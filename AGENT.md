@@ -47,10 +47,10 @@
   - 日历集成
   - UI 动画和美化
   - 单元测试覆盖
-- 正在进行的优化（后台并行）：
-  - 更多单元测试 (bg_b2e037a9)
-  - 代码结构优化 (bg_bc08b800)
-  - 集成测试 (bg_01e1fadf)
+- 已完成的优化：
+  - 更多单元测试（AuthManagerTest, DatabaseHelperTest, ExportManagerTest, NotificationHelperTest, CalendarHelperTest）
+  - 代码结构优化（BaseActivity 基类）
+  - 集成测试（42 个测试覆盖核心工作流）
 - 待实现功能：
   - 网络层（API 对接）
   - 媒体上传
