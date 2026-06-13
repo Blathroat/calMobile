@@ -1,6 +1,5 @@
 package com.example.calmobile;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
@@ -8,7 +7,11 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 
-public class LoginActivity extends Activity {
+/**
+ * Login activity for user authentication.
+ * Redirects to MainActivity if the user is already logged in.
+ */
+public class LoginActivity extends BaseActivity {
 
     private EditText usernameInput;
     private EditText passwordInput;

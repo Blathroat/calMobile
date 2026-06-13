@@ -1,6 +1,5 @@
 package com.example.calmobile;
 
-import android.app.Activity;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -8,7 +7,10 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-public class RegisterActivity extends Activity {
+/**
+ * Registration activity for new user account creation.
+ */
+public class RegisterActivity extends BaseActivity {
 
     private EditText usernameInput;
     private EditText emailInput;

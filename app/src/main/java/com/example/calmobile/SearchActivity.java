@@ -1,7 +1,5 @@
 package com.example.calmobile;
 
-import android.app.Activity;
-import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -12,7 +10,6 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -24,7 +21,7 @@ import java.util.List;
  * Supports real-time filtering, search history (in-memory, last 10),
  * and displays results from both ExhibitionManager and AdminUserManager.
  */
-public class SearchActivity extends Activity {
+public class SearchActivity extends BaseActivity {
 
     private static final int MAX_HISTORY = 10;
 
@@ -129,8 +126,9 @@ public class SearchActivity extends Activity {
 
     /**
      * Internal search — filters exhibitions and users, updates UI.
-     * @param query the search term
-     * @param fromHistory whether this was triggered from history click (no history re-add)
+     *
+     * @param query       the search term
+     * @param fromHistory whether this was triggered from history click
      */
     private void performSearchInternal(String query, boolean fromHistory) {
         List<ExhibitorExhibition> exhibitions = ExhibitionManager.search(query);
@@ -244,11 +242,8 @@ public class SearchActivity extends Activity {
     // ── Search history ──────────────────────────────────────────────
 
     private void addToHistory(String query) {
-        // Remove if already exists (move to front)
         searchHistory.remove(query);
-        // Add to front
         searchHistory.add(0, query);
-        // Trim to max
         while (searchHistory.size() > MAX_HISTORY) {
             searchHistory.remove(searchHistory.size() - 1);
         }
@@ -302,6 +297,12 @@ public class SearchActivity extends Activity {
 
     // ── UI helpers ──────────────────────────────────────────────────
 
+    /**
+     * Add a section header to the results list.
+     *
+     * @param parent the container to add the header to
+     * @param title  the section title text
+     */
     private void addSectionHeader(LinearLayout parent, String title) {
         TextView header = new TextView(this);
         header.setText(title);
@@ -310,37 +311,5 @@ public class SearchActivity extends Activity {
         header.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         header.setPadding(0, dp(12), 0, dp(4));
         parent.addView(header, fullWidthParams(0));
-    }
-
-    private void styleCard(LinearLayout card) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(getResources().getColor(R.color.card_background));
-        bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
-        card.setBackground(bg);
-        card.setElevation(dp(2));
-    }
-
-    private TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
-        TextView textView = new TextView(this);
-        textView.setText(text);
-        textView.setTextColor(getResources().getColor(colorRes));
-        textView.setTextSize(sizeSp);
-        textView.setTypeface(Typeface.DEFAULT, style);
-        textView.setLineSpacing(0, 1.15f);
-        parent.addView(textView, fullWidthParams(6));
-        return textView;
-    }
-
-    private LinearLayout.LayoutParams fullWidthParams(int topMarginDp) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, dp(topMarginDp), 0, 0);
-        return params;
-    }
-
-    private int dp(int value) {
-        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 }

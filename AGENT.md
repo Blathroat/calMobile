@@ -65,13 +65,29 @@
 
 ## Subagent 使用规范
 
-- subagent 默认名称是 Sisyphus-Junior，这是正常的，无需修改
-- 使用 `category` 参数指定任务类型（visual-engineering, unspecified-high, quick 等）
-- 使用 `load_skills` 参数加载特定技能
-- 后台任务完成后，通过 `<system-reminder>` 通知获取结果
-- 使用 `background_output(task_id="bg_xxx")` 获取任务结果
-- **等待任务时**：不要轮询，应使用工具主动获取状态或结束对话等待通知
-- **并行数量**：同时最多 3 个后台任务，多余的会自动排队
+### 指定 subagent 类型
+- 使用 `subagent_type` 参数指定具体 agent：
+  - `explore`: 代码库探索、文件查找、模式发现
+  - `librarian`: 文档查找、外部库研究、最佳实践
+  - `oracle`: 架构咨询、复杂调试、技术决策
+  - `plan`: 任务规划、工作分解、依赖分析
+  - `Metis`: 预规划顾问、需求分析
+  - `Momus`: 计划评审、质量检查
+- 使用 `category` 参数指定任务类型（当不指定 subagent_type 时）：
+  - `visual-engineering`: 前端/UI/布局工作
+  - `ultrabrain`: 复杂逻辑、算法、架构
+  - `quick`: 简单任务、单文件修改
+  - `unspecified-high/low`: 通用任务
+
+### 等待策略（优先级从高到低）
+1. **优先使用工具获取状态**：调用 `background_output(task_id="bg_xxx")` 检查任务是否完成
+2. **阻断等待**：如果任务未完成，使用 `block=true` 参数阻断等待结果
+3. **结束对话**：只有在无法阻断时才结束对话等待 `<system-reminder>` 通知
+
+### 并行执行
+- 同时最多 3 个后台任务，多余的会自动排队
+- 使用 `run_in_background=true` 启动后台任务
+- 任务完成后立即获取结果并验证
 - 测试依赖：junit:junit:4.13.2（仅 testImplementation，不进入 APK）。
 
 ## 开发与验证

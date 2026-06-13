@@ -172,7 +172,7 @@ const checks = [
   {
     id: 'admin-backend-activity-java',
     file: 'app/src/main/java/com/example/calmobile/AdminBackendActivity.java',
-    contains: ['package com.example.calmobile;', 'extends Activity', 'AdminBackendActivity', 'AdminUserManager']
+    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'AdminBackendActivity', 'AdminUserManager']
   },
   {
     id: 'admin-backend-layout',
