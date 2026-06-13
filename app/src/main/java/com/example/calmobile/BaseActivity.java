@@ -54,7 +54,7 @@ public abstract class BaseActivity extends Activity {
      * Create full-width LinearLayout.LayoutParams with a top margin.
      *
      * @param topMarginDp top margin in dp
-     * @returnLayoutParams for a full-width view with the specified top margin
+     * @return LayoutParams for a full-width view with the specified top margin
      */
     protected LinearLayout.LayoutParams fullWidthParams(int topMarginDp) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
@@ -73,7 +73,7 @@ public abstract class BaseActivity extends Activity {
      * @param text     the text content
      * @param colorRes the color resource ID for the text color
      * @param sizeSp   the text size in sp
-     * @param style    theTypeface style constant (e.g. {@link Typeface#BOLD})
+     * @param style    the Typeface style constant (e.g. {@link Typeface#BOLD})
      * @return the created TextView
      */
     protected TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
@@ -82,7 +82,7 @@ public abstract class BaseActivity extends Activity {
         textView.setTextColor(getResources().getColor(colorRes));
         textView.setTextSize(sizeSp);
         textView.setTypeface(Typeface.DEFAULT, style);
-        textView.setLineSpacing(0, 1.15f);
+        textView.setLineSpacing(0, 1.3f);
         parent.addView(textView, fullWidthParams(6));
         return textView;
     }
@@ -91,7 +91,7 @@ public abstract class BaseActivity extends Activity {
 
     /**
      * Apply the standard card background, corner radius, stroke, and elevation
-     * to a LinearLayout.
+     * to a LinearLayout using the design system values.
      *
      * @param card the LinearLayout to style
      */
@@ -102,6 +102,7 @@ public abstract class BaseActivity extends Activity {
         bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
         card.setBackground(bg);
         card.setElevation(dp(2));
+        card.setClipToOutline(true);
     }
 
     // ── Panel animations ───────────────────────────────────────────────
@@ -114,7 +115,7 @@ public abstract class BaseActivity extends Activity {
     protected void animateShowPanel(final View panel) {
         panel.setVisibility(View.VISIBLE);
         panel.setAlpha(0f);
-        panel.setTranslationY(dp(20));
+        panel.setTranslationY(dp(16));
         panel.animate()
                 .alpha(1f)
                 .translationY(0)
@@ -133,7 +134,7 @@ public abstract class BaseActivity extends Activity {
     protected void animateHidePanel(final View panel) {
         panel.animate()
                 .alpha(0f)
-                .translationY(dp(10))
+                .translationY(dp(8))
                 .setDuration(200)
                 .setInterpolator(new DecelerateInterpolator())
                 .setListener(new AnimatorListenerAdapter() {
@@ -160,12 +161,12 @@ public abstract class BaseActivity extends Activity {
         for (int i = 0; i < container.getChildCount(); i++) {
             View child = container.getChildAt(i);
             child.setAlpha(0f);
-            child.setTranslationY(dp(16));
+            child.setTranslationY(dp(12));
             child.animate()
                     .alpha(1f)
                     .translationY(0)
-                    .setDuration(300)
-                    .setStartDelay(startDelay + i * 60)
+                    .setDuration(280)
+                    .setStartDelay(startDelay + i * 50)
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
         }
@@ -186,26 +187,37 @@ public abstract class BaseActivity extends Activity {
         LinearLayout emptyBox = new LinearLayout(this);
         emptyBox.setOrientation(LinearLayout.VERTICAL);
         emptyBox.setGravity(android.view.Gravity.CENTER);
-        emptyBox.setPadding(dp(16), dp(32), dp(16), dp(32));
+        emptyBox.setPadding(dp(24), dp(40), dp(24), dp(40));
 
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(getResources().getColor(R.color.card_background));
-        bg.setCornerRadius(dp(12));
+        bg.setCornerRadius(dp(16));
         bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
         emptyBox.setBackground(bg);
 
+        // Icon with subtle background circle
         TextView icon = new TextView(this);
         icon.setText(getString(R.string.empty_state_icon));
-        icon.setTextSize(36);
+        icon.setTextSize(40);
         icon.setGravity(android.view.Gravity.CENTER);
-        emptyBox.addView(icon, fullWidthParams(0));
+
+        GradientDrawable iconBg = new GradientDrawable();
+        iconBg.setShape(GradientDrawable.OVAL);
+        iconBg.setColor(getResources().getColor(R.color.primary_container));
+        icon.setBackground(iconBg);
+        icon.setPadding(dp(16), dp(16), dp(16), dp(16));
+
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(72), dp(72));
+        iconParams.gravity = android.view.Gravity.CENTER;
+        emptyBox.addView(icon, iconParams);
 
         TextView msg = new TextView(this);
         msg.setText(message);
-        msg.setTextColor(getResources().getColor(R.color.empty_icon_color));
+        msg.setTextColor(getResources().getColor(R.color.text_tertiary));
         msg.setTextSize(14);
         msg.setGravity(android.view.Gravity.CENTER);
-        msg.setPadding(0, dp(8), 0, 0);
+        msg.setPadding(0, dp(16), 0, 0);
+        msg.setLineSpacing(0, 1.3f);
         emptyBox.addView(msg, fullWidthParams(4));
 
         container.addView(emptyBox, fullWidthParams(8));
@@ -246,10 +258,11 @@ public abstract class BaseActivity extends Activity {
         shape.setColor(Color.TRANSPARENT);
 
         RippleDrawable ripple = new RippleDrawable(
-                android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_color)),
+                android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_light)),
                 shape, null);
         btn.setBackground(ripple);
-        btn.setPadding(dp(12), dp(6), dp(12), dp(6));
+        btn.setTextColor(getResources().getColor(R.color.primary));
+        btn.setPadding(dp(14), dp(8), dp(14), dp(8));
     }
 
     // ── Divider ────────────────────────────────────────────────────────

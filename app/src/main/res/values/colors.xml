@@ -1,18 +1,99 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="surface_background">#F7F8FA</color>
-    <color name="card_background">#FFFFFF</color>
-    <color name="date_active_background">#E9F8F0</color>
-    <color name="text_primary">#1F2933</color>
-    <color name="text_secondary">#52606D</color>
-    <color name="status_open">#1F8A5B</color>
-    <color name="status_closed">#9A3412</color>
-    <color name="status_pending">#B45309</color>
+    <!-- ═══════════════════════════════════════════════════════════════
+         Brand & Primary — Teal-based, professional exhibition theme
+         ═══════════════════════════════════════════════════════════════ -->
+    <color name="primary">#0D9488</color>
+    <color name="primary_light">#14B8A6</color>
+    <color name="primary_dark">#0F766E</color>
+    <color name="primary_container">#CCFBF1</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="on_primary_container">#064E3B</color>
 
-    <!-- UI polish tokens -->
-    <color name="card_stroke">#E8EAED</color>
-    <color name="ripple_color">#331F8A5B</color>
-    <color name="empty_icon_color">#B0BEC5</color>
-    <color name="divider_color">#E8EAED</color>
-    <color name="back_button_tint">#1F8A5B</color>
+    <!-- Secondary — Warm amber for accents and highlights -->
+    <color name="secondary">#F59E0B</color>
+    <color name="secondary_light">#FBBF24</color>
+    <color name="secondary_dark">#D97706</color>
+    <color name="secondary_container">#FEF3C7</color>
+    <color name="on_secondary">#FFFFFF</color>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Surface & Background
+         ═══════════════════════════════════════════════════════════════ -->
+    <color name="surface_background">#F5F7FA</color>
+    <color name="surface_variant">#EDF0F4</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="card_stroke">#E2E6EC</color>
+    <color name="scrim">#33000000</color>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Typography
+         ═══════════════════════════════════════════════════════════════ -->
+    <color name="text_primary">#1A1D23</color>
+    <color name="text_secondary">#5F6670</color>
+    <color name="text_tertiary">#8D929A</color>
+    <color name="text_hint">#A8ADB5</color>
+    <color name="text_on_primary">#FFFFFF</color>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Status Colors
+         ═══════════════════════════════════════════════════════════════ -->
+    <color name="status_open">#059669</color>
+    <color name="status_open_bg">#ECFDF5</color>
+    <color name="status_closed">#DC2626</color>
+    <color name="status_closed_bg">#FEF2F2</color>
+    <color name="status_pending">#D97706</color>
+    <color name="status_pending_bg">#FFFBEB</color>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Interactive States
+         ═══════════════════════════════════════════════════════════════ -->
+    <color name="ripple_color">#1A0D9488</color>
+    <color name="ripple_light">#0DFFFFFF</color>
+    <color name="focus_ring">#330D9488</color>
+    <color name="pressed_overlay">#0A000000</color>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         UI Elements
+         ═══════════════════════════════════════════════════════════════ -->
+    <color name="divider_color">#E8ECF0</color>
+    <color name="empty_icon_color">#B0B8C1</color>
+    <color name="back_button_tint">#0D9488</color>
+
+    <!-- Date cells -->
+    <color name="date_active_background">#E6FAF7</color>
+    <color name="date_active_text">#0D9488</color>
+    <color name="date_today_background">#0D9488</color>
+    <color name="date_today_text">#FFFFFF</color>
+
+    <!-- Input fields -->
+    <color name="input_background">#F8F9FB</color>
+    <color name="input_border">#D5D9E0</color>
+    <color name="input_focused_border">#0D9488</color>
+    <color name="input_error_border">#DC2626</color>
+
+    <!-- Buttons -->
+    <color name="button_primary_bg">#0D9488</color>
+    <color name="button_primary_text">#FFFFFF</color>
+    <color name="button_secondary_bg">#F0F4F8</color>
+    <color name="button_secondary_text">#1A1D23</color>
+    <color name="button_danger_bg">#FEF2F2</color>
+    <color name="button_danger_text">#DC2626</color>
+    <color name="button_disabled_bg">#E8ECF0</color>
+    <color name="button_disabled_text">#A8ADB5</color>
+
+    <!-- Tab buttons -->
+    <color name="tab_active_bg">#0D9488</color>
+    <color name="tab_active_text">#FFFFFF</color>
+    <color name="tab_inactive_bg">#F0F4F8</color>
+    <color name="tab_inactive_text">#5F6670</color>
+
+    <!-- Avatar -->
+    <color name="avatar_bg">#0D9488</color>
+    <color name="avatar_text">#FFFFFF</color>
+
+    <!-- Search history chips -->
+    <color name="chip_bg">#E6FAF7</color>
+    <color name="chip_text">#0D9488</color>
+    <color name="chip_border">#B2F0E5</color>
 </resources>

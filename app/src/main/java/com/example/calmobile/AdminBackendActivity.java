@@ -3,6 +3,7 @@ package com.example.calmobile;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
@@ -127,14 +128,22 @@ public class AdminBackendActivity extends BaseActivity {
     private void switchTab(int tabIndex) {
         currentTab = tabIndex;
 
-        // Update tab button appearance
+        // Update tab button appearance with new design system
         for (int i = 0; i < tabButtons.length; i++) {
             if (i == tabIndex) {
-                tabButtons[i].setTextColor(getResources().getColor(R.color.card_background));
-                tabButtons[i].setBackgroundColor(getResources().getColor(R.color.status_open));
+                tabButtons[i].setTextColor(getResources().getColor(R.color.tab_active_text));
+                GradientDrawable activeBg = new GradientDrawable();
+                activeBg.setColor(getResources().getColor(R.color.tab_active_bg));
+                activeBg.setCornerRadius(dp(8));
+                tabButtons[i].setBackground(activeBg);
+                tabButtons[i].setElevation(dp(2));
             } else {
-                tabButtons[i].setTextColor(getResources().getColor(R.color.text_primary));
-                tabButtons[i].setBackgroundColor(getResources().getColor(R.color.card_background));
+                tabButtons[i].setTextColor(getResources().getColor(R.color.tab_inactive_text));
+                GradientDrawable inactiveBg = new GradientDrawable();
+                inactiveBg.setColor(getResources().getColor(R.color.tab_inactive_bg));
+                inactiveBg.setCornerRadius(dp(8));
+                tabButtons[i].setBackground(inactiveBg);
+                tabButtons[i].setElevation(0);
             }
         }
 

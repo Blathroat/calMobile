@@ -182,10 +182,22 @@ public class MainActivity extends BaseActivity {
             Button dayButton = new Button(this);
             dayButton.setAllCaps(false);
             dayButton.setText(count > 0 ? day + "\n" + count + "场" : String.valueOf(day));
-            dayButton.setTextColor(getResources().getColor(count > 0 ? R.color.status_open : R.color.text_secondary));
-            dayButton.setTextSize(13);
-            dayButton.setBackgroundResource(count > 0 ? R.color.date_active_background : R.color.card_background);
-            dayButton.setPadding(0, dp(6), 0, dp(6));
+            dayButton.setTextColor(getResources().getColor(count > 0 ? R.color.date_active_text : R.color.text_secondary));
+            dayButton.setTextSize(12);
+            dayButton.setTypeface(android.graphics.Typeface.DEFAULT, count > 0 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+
+            // Use rounded drawable backgrounds for calendar cells
+            GradientDrawable cellBg = new GradientDrawable();
+            cellBg.setCornerRadius(dp(8));
+            if (count > 0) {
+                cellBg.setColor(getResources().getColor(R.color.date_active_background));
+                cellBg.setStroke(dp(1), getResources().getColor(R.color.chip_border));
+            } else {
+                cellBg.setColor(getResources().getColor(R.color.card_background));
+                cellBg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+            }
+            dayButton.setBackground(cellBg);
+            dayButton.setPadding(0, dp(8), 0, dp(8));
             dayButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
@@ -195,7 +207,7 @@ public class MainActivity extends BaseActivity {
 
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = 0;
-            params.height = dp(64);
+            params.height = dp(56);
             params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
             params.setMargins(dp(2), dp(2), dp(2), dp(2));
             calendarGrid.addView(dayButton, params);

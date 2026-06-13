@@ -2,110 +2,151 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:background="@color/surface_background">
+    android:background="@color/surface_background"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:padding="32dp"
-        android:gravity="center_horizontal">
+        android:padding="@dimen/spacing_32dp">
+
+        <!-- Top spacer -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="@dimen/spacing_40dp" />
 
         <!-- Title -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="60dp"
+            android:gravity="center"
             android:text="@string/auth_register_title"
-            android:textColor="@color/text_primary"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:gravity="center" />
+            android:textAppearance="@style/TextAppearance.Headline" />
 
+        <!-- Subtitle -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/spacing_8dp"
+            android:gravity="center"
             android:text="@string/auth_register_subtitle"
-            android:textColor="@color/text_secondary"
-            android:textSize="16sp"
-            android:gravity="center" />
+            android:textAppearance="@style/TextAppearance.Subtitle" />
 
-        <!-- Username -->
-        <EditText
-            android:id="@+id/register_username"
+        <!-- Form card -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="48dp"
-            android:hint="@string/auth_username_hint"
-            android:inputType="text"
-            android:singleLine="true"
-            android:padding="14dp"
-            android:background="@color/card_background" />
+            android:layout_marginTop="@dimen/spacing_32dp"
+            android:background="@drawable/bg_card"
+            android:elevation="@dimen/elevation_low"
+            android:orientation="vertical"
+            android:padding="@dimen/spacing_24dp">
 
-        <!-- Email -->
-        <EditText
-            android:id="@+id/register_email"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:hint="@string/auth_email_hint"
-            android:inputType="textEmailAddress"
-            android:singleLine="true"
-            android:padding="14dp"
-            android:background="@color/card_background" />
+            <!-- Username label -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/auth_username_hint"
+                android:textAppearance="@style/TextAppearance.Label" />
 
-        <!-- Password -->
-        <EditText
-            android:id="@+id/register_password"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:hint="@string/auth_password_hint"
-            android:inputType="textPassword"
-            android:singleLine="true"
-            android:padding="14dp"
-            android:background="@color/card_background" />
+            <!-- Username input -->
+            <EditText
+                android:id="@+id/register_username"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_6dp"
+                android:hint="@string/auth_username_hint"
+                android:inputType="text"
+                android:singleLine="true"
+                style="@style/Widget.CalMobile.EditText" />
 
-        <!-- Confirm Password -->
-        <EditText
-            android:id="@+id/register_password_confirm"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:hint="@string/auth_password_confirm_hint"
-            android:inputType="textPassword"
-            android:singleLine="true"
-            android:padding="14dp"
-            android:background="@color/card_background" />
+            <!-- Email label -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_14dp"
+                android:text="@string/auth_email_hint"
+                android:textAppearance="@style/TextAppearance.Label" />
 
-        <!-- Error text -->
-        <TextView
-            android:id="@+id/register_error"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:textColor="@color/status_closed"
-            android:textSize="14sp"
-            android:visibility="gone" />
+            <!-- Email input -->
+            <EditText
+                android:id="@+id/register_email"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_6dp"
+                android:hint="@string/auth_email_hint"
+                android:inputType="textEmailAddress"
+                android:singleLine="true"
+                style="@style/Widget.CalMobile.EditText" />
 
-        <!-- Register button -->
-        <Button
-            android:id="@+id/register_btn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="@string/auth_register_btn" />
+            <!-- Password label -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_14dp"
+                android:text="@string/auth_password_hint"
+                android:textAppearance="@style/TextAppearance.Label" />
 
-        <!-- Back to login -->
+            <!-- Password input -->
+            <EditText
+                android:id="@+id/register_password"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_6dp"
+                android:hint="@string/auth_password_hint"
+                android:inputType="textPassword"
+                android:singleLine="true"
+                style="@style/Widget.CalMobile.EditText" />
+
+            <!-- Confirm Password label -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_14dp"
+                android:text="@string/auth_password_confirm_hint"
+                android:textAppearance="@style/TextAppearance.Label" />
+
+            <!-- Confirm Password input -->
+            <EditText
+                android:id="@+id/register_password_confirm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_6dp"
+                android:hint="@string/auth_password_confirm_hint"
+                android:inputType="textPassword"
+                android:singleLine="true"
+                style="@style/Widget.CalMobile.EditText" />
+
+            <!-- Error text -->
+            <TextView
+                android:id="@+id/register_error"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_8dp"
+                android:textColor="@color/status_closed"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <!-- Register button -->
+            <Button
+                android:id="@+id/register_btn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_24dp"
+                android:text="@string/auth_register_btn"
+                style="@style/Widget.CalMobile.Button.Primary" />
+        </LinearLayout>
+
+        <!-- Back to login as text button -->
         <Button
             android:id="@+id/go_to_login_btn"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="@dimen/spacing_16dp"
             android:text="@string/auth_go_to_login"
-            android:textColor="@color/status_open" />
+            style="@style/Widget.CalMobile.Button.Text" />
 
     </LinearLayout>
 </ScrollView>

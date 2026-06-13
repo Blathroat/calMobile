@@ -264,13 +264,14 @@ public class SearchActivity extends BaseActivity {
             Button chip = new Button(this);
             chip.setAllCaps(false);
             chip.setText(term);
-            chip.setTextSize(12);
-            chip.setPadding(dp(12), dp(4), dp(12), dp(4));
+            chip.setTextSize(13);
+            chip.setPadding(dp(14), dp(6), dp(14), dp(6));
+            chip.setTextColor(getResources().getColor(R.color.chip_text));
 
             GradientDrawable chipBg = new GradientDrawable();
-            chipBg.setColor(getResources().getColor(R.color.date_active_background));
-            chipBg.setCornerRadius(dp(16));
-            chipBg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+            chipBg.setColor(getResources().getColor(R.color.chip_bg));
+            chipBg.setCornerRadius(dp(100));
+            chipBg.setStroke(dp(1), getResources().getColor(R.color.chip_border));
             chip.setBackground(chipBg);
 
             chip.setOnClickListener(new View.OnClickListener() {

@@ -98,7 +98,7 @@ public class ProfileActivity extends BaseActivity {
         // Avatar placeholder (circle with initial)
         TextView avatar = new TextView(this);
         avatar.setText(nickname.length() > 0 ? nickname.substring(0, 1) : getString(R.string.profile_avatar_initial));
-        avatar.setTextColor(getResources().getColor(R.color.card_background));
+        avatar.setTextColor(getResources().getColor(R.color.avatar_text));
         avatar.setTextSize(28);
         avatar.setTypeface(Typeface.DEFAULT_BOLD);
         avatar.setGravity(android.view.Gravity.CENTER);
@@ -106,7 +106,7 @@ public class ProfileActivity extends BaseActivity {
         int avatarSize = dp(72);
         GradientDrawable circle = new GradientDrawable();
         circle.setShape(GradientDrawable.OVAL);
-        circle.setColor(getResources().getColor(R.color.status_open));
+        circle.setColor(getResources().getColor(R.color.avatar_bg));
         avatar.setBackground(circle);
 
         LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(avatarSize, avatarSize);
@@ -269,7 +269,7 @@ public class ProfileActivity extends BaseActivity {
                 row.setPadding(dp(12), dp(8), dp(12), dp(8));
 
                 GradientDrawable rowBg = new GradientDrawable();
-                rowBg.setColor(getResources().getColor(R.color.surface_background));
+                rowBg.setColor(getResources().getColor(R.color.surface_variant));
                 rowBg.setCornerRadius(dp(8));
                 row.setBackground(rowBg);
 

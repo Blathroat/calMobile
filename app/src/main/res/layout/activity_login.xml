@@ -2,86 +2,126 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:background="@color/surface_background">
+    android:background="@color/surface_background"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:padding="32dp"
-        android:gravity="center_horizontal">
+        android:padding="@dimen/spacing_32dp">
+
+        <!-- Top spacer for centering -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="@dimen/spacing_48dp" />
+
+        <!-- App icon / brand mark -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_avatar"
+            android:gravity="center"
+            android:text="展"
+            android:textColor="@color/avatar_text"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:padding="@dimen/spacing_20dp" />
 
         <!-- App title -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="60dp"
+            android:layout_marginTop="@dimen/spacing_24dp"
+            android:gravity="center"
             android:text="@string/app_name"
-            android:textColor="@color/text_primary"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:gravity="center" />
+            android:textAppearance="@style/TextAppearance.Headline" />
 
+        <!-- Subtitle -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="@dimen/spacing_8dp"
+            android:gravity="center"
             android:text="@string/auth_login_subtitle"
-            android:textColor="@color/text_secondary"
-            android:textSize="16sp"
-            android:gravity="center" />
+            android:textAppearance="@style/TextAppearance.Subtitle" />
 
-        <!-- Username -->
-        <EditText
-            android:id="@+id/login_username"
+        <!-- Form card -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="48dp"
-            android:hint="@string/auth_username_hint"
-            android:inputType="text"
-            android:singleLine="true"
-            android:padding="14dp"
-            android:background="@color/card_background" />
+            android:layout_marginTop="@dimen/spacing_40dp"
+            android:background="@drawable/bg_card"
+            android:elevation="@dimen/elevation_low"
+            android:orientation="vertical"
+            android:padding="@dimen/spacing_24dp">
 
-        <!-- Password -->
-        <EditText
-            android:id="@+id/login_password"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:hint="@string/auth_password_hint"
-            android:inputType="textPassword"
-            android:singleLine="true"
-            android:padding="14dp"
-            android:background="@color/card_background" />
+            <!-- Username label -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/auth_username_hint"
+                android:textAppearance="@style/TextAppearance.Label" />
 
-        <!-- Error text -->
-        <TextView
-            android:id="@+id/login_error"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:textColor="@color/status_closed"
-            android:textSize="14sp"
-            android:visibility="gone" />
+            <!-- Username input -->
+            <EditText
+                android:id="@+id/login_username"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_6dp"
+                android:hint="@string/auth_username_hint"
+                android:inputType="text"
+                android:singleLine="true"
+                style="@style/Widget.CalMobile.EditText" />
 
-        <!-- Login button -->
-        <Button
-            android:id="@+id/login_btn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="@string/auth_login_btn" />
+            <!-- Password label -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_16dp"
+                android:text="@string/auth_password_hint"
+                android:textAppearance="@style/TextAppearance.Label" />
 
-        <!-- Register link -->
+            <!-- Password input -->
+            <EditText
+                android:id="@+id/login_password"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_6dp"
+                android:hint="@string/auth_password_hint"
+                android:inputType="textPassword"
+                android:singleLine="true"
+                style="@style/Widget.CalMobile.EditText" />
+
+            <!-- Error text -->
+            <TextView
+                android:id="@+id/login_error"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_8dp"
+                android:textColor="@color/status_closed"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <!-- Login button -->
+            <Button
+                android:id="@+id/login_btn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_24dp"
+                android:text="@string/auth_login_btn"
+                style="@style/Widget.CalMobile.Button.Primary" />
+        </LinearLayout>
+
+        <!-- Register link as text button -->
         <Button
             android:id="@+id/go_to_register_btn"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="@dimen/spacing_16dp"
             android:text="@string/auth_go_to_register"
-            android:textColor="@color/status_open" />
+            style="@style/Widget.CalMobile.Button.Text" />
 
     </LinearLayout>
 </ScrollView>
