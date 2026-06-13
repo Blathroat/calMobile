@@ -3,6 +3,7 @@ package com.example.calmobile;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.InputType;
@@ -147,11 +148,15 @@ public class ExhibitorBackendActivity extends Activity {
             // Registrations button
             Button regBtn = new Button(this);
             regBtn.setAllCaps(false);
-            regBtn.setText(R.string.exhibitor_view_registrations);
+            regBtn.setText(R.string.reg_mgmt_nav_btn);
             regBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showRegistrations(exh);
+                    Intent intent = new Intent(ExhibitorBackendActivity.this,
+                            RegistrationManagementActivity.class);
+                    intent.putExtra(RegistrationManagementActivity.EXTRA_EXHIBITION_ID,
+                            exh.getId());
+                    startActivity(intent);
                 }
             });
             LinearLayout.LayoutParams regParams = new LinearLayout.LayoutParams(

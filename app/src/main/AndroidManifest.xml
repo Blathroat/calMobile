@@ -16,6 +16,7 @@
         <activity android:name=".ProfileActivity" />
         <activity android:name=".UserPublicActivity" />
         <activity android:name=".ExhibitorBackendActivity" />
+        <activity android:name=".RegistrationManagementActivity" />
     </application>
 
 </manifest>

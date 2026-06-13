@@ -73,4 +73,21 @@
     <string name="exhibitor_hint_description">请输入展会简介</string>
     <string name="exhibitor_day_label">6月%1$d日</string>
     <string name="go_to_exhibitor_backend">展商后台</string>
+
+    <!-- Registration Management -->
+    <string name="reg_mgmt_title">报名管理</string>
+    <string name="reg_mgmt_count">共 %1$d 条报名</string>
+    <string name="reg_mgmt_empty">暂无报名记录。</string>
+    <string name="reg_mgmt_detail_title">报名详情</string>
+    <string name="reg_mgmt_label_name">姓名</string>
+    <string name="reg_mgmt_label_type">观众类型</string>
+    <string name="reg_mgmt_label_time">报名时间</string>
+    <string name="reg_mgmt_label_status">审核状态</string>
+    <string name="reg_mgmt_label_answers">报名信息</string>
+    <string name="reg_mgmt_approve">通过</string>
+    <string name="reg_mgmt_reject">拒绝</string>
+    <string name="reg_mgmt_approved">已通过</string>
+    <string name="reg_mgmt_rejected">已拒绝</string>
+    <string name="reg_mgmt_close_detail">关闭详情</string>
+    <string name="reg_mgmt_nav_btn">查看报名</string>
 </resources>

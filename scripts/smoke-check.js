@@ -148,6 +148,21 @@ const checks = [
     id: 'exhibitor-backend-navigation',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
     contains: ['ExhibitorBackendActivity', 'exhibitorBackendButton']
+  },
+  {
+    id: 'registration-management-activity-java',
+    file: 'app/src/main/java/com/example/calmobile/RegistrationManagementActivity.java',
+    contains: ['package com.example.calmobile;', 'extends Activity', 'RegistrationManagementActivity', 'MgmtRecord']
+  },
+  {
+    id: 'registration-management-manifest',
+    file: 'app/src/main/AndroidManifest.xml',
+    contains: ['RegistrationManagementActivity']
+  },
+  {
+    id: 'registration-management-strings',
+    file: 'app/src/main/res/values/strings.xml',
+    contains: ['reg_mgmt_approve', 'reg_mgmt_reject']
   }
 ];
 
