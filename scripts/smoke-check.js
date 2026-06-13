@@ -123,6 +123,31 @@ const checks = [
     id: 'user-public-navigation',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
     contains: ['UserPublicActivity', 'openUserPublicProfile']
+  },
+  {
+    id: 'exhibitor-backend-activity-java',
+    file: 'app/src/main/java/com/example/calmobile/ExhibitorBackendActivity.java',
+    contains: ['package com.example.calmobile;', 'extends Activity', 'ExhibitorBackendActivity', 'ExhibitionManager', 'saveExhibition']
+  },
+  {
+    id: 'exhibitor-backend-navigation-layout',
+    file: 'app/src/main/res/layout/activity_main.xml',
+    contains: ['@+id/go_to_exhibitor_backend_btn']
+  },
+  {
+    id: 'exhibitor-backend-manifest',
+    file: 'app/src/main/AndroidManifest.xml',
+    contains: ['ExhibitorBackendActivity']
+  },
+  {
+    id: 'exhibitor-backend-strings',
+    file: 'app/src/main/res/values/strings.xml',
+    contains: ['exhibitor_backend_title', 'exhibitor_add_exhibition']
+  },
+  {
+    id: 'exhibitor-backend-navigation',
+    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
+    contains: ['ExhibitorBackendActivity', 'exhibitorBackendButton']
   }
 ];
 

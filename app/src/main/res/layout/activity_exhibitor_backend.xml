@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Back / title row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/exhibitor_back"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="← 返回"
+                android:textColor="@color/status_open"
+                android:textSize="15sp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="@string/exhibitor_backend_title"
+                android:textColor="@color/text_primary"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <!-- Spacer to balance the back button -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="      "
+                android:textSize="15sp" />
+        </LinearLayout>
+
+        <!-- Exhibition list section built programmatically -->
+        <LinearLayout
+            android:id="@+id/exhibitor_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:orientation="vertical" />
+
+        <!-- Add exhibition button -->
+        <Button
+            android:id="@+id/exhibitor_add_btn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="@string/exhibitor_add_exhibition" />
+
+        <!-- Exhibition detail / edit form (hidden by default) -->
+        <LinearLayout
+            android:id="@+id/exhibitor_form"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@color/card_background"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone" />
+
+        <!-- Registration records panel (hidden by default) -->
+        <LinearLayout
+            android:id="@+id/exhibitor_registrations_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="@color/card_background"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+</ScrollView>

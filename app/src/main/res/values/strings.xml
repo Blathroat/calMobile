@@ -38,4 +38,39 @@
     <string name="user_public_registrations_title">报名记录</string>
     <string name="user_public_edit_profile">编辑资料</string>
     <string name="user_public_view_profile_hint">查看该用户主页 →</string>
+
+    <!-- Exhibitor Backend -->
+    <string name="exhibitor_backend_title">展商后台</string>
+    <string name="exhibitor_backend_empty">暂无展会，点击下方按钮创建。</string>
+    <string name="exhibitor_add_exhibition">新建展会</string>
+    <string name="exhibitor_edit_exhibition">编辑展会</string>
+    <string name="exhibitor_save">保存</string>
+    <string name="exhibitor_cancel">取消</string>
+    <string name="exhibitor_delete">删除</string>
+    <string name="exhibitor_confirm_delete">确认删除该展会？</string>
+    <string name="exhibitor_deleted">展会已删除</string>
+    <string name="exhibitor_saved">展会已保存</string>
+    <string name="exhibitor_field_title">展会名称</string>
+    <string name="exhibitor_field_venue">展馆地点</string>
+    <string name="exhibitor_field_day">开展日期（日）</string>
+    <string name="exhibitor_field_time">开放时间</string>
+    <string name="exhibitor_field_category">展会分类</string>
+    <string name="exhibitor_field_description">展会简介</string>
+    <string name="exhibitor_field_status">展会状态</string>
+    <string name="exhibitor_status_open">报名中</string>
+    <string name="exhibitor_status_closed">截止报名</string>
+    <string name="exhibitor_status_ended">已结束</string>
+    <string name="exhibitor_change_status">更改状态</string>
+    <string name="exhibitor_view_registrations">查看报名记录</string>
+    <string name="exhibitor_registrations_title">报名记录</string>
+    <string name="exhibitor_registrations_empty">暂无报名记录。</string>
+    <string name="exhibitor_registrations_count">共 %1$d 条报名</string>
+    <string name="exhibitor_hint_title">请输入展会名称</string>
+    <string name="exhibitor_hint_venue">请输入展馆地点</string>
+    <string name="exhibitor_hint_day">请输入日期（1-30）</string>
+    <string name="exhibitor_hint_time">如 09:00-17:00</string>
+    <string name="exhibitor_hint_category">如 智能制造 / 工业自动化</string>
+    <string name="exhibitor_hint_description">请输入展会简介</string>
+    <string name="exhibitor_day_label">6月%1$d日</string>
+    <string name="go_to_exhibitor_backend">展商后台</string>
 </resources>

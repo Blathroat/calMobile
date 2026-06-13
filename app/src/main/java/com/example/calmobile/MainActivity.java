@@ -103,6 +103,15 @@ public class MainActivity extends Activity {
                 startActivity(new Intent(MainActivity.this, ProfileActivity.class));
             }
         });
+
+        Button exhibitorBackendButton = findViewById(R.id.go_to_exhibitor_backend_btn);
+        exhibitorBackendButton.setAllCaps(false);
+        exhibitorBackendButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                startActivity(new Intent(MainActivity.this, ExhibitorBackendActivity.class));
+            }
+        });
     }
 
     private void buildMonthGrid() {
