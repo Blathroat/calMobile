@@ -17,6 +17,7 @@
         <activity android:name=".UserPublicActivity" />
         <activity android:name=".ExhibitorBackendActivity" />
         <activity android:name=".RegistrationManagementActivity" />
+        <activity android:name=".AdminBackendActivity" />
     </application>
 
 </manifest>

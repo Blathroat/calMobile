@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Back / title row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/admin_back"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="← 返回"
+                android:textColor="@color/status_open"
+                android:textSize="15sp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="@string/admin_backend_title"
+                android:textColor="@color/text_primary"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <!-- Spacer to balance the back button -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="      "
+                android:textSize="15sp" />
+        </LinearLayout>
+
+        <!-- Tab switcher row -->
+        <LinearLayout
+            android:id="@+id/admin_tab_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:orientation="horizontal" />
+
+        <!-- System summary bar -->
+        <LinearLayout
+            android:id="@+id/admin_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@color/card_background"
+            android:orientation="vertical"
+            android:padding="14dp" />
+
+        <!-- Users section -->
+        <LinearLayout
+            android:id="@+id/admin_users_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical" />
+
+        <!-- User detail panel (hidden by default) -->
+        <LinearLayout
+            android:id="@+id/admin_user_detail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@color/card_background"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone" />
+
+        <!-- Exhibitions section -->
+        <LinearLayout
+            android:id="@+id/admin_exhibitions_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical" />
+
+        <!-- Exhibition detail panel (hidden by default) -->
+        <LinearLayout
+            android:id="@+id/admin_exhibition_detail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@color/card_background"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone" />
+
+        <!-- Settings section -->
+        <LinearLayout
+            android:id="@+id/admin_settings_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical" />
+
+    </LinearLayout>
+</ScrollView>

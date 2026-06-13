@@ -112,6 +112,15 @@ public class MainActivity extends Activity {
                 startActivity(new Intent(MainActivity.this, ExhibitorBackendActivity.class));
             }
         });
+
+        Button adminBackendButton = findViewById(R.id.go_to_admin_backend_btn);
+        adminBackendButton.setAllCaps(false);
+        adminBackendButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                startActivity(new Intent(MainActivity.this, AdminBackendActivity.class));
+            }
+        });
     }
 
     private void buildMonthGrid() {

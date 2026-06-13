@@ -163,6 +163,31 @@ const checks = [
     id: 'registration-management-strings',
     file: 'app/src/main/res/values/strings.xml',
     contains: ['reg_mgmt_approve', 'reg_mgmt_reject']
+  },
+  {
+    id: 'admin-backend-activity-java',
+    file: 'app/src/main/java/com/example/calmobile/AdminBackendActivity.java',
+    contains: ['package com.example.calmobile;', 'extends Activity', 'AdminBackendActivity', 'AdminUserManager']
+  },
+  {
+    id: 'admin-backend-layout',
+    file: 'app/src/main/res/layout/activity_admin_backend.xml',
+    contains: ['@+id/admin_tab_row']
+  },
+  {
+    id: 'admin-backend-manifest',
+    file: 'app/src/main/AndroidManifest.xml',
+    contains: ['AdminBackendActivity']
+  },
+  {
+    id: 'admin-backend-strings',
+    file: 'app/src/main/res/values/strings.xml',
+    contains: ['admin_backend_title', 'admin_tab_users', 'admin_tab_exhibitions']
+  },
+  {
+    id: 'admin-backend-navigation',
+    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
+    contains: ['AdminBackendActivity', 'adminBackendButton']
   }
 ];
 
