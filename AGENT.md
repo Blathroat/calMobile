@@ -15,6 +15,7 @@
 ## 项目约束
 
 - 项目目标：Android 移动端展会排期与报名应用。
+- GitHub 仓库：https://github.com/Blathroat/calMobile
 - 原始需求来源：根目录 TODO.md，不要覆盖或删除该文件。
 - 移动端需求文档：docs/MOBILE_REQUIREMENTS.md。
 - 主要语言：Java。
@@ -50,6 +51,13 @@
 3. 若以后添加 Gradle Wrapper，优先运行 `gradlew.bat :app:assembleDebug`。
 4. 若 adb 可用，安装并打开 App，进行真机或模拟器手动验证。
 5. 修改 Java 或 XML 后，检查相关文件诊断并运行相邻测试。
+
+## Git 与 GitHub 流程
+
+- 使用 `git-master` 技能处理所有 Git 操作。
+- 每个功能完成后，运行验证后提交并推送到 GitHub。
+- 提交信息格式：`feat: 功能简述` 或 `fix: 修复简述`。
+- 重要变更前创建分支：`git checkout -b feature/功能名`。
 
 ## 范围控制
 
