@@ -22,7 +22,9 @@
             </intent-filter>
         </activity>
         <activity android:name=".RegisterActivity" />
-        <activity android:name=".MainActivity" />
+        <activity
+            android:name=".MainActivity"
+            android:exported="true" />
         <activity android:name=".ProfileActivity" />
         <activity android:name=".UserPublicActivity" />
         <activity android:name=".ExhibitorBackendActivity" />
