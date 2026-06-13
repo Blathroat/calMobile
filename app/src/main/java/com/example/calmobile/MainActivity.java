@@ -1,31 +1,20 @@
 package com.example.calmobile;
 
 import android.Manifest;
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.AnimatorSet;
-import android.animation.ObjectAnimator;
-import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
-import android.graphics.drawable.StateListDrawable;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
-import android.view.MotionEvent;
 import android.view.View;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.GridLayout;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.TextView;
@@ -34,7 +23,11 @@ import android.widget.Toast;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends Activity {
+/**
+ * Main activity displaying the exhibition calendar, exhibition list,
+ * exhibition details, and registration form.
+ */
+public class MainActivity extends BaseActivity {
     private static final int MONTH_DAYS = 30;
 
     private static final Exhibition[] SAMPLE_EXHIBITIONS = new Exhibition[] {
@@ -91,7 +84,7 @@ public class MainActivity extends Activity {
     private final RegistrationManager registrationManager = new RegistrationManager();
     private LinearLayout myRegistrationsList;
 
-    // Calendar integration — tracks which exhibition is pending permission approval
+    /** Tracks which exhibition is pending calendar permission approval. */
     private Exhibition pendingCalendarExhibition;
 
     @Override
@@ -159,73 +152,13 @@ public class MainActivity extends Activity {
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
-    // ── Page transition helper ────────────────────────────────────────
+    // ── Card styling with ripple ───────────────────────────────────────
 
-    private void navigateTo(Class<? extends Activity> activityClass) {
-        startActivity(new Intent(this, activityClass));
-        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
-    }
-
-    // ── Panel animation helpers ───────────────────────────────────────
-
-    private void animateShowPanel(final View panel) {
-        panel.setVisibility(View.VISIBLE);
-        panel.setAlpha(0f);
-        panel.setTranslationY(dp(20));
-        panel.animate()
-                .alpha(1f)
-                .translationY(0)
-                .setDuration(300)
-                .setInterpolator(new DecelerateInterpolator())
-                .setListener(null)
-                .start();
-    }
-
-    private void animateHidePanel(final View panel) {
-        panel.animate()
-                .alpha(0f)
-                .translationY(dp(10))
-                .setDuration(200)
-                .setInterpolator(new DecelerateInterpolator())
-                .setListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        panel.setVisibility(View.GONE);
-                        panel.setAlpha(1f);
-                        panel.setTranslationY(0);
-                    }
-                })
-                .start();
-    }
-
-    // ── Staggered list item animation ─────────────────────────────────
-
-    private void animateListItems(LinearLayout container, int startDelay) {
-        for (int i = 0; i < container.getChildCount(); i++) {
-            View child = container.getChildAt(i);
-            child.setAlpha(0f);
-            child.setTranslationY(dp(16));
-            child.animate()
-                    .alpha(1f)
-                    .translationY(0)
-                    .setDuration(300)
-                    .setStartDelay(startDelay + i * 60)
-                    .setInterpolator(new DecelerateInterpolator())
-                    .start();
-        }
-    }
-
-    // ── Card styling helper ───────────────────────────────────────────
-
-    private void styleCard(LinearLayout card) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(getResources().getColor(R.color.card_background));
-        bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
-        card.setBackground(bg);
-        card.setElevation(dp(2));
-    }
-
+    /**
+     * Apply a ripple background effect to a view, used for clickable cards.
+     *
+     * @param view the View to apply the ripple background to
+     */
     private void applyRippleBackground(final View view) {
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(getResources().getColor(R.color.card_background));
@@ -236,55 +169,6 @@ public class MainActivity extends Activity {
                 android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_color)),
                 shape, null);
         view.setBackground(ripple);
-    }
-
-    // ── Empty state helper ────────────────────────────────────────────
-
-    private void showEmptyState(LinearLayout container, String message) {
-        container.removeAllViews();
-
-        LinearLayout emptyBox = new LinearLayout(this);
-        emptyBox.setOrientation(LinearLayout.VERTICAL);
-        emptyBox.setGravity(android.view.Gravity.CENTER);
-        emptyBox.setPadding(dp(16), dp(32), dp(16), dp(32));
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(getResources().getColor(R.color.card_background));
-        bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
-        emptyBox.setBackground(bg);
-
-        TextView icon = new TextView(this);
-        icon.setText(getString(R.string.empty_state_icon));
-        icon.setTextSize(36);
-        icon.setGravity(android.view.Gravity.CENTER);
-        emptyBox.addView(icon, fullWidthParams(0));
-
-        TextView msg = new TextView(this);
-        msg.setText(message);
-        msg.setTextColor(getResources().getColor(R.color.empty_icon_color));
-        msg.setTextSize(14);
-        msg.setGravity(android.view.Gravity.CENTER);
-        msg.setPadding(0, dp(8), 0, 0);
-        emptyBox.addView(msg, fullWidthParams(4));
-
-        container.addView(emptyBox, fullWidthParams(8));
-    }
-
-    // ── Confirmation dialog helper ────────────────────────────────────
-
-    private void showConfirmDialog(String message, final Runnable onConfirm) {
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.confirm_title)
-                .setMessage(message)
-                .setPositiveButton(R.string.confirm_yes, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        onConfirm.run();
-                    }
-                })
-                .setNegativeButton(R.string.confirm_no, null)
-                .show();
     }
 
     // ── Calendar grid ─────────────────────────────────────────────────
@@ -411,13 +295,14 @@ public class MainActivity extends Activity {
         addCalendarButtons(exhibition);
     }
 
-    // ── Registration form ─────────────────────────────────────────────
+    // ── Calendar integration ──────────────────────────────────────────
 
     /**
      * Add calendar add/remove buttons to the detail panel.
+     *
+     * @param exhibition the exhibition to add/remove from calendar
      */
     private void addCalendarButtons(final Exhibition exhibition) {
-        // Calendar add button
         Button addToCalendarBtn = new Button(this);
         addToCalendarBtn.setAllCaps(false);
         addToCalendarBtn.setText(R.string.calendar_add_to_calendar);
@@ -436,7 +321,6 @@ public class MainActivity extends Activity {
         });
         detailPanel.addView(addToCalendarBtn, fullWidthParams(4));
 
-        // Calendar remove button
         Button removeFromCalendarBtn = new Button(this);
         removeFromCalendarBtn.setAllCaps(false);
         removeFromCalendarBtn.setText(R.string.calendar_remove_from_calendar);
@@ -462,7 +346,6 @@ public class MainActivity extends Activity {
             if (grantResults.length > 0
                     && grantResults[0] == PackageManager.PERMISSION_GRANTED
                     && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
-                // Permission granted — retry the pending calendar action
                 if (pendingCalendarExhibition != null) {
                     CalendarHelper.addToCalendar(this,
                             pendingCalendarExhibition.title,
@@ -479,6 +362,8 @@ public class MainActivity extends Activity {
             }
         }
     }
+
+    // ── Registration form ─────────────────────────────────────────────
 
     private void showRegistrationForm(final Exhibition exhibition) {
         animateShowPanel(registrationPanel);
@@ -554,11 +439,9 @@ public class MainActivity extends Activity {
         registrationResultText.setText(message);
         Toast.makeText(this, "报名已提交", Toast.LENGTH_SHORT).show();
 
-        // Send registration confirmation notification
         NotificationHelper notificationHelper = NotificationHelper.getInstance(this);
         notificationHelper.sendRegistrationConfirmation(exhibition.title, visitorName);
 
-        // If user opted for reminder, schedule exhibition reminder notification
         if (needReminderCheck.isChecked()) {
             notificationHelper.sendExhibitionReminder(
                     exhibition.title, exhibition.venue, exhibition.day, exhibition.time);
@@ -646,7 +529,6 @@ public class MainActivity extends Activity {
     // ── Open user public profile ──────────────────────────────────────
 
     private void openUserPublicProfile(Registration registration) {
-        // Collect all registrations for the same visitor
         List<Registration> allRegs = registrationManager.list();
         List<Registration> visitorRegs = new ArrayList<>();
         for (Registration r : allRegs) {
@@ -690,11 +572,6 @@ public class MainActivity extends Activity {
         navigateTo(intent);
     }
 
-    private void navigateTo(Intent intent) {
-        startActivity(intent);
-        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
-    }
-
     // ── Visitor type radio helper ─────────────────────────────────────
 
     private void addVisitorType(String label, boolean checked) {
@@ -729,31 +606,7 @@ public class MainActivity extends Activity {
         return count;
     }
 
-    // ── UI helpers ────────────────────────────────────────────────────
-
-    private TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
-        TextView textView = new TextView(this);
-        textView.setText(text);
-        textView.setTextColor(getResources().getColor(colorRes));
-        textView.setTextSize(sizeSp);
-        textView.setTypeface(Typeface.DEFAULT, style);
-        textView.setLineSpacing(0, 1.15f);
-        parent.addView(textView, fullWidthParams(6));
-        return textView;
-    }
-
-    private LinearLayout.LayoutParams fullWidthParams(int topMarginDp) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, dp(topMarginDp), 0, 0);
-        return params;
-    }
-
-    private int dp(int value) {
-        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
-    }
-
+    /** Immutable exhibition model for the main activity's sample data. */
     private static class Exhibition {
         final int day;
         final String title;

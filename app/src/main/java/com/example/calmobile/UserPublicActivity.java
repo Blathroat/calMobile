@@ -1,12 +1,8 @@
 package com.example.calmobile;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
@@ -17,23 +13,27 @@ import android.widget.TextView;
 /**
  * Displays a user's public profile page.
  *
- * Expected Intent extras:
- *   nickname         (String)  — user display name
- *   bio              (String)  — short bio
- *   contact          (String)  — contact info
- *   socialMedia      (String)  — social media handle
- *   showRegistrations(boolean) — whether to show registrations section
- *   isOwnProfile     (boolean) — whether to show edit button
+ * <p>Expected Intent extras:
+ * <ul>
+ *   <li>{@code nickname} (String) — user display name</li>
+ *   <li>{@code bio} (String) — short bio</li>
+ *   <li>{@code contact} (String) — contact info</li>
+ *   <li>{@code socialMedia} (String) — social media handle</li>
+ *   <li>{@code showRegistrations} (boolean) — whether to show registrations section</li>
+ *   <li>{@code isOwnProfile} (boolean) — whether to show edit button</li>
+ * </ul>
  *
- * Registration data (parallel arrays, optional):
- *   regExhibitionTitles (String[])
- *   regExhibitionDays   (String[])
- *   regExhibitionTimes  (String[])
- *   regExhibitionVenues (String[])
- *   regStatuses         (String[])
- *   regNeedsSummaries   (String[])
+ * <p>Registration data (parallel arrays, optional):
+ * <ul>
+ *   <li>{@code regExhibitionTitles} (String[])</li>
+ *   <li>{@code regExhibitionDays} (String[])</li>
+ *   <li>{@code regExhibitionTimes} (String[])</li>
+ *   <li>{@code regExhibitionVenues} (String[])</li>
+ *   <li>{@code regStatuses} (String[])</li>
+ *   <li>{@code regNeedsSummaries} (String[])</li>
+ * </ul>
  */
-public class UserPublicActivity extends Activity {
+public class UserPublicActivity extends BaseActivity {
 
     private LinearLayout headerSection;
     private LinearLayout infoSection;
@@ -92,63 +92,6 @@ public class UserPublicActivity extends Activity {
     public void finish() {
         super.finish();
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
-    }
-
-    // ── Panel animation helpers ───────────────────────────────────────
-
-    private void animateShowPanel(final View panel) {
-        panel.setVisibility(View.VISIBLE);
-        panel.setAlpha(0f);
-        panel.setTranslationY(dp(20));
-        panel.animate()
-                .alpha(1f)
-                .translationY(0)
-                .setDuration(300)
-                .setInterpolator(new DecelerateInterpolator())
-                .setListener(null)
-                .start();
-    }
-
-    // ── Staggered list item animation ─────────────────────────────────
-
-    private void animateListItems(LinearLayout container, int startDelay) {
-        for (int i = 0; i < container.getChildCount(); i++) {
-            View child = container.getChildAt(i);
-            child.setAlpha(0f);
-            child.setTranslationY(dp(16));
-            child.animate()
-                    .alpha(1f)
-                    .translationY(0)
-                    .setDuration(300)
-                    .setStartDelay(startDelay + i * 60)
-                    .setInterpolator(new DecelerateInterpolator())
-                    .start();
-        }
-    }
-
-    // ── Card styling helper ───────────────────────────────────────────
-
-    private void styleCard(LinearLayout card) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(getResources().getColor(R.color.card_background));
-        bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
-        card.setBackground(bg);
-        card.setElevation(dp(2));
-    }
-
-    // ── Back button ripple ────────────────────────────────────────────
-
-    private void applyRippleToBackButton(TextView btn) {
-        GradientDrawable shape = new GradientDrawable();
-        shape.setCornerRadius(dp(20));
-        shape.setColor(android.graphics.Color.TRANSPARENT);
-
-        RippleDrawable ripple = new RippleDrawable(
-                android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_color)),
-                shape, null);
-        btn.setBackground(ripple);
-        btn.setPadding(dp(12), dp(6), dp(12), dp(6));
     }
 
     // ── Render methods ────────────────────────────────────────────────
@@ -295,39 +238,5 @@ public class UserPublicActivity extends Activity {
             }
         });
         actionsSection.addView(editButton, fullWidthParams(0));
-    }
-
-    // --- Helpers ---
-
-    private TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
-        TextView textView = new TextView(this);
-        textView.setText(text);
-        textView.setTextColor(getResources().getColor(colorRes));
-        textView.setTextSize(sizeSp);
-        textView.setTypeface(Typeface.DEFAULT, style);
-        textView.setLineSpacing(0, 1.15f);
-        parent.addView(textView, fullWidthParams(6));
-        return textView;
-    }
-
-    private void addDivider(LinearLayout parent) {
-        View divider = new View(this);
-        divider.setBackgroundColor(getResources().getColor(R.color.divider_color));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
-        params.setMargins(0, dp(12), 0, dp(4));
-        parent.addView(divider, params);
-    }
-
-    private LinearLayout.LayoutParams fullWidthParams(int topMarginDp) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, dp(topMarginDp), 0, 0);
-        return params;
-    }
-
-    private int dp(int value) {
-        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 }

@@ -1,18 +1,12 @@
 package com.example.calmobile;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.RippleDrawable;
 import android.content.Intent;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -28,13 +22,13 @@ import java.util.List;
  * Allows exhibitors to manage their exhibitions: view, add, edit, delete,
  * change status, and view registration records.
  */
-public class ExhibitorBackendActivity extends Activity {
+public class ExhibitorBackendActivity extends BaseActivity {
 
     private LinearLayout listContainer;
     private LinearLayout formContainer;
     private LinearLayout registrationsPanel;
 
-    // Form inputs (populated when add/edit is active)
+    /** Form inputs (populated when add/edit is active). */
     private EditText titleInput;
     private EditText venueInput;
     private EditText dayInput;
@@ -43,7 +37,8 @@ public class ExhibitorBackendActivity extends Activity {
     private EditText descriptionInput;
     private RadioGroup statusGroup;
 
-    private String editingId = null; // null = adding new, non-null = editing
+    /** null = adding new, non-null = editing. */
+    private String editingId = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -142,111 +137,6 @@ public class ExhibitorBackendActivity extends Activity {
     public void finish() {
         super.finish();
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
-    }
-
-    // ── Panel animation helpers ───────────────────────────────────────
-
-    private void animateShowPanel(final View panel) {
-        panel.setVisibility(View.VISIBLE);
-        panel.setAlpha(0f);
-        panel.setTranslationY(dp(20));
-        panel.animate()
-                .alpha(1f)
-                .translationY(0)
-                .setDuration(300)
-                .setInterpolator(new DecelerateInterpolator())
-                .setListener(null)
-                .start();
-    }
-
-    private void animateHidePanel(final View panel) {
-        panel.animate()
-                .alpha(0f)
-                .translationY(dp(10))
-                .setDuration(200)
-                .setInterpolator(new DecelerateInterpolator())
-                .setListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        panel.setVisibility(View.GONE);
-                        panel.setAlpha(1f);
-                        panel.setTranslationY(0);
-                    }
-                })
-                .start();
-    }
-
-    // ── Staggered list item animation ─────────────────────────────────
-
-    private void animateListItems(LinearLayout container, int startDelay) {
-        for (int i = 0; i < container.getChildCount(); i++) {
-            View child = container.getChildAt(i);
-            child.setAlpha(0f);
-            child.setTranslationY(dp(16));
-            child.animate()
-                    .alpha(1f)
-                    .translationY(0)
-                    .setDuration(300)
-                    .setStartDelay(startDelay + i * 60)
-                    .setInterpolator(new DecelerateInterpolator())
-                    .start();
-        }
-    }
-
-    // ── Card styling helper ───────────────────────────────────────────
-
-    private void styleCard(LinearLayout card) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(getResources().getColor(R.color.card_background));
-        bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
-        card.setBackground(bg);
-        card.setElevation(dp(2));
-    }
-
-    private void applyRippleToBackButton(TextView btn) {
-        GradientDrawable shape = new GradientDrawable();
-        shape.setCornerRadius(dp(20));
-        shape.setColor(android.graphics.Color.TRANSPARENT);
-
-        RippleDrawable ripple = new RippleDrawable(
-                android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_color)),
-                shape, null);
-        btn.setBackground(ripple);
-        btn.setPadding(dp(12), dp(6), dp(12), dp(6));
-    }
-
-    // ── Empty state helper ────────────────────────────────────────────
-
-    private void showEmptyState(LinearLayout container, String message) {
-        container.removeAllViews();
-
-        LinearLayout emptyBox = new LinearLayout(this);
-        emptyBox.setOrientation(LinearLayout.VERTICAL);
-        emptyBox.setGravity(android.view.Gravity.CENTER);
-        emptyBox.setPadding(dp(16), dp(32), dp(16), dp(32));
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(getResources().getColor(R.color.card_background));
-        bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
-        emptyBox.setBackground(bg);
-
-        TextView icon = new TextView(this);
-        icon.setText(getString(R.string.empty_state_icon));
-        icon.setTextSize(36);
-        icon.setGravity(android.view.Gravity.CENTER);
-        emptyBox.addView(icon, fullWidthParams(0));
-
-        TextView msg = new TextView(this);
-        msg.setText(message);
-        msg.setTextColor(getResources().getColor(R.color.empty_icon_color));
-        msg.setTextSize(14);
-        msg.setGravity(android.view.Gravity.CENTER);
-        msg.setPadding(0, dp(8), 0, 0);
-        emptyBox.addView(msg, fullWidthParams(4));
-
-        container.addView(emptyBox, fullWidthParams(8));
     }
 
     // ── List rendering ───────────────────────────────────────────────
@@ -552,15 +442,12 @@ public class ExhibitorBackendActivity extends Activity {
                 : ExhibitorExhibition.STATUS_OPEN;
 
         if (editingId != null) {
-            // Update existing
             ExhibitionManager.update(editingId, day, title, venue, time,
                     status, description, category);
-            Toast.makeText(this, R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
         } else {
-            // Add new
             ExhibitionManager.add(day, title, venue, time, status, description, category);
-            Toast.makeText(this, R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
         }
+        Toast.makeText(this, R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
 
         editingId = null;
         renderList();
@@ -654,30 +541,5 @@ public class ExhibitorBackendActivity extends Activity {
         registrationsPanel.addView(closeBtn, fullWidthParams(10));
 
         animateListItems(registrationsPanel, 150);
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────
-
-    private TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
-        TextView textView = new TextView(this);
-        textView.setText(text);
-        textView.setTextColor(getResources().getColor(colorRes));
-        textView.setTextSize(sizeSp);
-        textView.setTypeface(Typeface.DEFAULT, style);
-        textView.setLineSpacing(0, 1.15f);
-        parent.addView(textView, fullWidthParams(6));
-        return textView;
-    }
-
-    private LinearLayout.LayoutParams fullWidthParams(int topMarginDp) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, dp(topMarginDp), 0, 0);
-        return params;
-    }
-
-    private int dp(int value) {
-        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 }

@@ -1,16 +1,8 @@
 package com.example.calmobile;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
 import android.view.View;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -24,7 +16,7 @@ import java.util.List;
  * Displays registration records for a specific exhibition,
  * allows approving/rejecting pending registrations, and shows details.
  */
-public class RegistrationManagementActivity extends Activity {
+public class RegistrationManagementActivity extends BaseActivity {
 
     public static final String EXTRA_EXHIBITION_ID = "exhibition_id";
 
@@ -36,7 +28,7 @@ public class RegistrationManagementActivity extends Activity {
         final String visitorType;
         final String registrationTime;
         final String formAnswers;
-        String status; // "待审核", "已通过", "已拒绝"
+        String status;
 
         MgmtRecord(String id, String exhibitionId, String visitorName, String visitorType,
                 String registrationTime, String formAnswers, String status) {
@@ -50,7 +42,12 @@ public class RegistrationManagementActivity extends Activity {
         }
     }
 
-    // In-memory storage (session-only, no persistence)
+    /** Status constants for registration management. */
+    private static final String STATUS_PENDING = "待审核";
+    private static final String STATUS_APPROVED = "已通过";
+    private static final String STATUS_REJECTED = "已拒绝";
+
+    /** In-memory storage (session-only, no persistence). */
     private static final List<MgmtRecord> allRecords = new ArrayList<>();
     private static int nextId = 1;
     private static boolean seeded = false;
@@ -108,94 +105,6 @@ public class RegistrationManagementActivity extends Activity {
     public void finish() {
         super.finish();
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
-    }
-
-    // ── Panel animation helpers ───────────────────────────────────────
-
-    private void animateShowPanel(final View panel) {
-        panel.setVisibility(View.VISIBLE);
-        panel.setAlpha(0f);
-        panel.setTranslationY(dp(20));
-        panel.animate()
-                .alpha(1f)
-                .translationY(0)
-                .setDuration(300)
-                .setInterpolator(new DecelerateInterpolator())
-                .setListener(null)
-                .start();
-    }
-
-    private void animateHidePanel(final View panel) {
-        panel.animate()
-                .alpha(0f)
-                .translationY(dp(10))
-                .setDuration(200)
-                .setInterpolator(new DecelerateInterpolator())
-                .setListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        panel.setVisibility(View.GONE);
-                        panel.setAlpha(1f);
-                        panel.setTranslationY(0);
-                    }
-                })
-                .start();
-    }
-
-    // ── Staggered list item animation ─────────────────────────────────
-
-    private void animateListItems(LinearLayout container, int startDelay) {
-        for (int i = 0; i < container.getChildCount(); i++) {
-            View child = container.getChildAt(i);
-            child.setAlpha(0f);
-            child.setTranslationY(dp(16));
-            child.animate()
-                    .alpha(1f)
-                    .translationY(0)
-                    .setDuration(300)
-                    .setStartDelay(startDelay + i * 60)
-                    .setInterpolator(new DecelerateInterpolator())
-                    .start();
-        }
-    }
-
-    // ── Card styling helper ───────────────────────────────────────────
-
-    private void styleCard(LinearLayout card) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(getResources().getColor(R.color.card_background));
-        bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
-        card.setBackground(bg);
-        card.setElevation(dp(2));
-    }
-
-    private void applyRippleToBackButton(TextView btn) {
-        GradientDrawable shape = new GradientDrawable();
-        shape.setCornerRadius(dp(20));
-        shape.setColor(android.graphics.Color.TRANSPARENT);
-
-        RippleDrawable ripple = new RippleDrawable(
-                android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_color)),
-                shape, null);
-        btn.setBackground(ripple);
-        btn.setPadding(dp(12), dp(6), dp(12), dp(6));
-    }
-
-    // ── Confirmation dialog helper ────────────────────────────────────
-
-    private void showConfirmDialog(String message, final Runnable onConfirm) {
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.confirm_title)
-                .setMessage(message)
-                .setPositiveButton(R.string.confirm_yes, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        onConfirm.run();
-                    }
-                })
-                .setNegativeButton(R.string.confirm_no, null)
-                .show();
     }
 
     // ── Seed sample data ─────────────────────────────────────────────
@@ -413,10 +322,6 @@ public class RegistrationManagementActivity extends Activity {
 
     // ── Data helpers ─────────────────────────────────────────────────
 
-    private static final String STATUS_PENDING = "待审核";
-    private static final String STATUS_APPROVED = "已通过";
-    private static final String STATUS_REJECTED = "已拒绝";
-
     private static List<MgmtRecord> getRecordsForExhibition(String exhId) {
         List<MgmtRecord> result = new ArrayList<>();
         for (MgmtRecord r : allRecords) {
@@ -435,30 +340,5 @@ public class RegistrationManagementActivity extends Activity {
         } else {
             return R.color.status_pending;
         }
-    }
-
-    // ── UI helpers ───────────────────────────────────────────────────
-
-    private TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
-        TextView textView = new TextView(this);
-        textView.setText(text);
-        textView.setTextColor(getResources().getColor(colorRes));
-        textView.setTextSize(sizeSp);
-        textView.setTypeface(Typeface.DEFAULT, style);
-        textView.setLineSpacing(0, 1.15f);
-        parent.addView(textView, fullWidthParams(6));
-        return textView;
-    }
-
-    private LinearLayout.LayoutParams fullWidthParams(int topMarginDp) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, dp(topMarginDp), 0, 0);
-        return params;
-    }
-
-    private int dp(int value) {
-        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 }

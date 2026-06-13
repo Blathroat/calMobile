@@ -25,9 +25,14 @@ const checks = [
     contains: ['MainActivity', 'android.intent.action.MAIN', 'android.intent.category.LAUNCHER']
   },
   {
+    id: 'base-activity-java',
+    file: 'app/src/main/java/com/example/calmobile/BaseActivity.java',
+    contains: ['package com.example.calmobile;', 'extends Activity', 'BaseActivity']
+  },
+  {
     id: 'java-entry-activity',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['package com.example.calmobile;', 'extends Activity', 'setContentView(R.layout.activity_main)']
+    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'setContentView(R.layout.activity_main)']
   },
   {
     id: 'fake-data-flow-java',
@@ -77,7 +82,7 @@ const checks = [
   {
     id: 'profile-activity-java',
     file: 'app/src/main/java/com/example/calmobile/ProfileActivity.java',
-    contains: ['package com.example.calmobile;', 'extends Activity', 'ProfileActivity', 'nickname', 'bio', 'contact']
+    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'ProfileActivity', 'nickname', 'bio', 'contact']
   },
   {
     id: 'profile-activity-layout',
@@ -102,7 +107,7 @@ const checks = [
   {
     id: 'user-public-activity-java',
     file: 'app/src/main/java/com/example/calmobile/UserPublicActivity.java',
-    contains: ['package com.example.calmobile;', 'extends Activity', 'UserPublicActivity', 'nickname', 'bio', 'contact']
+    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'UserPublicActivity', 'nickname', 'bio', 'contact']
   },
   {
     id: 'user-public-activity-layout',
@@ -127,7 +132,7 @@ const checks = [
   {
     id: 'exhibitor-backend-activity-java',
     file: 'app/src/main/java/com/example/calmobile/ExhibitorBackendActivity.java',
-    contains: ['package com.example.calmobile;', 'extends Activity', 'ExhibitorBackendActivity', 'ExhibitionManager', 'saveExhibition']
+    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'ExhibitorBackendActivity', 'ExhibitionManager', 'saveExhibition']
   },
   {
     id: 'exhibitor-backend-navigation-layout',
@@ -152,7 +157,7 @@ const checks = [
   {
     id: 'registration-management-activity-java',
     file: 'app/src/main/java/com/example/calmobile/RegistrationManagementActivity.java',
-    contains: ['package com.example.calmobile;', 'extends Activity', 'RegistrationManagementActivity', 'MgmtRecord']
+    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'RegistrationManagementActivity', 'MgmtRecord']
   },
   {
     id: 'registration-management-manifest',

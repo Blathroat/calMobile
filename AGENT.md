@@ -65,11 +65,13 @@
 
 ## Subagent 使用规范
 
-- subagent 默认名称是 Sisyphus-Junior，无需修改
+- subagent 默认名称是 Sisyphus-Junior，这是正常的，无需修改
 - 使用 `category` 参数指定任务类型（visual-engineering, unspecified-high, quick 等）
 - 使用 `load_skills` 参数加载特定技能
 - 后台任务完成后，通过 `<system-reminder>` 通知获取结果
 - 使用 `background_output(task_id="bg_xxx")` 获取任务结果
+- **等待任务时**：不要轮询，应使用工具主动获取状态或结束对话等待通知
+- **并行数量**：同时最多 3 个后台任务，多余的会自动排队
 - 测试依赖：junit:junit:4.13.2（仅 testImplementation，不进入 APK）。
 
 ## 开发与验证
