@@ -60,6 +60,87 @@
   - 媒体上传
   - 推送通知
 
+## 项目文件结构
+
+```
+calMobile/
+├── app/
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/example/calmobile/
+│   │   │   │   ├── Activities (UI 层)
+│   │   │   │   ├── Managers (业务逻辑)
+│   │   │   │   ├── Models (数据模型)
+│   │   │   │   └── Helpers (工具类)
+│   │   │   ├── res/
+│   │   │   │   ├── layout/ (XML 布局)
+│   │   │   │   ├── values/ (字符串、颜色、主题)
+│   │   │   │   ├── anim/ (动画)
+│   │   │   │   └── drawable/ (图形资源)
+│   │   │   └── AndroidManifest.xml
+│   │   └── test/
+│   │       └── java/com/example/calmobile/
+│   │           ├── 单元测试
+│   │           └── 集成测试
+│   └── build.gradle
+├── build.gradle
+├── settings.gradle
+├── gradle/
+├── scripts/
+│   └── smoke-check.js
+├── docs/
+│   └── MOBILE_REQUIREMENTS.md
+├── AGENT.md
+├── ARCHITECTURE.md
+├── TODO.md
+└── MOBILE_REQUIREMENTS.md
+```
+
+## 核心类职责
+
+### Activities (UI 层)
+- **BaseActivity**: 基类，提供通用 UI 工具方法
+- **MainActivity**: 首页，展示展会月历和详情
+- **LoginActivity**: 登录页面
+- **RegisterActivity**: 注册页面
+- **ProfileActivity**: 个人主页和账号设置
+- **UserPublicActivity**: 用户公开页面
+- **ExhibitorBackendActivity**: 展商后台
+- **RegistrationManagementActivity**: 报名管理
+- **AdminBackendActivity**: 管理后台
+- **SearchActivity**: 搜索页面
+
+### Managers (业务逻辑)
+- **ExhibitionManager**: 展会管理，支持 SQLite 和内存存储
+- **RegistrationManager**: 报名管理，支持 SQLite 和内存存储
+- **AdminUserManager**: 用户管理，支持 SQLite 和内存存储
+- **AuthManager**: 认证管理（当前为内存存储）
+
+### Models (数据模型)
+- **ExhibitorExhibition**: 展会模型
+- **Registration**: 报名模型
+- **AdminUser**: 用户模型
+
+### Helpers (工具类)
+- **DatabaseHelper**: SQLite 数据库单例
+- **NotificationHelper**: 通知管理
+- **CalendarHelper**: 日历集成
+- **ExportManager**: 数据导出
+- **RichTextViewer**: 富文本查看器
+
+## 已知问题
+
+- 认证系统当前为内存存储（后续集成 SQLite）
+- 示例数据为硬编码（后续替换为 API 数据）
+- 富文本编辑器未实现（仅查看器）
+
+## 开发注意事项
+
+- 所有 Activity 继承自 BaseActivity
+- 数据管理类使用 SQLite + 内存双模式
+- 测试文件位于 app/src/test/java/com/example/calmobile/
+- 运行 `node scripts/smoke-check.js` 验证项目结构
+
 ## 并行开发策略
 
 - 使用 `run_in_background=true` 启动后台任务，避免阻塞主线程
