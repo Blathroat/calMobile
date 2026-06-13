@@ -1,9 +1,16 @@
 package com.example.calmobile;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -86,6 +93,7 @@ public class RegistrationManagementActivity extends Activity {
 
         // Back button
         TextView backBtn = findViewById(R.id.reg_mgmt_back);
+        applyRippleToBackButton(backBtn);
         backBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -94,6 +102,100 @@ public class RegistrationManagementActivity extends Activity {
         });
 
         renderList();
+    }
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+    }
+
+    // ── Panel animation helpers ───────────────────────────────────────
+
+    private void animateShowPanel(final View panel) {
+        panel.setVisibility(View.VISIBLE);
+        panel.setAlpha(0f);
+        panel.setTranslationY(dp(20));
+        panel.animate()
+                .alpha(1f)
+                .translationY(0)
+                .setDuration(300)
+                .setInterpolator(new DecelerateInterpolator())
+                .setListener(null)
+                .start();
+    }
+
+    private void animateHidePanel(final View panel) {
+        panel.animate()
+                .alpha(0f)
+                .translationY(dp(10))
+                .setDuration(200)
+                .setInterpolator(new DecelerateInterpolator())
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        panel.setVisibility(View.GONE);
+                        panel.setAlpha(1f);
+                        panel.setTranslationY(0);
+                    }
+                })
+                .start();
+    }
+
+    // ── Staggered list item animation ─────────────────────────────────
+
+    private void animateListItems(LinearLayout container, int startDelay) {
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            child.setAlpha(0f);
+            child.setTranslationY(dp(16));
+            child.animate()
+                    .alpha(1f)
+                    .translationY(0)
+                    .setDuration(300)
+                    .setStartDelay(startDelay + i * 60)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+    }
+
+    // ── Card styling helper ───────────────────────────────────────────
+
+    private void styleCard(LinearLayout card) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(getResources().getColor(R.color.card_background));
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+        card.setBackground(bg);
+        card.setElevation(dp(2));
+    }
+
+    private void applyRippleToBackButton(TextView btn) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setCornerRadius(dp(20));
+        shape.setColor(android.graphics.Color.TRANSPARENT);
+
+        RippleDrawable ripple = new RippleDrawable(
+                android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_color)),
+                shape, null);
+        btn.setBackground(ripple);
+        btn.setPadding(dp(12), dp(6), dp(12), dp(6));
+    }
+
+    // ── Confirmation dialog helper ────────────────────────────────────
+
+    private void showConfirmDialog(String message, final Runnable onConfirm) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.confirm_title)
+                .setMessage(message)
+                .setPositiveButton(R.string.confirm_yes, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        onConfirm.run();
+                    }
+                })
+                .setNegativeButton(R.string.confirm_no, null)
+                .show();
     }
 
     // ── Seed sample data ─────────────────────────────────────────────
@@ -125,7 +227,7 @@ public class RegistrationManagementActivity extends Activity {
 
     private void renderList() {
         listContainer.removeAllViews();
-        detailPanel.setVisibility(View.GONE);
+        animateHidePanel(detailPanel);
 
         List<MgmtRecord> records = getRecordsForExhibition(exhibitionId);
 
@@ -141,7 +243,7 @@ public class RegistrationManagementActivity extends Activity {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
             card.setPadding(dp(14), dp(12), dp(14), dp(12));
-            card.setBackgroundResource(R.color.card_background);
+            styleCard(card);
 
             // Visitor name + type row
             LinearLayout nameRow = new LinearLayout(this);
@@ -182,12 +284,14 @@ public class RegistrationManagementActivity extends Activity {
 
             listContainer.addView(card, fullWidthParams(8));
         }
+
+        animateListItems(listContainer, 100);
     }
 
     // ── Detail panel ─────────────────────────────────────────────────
 
     private void showDetail(final MgmtRecord record) {
-        detailPanel.setVisibility(View.VISIBLE);
+        animateShowPanel(detailPanel);
         detailPanel.removeAllViews();
 
         // Title
@@ -212,10 +316,22 @@ public class RegistrationManagementActivity extends Activity {
             approveBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    record.status = STATUS_APPROVED;
-                    Toast.makeText(RegistrationManagementActivity.this,
-                            R.string.reg_mgmt_approved, Toast.LENGTH_SHORT).show();
-                    renderList();
+                    showConfirmDialog(
+                            getString(R.string.confirm_approve),
+                            new Runnable() {
+                                @Override
+                                public void run() {
+                                    record.status = STATUS_APPROVED;
+                                    NotificationHelper.getInstance(RegistrationManagementActivity.this)
+                                            .sendRegistrationStatusNotification(
+                                                    exhibition.getTitle(),
+                                                    record.visitorName,
+                                                    STATUS_APPROVED);
+                                    Toast.makeText(RegistrationManagementActivity.this,
+                                            R.string.reg_mgmt_approved, Toast.LENGTH_SHORT).show();
+                                    renderList();
+                                }
+                            });
                 }
             });
             LinearLayout.LayoutParams approveParams = new LinearLayout.LayoutParams(
@@ -229,10 +345,22 @@ public class RegistrationManagementActivity extends Activity {
             rejectBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    record.status = STATUS_REJECTED;
-                    Toast.makeText(RegistrationManagementActivity.this,
-                            R.string.reg_mgmt_rejected, Toast.LENGTH_SHORT).show();
-                    renderList();
+                    showConfirmDialog(
+                            getString(R.string.confirm_reject),
+                            new Runnable() {
+                                @Override
+                                public void run() {
+                                    record.status = STATUS_REJECTED;
+                                    NotificationHelper.getInstance(RegistrationManagementActivity.this)
+                                            .sendRegistrationStatusNotification(
+                                                    exhibition.getTitle(),
+                                                    record.visitorName,
+                                                    STATUS_REJECTED);
+                                    Toast.makeText(RegistrationManagementActivity.this,
+                                            R.string.reg_mgmt_rejected, Toast.LENGTH_SHORT).show();
+                                    renderList();
+                                }
+                            });
                 }
             });
             LinearLayout.LayoutParams rejectParams = new LinearLayout.LayoutParams(
@@ -250,7 +378,7 @@ public class RegistrationManagementActivity extends Activity {
         closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                detailPanel.setVisibility(View.GONE);
+                animateHidePanel(detailPanel);
             }
         });
         detailPanel.addView(closeBtn, fullWidthParams(10));
@@ -309,7 +437,7 @@ public class RegistrationManagementActivity extends Activity {
         }
     }
 
-    // ── UI helpers (same pattern as ExhibitorBackendActivity) ────────
+    // ── UI helpers ───────────────────────────────────────────────────
 
     private TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
         TextView textView = new TextView(this);

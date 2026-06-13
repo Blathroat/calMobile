@@ -55,9 +55,17 @@
 ## 并行开发策略
 
 - 使用 `run_in_background=true` 启动后台任务，避免阻塞主线程
-- 同时启动多个独立任务，提高开发效率
+- 同时最多启动 3 个后台 subagent，多余的会自动排队等待
 - 任务完成后统一验证和提交
-- 当前并行任务：9 个
+- 不要一次性启动过多任务（如 9 个），3 个为最佳并行数
+
+## Subagent 使用规范
+
+- subagent 默认名称是 Sisyphus-Junior，无需修改
+- 使用 `category` 参数指定任务类型（visual-engineering, unspecified-high, quick 等）
+- 使用 `load_skills` 参数加载特定技能
+- 后台任务完成后，通过 `<system-reminder>` 通知获取结果
+- 使用 `background_output(task_id="bg_xxx")` 获取任务结果
 - 测试依赖：junit:junit:4.13.2（仅 testImplementation，不进入 APK）。
 
 ## 开发与验证

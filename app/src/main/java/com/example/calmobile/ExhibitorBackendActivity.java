@@ -1,13 +1,18 @@
 package com.example.calmobile;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
-import android.content.Intent;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -54,6 +59,7 @@ public class ExhibitorBackendActivity extends Activity {
 
         // Back button
         TextView backBtn = findViewById(R.id.exhibitor_back);
+        applyRippleToBackButton(backBtn);
         backBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -72,21 +78,188 @@ public class ExhibitorBackendActivity extends Activity {
             }
         });
 
+        // Export buttons row
+        LinearLayout exportRow = new LinearLayout(this);
+        exportRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams exportRowParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        exportRowParams.setMargins(0, dp(8), 0, 0);
+
+        Button exportExhBtn = new Button(this);
+        exportExhBtn.setAllCaps(false);
+        exportExhBtn.setText(R.string.export_exhibitions);
+        exportExhBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String path = ExportManager.exportExhibitions(ExhibitorBackendActivity.this);
+                if (path != null) {
+                    Toast.makeText(ExhibitorBackendActivity.this,
+                            getString(R.string.export_success, path),
+                            Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(ExhibitorBackendActivity.this,
+                            R.string.export_empty, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        LinearLayout.LayoutParams exportExhParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        exportExhParams.setMargins(0, 0, dp(4), 0);
+        exportRow.addView(exportExhBtn, exportExhParams);
+
+        Button exportRegBtn = new Button(this);
+        exportRegBtn.setAllCaps(false);
+        exportRegBtn.setText(R.string.export_registrations);
+        exportRegBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String path = ExportManager.exportRegistrations(ExhibitorBackendActivity.this);
+                if (path != null) {
+                    Toast.makeText(ExhibitorBackendActivity.this,
+                            getString(R.string.export_success, path),
+                            Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(ExhibitorBackendActivity.this,
+                            R.string.export_empty, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        LinearLayout.LayoutParams exportRegParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        exportRegParams.setMargins(dp(4), 0, 0, 0);
+        exportRow.addView(exportRegBtn, exportRegParams);
+
+        // Insert export row after the add button
+        LinearLayout parent = (LinearLayout) addBtn.getParent();
+        int addBtnIndex = parent.indexOfChild(addBtn);
+        parent.addView(exportRow, addBtnIndex + 1, exportRowParams);
+
         renderList();
+    }
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+    }
+
+    // ── Panel animation helpers ───────────────────────────────────────
+
+    private void animateShowPanel(final View panel) {
+        panel.setVisibility(View.VISIBLE);
+        panel.setAlpha(0f);
+        panel.setTranslationY(dp(20));
+        panel.animate()
+                .alpha(1f)
+                .translationY(0)
+                .setDuration(300)
+                .setInterpolator(new DecelerateInterpolator())
+                .setListener(null)
+                .start();
+    }
+
+    private void animateHidePanel(final View panel) {
+        panel.animate()
+                .alpha(0f)
+                .translationY(dp(10))
+                .setDuration(200)
+                .setInterpolator(new DecelerateInterpolator())
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        panel.setVisibility(View.GONE);
+                        panel.setAlpha(1f);
+                        panel.setTranslationY(0);
+                    }
+                })
+                .start();
+    }
+
+    // ── Staggered list item animation ─────────────────────────────────
+
+    private void animateListItems(LinearLayout container, int startDelay) {
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            child.setAlpha(0f);
+            child.setTranslationY(dp(16));
+            child.animate()
+                    .alpha(1f)
+                    .translationY(0)
+                    .setDuration(300)
+                    .setStartDelay(startDelay + i * 60)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+    }
+
+    // ── Card styling helper ───────────────────────────────────────────
+
+    private void styleCard(LinearLayout card) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(getResources().getColor(R.color.card_background));
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+        card.setBackground(bg);
+        card.setElevation(dp(2));
+    }
+
+    private void applyRippleToBackButton(TextView btn) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setCornerRadius(dp(20));
+        shape.setColor(android.graphics.Color.TRANSPARENT);
+
+        RippleDrawable ripple = new RippleDrawable(
+                android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_color)),
+                shape, null);
+        btn.setBackground(ripple);
+        btn.setPadding(dp(12), dp(6), dp(12), dp(6));
+    }
+
+    // ── Empty state helper ────────────────────────────────────────────
+
+    private void showEmptyState(LinearLayout container, String message) {
+        container.removeAllViews();
+
+        LinearLayout emptyBox = new LinearLayout(this);
+        emptyBox.setOrientation(LinearLayout.VERTICAL);
+        emptyBox.setGravity(android.view.Gravity.CENTER);
+        emptyBox.setPadding(dp(16), dp(32), dp(16), dp(32));
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(getResources().getColor(R.color.card_background));
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+        emptyBox.setBackground(bg);
+
+        TextView icon = new TextView(this);
+        icon.setText(getString(R.string.empty_state_icon));
+        icon.setTextSize(36);
+        icon.setGravity(android.view.Gravity.CENTER);
+        emptyBox.addView(icon, fullWidthParams(0));
+
+        TextView msg = new TextView(this);
+        msg.setText(message);
+        msg.setTextColor(getResources().getColor(R.color.empty_icon_color));
+        msg.setTextSize(14);
+        msg.setGravity(android.view.Gravity.CENTER);
+        msg.setPadding(0, dp(8), 0, 0);
+        emptyBox.addView(msg, fullWidthParams(4));
+
+        container.addView(emptyBox, fullWidthParams(8));
     }
 
     // ── List rendering ───────────────────────────────────────────────
 
     private void renderList() {
         listContainer.removeAllViews();
-        formContainer.setVisibility(View.GONE);
-        registrationsPanel.setVisibility(View.GONE);
+        animateHidePanel(formContainer);
+        animateHidePanel(registrationsPanel);
 
         List<ExhibitorExhibition> exhibitions = ExhibitionManager.listAll();
 
         if (exhibitions.isEmpty()) {
-            addText(listContainer, getString(R.string.exhibitor_backend_empty),
-                    R.color.text_secondary, 15, Typeface.NORMAL);
+            showEmptyState(listContainer, getString(R.string.exhibitor_backend_empty));
             return;
         }
 
@@ -94,7 +267,7 @@ public class ExhibitorBackendActivity extends Activity {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
             card.setPadding(dp(14), dp(12), dp(14), dp(12));
-            card.setBackgroundResource(R.color.card_background);
+            styleCard(card);
 
             // Title row
             addText(card, exh.getTitle(), R.color.text_primary, 17, Typeface.BOLD);
@@ -157,6 +330,7 @@ public class ExhibitorBackendActivity extends Activity {
                     intent.putExtra(RegistrationManagementActivity.EXTRA_EXHIBITION_ID,
                             exh.getId());
                     startActivity(intent);
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 }
             });
             LinearLayout.LayoutParams regParams = new LinearLayout.LayoutParams(
@@ -180,14 +354,16 @@ public class ExhibitorBackendActivity extends Activity {
 
             listContainer.addView(card, fullWidthParams(10));
         }
+
+        animateListItems(listContainer, 100);
     }
 
     // ── Form (add / edit) ────────────────────────────────────────────
 
     private void showForm(ExhibitorExhibition existing) {
-        formContainer.setVisibility(View.VISIBLE);
+        animateShowPanel(formContainer);
         formContainer.removeAllViews();
-        registrationsPanel.setVisibility(View.GONE);
+        animateHidePanel(registrationsPanel);
 
         boolean isEdit = existing != null;
         addText(formContainer,
@@ -417,9 +593,9 @@ public class ExhibitorBackendActivity extends Activity {
 
     private void confirmDelete(final ExhibitorExhibition exh) {
         new AlertDialog.Builder(this)
-                .setTitle(R.string.exhibitor_delete)
-                .setMessage(R.string.exhibitor_confirm_delete)
-                .setPositiveButton(R.string.exhibitor_delete, new DialogInterface.OnClickListener() {
+                .setTitle(R.string.confirm_title)
+                .setMessage(R.string.confirm_delete_exhibition)
+                .setPositiveButton(R.string.confirm_yes, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         ExhibitionManager.delete(exh.getId());
@@ -429,16 +605,16 @@ public class ExhibitorBackendActivity extends Activity {
                         renderList();
                     }
                 })
-                .setNegativeButton(R.string.exhibitor_cancel, null)
+                .setNegativeButton(R.string.confirm_no, null)
                 .show();
     }
 
     // ── Registration records ─────────────────────────────────────────
 
     private void showRegistrations(ExhibitorExhibition exh) {
-        registrationsPanel.setVisibility(View.VISIBLE);
+        animateShowPanel(registrationsPanel);
         registrationsPanel.removeAllViews();
-        formContainer.setVisibility(View.GONE);
+        animateHidePanel(formContainer);
 
         addText(registrationsPanel, getString(R.string.exhibitor_registrations_title),
                 R.color.text_primary, 20, Typeface.BOLD);
@@ -459,7 +635,7 @@ public class ExhibitorBackendActivity extends Activity {
                 LinearLayout row = new LinearLayout(this);
                 row.setOrientation(LinearLayout.VERTICAL);
                 row.setPadding(dp(12), dp(10), dp(12), dp(10));
-                row.setBackgroundResource(R.color.card_background);
+                styleCard(row);
                 addText(row, record, R.color.text_primary, 15, Typeface.NORMAL);
                 registrationsPanel.addView(row, fullWidthParams(6));
             }
@@ -472,13 +648,15 @@ public class ExhibitorBackendActivity extends Activity {
         closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                registrationsPanel.setVisibility(View.GONE);
+                animateHidePanel(registrationsPanel);
             }
         });
         registrationsPanel.addView(closeBtn, fullWidthParams(10));
+
+        animateListItems(registrationsPanel, 150);
     }
 
-    // ── Helpers (same pattern as MainActivity / ProfileActivity) ─────
+    // ── Helpers ───────────────────────────────────────────────────────
 
     private TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
         TextView textView = new TextView(this);

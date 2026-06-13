@@ -126,5 +126,19 @@
             android:layout_marginTop="10dp"
             android:text="@string/go_to_admin_backend" />
 
+        <Button
+            android:id="@+id/go_to_search_btn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/go_to_search" />
+
+        <Button
+            android:id="@+id/logout_btn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/auth_logout" />
+
     </LinearLayout>
 </ScrollView>

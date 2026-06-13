@@ -1,16 +1,31 @@
 package com.example.calmobile;
 
+import android.Manifest;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.graphics.drawable.StateListDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.GridLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.TextView;
@@ -76,6 +91,9 @@ public class MainActivity extends Activity {
     private final RegistrationManager registrationManager = new RegistrationManager();
     private LinearLayout myRegistrationsList;
 
+    // Calendar integration — tracks which exhibition is pending permission approval
+    private Exhibition pendingCalendarExhibition;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -95,12 +113,15 @@ public class MainActivity extends Activity {
         showExhibitionDetail(SAMPLE_EXHIBITIONS[1]);
         renderMyRegistrations();
 
+        // Request notification permission on API 33+
+        NotificationHelper.getInstance(this).requestNotificationPermission(this);
+
         Button profileButton = findViewById(R.id.go_to_profile_btn);
         profileButton.setAllCaps(false);
         profileButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                startActivity(new Intent(MainActivity.this, ProfileActivity.class));
+                navigateTo(ProfileActivity.class);
             }
         });
 
@@ -109,7 +130,7 @@ public class MainActivity extends Activity {
         exhibitorBackendButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                startActivity(new Intent(MainActivity.this, ExhibitorBackendActivity.class));
+                navigateTo(ExhibitorBackendActivity.class);
             }
         });
 
@@ -118,10 +139,155 @@ public class MainActivity extends Activity {
         adminBackendButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                startActivity(new Intent(MainActivity.this, AdminBackendActivity.class));
+                navigateTo(AdminBackendActivity.class);
+            }
+        });
+
+        Button searchButton = findViewById(R.id.go_to_search_btn);
+        searchButton.setAllCaps(false);
+        searchButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                navigateTo(SearchActivity.class);
             }
         });
     }
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+    }
+
+    // ── Page transition helper ────────────────────────────────────────
+
+    private void navigateTo(Class<? extends Activity> activityClass) {
+        startActivity(new Intent(this, activityClass));
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    // ── Panel animation helpers ───────────────────────────────────────
+
+    private void animateShowPanel(final View panel) {
+        panel.setVisibility(View.VISIBLE);
+        panel.setAlpha(0f);
+        panel.setTranslationY(dp(20));
+        panel.animate()
+                .alpha(1f)
+                .translationY(0)
+                .setDuration(300)
+                .setInterpolator(new DecelerateInterpolator())
+                .setListener(null)
+                .start();
+    }
+
+    private void animateHidePanel(final View panel) {
+        panel.animate()
+                .alpha(0f)
+                .translationY(dp(10))
+                .setDuration(200)
+                .setInterpolator(new DecelerateInterpolator())
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        panel.setVisibility(View.GONE);
+                        panel.setAlpha(1f);
+                        panel.setTranslationY(0);
+                    }
+                })
+                .start();
+    }
+
+    // ── Staggered list item animation ─────────────────────────────────
+
+    private void animateListItems(LinearLayout container, int startDelay) {
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            child.setAlpha(0f);
+            child.setTranslationY(dp(16));
+            child.animate()
+                    .alpha(1f)
+                    .translationY(0)
+                    .setDuration(300)
+                    .setStartDelay(startDelay + i * 60)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+    }
+
+    // ── Card styling helper ───────────────────────────────────────────
+
+    private void styleCard(LinearLayout card) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(getResources().getColor(R.color.card_background));
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+        card.setBackground(bg);
+        card.setElevation(dp(2));
+    }
+
+    private void applyRippleBackground(final View view) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(getResources().getColor(R.color.card_background));
+        shape.setCornerRadius(dp(12));
+        shape.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+
+        RippleDrawable ripple = new RippleDrawable(
+                android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_color)),
+                shape, null);
+        view.setBackground(ripple);
+    }
+
+    // ── Empty state helper ────────────────────────────────────────────
+
+    private void showEmptyState(LinearLayout container, String message) {
+        container.removeAllViews();
+
+        LinearLayout emptyBox = new LinearLayout(this);
+        emptyBox.setOrientation(LinearLayout.VERTICAL);
+        emptyBox.setGravity(android.view.Gravity.CENTER);
+        emptyBox.setPadding(dp(16), dp(32), dp(16), dp(32));
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(getResources().getColor(R.color.card_background));
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+        emptyBox.setBackground(bg);
+
+        TextView icon = new TextView(this);
+        icon.setText(getString(R.string.empty_state_icon));
+        icon.setTextSize(36);
+        icon.setGravity(android.view.Gravity.CENTER);
+        emptyBox.addView(icon, fullWidthParams(0));
+
+        TextView msg = new TextView(this);
+        msg.setText(message);
+        msg.setTextColor(getResources().getColor(R.color.empty_icon_color));
+        msg.setTextSize(14);
+        msg.setGravity(android.view.Gravity.CENTER);
+        msg.setPadding(0, dp(8), 0, 0);
+        emptyBox.addView(msg, fullWidthParams(4));
+
+        container.addView(emptyBox, fullWidthParams(8));
+    }
+
+    // ── Confirmation dialog helper ────────────────────────────────────
+
+    private void showConfirmDialog(String message, final Runnable onConfirm) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.confirm_title)
+                .setMessage(message)
+                .setPositiveButton(R.string.confirm_yes, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        onConfirm.run();
+                    }
+                })
+                .setNegativeButton(R.string.confirm_no, null)
+                .show();
+    }
+
+    // ── Calendar grid ─────────────────────────────────────────────────
 
     private void buildMonthGrid() {
         calendarGrid.removeAllViews();
@@ -152,13 +318,15 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ── Exhibition list for a day ─────────────────────────────────────
+
     private void showExhibitionsForDay(int day) {
         exhibitionList.removeAllViews();
         List<Exhibition> exhibitions = getExhibitionsForDay(day);
         statusText.setText(getString(R.string.local_day_count, day, exhibitions.size()));
 
         if (exhibitions.isEmpty()) {
-            addText(exhibitionList, "当天暂无展会，点击带标记日期查看样例展会。", R.color.text_secondary, 15, Typeface.NORMAL);
+            showEmptyState(exhibitionList, getString(R.string.empty_exhibitions_day));
             return;
         }
 
@@ -166,7 +334,8 @@ public class MainActivity extends Activity {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
             card.setPadding(dp(14), dp(12), dp(14), dp(12));
-            card.setBackgroundResource(R.color.card_background);
+            styleCard(card);
+            applyRippleBackground(card);
             card.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
@@ -191,12 +360,16 @@ public class MainActivity extends Activity {
 
             exhibitionList.addView(card, fullWidthParams(10));
         }
+
+        animateListItems(exhibitionList, 100);
     }
+
+    // ── Exhibition detail ─────────────────────────────────────────────
 
     private void showExhibitionDetail(final Exhibition exhibition) {
         detailPanel.removeAllViews();
-        detailPanel.setVisibility(View.VISIBLE);
-        registrationPanel.setVisibility(View.GONE);
+        animateShowPanel(detailPanel);
+        animateHidePanel(registrationPanel);
 
         addText(detailPanel, getString(R.string.exhibition_detail), R.color.text_primary, 20, Typeface.BOLD);
         addText(detailPanel, exhibition.title, R.color.text_primary, 18, Typeface.BOLD);
@@ -217,10 +390,98 @@ public class MainActivity extends Activity {
             }
         });
         detailPanel.addView(registerButton, fullWidthParams(12));
+
+        // Exhibition reminder button
+        Button reminderButton = new Button(this);
+        reminderButton.setAllCaps(false);
+        reminderButton.setText("设置提醒");
+        reminderButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                NotificationHelper helper = NotificationHelper.getInstance(MainActivity.this);
+                helper.sendExhibitionReminder(
+                        exhibition.title, exhibition.venue, exhibition.day, exhibition.time);
+                Toast.makeText(MainActivity.this,
+                        "已设置展会提醒（1天前提醒）", Toast.LENGTH_SHORT).show();
+            }
+        });
+        detailPanel.addView(reminderButton, fullWidthParams(4));
+
+        // Calendar integration buttons
+        addCalendarButtons(exhibition);
+    }
+
+    // ── Registration form ─────────────────────────────────────────────
+
+    /**
+     * Add calendar add/remove buttons to the detail panel.
+     */
+    private void addCalendarButtons(final Exhibition exhibition) {
+        // Calendar add button
+        Button addToCalendarBtn = new Button(this);
+        addToCalendarBtn.setAllCaps(false);
+        addToCalendarBtn.setText(R.string.calendar_add_to_calendar);
+        addToCalendarBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (!CalendarHelper.hasCalendarPermissions(MainActivity.this)) {
+                    pendingCalendarExhibition = exhibition;
+                    CalendarHelper.requestCalendarPermissions(MainActivity.this);
+                    return;
+                }
+                CalendarHelper.addToCalendar(MainActivity.this,
+                        exhibition.title, exhibition.venue,
+                        exhibition.day, exhibition.time, exhibition.description);
+            }
+        });
+        detailPanel.addView(addToCalendarBtn, fullWidthParams(4));
+
+        // Calendar remove button
+        Button removeFromCalendarBtn = new Button(this);
+        removeFromCalendarBtn.setAllCaps(false);
+        removeFromCalendarBtn.setText(R.string.calendar_remove_from_calendar);
+        removeFromCalendarBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (!CalendarHelper.hasCalendarPermissions(MainActivity.this)) {
+                    pendingCalendarExhibition = exhibition;
+                    CalendarHelper.requestCalendarPermissions(MainActivity.this);
+                    return;
+                }
+                CalendarHelper.removeFromCalendar(MainActivity.this,
+                        exhibition.title, exhibition.day);
+            }
+        });
+        detailPanel.addView(removeFromCalendarBtn, fullWidthParams(4));
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == CalendarHelper.REQUEST_CODE_CALENDAR_PERMISSION) {
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                    && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
+                // Permission granted — retry the pending calendar action
+                if (pendingCalendarExhibition != null) {
+                    CalendarHelper.addToCalendar(this,
+                            pendingCalendarExhibition.title,
+                            pendingCalendarExhibition.venue,
+                            pendingCalendarExhibition.day,
+                            pendingCalendarExhibition.time,
+                            pendingCalendarExhibition.description);
+                    pendingCalendarExhibition = null;
+                }
+            } else {
+                Toast.makeText(this, R.string.calendar_permission_denied,
+                        Toast.LENGTH_SHORT).show();
+                pendingCalendarExhibition = null;
+            }
+        }
     }
 
     private void showRegistrationForm(final Exhibition exhibition) {
-        registrationPanel.setVisibility(View.VISIBLE);
+        animateShowPanel(registrationPanel);
         registrationAnswers.removeAllViews();
 
         addText(registrationAnswers, getString(R.string.registration_title), R.color.text_primary, 20, Typeface.BOLD);
@@ -293,16 +554,27 @@ public class MainActivity extends Activity {
         registrationResultText.setText(message);
         Toast.makeText(this, "报名已提交", Toast.LENGTH_SHORT).show();
 
+        // Send registration confirmation notification
+        NotificationHelper notificationHelper = NotificationHelper.getInstance(this);
+        notificationHelper.sendRegistrationConfirmation(exhibition.title, visitorName);
+
+        // If user opted for reminder, schedule exhibition reminder notification
+        if (needReminderCheck.isChecked()) {
+            notificationHelper.sendExhibitionReminder(
+                    exhibition.title, exhibition.venue, exhibition.day, exhibition.time);
+        }
+
         renderMyRegistrations();
     }
+
+    // ── My registrations list ─────────────────────────────────────────
 
     private void renderMyRegistrations() {
         myRegistrationsList.removeAllViews();
         List<Registration> registrations = registrationManager.list();
 
         if (registrations.isEmpty()) {
-            addText(myRegistrationsList, getString(R.string.my_registrations_empty),
-                    R.color.text_secondary, 14, Typeface.NORMAL);
+            showEmptyState(myRegistrationsList, getString(R.string.my_registrations_empty));
             return;
         }
 
@@ -310,7 +582,7 @@ public class MainActivity extends Activity {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
             card.setPadding(dp(14), dp(12), dp(14), dp(12));
-            card.setBackgroundResource(R.color.card_background);
+            styleCard(card);
 
             addText(card, registration.getExhibitionTitle(),
                     R.color.text_primary, 16, Typeface.BOLD);
@@ -346,10 +618,17 @@ public class MainActivity extends Activity {
                 cancelButton.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        registrationManager.cancel(registration.getId());
-                        Toast.makeText(MainActivity.this,
-                                R.string.registration_cancelled, Toast.LENGTH_SHORT).show();
-                        renderMyRegistrations();
+                        showConfirmDialog(
+                                getString(R.string.confirm_cancel_registration),
+                                new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        registrationManager.cancel(registration.getId());
+                                        Toast.makeText(MainActivity.this,
+                                                R.string.registration_cancelled, Toast.LENGTH_SHORT).show();
+                                        renderMyRegistrations();
+                                    }
+                                });
                     }
                 });
                 card.addView(cancelButton, fullWidthParams(6));
@@ -360,7 +639,11 @@ public class MainActivity extends Activity {
 
             myRegistrationsList.addView(card, fullWidthParams(8));
         }
+
+        animateListItems(myRegistrationsList, 50);
     }
+
+    // ── Open user public profile ──────────────────────────────────────
 
     private void openUserPublicProfile(Registration registration) {
         // Collect all registrations for the same visitor
@@ -404,8 +687,15 @@ public class MainActivity extends Activity {
         intent.putExtra("regExhibitionVenues", venues);
         intent.putExtra("regStatuses", statuses);
         intent.putExtra("regNeedsSummaries", needs);
-        startActivity(intent);
+        navigateTo(intent);
     }
+
+    private void navigateTo(Intent intent) {
+        startActivity(intent);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    // ── Visitor type radio helper ─────────────────────────────────────
 
     private void addVisitorType(String label, boolean checked) {
         RadioButton radioButton = new RadioButton(this);
@@ -416,6 +706,8 @@ public class MainActivity extends Activity {
             visitorTypeGroup.check(radioButton.getId());
         }
     }
+
+    // ── Data helpers ──────────────────────────────────────────────────
 
     private List<Exhibition> getExhibitionsForDay(int day) {
         List<Exhibition> exhibitions = new ArrayList<>();
@@ -436,6 +728,8 @@ public class MainActivity extends Activity {
         }
         return count;
     }
+
+    // ── UI helpers ────────────────────────────────────────────────────
 
     private TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
         TextView textView = new TextView(this);

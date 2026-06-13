@@ -83,5 +83,25 @@
             android:layout_marginTop="16dp"
             android:orientation="horizontal" />
 
+        <!-- Notification settings section built programmatically -->
+        <LinearLayout
+            android:id="@+id/profile_notification_settings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@color/card_background"
+            android:orientation="vertical"
+            android:padding="16dp" />
+
+        <!-- Notification history section built programmatically -->
+        <LinearLayout
+            android:id="@+id/profile_notification_history"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@color/card_background"
+            android:orientation="vertical"
+            android:padding="16dp" />
+
     </LinearLayout>
 </ScrollView>

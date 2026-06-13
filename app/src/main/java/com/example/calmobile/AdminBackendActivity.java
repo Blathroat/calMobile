@@ -1,12 +1,17 @@
 package com.example.calmobile;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -56,6 +61,7 @@ public class AdminBackendActivity extends Activity {
 
         // Back button
         TextView backBtn = findViewById(R.id.admin_back);
+        applyRippleToBackButton(backBtn);
         backBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -65,6 +71,129 @@ public class AdminBackendActivity extends Activity {
 
         buildTabRow();
         switchTab(TAB_USERS);
+    }
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+    }
+
+    // ── Panel animation helpers ───────────────────────────────────────
+
+    private void animateShowPanel(final View panel) {
+        panel.setVisibility(View.VISIBLE);
+        panel.setAlpha(0f);
+        panel.setTranslationY(dp(20));
+        panel.animate()
+                .alpha(1f)
+                .translationY(0)
+                .setDuration(300)
+                .setInterpolator(new DecelerateInterpolator())
+                .setListener(null)
+                .start();
+    }
+
+    private void animateHidePanel(final View panel) {
+        panel.animate()
+                .alpha(0f)
+                .translationY(dp(10))
+                .setDuration(200)
+                .setInterpolator(new DecelerateInterpolator())
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        panel.setVisibility(View.GONE);
+                        panel.setAlpha(1f);
+                        panel.setTranslationY(0);
+                    }
+                })
+                .start();
+    }
+
+    private void animateShowSection(final View section) {
+        section.setVisibility(View.VISIBLE);
+        section.setAlpha(0f);
+        section.setTranslationX(dp(24));
+        section.animate()
+                .alpha(1f)
+                .translationX(0)
+                .setDuration(280)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
+    }
+
+    // ── Staggered list item animation ─────────────────────────────────
+
+    private void animateListItems(LinearLayout container, int startDelay) {
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            child.setAlpha(0f);
+            child.setTranslationY(dp(16));
+            child.animate()
+                    .alpha(1f)
+                    .translationY(0)
+                    .setDuration(300)
+                    .setStartDelay(startDelay + i * 60)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+    }
+
+    // ── Card styling helper ───────────────────────────────────────────
+
+    private void styleCard(LinearLayout card) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(getResources().getColor(R.color.card_background));
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+        card.setBackground(bg);
+        card.setElevation(dp(2));
+    }
+
+    private void applyRippleToBackButton(TextView btn) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setCornerRadius(dp(20));
+        shape.setColor(android.graphics.Color.TRANSPARENT);
+
+        RippleDrawable ripple = new RippleDrawable(
+                android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_color)),
+                shape, null);
+        btn.setBackground(ripple);
+        btn.setPadding(dp(12), dp(6), dp(12), dp(6));
+    }
+
+    // ── Empty state helper ────────────────────────────────────────────
+
+    private void showEmptyState(LinearLayout container, String message) {
+        container.removeAllViews();
+
+        LinearLayout emptyBox = new LinearLayout(this);
+        emptyBox.setOrientation(LinearLayout.VERTICAL);
+        emptyBox.setGravity(android.view.Gravity.CENTER);
+        emptyBox.setPadding(dp(16), dp(32), dp(16), dp(32));
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(getResources().getColor(R.color.card_background));
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+        emptyBox.setBackground(bg);
+
+        TextView icon = new TextView(this);
+        icon.setText(getString(R.string.empty_state_icon));
+        icon.setTextSize(36);
+        icon.setGravity(android.view.Gravity.CENTER);
+        emptyBox.addView(icon, fullWidthParams(0));
+
+        TextView msg = new TextView(this);
+        msg.setText(message);
+        msg.setTextColor(getResources().getColor(R.color.empty_icon_color));
+        msg.setTextSize(14);
+        msg.setGravity(android.view.Gravity.CENTER);
+        msg.setPadding(0, dp(8), 0, 0);
+        emptyBox.addView(msg, fullWidthParams(4));
+
+        container.addView(emptyBox, fullWidthParams(8));
     }
 
     // ── Tab switcher ────────────────────────────────────────────────
@@ -112,28 +241,34 @@ public class AdminBackendActivity extends Activity {
             }
         }
 
-        // Show/hide sections
-        usersSection.setVisibility(tabIndex == TAB_USERS ? View.VISIBLE : View.GONE);
-        userDetailPanel.setVisibility(View.GONE);
-        exhibitionsSection.setVisibility(tabIndex == TAB_EXHIBITIONS ? View.VISIBLE : View.GONE);
-        exhibitionDetailPanel.setVisibility(View.GONE);
-        settingsSection.setVisibility(tabIndex == TAB_SETTINGS ? View.VISIBLE : View.GONE);
+        // Hide all sections and detail panels
+        usersSection.setVisibility(View.GONE);
+        animateHidePanel(userDetailPanel);
+        exhibitionsSection.setVisibility(View.GONE);
+        animateHidePanel(exhibitionDetailPanel);
+        settingsSection.setVisibility(View.GONE);
 
-        // Render current tab content
-        renderSummary();
+        // Animate in the active section
         if (tabIndex == TAB_USERS) {
+            animateShowSection(usersSection);
             renderUserList();
         } else if (tabIndex == TAB_EXHIBITIONS) {
+            animateShowSection(exhibitionsSection);
             renderExhibitionList();
         } else if (tabIndex == TAB_SETTINGS) {
+            animateShowSection(settingsSection);
             renderSettings();
         }
+
+        // Render summary
+        renderSummary();
     }
 
     // ── Summary bar ─────────────────────────────────────────────────
 
     private void renderSummary() {
         summarySection.removeAllViews();
+        styleCard(summarySection);
 
         List<AdminUser> users = AdminUserManager.listAll();
         List<ExhibitorExhibition> exhibitions = ExhibitionManager.listAll();
@@ -153,16 +288,35 @@ public class AdminBackendActivity extends Activity {
 
     private void renderUserList() {
         usersSection.removeAllViews();
-        userDetailPanel.setVisibility(View.GONE);
+        animateHidePanel(userDetailPanel);
 
         List<AdminUser> users = AdminUserManager.listAll();
 
         addText(usersSection, getString(R.string.admin_tab_users),
                 R.color.text_primary, 20, Typeface.BOLD);
 
+        // Export users button
+        Button exportUsersBtn = new Button(this);
+        exportUsersBtn.setAllCaps(false);
+        exportUsersBtn.setText(R.string.export_users);
+        exportUsersBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String path = ExportManager.exportUsers(AdminBackendActivity.this);
+                if (path != null) {
+                    Toast.makeText(AdminBackendActivity.this,
+                            getString(R.string.export_success, path),
+                            Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(AdminBackendActivity.this,
+                            R.string.export_empty, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        usersSection.addView(exportUsersBtn, fullWidthParams(8));
+
         if (users.isEmpty()) {
-            addText(usersSection, "暂无用户数据。",
-                    R.color.text_secondary, 15, Typeface.NORMAL);
+            showEmptyState(usersSection, getString(R.string.empty_users_generic));
             return;
         }
 
@@ -170,7 +324,7 @@ public class AdminBackendActivity extends Activity {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
             card.setPadding(dp(14), dp(12), dp(14), dp(12));
-            card.setBackgroundResource(R.color.card_background);
+            styleCard(card);
 
             // Nickname
             addText(card, user.getNickname(), R.color.text_primary, 17, Typeface.BOLD);
@@ -229,10 +383,12 @@ public class AdminBackendActivity extends Activity {
 
             usersSection.addView(card, fullWidthParams(10));
         }
+
+        animateListItems(usersSection, 100);
     }
 
     private void showUserDetail(final AdminUser user) {
-        userDetailPanel.setVisibility(View.VISIBLE);
+        animateShowPanel(userDetailPanel);
         userDetailPanel.removeAllViews();
 
         addText(userDetailPanel, getString(R.string.admin_user_detail_title),
@@ -278,7 +434,7 @@ public class AdminBackendActivity extends Activity {
         closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                userDetailPanel.setVisibility(View.GONE);
+                animateHidePanel(userDetailPanel);
             }
         });
         LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
@@ -315,16 +471,35 @@ public class AdminBackendActivity extends Activity {
 
     private void renderExhibitionList() {
         exhibitionsSection.removeAllViews();
-        exhibitionDetailPanel.setVisibility(View.GONE);
+        animateHidePanel(exhibitionDetailPanel);
 
         List<ExhibitorExhibition> exhibitions = ExhibitionManager.listAll();
 
         addText(exhibitionsSection, getString(R.string.admin_tab_exhibitions),
                 R.color.text_primary, 20, Typeface.BOLD);
 
+        // Export exhibitions button
+        Button exportExhBtn = new Button(this);
+        exportExhBtn.setAllCaps(false);
+        exportExhBtn.setText(R.string.export_exhibitions);
+        exportExhBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String path = ExportManager.exportExhibitions(AdminBackendActivity.this);
+                if (path != null) {
+                    Toast.makeText(AdminBackendActivity.this,
+                            getString(R.string.export_success, path),
+                            Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(AdminBackendActivity.this,
+                            R.string.export_empty, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        exhibitionsSection.addView(exportExhBtn, fullWidthParams(8));
+
         if (exhibitions.isEmpty()) {
-            addText(exhibitionsSection, "暂无展会数据。",
-                    R.color.text_secondary, 15, Typeface.NORMAL);
+            showEmptyState(exhibitionsSection, getString(R.string.empty_exhibitions_generic));
             return;
         }
 
@@ -332,7 +507,7 @@ public class AdminBackendActivity extends Activity {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
             card.setPadding(dp(14), dp(12), dp(14), dp(12));
-            card.setBackgroundResource(R.color.card_background);
+            styleCard(card);
 
             // Title
             addText(card, exh.getTitle(), R.color.text_primary, 17, Typeface.BOLD);
@@ -403,10 +578,12 @@ public class AdminBackendActivity extends Activity {
 
             exhibitionsSection.addView(card, fullWidthParams(10));
         }
+
+        animateListItems(exhibitionsSection, 100);
     }
 
     private void showExhibitionDetail(final ExhibitorExhibition exh) {
-        exhibitionDetailPanel.setVisibility(View.VISIBLE);
+        animateShowPanel(exhibitionDetailPanel);
         exhibitionDetailPanel.removeAllViews();
 
         addText(exhibitionDetailPanel, getString(R.string.admin_exhibition_detail_title),
@@ -466,7 +643,7 @@ public class AdminBackendActivity extends Activity {
         closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                exhibitionDetailPanel.setVisibility(View.GONE);
+                animateHidePanel(exhibitionDetailPanel);
             }
         });
         LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
@@ -521,6 +698,57 @@ public class AdminBackendActivity extends Activity {
         addText(settingsSection, getString(R.string.admin_settings_title),
                 R.color.text_primary, 20, Typeface.BOLD);
 
+        // Data export section
+        addText(settingsSection, "数据导出",
+                R.color.text_primary, 17, Typeface.BOLD);
+
+        LinearLayout exportRow = new LinearLayout(this);
+        exportRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button exportExhBtn = new Button(this);
+        exportExhBtn.setAllCaps(false);
+        exportExhBtn.setText(R.string.export_exhibitions);
+        exportExhBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String path = ExportManager.exportExhibitions(AdminBackendActivity.this);
+                showExportResult(path);
+            }
+        });
+        LinearLayout.LayoutParams exhParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        exhParams.setMargins(0, 0, dp(4), 0);
+        exportRow.addView(exportExhBtn, exhParams);
+
+        Button exportRegBtn = new Button(this);
+        exportRegBtn.setAllCaps(false);
+        exportRegBtn.setText(R.string.export_registrations);
+        exportRegBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String path = ExportManager.exportRegistrations(AdminBackendActivity.this);
+                showExportResult(path);
+            }
+        });
+        LinearLayout.LayoutParams regParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        regParams.setMargins(dp(4), 0, 0, 0);
+        exportRow.addView(exportRegBtn, regParams);
+
+        settingsSection.addView(exportRow, fullWidthParams(8));
+
+        Button exportUsersBtn = new Button(this);
+        exportUsersBtn.setAllCaps(false);
+        exportUsersBtn.setText(R.string.export_users);
+        exportUsersBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String path = ExportManager.exportUsers(AdminBackendActivity.this);
+                showExportResult(path);
+            }
+        });
+        settingsSection.addView(exportUsersBtn, fullWidthParams(4));
+
         addText(settingsSection, getString(R.string.admin_settings_media_limit),
                 R.color.text_primary, 17, Typeface.BOLD);
 
@@ -567,9 +795,24 @@ public class AdminBackendActivity extends Activity {
             }
         });
         settingsSection.addView(saveBtn, fullWidthParams(14));
+
+        // Stagger settings items
+        animateListItems(settingsSection, 80);
     }
 
-    // ── Helpers (same pattern as ExhibitorBackendActivity) ──────────
+    // ── Export result helper ────────────────────────────────────────
+
+    private void showExportResult(String path) {
+        if (path != null) {
+            Toast.makeText(this,
+                    getString(R.string.export_success, path),
+                    Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(this, R.string.export_empty, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────
 
     private TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
         TextView textView = new TextView(this);

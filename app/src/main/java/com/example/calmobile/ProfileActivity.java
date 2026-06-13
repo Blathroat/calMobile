@@ -1,16 +1,28 @@
 package com.example.calmobile;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
 
 public class ProfileActivity extends Activity {
 
@@ -26,6 +38,8 @@ public class ProfileActivity extends Activity {
     private LinearLayout infoSection;
     private LinearLayout editFieldsSection;
     private LinearLayout actionsSection;
+    private LinearLayout notificationSettingsSection;
+    private LinearLayout notificationHistorySection;
 
     private EditText nicknameInput;
     private EditText bioInput;
@@ -41,6 +55,11 @@ public class ProfileActivity extends Activity {
         infoSection = findViewById(R.id.profile_info);
         editFieldsSection = findViewById(R.id.profile_edit_fields);
         actionsSection = findViewById(R.id.profile_actions);
+        notificationSettingsSection = findViewById(R.id.profile_notification_settings);
+        notificationHistorySection = findViewById(R.id.profile_notification_history);
+
+        // Request notification permission on API 33+
+        NotificationHelper.getInstance(this).requestNotificationPermission(this);
 
         // Apply defaults on first launch
         if (nickname.length() == 0) {
@@ -51,6 +70,7 @@ public class ProfileActivity extends Activity {
         }
 
         TextView backBtn = findViewById(R.id.profile_back);
+        applyRippleToBackButton(backBtn);
         backBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -61,12 +81,94 @@ public class ProfileActivity extends Activity {
         renderDisplayMode();
     }
 
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+    }
+
+    // ── Panel animation helpers ───────────────────────────────────────
+
+    private void animateShowPanel(final View panel) {
+        panel.setVisibility(View.VISIBLE);
+        panel.setAlpha(0f);
+        panel.setTranslationY(dp(20));
+        panel.animate()
+                .alpha(1f)
+                .translationY(0)
+                .setDuration(300)
+                .setInterpolator(new DecelerateInterpolator())
+                .setListener(null)
+                .start();
+    }
+
+    private void animateHidePanel(final View panel) {
+        panel.animate()
+                .alpha(0f)
+                .translationY(dp(10))
+                .setDuration(200)
+                .setInterpolator(new DecelerateInterpolator())
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        panel.setVisibility(View.GONE);
+                        panel.setAlpha(1f);
+                        panel.setTranslationY(0);
+                    }
+                })
+                .start();
+    }
+
+    // ── Card styling helper ───────────────────────────────────────────
+
+    private void styleCard(LinearLayout card) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(getResources().getColor(R.color.card_background));
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+        card.setBackground(bg);
+        card.setElevation(dp(2));
+    }
+
+    // ── Back button ripple ────────────────────────────────────────────
+
+    private void applyRippleToBackButton(TextView btn) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setCornerRadius(dp(20));
+        shape.setColor(android.graphics.Color.TRANSPARENT);
+
+        RippleDrawable ripple = new RippleDrawable(
+                android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_color)),
+                shape, null);
+        btn.setBackground(ripple);
+        btn.setPadding(dp(12), dp(6), dp(12), dp(6));
+    }
+
+    // ── Confirmation dialog helper ────────────────────────────────────
+
+    private void showConfirmDialog(String message, final Runnable onConfirm) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.confirm_title)
+                .setMessage(message)
+                .setPositiveButton(R.string.confirm_yes, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        onConfirm.run();
+                    }
+                })
+                .setNegativeButton(R.string.confirm_no, null)
+                .show();
+    }
+
+    // ── Display mode ──────────────────────────────────────────────────
+
     private void renderDisplayMode() {
         editing = false;
 
         // --- Header: avatar + nickname ---
         headerSection.removeAllViews();
         headerSection.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        styleCard(headerSection);
 
         // Avatar placeholder (circle with initial)
         TextView avatar = new TextView(this);
@@ -91,6 +193,8 @@ public class ProfileActivity extends Activity {
 
         // --- Info section ---
         infoSection.removeAllViews();
+        infoSection.setVisibility(View.VISIBLE);
+        styleCard(infoSection);
 
         addText(infoSection, getString(R.string.profile_bio_label), R.color.text_secondary, 13, Typeface.NORMAL);
         addText(infoSection, bio, R.color.text_primary, 16, Typeface.NORMAL);
@@ -104,6 +208,21 @@ public class ProfileActivity extends Activity {
 
         addText(infoSection, getString(R.string.profile_social_label), R.color.text_secondary, 13, Typeface.NORMAL);
         addText(infoSection, socialMedia, R.color.text_primary, 16, Typeface.NORMAL);
+
+        // Animate header and info in
+        animateShowPanel(headerSection);
+        infoSection.setAlpha(0f);
+        infoSection.setTranslationY(dp(16));
+        infoSection.animate()
+                .alpha(1f).translationY(0)
+                .setDuration(300).setStartDelay(100)
+                .setInterpolator(new DecelerateInterpolator()).start();
+
+        // --- Notification settings ---
+        renderNotificationSettings();
+
+        // --- Notification history ---
+        renderNotificationHistory();
 
         // --- Hide edit section ---
         editFieldsSection.setVisibility(View.GONE);
@@ -122,13 +241,186 @@ public class ProfileActivity extends Activity {
         actionsSection.addView(editButton, fullWidthParams(0));
     }
 
+    // ── Notification settings ────────────────────────────────────────
+
+    private void renderNotificationSettings() {
+        notificationSettingsSection.removeAllViews();
+        notificationSettingsSection.setVisibility(View.VISIBLE);
+        styleCard(notificationSettingsSection);
+
+        final NotificationHelper helper = NotificationHelper.getInstance(this);
+
+        addText(notificationSettingsSection, getString(R.string.notification_settings_title),
+                R.color.text_primary, 17, Typeface.BOLD);
+
+        // Exhibition reminders toggle
+        CheckBox exhibitionToggle = new CheckBox(this);
+        exhibitionToggle.setText(getString(R.string.notification_exhibition_reminder));
+        exhibitionToggle.setChecked(helper.isExhibitionReminderEnabled());
+        exhibitionToggle.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                CheckBox cb = (CheckBox) v;
+                helper.setExhibitionReminderEnabled(cb.isChecked());
+                Toast.makeText(ProfileActivity.this,
+                        R.string.notification_settings_saved, Toast.LENGTH_SHORT).show();
+            }
+        });
+        notificationSettingsSection.addView(exhibitionToggle, fullWidthParams(4));
+
+        addText(notificationSettingsSection, getString(R.string.notification_exhibition_reminder_desc),
+                R.color.text_secondary, 12, Typeface.NORMAL);
+
+        // Registration updates toggle
+        CheckBox registrationToggle = new CheckBox(this);
+        registrationToggle.setText(getString(R.string.notification_registration_updates));
+        registrationToggle.setChecked(helper.isRegistrationUpdatesEnabled());
+        registrationToggle.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                CheckBox cb = (CheckBox) v;
+                helper.setRegistrationUpdatesEnabled(cb.isChecked());
+                Toast.makeText(ProfileActivity.this,
+                        R.string.notification_settings_saved, Toast.LENGTH_SHORT).show();
+            }
+        });
+        notificationSettingsSection.addView(registrationToggle, fullWidthParams(4));
+
+        addText(notificationSettingsSection, getString(R.string.notification_registration_updates_desc),
+                R.color.text_secondary, 12, Typeface.NORMAL);
+
+        // Permission hint (if not granted)
+        if (!helper.hasNotificationPermission()) {
+            addText(notificationSettingsSection, getString(R.string.notification_permission_hint),
+                    R.color.status_pending, 13, Typeface.NORMAL);
+
+            Button permBtn = new Button(this);
+            permBtn.setAllCaps(false);
+            permBtn.setText(R.string.notification_permission_hint);
+            permBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    helper.requestNotificationPermission(ProfileActivity.this);
+                }
+            });
+            notificationSettingsSection.addView(permBtn, fullWidthParams(4));
+        }
+
+        // Staggered animation
+        notificationSettingsSection.setAlpha(0f);
+        notificationSettingsSection.setTranslationY(dp(16));
+        notificationSettingsSection.animate()
+                .alpha(1f).translationY(0)
+                .setDuration(300).setStartDelay(200)
+                .setInterpolator(new DecelerateInterpolator()).start();
+    }
+
+    // ── Notification history ─────────────────────────────────────────
+
+    private void renderNotificationHistory() {
+        notificationHistorySection.removeAllViews();
+        notificationHistorySection.setVisibility(View.VISIBLE);
+        styleCard(notificationHistorySection);
+
+        final NotificationHelper helper = NotificationHelper.getInstance(this);
+        List<NotificationHelper.NotificationRecord> records = helper.getHistory();
+
+        addText(notificationHistorySection, getString(R.string.notification_history_title),
+                R.color.text_primary, 17, Typeface.BOLD);
+
+        addText(notificationHistorySection,
+                getString(R.string.notification_history_count, records.size()),
+                R.color.text_secondary, 13, Typeface.NORMAL);
+
+        if (records.isEmpty()) {
+            addText(notificationHistorySection, getString(R.string.notification_history_empty),
+                    R.color.text_secondary, 14, Typeface.NORMAL);
+        } else {
+            SimpleDateFormat sdf = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault());
+
+            for (NotificationHelper.NotificationRecord record : records) {
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.VERTICAL);
+                row.setPadding(dp(12), dp(8), dp(12), dp(8));
+
+                GradientDrawable rowBg = new GradientDrawable();
+                rowBg.setColor(getResources().getColor(R.color.surface_background));
+                rowBg.setCornerRadius(dp(8));
+                row.setBackground(rowBg);
+
+                // Type + time
+                String timeStr = sdf.format(new Date(record.timestamp));
+                addText(row, record.type + " · " + timeStr,
+                        R.color.text_secondary, 12, Typeface.NORMAL);
+
+                // Title
+                addText(row, record.relatedTitle,
+                        R.color.text_primary, 14, Typeface.BOLD);
+
+                // Message preview
+                String preview = record.message.length() > 60
+                        ? record.message.substring(0, 60) + "…"
+                        : record.message;
+                addText(row, preview, R.color.text_secondary, 13, Typeface.NORMAL);
+
+                notificationHistorySection.addView(row, fullWidthParams(6));
+            }
+        }
+
+        // Clear history button
+        if (!records.isEmpty()) {
+            Button clearBtn = new Button(this);
+            clearBtn.setAllCaps(false);
+            clearBtn.setText(R.string.notification_clear_history);
+            clearBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    showConfirmDialog(
+                            "确定清除所有通知历史？",
+                            new Runnable() {
+                                @Override
+                                public void run() {
+                                    helper.clearHistory();
+                                    renderNotificationHistory();
+                                    Toast.makeText(ProfileActivity.this,
+                                            "通知历史已清除", Toast.LENGTH_SHORT).show();
+                                }
+                            });
+                }
+            });
+            notificationHistorySection.addView(clearBtn, fullWidthParams(8));
+        }
+
+        // Staggered animation
+        notificationHistorySection.setAlpha(0f);
+        notificationHistorySection.setTranslationY(dp(16));
+        notificationHistorySection.animate()
+                .alpha(1f).translationY(0)
+                .setDuration(300).setStartDelay(300)
+                .setInterpolator(new DecelerateInterpolator()).start();
+    }
+
+    // ── Edit mode ─────────────────────────────────────────────────────
+
     private void renderEditMode() {
         editing = true;
 
-        // Hide info, show edit fields
-        infoSection.setVisibility(View.GONE);
-        editFieldsSection.setVisibility(View.VISIBLE);
+        // Animate info out, then show edit
+        animateHidePanel(infoSection);
+
+        // Show edit fields after a brief delay
+        editFieldsSection.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                showEditFields();
+            }
+        }, 220);
+    }
+
+    private void showEditFields() {
         editFieldsSection.removeAllViews();
+        styleCard(editFieldsSection);
+        animateShowPanel(editFieldsSection);
 
         // Nickname
         addText(editFieldsSection, getString(R.string.profile_nickname_label), R.color.text_secondary, 13, Typeface.BOLD);
@@ -181,7 +473,14 @@ public class ProfileActivity extends Activity {
         cancelButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                renderDisplayMode();
+                showConfirmDialog(
+                        getString(R.string.confirm_cancel_edit),
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                renderDisplayMode();
+                            }
+                        });
             }
         });
 
@@ -216,7 +515,7 @@ public class ProfileActivity extends Activity {
         renderDisplayMode();
     }
 
-    // --- Helpers (same patterns as MainActivity) ---
+    // --- Helpers ---
 
     private TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
         TextView textView = new TextView(this);
@@ -231,7 +530,7 @@ public class ProfileActivity extends Activity {
 
     private void addDivider(LinearLayout parent) {
         View divider = new View(this);
-        divider.setBackgroundColor(getResources().getColor(R.color.text_secondary));
+        divider.setBackgroundColor(getResources().getColor(R.color.divider_color));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
         params.setMargins(0, dp(12), 0, dp(4));

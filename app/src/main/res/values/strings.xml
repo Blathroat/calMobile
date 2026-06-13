@@ -137,4 +137,88 @@
     <string name="admin_user_status_label">状态：%1$s</string>
     <string name="admin_user_registered">注册：%1$s</string>
     <string name="admin_user_last_login">登录：%1$s</string>
+
+    <!-- Empty states -->
+    <string name="empty_state_icon">\uD83D\uDCCB</string>
+    <string name="empty_exhibitions_day">当天暂无展会，点击带标记日期查看样例展会。</string>
+    <string name="empty_exhibitions_generic">暂无展会数据</string>
+    <string name="empty_users_generic">暂无用户数据</string>
+
+    <!-- Confirmation dialogs -->
+    <string name="confirm_title">确认操作</string>
+    <string name="confirm_cancel_registration">确定要取消该报名吗？取消后无法恢复。</string>
+    <string name="confirm_cancel_edit">确定要放弃编辑吗？未保存的修改将会丢失。</string>
+    <string name="confirm_approve">确定通过该报名申请？</string>
+    <string name="confirm_reject">确定拒绝该报名申请？</string>
+    <string name="confirm_delete_exhibition">确认删除该展会？删除后无法恢复。</string>
+    <string name="confirm_yes">确定</string>
+    <string name="confirm_no">取消</string>
+
+    <!-- Loading -->
+    <string name="loading_text">加载中…</string>
+    <string name="saving_text">保存中…</string>
+
+    <!-- Auth / Login -->
+    <string name="auth_login_subtitle">登录您的账号</string>
+    <string name="auth_username_hint">用户名</string>
+    <string name="auth_password_hint">密码</string>
+    <string name="auth_email_hint">邮箱</string>
+    <string name="auth_password_confirm_hint">确认密码</string>
+    <string name="auth_login_btn">登录</string>
+    <string name="auth_go_to_register">注册新账号</string>
+    <string name="auth_register_title">注册账号</string>
+    <string name="auth_register_subtitle">创建新账号以使用展会排期助手</string>
+    <string name="auth_register_btn">注册</string>
+    <string name="auth_go_to_login">已有账号？返回登录</string>
+    <string name="auth_logout">退出登录</string>
+    <string name="auth_welcome">欢迎，%1$s</string>
+
+    <!-- Search -->
+    <string name="search_title">搜索</string>
+    <string name="search_hint">搜索展会名称、地点、分类或用户昵称、邮箱…</string>
+    <string name="search_btn">搜索</string>
+    <string name="search_back">返回</string>
+    <string name="search_empty_hint">请输入搜索关键词</string>
+    <string name="search_results_count">共找到 %1$d 条结果（%2$s）</string>
+    <string name="search_no_results">未找到与「%1$s」相关的结果</string>
+    <string name="search_section_exhibitions">展会（%1$d）</string>
+    <string name="search_section_users">用户（%1$d）</string>
+    <string name="search_history_title">搜索历史</string>
+    <string name="search_clear_history">清除</string>
+    <string name="go_to_search">搜索</string>
+
+    <!-- Notification Settings -->
+    <string name="notification_settings_title">通知设置</string>
+    <string name="notification_exhibition_reminder">展会提醒</string>
+    <string name="notification_exhibition_reminder_desc">开展前一天提醒</string>
+    <string name="notification_registration_updates">报名动态</string>
+    <string name="notification_registration_updates_desc">报名审核状态变更通知</string>
+    <string name="notification_history_title">通知历史</string>
+    <string name="notification_history_empty">暂无通知记录</string>
+    <string name="notification_history_count">共 %1$d 条通知</string>
+    <string name="notification_clear_history">清除历史</string>
+    <string name="notification_permission_hint">开启通知以接收展会提醒</string>
+    <string name="notification_permission_denied">通知权限未授予，无法发送提醒</string>
+    <string name="notification_settings_saved">通知设置已保存</string>
+
+    <!-- Calendar Integration -->
+    <string name="calendar_add_to_calendar">添加到日历</string>
+    <string name="calendar_remove_from_calendar">从日历移除</string>
+    <string name="calendar_already_in_calendar">已在日历中</string>
+    <string name="calendar_added">已添加到日历</string>
+    <string name="calendar_removed">已从日历移除</string>
+    <string name="calendar_already_added">该展会已在日历中</string>
+    <string name="calendar_not_in_calendar">该展会未在日历中</string>
+    <string name="calendar_add_failed">添加到日历失败</string>
+    <string name="calendar_remove_failed">从日历移除失败</string>
+    <string name="calendar_permission_denied">日历权限未授予，无法操作</string>
+    <string name="calendar_no_account">未找到可用的日历账号</string>
+
+    <!-- Data Export -->
+    <string name="export_exhibitions">导出展会数据</string>
+    <string name="export_registrations">导出报名数据</string>
+    <string name="export_users">导出用户数据</string>
+    <string name="export_success">导出成功：%1$s</string>
+    <string name="export_empty">暂无数据可导出</string>
+    <string name="export_failed">导出失败，请重试</string>
 </resources>
