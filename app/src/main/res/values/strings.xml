@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">展会排期助手</string>
+    <string name="home_status">本地假数据演示已就绪：点击带标记日期查看展会卡片、详情和报名表单。</string>
+    <string name="local_day_count">本地假数据：6月%1$d日共有 %2$d 场展会</string>
+    <string name="month_view_title">6月展会月视图</string>
+    <string name="today_exhibitions">今日展会</string>
+    <string name="exhibition_detail">展会详情</string>
+    <string name="registration_title">报名信息</string>
+    <string name="submit_registration">提交报名</string>
+    <string name="registration_closed">报名已截止</string>
+    <string name="my_registrations_title">我的报名</string>
+    <string name="my_registrations_empty">暂无报名记录，提交报名后将在此显示。</string>
+    <string name="cancel_registration">取消报名</string>
+    <string name="status_pending">待参加</string>
+    <string name="status_cancelled">已取消</string>
+    <string name="registration_cancelled">报名已取消</string>
+
+    <string name="profile_title">个人主页</string>
+    <string name="profile_nickname_label">昵称</string>
+    <string name="profile_bio_label">简介</string>
+    <string name="profile_contact_label">联系方式</string>
+    <string name="profile_social_label">社交账号</string>
+    <string name="profile_edit">编辑资料</string>
+    <string name="profile_save">保存</string>
+    <string name="profile_cancel">取消</string>
+    <string name="profile_saved">资料已保存</string>
+    <string name="profile_default_nickname">展会达人</string>
+    <string name="profile_default_bio">专注展会策划与行业研究，热衷发现新产品与趋势。</string>
+    <string name="profile_default_contact">calmobile@example.com</string>
+    <string name="profile_default_social">微信：calmobile</string>
+    <string name="profile_avatar_initial">展</string>
+    <string name="go_to_profile">个人主页</string>
+
+    <string name="user_public_title">用户主页</string>
+    <string name="user_public_unknown_user">未知用户</string>
+    <string name="user_public_no_info">该用户暂未填写个人信息。</string>
+    <string name="user_public_registrations_title">报名记录</string>
+    <string name="user_public_edit_profile">编辑资料</string>
+    <string name="user_public_view_profile_hint">查看该用户主页 →</string>
+</resources>

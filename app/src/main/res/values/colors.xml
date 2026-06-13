@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="surface_background">#F7F8FA</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="date_active_background">#E9F8F0</color>
+    <color name="text_primary">#1F2933</color>
+    <color name="text_secondary">#52606D</color>
+    <color name="status_open">#1F8A5B</color>
+    <color name="status_closed">#9A3412</color>
+</resources>
