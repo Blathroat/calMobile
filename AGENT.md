@@ -51,6 +51,10 @@
   - 更多单元测试（AuthManagerTest, DatabaseHelperTest, ExportManagerTest, NotificationHelperTest, CalendarHelperTest）
   - 代码结构优化（BaseActivity 基类）
   - 集成测试（42 个测试覆盖核心工作流）
+  - 真实调试验证（模拟器端到端测试）
+- 正在进行的优化（后台并行）：
+  - UI 设计优化 (bg_60f93c60)
+  - 项目文档完善 (bg_a786ad4f)
 - 待实现功能：
   - 网络层（API 对接）
   - 媒体上传
