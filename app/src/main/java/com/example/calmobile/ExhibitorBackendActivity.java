@@ -5,13 +5,9 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
-import android.text.InputType;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -24,29 +20,22 @@ import java.util.List;
  */
 public class ExhibitorBackendActivity extends BaseActivity {
 
+    private static final int REQUEST_EXHIBITION_FORM = 1001;
+
     private LinearLayout listContainer;
-    private LinearLayout formContainer;
     private LinearLayout registrationsPanel;
-
-    /** Form inputs (populated when add/edit is active). */
-    private EditText titleInput;
-    private EditText venueInput;
-    private EditText dayInput;
-    private EditText timeInput;
-    private EditText categoryInput;
-    private EditText descriptionInput;
-    private RadioGroup statusGroup;
-
-    /** null = adding new, non-null = editing. */
-    private String editingId = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (!AuthManager.getInstance().canAccessExhibitor()) {
+            Toast.makeText(this, R.string.auth_exhibitor_required, Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_exhibitor_backend);
 
         listContainer = findViewById(R.id.exhibitor_list);
-        formContainer = findViewById(R.id.exhibitor_form);
         registrationsPanel = findViewById(R.id.exhibitor_registrations_panel);
 
         // Ensure sample data is seeded
@@ -64,12 +53,11 @@ public class ExhibitorBackendActivity extends BaseActivity {
 
         // Add button
         Button addBtn = findViewById(R.id.exhibitor_add_btn);
-        addBtn.setAllCaps(false);
+        stylePrimaryButton(addBtn);
         addBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                editingId = null;
-                showForm(null);
+                openForm(null);
             }
         });
 
@@ -139,11 +127,27 @@ public class ExhibitorBackendActivity extends BaseActivity {
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_EXHIBITION_FORM) {
+            renderList();
+        }
+    }
+
+    private void openForm(String exhibitionId) {
+        Intent intent = new Intent(this, ExhibitionFormActivity.class);
+        if (exhibitionId != null) {
+            intent.putExtra(ExhibitionFormActivity.EXTRA_EXHIBITION_ID, exhibitionId);
+        }
+        startActivityForResult(intent, REQUEST_EXHIBITION_FORM);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
     // ── List rendering ───────────────────────────────────────────────
 
     private void renderList() {
         listContainer.removeAllViews();
-        animateHidePanel(formContainer);
         animateHidePanel(registrationsPanel);
 
         List<ExhibitorExhibition> exhibitions = ExhibitionManager.listAll();
@@ -184,8 +188,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
             editBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    editingId = exh.getId();
-                    showForm(exh);
+                    openForm(exh.getId());
                 }
             });
             LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(
@@ -248,211 +251,6 @@ public class ExhibitorBackendActivity extends BaseActivity {
         animateListItems(listContainer, 100);
     }
 
-    // ── Form (add / edit) ────────────────────────────────────────────
-
-    private void showForm(ExhibitorExhibition existing) {
-        animateShowPanel(formContainer);
-        formContainer.removeAllViews();
-        animateHidePanel(registrationsPanel);
-
-        boolean isEdit = existing != null;
-        addText(formContainer,
-                isEdit ? getString(R.string.exhibitor_edit_exhibition)
-                        : getString(R.string.exhibitor_add_exhibition),
-                R.color.text_primary, 20, Typeface.BOLD);
-
-        // Title
-        addText(formContainer, getString(R.string.exhibitor_field_title),
-                R.color.text_secondary, 13, Typeface.BOLD);
-        titleInput = new EditText(this);
-        titleInput.setSingleLine(true);
-        titleInput.setInputType(InputType.TYPE_CLASS_TEXT);
-        titleInput.setHint(R.string.exhibitor_hint_title);
-        if (isEdit) {
-            titleInput.setText(existing.getTitle());
-        }
-        formContainer.addView(titleInput, fullWidthParams(4));
-
-        // Venue
-        addText(formContainer, getString(R.string.exhibitor_field_venue),
-                R.color.text_secondary, 13, Typeface.BOLD);
-        venueInput = new EditText(this);
-        venueInput.setSingleLine(true);
-        venueInput.setInputType(InputType.TYPE_CLASS_TEXT);
-        venueInput.setHint(R.string.exhibitor_hint_venue);
-        if (isEdit) {
-            venueInput.setText(existing.getVenue());
-        }
-        formContainer.addView(venueInput, fullWidthParams(4));
-
-        // Day
-        addText(formContainer, getString(R.string.exhibitor_field_day),
-                R.color.text_secondary, 13, Typeface.BOLD);
-        dayInput = new EditText(this);
-        dayInput.setSingleLine(true);
-        dayInput.setInputType(InputType.TYPE_CLASS_NUMBER);
-        dayInput.setHint(R.string.exhibitor_hint_day);
-        if (isEdit) {
-            dayInput.setText(String.valueOf(existing.getDay()));
-        }
-        formContainer.addView(dayInput, fullWidthParams(4));
-
-        // Time
-        addText(formContainer, getString(R.string.exhibitor_field_time),
-                R.color.text_secondary, 13, Typeface.BOLD);
-        timeInput = new EditText(this);
-        timeInput.setSingleLine(true);
-        timeInput.setInputType(InputType.TYPE_CLASS_TEXT);
-        timeInput.setHint(R.string.exhibitor_hint_time);
-        if (isEdit) {
-            timeInput.setText(existing.getTime());
-        }
-        formContainer.addView(timeInput, fullWidthParams(4));
-
-        // Category
-        addText(formContainer, getString(R.string.exhibitor_field_category),
-                R.color.text_secondary, 13, Typeface.BOLD);
-        categoryInput = new EditText(this);
-        categoryInput.setSingleLine(true);
-        categoryInput.setInputType(InputType.TYPE_CLASS_TEXT);
-        categoryInput.setHint(R.string.exhibitor_hint_category);
-        if (isEdit) {
-            categoryInput.setText(existing.getCategory());
-        }
-        formContainer.addView(categoryInput, fullWidthParams(4));
-
-        // Description
-        addText(formContainer, getString(R.string.exhibitor_field_description),
-                R.color.text_secondary, 13, Typeface.BOLD);
-        descriptionInput = new EditText(this);
-        descriptionInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        descriptionInput.setMinLines(2);
-        descriptionInput.setHint(R.string.exhibitor_hint_description);
-        if (isEdit) {
-            descriptionInput.setText(existing.getDescription());
-        }
-        formContainer.addView(descriptionInput, fullWidthParams(4));
-
-        // Status radio
-        addText(formContainer, getString(R.string.exhibitor_field_status),
-                R.color.text_secondary, 13, Typeface.BOLD);
-        statusGroup = new RadioGroup(this);
-        statusGroup.setOrientation(RadioGroup.VERTICAL);
-        addStatusOption(ExhibitorExhibition.STATUS_OPEN,
-                isEdit && ExhibitorExhibition.STATUS_OPEN.equals(existing.getStatus()));
-        addStatusOption(ExhibitorExhibition.STATUS_CLOSED,
-                isEdit && ExhibitorExhibition.STATUS_CLOSED.equals(existing.getStatus()));
-        addStatusOption(ExhibitorExhibition.STATUS_ENDED,
-                isEdit && ExhibitorExhibition.STATUS_ENDED.equals(existing.getStatus()));
-        if (!isEdit) {
-            // Default to 报名中 for new exhibitions
-            ((RadioButton) statusGroup.getChildAt(0)).setChecked(true);
-        }
-        formContainer.addView(statusGroup, fullWidthParams(4));
-
-        // Save + Cancel buttons
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-
-        Button saveBtn = new Button(this);
-        stylePrimaryButton(saveBtn);
-        saveBtn.setText(R.string.exhibitor_save);
-        saveBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                saveExhibition();
-            }
-        });
-        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        saveParams.setMargins(0, 0, dp(6), 0);
-        buttons.addView(saveBtn, saveParams);
-
-        Button cancelBtn = new Button(this);
-        styleSecondaryButton(cancelBtn);
-        cancelBtn.setText(R.string.exhibitor_cancel);
-        cancelBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                editingId = null;
-                renderList();
-            }
-        });
-        LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        cancelParams.setMargins(dp(6), 0, 0, 0);
-        buttons.addView(cancelBtn, cancelParams);
-
-        formContainer.addView(buttons, fullWidthParams(12));
-    }
-
-    private void addStatusOption(String label, boolean checked) {
-        RadioButton rb = new RadioButton(this);
-        rb.setId(View.generateViewId());
-        rb.setText(label);
-        statusGroup.addView(rb, fullWidthParams(0));
-        if (checked) {
-            statusGroup.check(rb.getId());
-        }
-    }
-
-    private void saveExhibition() {
-        String title = titleInput.getText().toString().trim();
-        String venue = venueInput.getText().toString().trim();
-        String dayStr = dayInput.getText().toString().trim();
-        String time = timeInput.getText().toString().trim();
-        String category = categoryInput.getText().toString().trim();
-        String description = descriptionInput.getText().toString().trim();
-
-        // Validate required fields
-        if (title.length() == 0) {
-            titleInput.setError("必填");
-            return;
-        }
-        if (venue.length() == 0) {
-            venueInput.setError("必填");
-            return;
-        }
-        if (dayStr.length() == 0) {
-            dayInput.setError("必填");
-            return;
-        }
-        if (time.length() == 0) {
-            timeInput.setError("必填");
-            return;
-        }
-
-        int day;
-        try {
-            day = Integer.parseInt(dayStr);
-            if (day < 1 || day > 30) {
-                dayInput.setError("1-30");
-                return;
-            }
-        } catch (NumberFormatException e) {
-            dayInput.setError("请输入数字");
-            return;
-        }
-
-        // Get selected status
-        int checkedId = statusGroup.getCheckedRadioButtonId();
-        RadioButton selectedStatus = findViewById(checkedId);
-        String status = selectedStatus != null
-                ? selectedStatus.getText().toString()
-                : ExhibitorExhibition.STATUS_OPEN;
-
-        if (editingId != null) {
-            ExhibitionManager.update(editingId, day, title, venue, time,
-                    status, description, category);
-        } else {
-            ExhibitionManager.add(day, title, venue, time, status, description, category);
-        }
-        Toast.makeText(this, R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
-
-        editingId = null;
-        renderList();
-    }
-
     // ── Status management ────────────────────────────────────────────
 
     private void showStatusDialog(final ExhibitorExhibition exh) {
@@ -488,7 +286,6 @@ public class ExhibitorBackendActivity extends BaseActivity {
                         ExhibitionManager.delete(exh.getId());
                         Toast.makeText(ExhibitorBackendActivity.this,
                                 R.string.exhibitor_deleted, Toast.LENGTH_SHORT).show();
-                        editingId = null;
                         renderList();
                     }
                 })
@@ -501,7 +298,6 @@ public class ExhibitorBackendActivity extends BaseActivity {
     private void showRegistrations(ExhibitorExhibition exh) {
         animateShowPanel(registrationsPanel);
         registrationsPanel.removeAllViews();
-        animateHidePanel(formContainer);
 
         addText(registrationsPanel, getString(R.string.exhibitor_registrations_title),
                 R.color.text_primary, 20, Typeface.BOLD);
