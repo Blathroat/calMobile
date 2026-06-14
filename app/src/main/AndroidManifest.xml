@@ -24,13 +24,16 @@
         <activity android:name=".RegisterActivity" />
         <activity
             android:name=".MainActivity"
-            android:exported="true" />
+            android:exported="false" />
         <activity android:name=".ProfileActivity" />
         <activity android:name=".UserPublicActivity" />
         <activity android:name=".ExhibitorBackendActivity" />
         <activity android:name=".RegistrationManagementActivity" />
         <activity android:name=".AdminBackendActivity" />
         <activity android:name=".SearchActivity" />
+        <activity android:name=".ExhibitionDetailActivity" />
+        <activity android:name=".MoreActivity" />
+        <activity android:name=".RegistrationFormActivity" />
     </application>
 
 </manifest>
