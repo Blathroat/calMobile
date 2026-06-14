@@ -256,6 +256,8 @@ public abstract class BaseActivity extends Activity {
         btn.setBackgroundResource(R.drawable.bg_button_primary);
         btn.setTextColor(getResources().getColor(R.color.button_primary_text));
         btn.setAllCaps(false);
+        btn.setStateListAnimator(null);
+        btn.setElevation(0);
     }
 
     /**
@@ -267,6 +269,8 @@ public abstract class BaseActivity extends Activity {
         btn.setBackgroundResource(R.drawable.bg_button_secondary);
         btn.setTextColor(getResources().getColor(R.color.button_secondary_text));
         btn.setAllCaps(false);
+        btn.setStateListAnimator(null);
+        btn.setElevation(0);
     }
 
     /**
@@ -278,6 +282,24 @@ public abstract class BaseActivity extends Activity {
         btn.setBackgroundResource(R.drawable.bg_button_danger);
         btn.setTextColor(getResources().getColor(R.color.button_danger_text));
         btn.setAllCaps(false);
+        btn.setStateListAnimator(null);
+        btn.setElevation(0);
+    }
+
+    /**
+     * Apply the logout button style (transparent background, red bold text).
+     * Used for the profile logout action.
+     *
+     * @param btn the Button to style
+     */
+    protected void styleLogoutButton(android.widget.Button btn) {
+        btn.setBackgroundResource(R.drawable.bg_button_text);
+        btn.setTextColor(getResources().getColor(R.color.status_closed));
+        btn.setTextSize(15);
+        btn.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        btn.setAllCaps(false);
+        btn.setStateListAnimator(null);
+        btn.setElevation(0);
     }
 
     // ── Back button styling ────────────────────────────────────────────
