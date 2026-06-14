@@ -42,7 +42,7 @@ const checks = [
   {
     id: 'fake-data-flow-layout',
     file: 'app/src/main/res/layout/activity_main.xml',
-    contains: ['@+id/calendar_grid', '@+id/exhibition_list', '@+id/my_registrations_title', '@+id/my_registrations_list', '@layout/layout_bottom_nav']
+    contains: ['@+id/content_frame', '@layout/layout_bottom_nav']
   },
   {
     id: 'exhibition-detail-activity-java',
@@ -72,7 +72,7 @@ const checks = [
   {
     id: 'my-registrations-java-wiring',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['RegistrationManager', 'renderMyRegistrations', 'registrationManager.list', 'registrationManager.cancel', 'myRegistrationsList']
+    contains: ['RegistrationManager', 'renderMyRegistrations', 'registrationManager.list', 'registrationManager.cancel', 'homeRegistrationsList']
   },
   {
     id: 'gradle-wrapper-properties',
@@ -152,7 +152,7 @@ const checks = [
   {
     id: 'exhibitor-backend-activity-java',
     file: 'app/src/main/java/com/example/calmobile/ExhibitorBackendActivity.java',
-    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'ExhibitorBackendActivity', 'ExhibitionManager', 'saveExhibition']
+    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'ExhibitorBackendActivity', 'ExhibitionManager', 'ExhibitionFormActivity']
   },
   {
     id: 'exhibitor-backend-navigation-layout',
@@ -162,7 +162,7 @@ const checks = [
   {
     id: 'exhibitor-backend-manifest',
     file: 'app/src/main/AndroidManifest.xml',
-    contains: ['ExhibitorBackendActivity']
+    contains: ['ExhibitorBackendActivity', 'ExhibitionFormActivity']
   },
   {
     id: 'exhibitor-backend-strings',
@@ -172,7 +172,7 @@ const checks = [
   {
     id: 'exhibitor-backend-navigation',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['ExhibitorBackendActivity', 'nav_exhibitor']
+    contains: ['buildExhibitorContent', 'nav_exhibitor', 'canAccessExhibitor']
   },
   {
     id: 'registration-management-activity-java',
@@ -212,7 +212,7 @@ const checks = [
   {
     id: 'admin-backend-navigation',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['AdminBackendActivity', 'nav_admin']
+    contains: ['buildAdminContent', 'nav_admin', 'canAccessAdmin']
   },
 
   // ── MoreActivity ──────────────────────────────────────────────
@@ -234,7 +234,7 @@ const checks = [
   {
     id: 'more-activity-navigation',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['MoreActivity', 'nav_more']
+    notContains: ['MoreActivity', 'nav_more']
   },
   {
     id: 'more-activity-strings',
@@ -261,12 +261,12 @@ const checks = [
   {
     id: 'home-search-bar-layout',
     file: 'app/src/main/res/layout/activity_main.xml',
-    contains: ['@+id/home_search_bar', 'search_hint']
+    contains: ['@+id/content_frame']
   },
   {
     id: 'home-search-bar-wiring',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['home_search_bar', 'SearchActivity']
+    contains: ['styleSearchBar', 'search_hint', 'SearchActivity']
   },
   {
     id: 'calendar-alignment-fix',
@@ -276,7 +276,7 @@ const checks = [
   {
     id: 'bottom-nav-home-active-state',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['homeTab.setSelected(true)', 'R.id.nav_home']
+    contains: ['item.setSelected(active)', 'R.id.nav_home', 'currentTab = TAB_HOME']
   },
   {
     id: 'more-notification-not-profile',
@@ -291,7 +291,59 @@ const checks = [
   {
     id: 'bottom-nav-weight-sum',
     file: 'app/src/main/res/layout/layout_bottom_nav.xml',
-    contains: ['weightSum="5"']
+    contains: ['weightSum="4"']
+  },
+
+  // ── 新需求：中文文档检查 ─────────────────────────────────────────
+  // 以下检查验证文档已使用中文记录新需求，应立即通过。
+  {
+    id: 'chinese-doc-readme-new-requirements',
+    file: 'README.md',
+    contains: ['新需求追踪', '底部导航移除', '访客/权限辅助', '二级展会表单']
+  },
+  {
+    id: 'chinese-doc-agent-new-requirements',
+    file: 'AGENT.md',
+    contains: ['GuestHelper', 'PermissionHelper', 'ExhibitionFormActivity', '已完成代码实现']
+  },
+  {
+    id: 'chinese-doc-project-review-new-items',
+    file: 'docs/PROJECT_REVIEW.md',
+    contains: ['已完成', 'GuestHelper', 'PermissionHelper', 'ExhibitionFormActivity']
+  },
+
+  // ── 新需求：代码实现检查 ─────────────────────────────────────────
+  // 以下检查覆盖访客/权限辅助类、展会二级表单页和 4 标签底部导航。
+  // 实现说明见 README.md「新需求追踪」和 docs/PROJECT_REVIEW.md 对应条目。
+  {
+    id: 'guest-helper-java',
+    file: 'app/src/main/java/com/example/calmobile/GuestHelper.java',
+    contains: ['package com.example.calmobile;', 'isGuest']
+  },
+  {
+    id: 'permission-helper-java',
+    file: 'app/src/main/java/com/example/calmobile/PermissionHelper.java',
+    contains: ['package com.example.calmobile;', 'hasPermission']
+  },
+  {
+    id: 'exhibition-form-activity-java',
+    file: 'app/src/main/java/com/example/calmobile/ExhibitionFormActivity.java',
+    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'ExhibitionFormActivity']
+  },
+  {
+    id: 'exhibition-form-layout',
+    file: 'app/src/main/res/layout/activity_exhibition_form.xml',
+    contains: ['@+id/exhibition_form']
+  },
+  {
+    id: 'bottom-nav-4-tab',
+    file: 'app/src/main/res/layout/layout_bottom_nav.xml',
+    contains: ['weightSum="4"']
+  },
+  {
+    id: 'no-more-in-bottom-nav',
+    file: 'app/src/main/res/layout/layout_bottom_nav.xml',
+    notContains: ['nav_more']
   }
 ];
 
@@ -308,14 +360,24 @@ for (const check of checks) {
     console.error(`FAIL ${check.id}: ${check.file} is ${stat.size} bytes, expected at least ${check.minBytes}`);
     failed = true;
   }
-  if (!check.contains) {
+  if (!check.contains && !check.notContains) {
     continue;
   }
   const content = fs.readFileSync(fullPath, 'utf8');
-  for (const expected of check.contains) {
-    if (!content.includes(expected)) {
-      console.error(`FAIL ${check.id}: ${check.file} does not contain ${expected}`);
-      failed = true;
+  if (check.contains) {
+    for (const expected of check.contains) {
+      if (!content.includes(expected)) {
+        console.error(`FAIL ${check.id}: ${check.file} does not contain ${expected}`);
+        failed = true;
+      }
+    }
+  }
+  if (check.notContains) {
+    for (const forbidden of check.notContains) {
+      if (content.includes(forbidden)) {
+        console.error(`FAIL ${check.id}: ${check.file} should not contain ${forbidden}`);
+        failed = true;
+      }
     }
   }
 }
