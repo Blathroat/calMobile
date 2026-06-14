@@ -4,20 +4,48 @@
 
 ## 结论
 
-当前项目已经覆盖移动端展会排期、详情、报名、个人页、展商后台、报名管理和管理后台等核心业务，并已补齐首页顶部搜索、More 页内通知设置、底部导航均分与后台按钮样式统一。数据模型一致性、持久化完整性和测试层级仍有提升空间。
+当前项目已经覆盖移动端展会排期、详情、报名、个人页、展商后台、报名管理和管理后台等核心业务，并已补齐首页顶部搜索、4 标签底部导航、访客权限、展商二级表单页与后台按钮样式统一。数据模型一致性、持久化完整性和测试层级仍有提升空间。
 
 本清单按优先级记录后续可改进点，重点关注 UI/UX。
 
 ## P0：优先修复
 
-### 1. 底部导航已接入首页，仍需扩展到完整顶层导航体验
+### 1. 底部导航已接入完整顶层导航体验 [已完成]
 
 - 相关文件：
   - `app/src/main/res/layout/layout_bottom_nav.xml`
   - `app/src/main/java/com/example/calmobile/MainActivity.java`
   - `app/src/main/res/layout/activity_main.xml`
-- 当前状态：5 个 tab（首页、个人、展商、管理、更多）已接入首页，旧竖向导航按钮已移除，首页内容区域与固定底部导航分离；底部导航已显式 `weightSum=5` 并保持 5 个等宽入口。
-- 后续建议：将顶层页面（个人、展商、管理）也统一接入底部导航，补齐当前 tab 高亮状态，并避免重复堆叠 Activity。
+- 当前状态：4 个 tab（首页、个人、展商、管理）已接入 `MainActivity` 内容容器，旧竖向导航按钮和底部"更多"入口已移除；底部导航已显式 `weightSum=4` 并保持等宽入口。
+- 已完成：点击底部标签时左右滑动切换内容并保留底部导航，当前 tab 高亮跟随切换，展商/管理入口会按权限隐藏。
+
+### 1a. 底部导航移除"更多"标签 [已完成]
+
+- 相关文件：
+  - `app/src/main/res/layout/layout_bottom_nav.xml`
+  - `app/src/main/java/com/example/calmobile/MainActivity.java`
+  - `app/src/main/java/com/example/calmobile/MoreActivity.java`
+- 目标：将底部导航从 5 个标签缩减为 4 个（首页、个人、展商、管理），`weightSum` 从 5 改为 4。
+- 原"更多"页功能迁移：通知设置移入个人页或独立设置入口，数据导出和退出登录移入个人页或顶部菜单。
+- 状态：布局与 Java 入口均已清理（`weightSum="4"`，`nav_more` 已移除）。smoke-check 对应检查项（`bottom-nav-4-tab`、`no-more-in-bottom-nav`）已通过。
+
+### 1b. 访客/权限辅助类 [已完成]
+
+- 目标文件：
+  - `app/src/main/java/com/example/calmobile/GuestHelper.java`
+  - `app/src/main/java/com/example/calmobile/PermissionHelper.java`
+- 目标：新增 `GuestHelper` 提供 `isGuest()` 方法判断当前用户是否为访客状态；新增 `PermissionHelper` 提供 `hasPermission(String permission)` 方法基于角色（超级管理员、管理员、展商、普通用户）校验操作权限。
+- 用途：展商后台、管理后台等受保护页面在入口处调用辅助方法进行访问控制；报名按钮根据权限状态决定是否可点击。
+- 状态：`GuestHelper.java` 与 `PermissionHelper.java` 已新增，`AuthManager` 已提供访客、展商和管理员权限判断，smoke-check 对应检查项已通过。
+
+### 1c. 二级展会表单页 [已完成]
+
+- 目标文件：
+  - `app/src/main/java/com/example/calmobile/ExhibitionFormActivity.java`
+  - `app/src/main/res/layout/activity_exhibition_form.xml`
+- 目标：为展商提供独立的展会创建/编辑表单页面，支持填写展会名称、地点、时间、报名方式（需审核/无需审核/仅展示）、展会介绍等内容。
+- 与现有 `RegistrationFormActivity`（访客报名表单）区分：`ExhibitionFormActivity` 为展商管理专用，`RegistrationFormActivity` 为访客报名专用。
+- 状态：`ExhibitionFormActivity.java` 与 `activity_exhibition_form.xml` 已新增，`ExhibitorBackendActivity` 的新建/编辑入口已改为打开二级页面，smoke-check 对应检查项已通过。
 
 ### 2. 首页日历仍是固定 30 天样例
 
@@ -137,9 +165,12 @@
 
 ## 建议迭代顺序
 
-1. 补齐搜索结果跳转，并继续完善“更多/账号”内的数据导出真实入口。
-2. 统一首页/展商后台的数据源和展会模型。
-3. 修复报名数据管理多实例问题。
-4. 外部化硬编码文案，补齐无障碍描述。
-5. 增加 UI 测试和真实设备/模拟器截图。
-6. 规划 targetSdk、持久化认证和数据库迁移策略。
+1. 持续补齐 4 标签底部导航的真机/模拟器回归验证。
+2. 将访客/权限辅助类与后续 SQLite 用户角色持久化打通。
+3. 为 `ExhibitionFormActivity` 增加更完整的输入校验和单元测试覆盖。
+4. 补齐搜索结果跳转，并继续完善"更多/账号"内的数据导出真实入口。
+5. 统一首页/展商后台的数据源和展会模型。
+6. 修复报名数据管理多实例问题。
+7. 外部化硬编码文案，补齐无障碍描述。
+8. 增加 UI 测试和真实设备/模拟器截图。
+9. 规划 targetSdk、持久化认证和数据库迁移策略。

@@ -58,22 +58,28 @@
   - 组件样式系统（styles.xml）
   - 15 个 drawable 资源（按钮、输入框、卡片、标签等）
   - 9 个布局文件更新
-  - 首页固定底部导航栏（首页、个人、展商、管理、更多）
+  - 首页固定底部导航栏（首页、个人、展商、管理）
   - 首页顶部搜索入口，可直接进入 SearchActivity
   - 首页日历有展会日期块已做垂直居中修正
-  - 更多/账号页面（搜索、通知设置、数据导出提示、退出登录）
-  - 更多页通知设置改为页内设置区，不再跳转个人页
+  - 个人页底部退出登录入口
+  - 访客权限限制：未登录仅可浏览首页和展会详情
   - 展商/管理后台程序化按钮统一使用 CalMobile 按钮样式
-  - 展会详情与报名表单独立 Activity 页面
+  - 展会详情、报名表单与展商展会表单独立 Activity 页面
 - 已完成的文档：
   - README.md（中文版）
   - ARCHITECTURE.md（627 行，中文版）
   - AGENT.md 更新
   - docs/PROJECT_REVIEW.md 项目 review 与改进清单
 - 最近验证：
-  - `node scripts/smoke-check.js`：56 项检查通过
+  - `node scripts/smoke-check.js`：66 项检查通过（含新导航、访客/权限辅助类和展会二级表单页）
   - `gradlew.bat :app:testDebugUnitTest :app:assembleDebug`：BUILD SUCCESSFUL
   - ADB 模拟器验证：`emulator-5554` 可打开首页、更多、管理后台、展商后台；More 通知设置保持在 More 页内
+- 新需求（已完成代码实现）：
+  - 底部导航从 5 标签缩减为 4 标签（移除"更多"），`layout_bottom_nav.xml` 的 `weightSum` 已改为 4
+  - 已新增 `GuestHelper.java`（访客状态判断 `isGuest()`）和 `PermissionHelper.java`（角色权限校验 `hasPermission()`）
+  - 已新增 `ExhibitionFormActivity.java`（展商创建/编辑展会的二级表单页）
+  - 退出登录迁移至个人页底部，底部导航切换保留导航栏并使用左右滑动动画
+  - smoke-check.js 已覆盖对应静态检查并通过
 - 待实现功能：
   - 网络层（API 对接）
   - 媒体上传
@@ -122,6 +128,7 @@ calMobile/
 - **MainActivity**: 首页，展示展会月历、展会列表、我的报名和底部导航
 - **ExhibitionDetailActivity**: 展会详情独立页面
 - **RegistrationFormActivity**: 报名表单独立页面
+- **ExhibitionFormActivity**: 展商创建/编辑展会的二级表单页
 - **MoreActivity**: 更多/账号页面，提供搜索、通知设置、数据导出提示和退出登录
 - **LoginActivity**: 登录页面
 - **RegisterActivity**: 注册页面
@@ -149,6 +156,8 @@ calMobile/
 - **CalendarHelper**: 日历集成
 - **ExportManager**: 数据导出
 - **RichTextViewer**: 富文本查看器
+- **GuestHelper**: 访客状态判断
+- **PermissionHelper**: 角色权限校验
 
 ## 已知问题
 
