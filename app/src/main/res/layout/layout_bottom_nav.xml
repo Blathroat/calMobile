@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_bottom_nav"
+    android:elevation="@dimen/elevation_medium"
+    android:orientation="vertical">
+
+    <!-- Top divider line -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/stroke_thin"
+        android:background="@color/divider_color" />
+
+    <!-- Navigation items row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/nav_bar_height"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:weightSum="5">
+
+        <!-- ── Home tab ─────────────────────────────────────── -->
+        <LinearLayout
+            android:id="@+id/nav_home"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_nav_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="@dimen/nav_item_padding_vertical"
+            android:paddingBottom="@dimen/nav_item_padding_vertical">
+
+            <ImageView
+                android:id="@+id/nav_home_icon"
+                android:layout_width="@dimen/nav_icon_size"
+                android:layout_height="@dimen/nav_icon_size"
+                android:contentDescription="@string/nav_home"
+                android:src="@drawable/ic_nav_home" />
+
+            <TextView
+                android:id="@+id/nav_home_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/nav_item_margin_top"
+                android:text="@string/nav_home"
+                android:textColor="@color/nav_inactive_text"
+                android:textSize="@dimen/nav_text_size" />
+        </LinearLayout>
+
+        <!-- ── Profile tab ──────────────────────────────────── -->
+        <LinearLayout
+            android:id="@+id/nav_profile"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_nav_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="@dimen/nav_item_padding_vertical"
+            android:paddingBottom="@dimen/nav_item_padding_vertical">
+
+            <ImageView
+                android:id="@+id/nav_profile_icon"
+                android:layout_width="@dimen/nav_icon_size"
+                android:layout_height="@dimen/nav_icon_size"
+                android:contentDescription="@string/nav_profile"
+                android:src="@drawable/ic_nav_profile" />
+
+            <TextView
+                android:id="@+id/nav_profile_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/nav_item_margin_top"
+                android:text="@string/nav_profile"
+                android:textColor="@color/nav_inactive_text"
+                android:textSize="@dimen/nav_text_size" />
+        </LinearLayout>
+
+        <!-- ── Exhibitor tab ────────────────────────────────── -->
+        <LinearLayout
+            android:id="@+id/nav_exhibitor"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_nav_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="@dimen/nav_item_padding_vertical"
+            android:paddingBottom="@dimen/nav_item_padding_vertical">
+
+            <ImageView
+                android:id="@+id/nav_exhibitor_icon"
+                android:layout_width="@dimen/nav_icon_size"
+                android:layout_height="@dimen/nav_icon_size"
+                android:contentDescription="@string/nav_exhibitor"
+                android:src="@drawable/ic_nav_exhibitor" />
+
+            <TextView
+                android:id="@+id/nav_exhibitor_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/nav_item_margin_top"
+                android:text="@string/nav_exhibitor"
+                android:textColor="@color/nav_inactive_text"
+                android:textSize="@dimen/nav_text_size" />
+        </LinearLayout>
+
+        <!-- ── Admin tab ────────────────────────────────────── -->
+        <LinearLayout
+            android:id="@+id/nav_admin"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_nav_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="@dimen/nav_item_padding_vertical"
+            android:paddingBottom="@dimen/nav_item_padding_vertical">
+
+            <ImageView
+                android:id="@+id/nav_admin_icon"
+                android:layout_width="@dimen/nav_icon_size"
+                android:layout_height="@dimen/nav_icon_size"
+                android:contentDescription="@string/nav_admin"
+                android:src="@drawable/ic_nav_admin" />
+
+            <TextView
+                android:id="@+id/nav_admin_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/nav_item_margin_top"
+                android:text="@string/nav_admin"
+                android:textColor="@color/nav_inactive_text"
+                android:textSize="@dimen/nav_text_size" />
+        </LinearLayout>
+
+        <!-- ── More tab ─────────────────────────────────────── -->
+        <LinearLayout
+            android:id="@+id/nav_more"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_nav_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="@dimen/nav_item_padding_vertical"
+            android:paddingBottom="@dimen/nav_item_padding_vertical">
+
+            <ImageView
+                android:id="@+id/nav_more_icon"
+                android:layout_width="@dimen/nav_icon_size"
+                android:layout_height="@dimen/nav_icon_size"
+                android:contentDescription="@string/nav_more"
+                android:src="@drawable/ic_nav_more" />
+
+            <TextView
+                android:id="@+id/nav_more_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/nav_item_margin_top"
+                android:text="@string/nav_more"
+                android:textColor="@color/nav_inactive_text"
+                android:textSize="@dimen/nav_text_size" />
+        </LinearLayout>
+
+    </LinearLayout>
+</LinearLayout>
