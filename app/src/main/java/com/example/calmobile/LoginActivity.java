@@ -51,6 +51,15 @@ public class LoginActivity extends BaseActivity {
                 startActivity(new Intent(LoginActivity.this, RegisterActivity.class));
             }
         });
+
+        Button guestBtn = findViewById(R.id.guest_entry_btn);
+        guestBtn.setAllCaps(false);
+        guestBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                continueAsGuest();
+            }
+        });
     }
 
     @Override
@@ -76,6 +85,16 @@ public class LoginActivity extends BaseActivity {
 
         // Login success — go to MainActivity
         errorText.setVisibility(View.GONE);
+        openHome();
+    }
+
+    private void continueAsGuest() {
+        AuthManager.getInstance().enterAsGuest();
+        errorText.setVisibility(View.GONE);
+        openHome();
+    }
+
+    private void openHome() {
         Intent intent = new Intent(this, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);

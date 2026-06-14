@@ -123,5 +123,13 @@
             android:text="@string/auth_go_to_register"
             style="@style/Widget.CalMobile.Button.Text" />
 
+        <Button
+            android:id="@+id/guest_entry_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_8dp"
+            android:text="@string/auth_continue_guest"
+            style="@style/Widget.CalMobile.Button.Text" />
+
     </LinearLayout>
 </ScrollView>
