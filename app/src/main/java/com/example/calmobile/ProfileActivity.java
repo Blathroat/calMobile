@@ -2,6 +2,7 @@ package com.example.calmobile;
 
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
@@ -38,6 +39,7 @@ public class ProfileActivity extends BaseActivity {
     private LinearLayout actionsSection;
     private LinearLayout notificationSettingsSection;
     private LinearLayout notificationHistorySection;
+    private LinearLayout logoutSection;
 
     private EditText nicknameInput;
     private EditText bioInput;
@@ -47,6 +49,12 @@ public class ProfileActivity extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (!AuthManager.getInstance().canAccessProfile()) {
+            Toast.makeText(this, R.string.auth_login_required_profile,
+                    Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_profile);
 
         headerSection = findViewById(R.id.profile_header);
@@ -55,6 +63,7 @@ public class ProfileActivity extends BaseActivity {
         actionsSection = findViewById(R.id.profile_actions);
         notificationSettingsSection = findViewById(R.id.profile_notification_settings);
         notificationHistorySection = findViewById(R.id.profile_notification_history);
+        logoutSection = findViewById(R.id.profile_logout_section);
 
         // Request notification permission on API 33+
         NotificationHelper.getInstance(this).requestNotificationPermission(this);
@@ -155,7 +164,7 @@ public class ProfileActivity extends BaseActivity {
         // --- Actions: edit button only ---
         actionsSection.removeAllViews();
         Button editButton = new Button(this);
-        editButton.setAllCaps(false);
+        stylePrimaryButton(editButton);
         editButton.setText(R.string.profile_edit);
         editButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -164,6 +173,50 @@ public class ProfileActivity extends BaseActivity {
             }
         });
         actionsSection.addView(editButton, fullWidthParams(0));
+
+        // --- Logout button at bottom ---
+        renderLogoutSection();
+    }
+
+    // ── Logout section ──────────────────────────────────────────────
+
+    private void renderLogoutSection() {
+        logoutSection.removeAllViews();
+
+        Button logoutButton = new Button(this);
+        styleLogoutButton(logoutButton);
+        logoutButton.setText(R.string.profile_logout);
+        logoutButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showConfirmDialog(
+                        getString(R.string.profile_logout_confirm),
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                performLogout();
+                            }
+                        });
+            }
+        });
+        logoutSection.addView(logoutButton, fullWidthParams(0));
+
+        // Staggered animation
+        logoutSection.setAlpha(0f);
+        logoutSection.setTranslationY(dp(16));
+        logoutSection.animate()
+                .alpha(1f).translationY(0)
+                .setDuration(300).setStartDelay(400)
+                .setInterpolator(new DecelerateInterpolator()).start();
+    }
+
+    private void performLogout() {
+        AuthManager.getInstance().logout();
+        Intent intent = new Intent(this, LoginActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+        finish();
     }
 
     // ── Notification settings ────────────────────────────────────────
@@ -220,7 +273,7 @@ public class ProfileActivity extends BaseActivity {
                     R.color.status_pending, 13, Typeface.NORMAL);
 
             Button permBtn = new Button(this);
-            permBtn.setAllCaps(false);
+            styleSecondaryButton(permBtn);
             permBtn.setText(R.string.notification_permission_hint);
             permBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -295,7 +348,7 @@ public class ProfileActivity extends BaseActivity {
         // Clear history button
         if (!records.isEmpty()) {
             Button clearBtn = new Button(this);
-            clearBtn.setAllCaps(false);
+            styleDangerButton(clearBtn);
             clearBtn.setText(R.string.notification_clear_history);
             clearBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -383,7 +436,7 @@ public class ProfileActivity extends BaseActivity {
         actionsSection.removeAllViews();
 
         Button saveButton = new Button(this);
-        saveButton.setAllCaps(false);
+        stylePrimaryButton(saveButton);
         saveButton.setText(R.string.profile_save);
         saveButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -393,7 +446,7 @@ public class ProfileActivity extends BaseActivity {
         });
 
         Button cancelButton = new Button(this);
-        cancelButton.setAllCaps(false);
+        styleSecondaryButton(cancelButton);
         cancelButton.setText(R.string.profile_cancel);
         cancelButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -420,6 +473,17 @@ public class ProfileActivity extends BaseActivity {
         actionsSection.addView(saveButton, saveParams);
         actionsSection.addView(cancelButton, cancelParams);
     }
+
+    // ── Package-private data accessors for in-place Profile tab ────
+
+    static String getProfileNickname() { return nickname; }
+    static String getProfileBio() { return bio; }
+    static String getProfileContact() { return contact; }
+    static String getProfileSocialMedia() { return socialMedia; }
+    static void setProfileNickname(String v) { nickname = v; }
+    static void setProfileBio(String v) { bio = v; }
+    static void setProfileContact(String v) { contact = v; }
+    static void setProfileSocialMedia(String v) { socialMedia = v; }
 
     private void saveProfile() {
         String newNickname = nicknameInput.getText().toString().trim();

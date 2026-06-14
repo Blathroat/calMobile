@@ -106,5 +106,14 @@
             android:orientation="vertical"
             android:padding="@dimen/spacing_16dp" />
 
+        <!-- Logout button section -->
+        <LinearLayout
+            android:id="@+id/profile_logout_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_24dp"
+            android:layout_marginBottom="@dimen/spacing_16dp"
+            android:orientation="vertical" />
+
     </LinearLayout>
 </ScrollView>
