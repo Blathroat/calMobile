@@ -22,7 +22,7 @@ const checks = [
   {
     id: 'android-manifest-main-activity',
     file: 'app/src/main/AndroidManifest.xml',
-    contains: ['MainActivity', 'android.intent.action.MAIN', 'android.intent.category.LAUNCHER']
+    contains: ['android:name=".MainActivity"', 'android:exported="false"', 'android.intent.action.MAIN', 'android.intent.category.LAUNCHER']
   },
   {
     id: 'base-activity-java',
@@ -37,12 +37,32 @@ const checks = [
   {
     id: 'fake-data-flow-java',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['class Exhibition', 'SAMPLE_EXHIBITIONS', 'buildMonthGrid', 'showExhibitionDetail', 'showRegistrationForm', 'submitRegistration']
+    contains: ['class Exhibition', 'SAMPLE_EXHIBITIONS', 'buildMonthGrid', 'openExhibitionDetail', 'ExhibitionDetailActivity']
   },
   {
     id: 'fake-data-flow-layout',
     file: 'app/src/main/res/layout/activity_main.xml',
-    contains: ['@+id/calendar_grid', '@+id/exhibition_list', '@+id/detail_panel', '@+id/registration_panel', '@+id/registration_answers', '@+id/my_registrations_title', '@+id/my_registrations_list']
+    contains: ['@+id/calendar_grid', '@+id/exhibition_list', '@+id/my_registrations_title', '@+id/my_registrations_list', '@layout/layout_bottom_nav']
+  },
+  {
+    id: 'exhibition-detail-activity-java',
+    file: 'app/src/main/java/com/example/calmobile/ExhibitionDetailActivity.java',
+    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'RegistrationFormActivity', 'getStringExtra', 'openForRegistration']
+  },
+  {
+    id: 'exhibition-detail-layout',
+    file: 'app/src/main/res/layout/activity_exhibition_detail.xml',
+    contains: ['@+id/detail_content', '@+id/detail_back', '@+id/detail_actions']
+  },
+  {
+    id: 'registration-form-activity-java',
+    file: 'app/src/main/java/com/example/calmobile/RegistrationFormActivity.java',
+    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'RegistrationManager', 'submit', 'getStringExtra']
+  },
+  {
+    id: 'registration-form-layout',
+    file: 'app/src/main/res/layout/activity_registration_form.xml',
+    contains: ['@+id/reg_form', '@+id/reg_back', '@+id/reg_result']
   },
   {
     id: 'fake-data-flow-strings',
@@ -52,7 +72,7 @@ const checks = [
   {
     id: 'my-registrations-java-wiring',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['RegistrationManager', 'renderMyRegistrations', 'registrationManager.submit', 'registrationManager.cancel', 'myRegistrationsList']
+    contains: ['RegistrationManager', 'renderMyRegistrations', 'registrationManager.list', 'registrationManager.cancel', 'myRegistrationsList']
   },
   {
     id: 'gradle-wrapper-properties',
@@ -102,7 +122,7 @@ const checks = [
   {
     id: 'profile-navigation',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['ProfileActivity', 'go_to_profile']
+    contains: ['ProfileActivity', 'nav_profile']
   },
   {
     id: 'user-public-activity-java',
@@ -137,7 +157,7 @@ const checks = [
   {
     id: 'exhibitor-backend-navigation-layout',
     file: 'app/src/main/res/layout/activity_main.xml',
-    contains: ['@+id/go_to_exhibitor_backend_btn']
+    contains: ['@layout/layout_bottom_nav']
   },
   {
     id: 'exhibitor-backend-manifest',
@@ -152,7 +172,7 @@ const checks = [
   {
     id: 'exhibitor-backend-navigation',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['ExhibitorBackendActivity', 'exhibitorBackendButton']
+    contains: ['ExhibitorBackendActivity', 'nav_exhibitor']
   },
   {
     id: 'registration-management-activity-java',
@@ -192,7 +212,86 @@ const checks = [
   {
     id: 'admin-backend-navigation',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['AdminBackendActivity', 'adminBackendButton']
+    contains: ['AdminBackendActivity', 'nav_admin']
+  },
+
+  // ── MoreActivity ──────────────────────────────────────────────
+  {
+    id: 'more-activity-java',
+    file: 'app/src/main/java/com/example/calmobile/MoreActivity.java',
+    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'MoreActivity', 'SearchActivity', 'performLogout', 'AuthManager', 'renderNotificationSection', 'NotificationHelper']
+  },
+  {
+    id: 'more-activity-layout',
+    file: 'app/src/main/res/layout/activity_more.xml',
+    contains: ['@+id/more_scroll', '@+id/more_back', '@+id/more_menu', '@+id/more_logout']
+  },
+  {
+    id: 'more-activity-manifest-registered',
+    file: 'app/src/main/AndroidManifest.xml',
+    contains: ['MoreActivity']
+  },
+  {
+    id: 'more-activity-navigation',
+    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
+    contains: ['MoreActivity', 'nav_more']
+  },
+  {
+    id: 'more-activity-strings',
+    file: 'app/src/main/res/values/strings.xml',
+    contains: ['nav_more_title', 'nav_more_back', 'nav_more_search', 'nav_more_notifications', 'nav_more_export', 'nav_more_logout', 'nav_more_logout_confirm']
+  },
+
+  // ── UI fix regression checks ────────────────────────────────────
+  {
+    id: 'base-activity-button-helpers',
+    file: 'app/src/main/java/com/example/calmobile/BaseActivity.java',
+    contains: ['stylePrimaryButton', 'styleSecondaryButton', 'styleDangerButton', 'bg_button_primary', 'bg_button_secondary', 'bg_button_danger']
+  },
+  {
+    id: 'admin-backend-styled-buttons',
+    file: 'app/src/main/java/com/example/calmobile/AdminBackendActivity.java',
+    contains: ['styleSecondaryButton', 'stylePrimaryButton']
+  },
+  {
+    id: 'exhibitor-backend-styled-buttons',
+    file: 'app/src/main/java/com/example/calmobile/ExhibitorBackendActivity.java',
+    contains: ['styleSecondaryButton', 'stylePrimaryButton', 'styleDangerButton']
+  },
+  {
+    id: 'home-search-bar-layout',
+    file: 'app/src/main/res/layout/activity_main.xml',
+    contains: ['@+id/home_search_bar', 'search_hint']
+  },
+  {
+    id: 'home-search-bar-wiring',
+    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
+    contains: ['home_search_bar', 'SearchActivity']
+  },
+  {
+    id: 'calendar-alignment-fix',
+    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
+    contains: ['setGravity', 'setIncludeFontPadding']
+  },
+  {
+    id: 'bottom-nav-home-active-state',
+    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
+    contains: ['homeTab.setSelected(true)', 'R.id.nav_home']
+  },
+  {
+    id: 'more-notification-not-profile',
+    file: 'app/src/main/java/com/example/calmobile/MoreActivity.java',
+    contains: ['renderNotificationSection', 'NotificationHelper', 'CheckBox']
+  },
+  {
+    id: 'more-notification-layout-section',
+    file: 'app/src/main/res/layout/activity_more.xml',
+    contains: ['@+id/more_notification_section']
+  },
+  {
+    id: 'bottom-nav-weight-sum',
+    file: 'app/src/main/res/layout/layout_bottom_nav.xml',
+    contains: ['weightSum="5"']
   }
 ];
 
