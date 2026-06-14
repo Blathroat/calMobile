@@ -62,6 +62,11 @@ public class RegistrationManagementActivity extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (!AuthManager.getInstance().canAccessExhibitor()) {
+            Toast.makeText(this, R.string.auth_exhibitor_required, Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_registration_management);
 
         exhibitionId = getIntent().getStringExtra(EXTRA_EXHIBITION_ID);
@@ -220,7 +225,7 @@ public class RegistrationManagementActivity extends BaseActivity {
             buttons.setOrientation(LinearLayout.HORIZONTAL);
 
             Button approveBtn = new Button(this);
-            approveBtn.setAllCaps(false);
+            stylePrimaryButton(approveBtn);
             approveBtn.setText(R.string.reg_mgmt_approve);
             approveBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -249,7 +254,7 @@ public class RegistrationManagementActivity extends BaseActivity {
             buttons.addView(approveBtn, approveParams);
 
             Button rejectBtn = new Button(this);
-            rejectBtn.setAllCaps(false);
+            styleDangerButton(rejectBtn);
             rejectBtn.setText(R.string.reg_mgmt_reject);
             rejectBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -282,7 +287,7 @@ public class RegistrationManagementActivity extends BaseActivity {
 
         // Close detail button
         Button closeBtn = new Button(this);
-        closeBtn.setAllCaps(false);
+        styleSecondaryButton(closeBtn);
         closeBtn.setText(R.string.reg_mgmt_close_detail);
         closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override

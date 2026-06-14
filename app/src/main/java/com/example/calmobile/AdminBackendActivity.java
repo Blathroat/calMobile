@@ -41,6 +41,11 @@ public class AdminBackendActivity extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (!AuthManager.getInstance().canAccessAdmin()) {
+            Toast.makeText(this, R.string.auth_admin_required, Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_admin_backend);
 
         tabRow = findViewById(R.id.admin_tab_row);
