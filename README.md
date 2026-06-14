@@ -1,52 +1,58 @@
 # CalMobile
 
-An Android mobile application for exhibition scheduling, registration, and management.
+一个用于展会日程、报名和管理的 Android 移动应用。
 
-## Overview
+## 概述
 
-CalMobile is a native Android application built with Java that provides a complete exhibition management solution. It supports exhibition browsing, visitor registration, exhibitor backend management, and admin controls.
+CalMobile 是一款使用 Java 构建的原生 Android 应用，提供完整的展会管理解决方案。它支持展会浏览、访客报名、展商后台管理和管理员控制。
 
-## Features
+## 功能
 
-### Core Features
-- **Exhibition Calendar**: Monthly view showing exhibitions with day markers
-- **Exhibition Details**: Rich exhibition information with status indicators
-- **Registration System**: Visitor registration with customizable form fields
-- **My Registrations**: View and manage personal registration records
+### 核心功能
+- **展会日历**：按月展示展会，并在日期上显示标记
+- **展会详情**：展示丰富的展会信息和状态标识
+- **报名系统**：支持带自定义字段的访客报名
+- **我的报名**：查看和管理个人报名记录
 
-### User Features
-- **User Profiles**: Personal profile with bio, contact info, and social media
-- **Public Profiles**: View other users' public profiles
-- **Registration History**: Track exhibition attendance history
+### 用户功能
+- **用户资料**：个人资料、简介、联系方式和社交媒体信息
+- **公开资料**：查看其他用户的公开资料
+- **报名历史**：跟踪展会参与历史
 
-### Exhibitor Features
-- **Exhibitor Backend**: Create, edit, and delete exhibitions
-- **Registration Management**: Review and approve/reject visitor registrations
-- **Exhibition Status Control**: Manage exhibition status (open, closed, ended)
+### 展商功能
+- **展商后台**：创建、编辑和删除展会
+- **报名管理**：审核并通过/拒绝访客报名
+- **展会状态控制**：管理展会状态（open、closed、ended）
 
-### Admin Features
-- **User Management**: View, ban, restrict, and manage user accounts
-- **Exhibition Management**: Oversee all exhibitions with lock/unlock capabilities
-- **Data Export**: Export exhibitions, registrations, and users to CSV
+### 管理员功能
+- **用户管理**：查看、封禁、限制和管理用户账号
+- **展会管理**：统一管理所有展会，并支持锁定/解锁
+- **数据导出**：将展会、报名和用户数据导出为 CSV
 
-### Enhanced Features
-- **SQLite Database**: Local persistent storage for all data
-- **Authentication System**: User registration and login
-- **Rich Text Viewer**: HTML rendering for exhibition descriptions
-- **Search Functionality**: Search exhibitions and users
-- **Notification System**: Exhibition reminders and registration updates
-- **Calendar Integration**: Add exhibitions to device calendar
-- **UI Animations**: Smooth transitions and list animations
+### 增强功能
+- **SQLite 数据库**：为所有数据提供本地持久化存储
+- **认证系统**：用户注册和登录
+- **富文本查看器**：为展会描述提供 HTML 渲染
+- **搜索功能**：搜索展会和用户
+- **通知系统**：展会提醒和报名更新
+- **日历集成**：将展会添加到设备日历
+- **底部导航**：为首页、个人、展商、管理和更多提供固定首页导航
+- **首页顶部搜索入口**：在首页顶部直接进入搜索流程
+- **更多/账号入口**：提供通知设置、数据导出提示和退出登录；通知设置保持在 More 页内
+- **独立详情流程**：展会详情和报名表单作为独立 Activity 页面运行
+- **UI 动画**：平滑过渡和列表动画
 
-## Screenshots
+## 截图
 
-*Coming soon*
+*即将补充*
 
-## Architecture
+## 架构
 
-For detailed architecture information, see [ARCHITECTURE.md](ARCHITECTURE.md).
+详细架构信息请查看 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-### Project Structure
+最新项目 review 和优先级改进 backlog 请查看 [docs/PROJECT_REVIEW.md](docs/PROJECT_REVIEW.md)。
+
+### 项目结构
 
 ```
 calMobile/
@@ -54,20 +60,20 @@ calMobile/
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── java/com/example/calmobile/
-│   │   │   │   ├── Activities (UI layer)
-│   │   │   │   ├── Managers (Business logic)
-│   │   │   │   ├── Models (Data models)
-│   │   │   │   └── Helpers (Utilities)
+│   │   │   │   ├── Activities（UI 层）
+│   │   │   │   ├── Managers（业务逻辑）
+│   │   │   │   ├── Models（数据模型）
+│   │   │   │   └── Helpers（工具类）
 │   │   │   ├── res/
-│   │   │   │   ├── layout/ (XML layouts)
-│   │   │   │   ├── values/ (Strings, colors, themes)
-│   │   │   │   ├── anim/ (Animations)
-│   │   │   │   └── drawable/ (Drawables)
+│   │   │   │   ├── layout/（XML 布局）
+│   │   │   │   ├── values/（字符串、颜色、主题）
+│   │   │   │   ├── anim/（动画）
+│   │   │   │   └── drawable/（Drawable 资源）
 │   │   │   └── AndroidManifest.xml
 │   │   └── test/
 │   │       └── java/com/example/calmobile/
-│   │           ├── Unit tests
-│   │           └── Integration tests
+│   │           ├── 单元测试
+│   │           └── 集成测试
 │   └── build.gradle
 ├── build.gradle
 ├── settings.gradle
@@ -82,44 +88,44 @@ calMobile/
 └── MOBILE_REQUIREMENTS.md
 ```
 
-## Prerequisites
+## 前置要求
 
-- Android Studio Arctic Fox or later
-- JDK 8 or later
-- Android SDK with API 30 installed
-- Gradle 7.6.4 (included via wrapper)
+- Android Studio Arctic Fox 或更高版本
+- JDK 8 或更高版本
+- 已安装 API 30 的 Android SDK
+- Gradle 7.6.4（已通过 wrapper 包含）
 
-## Setup Instructions
+## 设置说明
 
-### 1. Clone the Repository
+### 1. 克隆仓库
 
 ```bash
 git clone https://github.com/Blathroat/calMobile.git
 cd calMobile
 ```
 
-### 2. Open in Android Studio
+### 2. 在 Android Studio 中打开
 
-1. Launch Android Studio
-2. Select "Open an existing project"
-3. Navigate to the cloned directory and click "OK"
-4. Wait for Gradle sync to complete
+1. 启动 Android Studio
+2. 选择 “Open an existing project”
+3. 导航到克隆后的目录并点击 “OK”
+4. 等待 Gradle sync 完成
 
-### 3. Configure SDK
+### 3. 配置 SDK
 
-1. Go to File → Project Structure → SDK Location
-2. Ensure Android SDK location is set correctly
-3. Verify API 30 is installed in SDK Manager
+1. 进入 File → Project Structure → SDK Location
+2. 确认 Android SDK location 设置正确
+3. 在 SDK Manager 中确认已安装 API 30
 
-## Build Instructions
+## 构建说明
 
-### Using Android Studio
+### 使用 Android Studio
 
-1. Select Build → Make Project (or press Ctrl+F9)
-2. Wait for build to complete
-3. Check Build Output for any errors
+1. 选择 Build → Make Project（或按 Ctrl+F9）
+2. 等待构建完成
+3. 在 Build Output 中检查是否有错误
 
-### Using Command Line
+### 使用命令行
 
 ```bash
 # Windows
@@ -129,31 +135,31 @@ gradlew.bat :app:assembleDebug
 ./gradlew :app:assembleDebug
 ```
 
-### Build Variants
+### 构建变体
 
-- **debug**: Development build with debug symbols
-- **release**: Production build (requires signing configuration)
+- **debug**：带调试符号的开发构建
+- **release**：生产构建（需要签名配置）
 
-## Running the App
+## 运行应用
 
-### On Emulator
+### 在模拟器上运行
 
-1. Create an AVD (Android Virtual Device) in Device Manager
-2. Select a device with API 30 or higher
-3. Click Run → Run 'app' (or press Shift+F10)
-4. Select the emulator and click OK
+1. 在 Device Manager 中创建 AVD（Android Virtual Device）
+2. 选择 API 30 或更高版本的设备
+3. 点击 Run → Run 'app'（或按 Shift+F10）
+4. 选择模拟器并点击 OK
 
-### On Physical Device
+### 在真机上运行
 
-1. Enable Developer Options on your device
-2. Enable USB Debugging
-3. Connect device via USB
-4. Click Run → Run 'app' (or press Shift+F10)
-5. Select your device and click OK
+1. 在设备上启用开发者选项
+2. 启用 USB Debugging
+3. 通过 USB 连接设备
+4. 点击 Run → Run 'app'（或按 Shift+F10）
+5. 选择你的设备并点击 OK
 
-## Testing
+## 测试
 
-### Running Unit Tests
+### 运行单元测试
 
 ```bash
 # Windows
@@ -163,11 +169,11 @@ gradlew.bat :app:testDebugUnitTest
 ./gradlew :app:testDebugUnitTest
 ```
 
-### Test Coverage
+### 测试覆盖
 
-The project includes 15 test files covering:
+项目包含 15 个测试文件，覆盖：
 
-- **Unit Tests**:
+- **单元测试**：
   - AuthManagerTest
   - DatabaseHelperTest
   - ExhibitionManagerTest
@@ -180,7 +186,7 @@ The project includes 15 test files covering:
   - ExhibitorExhibitionTest
   - AdminUserTest
 
-- **Integration Tests**:
+- **集成测试**：
   - ExhibitionWorkflowIntegrationTest
   - RegistrationWorkflowIntegrationTest
   - SearchWorkflowIntegrationTest
@@ -188,107 +194,117 @@ The project includes 15 test files covering:
 
 ### Smoke Test
 
-Run the smoke test to verify project structure:
+运行 smoke test 以验证项目结构：
 
 ```bash
 node scripts/smoke-check.js
 ```
 
-## Project Status
+## 项目状态
 
-### Current Phase
-Feature complete, focusing on optimization and enhancement.
+### 当前阶段
+功能已完成，当前重点是优化和增强。
 
-### Implemented Features
-- Exhibition calendar with monthly view (4.1)
-- Exhibition details display (4.2)
-- Registration form submission (4.3)
-- My registrations list with cancel functionality (4.4)
-- Personal profile and account settings (4.5)
-- User public profiles (4.6)
-- Exhibitor backend (4.7)
-- Registration management (4.8)
-- Admin backend (4.9)
+### 已实现功能
+- 带月视图的展会日历（4.1）
+- 展会详情展示（4.2）
+- 报名表单提交（4.3）
+- 带取消功能的我的报名列表（4.4）
+- 个人资料和账号设置（4.5）
+- 用户公开资料（4.6）
+- 展商后台（4.7）
+- 报名管理（4.8）
+- 管理员后台（4.9）
 
-### Completed Enhancements
-- SQLite local persistence
-- Local authentication system
-- Rich text viewer
-- Search functionality
-- Data export (CSV)
-- Notification system
-- Calendar integration
-- UI animations and styling
-- Unit test coverage
+### 已完成增强
+- SQLite 本地持久化
+- 本地认证系统
+- 富文本查看器
+- 搜索功能
+- 数据导出（CSV）
+- 通知系统
+- 日历集成
+- 首页固定底部导航
+- 首页顶部搜索入口
+- 更多/账号页面、页内通知设置与退出登录入口
+- 展商/管理后台按钮样式统一
+- 独立的展会详情和报名表单 Activity
+- UI 动画和样式
+- 单元测试覆盖
 
-### Pending Features
-- Network layer (API integration)
-- Media upload
-- Push notifications
+### 最新验证
+- `node scripts/smoke-check.js` — 56 项脚手架检查通过
+- `gradlew.bat :app:testDebugUnitTest :app:assembleDebug` — BUILD SUCCESSFUL
+- ADB 模拟器验证：首页顶部搜索入口、More 页内通知设置、管理后台和展商后台页面可打开并渲染
 
-## Contributing
+### 待完成功能
+- 网络层（API integration）
+- 媒体上传
+- 推送通知
 
-### Development Workflow
+## 贡献
 
-1. Create a feature branch from `main`
-2. Make your changes
-3. Run tests to ensure nothing is broken
-4. Commit with descriptive message
-5. Push and create a Pull Request
+### 开发流程
 
-### Code Style
+1. 从 `main` 创建 feature branch
+2. 进行修改
+3. 运行测试，确保没有破坏现有功能
+4. 使用描述性信息提交
+5. 推送并创建 Pull Request
 
-- Follow Java naming conventions
-- Use meaningful variable and method names
-- Add Javadoc comments for public methods
-- Keep methods focused and small
+### 代码风格
+
+- 遵循 Java 命名规范
+- 使用有意义的变量名和方法名
+- 为 public 方法添加 Javadoc 注释
+- 保持方法职责集中且简短
 
 ### Commit Messages
 
-Use conventional commit format:
+使用 conventional commit 格式：
 - `feat: add new feature`
 - `fix: fix bug`
 - `docs: update documentation`
 - `test: add tests`
 - `refactor: refactor code`
 
-## Dependencies
+## 依赖
 
-### Current Dependencies
+### 当前依赖
 
-- **JUnit 4.13.2**: Unit testing (testImplementation only)
+- **JUnit 4.13.2**：单元测试（仅 testImplementation）
 
-### No External Dependencies
+### 无外部依赖
 
-The project intentionally uses only Android SDK APIs to:
-- Minimize APK size
-- Reduce dependency conflicts
-- Maintain full control over the codebase
+项目有意仅使用 Android SDK API，以便：
+- 最小化 APK 体积
+- 减少依赖冲突
+- 保持对代码库的完全控制
 
-## Permissions
+## 权限
 
-The app requests the following permissions:
+应用请求以下权限：
 
-- `POST_NOTIFICATIONS`: For exhibition reminders (API 33+)
-- `READ_CALENDAR`: For calendar integration
-- `WRITE_CALENDAR`: For calendar integration
+- `POST_NOTIFICATIONS`：用于展会提醒（API 33+）
+- `READ_CALENDAR`：用于日历集成
+- `WRITE_CALENDAR`：用于日历集成
 
-## Known Issues
+## 已知问题
 
-- Authentication is currently in-memory (will be integrated with SQLite)
-- Sample data is hardcoded (will be replaced with API data)
-- Rich text editor not yet implemented (viewer only)
+- 认证当前仍在内存中（后续会与 SQLite 集成）
+- 示例数据为硬编码（后续会替换为 API 数据）
+- 富文本编辑器尚未实现（目前仅有查看器）
 
-## License
+## 许可证
 
-This project is private and not licensed for public use.
+本项目为私有项目，未授权公开使用。
 
-## Contact
+## 联系方式
 
-For questions or support, please contact the project maintainer.
+如有问题或需要支持，请联系项目维护者。
 
-## Acknowledgments
+## 致谢
 
-- Original requirements from TODO.md
-- Mobile requirements adapted from docs/MOBILE_REQUIREMENTS.md
-- Built with Android SDK and Gradle
+- 原始需求来自 TODO.md
+- 移动端需求改编自 docs/MOBILE_REQUIREMENTS.md
+- 使用 Android SDK 和 Gradle 构建

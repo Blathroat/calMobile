@@ -58,14 +58,22 @@
   - 组件样式系统（styles.xml）
   - 15 个 drawable 资源（按钮、输入框、卡片、标签等）
   - 9 个布局文件更新
+  - 首页固定底部导航栏（首页、个人、展商、管理、更多）
+  - 首页顶部搜索入口，可直接进入 SearchActivity
+  - 首页日历有展会日期块已做垂直居中修正
+  - 更多/账号页面（搜索、通知设置、数据导出提示、退出登录）
+  - 更多页通知设置改为页内设置区，不再跳转个人页
+  - 展商/管理后台程序化按钮统一使用 CalMobile 按钮样式
+  - 展会详情与报名表单独立 Activity 页面
 - 已完成的文档：
-  - README.md（294 行）
+  - README.md（中文版）
   - ARCHITECTURE.md（627 行，中文版）
   - AGENT.md 更新
-- 正在进行的 UI 重构（后台并行）：
-  - 新配色方案设计 (bg_772577cb)
-  - 底部导航栏实现 (bg_2653ffd0)
-  - 展会详情/报名表单改为独立页面 (bg_2dccc709)
+  - docs/PROJECT_REVIEW.md 项目 review 与改进清单
+- 最近验证：
+  - `node scripts/smoke-check.js`：56 项检查通过
+  - `gradlew.bat :app:testDebugUnitTest :app:assembleDebug`：BUILD SUCCESSFUL
+  - ADB 模拟器验证：`emulator-5554` 可打开首页、更多、管理后台、展商后台；More 通知设置保持在 More 页内
 - 待实现功能：
   - 网络层（API 对接）
   - 媒体上传
@@ -111,7 +119,10 @@ calMobile/
 
 ### Activities (UI 层)
 - **BaseActivity**: 基类，提供通用 UI 工具方法
-- **MainActivity**: 首页，展示展会月历和详情
+- **MainActivity**: 首页，展示展会月历、展会列表、我的报名和底部导航
+- **ExhibitionDetailActivity**: 展会详情独立页面
+- **RegistrationFormActivity**: 报名表单独立页面
+- **MoreActivity**: 更多/账号页面，提供搜索、通知设置、数据导出提示和退出登录
 - **LoginActivity**: 登录页面
 - **RegisterActivity**: 注册页面
 - **ProfileActivity**: 个人主页和账号设置
@@ -152,40 +163,6 @@ calMobile/
 - 测试文件位于 app/src/test/java/com/example/calmobile/
 - 运行 `node scripts/smoke-check.js` 验证项目结构
 
-## 并行开发策略
-
-- 使用 `run_in_background=true` 启动后台任务，避免阻塞主线程
-- 同时最多启动 3 个后台 subagent，多余的会自动排队等待
-- 任务完成后统一验证和提交
-- 不要一次性启动过多任务（如 9 个），3 个为最佳并行数
-
-## Subagent 使用规范
-
-### 指定 subagent 类型
-- 使用 `subagent_type` 参数指定具体 agent：
-  - `explore`: 代码库探索、文件查找、模式发现
-  - `librarian`: 文档查找、外部库研究、最佳实践
-  - `oracle`: 架构咨询、复杂调试、技术决策
-  - `plan`: 任务规划、工作分解、依赖分析
-  - `Metis`: 预规划顾问、需求分析
-  - `Momus`: 计划评审、质量检查
-- 使用 `category` 参数指定任务类型（当不指定 subagent_type 时）：
-  - `visual-engineering`: 前端/UI/布局工作
-  - `ultrabrain`: 复杂逻辑、算法、架构
-  - `quick`: 简单任务、单文件修改
-  - `unspecified-high/low`: 通用任务
-
-### 等待策略（优先级从高到低）
-1. **优先使用工具获取状态**：调用 `background_output(task_id="bg_xxx")` 检查任务是否完成
-2. **阻断等待**：如果任务未完成，使用 `block=true` 参数阻断等待结果
-3. **结束对话**：只有在无法阻断时才结束对话等待 `<system-reminder>` 通知
-
-### 并行执行
-- 同时最多 3 个后台任务，多余的会自动排队
-- 使用 `run_in_background=true` 启动后台任务
-- 任务完成后立即获取结果并验证
-- 测试依赖：junit:junit:4.13.2（仅 testImplementation，不进入 APK）。
-
 ## 开发与验证
 
 优先验证顺序：
@@ -199,7 +176,7 @@ calMobile/
 ## Git 与 GitHub 流程
 
 - 使用 `git-master` 技能处理所有 Git 操作。
-- 每个功能完成后，运行验证后提交并推送到 GitHub。
+- 仅在用户明确要求时提交或推送；提交前必须检查状态、差异和最近提交。
 - 提交信息格式：`feat: 功能简述` 或 `fix: 修复简述`。
 - 重要变更前创建分支：`git checkout -b feature/功能名`。
 
