@@ -214,6 +214,20 @@
     <string name="calendar_permission_denied">日历权限未授予，无法操作</string>
     <string name="calendar_no_account">未找到可用的日历账号</string>
 
+    <!-- Bottom Navigation -->
+    <string name="nav_home">首页</string>
+    <string name="nav_profile">个人</string>
+    <string name="nav_exhibitor">展商</string>
+    <string name="nav_admin">管理</string>
+    <string name="nav_more">更多</string>
+    <string name="nav_more_title">更多功能</string>
+    <string name="nav_more_back">← 返回</string>
+    <string name="nav_more_search">搜索</string>
+    <string name="nav_more_notifications">通知设置</string>
+    <string name="nav_more_export">数据导出</string>
+    <string name="nav_more_logout">退出登录</string>
+    <string name="nav_more_logout_confirm">确定要退出登录吗？</string>
+
     <!-- Data Export -->
     <string name="export_exhibitions">导出展会数据</string>
     <string name="export_registrations">导出报名数据</string>

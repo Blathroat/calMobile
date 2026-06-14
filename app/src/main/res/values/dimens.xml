@@ -62,4 +62,13 @@
     <dimen name="stroke_normal">1dp</dimen>
     <dimen name="stroke_thick">1.5dp</dimen>
     <dimen name="stroke_focus">2dp</dimen>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Bottom Navigation
+         ═══════════════════════════════════════════════════════════════ -->
+    <dimen name="nav_bar_height">56dp</dimen>
+    <dimen name="nav_icon_size">22dp</dimen>
+    <dimen name="nav_text_size">11sp</dimen>
+    <dimen name="nav_item_padding_vertical">6dp</dimen>
+    <dimen name="nav_item_margin_top">2dp</dimen>
 </resources>
