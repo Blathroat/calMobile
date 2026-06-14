@@ -82,7 +82,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
         exportRowParams.setMargins(0, dp(8), 0, 0);
 
         Button exportExhBtn = new Button(this);
-        exportExhBtn.setAllCaps(false);
+        styleSecondaryButton(exportExhBtn);
         exportExhBtn.setText(R.string.export_exhibitions);
         exportExhBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -104,7 +104,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
         exportRow.addView(exportExhBtn, exportExhParams);
 
         Button exportRegBtn = new Button(this);
-        exportRegBtn.setAllCaps(false);
+        styleSecondaryButton(exportRegBtn);
         exportRegBtn.setText(R.string.export_registrations);
         exportRegBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -179,7 +179,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
 
             // Edit button
             Button editBtn = new Button(this);
-            editBtn.setAllCaps(false);
+            styleSecondaryButton(editBtn);
             editBtn.setText(R.string.exhibitor_edit_exhibition);
             editBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -195,7 +195,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
 
             // Status button
             Button statusBtn = new Button(this);
-            statusBtn.setAllCaps(false);
+            styleSecondaryButton(statusBtn);
             statusBtn.setText(R.string.exhibitor_change_status);
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -210,7 +210,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
 
             // Registrations button
             Button regBtn = new Button(this);
-            regBtn.setAllCaps(false);
+            styleSecondaryButton(regBtn);
             regBtn.setText(R.string.reg_mgmt_nav_btn);
             regBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -232,7 +232,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
 
             // Delete button (separate row)
             Button deleteBtn = new Button(this);
-            deleteBtn.setAllCaps(false);
+            styleDangerButton(deleteBtn);
             deleteBtn.setText(R.string.exhibitor_delete);
             deleteBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -355,7 +355,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
         buttons.setOrientation(LinearLayout.HORIZONTAL);
 
         Button saveBtn = new Button(this);
-        saveBtn.setAllCaps(false);
+        stylePrimaryButton(saveBtn);
         saveBtn.setText(R.string.exhibitor_save);
         saveBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -369,7 +369,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
         buttons.addView(saveBtn, saveParams);
 
         Button cancelBtn = new Button(this);
-        cancelBtn.setAllCaps(false);
+        styleSecondaryButton(cancelBtn);
         cancelBtn.setText(R.string.exhibitor_cancel);
         cancelBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -530,7 +530,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
 
         // Close button
         Button closeBtn = new Button(this);
-        closeBtn.setAllCaps(false);
+        styleSecondaryButton(closeBtn);
         closeBtn.setText(R.string.exhibitor_cancel);
         closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override

@@ -203,7 +203,7 @@ public class AdminBackendActivity extends BaseActivity {
 
         // Export users button
         Button exportUsersBtn = new Button(this);
-        exportUsersBtn.setAllCaps(false);
+        styleSecondaryButton(exportUsersBtn);
         exportUsersBtn.setText(R.string.export_users);
         exportUsersBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -250,7 +250,7 @@ public class AdminBackendActivity extends BaseActivity {
 
             // View detail button
             Button detailBtn = new Button(this);
-            detailBtn.setAllCaps(false);
+            styleSecondaryButton(detailBtn);
             detailBtn.setText(R.string.admin_user_detail_title);
             detailBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -265,7 +265,7 @@ public class AdminBackendActivity extends BaseActivity {
 
             // Change status button
             Button statusBtn = new Button(this);
-            statusBtn.setAllCaps(false);
+            styleSecondaryButton(statusBtn);
             statusBtn.setText(R.string.admin_change_user_status);
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -314,7 +314,7 @@ public class AdminBackendActivity extends BaseActivity {
         actions.setOrientation(LinearLayout.HORIZONTAL);
 
         Button statusBtn = new Button(this);
-        statusBtn.setAllCaps(false);
+        styleSecondaryButton(statusBtn);
         statusBtn.setText(R.string.admin_change_user_status);
         statusBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -328,7 +328,7 @@ public class AdminBackendActivity extends BaseActivity {
         actions.addView(statusBtn, statusParams);
 
         Button closeBtn = new Button(this);
-        closeBtn.setAllCaps(false);
+        styleSecondaryButton(closeBtn);
         closeBtn.setText(R.string.admin_close_detail);
         closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -379,7 +379,7 @@ public class AdminBackendActivity extends BaseActivity {
 
         // Export exhibitions button
         Button exportExhBtn = new Button(this);
-        exportExhBtn.setAllCaps(false);
+        styleSecondaryButton(exportExhBtn);
         exportExhBtn.setText(R.string.export_exhibitions);
         exportExhBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -421,7 +421,7 @@ public class AdminBackendActivity extends BaseActivity {
 
             // Detail button
             Button detailBtn = new Button(this);
-            detailBtn.setAllCaps(false);
+            styleSecondaryButton(detailBtn);
             detailBtn.setText(R.string.admin_exhibition_detail_title);
             detailBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -436,7 +436,7 @@ public class AdminBackendActivity extends BaseActivity {
 
             // Status button
             Button statusBtn = new Button(this);
-            statusBtn.setAllCaps(false);
+            styleSecondaryButton(statusBtn);
             statusBtn.setText(R.string.admin_change_exhibition_status);
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -451,7 +451,7 @@ public class AdminBackendActivity extends BaseActivity {
 
             // Lock/Unlock button
             Button lockBtn = new Button(this);
-            lockBtn.setAllCaps(false);
+            styleSecondaryButton(lockBtn);
             lockBtn.setText(exh.isOpenForRegistration()
                     ? R.string.admin_lock_exhibition
                     : R.string.admin_unlock_exhibition);
@@ -500,7 +500,7 @@ public class AdminBackendActivity extends BaseActivity {
         actions.setOrientation(LinearLayout.HORIZONTAL);
 
         Button statusBtn = new Button(this);
-        statusBtn.setAllCaps(false);
+        styleSecondaryButton(statusBtn);
         statusBtn.setText(R.string.admin_change_exhibition_status);
         statusBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -514,7 +514,7 @@ public class AdminBackendActivity extends BaseActivity {
         actions.addView(statusBtn, statusParams);
 
         Button lockBtn = new Button(this);
-        lockBtn.setAllCaps(false);
+        styleSecondaryButton(lockBtn);
         lockBtn.setText(exh.isOpenForRegistration()
                 ? R.string.admin_lock_exhibition
                 : R.string.admin_unlock_exhibition);
@@ -530,7 +530,7 @@ public class AdminBackendActivity extends BaseActivity {
         actions.addView(lockBtn, lockParams);
 
         Button closeBtn = new Button(this);
-        closeBtn.setAllCaps(false);
+        styleSecondaryButton(closeBtn);
         closeBtn.setText(R.string.admin_close_detail);
         closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -596,7 +596,7 @@ public class AdminBackendActivity extends BaseActivity {
         exportRow.setOrientation(LinearLayout.HORIZONTAL);
 
         Button exportExhBtn = new Button(this);
-        exportExhBtn.setAllCaps(false);
+        styleSecondaryButton(exportExhBtn);
         exportExhBtn.setText(R.string.export_exhibitions);
         exportExhBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -611,7 +611,7 @@ public class AdminBackendActivity extends BaseActivity {
         exportRow.addView(exportExhBtn, exhParams);
 
         Button exportRegBtn = new Button(this);
-        exportRegBtn.setAllCaps(false);
+        styleSecondaryButton(exportRegBtn);
         exportRegBtn.setText(R.string.export_registrations);
         exportRegBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -628,7 +628,7 @@ public class AdminBackendActivity extends BaseActivity {
         settingsSection.addView(exportRow, fullWidthParams(8));
 
         Button exportUsersBtn = new Button(this);
-        exportUsersBtn.setAllCaps(false);
+        styleSecondaryButton(exportUsersBtn);
         exportUsersBtn.setText(R.string.export_users);
         exportUsersBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -675,7 +675,7 @@ public class AdminBackendActivity extends BaseActivity {
 
         // Save button
         Button saveBtn = new Button(this);
-        saveBtn.setAllCaps(false);
+        stylePrimaryButton(saveBtn);
         saveBtn.setText(R.string.admin_settings_save);
         saveBtn.setOnClickListener(new View.OnClickListener() {
             @Override

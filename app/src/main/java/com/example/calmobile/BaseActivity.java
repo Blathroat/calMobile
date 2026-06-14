@@ -245,6 +245,41 @@ public abstract class BaseActivity extends Activity {
                 .show();
     }
 
+    // ── Button styling ─────────────────────────────────────────────────
+
+    /**
+     * Apply the primary button style (solid indigo background, white text).
+     *
+     * @param btn the Button to style
+     */
+    protected void stylePrimaryButton(android.widget.Button btn) {
+        btn.setBackgroundResource(R.drawable.bg_button_primary);
+        btn.setTextColor(getResources().getColor(R.color.button_primary_text));
+        btn.setAllCaps(false);
+    }
+
+    /**
+     * Apply the secondary button style (light grey background, dark text).
+     *
+     * @param btn the Button to style
+     */
+    protected void styleSecondaryButton(android.widget.Button btn) {
+        btn.setBackgroundResource(R.drawable.bg_button_secondary);
+        btn.setTextColor(getResources().getColor(R.color.button_secondary_text));
+        btn.setAllCaps(false);
+    }
+
+    /**
+     * Apply the danger button style (light red background, red text).
+     *
+     * @param btn the Button to style
+     */
+    protected void styleDangerButton(android.widget.Button btn) {
+        btn.setBackgroundResource(R.drawable.bg_button_danger);
+        btn.setTextColor(getResources().getColor(R.color.button_danger_text));
+        btn.setAllCaps(false);
+    }
+
     // ── Back button styling ────────────────────────────────────────────
 
     /**
