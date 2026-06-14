@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/surface_background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/spacing_20dp"
+        android:paddingTop="@dimen/spacing_16dp"
+        android:paddingBottom="@dimen/spacing_32dp">
+
+        <!-- Back / title row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/reg_back"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="← 返回"
+                style="@style/Widget.CalMobile.BackButton" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="@string/registration_title"
+                android:textAppearance="@style/TextAppearance.Title" />
+
+            <!-- Spacer to balance the back button -->
+            <View
+                android:layout_width="@dimen/spacing_56dp"
+                android:layout_height="@dimen/spacing_1dp" />
+        </LinearLayout>
+
+        <!-- Registration form card (populated programmatically) -->
+        <LinearLayout
+            android:id="@+id/reg_form"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_20dp"
+            android:background="@drawable/bg_card"
+            android:elevation="@dimen/elevation_low"
+            android:orientation="vertical"
+            android:padding="@dimen/spacing_16dp" />
+
+        <!-- Result card (populated after submission) -->
+        <LinearLayout
+            android:id="@+id/reg_result"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_12dp"
+            android:background="@drawable/bg_card"
+            android:elevation="@dimen/elevation_low"
+            android:orientation="vertical"
+            android:padding="@dimen/spacing_16dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+</ScrollView>
