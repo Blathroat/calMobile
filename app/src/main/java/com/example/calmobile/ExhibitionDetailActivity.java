@@ -112,8 +112,10 @@ public class ExhibitionDetailActivity extends BaseActivity {
         // Registration button
         Button registerButton = new Button(this);
         registerButton.setAllCaps(false);
+        final boolean canRegister = AuthManager.getInstance().canRegisterForExhibitions();
         registerButton.setText(openForRegistration
-                ? R.string.registration_title : R.string.registration_closed);
+                ? (canRegister ? R.string.registration_title : R.string.registration_login_required)
+                : R.string.registration_closed);
         registerButton.setEnabled(openForRegistration);
         if (openForRegistration) {
             registerButton.setBackgroundResource(R.drawable.bg_button_primary);
@@ -125,6 +127,11 @@ public class ExhibitionDetailActivity extends BaseActivity {
         registerButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                if (!AuthManager.getInstance().canRegisterForExhibitions()) {
+                    Toast.makeText(ExhibitionDetailActivity.this,
+                            R.string.auth_login_required_registration, Toast.LENGTH_SHORT).show();
+                    return;
+                }
                 Intent regIntent = new Intent(ExhibitionDetailActivity.this,
                         RegistrationFormActivity.class);
                 regIntent.putExtra("day", day);

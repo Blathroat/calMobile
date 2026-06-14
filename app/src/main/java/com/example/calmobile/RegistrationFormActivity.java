@@ -45,6 +45,12 @@ public class RegistrationFormActivity extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (!AuthManager.getInstance().canRegisterForExhibitions()) {
+            Toast.makeText(this, R.string.auth_login_required_registration,
+                    Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_registration_form);
 
         regForm = findViewById(R.id.reg_form);

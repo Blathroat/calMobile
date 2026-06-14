@@ -83,7 +83,7 @@ public class UserPublicActivity extends BaseActivity {
             renderRegistrations(intent);
         }
 
-        if (isOwnProfile) {
+        if (isOwnProfile && AuthManager.getInstance().canAccessProfile()) {
             renderOwnProfileActions();
         }
     }
