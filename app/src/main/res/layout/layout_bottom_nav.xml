@@ -18,7 +18,7 @@
         android:layout_height="@dimen/nav_bar_height"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:weightSum="5">
+        android:weightSum="4">
 
         <!-- ── Home tab ─────────────────────────────────────── -->
         <LinearLayout
@@ -140,37 +140,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/nav_item_margin_top"
                 android:text="@string/nav_admin"
-                android:textColor="@color/nav_inactive_text"
-                android:textSize="@dimen/nav_text_size" />
-        </LinearLayout>
-
-        <!-- ── More tab ─────────────────────────────────────── -->
-        <LinearLayout
-            android:id="@+id/nav_more"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bg_nav_item"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:paddingTop="@dimen/nav_item_padding_vertical"
-            android:paddingBottom="@dimen/nav_item_padding_vertical">
-
-            <ImageView
-                android:id="@+id/nav_more_icon"
-                android:layout_width="@dimen/nav_icon_size"
-                android:layout_height="@dimen/nav_icon_size"
-                android:contentDescription="@string/nav_more"
-                android:src="@drawable/ic_nav_more" />
-
-            <TextView
-                android:id="@+id/nav_more_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/nav_item_margin_top"
-                android:text="@string/nav_more"
                 android:textColor="@color/nav_inactive_text"
                 android:textSize="@dimen/nav_text_size" />
         </LinearLayout>
