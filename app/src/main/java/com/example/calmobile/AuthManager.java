@@ -12,6 +12,10 @@ public class AuthManager {
 
     private static AuthManager instance;
 
+    private static final String ROLE_USER = "user";
+    private static final String ROLE_EXHIBITOR = "exhibitor";
+    private static final String ROLE_ADMIN = "admin";
+
     // User storage: username -> UserRecord
     private final Map<String, UserRecord> users = new HashMap<>();
 
@@ -20,7 +24,7 @@ public class AuthManager {
 
     private AuthManager() {
         // Pre-populate with a demo user for testing
-        users.put("demo", new UserRecord("demo", "password", "demo@example.com"));
+        users.put("demo", new UserRecord("demo", "password", "demo@example.com", ROLE_ADMIN));
     }
 
     public static synchronized AuthManager getInstance() {
@@ -50,7 +54,7 @@ public class AuthManager {
             return "用户名已存在";
         }
 
-        users.put(key, new UserRecord(key, password, email.trim()));
+        users.put(key, new UserRecord(key, password, email.trim(), ROLE_USER));
         return null; // success
     }
 
@@ -87,10 +91,24 @@ public class AuthManager {
     }
 
     /**
+     * Continue without an authenticated user.
+     */
+    public void enterAsGuest() {
+        currentUsername = null;
+    }
+
+    /**
      * Check if a user is currently logged in.
      */
     public boolean isLoggedIn() {
         return currentUsername != null;
+    }
+
+    /**
+     * Check whether the current session is an unauthenticated guest.
+     */
+    public boolean isGuest() {
+        return !isLoggedIn();
     }
 
     /**
@@ -117,17 +135,63 @@ public class AuthManager {
     }
 
     /**
+     * Check whether profile-only actions are available.
+     */
+    public boolean canAccessProfile() {
+        return isLoggedIn();
+    }
+
+    /**
+     * Check whether registration actions are available.
+     */
+    public boolean canRegisterForExhibitions() {
+        return isLoggedIn();
+    }
+
+    /**
+     * Check whether the current user has exhibitor permissions.
+     */
+    public boolean isExhibitor() {
+        UserRecord record = getCurrentUserRecord();
+        return record != null
+                && (ROLE_EXHIBITOR.equals(record.role) || ROLE_ADMIN.equals(record.role));
+    }
+
+    public boolean canAccessExhibitor() {
+        return isExhibitor();
+    }
+
+    /**
+     * Check whether the current user has admin permissions.
+     */
+    public boolean isAdmin() {
+        UserRecord record = getCurrentUserRecord();
+        return record != null && ROLE_ADMIN.equals(record.role);
+    }
+
+    public boolean canAccessAdmin() {
+        return isAdmin();
+    }
+
+    private UserRecord getCurrentUserRecord() {
+        if (currentUsername == null) return null;
+        return users.get(currentUsername);
+    }
+
+    /**
      * Internal user record.
      */
     private static class UserRecord {
         final String username;
         final String password;
         final String email;
+        final String role;
 
-        UserRecord(String username, String password, String email) {
+        UserRecord(String username, String password, String email, String role) {
             this.username = username;
             this.password = password;
             this.email = email;
+            this.role = role;
         }
     }
 }
