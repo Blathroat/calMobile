@@ -30,6 +30,8 @@
     <string name="profile_default_contact">calmobile@example.com</string>
     <string name="profile_default_social">微信：calmobile</string>
     <string name="profile_avatar_initial">展</string>
+    <string name="profile_logout">退出登录</string>
+    <string name="profile_logout_confirm">确定要退出登录吗？</string>
     <string name="go_to_profile">个人主页</string>
 
     <string name="user_public_title">用户主页</string>
@@ -72,6 +74,11 @@
     <string name="exhibitor_hint_category">如 智能制造 / 工业自动化</string>
     <string name="exhibitor_hint_description">请输入展会简介</string>
     <string name="exhibitor_day_label">6月%1$d日</string>
+    <string name="exhibition_form_back">← 返回</string>
+    <string name="exhibition_form_not_found">未找到要编辑的展会</string>
+    <string name="exhibitor_validation_required">必填</string>
+    <string name="exhibitor_validation_day_range">1-30</string>
+    <string name="exhibitor_validation_day_number">请输入数字</string>
     <string name="go_to_exhibitor_backend">展商后台</string>
 
     <!-- Registration Management -->
@@ -166,12 +173,18 @@
     <string name="auth_password_confirm_hint">确认密码</string>
     <string name="auth_login_btn">登录</string>
     <string name="auth_go_to_register">注册新账号</string>
+    <string name="auth_continue_guest">以访客身份浏览</string>
     <string name="auth_register_title">注册账号</string>
     <string name="auth_register_subtitle">创建新账号以使用展会排期助手</string>
     <string name="auth_register_btn">注册</string>
     <string name="auth_go_to_login">已有账号？返回登录</string>
     <string name="auth_logout">退出登录</string>
     <string name="auth_welcome">欢迎，%1$s</string>
+    <string name="auth_login_required_registration">请先登录后再报名</string>
+    <string name="auth_login_required_profile">请先登录后使用个人功能</string>
+    <string name="auth_exhibitor_required">当前账号无展商权限</string>
+    <string name="auth_admin_required">当前账号无管理员权限</string>
+    <string name="registration_login_required">登录后报名</string>
 
     <!-- Search -->
     <string name="search_title">搜索</string>

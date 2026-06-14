@@ -97,6 +97,7 @@
         <item name="android:paddingTop">@dimen/spacing_12dp</item>
         <item name="android:paddingBottom">@dimen/spacing_12dp</item>
         <item name="android:minHeight">@dimen/button_height</item>
+        <item name="android:stateListAnimator">@null</item>
     </style>
 
     <!-- Text button: Transparent, teal text -->
@@ -109,6 +110,7 @@
         <item name="android:paddingRight">@dimen/spacing_16dp</item>
         <item name="android:paddingTop">@dimen/spacing_10dp</item>
         <item name="android:paddingBottom">@dimen/spacing_10dp</item>
+        <item name="android:stateListAnimator">@null</item>
     </style>
 
     <!-- Danger button: Red tinted -->
@@ -122,6 +124,22 @@
         <item name="android:paddingTop">@dimen/spacing_12dp</item>
         <item name="android:paddingBottom">@dimen/spacing_12dp</item>
         <item name="android:minHeight">@dimen/button_height</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <!-- Logout button: Red text on transparent, for profile logout -->
+    <style name="Widget.CalMobile.Button.Logout" parent="android:Widget.Button">
+        <item name="android:background">@drawable/bg_button_text</item>
+        <item name="android:textColor">@color/status_closed</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:paddingLeft">@dimen/spacing_20dp</item>
+        <item name="android:paddingRight">@dimen/spacing_20dp</item>
+        <item name="android:paddingTop">@dimen/spacing_12dp</item>
+        <item name="android:paddingBottom">@dimen/spacing_12dp</item>
+        <item name="android:minHeight">@dimen/button_height</item>
+        <item name="android:stateListAnimator">@null</item>
     </style>
 
     <!-- ═══════════════════════════════════════════════════════════════
