@@ -1,22 +1,14 @@
 package com.example.calmobile;
 
-import android.Manifest;
-import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
-import android.text.InputType;
 import android.view.View;
 import android.widget.Button;
-import android.widget.CheckBox;
-import android.widget.EditText;
 import android.widget.GridLayout;
 import android.widget.LinearLayout;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -25,7 +17,8 @@ import java.util.List;
 
 /**
  * Main activity displaying the exhibition calendar, exhibition list,
- * exhibition details, and registration form.
+ * and user registrations. Exhibition detail and registration form
+ * are now separate Activity pages.
  */
 public class MainActivity extends BaseActivity {
     private static final int MONTH_DAYS = 30;
@@ -72,20 +65,9 @@ public class MainActivity extends BaseActivity {
     private TextView statusText;
     private GridLayout calendarGrid;
     private LinearLayout exhibitionList;
-    private LinearLayout detailPanel;
-    private LinearLayout registrationPanel;
-    private LinearLayout registrationAnswers;
-    private EditText nameInput;
-    private RadioGroup visitorTypeGroup;
-    private CheckBox needMeetingCheck;
-    private CheckBox needReminderCheck;
-    private TextView registrationResultText;
 
     private final RegistrationManager registrationManager = new RegistrationManager();
     private LinearLayout myRegistrationsList;
-
-    /** Tracks which exhibition is pending calendar permission approval. */
-    private Exhibition pendingCalendarExhibition;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -95,53 +77,81 @@ public class MainActivity extends BaseActivity {
         statusText = findViewById(R.id.status_text);
         calendarGrid = findViewById(R.id.calendar_grid);
         exhibitionList = findViewById(R.id.exhibition_list);
-        detailPanel = findViewById(R.id.detail_panel);
-        registrationPanel = findViewById(R.id.registration_panel);
-        registrationAnswers = findViewById(R.id.registration_answers);
         myRegistrationsList = findViewById(R.id.my_registrations_list);
 
         statusText.setText(R.string.home_status);
         buildMonthGrid();
         showExhibitionsForDay(12);
-        showExhibitionDetail(SAMPLE_EXHIBITIONS[1]);
         renderMyRegistrations();
+
+        // Search bar — navigate to SearchActivity
+        View searchBar = findViewById(R.id.home_search_bar);
+        if (searchBar != null) {
+            searchBar.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    navigateTo(SearchActivity.class);
+                }
+            });
+        }
 
         // Request notification permission on API 33+
         NotificationHelper.getInstance(this).requestNotificationPermission(this);
 
-        Button profileButton = findViewById(R.id.go_to_profile_btn);
-        profileButton.setAllCaps(false);
-        profileButton.setOnClickListener(new View.OnClickListener() {
+        setupBottomNav();
+    }
+
+    /**
+     * Wire the bottom navigation bar tabs.
+     * Home tab is active (current screen); other tabs navigate to their targets.
+     */
+    private void setupBottomNav() {
+        // Mark home tab as active
+        View homeTab = findViewById(R.id.nav_home);
+        if (homeTab != null) {
+            homeTab.setSelected(true);
+            homeTab.setOnClickListener(null);
+        }
+        TextView homeText = findViewById(R.id.nav_home_text);
+        if (homeText != null) {
+            homeText.setTextColor(getResources().getColor(R.color.nav_active_text));
+        }
+        android.widget.ImageView homeIcon = findViewById(R.id.nav_home_icon);
+        if (homeIcon != null) {
+            homeIcon.setColorFilter(getResources().getColor(R.color.nav_active_icon));
+        }
+
+        // Home — already on MainActivity, no-op
+
+        // Profile
+        findViewById(R.id.nav_profile).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 navigateTo(ProfileActivity.class);
             }
         });
 
-        Button exhibitorBackendButton = findViewById(R.id.go_to_exhibitor_backend_btn);
-        exhibitorBackendButton.setAllCaps(false);
-        exhibitorBackendButton.setOnClickListener(new View.OnClickListener() {
+        // Exhibitor
+        findViewById(R.id.nav_exhibitor).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 navigateTo(ExhibitorBackendActivity.class);
             }
         });
 
-        Button adminBackendButton = findViewById(R.id.go_to_admin_backend_btn);
-        adminBackendButton.setAllCaps(false);
-        adminBackendButton.setOnClickListener(new View.OnClickListener() {
+        // Admin
+        findViewById(R.id.nav_admin).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 navigateTo(AdminBackendActivity.class);
             }
         });
 
-        Button searchButton = findViewById(R.id.go_to_search_btn);
-        searchButton.setAllCaps(false);
-        searchButton.setOnClickListener(new View.OnClickListener() {
+        // More — opens MoreActivity
+        findViewById(R.id.nav_more).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                navigateTo(SearchActivity.class);
+                navigateTo(MoreActivity.class);
             }
         });
     }
@@ -198,6 +208,8 @@ public class MainActivity extends BaseActivity {
             }
             dayButton.setBackground(cellBg);
             dayButton.setPadding(0, dp(8), 0, dp(8));
+            dayButton.setGravity(android.view.Gravity.CENTER);
+            dayButton.setIncludeFontPadding(false);
             dayButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
@@ -235,7 +247,7 @@ public class MainActivity extends BaseActivity {
             card.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
-                    showExhibitionDetail(exhibition);
+                    openExhibitionDetail(exhibition);
                 }
             });
 
@@ -249,7 +261,7 @@ public class MainActivity extends BaseActivity {
             detailButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
-                    showExhibitionDetail(exhibition);
+                    openExhibitionDetail(exhibition);
                 }
             });
             card.addView(detailButton, fullWidthParams(8));
@@ -260,206 +272,24 @@ public class MainActivity extends BaseActivity {
         animateListItems(exhibitionList, 100);
     }
 
-    // ── Exhibition detail ─────────────────────────────────────────────
-
-    private void showExhibitionDetail(final Exhibition exhibition) {
-        detailPanel.removeAllViews();
-        animateShowPanel(detailPanel);
-        animateHidePanel(registrationPanel);
-
-        addText(detailPanel, getString(R.string.exhibition_detail), R.color.text_primary, 20, Typeface.BOLD);
-        addText(detailPanel, exhibition.title, R.color.text_primary, 18, Typeface.BOLD);
-        addText(detailPanel, "时间：6月" + exhibition.day + "日 " + exhibition.time, R.color.text_secondary, 15, Typeface.NORMAL);
-        addText(detailPanel, "地点：" + exhibition.venue, R.color.text_secondary, 15, Typeface.NORMAL);
-        addText(detailPanel, "状态：" + exhibition.status, exhibition.openForRegistration ? R.color.status_open : R.color.status_closed, 15, Typeface.BOLD);
-        addText(detailPanel, exhibition.description, R.color.text_primary, 15, Typeface.NORMAL);
-        addText(detailPanel, "说明：当前为本地假数据演示，报名结果不会提交到服务器。", R.color.text_secondary, 14, Typeface.NORMAL);
-
-        Button registerButton = new Button(this);
-        registerButton.setAllCaps(false);
-        registerButton.setText(exhibition.openForRegistration ? R.string.registration_title : R.string.registration_closed);
-        registerButton.setEnabled(exhibition.openForRegistration);
-        registerButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                showRegistrationForm(exhibition);
-            }
-        });
-        detailPanel.addView(registerButton, fullWidthParams(12));
-
-        // Exhibition reminder button
-        Button reminderButton = new Button(this);
-        reminderButton.setAllCaps(false);
-        reminderButton.setText("设置提醒");
-        reminderButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                NotificationHelper helper = NotificationHelper.getInstance(MainActivity.this);
-                helper.sendExhibitionReminder(
-                        exhibition.title, exhibition.venue, exhibition.day, exhibition.time);
-                Toast.makeText(MainActivity.this,
-                        "已设置展会提醒（1天前提醒）", Toast.LENGTH_SHORT).show();
-            }
-        });
-        detailPanel.addView(reminderButton, fullWidthParams(4));
-
-        // Calendar integration buttons
-        addCalendarButtons(exhibition);
-    }
-
-    // ── Calendar integration ──────────────────────────────────────────
+    // ── Navigate to exhibition detail ─────────────────────────────────
 
     /**
-     * Add calendar add/remove buttons to the detail panel.
+     * Open the exhibition detail page as a separate Activity.
      *
-     * @param exhibition the exhibition to add/remove from calendar
+     * @param exhibition the exhibition to display
      */
-    private void addCalendarButtons(final Exhibition exhibition) {
-        Button addToCalendarBtn = new Button(this);
-        addToCalendarBtn.setAllCaps(false);
-        addToCalendarBtn.setText(R.string.calendar_add_to_calendar);
-        addToCalendarBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (!CalendarHelper.hasCalendarPermissions(MainActivity.this)) {
-                    pendingCalendarExhibition = exhibition;
-                    CalendarHelper.requestCalendarPermissions(MainActivity.this);
-                    return;
-                }
-                CalendarHelper.addToCalendar(MainActivity.this,
-                        exhibition.title, exhibition.venue,
-                        exhibition.day, exhibition.time, exhibition.description);
-            }
-        });
-        detailPanel.addView(addToCalendarBtn, fullWidthParams(4));
-
-        Button removeFromCalendarBtn = new Button(this);
-        removeFromCalendarBtn.setAllCaps(false);
-        removeFromCalendarBtn.setText(R.string.calendar_remove_from_calendar);
-        removeFromCalendarBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (!CalendarHelper.hasCalendarPermissions(MainActivity.this)) {
-                    pendingCalendarExhibition = exhibition;
-                    CalendarHelper.requestCalendarPermissions(MainActivity.this);
-                    return;
-                }
-                CalendarHelper.removeFromCalendar(MainActivity.this,
-                        exhibition.title, exhibition.day);
-            }
-        });
-        detailPanel.addView(removeFromCalendarBtn, fullWidthParams(4));
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == CalendarHelper.REQUEST_CODE_CALENDAR_PERMISSION) {
-            if (grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED
-                    && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
-                if (pendingCalendarExhibition != null) {
-                    CalendarHelper.addToCalendar(this,
-                            pendingCalendarExhibition.title,
-                            pendingCalendarExhibition.venue,
-                            pendingCalendarExhibition.day,
-                            pendingCalendarExhibition.time,
-                            pendingCalendarExhibition.description);
-                    pendingCalendarExhibition = null;
-                }
-            } else {
-                Toast.makeText(this, R.string.calendar_permission_denied,
-                        Toast.LENGTH_SHORT).show();
-                pendingCalendarExhibition = null;
-            }
-        }
-    }
-
-    // ── Registration form ─────────────────────────────────────────────
-
-    private void showRegistrationForm(final Exhibition exhibition) {
-        animateShowPanel(registrationPanel);
-        registrationAnswers.removeAllViews();
-
-        addText(registrationAnswers, getString(R.string.registration_title), R.color.text_primary, 20, Typeface.BOLD);
-        addText(registrationAnswers, exhibition.title, R.color.text_secondary, 15, Typeface.NORMAL);
-
-        nameInput = new EditText(this);
-        nameInput.setSingleLine(true);
-        nameInput.setInputType(InputType.TYPE_CLASS_TEXT);
-        nameInput.setHint("姓名 / 公司名称");
-        registrationAnswers.addView(nameInput, fullWidthParams(10));
-
-        addText(registrationAnswers, "参观身份", R.color.text_primary, 15, Typeface.BOLD);
-        visitorTypeGroup = new RadioGroup(this);
-        visitorTypeGroup.setOrientation(RadioGroup.VERTICAL);
-        addVisitorType("专业观众", true);
-        addVisitorType("采购负责人", false);
-        addVisitorType("媒体或合作伙伴", false);
-        registrationAnswers.addView(visitorTypeGroup, fullWidthParams(4));
-
-        addText(registrationAnswers, "报名需求", R.color.text_primary, 15, Typeface.BOLD);
-        needMeetingCheck = new CheckBox(this);
-        needMeetingCheck.setText("希望安排展商洽谈");
-        registrationAnswers.addView(needMeetingCheck, fullWidthParams(2));
-
-        needReminderCheck = new CheckBox(this);
-        needReminderCheck.setText("需要开展前提醒");
-        needReminderCheck.setChecked(true);
-        registrationAnswers.addView(needReminderCheck, fullWidthParams(2));
-
-        Button submitButton = new Button(this);
-        submitButton.setAllCaps(false);
-        submitButton.setText(R.string.submit_registration);
-        submitButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                submitRegistration(exhibition);
-            }
-        });
-        registrationAnswers.addView(submitButton, fullWidthParams(10));
-
-        registrationResultText = addText(registrationAnswers, "填写后点击提交，页面会生成本地演示反馈。", R.color.text_secondary, 14, Typeface.NORMAL);
-    }
-
-    private void submitRegistration(Exhibition exhibition) {
-        String visitorName = nameInput.getText().toString().trim();
-        if (visitorName.length() == 0) {
-            visitorName = "匿名观众";
-        }
-
-        RadioButton selectedType = findViewById(visitorTypeGroup.getCheckedRadioButtonId());
-        String visitorType = selectedType.getText().toString();
-        String meetingNeed = needMeetingCheck.isChecked() ? "需要洽谈" : "仅参观";
-        String reminderNeed = needReminderCheck.isChecked() ? "已勾选提醒" : "不提醒";
-        String needsSummary = meetingNeed + "，" + reminderNeed;
-
-        registrationManager.submit(
-                exhibition.title,
-                exhibition.day,
-                exhibition.time,
-                exhibition.venue,
-                visitorName,
-                visitorType,
-                needsSummary);
-
-        String message = "已提交报名\n"
-                + "展会：" + exhibition.title + "\n"
-                + "报名人：" + visitorName + "\n"
-                + "身份：" + visitorType + "\n"
-                + "需求：" + needsSummary;
-        registrationResultText.setText(message);
-        Toast.makeText(this, "报名已提交", Toast.LENGTH_SHORT).show();
-
-        NotificationHelper notificationHelper = NotificationHelper.getInstance(this);
-        notificationHelper.sendRegistrationConfirmation(exhibition.title, visitorName);
-
-        if (needReminderCheck.isChecked()) {
-            notificationHelper.sendExhibitionReminder(
-                    exhibition.title, exhibition.venue, exhibition.day, exhibition.time);
-        }
-
-        renderMyRegistrations();
+    private void openExhibitionDetail(Exhibition exhibition) {
+        Intent intent = new Intent(this, ExhibitionDetailActivity.class);
+        intent.putExtra("day", exhibition.day);
+        intent.putExtra("title", exhibition.title);
+        intent.putExtra("venue", exhibition.venue);
+        intent.putExtra("time", exhibition.time);
+        intent.putExtra("status", exhibition.status);
+        intent.putExtra("openForRegistration", exhibition.openForRegistration);
+        intent.putExtra("description", exhibition.description);
+        intent.putExtra("category", exhibition.category);
+        navigateTo(intent);
     }
 
     // ── My registrations list ─────────────────────────────────────────
@@ -582,18 +412,6 @@ public class MainActivity extends BaseActivity {
         intent.putExtra("regStatuses", statuses);
         intent.putExtra("regNeedsSummaries", needs);
         navigateTo(intent);
-    }
-
-    // ── Visitor type radio helper ─────────────────────────────────────
-
-    private void addVisitorType(String label, boolean checked) {
-        RadioButton radioButton = new RadioButton(this);
-        radioButton.setId(View.generateViewId());
-        radioButton.setText(label);
-        visitorTypeGroup.addView(radioButton, fullWidthParams(0));
-        if (checked) {
-            visitorTypeGroup.check(radioButton.getId());
-        }
     }
 
     // ── Data helpers ──────────────────────────────────────────────────
