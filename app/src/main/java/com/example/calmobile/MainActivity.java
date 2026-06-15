@@ -60,22 +60,34 @@ public class MainActivity extends BaseActivity {
     private int currentYear = 2026;
     private int currentMonth = 6; // 1-12
     private static final Exhibition[] SAMPLE_EXHIBITIONS = new Exhibition[] {
-            new Exhibition(6, "华南智能制造展", "深圳国际会展中心 6 号馆",
+            new Exhibition(6, 6, "华南智能制造展", "深圳国际会展中心 6 号馆",
                     "09:30-17:00", "报名中", true,
                     "聚焦工业机器人、柔性产线和数字化工厂方案，适合制造业采购与技术负责人参观。",
                     "智能制造 / 工业自动化"),
-            new Exhibition(12, "绿色能源装备展", "广州琶洲展馆 A 区",
+            new Exhibition(12, 6, "绿色能源装备展", "广州琶洲展馆 A 区",
                     "10:00-18:00", "报名中", true,
                     "展示储能、电池回收、光伏逆变器和低碳园区方案，现场开放采购对接区。",
                     "新能源 / 储能"),
-            new Exhibition(12, "跨境电商选品会", "广州琶洲展馆 B 区",
+            new Exhibition(12, 6, "跨境电商选品会", "广州琶洲展馆 B 区",
                     "13:30-20:00", "席位紧张", true,
                     "本地假数据演示：用当天多场展会验证列表、详情和报名表单切换流程。",
                     "电商 / 选品"),
-            new Exhibition(21, "城市更新材料展", "上海新国际博览中心",
+            new Exhibition(21, 6, "城市更新材料展", "上海新国际博览中心",
                     "09:00-16:30", "报名截止", false,
                     "面向建筑材料、节能门窗和旧改服务商的专业展，当前样例设置为不可报名状态。",
-                    "建筑材料 / 城市更新")
+                    "建筑材料 / 城市更新"),
+            new Exhibition(5, 7, "国际电子展", "深圳会展中心",
+                    "09:00-17:00", "报名中", true,
+                    "7月电子行业盛会，展示最新芯片、传感器和物联网方案。",
+                    "电子 / 半导体"),
+            new Exhibition(15, 7, "亚洲食品博览会", "上海国家会展中心",
+                    "10:00-18:00", "报名中", true,
+                    "汇聚亚太地区优质食品供应商，涵盖休闲食品、饮料和健康食品。",
+                    "食品 / 饮料"),
+            new Exhibition(10, 8, "国际汽车展", "北京中国国际展览中心",
+                    "09:00-18:00", "报名中", true,
+                    "展示新能源汽车、智能驾驶和汽车零部件最新技术。",
+                    "汽车 / 新能源"),
     };
     private TextView homeStatusText;
     private TextView monthTitleText;
@@ -408,7 +420,14 @@ public class MainActivity extends BaseActivity {
         calCard.addView(monthNav, fullWidthParams(4));
         homeCalendarGrid = new GridLayout(this);
         homeCalendarGrid.setColumnCount(7);
-        homeCalendarGrid.setRowCount((getDaysInMonth(currentYear, currentMonth) + 6) / 7);
+        // Calculate rows: 1 header row + enough rows for days + offset
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        cal.set(currentYear, currentMonth - 1, 1);
+        int dayOfWeek = cal.get(java.util.Calendar.DAY_OF_WEEK);
+        int startOffset = (dayOfWeek == 1) ? 6 : dayOfWeek - 2;
+        int totalCells = startOffset + getDaysInMonth(currentYear, currentMonth);
+        int rowCount = 1 + (totalCells + 6) / 7; // 1 header + day rows
+        homeCalendarGrid.setRowCount(rowCount);
         homeCalendarGrid.setAlignmentMode(GridLayout.ALIGN_MARGINS);
         calCard.addView(homeCalendarGrid, fullWidthParams(12));
         root.addView(calCard, fullWidthParams(28));
@@ -469,6 +488,43 @@ public class MainActivity extends BaseActivity {
             }
         }
         
+        // Add default registered day for demo (day 12 in current month)
+        if (currentMonth == 6) {
+            registeredDays.add(12);
+        }
+        
+        // Calculate day of week for the 1st (0=Sunday, 1=Monday, ..., 6=Saturday)
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        cal.set(currentYear, currentMonth - 1, 1);
+        int dayOfWeek = cal.get(java.util.Calendar.DAY_OF_WEEK);
+        // Convert to Monday-first (1=Monday, ..., 7=Sunday)
+        int startOffset = (dayOfWeek == 1) ? 6 : dayOfWeek - 2;
+        
+        // Add weekday header row
+        String[] weekDays = {"一", "二", "三", "四", "五", "六", "日"};
+        for (String weekDay : weekDays) {
+            TextView header = new TextView(this);
+            header.setText(weekDay);
+            header.setGravity(android.view.Gravity.CENTER);
+            header.setTextSize(12);
+            header.setTextColor(getResources().getColor(R.color.text_secondary));
+            GridLayout.LayoutParams headerParams = new GridLayout.LayoutParams();
+            headerParams.width = 0;
+            headerParams.height = dp(32);
+            headerParams.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
+            homeCalendarGrid.addView(header, headerParams);
+        }
+        
+        // Add empty cells for days before the 1st
+        for (int i = 0; i < startOffset; i++) {
+            View empty = new View(this);
+            GridLayout.LayoutParams emptyParams = new GridLayout.LayoutParams();
+            emptyParams.width = 0;
+            emptyParams.height = dp(52);
+            emptyParams.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
+            homeCalendarGrid.addView(empty, emptyParams);
+        }
+        
         for (int day = 1; day <= daysInMonth; day++) {
             final int selectedDay = day;
             int count = countExhibitionsForDay(day);
@@ -497,7 +553,7 @@ public class MainActivity extends BaseActivity {
             }
             dayButton.setTextColor(getResources().getColor(textColor));
             
-            dayButton.setTextSize(11);
+            dayButton.setTextSize(14);
             dayButton.setTypeface(Typeface.DEFAULT,
                     (count > 0 || isRegistered) ? Typeface.BOLD : Typeface.NORMAL);
 
@@ -558,7 +614,14 @@ public class MainActivity extends BaseActivity {
     private void updateMonthDisplay() {
         monthTitleText.setText(currentYear + "年" + currentMonth + "月");
         int daysInMonth = getDaysInMonth(currentYear, currentMonth);
-        homeCalendarGrid.setRowCount((daysInMonth + 6) / 7);
+        // Calculate rows: 1 header row + enough rows for days + offset
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        cal.set(currentYear, currentMonth - 1, 1);
+        int dayOfWeek = cal.get(java.util.Calendar.DAY_OF_WEEK);
+        int startOffset = (dayOfWeek == 1) ? 6 : dayOfWeek - 2;
+        int totalCells = startOffset + daysInMonth;
+        int rowCount = 1 + (totalCells + 6) / 7; // 1 header + day rows
+        homeCalendarGrid.setRowCount(rowCount);
         buildMonthGrid(daysInMonth);
         showExhibitionsForDay(1);
     }
@@ -1751,7 +1814,7 @@ public class MainActivity extends BaseActivity {
     private List<Exhibition> getExhibitionsForDay(int day) {
         List<Exhibition> result = new ArrayList<>();
         for (Exhibition e : SAMPLE_EXHIBITIONS) {
-            if (e.day == day) {
+            if (e.day == day && e.month == currentMonth) {
                 result.add(e);
             }
         }
@@ -1761,7 +1824,7 @@ public class MainActivity extends BaseActivity {
     private int countExhibitionsForDay(int day) {
         int count = 0;
         for (Exhibition e : SAMPLE_EXHIBITIONS) {
-            if (e.day == day) {
+            if (e.day == day && e.month == currentMonth) {
                 count++;
             }
         }
@@ -1771,6 +1834,7 @@ public class MainActivity extends BaseActivity {
     /** Immutable exhibition model for sample data. */
     private static class Exhibition {
         final int day;
+        final int month;
         final String title;
         final String venue;
         final String time;
@@ -1779,9 +1843,10 @@ public class MainActivity extends BaseActivity {
         final String description;
         final String category;
 
-        Exhibition(int day, String title, String venue, String time, String status,
+        Exhibition(int day, int month, String title, String venue, String time, String status,
                    boolean openForRegistration, String description, String category) {
             this.day = day;
+            this.month = month;
             this.title = title;
             this.venue = venue;
             this.time = time;

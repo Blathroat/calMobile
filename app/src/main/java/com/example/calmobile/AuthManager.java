@@ -23,8 +23,10 @@ public class AuthManager {
     private String currentUsername;
 
     private AuthManager() {
-        // Pre-populate with a demo user for testing
+        // Pre-populate with demo users for testing
         users.put("demo", new UserRecord("demo", "password", "demo@example.com", ROLE_ADMIN));
+        users.put("exhibitor", new UserRecord("exhibitor", "password", "exhibitor@example.com", ROLE_EXHIBITOR));
+        users.put("user", new UserRecord("user", "password", "user@example.com", ROLE_USER));
     }
 
     public static synchronized AuthManager getInstance() {

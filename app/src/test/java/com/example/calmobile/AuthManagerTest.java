@@ -258,14 +258,14 @@ public class AuthManagerTest {
 
     @Test
     public void getUserCountIncludesDemoUser() {
-        assertEquals(1, auth.getUserCount());
+        assertEquals(3, auth.getUserCount()); // demo + exhibitor + user
     }
 
     @Test
     public void getUserCountAfterRegistrations() {
         auth.register("alice", "pass1234", "alice@example.com");
         auth.register("bob", "pass1234", "bob@example.com");
-        assertEquals(3, auth.getUserCount()); // demo + alice + bob
+        assertEquals(5, auth.getUserCount()); // demo + exhibitor + user + alice + bob
     }
 
     // ── Edge cases / integration ─────────────────────────────────
@@ -307,7 +307,7 @@ public class AuthManagerTest {
 
     @Test
     public void demoUserExistsFromConstructor() {
-        assertEquals(1, auth.getUserCount());
+        assertEquals(3, auth.getUserCount()); // demo + exhibitor + user
         assertNull(auth.login("demo", "password"));
     }
 
