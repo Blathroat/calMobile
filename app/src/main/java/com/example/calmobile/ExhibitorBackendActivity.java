@@ -8,6 +8,7 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -165,16 +166,14 @@ public class ExhibitorBackendActivity extends BaseActivity {
             card.addView(actions, fullWidthParams(8));
 
             // Delete button (circular trash icon)
-            Button deleteBtn = new Button(this);
-            deleteBtn.setAllCaps(false);
-            deleteBtn.setText("🗑");
-            deleteBtn.setTextSize(18);
+            ImageView deleteBtn = new ImageView(this);
+            deleteBtn.setImageResource(android.R.drawable.ic_menu_delete);
+            deleteBtn.setColorFilter(getResources().getColor(R.color.button_danger_text));
             deleteBtn.setPadding(dp(12), dp(8), dp(12), dp(8));
             GradientDrawable deleteBg = new GradientDrawable();
             deleteBg.setShape(GradientDrawable.OVAL);
             deleteBg.setColor(getResources().getColor(R.color.button_danger_bg));
             deleteBtn.setBackground(deleteBg);
-            deleteBtn.setTextColor(getResources().getColor(R.color.button_danger_text));
             deleteBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {

@@ -45,6 +45,10 @@ public class MainActivity extends BaseActivity {
     private static final int[] NAV_ICON_IDS = {
             R.id.nav_home_icon, R.id.nav_exhibitor_icon, R.id.nav_admin_icon, R.id.nav_profile_icon
     };
+    // Mapping from NAV_IDS index to TAB constants
+    private static final int[] NAV_TO_TAB = {
+            TAB_HOME, TAB_EXHIBITOR, TAB_ADMIN, TAB_PROFILE
+    };
 
     // ── State ─────────────────────────────────────────────────────
     private int currentTab = TAB_HOME;
@@ -192,15 +196,16 @@ public class MainActivity extends BaseActivity {
 
     private void setupBottomNav() {
         for (int i = 0; i < NAV_IDS.length; i++) {
-            final int idx = i;
+            final int navIndex = i;
+            final int tabIndex = NAV_TO_TAB[i];
             findViewById(NAV_IDS[i]).setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    if (!canAccessTab(idx)) {
-                        showAccessDeniedForTab(idx);
+                    if (!canAccessTab(tabIndex)) {
+                        showAccessDeniedForTab(tabIndex);
                         return;
                     }
-                    showTab(idx, true);
+                    showTab(tabIndex, true);
                 }
             });
         }
@@ -212,7 +217,7 @@ public class MainActivity extends BaseActivity {
             View item = findViewById(NAV_IDS[i]);
             TextView text = findViewById(NAV_TEXT_IDS[i]);
             ImageView icon = findViewById(NAV_ICON_IDS[i]);
-            boolean active = (i == currentTab);
+            boolean active = (NAV_TO_TAB[i] == currentTab);
             item.setSelected(active);
             text.setTextColor(getResources().getColor(
                     active ? R.color.nav_active_text : R.color.nav_inactive_text));
@@ -1040,70 +1045,125 @@ public class MainActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showExhibitorStatusDialog(exh);
+                    showInlineStatusPicker(exhListContainer, exh);
                 }
             });
             LinearLayout.LayoutParams statusP = new LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            statusP.setMargins(dp(4), 0, dp(4), 0);
+            statusP.setMargins(dp(4), 0, 0, 0);
             actions.addView(statusBtn, statusP);
 
-            Button delBtn = new Button(this);
-            styleDangerButton(delBtn);
-            delBtn.setText(R.string.exhibitor_delete);
+            card.addView(actions, fullWidthParams(8));
+
+            // Delete button (circular trash icon)
+            ImageView delBtn = new ImageView(this);
+            delBtn.setImageResource(android.R.drawable.ic_menu_delete);
+            delBtn.setColorFilter(getResources().getColor(R.color.button_danger_text));
+            delBtn.setPadding(dp(12), dp(8), dp(12), dp(8));
+            GradientDrawable delBg = new GradientDrawable();
+            delBg.setShape(GradientDrawable.OVAL);
+            delBg.setColor(getResources().getColor(R.color.button_danger_bg));
+            delBtn.setBackground(delBg);
             delBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    confirmDeleteExhibition(exh);
+                    showConfirmDialog(
+                            getString(R.string.confirm_delete_exhibition),
+                            new Runnable() {
+                                @Override
+                                public void run() {
+                                    ExhibitionManager.delete(exh.getId());
+                                    Toast.makeText(MainActivity.this,
+                                            R.string.exhibitor_deleted, Toast.LENGTH_SHORT).show();
+                                    renderExhibitorList();
+                                }
+                            });
                 }
             });
             LinearLayout.LayoutParams delP = new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            delP.setMargins(dp(4), 0, 0, 0);
-            actions.addView(delBtn, delP);
-
-            card.addView(actions, fullWidthParams(8));
+                    dp(48), dp(48));
+            delP.setMargins(dp(8), 0, 0, 0);
+            card.addView(delBtn, delP);
             exhListContainer.addView(card, fullWidthParams(10));
         }
         animateListItems(exhListContainer, 100);
     }
 
-    private void showExhibitorStatusDialog(final ExhibitorExhibition exh) {
-        final String[] statuses = {
+    private void showInlineStatusPicker(final LinearLayout parentContainer,
+                                        final ExhibitorExhibition exh) {
+        // Remove any existing picker
+        for (int i = parentContainer.getChildCount() - 1; i >= 0; i--) {
+            View child = parentContainer.getChildAt(i);
+            if (child.getTag() != null && "status_picker".equals(child.getTag())) {
+                parentContainer.removeView(child);
+            }
+        }
+
+        LinearLayout pickerCard = new LinearLayout(this);
+        pickerCard.setOrientation(LinearLayout.VERTICAL);
+        pickerCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        styleCard(pickerCard);
+        pickerCard.setTag("status_picker");
+
+        addText(pickerCard, getString(R.string.exhibitor_change_status),
+                R.color.text_primary, 17, Typeface.BOLD);
+
+        String[] statuses = new String[] {
                 ExhibitorExhibition.STATUS_OPEN,
                 ExhibitorExhibition.STATUS_CLOSED,
                 ExhibitorExhibition.STATUS_ENDED
         };
-        new android.app.AlertDialog.Builder(this)
-                .setTitle(R.string.exhibitor_change_status)
-                .setItems(statuses, new android.content.DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(android.content.DialogInterface dialog, int which) {
-                        ExhibitionManager.updateStatus(exh.getId(), statuses[which]);
-                        Toast.makeText(MainActivity.this,
-                                R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
-                        renderExhibitorList();
-                    }
-                })
-                .show();
-    }
 
-    private void confirmDeleteExhibition(final ExhibitorExhibition exh) {
-        new android.app.AlertDialog.Builder(this)
-                .setTitle(R.string.confirm_title)
-                .setMessage(R.string.confirm_delete_exhibition)
-                .setPositiveButton(R.string.confirm_yes,
-                        new android.content.DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(android.content.DialogInterface dialog, int which) {
-                                ExhibitionManager.delete(exh.getId());
-                                Toast.makeText(MainActivity.this,
-                                        R.string.exhibitor_deleted, Toast.LENGTH_SHORT).show();
-                                renderExhibitorList();
-                            }
-                        })
-                .setNegativeButton(R.string.confirm_no, null)
-                .show();
+        for (final String status : statuses) {
+            Button optionBtn = new Button(this);
+            optionBtn.setAllCaps(false);
+            optionBtn.setText(status);
+            optionBtn.setTextSize(15);
+            optionBtn.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
+            optionBtn.setPadding(dp(12), dp(10), dp(12), dp(10));
+
+            GradientDrawable optionBg = new GradientDrawable();
+            optionBg.setCornerRadius(dp(8));
+            if (status.equals(exh.getStatus())) {
+                optionBg.setColor(getResources().getColor(R.color.tab_active_bg));
+                optionBtn.setTextColor(getResources().getColor(R.color.tab_active_text));
+            } else {
+                optionBg.setColor(getResources().getColor(R.color.card_background));
+                optionBg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+                optionBtn.setTextColor(getResources().getColor(R.color.text_primary));
+            }
+            optionBtn.setBackground(optionBg);
+
+            optionBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    ExhibitionManager.updateStatus(exh.getId(), status);
+                    Toast.makeText(MainActivity.this,
+                            R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
+                    invalidateTab(TAB_EXHIBITOR);
+                    showTab(TAB_EXHIBITOR, false);
+                }
+            });
+            LinearLayout.LayoutParams params = fullWidthParams(6);
+            params.setMargins(0, dp(4), 0, 0);
+            pickerCard.addView(optionBtn, params);
+        }
+
+        Button cancelBtn = new Button(this);
+        styleSecondaryButton(cancelBtn);
+        cancelBtn.setText(R.string.confirm_no);
+        cancelBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                invalidateTab(TAB_EXHIBITOR);
+                showTab(TAB_EXHIBITOR, false);
+            }
+        });
+        LinearLayout.LayoutParams cancelParams = fullWidthParams(8);
+        cancelParams.setMargins(0, dp(8), 0, 0);
+        pickerCard.addView(cancelBtn, cancelParams);
+
+        parentContainer.addView(pickerCard, fullWidthParams(10));
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1291,7 +1351,7 @@ public class MainActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showAdminUserStatusDialog(user);
+                    showAdminUserStatusPicker(container, detailPanel, user);
                 }
             });
             LinearLayout.LayoutParams sP = new LinearLayout.LayoutParams(
@@ -1336,25 +1396,82 @@ public class MainActivity extends BaseActivity {
         detailPanel.addView(closeBtn, fullWidthParams(8));
     }
 
-    private void showAdminUserStatusDialog(final AdminUser user) {
-        final String[] statuses = {
+    private void showAdminUserStatusPicker(final LinearLayout container,
+                                           final LinearLayout detailPanel,
+                                           final AdminUser user) {
+        // Remove any existing picker
+        for (int i = container.getChildCount() - 1; i >= 0; i--) {
+            View child = container.getChildAt(i);
+            if (child.getTag() != null && "user_status_picker".equals(child.getTag())) {
+                container.removeView(child);
+            }
+        }
+
+        LinearLayout pickerCard = new LinearLayout(this);
+        pickerCard.setOrientation(LinearLayout.VERTICAL);
+        pickerCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        styleCard(pickerCard);
+        pickerCard.setTag("user_status_picker");
+
+        addText(pickerCard, getString(R.string.admin_change_user_status),
+                R.color.text_primary, 17, Typeface.BOLD);
+
+        String[] statuses = {
                 AdminUser.STATUS_ACTIVE,
                 AdminUser.STATUS_BANNED,
                 AdminUser.STATUS_RESTRICTED
         };
-        new android.app.AlertDialog.Builder(this)
-                .setTitle(R.string.admin_change_user_status)
-                .setItems(statuses, new android.content.DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(android.content.DialogInterface dialog, int which) {
-                        AdminUserManager.updateStatus(user.getId(), statuses[which]);
-                        Toast.makeText(MainActivity.this,
-                                R.string.admin_user_status_changed, Toast.LENGTH_SHORT).show();
-                        invalidateTab(TAB_ADMIN);
-                        showTab(TAB_ADMIN, false);
-                    }
-                })
-                .show();
+
+        for (final String status : statuses) {
+            Button optionBtn = new Button(this);
+            optionBtn.setAllCaps(false);
+            optionBtn.setText(status);
+            optionBtn.setTextSize(15);
+            optionBtn.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
+            optionBtn.setPadding(dp(12), dp(10), dp(12), dp(10));
+
+            GradientDrawable optionBg = new GradientDrawable();
+            optionBg.setCornerRadius(dp(8));
+            if (status.equals(user.getStatus())) {
+                optionBg.setColor(getResources().getColor(R.color.tab_active_bg));
+                optionBtn.setTextColor(getResources().getColor(R.color.tab_active_text));
+            } else {
+                optionBg.setColor(getResources().getColor(R.color.card_background));
+                optionBg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+                optionBtn.setTextColor(getResources().getColor(R.color.text_primary));
+            }
+            optionBtn.setBackground(optionBg);
+
+            optionBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    AdminUserManager.updateStatus(user.getId(), status);
+                    Toast.makeText(MainActivity.this,
+                            R.string.admin_user_status_changed, Toast.LENGTH_SHORT).show();
+                    invalidateTab(TAB_ADMIN);
+                    showTab(TAB_ADMIN, false);
+                }
+            });
+            LinearLayout.LayoutParams params = fullWidthParams(6);
+            params.setMargins(0, dp(4), 0, 0);
+            pickerCard.addView(optionBtn, params);
+        }
+
+        Button cancelBtn = new Button(this);
+        styleSecondaryButton(cancelBtn);
+        cancelBtn.setText(R.string.admin_close_detail);
+        cancelBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                invalidateTab(TAB_ADMIN);
+                showTab(TAB_ADMIN, false);
+            }
+        });
+        LinearLayout.LayoutParams cancelParams = fullWidthParams(8);
+        cancelParams.setMargins(0, dp(8), 0, 0);
+        pickerCard.addView(cancelBtn, cancelParams);
+
+        container.addView(pickerCard, fullWidthParams(10));
     }
 
     private void renderAdminExhibitions(LinearLayout container, final LinearLayout detailPanel) {
@@ -1404,7 +1521,7 @@ public class MainActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showAdminExhibitionStatusDialog(exh);
+                    showAdminExhibitionStatusPicker(container, exh);
                 }
             });
             LinearLayout.LayoutParams sP = new LinearLayout.LayoutParams(
@@ -1464,25 +1581,81 @@ public class MainActivity extends BaseActivity {
         detailPanel.addView(closeBtn, fullWidthParams(8));
     }
 
-    private void showAdminExhibitionStatusDialog(final ExhibitorExhibition exh) {
-        final String[] statuses = {
+    private void showAdminExhibitionStatusPicker(final LinearLayout container,
+                                                  final ExhibitorExhibition exh) {
+        // Remove any existing picker
+        for (int i = container.getChildCount() - 1; i >= 0; i--) {
+            View child = container.getChildAt(i);
+            if (child.getTag() != null && "exh_status_picker".equals(child.getTag())) {
+                container.removeView(child);
+            }
+        }
+
+        LinearLayout pickerCard = new LinearLayout(this);
+        pickerCard.setOrientation(LinearLayout.VERTICAL);
+        pickerCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        styleCard(pickerCard);
+        pickerCard.setTag("exh_status_picker");
+
+        addText(pickerCard, getString(R.string.admin_change_exhibition_status),
+                R.color.text_primary, 17, Typeface.BOLD);
+
+        String[] statuses = {
                 ExhibitorExhibition.STATUS_OPEN,
                 ExhibitorExhibition.STATUS_CLOSED,
                 ExhibitorExhibition.STATUS_ENDED
         };
-        new android.app.AlertDialog.Builder(this)
-                .setTitle(R.string.admin_change_exhibition_status)
-                .setItems(statuses, new android.content.DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(android.content.DialogInterface dialog, int which) {
-                        ExhibitionManager.updateStatus(exh.getId(), statuses[which]);
-                        Toast.makeText(MainActivity.this,
-                                R.string.admin_exhibition_status_changed, Toast.LENGTH_SHORT).show();
-                        invalidateTab(TAB_ADMIN);
-                        showTab(TAB_ADMIN, false);
-                    }
-                })
-                .show();
+
+        for (final String status : statuses) {
+            Button optionBtn = new Button(this);
+            optionBtn.setAllCaps(false);
+            optionBtn.setText(status);
+            optionBtn.setTextSize(15);
+            optionBtn.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
+            optionBtn.setPadding(dp(12), dp(10), dp(12), dp(10));
+
+            GradientDrawable optionBg = new GradientDrawable();
+            optionBg.setCornerRadius(dp(8));
+            if (status.equals(exh.getStatus())) {
+                optionBg.setColor(getResources().getColor(R.color.tab_active_bg));
+                optionBtn.setTextColor(getResources().getColor(R.color.tab_active_text));
+            } else {
+                optionBg.setColor(getResources().getColor(R.color.card_background));
+                optionBg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+                optionBtn.setTextColor(getResources().getColor(R.color.text_primary));
+            }
+            optionBtn.setBackground(optionBg);
+
+            optionBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    ExhibitionManager.updateStatus(exh.getId(), status);
+                    Toast.makeText(MainActivity.this,
+                            R.string.admin_exhibition_status_changed, Toast.LENGTH_SHORT).show();
+                    invalidateTab(TAB_ADMIN);
+                    showTab(TAB_ADMIN, false);
+                }
+            });
+            LinearLayout.LayoutParams params = fullWidthParams(6);
+            params.setMargins(0, dp(4), 0, 0);
+            pickerCard.addView(optionBtn, params);
+        }
+
+        Button cancelBtn = new Button(this);
+        styleSecondaryButton(cancelBtn);
+        cancelBtn.setText(R.string.admin_close_detail);
+        cancelBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                invalidateTab(TAB_ADMIN);
+                showTab(TAB_ADMIN, false);
+            }
+        });
+        LinearLayout.LayoutParams cancelParams = fullWidthParams(8);
+        cancelParams.setMargins(0, dp(8), 0, 0);
+        pickerCard.addView(cancelBtn, cancelParams);
+
+        container.addView(pickerCard, fullWidthParams(10));
     }
 
     private void toggleAdminExhibitionLock(ExhibitorExhibition exh) {
