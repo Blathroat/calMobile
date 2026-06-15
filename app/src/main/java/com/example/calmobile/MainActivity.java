@@ -1021,17 +1021,21 @@ public class MainActivity extends BaseActivity {
             addText(card, exh.getStatus() + " · " + exh.getCategory(),
                     statusColor, 14, Typeface.BOLD);
 
-            // Action buttons
+            // Action buttons row
             LinearLayout actions = new LinearLayout(this);
             actions.setOrientation(LinearLayout.HORIZONTAL);
 
+            // Edit button - directly opens ExhibitionFormActivity
             Button editBtn = new Button(this);
             styleSecondaryButton(editBtn);
             editBtn.setText(R.string.exhibitor_edit_exhibition);
             editBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    navigateTo(ExhibitorBackendActivity.class);
+                    Intent intent = new Intent(MainActivity.this, ExhibitionFormActivity.class);
+                    intent.putExtra(ExhibitionFormActivity.EXTRA_EXHIBITION_ID, exh.getId());
+                    startActivity(intent);
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 }
             });
             LinearLayout.LayoutParams editP = new LinearLayout.LayoutParams(
@@ -1039,6 +1043,27 @@ public class MainActivity extends BaseActivity {
             editP.setMargins(0, 0, dp(4), 0);
             actions.addView(editBtn, editP);
 
+            // View registrations button
+            Button regBtn = new Button(this);
+            styleSecondaryButton(regBtn);
+            regBtn.setText(R.string.reg_mgmt_nav_btn);
+            regBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Intent intent = new Intent(MainActivity.this,
+                            RegistrationManagementActivity.class);
+                    intent.putExtra(RegistrationManagementActivity.EXTRA_EXHIBITION_ID,
+                            exh.getId());
+                    startActivity(intent);
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+                }
+            });
+            LinearLayout.LayoutParams regP = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            regP.setMargins(dp(4), 0, dp(4), 0);
+            actions.addView(regBtn, regP);
+
+            // Status button
             Button statusBtn = new Button(this);
             styleSecondaryButton(statusBtn);
             statusBtn.setText(R.string.exhibitor_change_status);
@@ -1050,20 +1075,19 @@ public class MainActivity extends BaseActivity {
             });
             LinearLayout.LayoutParams statusP = new LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            statusP.setMargins(dp(4), 0, 0, 0);
+            statusP.setMargins(dp(4), 0, dp(4), 0);
             actions.addView(statusBtn, statusP);
 
-            card.addView(actions, fullWidthParams(8));
-
-            // Delete button (circular trash icon)
-            ImageView delBtn = new ImageView(this);
-            delBtn.setImageResource(android.R.drawable.ic_menu_delete);
-            delBtn.setColorFilter(getResources().getColor(R.color.button_danger_text));
-            delBtn.setPadding(dp(12), dp(8), dp(12), dp(8));
+            // Delete button (circular trash icon, same height as other buttons)
+            Button delBtn = new Button(this);
+            delBtn.setAllCaps(false);
+            delBtn.setText("\u2716");
+            delBtn.setTextSize(14);
             GradientDrawable delBg = new GradientDrawable();
             delBg.setShape(GradientDrawable.OVAL);
             delBg.setColor(getResources().getColor(R.color.button_danger_bg));
             delBtn.setBackground(delBg);
+            delBtn.setTextColor(getResources().getColor(R.color.button_danger_text));
             delBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -1081,9 +1105,11 @@ public class MainActivity extends BaseActivity {
                 }
             });
             LinearLayout.LayoutParams delP = new LinearLayout.LayoutParams(
-                    dp(48), dp(48));
-            delP.setMargins(dp(8), 0, 0, 0);
-            card.addView(delBtn, delP);
+                    dp(48), LinearLayout.LayoutParams.WRAP_CONTENT);
+            delP.setMargins(dp(4), 0, 0, 0);
+            actions.addView(delBtn, delP);
+
+            card.addView(actions, fullWidthParams(8));
             exhListContainer.addView(card, fullWidthParams(10));
         }
         animateListItems(exhListContainer, 100);
