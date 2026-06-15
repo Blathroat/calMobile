@@ -3,6 +3,7 @@ package com.example.calmobile;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.View;
@@ -24,6 +25,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
 
     private LinearLayout listContainer;
     private LinearLayout registrationsPanel;
+    private LinearLayout statusPickerCard;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,63 +62,6 @@ public class ExhibitorBackendActivity extends BaseActivity {
                 openForm(null);
             }
         });
-
-        // Export buttons row
-        LinearLayout exportRow = new LinearLayout(this);
-        exportRow.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams exportRowParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        exportRowParams.setMargins(0, dp(8), 0, 0);
-
-        Button exportExhBtn = new Button(this);
-        styleSecondaryButton(exportExhBtn);
-        exportExhBtn.setText(R.string.export_exhibitions);
-        exportExhBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                String path = ExportManager.exportExhibitions(ExhibitorBackendActivity.this);
-                if (path != null) {
-                    Toast.makeText(ExhibitorBackendActivity.this,
-                            getString(R.string.export_success, path),
-                            Toast.LENGTH_LONG).show();
-                } else {
-                    Toast.makeText(ExhibitorBackendActivity.this,
-                            R.string.export_empty, Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
-        LinearLayout.LayoutParams exportExhParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        exportExhParams.setMargins(0, 0, dp(4), 0);
-        exportRow.addView(exportExhBtn, exportExhParams);
-
-        Button exportRegBtn = new Button(this);
-        styleSecondaryButton(exportRegBtn);
-        exportRegBtn.setText(R.string.export_registrations);
-        exportRegBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                String path = ExportManager.exportRegistrations(ExhibitorBackendActivity.this);
-                if (path != null) {
-                    Toast.makeText(ExhibitorBackendActivity.this,
-                            getString(R.string.export_success, path),
-                            Toast.LENGTH_LONG).show();
-                } else {
-                    Toast.makeText(ExhibitorBackendActivity.this,
-                            R.string.export_empty, Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
-        LinearLayout.LayoutParams exportRegParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        exportRegParams.setMargins(dp(4), 0, 0, 0);
-        exportRow.addView(exportRegBtn, exportRegParams);
-
-        // Insert export row after the add button
-        LinearLayout parent = (LinearLayout) addBtn.getParent();
-        int addBtnIndex = parent.indexOfChild(addBtn);
-        parent.addView(exportRow, addBtnIndex + 1, exportRowParams);
 
         renderList();
     }
@@ -254,24 +199,74 @@ public class ExhibitorBackendActivity extends BaseActivity {
     // ── Status management ────────────────────────────────────────────
 
     private void showStatusDialog(final ExhibitorExhibition exh) {
-        final String[] statuses = new String[] {
+        if (statusPickerCard != null && statusPickerCard.getParent() instanceof LinearLayout) {
+            ((LinearLayout) statusPickerCard.getParent()).removeView(statusPickerCard);
+        }
+
+        statusPickerCard = new LinearLayout(this);
+        statusPickerCard.setOrientation(LinearLayout.VERTICAL);
+        statusPickerCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        styleCard(statusPickerCard);
+
+        addText(statusPickerCard, getString(R.string.exhibitor_change_status),
+                R.color.text_primary, 17, Typeface.BOLD);
+
+        String[] statuses = new String[] {
                 ExhibitorExhibition.STATUS_OPEN,
                 ExhibitorExhibition.STATUS_CLOSED,
                 ExhibitorExhibition.STATUS_ENDED
         };
 
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.exhibitor_change_status)
-                .setItems(statuses, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        ExhibitionManager.updateStatus(exh.getId(), statuses[which]);
-                        Toast.makeText(ExhibitorBackendActivity.this,
-                                R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
-                        renderList();
-                    }
-                })
-                .show();
+        for (final String status : statuses) {
+            Button optionBtn = new Button(this);
+            optionBtn.setAllCaps(false);
+            optionBtn.setText(status);
+            optionBtn.setTextSize(15);
+            optionBtn.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
+            optionBtn.setPadding(dp(12), dp(10), dp(12), dp(10));
+
+            GradientDrawable optionBg = new GradientDrawable();
+            optionBg.setCornerRadius(dp(8));
+            if (status.equals(exh.getStatus())) {
+                optionBg.setColor(getResources().getColor(R.color.tab_active_bg));
+                optionBtn.setTextColor(getResources().getColor(R.color.tab_active_text));
+            } else {
+                optionBg.setColor(getResources().getColor(R.color.card_background));
+                optionBg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+                optionBtn.setTextColor(getResources().getColor(R.color.text_primary));
+            }
+            optionBtn.setBackground(optionBg);
+
+            optionBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    ExhibitionManager.updateStatus(exh.getId(), status);
+                    Toast.makeText(ExhibitorBackendActivity.this,
+                            R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
+                    renderList();
+                }
+            });
+
+            LinearLayout.LayoutParams params = fullWidthParams(6);
+            params.setMargins(0, dp(4), 0, 0);
+            statusPickerCard.addView(optionBtn, params);
+        }
+
+        Button cancelBtn = new Button(this);
+        styleSecondaryButton(cancelBtn);
+        cancelBtn.setText(R.string.confirm_no);
+        cancelBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                renderList();
+            }
+        });
+
+        LinearLayout.LayoutParams cancelParams = fullWidthParams(8);
+        cancelParams.setMargins(0, dp(8), 0, 0);
+        statusPickerCard.addView(cancelBtn, cancelParams);
+
+        listContainer.addView(statusPickerCard, fullWidthParams(10));
     }
 
     // ── Delete ───────────────────────────────────────────────────────

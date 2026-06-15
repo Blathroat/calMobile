@@ -1,16 +1,17 @@
 package com.example.calmobile;
 
-import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -34,9 +35,17 @@ public class AdminBackendActivity extends BaseActivity {
     private LinearLayout exhibitionsSection;
     private LinearLayout exhibitionDetailPanel;
     private LinearLayout settingsSection;
+    private ScrollView scrollView;
+    private LinearLayout statusPickerPanel;
+    private String currentUserDetailId;
+    private String currentExhibitionDetailId;
 
     private int currentTab = TAB_USERS;
     private Button[] tabButtons;
+
+    private interface StatusSelectionHandler {
+        void onStatusSelected(String status);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,6 +57,7 @@ public class AdminBackendActivity extends BaseActivity {
         }
         setContentView(R.layout.activity_admin_backend);
 
+        scrollView = (ScrollView) ((ViewGroup) findViewById(android.R.id.content)).getChildAt(0);
         tabRow = findViewById(R.id.admin_tab_row);
         summarySection = findViewById(R.id.admin_summary);
         usersSection = findViewById(R.id.admin_users_section);
@@ -97,6 +107,13 @@ public class AdminBackendActivity extends BaseActivity {
                 .setDuration(280)
                 .setInterpolator(new DecelerateInterpolator())
                 .start();
+    }
+
+    private void hidePanelImmediately(final View panel) {
+        panel.animate().cancel();
+        panel.setVisibility(View.GONE);
+        panel.setAlpha(1f);
+        panel.setTranslationY(0);
     }
 
     // ── Tab switcher ────────────────────────────────────────────────
@@ -153,10 +170,11 @@ public class AdminBackendActivity extends BaseActivity {
         }
 
         // Hide all sections and detail panels
+        removeStatusPickerPanel();
         usersSection.setVisibility(View.GONE);
-        animateHidePanel(userDetailPanel);
+        hidePanelImmediately(userDetailPanel);
         exhibitionsSection.setVisibility(View.GONE);
-        animateHidePanel(exhibitionDetailPanel);
+        hidePanelImmediately(exhibitionDetailPanel);
         settingsSection.setVisibility(View.GONE);
 
         // Animate in the active section
@@ -199,7 +217,8 @@ public class AdminBackendActivity extends BaseActivity {
 
     private void renderUserList() {
         usersSection.removeAllViews();
-        animateHidePanel(userDetailPanel);
+        currentUserDetailId = null;
+        hidePanelImmediately(userDetailPanel);
 
         List<AdminUser> users = AdminUserManager.listAll();
 
@@ -275,7 +294,7 @@ public class AdminBackendActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showUserStatusDialog(user);
+                    showUserStatusPicker(user);
                 }
             });
             LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
@@ -292,8 +311,10 @@ public class AdminBackendActivity extends BaseActivity {
     }
 
     private void showUserDetail(final AdminUser user) {
-        animateShowPanel(userDetailPanel);
+        currentUserDetailId = user.getId();
+        userDetailPanel.animate().cancel();
         userDetailPanel.removeAllViews();
+        animateShowPanel(userDetailPanel);
 
         addText(userDetailPanel, getString(R.string.admin_user_detail_title),
                 R.color.text_primary, 20, Typeface.BOLD);
@@ -324,7 +345,7 @@ public class AdminBackendActivity extends BaseActivity {
         statusBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                showUserStatusDialog(user);
+                showUserStatusPicker(user);
             }
         });
         LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
@@ -338,6 +359,7 @@ public class AdminBackendActivity extends BaseActivity {
         closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                currentUserDetailId = null;
                 animateHidePanel(userDetailPanel);
             }
         });
@@ -347,35 +369,44 @@ public class AdminBackendActivity extends BaseActivity {
         actions.addView(closeBtn, closeParams);
 
         userDetailPanel.addView(actions, fullWidthParams(0));
+        scrollToView(userDetailPanel);
     }
 
-    private void showUserStatusDialog(final AdminUser user) {
+    private void showUserStatusPicker(final AdminUser user) {
+        final boolean restoreDetail = userDetailPanel.getVisibility() == View.VISIBLE
+                && user.getId().equals(currentUserDetailId);
+        LinearLayout pickerHost = restoreDetail ? userDetailPanel : usersSection;
         final String[] statuses = new String[] {
                 AdminUser.STATUS_ACTIVE,
                 AdminUser.STATUS_BANNED,
                 AdminUser.STATUS_RESTRICTED
         };
 
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.admin_change_user_status)
-                .setItems(statuses, new DialogInterface.OnClickListener() {
+        showStatusPickerPanel(pickerHost, getString(R.string.admin_change_user_status),
+                statuses, user.getStatus(), new StatusSelectionHandler() {
                     @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        AdminUserManager.updateStatus(user.getId(), statuses[which]);
+                    public void onStatusSelected(String status) {
+                        AdminUserManager.updateStatus(user.getId(), status);
                         Toast.makeText(AdminBackendActivity.this,
                                 R.string.admin_user_status_changed, Toast.LENGTH_SHORT).show();
                         renderUserList();
                         renderSummary();
+                        if (restoreDetail) {
+                            AdminUser updated = AdminUserManager.findById(user.getId());
+                            if (updated != null) {
+                                showUserDetail(updated);
+                            }
+                        }
                     }
-                })
-                .show();
+                });
     }
 
     // ── Exhibitions tab ─────────────────────────────────────────────
 
     private void renderExhibitionList() {
         exhibitionsSection.removeAllViews();
-        animateHidePanel(exhibitionDetailPanel);
+        currentExhibitionDetailId = null;
+        hidePanelImmediately(exhibitionDetailPanel);
 
         List<ExhibitorExhibition> exhibitions = ExhibitionManager.listAll();
 
@@ -446,7 +477,7 @@ public class AdminBackendActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showExhibitionStatusDialog(exh);
+                    showExhibitionStatusPicker(exh);
                 }
             });
             LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
@@ -480,8 +511,10 @@ public class AdminBackendActivity extends BaseActivity {
     }
 
     private void showExhibitionDetail(final ExhibitorExhibition exh) {
-        animateShowPanel(exhibitionDetailPanel);
+        currentExhibitionDetailId = exh.getId();
+        exhibitionDetailPanel.animate().cancel();
         exhibitionDetailPanel.removeAllViews();
+        animateShowPanel(exhibitionDetailPanel);
 
         addText(exhibitionDetailPanel, getString(R.string.admin_exhibition_detail_title),
                 R.color.text_primary, 20, Typeface.BOLD);
@@ -510,7 +543,7 @@ public class AdminBackendActivity extends BaseActivity {
         statusBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                showExhibitionStatusDialog(exh);
+                showExhibitionStatusPicker(exh);
             }
         });
         LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
@@ -540,6 +573,7 @@ public class AdminBackendActivity extends BaseActivity {
         closeBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                currentExhibitionDetailId = null;
                 animateHidePanel(exhibitionDetailPanel);
             }
         });
@@ -549,31 +583,41 @@ public class AdminBackendActivity extends BaseActivity {
         actions.addView(closeBtn, closeParams);
 
         exhibitionDetailPanel.addView(actions, fullWidthParams(0));
+        scrollToView(exhibitionDetailPanel);
     }
 
-    private void showExhibitionStatusDialog(final ExhibitorExhibition exh) {
+    private void showExhibitionStatusPicker(final ExhibitorExhibition exh) {
+        final boolean restoreDetail = exhibitionDetailPanel.getVisibility() == View.VISIBLE
+                && exh.getId().equals(currentExhibitionDetailId);
+        LinearLayout pickerHost = restoreDetail ? exhibitionDetailPanel : exhibitionsSection;
         final String[] statuses = new String[] {
                 ExhibitorExhibition.STATUS_OPEN,
                 ExhibitorExhibition.STATUS_CLOSED,
                 ExhibitorExhibition.STATUS_ENDED
         };
 
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.admin_change_exhibition_status)
-                .setItems(statuses, new DialogInterface.OnClickListener() {
+        showStatusPickerPanel(pickerHost, getString(R.string.admin_change_exhibition_status),
+                statuses, exh.getStatus(), new StatusSelectionHandler() {
                     @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        ExhibitionManager.updateStatus(exh.getId(), statuses[which]);
+                    public void onStatusSelected(String status) {
+                        ExhibitionManager.updateStatus(exh.getId(), status);
                         Toast.makeText(AdminBackendActivity.this,
                                 R.string.admin_exhibition_status_changed, Toast.LENGTH_SHORT).show();
                         renderExhibitionList();
                         renderSummary();
+                        if (restoreDetail) {
+                            ExhibitorExhibition updated = ExhibitionManager.findById(exh.getId());
+                            if (updated != null) {
+                                showExhibitionDetail(updated);
+                            }
+                        }
                     }
-                })
-                .show();
+                });
     }
 
     private void toggleExhibitionLock(ExhibitorExhibition exh) {
+        boolean restoreDetail = exhibitionDetailPanel.getVisibility() == View.VISIBLE
+                && exh.getId().equals(currentExhibitionDetailId);
         if (exh.isOpenForRegistration()) {
             ExhibitionManager.updateStatus(exh.getId(), ExhibitorExhibition.STATUS_CLOSED);
             Toast.makeText(this, R.string.admin_exhibition_locked, Toast.LENGTH_SHORT).show();
@@ -583,6 +627,106 @@ public class AdminBackendActivity extends BaseActivity {
         }
         renderExhibitionList();
         renderSummary();
+        if (restoreDetail) {
+            ExhibitorExhibition updated = ExhibitionManager.findById(exh.getId());
+            if (updated != null) {
+                showExhibitionDetail(updated);
+            }
+        }
+    }
+
+    private void showStatusPickerPanel(LinearLayout pickerHost, String title, String[] statuses,
+            String currentStatus, final StatusSelectionHandler handler) {
+        removeStatusPickerPanel();
+
+        LinearLayout pickerCard = new LinearLayout(this);
+        pickerCard.setOrientation(LinearLayout.VERTICAL);
+        pickerCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        styleCard(pickerCard);
+        statusPickerPanel = pickerCard;
+
+        addText(pickerCard, title, R.color.text_primary, 17, Typeface.BOLD);
+
+        for (final String status : statuses) {
+            Button optionBtn = new Button(this);
+            optionBtn.setAllCaps(false);
+            optionBtn.setText(status);
+            optionBtn.setTextSize(15);
+            optionBtn.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
+            optionBtn.setPadding(dp(12), dp(10), dp(12), dp(10));
+            optionBtn.setStateListAnimator(null);
+            optionBtn.setElevation(0);
+            styleStatusOptionButton(optionBtn, status.equals(currentStatus));
+            optionBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    removeStatusPickerPanel();
+                    handler.onStatusSelected(status);
+                }
+            });
+            pickerCard.addView(optionBtn, fullWidthParams(4));
+        }
+
+        Button cancelBtn = new Button(this);
+        styleSecondaryButton(cancelBtn);
+        cancelBtn.setText(R.string.admin_close_detail);
+        cancelBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                removeStatusPickerPanel();
+            }
+        });
+        pickerCard.addView(cancelBtn, fullWidthParams(8));
+
+        pickerHost.addView(pickerCard, fullWidthParams(10));
+        scrollToView(pickerCard);
+    }
+
+    private void styleStatusOptionButton(Button optionBtn, boolean selected) {
+        GradientDrawable optionBg = new GradientDrawable();
+        optionBg.setCornerRadius(dp(8));
+        if (selected) {
+            optionBg.setColor(getResources().getColor(R.color.tab_active_bg));
+            optionBtn.setTextColor(getResources().getColor(R.color.tab_active_text));
+        } else {
+            optionBg.setColor(getResources().getColor(R.color.card_background));
+            optionBg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+            optionBtn.setTextColor(getResources().getColor(R.color.text_primary));
+        }
+        optionBtn.setBackground(optionBg);
+    }
+
+    private void removeStatusPickerPanel() {
+        if (statusPickerPanel != null) {
+            if (statusPickerPanel.getParent() instanceof ViewGroup) {
+                ((ViewGroup) statusPickerPanel.getParent()).removeView(statusPickerPanel);
+            }
+            statusPickerPanel = null;
+        }
+    }
+
+    private void scrollToView(final View target) {
+        if (scrollView == null || target == null) {
+            return;
+        }
+        scrollView.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                int scrollY = getTopRelativeToScrollView(target) - dp(12);
+                scrollView.smoothScrollTo(0, Math.max(0, scrollY));
+            }
+        }, 120);
+    }
+
+    private int getTopRelativeToScrollView(View target) {
+        int top = target.getTop();
+        ViewParent parent = target.getParent();
+        while (parent instanceof View && parent != scrollView) {
+            View parentView = (View) parent;
+            top += parentView.getTop();
+            parent = parentView.getParent();
+        }
+        return top;
     }
 
     // ── Settings tab ────────────────────────────────────────────────
