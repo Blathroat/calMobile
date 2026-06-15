@@ -215,33 +215,6 @@ const checks = [
     contains: ['buildAdminContent', 'nav_admin', 'canAccessAdmin']
   },
 
-  // ── MoreActivity ──────────────────────────────────────────────
-  {
-    id: 'more-activity-java',
-    file: 'app/src/main/java/com/example/calmobile/MoreActivity.java',
-    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'MoreActivity', 'SearchActivity', 'performLogout', 'AuthManager', 'renderNotificationSection', 'NotificationHelper']
-  },
-  {
-    id: 'more-activity-layout',
-    file: 'app/src/main/res/layout/activity_more.xml',
-    contains: ['@+id/more_scroll', '@+id/more_back', '@+id/more_menu', '@+id/more_logout']
-  },
-  {
-    id: 'more-activity-manifest-registered',
-    file: 'app/src/main/AndroidManifest.xml',
-    contains: ['MoreActivity']
-  },
-  {
-    id: 'more-activity-navigation',
-    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    notContains: ['MoreActivity', 'nav_more']
-  },
-  {
-    id: 'more-activity-strings',
-    file: 'app/src/main/res/values/strings.xml',
-    contains: ['nav_more_title', 'nav_more_back', 'nav_more_search', 'nav_more_notifications', 'nav_more_export', 'nav_more_logout', 'nav_more_logout_confirm']
-  },
-
   // ── UI fix regression checks ────────────────────────────────────
   {
     id: 'base-activity-button-helpers',
@@ -277,16 +250,6 @@ const checks = [
     id: 'bottom-nav-home-active-state',
     file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
     contains: ['item.setSelected(active)', 'R.id.nav_home', 'currentTab = TAB_HOME']
-  },
-  {
-    id: 'more-notification-not-profile',
-    file: 'app/src/main/java/com/example/calmobile/MoreActivity.java',
-    contains: ['renderNotificationSection', 'NotificationHelper', 'CheckBox']
-  },
-  {
-    id: 'more-notification-layout-section',
-    file: 'app/src/main/res/layout/activity_more.xml',
-    contains: ['@+id/more_notification_section']
   },
   {
     id: 'bottom-nav-weight-sum',

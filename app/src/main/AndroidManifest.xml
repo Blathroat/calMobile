@@ -33,7 +33,6 @@
         <activity android:name=".AdminBackendActivity" />
         <activity android:name=".SearchActivity" />
         <activity android:name=".ExhibitionDetailActivity" />
-        <activity android:name=".MoreActivity" />
         <activity android:name=".RegistrationFormActivity" />
     </application>
 

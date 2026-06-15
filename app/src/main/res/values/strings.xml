@@ -3,7 +3,6 @@
     <string name="app_name">展会排期助手</string>
     <string name="home_status">本地假数据演示已就绪：点击带标记日期查看展会卡片、详情和报名表单。</string>
     <string name="local_day_count">本地假数据：6月%1$d日共有 %2$d 场展会</string>
-    <string name="month_view_title">6月展会月视图</string>
     <string name="today_exhibitions">今日展会</string>
     <string name="exhibition_detail">展会详情</string>
     <string name="registration_title">报名信息</string>
@@ -32,7 +31,6 @@
     <string name="profile_avatar_initial">展</string>
     <string name="profile_logout">退出登录</string>
     <string name="profile_logout_confirm">确定要退出登录吗？</string>
-    <string name="go_to_profile">个人主页</string>
 
     <string name="user_public_title">用户主页</string>
     <string name="user_public_unknown_user">未知用户</string>
@@ -49,7 +47,6 @@
     <string name="exhibitor_save">保存</string>
     <string name="exhibitor_cancel">取消</string>
     <string name="exhibitor_delete">删除</string>
-    <string name="exhibitor_confirm_delete">确认删除该展会？</string>
     <string name="exhibitor_deleted">展会已删除</string>
     <string name="exhibitor_saved">展会已保存</string>
     <string name="exhibitor_field_title">展会名称</string>
@@ -63,7 +60,6 @@
     <string name="exhibitor_status_closed">截止报名</string>
     <string name="exhibitor_status_ended">已结束</string>
     <string name="exhibitor_change_status">更改状态</string>
-    <string name="exhibitor_view_registrations">查看报名记录</string>
     <string name="exhibitor_registrations_title">报名记录</string>
     <string name="exhibitor_registrations_empty">暂无报名记录。</string>
     <string name="exhibitor_registrations_count">共 %1$d 条报名</string>
@@ -79,7 +75,6 @@
     <string name="exhibitor_validation_required">必填</string>
     <string name="exhibitor_validation_day_range">1-30</string>
     <string name="exhibitor_validation_day_number">请输入数字</string>
-    <string name="go_to_exhibitor_backend">展商后台</string>
 
     <!-- Registration Management -->
     <string name="reg_mgmt_title">报名管理</string>
@@ -100,16 +95,12 @@
 
     <!-- Admin Backend -->
     <string name="admin_backend_title">管理后台</string>
-    <string name="go_to_admin_backend">管理后台</string>
     <string name="admin_tab_users">用户管理</string>
     <string name="admin_tab_exhibitions">展会管理</string>
     <string name="admin_tab_settings">系统设置</string>
     <string name="admin_summary_users">用户总数：%1$d</string>
     <string name="admin_summary_exhibitions">展会总数：%1$d</string>
     <string name="admin_summary_active">正常：%1$d　封禁：%2$d　受限：%3$d</string>
-    <string name="admin_user_status_active">正常</string>
-    <string name="admin_user_status_banned">封禁</string>
-    <string name="admin_user_status_restricted">受限</string>
     <string name="admin_user_detail_title">用户详情</string>
     <string name="admin_user_label_nickname">昵称</string>
     <string name="admin_user_label_email">邮箱</string>
@@ -124,7 +115,6 @@
     <string name="admin_exhibition_label_venue">展馆地点</string>
     <string name="admin_exhibition_label_date">开展日期</string>
     <string name="admin_exhibition_label_time">开放时间</string>
-    <string name="admin_exhibition_label_exhibitor">展商</string>
     <string name="admin_exhibition_label_status">展会状态</string>
     <string name="admin_lock_exhibition">锁定展会</string>
     <string name="admin_unlock_exhibition">解锁展会</string>
@@ -161,11 +151,7 @@
     <string name="confirm_yes">确定</string>
     <string name="confirm_no">取消</string>
 
-    <!-- Loading -->
-    <string name="loading_text">加载中…</string>
-    <string name="saving_text">保存中…</string>
-
-    <!-- Auth / Login -->
+    <!-- Confirmation dialogs -->
     <string name="auth_login_subtitle">登录您的账号</string>
     <string name="auth_username_hint">用户名</string>
     <string name="auth_password_hint">密码</string>
@@ -178,8 +164,6 @@
     <string name="auth_register_subtitle">创建新账号以使用展会排期助手</string>
     <string name="auth_register_btn">注册</string>
     <string name="auth_go_to_login">已有账号？返回登录</string>
-    <string name="auth_logout">退出登录</string>
-    <string name="auth_welcome">欢迎，%1$s</string>
     <string name="auth_login_required_registration">请先登录后再报名</string>
     <string name="auth_login_required_profile">请先登录后使用个人功能</string>
     <string name="auth_exhibitor_required">当前账号无展商权限</string>
@@ -190,7 +174,6 @@
     <string name="search_title">搜索</string>
     <string name="search_hint">搜索展会名称、地点、分类或用户昵称、邮箱…</string>
     <string name="search_btn">搜索</string>
-    <string name="search_back">返回</string>
     <string name="search_empty_hint">请输入搜索关键词</string>
     <string name="search_results_count">共找到 %1$d 条结果（%2$s）</string>
     <string name="search_no_results">未找到与「%1$s」相关的结果</string>
@@ -198,7 +181,6 @@
     <string name="search_section_users">用户（%1$d）</string>
     <string name="search_history_title">搜索历史</string>
     <string name="search_clear_history">清除</string>
-    <string name="go_to_search">搜索</string>
 
     <!-- Notification Settings -->
     <string name="notification_settings_title">通知设置</string>
@@ -211,13 +193,11 @@
     <string name="notification_history_count">共 %1$d 条通知</string>
     <string name="notification_clear_history">清除历史</string>
     <string name="notification_permission_hint">开启通知以接收展会提醒</string>
-    <string name="notification_permission_denied">通知权限未授予，无法发送提醒</string>
     <string name="notification_settings_saved">通知设置已保存</string>
 
     <!-- Calendar Integration -->
     <string name="calendar_add_to_calendar">添加到日历</string>
     <string name="calendar_remove_from_calendar">从日历移除</string>
-    <string name="calendar_already_in_calendar">已在日历中</string>
     <string name="calendar_added">已添加到日历</string>
     <string name="calendar_removed">已从日历移除</string>
     <string name="calendar_already_added">该展会已在日历中</string>
@@ -232,14 +212,6 @@
     <string name="nav_profile">个人</string>
     <string name="nav_exhibitor">展商</string>
     <string name="nav_admin">管理</string>
-    <string name="nav_more">更多</string>
-    <string name="nav_more_title">更多功能</string>
-    <string name="nav_more_back">← 返回</string>
-    <string name="nav_more_search">搜索</string>
-    <string name="nav_more_notifications">通知设置</string>
-    <string name="nav_more_export">数据导出</string>
-    <string name="nav_more_logout">退出登录</string>
-    <string name="nav_more_logout_confirm">确定要退出登录吗？</string>
 
     <!-- Data Export -->
     <string name="export_exhibitions">导出展会数据</string>
@@ -247,5 +219,4 @@
     <string name="export_users">导出用户数据</string>
     <string name="export_success">导出成功：%1$s</string>
     <string name="export_empty">暂无数据可导出</string>
-    <string name="export_failed">导出失败，请重试</string>
 </resources>
