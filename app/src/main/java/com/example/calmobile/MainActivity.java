@@ -140,7 +140,8 @@ public class MainActivity extends BaseActivity {
             animate = false;
         }
 
-        if (tabIndex == currentTab && contentFrame.getChildCount() > 0) {
+        // Don't skip if tab was invalidated (tabViews[tabIndex] == null)
+        if (tabIndex == currentTab && contentFrame.getChildCount() > 0 && tabViews[tabIndex] != null) {
             return;
         }
 
@@ -1133,7 +1134,7 @@ public class MainActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showInlineStatusPicker(exhListContainer, exh);
+                    showExhibitorStatusDialog(exh);
                 }
             });
             LinearLayout.LayoutParams statusP = new LinearLayout.LayoutParams(
@@ -1253,6 +1254,28 @@ public class MainActivity extends BaseActivity {
         pickerCard.addView(cancelBtn, cancelParams);
 
         parentContainer.addView(pickerCard, fullWidthParams(10));
+    }
+
+    private void showExhibitorStatusDialog(final ExhibitorExhibition exh) {
+        final String[] statuses = new String[] {
+                ExhibitorExhibition.STATUS_OPEN,
+                ExhibitorExhibition.STATUS_CLOSED,
+                ExhibitorExhibition.STATUS_ENDED
+        };
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.exhibitor_change_status)
+                .setItems(statuses, new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface dialog, int which) {
+                        ExhibitionManager.updateStatus(exh.getId(), statuses[which]);
+                        Toast.makeText(MainActivity.this,
+                                R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
+                        invalidateTab(TAB_EXHIBITOR);
+                        showTab(TAB_EXHIBITOR, false);
+                    }
+                })
+                .show();
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1615,9 +1638,21 @@ public class MainActivity extends BaseActivity {
             addText(card, getString(R.string.admin_exhibition_day_label, exh.getDay())
                             + " " + exh.getTime() + " · " + exh.getVenue(),
                     R.color.text_secondary, 14, Typeface.NORMAL);
-            int sc = exh.isOpenForRegistration() ? R.color.status_open : R.color.status_closed;
-            addText(card, exh.getStatus() + " · " + exh.getCategory(),
-                    sc, 14, Typeface.BOLD);
+            
+            // Status display: green for open, yellow for locked, red for ended
+            int sc;
+            String statusText;
+            if (exh.isOpenForRegistration()) {
+                sc = R.color.status_open;
+                statusText = exh.getStatus() + " · " + exh.getCategory();
+            } else if (ExhibitorExhibition.STATUS_CLOSED.equals(exh.getStatus())) {
+                sc = R.color.status_locked;
+                statusText = "已锁定 · " + exh.getCategory();
+            } else {
+                sc = R.color.status_closed;
+                statusText = exh.getStatus() + " · " + exh.getCategory();
+            }
+            addText(card, statusText, sc, 14, Typeface.BOLD);
 
             LinearLayout actions = new LinearLayout(this);
             actions.setOrientation(LinearLayout.HORIZONTAL);
