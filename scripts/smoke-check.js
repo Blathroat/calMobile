@@ -17,7 +17,7 @@ const checks = [
   {
     id: 'android-gradle-files',
     file: 'app/build.gradle',
-    contains: ["compileSdk 30", "targetSdk 30", "namespace 'com.example.calmobile'"]
+    contains: ["compileSdk 34", "targetSdk 34", "namespace 'com.example.calmobile'"]
   },
   {
     id: 'android-manifest-main-activity',
@@ -77,7 +77,7 @@ const checks = [
   {
     id: 'gradle-wrapper-properties',
     file: 'gradle/wrapper/gradle-wrapper.properties',
-    contains: ['distributionUrl=https\\://services.gradle.org/distributions/gradle-7.6.4-bin.zip']
+    contains: ['distributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-bin.zip']
   },
   {
     id: 'gradle-wrapper-batch-script',
