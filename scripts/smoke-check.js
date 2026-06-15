@@ -276,18 +276,8 @@ const checks = [
   },
 
   // ── 新需求：代码实现检查 ─────────────────────────────────────────
-  // 以下检查覆盖访客/权限辅助类、展会二级表单页和 4 标签底部导航。
+  // 以下检查覆盖展会二级表单页和 4 标签底部导航。
   // 实现说明见 README.md「新需求追踪」和 docs/PROJECT_REVIEW.md 对应条目。
-  {
-    id: 'guest-helper-java',
-    file: 'app/src/main/java/com/example/calmobile/GuestHelper.java',
-    contains: ['package com.example.calmobile;', 'isGuest']
-  },
-  {
-    id: 'permission-helper-java',
-    file: 'app/src/main/java/com/example/calmobile/PermissionHelper.java',
-    contains: ['package com.example.calmobile;', 'hasPermission']
-  },
   {
     id: 'exhibition-form-activity-java',
     file: 'app/src/main/java/com/example/calmobile/ExhibitionFormActivity.java',

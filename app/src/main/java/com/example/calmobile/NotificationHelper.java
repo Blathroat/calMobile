@@ -1,6 +1,5 @@
 package com.example.calmobile;
 
-import android.Manifest;
 import android.app.Activity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -11,7 +10,6 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
-import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;

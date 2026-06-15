@@ -56,7 +56,6 @@ public class MainActivity extends BaseActivity {
     private FrameLayout contentFrame;
 
     // ── Home tab fields ───────────────────────────────────────────
-    private static final int MONTH_DAYS = 30;
     private int currentYear = 2026;
     private int currentMonth = 6; // 1-12
     private static final Exhibition[] SAMPLE_EXHIBITIONS = new Exhibition[] {
@@ -103,7 +102,6 @@ public class MainActivity extends BaseActivity {
     // ── Admin tab fields ──────────────────────────────────────────
     private static final int ADMIN_TAB_USERS = 0;
     private static final int ADMIN_TAB_EXHIBITIONS = 1;
-    private static final int ADMIN_TAB_SETTINGS = 2;
     private int adminCurrentSubTab = ADMIN_TAB_USERS;
 
     // ══════════════════════════════════════════════════════════════
