@@ -1426,10 +1426,14 @@ public class MainActivity extends BaseActivity {
             detailBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    // Open AdminBackendActivity with user detail
-                    Intent intent = new Intent(MainActivity.this, AdminBackendActivity.class);
-                    intent.putExtra("show_tab", "users");
-                    intent.putExtra("user_id", user.getId());
+                    // Open UserPublicActivity with user details
+                    Intent intent = new Intent(MainActivity.this, UserPublicActivity.class);
+                    intent.putExtra("nickname", user.getNickname());
+                    intent.putExtra("bio", user.getEmail());
+                    intent.putExtra("contact", user.getRegistrationTime());
+                    intent.putExtra("socialMedia", user.getLastLoginTime());
+                    intent.putExtra("showRegistrations", false);
+                    intent.putExtra("isOwnProfile", false);
                     startActivity(intent);
                     overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 }
@@ -1445,13 +1449,8 @@ public class MainActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    // Open AdminBackendActivity with user status change
-                    Intent intent = new Intent(MainActivity.this, AdminBackendActivity.class);
-                    intent.putExtra("show_tab", "users");
-                    intent.putExtra("user_id", user.getId());
-                    intent.putExtra("action", "change_status");
-                    startActivity(intent);
-                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+                    // Show status change dialog
+                    showUserStatusDialog(user);
                 }
             });
             LinearLayout.LayoutParams sP = new LinearLayout.LayoutParams(
@@ -1494,6 +1493,28 @@ public class MainActivity extends BaseActivity {
             }
         });
         detailPanel.addView(closeBtn, fullWidthParams(8));
+    }
+
+    private void showUserStatusDialog(final AdminUser user) {
+        final String[] statuses = {
+                AdminUser.STATUS_ACTIVE,
+                AdminUser.STATUS_BANNED,
+                AdminUser.STATUS_RESTRICTED
+        };
+        
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.admin_change_user_status)
+                .setItems(statuses, new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface dialog, int which) {
+                        AdminUserManager.updateStatus(user.getId(), statuses[which]);
+                        Toast.makeText(MainActivity.this,
+                                R.string.admin_user_status_changed, Toast.LENGTH_SHORT).show();
+                        invalidateTab(TAB_ADMIN);
+                        showTab(TAB_ADMIN, false);
+                    }
+                })
+                .show();
     }
 
     private void showAdminUserStatusPicker(final LinearLayout container,
@@ -1607,10 +1628,16 @@ public class MainActivity extends BaseActivity {
             detailBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    // Open AdminBackendActivity with exhibition detail
-                    Intent intent = new Intent(MainActivity.this, AdminBackendActivity.class);
-                    intent.putExtra("show_tab", "exhibitions");
-                    intent.putExtra("exhibition_id", exh.getId());
+                    // Open ExhibitionDetailActivity with exhibition details
+                    Intent intent = new Intent(MainActivity.this, ExhibitionDetailActivity.class);
+                    intent.putExtra("day", exh.getDay());
+                    intent.putExtra("title", exh.getTitle());
+                    intent.putExtra("venue", exh.getVenue());
+                    intent.putExtra("time", exh.getTime());
+                    intent.putExtra("status", exh.getStatus());
+                    intent.putExtra("openForRegistration", exh.isOpenForRegistration());
+                    intent.putExtra("description", exh.getDescription());
+                    intent.putExtra("category", exh.getCategory());
                     startActivity(intent);
                     overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 }
@@ -1626,13 +1653,8 @@ public class MainActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    // Open AdminBackendActivity with exhibition status change
-                    Intent intent = new Intent(MainActivity.this, AdminBackendActivity.class);
-                    intent.putExtra("show_tab", "exhibitions");
-                    intent.putExtra("exhibition_id", exh.getId());
-                    intent.putExtra("action", "change_status");
-                    startActivity(intent);
-                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+                    // Show exhibition status change dialog
+                    showExhibitionStatusDialog(exh);
                 }
             });
             LinearLayout.LayoutParams sP = new LinearLayout.LayoutParams(
@@ -1648,13 +1670,8 @@ public class MainActivity extends BaseActivity {
             lockBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    // Open AdminBackendActivity with exhibition lock action
-                    Intent intent = new Intent(MainActivity.this, AdminBackendActivity.class);
-                    intent.putExtra("show_tab", "exhibitions");
-                    intent.putExtra("exhibition_id", exh.getId());
-                    intent.putExtra("action", "toggle_lock");
-                    startActivity(intent);
-                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+                    // Toggle exhibition lock status directly
+                    toggleAdminExhibitionLock(exh);
                 }
             });
             LinearLayout.LayoutParams lP = new LinearLayout.LayoutParams(
@@ -1696,6 +1713,28 @@ public class MainActivity extends BaseActivity {
             }
         });
         detailPanel.addView(closeBtn, fullWidthParams(8));
+    }
+
+    private void showExhibitionStatusDialog(final ExhibitorExhibition exh) {
+        final String[] statuses = {
+                ExhibitorExhibition.STATUS_OPEN,
+                ExhibitorExhibition.STATUS_CLOSED,
+                ExhibitorExhibition.STATUS_ENDED
+        };
+        
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.admin_change_exhibition_status)
+                .setItems(statuses, new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface dialog, int which) {
+                        ExhibitionManager.updateStatus(exh.getId(), statuses[which]);
+                        Toast.makeText(MainActivity.this,
+                                R.string.admin_exhibition_status_changed, Toast.LENGTH_SHORT).show();
+                        invalidateTab(TAB_ADMIN);
+                        showTab(TAB_ADMIN, false);
+                    }
+                })
+                .show();
     }
 
     private void showAdminExhibitionStatusPicker(final LinearLayout container,
