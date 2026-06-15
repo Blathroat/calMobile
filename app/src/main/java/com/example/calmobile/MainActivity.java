@@ -1426,7 +1426,12 @@ public class MainActivity extends BaseActivity {
             detailBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showAdminUserDetail(user, detailPanel);
+                    // Open AdminBackendActivity with user detail
+                    Intent intent = new Intent(MainActivity.this, AdminBackendActivity.class);
+                    intent.putExtra("show_tab", "users");
+                    intent.putExtra("user_id", user.getId());
+                    startActivity(intent);
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 }
             });
             LinearLayout.LayoutParams dP = new LinearLayout.LayoutParams(
@@ -1440,7 +1445,13 @@ public class MainActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showAdminUserStatusPicker(container, detailPanel, user);
+                    // Open AdminBackendActivity with user status change
+                    Intent intent = new Intent(MainActivity.this, AdminBackendActivity.class);
+                    intent.putExtra("show_tab", "users");
+                    intent.putExtra("user_id", user.getId());
+                    intent.putExtra("action", "change_status");
+                    startActivity(intent);
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 }
             });
             LinearLayout.LayoutParams sP = new LinearLayout.LayoutParams(
@@ -1596,7 +1607,12 @@ public class MainActivity extends BaseActivity {
             detailBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showAdminExhibitionDetail(exh, detailPanel);
+                    // Open AdminBackendActivity with exhibition detail
+                    Intent intent = new Intent(MainActivity.this, AdminBackendActivity.class);
+                    intent.putExtra("show_tab", "exhibitions");
+                    intent.putExtra("exhibition_id", exh.getId());
+                    startActivity(intent);
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 }
             });
             LinearLayout.LayoutParams dP = new LinearLayout.LayoutParams(
@@ -1610,7 +1626,13 @@ public class MainActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showAdminExhibitionStatusPicker(container, exh);
+                    // Open AdminBackendActivity with exhibition status change
+                    Intent intent = new Intent(MainActivity.this, AdminBackendActivity.class);
+                    intent.putExtra("show_tab", "exhibitions");
+                    intent.putExtra("exhibition_id", exh.getId());
+                    intent.putExtra("action", "change_status");
+                    startActivity(intent);
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 }
             });
             LinearLayout.LayoutParams sP = new LinearLayout.LayoutParams(
@@ -1626,7 +1648,13 @@ public class MainActivity extends BaseActivity {
             lockBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    toggleAdminExhibitionLock(exh);
+                    // Open AdminBackendActivity with exhibition lock action
+                    Intent intent = new Intent(MainActivity.this, AdminBackendActivity.class);
+                    intent.putExtra("show_tab", "exhibitions");
+                    intent.putExtra("exhibition_id", exh.getId());
+                    intent.putExtra("action", "toggle_lock");
+                    startActivity(intent);
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 }
             });
             LinearLayout.LayoutParams lP = new LinearLayout.LayoutParams(
