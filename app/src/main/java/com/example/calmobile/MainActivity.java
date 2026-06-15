@@ -545,7 +545,7 @@ public class MainActivity extends BaseActivity {
             // Text color: blue for registered, teal for exhibitions, gray for empty
             int textColor;
             if (isRegistered) {
-                textColor = R.color.status_open; // Blue for registered
+                textColor = R.color.registered_blue; // Blue for registered
             } else if (count > 0) {
                 textColor = R.color.date_active_text;
             } else {
@@ -561,8 +561,8 @@ public class MainActivity extends BaseActivity {
             GradientDrawable cellBg = new GradientDrawable();
             cellBg.setCornerRadius(dp(8));
             if (isRegistered) {
-                cellBg.setColor(getResources().getColor(R.color.status_open));
-                cellBg.setStroke(dp(1), getResources().getColor(R.color.status_open));
+                cellBg.setColor(getResources().getColor(R.color.registered_blue_bg));
+                cellBg.setStroke(dp(1), getResources().getColor(R.color.registered_blue));
             } else if (count > 0) {
                 cellBg.setColor(getResources().getColor(R.color.date_active_background));
                 cellBg.setStroke(dp(1), getResources().getColor(R.color.chip_border));
@@ -1146,6 +1146,7 @@ public class MainActivity extends BaseActivity {
             delBtn.setImageResource(android.R.drawable.ic_menu_delete);
             delBtn.setColorFilter(getResources().getColor(R.color.button_danger_text));
             delBtn.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            delBtn.setPadding(dp(14), dp(14), dp(14), dp(14));
             GradientDrawable delBg = new GradientDrawable();
             delBg.setShape(GradientDrawable.OVAL);
             delBg.setColor(getResources().getColor(R.color.button_danger_bg));

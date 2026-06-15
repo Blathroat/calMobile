@@ -40,6 +40,8 @@
          ═══════════════════════════════════════════════════════════════ -->
     <color name="status_open">#059669</color>
     <color name="status_open_bg">#ECFDF5</color>
+    <color name="registered_blue">#2563EB</color>
+    <color name="registered_blue_bg">#DBEAFE</color>
     <color name="status_closed">#DC2626</color>
     <color name="status_closed_bg">#FEF2F2</color>
     <color name="status_pending">#F59E0B</color>
