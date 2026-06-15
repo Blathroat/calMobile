@@ -46,6 +46,8 @@
     <color name="status_closed_bg">#FEF2F2</color>
     <color name="status_pending">#F59E0B</color>
     <color name="status_pending_bg">#FFFBEB</color>
+    <color name="status_locked">#D97706</color>
+    <color name="status_locked_bg">#FEF3C7</color>
 
     <!-- ═══════════════════════════════════════════════════════════════
          Interactive States
