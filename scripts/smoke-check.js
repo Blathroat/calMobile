@@ -256,7 +256,7 @@ const checks = [
   {
     id: 'exhibitor-backend-styled-buttons',
     file: 'app/src/main/java/com/example/calmobile/ExhibitorBackendActivity.java',
-    contains: ['styleSecondaryButton', 'stylePrimaryButton', 'styleDangerButton']
+    contains: ['styleSecondaryButton', 'stylePrimaryButton', 'button_danger_bg']
   },
   {
     id: 'home-search-bar-layout',

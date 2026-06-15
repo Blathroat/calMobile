@@ -37,13 +37,13 @@ public class MainActivity extends BaseActivity {
     private static final int TAB_COUNT = 4;
 
     private static final int[] NAV_IDS = {
-            R.id.nav_home, R.id.nav_profile, R.id.nav_exhibitor, R.id.nav_admin
+            R.id.nav_home, R.id.nav_exhibitor, R.id.nav_admin, R.id.nav_profile
     };
     private static final int[] NAV_TEXT_IDS = {
-            R.id.nav_home_text, R.id.nav_profile_text, R.id.nav_exhibitor_text, R.id.nav_admin_text
+            R.id.nav_home_text, R.id.nav_exhibitor_text, R.id.nav_admin_text, R.id.nav_profile_text
     };
     private static final int[] NAV_ICON_IDS = {
-            R.id.nav_home_icon, R.id.nav_profile_icon, R.id.nav_exhibitor_icon, R.id.nav_admin_icon
+            R.id.nav_home_icon, R.id.nav_exhibitor_icon, R.id.nav_admin_icon, R.id.nav_profile_icon
     };
 
     // ── State ─────────────────────────────────────────────────────
@@ -227,12 +227,33 @@ public class MainActivity extends BaseActivity {
         boolean showExhibitor = auth.canAccessExhibitor();
         boolean showAdmin = auth.canAccessAdmin();
 
-        findViewById(R.id.nav_profile).setVisibility(
-                showProfile ? View.VISIBLE : View.GONE);
+        // Profile tab is always visible (for guest mode login access)
+        findViewById(R.id.nav_profile).setVisibility(View.VISIBLE);
         findViewById(R.id.nav_exhibitor).setVisibility(
                 showExhibitor ? View.VISIBLE : View.GONE);
         findViewById(R.id.nav_admin).setVisibility(
                 showAdmin ? View.VISIBLE : View.GONE);
+
+        // Update weightSum for dynamic equal distribution
+        LinearLayout navRow = findViewById(R.id.nav_items_row);
+        int visibleCount = 1; // Home is always visible
+        if (showExhibitor) visibleCount++;
+        if (showAdmin) visibleCount++;
+        visibleCount++; // Profile is always visible
+        navRow.setWeightSum(visibleCount);
+
+        // If guest, profile tab click should go to login
+        if (!showProfile) {
+            findViewById(R.id.nav_profile).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Intent intent = new Intent(MainActivity.this, LoginActivity.class);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                    finish();
+                }
+            });
+        }
 
         if ((currentTab == TAB_PROFILE && !showProfile)
                 || (currentTab == TAB_EXHIBITOR && !showExhibitor)
@@ -245,7 +266,7 @@ public class MainActivity extends BaseActivity {
         AuthManager auth = AuthManager.getInstance();
         switch (tabIndex) {
             case TAB_PROFILE:
-                return auth.canAccessProfile();
+                return true; // Profile tab is always accessible (guest goes to login)
             case TAB_EXHIBITOR:
                 return auth.canAccessExhibitor();
             case TAB_ADMIN:
@@ -391,57 +412,6 @@ public class MainActivity extends BaseActivity {
         addText(root, getString(R.string.today_exhibitions),
                 R.color.text_primary, 17, Typeface.BOLD);
 
-        if (AuthManager.getInstance().canAccessExhibitor()) {
-            LinearLayout exportRow = new LinearLayout(this);
-            exportRow.setOrientation(LinearLayout.HORIZONTAL);
-
-            Button exportExhBtn = new Button(this);
-            styleSecondaryButton(exportExhBtn);
-            exportExhBtn.setText(R.string.export_exhibitions);
-            exportExhBtn.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    String path = ExportManager.exportExhibitions(MainActivity.this);
-                    if (path != null) {
-                        Toast.makeText(MainActivity.this,
-                                getString(R.string.export_success, path),
-                                Toast.LENGTH_LONG).show();
-                    } else {
-                        Toast.makeText(MainActivity.this,
-                                R.string.export_empty, Toast.LENGTH_SHORT).show();
-                    }
-                }
-            });
-            LinearLayout.LayoutParams exhParams = new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            exhParams.setMargins(0, 0, dp(4), 0);
-            exportRow.addView(exportExhBtn, exhParams);
-
-            Button exportRegBtn = new Button(this);
-            styleSecondaryButton(exportRegBtn);
-            exportRegBtn.setText(R.string.export_registrations);
-            exportRegBtn.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    String path = ExportManager.exportRegistrations(MainActivity.this);
-                    if (path != null) {
-                        Toast.makeText(MainActivity.this,
-                                getString(R.string.export_success, path),
-                                Toast.LENGTH_LONG).show();
-                    } else {
-                        Toast.makeText(MainActivity.this,
-                                R.string.export_empty, Toast.LENGTH_SHORT).show();
-                    }
-                }
-            });
-            LinearLayout.LayoutParams regParams = new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            regParams.setMargins(dp(4), 0, 0, 0);
-            exportRow.addView(exportRegBtn, regParams);
-
-            root.addView(exportRow, fullWidthParams(8));
-        }
-
         homeExhibitionList = new LinearLayout(this);
         homeExhibitionList.setOrientation(LinearLayout.VERTICAL);
         root.addView(homeExhibitionList, fullWidthParams(8));
@@ -484,21 +454,55 @@ public class MainActivity extends BaseActivity {
 
     private void buildMonthGrid(int daysInMonth) {
         homeCalendarGrid.removeAllViews();
+        
+        // Get current user's registrations to check which days have registrations
+        List<Registration> userRegistrations = registrationManager.list();
+        java.util.Set<Integer> registeredDays = new java.util.HashSet<>();
+        for (Registration reg : userRegistrations) {
+            if (reg.getStatus() == Registration.Status.PENDING) {
+                registeredDays.add(reg.getExhibitionDay());
+            }
+        }
+        
         for (int day = 1; day <= daysInMonth; day++) {
             final int selectedDay = day;
             int count = countExhibitionsForDay(day);
+            boolean isRegistered = registeredDays.contains(day);
+            
             Button dayButton = new Button(this);
             dayButton.setAllCaps(false);
-            dayButton.setText(count > 0 ? day + "\n" + count + "场" : String.valueOf(day));
-            dayButton.setTextColor(getResources().getColor(
-                    count > 0 ? R.color.date_active_text : R.color.text_secondary));
-            dayButton.setTextSize(12);
+            
+            // Text: show "已报名" if registered, otherwise show count
+            if (isRegistered) {
+                dayButton.setText(day + "\n已报名");
+            } else if (count > 0) {
+                dayButton.setText(day + "\n" + count + "场");
+            } else {
+                dayButton.setText(String.valueOf(day));
+            }
+            
+            // Text color: blue for registered, teal for exhibitions, gray for empty
+            int textColor;
+            if (isRegistered) {
+                textColor = R.color.status_open; // Blue for registered
+            } else if (count > 0) {
+                textColor = R.color.date_active_text;
+            } else {
+                textColor = R.color.text_secondary;
+            }
+            dayButton.setTextColor(getResources().getColor(textColor));
+            
+            dayButton.setTextSize(11);
             dayButton.setTypeface(Typeface.DEFAULT,
-                    count > 0 ? Typeface.BOLD : Typeface.NORMAL);
+                    (count > 0 || isRegistered) ? Typeface.BOLD : Typeface.NORMAL);
 
+            // Background: blue for registered, teal for exhibitions, white for empty
             GradientDrawable cellBg = new GradientDrawable();
             cellBg.setCornerRadius(dp(8));
-            if (count > 0) {
+            if (isRegistered) {
+                cellBg.setColor(getResources().getColor(R.color.status_open));
+                cellBg.setStroke(dp(1), getResources().getColor(R.color.status_open));
+            } else if (count > 0) {
                 cellBg.setColor(getResources().getColor(R.color.date_active_background));
                 cellBg.setStroke(dp(1), getResources().getColor(R.color.chip_border));
             } else {
@@ -506,7 +510,7 @@ public class MainActivity extends BaseActivity {
                 cellBg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
             }
             dayButton.setBackground(cellBg);
-            dayButton.setPadding(0, dp(6), 0, dp(6));
+            dayButton.setPadding(0, dp(4), 0, dp(4));
             dayButton.setGravity(android.view.Gravity.CENTER);
             dayButton.setIncludeFontPadding(false);
             dayButton.setMinHeight(0);
@@ -521,7 +525,7 @@ public class MainActivity extends BaseActivity {
 
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = 0;
-            params.height = dp(56);
+            params.height = dp(52);
             params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
             params.setMargins(dp(2), dp(2), dp(2), dp(2));
             homeCalendarGrid.addView(dayButton, params);
@@ -914,6 +918,56 @@ public class MainActivity extends BaseActivity {
             }
         });
         root.addView(addBtn, fullWidthParams(16));
+
+        // Export buttons row
+        LinearLayout exportRow = new LinearLayout(this);
+        exportRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button exportExhBtn = new Button(this);
+        styleSecondaryButton(exportExhBtn);
+        exportExhBtn.setText(R.string.export_exhibitions);
+        exportExhBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String path = ExportManager.exportExhibitions(MainActivity.this);
+                if (path != null) {
+                    Toast.makeText(MainActivity.this,
+                            getString(R.string.export_success, path),
+                            Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(MainActivity.this,
+                            R.string.export_empty, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        LinearLayout.LayoutParams exhParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        exhParams.setMargins(0, 0, dp(4), 0);
+        exportRow.addView(exportExhBtn, exhParams);
+
+        Button exportRegBtn = new Button(this);
+        styleSecondaryButton(exportRegBtn);
+        exportRegBtn.setText(R.string.export_registrations);
+        exportRegBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String path = ExportManager.exportRegistrations(MainActivity.this);
+                if (path != null) {
+                    Toast.makeText(MainActivity.this,
+                            getString(R.string.export_success, path),
+                            Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(MainActivity.this,
+                            R.string.export_empty, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        LinearLayout.LayoutParams regParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        regParams.setMargins(dp(4), 0, 0, 0);
+        exportRow.addView(exportRegBtn, regParams);
+
+        root.addView(exportRow, fullWidthParams(8));
 
         // Exhibition list
         exhListContainer = new LinearLayout(this);

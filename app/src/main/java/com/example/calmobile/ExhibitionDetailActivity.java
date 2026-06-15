@@ -104,7 +104,7 @@ public class ExhibitionDetailActivity extends BaseActivity {
     }
 
     /**
-     * Build the action buttons: register, reminder, calendar add/remove.
+     * Build the action buttons: register, calendar toggle.
      */
     private void buildActionButtons() {
         detailActions.removeAllViews();
@@ -147,31 +147,12 @@ public class ExhibitionDetailActivity extends BaseActivity {
         });
         detailActions.addView(registerButton, fullWidthParams(0));
 
-        // Reminder button
-        Button reminderButton = new Button(this);
-        reminderButton.setAllCaps(false);
-        reminderButton.setText("设置提醒");
-        reminderButton.setBackgroundResource(R.drawable.bg_button_secondary);
-        reminderButton.setTextColor(getResources().getColor(R.color.button_secondary_text));
-        reminderButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                NotificationHelper helper = NotificationHelper.getInstance(
-                        ExhibitionDetailActivity.this);
-                helper.sendExhibitionReminder(title, venue, day, time);
-                Toast.makeText(ExhibitionDetailActivity.this,
-                        "已设置展会提醒（1天前提醒）", Toast.LENGTH_SHORT).show();
-            }
-        });
-        detailActions.addView(reminderButton, fullWidthParams(8));
-
-        // Calendar add button
-        Button addToCalendarBtn = new Button(this);
-        addToCalendarBtn.setAllCaps(false);
-        addToCalendarBtn.setText(R.string.calendar_add_to_calendar);
-        addToCalendarBtn.setBackgroundResource(R.drawable.bg_button_secondary);
-        addToCalendarBtn.setTextColor(getResources().getColor(R.color.button_secondary_text));
-        addToCalendarBtn.setOnClickListener(new View.OnClickListener() {
+        // Calendar toggle button (add/remove)
+        final boolean[] isInCalendar = {CalendarHelper.isInCalendar(this, title, day)};
+        final Button calendarToggleBtn = new Button(this);
+        calendarToggleBtn.setAllCaps(false);
+        updateCalendarButton(calendarToggleBtn, isInCalendar[0]);
+        calendarToggleBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 if (!CalendarHelper.hasCalendarPermissions(ExhibitionDetailActivity.this)) {
@@ -179,33 +160,36 @@ public class ExhibitionDetailActivity extends BaseActivity {
                     CalendarHelper.requestCalendarPermissions(ExhibitionDetailActivity.this);
                     return;
                 }
-                CalendarHelper.addToCalendar(ExhibitionDetailActivity.this,
-                        title, venue, day, time, description);
-            }
-        });
-        detailActions.addView(addToCalendarBtn, fullWidthParams(8));
-
-        // Calendar remove button
-        Button removeFromCalendarBtn = new Button(this);
-        removeFromCalendarBtn.setAllCaps(false);
-        removeFromCalendarBtn.setText(R.string.calendar_remove_from_calendar);
-        removeFromCalendarBtn.setBackgroundResource(R.drawable.bg_button_secondary);
-        removeFromCalendarBtn.setTextColor(getResources().getColor(R.color.button_secondary_text));
-        removeFromCalendarBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (!CalendarHelper.hasCalendarPermissions(ExhibitionDetailActivity.this)) {
-                    pendingCalendarPermission = true;
-                    CalendarHelper.requestCalendarPermissions(ExhibitionDetailActivity.this);
-                    return;
+                if (isInCalendar[0]) {
+                    CalendarHelper.removeFromCalendar(ExhibitionDetailActivity.this, title, day);
+                    isInCalendar[0] = false;
+                    Toast.makeText(ExhibitionDetailActivity.this,
+                            "已从日历移除", Toast.LENGTH_SHORT).show();
+                } else {
+                    CalendarHelper.addToCalendar(ExhibitionDetailActivity.this,
+                            title, venue, day, time, description);
+                    isInCalendar[0] = true;
+                    Toast.makeText(ExhibitionDetailActivity.this,
+                            "已添加到日历", Toast.LENGTH_SHORT).show();
                 }
-                CalendarHelper.removeFromCalendar(ExhibitionDetailActivity.this,
-                        title, day);
+                updateCalendarButton(calendarToggleBtn, isInCalendar[0]);
             }
         });
-        detailActions.addView(removeFromCalendarBtn, fullWidthParams(8));
+        detailActions.addView(calendarToggleBtn, fullWidthParams(8));
 
         animateListItems(detailActions, 80);
+    }
+    
+    private void updateCalendarButton(Button btn, boolean isInCalendar) {
+        if (isInCalendar) {
+            btn.setText(R.string.calendar_remove_from_calendar);
+            btn.setBackgroundResource(R.drawable.bg_button_danger);
+            btn.setTextColor(getResources().getColor(R.color.button_danger_text));
+        } else {
+            btn.setText(R.string.calendar_add_to_calendar);
+            btn.setBackgroundResource(R.drawable.bg_button_secondary);
+            btn.setTextColor(getResources().getColor(R.color.button_secondary_text));
+        }
     }
 
     @Override

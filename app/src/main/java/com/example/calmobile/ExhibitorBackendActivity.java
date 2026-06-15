@@ -126,20 +126,26 @@ public class ExhibitorBackendActivity extends BaseActivity {
             LinearLayout actions = new LinearLayout(this);
             actions.setOrientation(LinearLayout.HORIZONTAL);
 
-            // Edit button
-            Button editBtn = new Button(this);
-            styleSecondaryButton(editBtn);
-            editBtn.setText(R.string.exhibitor_edit_exhibition);
-            editBtn.setOnClickListener(new View.OnClickListener() {
+            // Edit + View Registrations combined button
+            Button editRegBtn = new Button(this);
+            styleSecondaryButton(editRegBtn);
+            editRegBtn.setText(R.string.exhibitor_edit_exhibition + " / " + getString(R.string.reg_mgmt_nav_btn));
+            editRegBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    openForm(exh.getId());
+                    // Open registration management directly
+                    Intent intent = new Intent(ExhibitorBackendActivity.this,
+                            RegistrationManagementActivity.class);
+                    intent.putExtra(RegistrationManagementActivity.EXTRA_EXHIBITION_ID,
+                            exh.getId());
+                    startActivity(intent);
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 }
             });
-            LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams editRegParams = new LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            editParams.setMargins(0, 0, dp(4), 0);
-            actions.addView(editBtn, editParams);
+            editRegParams.setMargins(0, 0, dp(4), 0);
+            actions.addView(editRegBtn, editRegParams);
 
             // Status button
             Button statusBtn = new Button(this);
@@ -153,42 +159,32 @@ public class ExhibitorBackendActivity extends BaseActivity {
             });
             LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            statusParams.setMargins(dp(4), 0, dp(4), 0);
+            statusParams.setMargins(dp(4), 0, 0, 0);
             actions.addView(statusBtn, statusParams);
-
-            // Registrations button
-            Button regBtn = new Button(this);
-            styleSecondaryButton(regBtn);
-            regBtn.setText(R.string.reg_mgmt_nav_btn);
-            regBtn.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    Intent intent = new Intent(ExhibitorBackendActivity.this,
-                            RegistrationManagementActivity.class);
-                    intent.putExtra(RegistrationManagementActivity.EXTRA_EXHIBITION_ID,
-                            exh.getId());
-                    startActivity(intent);
-                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
-                }
-            });
-            LinearLayout.LayoutParams regParams = new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            regParams.setMargins(dp(4), 0, 0, 0);
-            actions.addView(regBtn, regParams);
 
             card.addView(actions, fullWidthParams(8));
 
-            // Delete button (separate row)
+            // Delete button (circular trash icon)
             Button deleteBtn = new Button(this);
-            styleDangerButton(deleteBtn);
-            deleteBtn.setText(R.string.exhibitor_delete);
+            deleteBtn.setAllCaps(false);
+            deleteBtn.setText("🗑");
+            deleteBtn.setTextSize(18);
+            deleteBtn.setPadding(dp(12), dp(8), dp(12), dp(8));
+            GradientDrawable deleteBg = new GradientDrawable();
+            deleteBg.setShape(GradientDrawable.OVAL);
+            deleteBg.setColor(getResources().getColor(R.color.button_danger_bg));
+            deleteBtn.setBackground(deleteBg);
+            deleteBtn.setTextColor(getResources().getColor(R.color.button_danger_text));
             deleteBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     confirmDelete(exh);
                 }
             });
-            card.addView(deleteBtn, fullWidthParams(4));
+            LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(
+                    dp(48), dp(48));
+            deleteParams.setMargins(dp(8), 0, 0, 0);
+            card.addView(deleteBtn, deleteParams);
 
             listContainer.addView(card, fullWidthParams(10));
         }
