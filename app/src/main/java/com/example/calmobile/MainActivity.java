@@ -477,13 +477,13 @@ public class MainActivity extends BaseActivity {
             Button dayButton = new Button(this);
             dayButton.setAllCaps(false);
             
-            // Text: show "已报名" if registered, otherwise show count
+            // Text: always use 2 lines for consistent alignment
             if (isRegistered) {
                 dayButton.setText(day + "\n已报名");
             } else if (count > 0) {
                 dayButton.setText(day + "\n" + count + "场");
             } else {
-                dayButton.setText(String.valueOf(day));
+                dayButton.setText(day + "\n ");
             }
             
             // Text color: blue for registered, teal for exhibitions, gray for empty
@@ -1079,15 +1079,14 @@ public class MainActivity extends BaseActivity {
             actions.addView(statusBtn, statusP);
 
             // Delete button (circular trash icon, same height as other buttons)
-            Button delBtn = new Button(this);
-            delBtn.setAllCaps(false);
-            delBtn.setText("\u2716");
-            delBtn.setTextSize(14);
+            ImageView delBtn = new ImageView(this);
+            delBtn.setImageResource(android.R.drawable.ic_menu_delete);
+            delBtn.setColorFilter(getResources().getColor(R.color.button_danger_text));
+            delBtn.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             GradientDrawable delBg = new GradientDrawable();
             delBg.setShape(GradientDrawable.OVAL);
             delBg.setColor(getResources().getColor(R.color.button_danger_bg));
             delBtn.setBackground(delBg);
-            delBtn.setTextColor(getResources().getColor(R.color.button_danger_text));
             delBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -1105,7 +1104,7 @@ public class MainActivity extends BaseActivity {
                 }
             });
             LinearLayout.LayoutParams delP = new LinearLayout.LayoutParams(
-                    dp(48), LinearLayout.LayoutParams.WRAP_CONTENT);
+                    dp(48), dp(48));
             delP.setMargins(dp(4), 0, 0, 0);
             actions.addView(delBtn, delP);
 
