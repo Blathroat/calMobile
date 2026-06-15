@@ -1,5 +1,7 @@
 package com.example.calmobile;
 
+import com.example.calmobile.ExportManager;
+
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -51,6 +53,8 @@ public class MainActivity extends BaseActivity {
 
     // ── Home tab fields ───────────────────────────────────────────
     private static final int MONTH_DAYS = 30;
+    private int currentYear = 2026;
+    private int currentMonth = 6; // 1-12
     private static final Exhibition[] SAMPLE_EXHIBITIONS = new Exhibition[] {
             new Exhibition(6, "华南智能制造展", "深圳国际会展中心 6 号馆",
                     "09:30-17:00", "报名中", true,
@@ -70,6 +74,7 @@ public class MainActivity extends BaseActivity {
                     "建筑材料 / 城市更新")
     };
     private TextView homeStatusText;
+    private TextView monthTitleText;
     private GridLayout homeCalendarGrid;
     private LinearLayout homeExhibitionList;
     private LinearLayout homeRegistrationsList;
@@ -304,11 +309,80 @@ public class MainActivity extends BaseActivity {
         calCard.setOrientation(LinearLayout.VERTICAL);
         calCard.setPadding(dp(16), dp(16), dp(16), dp(16));
         styleCard(calCard);
-        addText(calCard, getString(R.string.month_view_title),
-                R.color.text_primary, 17, Typeface.BOLD);
+        final float[] touchX = new float[1];
+        calCard.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, android.view.MotionEvent event) {
+                switch (event.getAction()) {
+                    case android.view.MotionEvent.ACTION_DOWN:
+                        touchX[0] = event.getX();
+                        return true;
+                    case android.view.MotionEvent.ACTION_UP:
+                        float dx = event.getX() - touchX[0];
+                        if (Math.abs(dx) > 100) {
+                            if (dx > 0) {
+                                prevMonth();
+                            } else {
+                                nextMonth();
+                            }
+                            return true;
+                        }
+                        return false;
+                }
+                return false;
+            }
+        });
+
+        LinearLayout monthNav = new LinearLayout(this);
+        monthNav.setOrientation(LinearLayout.HORIZONTAL);
+        monthNav.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
+        Button prevBtn = new Button(this);
+        prevBtn.setAllCaps(false);
+        prevBtn.setText("◀");
+        prevBtn.setTextSize(18);
+        prevBtn.setTextColor(getResources().getColor(R.color.text_primary));
+        prevBtn.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        prevBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                prevMonth();
+            }
+        });
+        monthNav.addView(prevBtn, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        monthTitleText = new TextView(this);
+        monthTitleText.setText(currentYear + "年" + currentMonth + "月");
+        monthTitleText.setTextColor(getResources().getColor(R.color.text_primary));
+        monthTitleText.setTextSize(17);
+        monthTitleText.setTypeface(Typeface.DEFAULT_BOLD);
+        monthTitleText.setGravity(android.view.Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        monthNav.addView(monthTitleText, titleParams);
+
+        Button nextBtn = new Button(this);
+        nextBtn.setAllCaps(false);
+        nextBtn.setText("▶");
+        nextBtn.setTextSize(18);
+        nextBtn.setTextColor(getResources().getColor(R.color.text_primary));
+        nextBtn.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        nextBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                nextMonth();
+            }
+        });
+        monthNav.addView(nextBtn, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        calCard.addView(monthNav, fullWidthParams(4));
         homeCalendarGrid = new GridLayout(this);
         homeCalendarGrid.setColumnCount(7);
-        homeCalendarGrid.setRowCount(5);
+        homeCalendarGrid.setRowCount((getDaysInMonth(currentYear, currentMonth) + 6) / 7);
         homeCalendarGrid.setAlignmentMode(GridLayout.ALIGN_MARGINS);
         calCard.addView(homeCalendarGrid, fullWidthParams(12));
         root.addView(calCard, fullWidthParams(28));
@@ -316,6 +390,58 @@ public class MainActivity extends BaseActivity {
         // Today's exhibitions
         addText(root, getString(R.string.today_exhibitions),
                 R.color.text_primary, 17, Typeface.BOLD);
+
+        if (AuthManager.getInstance().canAccessExhibitor()) {
+            LinearLayout exportRow = new LinearLayout(this);
+            exportRow.setOrientation(LinearLayout.HORIZONTAL);
+
+            Button exportExhBtn = new Button(this);
+            styleSecondaryButton(exportExhBtn);
+            exportExhBtn.setText(R.string.export_exhibitions);
+            exportExhBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    String path = ExportManager.exportExhibitions(MainActivity.this);
+                    if (path != null) {
+                        Toast.makeText(MainActivity.this,
+                                getString(R.string.export_success, path),
+                                Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(MainActivity.this,
+                                R.string.export_empty, Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+            LinearLayout.LayoutParams exhParams = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            exhParams.setMargins(0, 0, dp(4), 0);
+            exportRow.addView(exportExhBtn, exhParams);
+
+            Button exportRegBtn = new Button(this);
+            styleSecondaryButton(exportRegBtn);
+            exportRegBtn.setText(R.string.export_registrations);
+            exportRegBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    String path = ExportManager.exportRegistrations(MainActivity.this);
+                    if (path != null) {
+                        Toast.makeText(MainActivity.this,
+                                getString(R.string.export_success, path),
+                                Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(MainActivity.this,
+                                R.string.export_empty, Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+            LinearLayout.LayoutParams regParams = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            regParams.setMargins(dp(4), 0, 0, 0);
+            exportRow.addView(exportRegBtn, regParams);
+
+            root.addView(exportRow, fullWidthParams(8));
+        }
+
         homeExhibitionList = new LinearLayout(this);
         homeExhibitionList.setOrientation(LinearLayout.VERTICAL);
         root.addView(homeExhibitionList, fullWidthParams(8));
@@ -328,7 +454,7 @@ public class MainActivity extends BaseActivity {
         root.addView(homeRegistrationsList, fullWidthParams(8));
 
         // Build data
-        buildMonthGrid();
+        buildMonthGrid(getDaysInMonth(currentYear, currentMonth));
         showExhibitionsForDay(12);
         renderMyRegistrations();
 
@@ -356,9 +482,9 @@ public class MainActivity extends BaseActivity {
 
     // ── Calendar grid ─────────────────────────────────────────────
 
-    private void buildMonthGrid() {
+    private void buildMonthGrid(int daysInMonth) {
         homeCalendarGrid.removeAllViews();
-        for (int day = 1; day <= MONTH_DAYS; day++) {
+        for (int day = 1; day <= daysInMonth; day++) {
             final int selectedDay = day;
             int count = countExhibitionsForDay(day);
             Button dayButton = new Button(this);
@@ -380,9 +506,12 @@ public class MainActivity extends BaseActivity {
                 cellBg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
             }
             dayButton.setBackground(cellBg);
-            dayButton.setPadding(0, dp(8), 0, dp(8));
+            dayButton.setPadding(0, dp(6), 0, dp(6));
             dayButton.setGravity(android.view.Gravity.CENTER);
             dayButton.setIncludeFontPadding(false);
+            dayButton.setMinHeight(0);
+            dayButton.setMinimumHeight(0);
+            dayButton.setLineSpacing(0, 1.0f);
             dayButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -397,6 +526,38 @@ public class MainActivity extends BaseActivity {
             params.setMargins(dp(2), dp(2), dp(2), dp(2));
             homeCalendarGrid.addView(dayButton, params);
         }
+    }
+
+    private void prevMonth() {
+        currentMonth--;
+        if (currentMonth < 1) {
+            currentMonth = 12;
+            currentYear--;
+        }
+        updateMonthDisplay();
+    }
+
+    private void nextMonth() {
+        currentMonth++;
+        if (currentMonth > 12) {
+            currentMonth = 1;
+            currentYear++;
+        }
+        updateMonthDisplay();
+    }
+
+    private void updateMonthDisplay() {
+        monthTitleText.setText(currentYear + "年" + currentMonth + "月");
+        int daysInMonth = getDaysInMonth(currentYear, currentMonth);
+        homeCalendarGrid.setRowCount((daysInMonth + 6) / 7);
+        buildMonthGrid(daysInMonth);
+        showExhibitionsForDay(1);
+    }
+
+    private int getDaysInMonth(int year, int month) {
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        cal.set(year, month - 1, 1);
+        return cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH);
     }
 
     // ── Exhibition list for a day ─────────────────────────────────
@@ -639,7 +800,7 @@ public class MainActivity extends BaseActivity {
 
         // Edit button
         Button editBtn = new Button(this);
-        editBtn.setAllCaps(false);
+        stylePrimaryButton(editBtn);
         editBtn.setText(R.string.profile_edit);
         editBtn.setOnClickListener(new View.OnClickListener() {
             @Override

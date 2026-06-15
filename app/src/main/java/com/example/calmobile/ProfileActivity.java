@@ -172,7 +172,7 @@ public class ProfileActivity extends BaseActivity {
                 renderEditMode();
             }
         });
-        actionsSection.addView(editButton, fullWidthParams(0));
+        actionsSection.addView(editButton, fullWidthParams(8));
 
         // --- Logout button at bottom ---
         renderLogoutSection();
