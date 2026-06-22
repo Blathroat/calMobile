@@ -40,9 +40,9 @@ def add_para(text, bold=False, font_size=12, alignment=None):
         p.alignment = alignment
     return p
 
-def add_image(path, width=Inches(5)):
+def add_image(path, width=Inches(2.5), height=Inches(4.0)):
     if os.path.exists(path):
-        doc.add_picture(path, width=width)
+        doc.add_picture(path, width=width, height=height)
         last_paragraph = doc.paragraphs[-1]
         last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         return True
