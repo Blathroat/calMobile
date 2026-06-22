@@ -56,7 +56,7 @@ for _ in range(4):
 
 title_p = doc.add_paragraph()
 title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-title_run = title_p.add_run('展会排期助手')
+title_run = title_p.add_run('Android移动应用开发课程实验报告')
 title_run.font.name = '黑体'
 title_run.font.size = Pt(28)
 title_run.bold = True
@@ -64,7 +64,7 @@ title_run.element.rPr.rFonts.set(qn('w:eastAsia'), '黑体')
 
 subtitle_p = doc.add_paragraph()
 subtitle_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-subtitle_run = subtitle_p.add_run('功能测试报告')
+subtitle_run = subtitle_p.add_run('CalMobile展会排期助手功能测试与分析')
 subtitle_run.font.name = '黑体'
 subtitle_run.font.size = Pt(22)
 subtitle_run.element.rPr.rFonts.set(qn('w:eastAsia'), '黑体')
@@ -72,11 +72,12 @@ subtitle_run.element.rPr.rFonts.set(qn('w:eastAsia'), '黑体')
 doc.add_paragraph()
 
 info_items = [
+    '实验名称：Android移动应用功能测试与性能分析',
     '项目名称：CalMobile 展会排期助手',
-    '测试环境：Android 模拟器 API 34',
-    '测试日期：2026年6月15日',
-    '版本号：0.1.0',
-    '测试人员：自动化测试'
+    '实验环境：Android 模拟器 API 34，Node.js后端服务器',
+    '实验日期：2026年6月15日',
+    '应用版本：0.1.0',
+    '实验人员：课程实验小组'
 ]
 for item in info_items:
     p = doc.add_paragraph()
@@ -278,11 +279,11 @@ for row_data in role_data:
 doc.add_paragraph()
 
 # === 5. Test Summary ===
-add_heading('五、测试总结', level=1, font_size=16)
-add_para('本次测试覆盖了展会排期助手的全部核心功能模块，包括登录认证、首页日历、展会详情、'
-         '展商后台、管理后台和个人中心。所有功能均能正常运行，界面交互流畅，数据展示正确。')
+add_heading('五、实验总结', level=1, font_size=16)
+add_para('本次实验对展会排期助手Android应用进行了全面的功能测试，验证了登录认证、首页日历、展会详情、'
+         '展商后台、管理后台和个人中心等核心功能模块。所有功能均能正常运行，界面交互流畅，数据展示正确。')
 add_para('')
-add_para('主要测试结果：', bold=True)
+add_para('主要实验结果：', bold=True)
 add_para('• 登录/注册/访客模式：全部通过')
 add_para('• 首页日历与月份切换：全部通过')
 add_para('• 展会详情与报名功能：全部通过')
@@ -293,9 +294,11 @@ add_para('• 底部导航栏切换：全部通过')
 add_para('• 数据导出功能：全部通过')
 
 doc.add_paragraph()
-add_para('测试结论：应用功能完整，界面美观，交互流畅，可投入正式使用。', bold=True)
+add_para('实验结论：通过本次实验，验证了Android移动应用开发中前后端分离架构的可行性，'
+         '掌握了Retrofit网络请求、Room本地数据库、MVVM架构模式等关键技术，'
+         '应用功能完整，界面美观，交互流畅，达到了课程实验的预期目标。', bold=True)
 
 # Save
-output_path = 'C:/Users/26713/Documents/calMobile/docs/展会排期助手功能测试报告.docx'
+output_path = 'C:/Users/26713/Documents/calMobile/docs/Android移动应用开发课程实验报告.docx'
 doc.save(output_path)
 print(f'Report saved to: {output_path}')
