@@ -2,7 +2,10 @@
 <resources>
     <string name="app_name">展会排期助手</string>
     <string name="home_status">本地假数据演示已就绪：点击带标记日期查看展会卡片、详情和报名表单。</string>
-    <string name="local_day_count">本地假数据：6月%1$d日共有 %2$d 场展会</string>
+    <string name="local_day_count">本地演示：%1$d月%2$d日共有 %3$d 场展会</string>
+    <string name="home_hero_title">今天，去遇见值得记住的展会</string>
+    <string name="home_brand_mark">展</string>
+    <string name="home_exhibitions_for_day">%1$d月%2$d日的展会</string>
     <string name="today_exhibitions">今日展会</string>
     <string name="exhibition_detail">展会详情</string>
     <string name="registration_title">报名信息</string>
@@ -169,6 +172,38 @@
     <string name="auth_exhibitor_required">当前账号无展商权限</string>
     <string name="auth_admin_required">当前账号无管理员权限</string>
     <string name="registration_login_required">登录后报名</string>
+    <string name="registration_name_required">请填写姓名或公司名称</string>
+    <string name="registration_already_submitted">你已报名该展会，无需重复提交</string>
+    <string name="registration_submitting">正在提交…</string>
+    <string name="registration_local_demo_hint">本地演示：报名结果保存在当前设备。</string>
+    <string name="registration_success_title">报名已提交</string>
+    <string name="registration_success_message">我们已记录你的报名信息。</string>
+    <string name="detail_time">时间：%1$d月%2$d日 %3$s</string>
+    <string name="detail_venue">地点：%1$s</string>
+    <string name="detail_status">状态：%1$s</string>
+    <string name="detail_local_demo_note">说明：当前为本地假数据演示，报名结果不会提交到服务器。</string>
+    <string name="calendar_removed_feedback">已从日历移除</string>
+    <string name="calendar_added_feedback">已添加到日历</string>
+    <string name="registration_exhibition_meta">%1$d月%2$d日 %3$s · %4$s</string>
+    <string name="registration_name_hint">姓名 / 公司名称</string>
+    <string name="registration_visitor_type">参观身份</string>
+    <string name="registration_professional_visitor">专业观众</string>
+    <string name="registration_procurement_lead">采购负责人</string>
+    <string name="registration_media_partner">媒体或合作伙伴</string>
+    <string name="registration_needs">报名需求</string>
+    <string name="registration_meeting_option">希望安排展商洽谈</string>
+    <string name="registration_reminder_option">需要开展前提醒</string>
+    <string name="registration_demo_hint">填写后点击提交，页面会生成本地演示反馈。</string>
+    <string name="registration_need_meeting">需要洽谈</string>
+    <string name="registration_visit_only">仅参观</string>
+    <string name="registration_reminder_enabled">已勾选提醒</string>
+    <string name="registration_reminder_disabled">不提醒</string>
+    <string name="registration_exhibition_label">展会：%1$s</string>
+    <string name="registration_time_label">时间：%1$d月%2$d日 %3$s</string>
+    <string name="registration_venue_label">地点：%1$s</string>
+    <string name="registration_visitor_label">报名人：%1$s</string>
+    <string name="registration_type_label">身份：%1$s</string>
+    <string name="registration_needs_label">需求：%1$s</string>
 
     <!-- Search -->
     <string name="search_title">搜索</string>

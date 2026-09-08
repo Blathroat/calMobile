@@ -10,6 +10,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.os.Bundle;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.LinearLayout;
@@ -35,6 +36,12 @@ import android.widget.TextView;
  * </ul>
  */
 public abstract class BaseActivity extends Activity {
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        AppSettings.applyWindowColors(this);
+    }
 
     // ── Dimension helpers ──────────────────────────────────────────────
 
@@ -87,7 +94,7 @@ public abstract class BaseActivity extends Activity {
         return textView;
     }
 
-    // ── Card styling ───────────────────────────────────────────────────
+    // ── 卡片样式 ───────────────────────────────────────────────────────
 
     /**
      * Apply the standard card background, corner radius, stroke, and elevation
@@ -98,8 +105,8 @@ public abstract class BaseActivity extends Activity {
     protected void styleCard(LinearLayout card) {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(getResources().getColor(R.color.card_background));
-        bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
+        bg.setCornerRadius(dp(20));
+        bg.setStroke(dp(1), AppSettings.getAccentColor(this));
         card.setBackground(bg);
         card.setElevation(dp(2));
         card.setClipToOutline(true);
@@ -254,10 +261,16 @@ public abstract class BaseActivity extends Activity {
      */
     protected void stylePrimaryButton(android.widget.Button btn) {
         btn.setBackgroundResource(R.drawable.bg_button_primary);
+        btn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                AppSettings.getAccentColor(this)));
         btn.setTextColor(getResources().getColor(R.color.button_primary_text));
         btn.setAllCaps(false);
         btn.setStateListAnimator(null);
         btn.setElevation(0);
+        btn.setTextSize(15);
+        btn.setMinHeight(dp(46));
+        btn.setMinimumHeight(dp(46));
+        btn.setPadding(dp(16), 0, dp(16), 0);
     }
 
     /**
@@ -267,10 +280,14 @@ public abstract class BaseActivity extends Activity {
      */
     protected void styleSecondaryButton(android.widget.Button btn) {
         btn.setBackgroundResource(R.drawable.bg_button_secondary);
-        btn.setTextColor(getResources().getColor(R.color.button_secondary_text));
+        btn.setTextColor(AppSettings.getAccentColor(this));
         btn.setAllCaps(false);
         btn.setStateListAnimator(null);
         btn.setElevation(0);
+        btn.setTextSize(14);
+        btn.setMinHeight(dp(44));
+        btn.setMinimumHeight(dp(44));
+        btn.setPadding(dp(14), 0, dp(14), 0);
     }
 
     /**
@@ -284,6 +301,10 @@ public abstract class BaseActivity extends Activity {
         btn.setAllCaps(false);
         btn.setStateListAnimator(null);
         btn.setElevation(0);
+        btn.setTextSize(14);
+        btn.setMinHeight(dp(44));
+        btn.setMinimumHeight(dp(44));
+        btn.setPadding(dp(14), 0, dp(14), 0);
     }
 
     /**
@@ -318,7 +339,7 @@ public abstract class BaseActivity extends Activity {
                 android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_light)),
                 shape, null);
         btn.setBackground(ripple);
-        btn.setTextColor(getResources().getColor(R.color.primary));
+        btn.setTextColor(AppSettings.getAccentColor(this));
         btn.setPadding(dp(14), dp(8), dp(14), dp(8));
     }
 

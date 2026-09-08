@@ -1,5 +1,6 @@
 package com.example.calmobile;
 
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -9,6 +10,7 @@ import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -294,7 +296,7 @@ public class AdminBackendActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showUserStatusPicker(user);
+                    showUserStatusPicker(card, user);
                 }
             });
             LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
@@ -318,38 +320,29 @@ public class AdminBackendActivity extends BaseActivity {
 
         addText(userDetailPanel, getString(R.string.admin_user_detail_title),
                 R.color.text_primary, 20, Typeface.BOLD);
-
         addText(userDetailPanel, getString(R.string.admin_user_label_nickname) + "：" + user.getNickname(),
                 R.color.text_primary, 16, Typeface.BOLD);
         addText(userDetailPanel, getString(R.string.admin_user_label_email) + "：" + user.getEmail(),
                 R.color.text_secondary, 15, Typeface.NORMAL);
-
-        int statusColor = user.isActive()
-                ? R.color.status_open
+        int statusColor = user.isActive() ? R.color.status_open
                 : (user.isBanned() ? R.color.status_closed : R.color.status_pending);
         addText(userDetailPanel, getString(R.string.admin_user_label_status) + "：" + user.getStatus(),
                 statusColor, 15, Typeface.BOLD);
-
         addText(userDetailPanel, getString(R.string.admin_user_label_reg_time) + "：" + user.getRegistrationTime(),
                 R.color.text_secondary, 15, Typeface.NORMAL);
         addText(userDetailPanel, getString(R.string.admin_user_label_last_login) + "：" + user.getLastLoginTime(),
                 R.color.text_secondary, 15, Typeface.NORMAL);
 
-        // Action buttons
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
-
         Button statusBtn = new Button(this);
         styleSecondaryButton(statusBtn);
         statusBtn.setText(R.string.admin_change_user_status);
         statusBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showUserStatusPicker(user);
-            }
+            @Override public void onClick(View v) { showUserStatusPicker(userDetailPanel, user); }
         });
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         statusParams.setMargins(0, dp(8), dp(4), 0);
         actions.addView(statusBtn, statusParams);
 
@@ -357,25 +350,22 @@ public class AdminBackendActivity extends BaseActivity {
         styleSecondaryButton(closeBtn);
         closeBtn.setText(R.string.admin_close_detail);
         closeBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+            @Override public void onClick(View v) {
                 currentUserDetailId = null;
                 animateHidePanel(userDetailPanel);
             }
         });
-        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         closeParams.setMargins(dp(4), dp(8), 0, 0);
         actions.addView(closeBtn, closeParams);
-
         userDetailPanel.addView(actions, fullWidthParams(0));
         scrollToView(userDetailPanel);
     }
-
-    private void showUserStatusPicker(final AdminUser user) {
+    private void showUserStatusPicker(final LinearLayout cardHost, final AdminUser user) {
         final boolean restoreDetail = userDetailPanel.getVisibility() == View.VISIBLE
                 && user.getId().equals(currentUserDetailId);
-        LinearLayout pickerHost = restoreDetail ? userDetailPanel : usersSection;
+        LinearLayout pickerHost = restoreDetail ? userDetailPanel : cardHost;
         final String[] statuses = new String[] {
                 AdminUser.STATUS_ACTIVE,
                 AdminUser.STATUS_BANNED,
@@ -477,7 +467,7 @@ public class AdminBackendActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showExhibitionStatusPicker(exh);
+                    showExhibitionStatusPicker(card, exh);
                 }
             });
             LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
@@ -518,7 +508,6 @@ public class AdminBackendActivity extends BaseActivity {
 
         addText(exhibitionDetailPanel, getString(R.string.admin_exhibition_detail_title),
                 R.color.text_primary, 20, Typeface.BOLD);
-
         addText(exhibitionDetailPanel, getString(R.string.admin_exhibition_label_title) + "：" + exh.getTitle(),
                 R.color.text_primary, 16, Typeface.BOLD);
         addText(exhibitionDetailPanel, getString(R.string.admin_exhibition_label_venue) + "：" + exh.getVenue(),
@@ -527,69 +516,84 @@ public class AdminBackendActivity extends BaseActivity {
                 R.color.text_secondary, 15, Typeface.NORMAL);
         addText(exhibitionDetailPanel, getString(R.string.admin_exhibition_label_time) + "：" + exh.getTime(),
                 R.color.text_secondary, 15, Typeface.NORMAL);
-
-        int statusColor = exh.isOpenForRegistration()
-                ? R.color.status_open : R.color.status_closed;
+        int statusColor = exh.isOpenForRegistration() ? R.color.status_open : R.color.status_closed;
         addText(exhibitionDetailPanel, getString(R.string.admin_exhibition_label_status) + "：" + exh.getStatus(),
                 statusColor, 15, Typeface.BOLD);
 
-        // Action buttons
+        LinearLayout manageRow = new LinearLayout(this);
+        manageRow.setOrientation(LinearLayout.HORIZONTAL);
+        Button editBtn = new Button(this);
+        styleSecondaryButton(editBtn);
+        editBtn.setText(R.string.exhibitor_edit_exhibition);
+        editBtn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                Intent intent = new Intent(AdminBackendActivity.this, ExhibitionFormActivity.class);
+                intent.putExtra(ExhibitionFormActivity.EXTRA_EXHIBITION_ID, exh.getId());
+                startActivity(intent);
+                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+            }
+        });
+        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        editParams.setMargins(0, dp(8), dp(4), 0);
+        manageRow.addView(editBtn, editParams);
+        Button registrationsBtn = new Button(this);
+        styleSecondaryButton(registrationsBtn);
+        registrationsBtn.setText(R.string.reg_mgmt_nav_btn);
+        registrationsBtn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                Intent intent = new Intent(AdminBackendActivity.this, RegistrationManagementActivity.class);
+                intent.putExtra(RegistrationManagementActivity.EXTRA_EXHIBITION_ID, exh.getId());
+                startActivity(intent);
+                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+            }
+        });
+        LinearLayout.LayoutParams registrationsParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        registrationsParams.setMargins(dp(4), dp(8), 0, 0);
+        manageRow.addView(registrationsBtn, registrationsParams);
+        exhibitionDetailPanel.addView(manageRow, fullWidthParams(0));
+
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
-
         Button statusBtn = new Button(this);
         styleSecondaryButton(statusBtn);
         statusBtn.setText(R.string.admin_change_exhibition_status);
         statusBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showExhibitionStatusPicker(exh);
-            }
+            @Override public void onClick(View v) { showExhibitionStatusPicker(exhibitionDetailPanel, exh); }
         });
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         statusParams.setMargins(0, dp(8), dp(4), 0);
         actions.addView(statusBtn, statusParams);
-
         Button lockBtn = new Button(this);
         styleSecondaryButton(lockBtn);
-        lockBtn.setText(exh.isOpenForRegistration()
-                ? R.string.admin_lock_exhibition
-                : R.string.admin_unlock_exhibition);
+        lockBtn.setText(exh.isOpenForRegistration() ? R.string.admin_lock_exhibition : R.string.admin_unlock_exhibition);
         lockBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                toggleExhibitionLock(exh);
-            }
+            @Override public void onClick(View v) { toggleExhibitionLock(exh); }
         });
-        LinearLayout.LayoutParams lockParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams lockParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         lockParams.setMargins(dp(4), dp(8), dp(4), 0);
         actions.addView(lockBtn, lockParams);
-
         Button closeBtn = new Button(this);
         styleSecondaryButton(closeBtn);
         closeBtn.setText(R.string.admin_close_detail);
         closeBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                currentExhibitionDetailId = null;
-                animateHidePanel(exhibitionDetailPanel);
-            }
+            @Override public void onClick(View v) { currentExhibitionDetailId = null; animateHidePanel(exhibitionDetailPanel); }
         });
-        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         closeParams.setMargins(dp(4), dp(8), 0, 0);
         actions.addView(closeBtn, closeParams);
-
         exhibitionDetailPanel.addView(actions, fullWidthParams(0));
         scrollToView(exhibitionDetailPanel);
     }
-
-    private void showExhibitionStatusPicker(final ExhibitorExhibition exh) {
+    private void showExhibitionStatusPicker(final LinearLayout cardHost,
+                                             final ExhibitorExhibition exh) {
         final boolean restoreDetail = exhibitionDetailPanel.getVisibility() == View.VISIBLE
                 && exh.getId().equals(currentExhibitionDetailId);
-        LinearLayout pickerHost = restoreDetail ? exhibitionDetailPanel : exhibitionsSection;
+        LinearLayout pickerHost = restoreDetail ? exhibitionDetailPanel : cardHost;
         final String[] statuses = new String[] {
                 ExhibitorExhibition.STATUS_OPEN,
                 ExhibitorExhibition.STATUS_CLOSED,
@@ -737,6 +741,46 @@ public class AdminBackendActivity extends BaseActivity {
         addText(settingsSection, getString(R.string.admin_settings_title),
                 R.color.text_primary, 20, Typeface.BOLD);
 
+        addText(settingsSection, "应用配色", R.color.text_primary, 17, Typeface.BOLD);
+        final int[] selectedTheme = {AppSettings.getThemeIndex(this)};
+        LinearLayout colorRow = new LinearLayout(this);
+        colorRow.setOrientation(LinearLayout.HORIZONTAL);
+        int[] accentColors = AppSettings.getAccentColors();
+        for (int i = 0; i < accentColors.length; i++) {
+            final int index = i;
+            Button colorButton = new Button(this);
+            colorButton.setText("");
+            colorButton.setMinHeight(dp(46));
+            colorButton.setMinimumHeight(dp(46));
+            colorButton.setBackgroundColor(accentColors[i]);
+            colorButton.setContentDescription("配色 " + (i + 1));
+            colorButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    selectedTheme[0] = index;
+                    AppSettings.setThemeIndex(AdminBackendActivity.this, index);
+                    AppSettings.applyWindowColors(AdminBackendActivity.this);
+                    Toast.makeText(AdminBackendActivity.this, "配色已更新", Toast.LENGTH_SHORT).show();
+                }
+            });
+            LinearLayout.LayoutParams colorParams = new LinearLayout.LayoutParams(0, dp(46), 1f);
+            colorParams.setMargins(dp(3), 0, dp(3), 0);
+            colorRow.addView(colorButton, colorParams);
+        }
+        settingsSection.addView(colorRow, fullWidthParams(6));
+
+        addText(settingsSection, "进入应用时的公告", R.color.text_primary, 17, Typeface.BOLD);
+        final EditText announcementInput = new EditText(this);
+        announcementInput.setSingleLine(false);
+        announcementInput.setMinLines(2);
+        announcementInput.setHint("例如：本周末展馆开放时间调整");
+        announcementInput.setText(AppSettings.getAnnouncement(this));
+        settingsSection.addView(announcementInput, fullWidthParams(4));
+        final CheckBox announcementToggle = new CheckBox(this);
+        announcementToggle.setText("进入应用时显示公告");
+        announcementToggle.setChecked(AppSettings.isAnnouncementEnabled(this));
+        settingsSection.addView(announcementToggle, fullWidthParams(2));
+
         // Data export section
         addText(settingsSection, "数据导出",
                 R.color.text_primary, 17, Typeface.BOLD);
@@ -829,6 +873,9 @@ public class AdminBackendActivity extends BaseActivity {
         saveBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                AppSettings.setThemeIndex(AdminBackendActivity.this, selectedTheme[0]);
+                AppSettings.saveAnnouncement(AdminBackendActivity.this,
+                        announcementInput.getText().toString(), announcementToggle.isChecked());
                 Toast.makeText(AdminBackendActivity.this,
                         R.string.admin_settings_saved, Toast.LENGTH_SHORT).show();
             }

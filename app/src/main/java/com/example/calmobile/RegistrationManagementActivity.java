@@ -58,6 +58,7 @@ public class RegistrationManagementActivity extends BaseActivity {
 
     private String exhibitionId;
     private ExhibitorExhibition exhibition;
+    private String expandedRecordId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -141,7 +142,7 @@ public class RegistrationManagementActivity extends BaseActivity {
 
     private void renderList() {
         listContainer.removeAllViews();
-        animateHidePanel(detailPanel);
+        detailPanel.setVisibility(View.GONE);
 
         List<MgmtRecord> records = getRecordsForExhibition(exhibitionId);
 
@@ -188,13 +189,32 @@ public class RegistrationManagementActivity extends BaseActivity {
             addText(card, record.visitorType + " · " + record.registrationTime,
                     R.color.text_secondary, 13, Typeface.NORMAL);
 
-            // Click to show detail
+            // 详情直接展开在当前用户卡片下方
+            final LinearLayout inlineDetail = new LinearLayout(this);
+            inlineDetail.setOrientation(LinearLayout.VERTICAL);
+            inlineDetail.setPadding(dp(12), dp(10), dp(12), dp(10));
+            inlineDetail.setBackgroundResource(R.drawable.bg_surface_variant);
+            inlineDetail.setVisibility(View.GONE);
+            card.addView(inlineDetail, fullWidthParams(8));
+
             card.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showDetail(record);
+                    if (record.id.equals(expandedRecordId)) {
+                        expandedRecordId = null;
+                        inlineDetail.setVisibility(View.GONE);
+                    } else {
+                        expandedRecordId = record.id;
+                        renderDetail(inlineDetail, record);
+                        inlineDetail.setVisibility(View.VISIBLE);
+                    }
                 }
             });
+
+            if (record.id.equals(expandedRecordId)) {
+                renderDetail(inlineDetail, record);
+                inlineDetail.setVisibility(View.VISIBLE);
+            }
 
             listContainer.addView(card, fullWidthParams(8));
         }
@@ -204,20 +224,17 @@ public class RegistrationManagementActivity extends BaseActivity {
 
     // ── Detail panel ─────────────────────────────────────────────────
 
-    private void showDetail(final MgmtRecord record) {
-        animateShowPanel(detailPanel);
-        detailPanel.removeAllViews();
+    private void renderDetail(final LinearLayout host, final MgmtRecord record) {
+        host.removeAllViews();
 
-        // Title
-        addText(detailPanel, getString(R.string.reg_mgmt_detail_title),
+        addText(host, getString(R.string.reg_mgmt_detail_title),
                 R.color.text_primary, 18, Typeface.BOLD);
 
-        // Visitor info
-        addDetailRow(getString(R.string.reg_mgmt_label_name), record.visitorName);
-        addDetailRow(getString(R.string.reg_mgmt_label_type), record.visitorType);
-        addDetailRow(getString(R.string.reg_mgmt_label_time), record.registrationTime);
-        addDetailRow(getString(R.string.reg_mgmt_label_status), record.status);
-        addDetailRow(getString(R.string.reg_mgmt_label_answers), record.formAnswers);
+        addDetailRow(host, getString(R.string.reg_mgmt_label_name), record.visitorName);
+        addDetailRow(host, getString(R.string.reg_mgmt_label_type), record.visitorType);
+        addDetailRow(host, getString(R.string.reg_mgmt_label_time), record.registrationTime);
+        addDetailRow(host, getString(R.string.reg_mgmt_label_status), record.status);
+        addDetailRow(host, getString(R.string.reg_mgmt_label_answers), record.formAnswers);
 
         // Approve / Reject buttons (only for pending)
         if (STATUS_PENDING.equals(record.status)) {
@@ -282,23 +299,11 @@ public class RegistrationManagementActivity extends BaseActivity {
             rejectParams.setMargins(dp(6), dp(8), 0, 0);
             buttons.addView(rejectBtn, rejectParams);
 
-            detailPanel.addView(buttons, fullWidthParams(0));
+            host.addView(buttons, fullWidthParams(0));
         }
-
-        // Close detail button
-        Button closeBtn = new Button(this);
-        styleSecondaryButton(closeBtn);
-        closeBtn.setText(R.string.reg_mgmt_close_detail);
-        closeBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                animateHidePanel(detailPanel);
-            }
-        });
-        detailPanel.addView(closeBtn, fullWidthParams(10));
     }
 
-    private void addDetailRow(String label, String value) {
+    private void addDetailRow(LinearLayout host, String label, String value) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding(0, dp(6), 0, dp(2));
@@ -322,7 +327,7 @@ public class RegistrationManagementActivity extends BaseActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        detailPanel.addView(row, fullWidthParams(0));
+        host.addView(row, fullWidthParams(0));
     }
 
     // ── Data helpers ─────────────────────────────────────────────────

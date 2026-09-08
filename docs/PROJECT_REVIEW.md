@@ -148,7 +148,7 @@
 ### 15. 目标 SDK 偏旧
 
 - 相关文件：`app/build.gradle`
-- 当前约束为 `targetSdk 30`，暂不擅自修改。
+- 当前约束为 `targetSdk 34`，暂不擅自修改。
 - 建议：后续若面向应用商店发布，需要规划 targetSdk 升级。
 
 ### 16. 缺少 UI/Instrumentation 测试

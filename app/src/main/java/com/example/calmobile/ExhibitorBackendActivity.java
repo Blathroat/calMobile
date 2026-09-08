@@ -1,7 +1,5 @@
 package com.example.calmobile;
 
-import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.Typeface;
@@ -127,11 +125,10 @@ public class ExhibitorBackendActivity extends BaseActivity {
             LinearLayout actions = new LinearLayout(this);
             actions.setOrientation(LinearLayout.HORIZONTAL);
 
-            // Edit + View Registrations combined button
-            Button editRegBtn = new Button(this);
-            styleSecondaryButton(editRegBtn);
-            editRegBtn.setText(R.string.exhibitor_edit_exhibition + " / " + getString(R.string.reg_mgmt_nav_btn));
-            editRegBtn.setOnClickListener(new View.OnClickListener() {
+            Button registrationsBtn = new Button(this);
+            styleSecondaryButton(registrationsBtn);
+            registrationsBtn.setText(R.string.reg_mgmt_nav_btn);
+            registrationsBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     // Open registration management directly
@@ -143,10 +140,10 @@ public class ExhibitorBackendActivity extends BaseActivity {
                     overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 }
             });
-            LinearLayout.LayoutParams editRegParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams registrationsParams = new LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            editRegParams.setMargins(0, 0, dp(4), 0);
-            actions.addView(editRegBtn, editRegParams);
+            registrationsParams.setMargins(0, 0, dp(4), 0);
+            actions.addView(registrationsBtn, registrationsParams);
 
             // Status button
             Button statusBtn = new Button(this);
@@ -155,7 +152,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showStatusDialog(exh);
+                    showStatusPicker(card, exh);
                 }
             });
             LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
@@ -193,7 +190,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
 
     // ── Status management ────────────────────────────────────────────
 
-    private void showStatusDialog(final ExhibitorExhibition exh) {
+    private void showStatusPicker(final LinearLayout host, final ExhibitorExhibition exh) {
         if (statusPickerCard != null && statusPickerCard.getParent() instanceof LinearLayout) {
             ((LinearLayout) statusPickerCard.getParent()).removeView(statusPickerCard);
         }
@@ -261,26 +258,22 @@ public class ExhibitorBackendActivity extends BaseActivity {
         cancelParams.setMargins(0, dp(8), 0, 0);
         statusPickerCard.addView(cancelBtn, cancelParams);
 
-        listContainer.addView(statusPickerCard, fullWidthParams(10));
+        host.addView(statusPickerCard, fullWidthParams(8));
+        statusPickerCard.requestFocus();
     }
 
     // ── Delete ───────────────────────────────────────────────────────
 
     private void confirmDelete(final ExhibitorExhibition exh) {
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.confirm_title)
-                .setMessage(R.string.confirm_delete_exhibition)
-                .setPositiveButton(R.string.confirm_yes, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        ExhibitionManager.delete(exh.getId());
-                        Toast.makeText(ExhibitorBackendActivity.this,
-                                R.string.exhibitor_deleted, Toast.LENGTH_SHORT).show();
-                        renderList();
-                    }
-                })
-                .setNegativeButton(R.string.confirm_no, null)
-                .show();
+        showConfirmDialog(getString(R.string.confirm_delete_exhibition), new Runnable() {
+            @Override
+            public void run() {
+                ExhibitionManager.delete(exh.getId());
+                Toast.makeText(ExhibitorBackendActivity.this,
+                        R.string.exhibitor_deleted, Toast.LENGTH_SHORT).show();
+                renderList();
+            }
+        });
     }
 
     // ── Registration records ─────────────────────────────────────────

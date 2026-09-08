@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
+import android.view.inputmethod.EditorInfo;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -16,11 +17,7 @@ import android.widget.Toast;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Unified search activity for finding exhibitions and users.
- * Supports real-time filtering, search history (in-memory, last 10),
- * and displays results from both ExhibitionManager and AdminUserManager.
- */
+/** 统一搜索展会与用户，支持实时筛选和最近十条本地历史记录。 */
 public class SearchActivity extends BaseActivity {
 
     private static final int MAX_HISTORY = 10;
@@ -40,11 +37,11 @@ public class SearchActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_search);
 
-        // Initialize managers
+        // 初始化数据管理器
         ExhibitionManager.ensureInitialized();
         AdminUserManager.ensureInitialized();
 
-        // Bind views
+        // 绑定界面控件
         searchInput = findViewById(R.id.search_input);
         searchButton = findViewById(R.id.search_btn);
         searchHistorySection = findViewById(R.id.search_history_section);
@@ -53,7 +50,7 @@ public class SearchActivity extends BaseActivity {
         resultsCount = findViewById(R.id.search_results_count);
         resultsList = findViewById(R.id.search_results_list);
 
-        // Back button
+        // 返回按钮
         Button backButton = findViewById(R.id.search_back_btn);
         backButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -62,7 +59,7 @@ public class SearchActivity extends BaseActivity {
             }
         });
 
-        // Search button click
+        // 搜索按钮
         searchButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -70,7 +67,7 @@ public class SearchActivity extends BaseActivity {
             }
         });
 
-        // Real-time filtering on text change
+        // 输入时即时筛选结果
         searchInput.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -92,7 +89,15 @@ public class SearchActivity extends BaseActivity {
             }
         });
 
-        // Clear history
+        searchInput.setOnEditorActionListener((view, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                performSearch();
+                return true;
+            }
+            return false;
+        });
+
+        // 清空历史记录
         clearHistoryButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -101,7 +106,7 @@ public class SearchActivity extends BaseActivity {
             }
         });
 
-        // Initial state
+        // 初始状态
         renderHistory();
     }
 
@@ -111,9 +116,7 @@ public class SearchActivity extends BaseActivity {
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
-    /**
-     * Perform search from button click — adds to history.
-     */
+    /** 从按钮或软键盘提交搜索，并记录关键词。 */
     private void performSearch() {
         String query = searchInput.getText().toString().trim();
         if (query.isEmpty()) {
@@ -124,12 +127,7 @@ public class SearchActivity extends BaseActivity {
         performSearchInternal(query, true);
     }
 
-    /**
-     * Internal search — filters exhibitions and users, updates UI.
-     *
-     * @param query       the search term
-     * @param fromHistory whether this was triggered from history click
-     */
+    /** 筛选展会和用户，并刷新结果区域。 */
     private void performSearchInternal(String query, boolean fromHistory) {
         List<ExhibitorExhibition> exhibitions = ExhibitionManager.search(query);
         List<AdminUser> users = AdminUserManager.search(query);
@@ -145,7 +143,7 @@ public class SearchActivity extends BaseActivity {
             return;
         }
 
-        // Exhibition results section
+        // 展会结果区域
         if (!exhibitions.isEmpty()) {
             addSectionHeader(resultsList, getString(R.string.search_section_exhibitions, exhibitions.size()));
             for (ExhibitorExhibition ex : exhibitions) {
@@ -153,7 +151,7 @@ public class SearchActivity extends BaseActivity {
             }
         }
 
-        // User results section
+        // 用户结果区域
         if (!users.isEmpty()) {
             addSectionHeader(resultsList, getString(R.string.search_section_users, users.size()));
             for (AdminUser user : users) {
@@ -162,9 +160,7 @@ public class SearchActivity extends BaseActivity {
         }
     }
 
-    /**
-     * Show empty state when no results found.
-     */
+    /** 没有结果时显示空状态。 */
     private void showEmptyResults(String query) {
         LinearLayout emptyBox = new LinearLayout(this);
         emptyBox.setOrientation(LinearLayout.VERTICAL);
@@ -194,15 +190,13 @@ public class SearchActivity extends BaseActivity {
         resultsList.addView(emptyBox, fullWidthParams(8));
     }
 
-    /**
-     * Clear results display.
-     */
+    /** 清空搜索结果。 */
     private void clearResults() {
         resultsList.removeAllViews();
         resultsCount.setVisibility(View.GONE);
     }
 
-    // ── Exhibition result card ──────────────────────────────────────
+    // ── 展会结果卡片 ─────────────────────────────────────────────
 
     private LinearLayout createExhibitionCard(ExhibitorExhibition ex) {
         LinearLayout card = new LinearLayout(this);
@@ -221,7 +215,7 @@ public class SearchActivity extends BaseActivity {
         return card;
     }
 
-    // ── User result card ────────────────────────────────────────────
+    // ── 用户结果卡片 ─────────────────────────────────────────────
 
     private LinearLayout createUserCard(AdminUser user) {
         LinearLayout card = new LinearLayout(this);
@@ -239,7 +233,7 @@ public class SearchActivity extends BaseActivity {
         return card;
     }
 
-    // ── Search history ──────────────────────────────────────────────
+    // ── 搜索历史 ─────────────────────────────────────────────────
 
     private void addToHistory(String query) {
         searchHistory.remove(query);
@@ -296,14 +290,9 @@ public class SearchActivity extends BaseActivity {
         renderHistory();
     }
 
-    // ── UI helpers ──────────────────────────────────────────────────
+    // ── 界面辅助方法 ─────────────────────────────────────────────
 
-    /**
-     * Add a section header to the results list.
-     *
-     * @param parent the container to add the header to
-     * @param title  the section title text
-     */
+    /** 向结果列表添加分组标题。 */
     private void addSectionHeader(LinearLayout parent, String title) {
         TextView header = new TextView(this);
         header.setText(title);

@@ -8,8 +8,8 @@
     "dev": "nodemon src/index.js",
     "test": "jest",
     "lint": "eslint src/",
-    "db:migrate": "node src/config/database.js migrate",
-    "db:seed": "node src/config/database.js seed"
+    "db:migrate": "node src/config/migrate.js migrate",
+    "db:seed": "node src/config/migrate.js seed"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

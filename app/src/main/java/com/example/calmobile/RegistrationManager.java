@@ -56,6 +56,16 @@ public class RegistrationManager {
         return new ArrayList<>(fallbackRegistrations);
     }
 
+    public boolean hasActiveRegistration(String exhibitionTitle) {
+        for (Registration registration : list()) {
+            if (registration.getStatus() != Registration.Status.CANCELLED
+                    && registration.getExhibitionTitle().equals(exhibitionTitle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean cancel(String id) {
         DatabaseHelper dbHelper = DatabaseHelper.getInstance();
         if (dbHelper != null) {

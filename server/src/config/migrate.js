@@ -195,7 +195,7 @@ if (require.main === module) {
       .then(() => process.exit(0))
       .catch(() => process.exit(1));
   } else {
-    console.log('用法：node database.js [migrate|seed]');
+    console.log('用法：node src/config/migrate.js [migrate|seed]');
     process.exit(1);
   }
 }

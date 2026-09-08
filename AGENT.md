@@ -4,7 +4,7 @@
 
 - 与用户对话时使用中文。
 - 回答保持简洁，先给结论，再给必要细节。
-- 重要技术选型必须先询问用户再执行，包括但不限于后端技术栈、认证方案、数据库/缓存、网络库、富文本/媒体方案、正式包名、最低支持 Android 版本、发布签名方案。
+- 重要技术选型必须先询问用户再执行，包括但不限于认证方案、数据库/缓存、富文本/媒体方案、正式包名、发布签名方案。
 
 ## 上下文与工具使用
 
@@ -14,74 +14,41 @@
 
 ## 项目约束
 
-- 项目目标：Android 移动端展会排期与报名应用。
-- GitHub 仓库：https://github.com/Blathroat/calMobile
-- 原始需求来源：根目录 TODO.md，不要覆盖或删除该文件。
-- 移动端需求文档：docs/MOBILE_REQUIREMENTS.md。
-- 主要语言：Java。
-- 当前 Android API 30：compileSdk 30、targetSdk 30。
+- **项目目标**：Android 移动端展会排期与报名应用。
+- **GitHub 仓库**：https://github.com/Blathroat/calMobile
+- **原始需求来源**：根目录 TODO.md，不要覆盖或删除该文件。
+- **移动端需求文档**：docs/MOBILE_REQUIREMENTS.md。
+- **主要语言**：Java。
+- **Android SDK**：compileSdk 34、targetSdk 34、minSdk 24、buildToolsVersion 36.0.0（原始需求 API 30 已更新至 API 34）。
+- **Gradle**：8.5（通过 wrapper 包含）。
+- **Launcher Activity**：LoginActivity（不是 MainActivity）。
 - 不要擅自改用 Kotlin、Compose、Flutter、React Native 或其他跨端方案。
-- 不要在未确认前引入 Room、Retrofit、Firebase、Hilt、AndroidX Navigation 等重要依赖或框架。
+- 不要在未确认前引入 Firebase、Hilt、AndroidX Navigation 等新框架。
+
+## 已引入的依赖
+
+以下依赖已在 `app/build.gradle` 中配置，可以使用：
+
+| 类别 | 依赖 |
+|------|------|
+| AndroidX | appcompat, core-ktx, lifecycle (livedata/viewmodel/runtime), recyclerview, swiperefreshlayout |
+| Material | com.google.android.material:material:1.11.0 |
+| Database | androidx.room:room-runtime + compiler:2.6.1 |
+| Network | retrofit2:2.9.0, converter-gson:2.9.0, okhttp3 logging-interceptor:4.12.0 |
+| JSON | com.google.code.gson:gson:2.10.1 |
+| Image | com.github.bumptech.glide:glide:4.16.0 |
+| Test | junit:4.13.2, espresso-core:3.5.1 |
 
 ## 当前工程状态
 
-- 当前阶段：功能完整，正在优化和增强。
-- UI 使用 XML 布局和平台 Activity，避免引入未确认依赖。
-- 已实现功能（本地假数据）：
-  - 首页月视图展会排期（4.1）
-  - 展会详情展示（4.2）
-  - 报名表单提交（4.3）
-  - 我的报名列表与取消功能（4.4）
-  - 个人主页与账号设置（4.5）
-  - 用户公开页（4.6）
-  - 展商后台（4.7）
-  - 展会报名管理（4.8）
-  - 管理后台（4.9）
-- 已完成的增强功能：
-  - SQLite 本地持久化
-  - 本地认证系统
-  - 富文本查看器
-  - 搜索功能
-  - 数据导出
-  - 通知系统
-  - 日历集成
-  - UI 动画和美化
-  - 单元测试覆盖
-- 已完成的优化：
-  - 更多单元测试（AuthManagerTest, DatabaseHelperTest, ExportManagerTest, NotificationHelperTest, CalendarHelperTest）
-  - 代码结构优化（BaseActivity 基类）
-  - 集成测试（42 个测试覆盖核心工作流）
-  - 真实调试验证（模拟器端到端测试）
-- 已完成的 UI 优化：
-  - Material Design 3 色彩系统（teal 主色、amber 辅色）
-  - 4dp 间距规范（dimens.xml）
-  - 组件样式系统（styles.xml）
-  - 15 个 drawable 资源（按钮、输入框、卡片、标签等）
-  - 9 个布局文件更新
-  - 首页固定底部导航栏（首页、个人、展商、管理）
-  - 首页顶部搜索入口，可直接进入 SearchActivity
-  - 首页日历有展会日期块已做垂直居中修正
-  - 个人页底部退出登录入口
-  - 访客权限限制：未登录仅可浏览首页和展会详情
-  - 展商/管理后台程序化按钮统一使用 CalMobile 按钮样式
-  - 展会详情、报名表单与展商展会表单独立 Activity 页面
-- 已完成的文档：
-  - README.md（中文版）
-  - ARCHITECTURE.md（627 行，中文版）
-  - AGENT.md 更新
-  - docs/PROJECT_REVIEW.md 项目 review 与改进清单
-- 最近验证：
-  - `node scripts/smoke-check.js`：66 项检查通过（含新导航、访客/权限辅助类和展会二级表单页）
-  - `gradlew.bat :app:testDebugUnitTest :app:assembleDebug`：BUILD SUCCESSFUL
-  - ADB 模拟器验证：`emulator-5554` 可打开首页、更多、管理后台、展商后台；More 通知设置保持在 More 页内
-- 新需求（已完成代码实现）：
-  - 底部导航从 5 标签缩减为 4 标签（移除"更多"），`layout_bottom_nav.xml` 的 `weightSum` 已改为 4
-  - 已新增 `GuestHelper.java`（访客状态判断 `isGuest()`）和 `PermissionHelper.java`（角色权限校验 `hasPermission()`）
-  - 已新增 `ExhibitionFormActivity.java`（展商创建/编辑展会的二级表单页）
-  - 退出登录迁移至个人页底部，底部导航切换保留导航栏并使用左右滑动动画
-  - smoke-check.js 已覆盖对应静态检查并通过
-- 待实现功能：
-  - 网络层（API 对接）
+- **当前阶段**：功能完整，正在优化和增强。
+- UI 使用 XML 布局和平台 Activity。
+- 已完成代码实现的功能：
+  - 底部导航 4 标签（首页/展商/管理/个人）
+  - GuestHelper 访客状态判断、PermissionHelper 角色权限校验
+  - ExhibitionFormActivity 展商创建/编辑展会
+- **待实现功能**：
+  - 网络层（API 对接，Retrofit 已引入）
   - 媒体上传
   - 推送通知
 
@@ -93,28 +60,22 @@ calMobile/
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── java/com/example/calmobile/
-│   │   │   │   ├── Activities (UI 层)
-│   │   │   │   ├── Managers (业务逻辑)
+│   │   │   │   ├── Activities (UI 层，继承 BaseActivity)
+│   │   │   │   ├── Managers (业务逻辑，SQLite + 内存双模式)
 │   │   │   │   ├── Models (数据模型)
 │   │   │   │   └── Helpers (工具类)
 │   │   │   ├── res/
 │   │   │   │   ├── layout/ (XML 布局)
-│   │   │   │   ├── values/ (字符串、颜色、主题)
-│   │   │   │   ├── anim/ (动画)
+│   │   │   │   ├── values/ (strings.xml, colors.xml, themes.xml, dimens.xml)
+│   │   │   │   ├── anim/ (过渡动画)
 │   │   │   │   └── drawable/ (图形资源)
 │   │   │   └── AndroidManifest.xml
 │   │   └── test/
-│   │       └── java/com/example/calmobile/
-│   │           ├── 单元测试
-│   │           └── 集成测试
+│   │       └── java/com/example/calmobile/ (单元测试 + 集成测试)
 │   └── build.gradle
-├── build.gradle
-├── settings.gradle
-├── gradle/
-├── scripts/
-│   └── smoke-check.js
+├── server/ (Node.js 后端，独立运行)
+├── scripts/smoke-check.js (57 项静态检查)
 ├── docs/
-│   └── MOBILE_REQUIREMENTS.md
 ├── AGENT.md
 ├── ARCHITECTURE.md
 ├── TODO.md
@@ -124,15 +85,13 @@ calMobile/
 ## 核心类职责
 
 ### Activities (UI 层)
-- **BaseActivity**: 基类，提供通用 UI 工具方法
-- **MainActivity**: 首页，展示展会月历、展会列表、我的报名和底部导航
+- **BaseActivity**: 基类，提供 dp 转换、按钮样式、面板动画、导航等通用方法
+- **LoginActivity**: 启动页/登录页（Launcher）
+- **MainActivity**: 首页，展会月历 + 4 标签底部导航（首页/展商/管理/个人）
 - **ExhibitionDetailActivity**: 展会详情独立页面
 - **RegistrationFormActivity**: 报名表单独立页面
 - **ExhibitionFormActivity**: 展商创建/编辑展会的二级表单页
-- **MoreActivity**: 更多/账号页面，提供搜索、通知设置、数据导出提示和退出登录
-- **LoginActivity**: 登录页面
-- **RegisterActivity**: 注册页面
-- **ProfileActivity**: 个人主页和账号设置
+- **ProfileActivity**: 个人主页和账号设置（含退出登录）
 - **UserPublicActivity**: 用户公开页面
 - **ExhibitorBackendActivity**: 展商后台
 - **RegistrationManagementActivity**: 报名管理
@@ -140,9 +99,9 @@ calMobile/
 - **SearchActivity**: 搜索页面
 
 ### Managers (业务逻辑)
-- **ExhibitionManager**: 展会管理，支持 SQLite 和内存存储
-- **RegistrationManager**: 报名管理，支持 SQLite 和内存存储
-- **AdminUserManager**: 用户管理，支持 SQLite 和内存存储
+- **ExhibitionManager**: 展会 CRUD，SQLite + 内存双模式
+- **RegistrationManager**: 报名 CRUD，SQLite + 内存双模式
+- **AdminUserManager**: 用户管理，SQLite + 内存双模式
 - **AuthManager**: 认证管理（当前为内存存储）
 
 ### Models (数据模型)
@@ -154,33 +113,21 @@ calMobile/
 - **DatabaseHelper**: SQLite 数据库单例
 - **NotificationHelper**: 通知管理
 - **CalendarHelper**: 日历集成
-- **ExportManager**: 数据导出
-- **RichTextViewer**: 富文本查看器
-- **GuestHelper**: 访客状态判断
-- **PermissionHelper**: 角色权限校验
-
-## 已知问题
-
-- 认证系统当前为内存存储（后续集成 SQLite）
-- 示例数据为硬编码（后续替换为 API 数据）
-- 富文本编辑器未实现（仅查看器）
-
-## 开发注意事项
-
-- 所有 Activity 继承自 BaseActivity
-- 数据管理类使用 SQLite + 内存双模式
-- 测试文件位于 app/src/test/java/com/example/calmobile/
-- 运行 `node scripts/smoke-check.js` 验证项目结构
+- **ExportManager**: CSV 数据导出
+- **RichTextViewer**: HTML 富文本渲染
+- **GuestHelper**: 访客状态判断（isGuest()）
+- **PermissionHelper**: 角色权限校验（hasPermission()）
 
 ## 开发与验证
 
 优先验证顺序：
 
-1. 运行 `node scripts/smoke-check.js` 检查项目骨架与文档是否完整。
-2. 若 Gradle 可用，运行 `gradle :app:assembleDebug` 或使用 Android Studio 同步并构建。
-3. 若以后添加 Gradle Wrapper，优先运行 `gradlew.bat :app:assembleDebug`。
-4. 若 adb 可用，安装并打开 App，进行真机或模拟器手动验证。
-5. 修改 Java 或 XML 后，检查相关文件诊断并运行相邻测试。
+1. `node scripts/smoke-check.js` — 57 项静态检查（项目骨架、文档、导航、权限辅助类）
+2. `gradlew.bat :app:testDebugUnitTest` — 单元测试
+3. `gradlew.bat :app:assembleDebug` — 构建 APK
+4. ADB 模拟器验证（如可用）
+
+修改 Java 或 XML 后，检查相邻测试并运行 smoke-check。
 
 ## Git 与 GitHub 流程
 

@@ -23,7 +23,7 @@ CalMobile 采用分层架构模式，关注点清晰分离：
 - **数据层**：数据库帮助类和模型
 - **工具层**：辅助功能类
 
-应用仅使用 Android SDK API，除 JUnit 测试外无外部依赖。
+应用已引入 AndroidX、Material Design、Room、Retrofit、Glide 等依赖，详见 `app/build.gradle`。
 
 ## 项目结构
 
@@ -36,6 +36,9 @@ app/src/main/java/com/example/calmobile/
 │   ├── RegisterActivity.java      # 注册页面
 │   ├── ProfileActivity.java       # 个人资料和设置
 │   ├── UserPublicActivity.java    # 用户公开主页
+│   ├── ExhibitionDetailActivity.java  # 展会详情页面
+│   ├── RegistrationFormActivity.java  # 报名表单页面
+│   ├── ExhibitionFormActivity.java    # 展商创建/编辑展会表单
 │   ├── ExhibitorBackendActivity.java  # 展商管理后台
 │   ├── RegistrationManagementActivity.java  # 报名管理
 │   ├── AdminBackendActivity.java  # 管理员后台
@@ -54,7 +57,9 @@ app/src/main/java/com/example/calmobile/
 │   ├── NotificationHelper.java    # 通知管理
 │   ├── CalendarHelper.java        # 日历集成
 │   ├── ExportManager.java         # CSV 数据导出
-│   └── RichTextViewer.java        # HTML 文本渲染
+│   ├── RichTextViewer.java        # HTML 文本渲染
+│   ├── GuestHelper.java           # 访客状态判断
+│   └── PermissionHelper.java      # 角色权限校验
 └── CalMobileApp.java              # Application 类
 ```
 

@@ -7,7 +7,7 @@
     android:paddingHorizontal="@dimen/spacing_16dp"
     android:paddingTop="@dimen/spacing_16dp">
 
-    <!-- Back button row -->
+    <!-- 返回与标题区域 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -29,22 +29,22 @@
             android:text="@string/search_title"
             android:textAppearance="@style/TextAppearance.Title" />
 
-        <!-- Spacer for symmetry -->
+        <!-- 保持标题居中 -->
         <View
             android:layout_width="@dimen/spacing_56dp"
             android:layout_height="@dimen/spacing_1dp" />
     </LinearLayout>
 
-    <!-- Search input card -->
+    <!-- 搜索输入区域 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/spacing_16dp"
+        android:layout_marginTop="@dimen/spacing_12dp"
         android:background="@drawable/bg_card"
         android:elevation="@dimen/elevation_low"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="@dimen/spacing_8dp">
+        android:padding="@dimen/spacing_6dp">
 
         <EditText
             android:id="@+id/search_input"
@@ -53,6 +53,7 @@
             android:layout_weight="1"
             android:hint="@string/search_hint"
             android:inputType="text"
+            android:imeOptions="actionSearch"
             android:maxLines="1"
             android:singleLine="true"
             android:background="@android:color/transparent"
@@ -69,7 +70,7 @@
             style="@style/Widget.CalMobile.Button.Primary" />
     </LinearLayout>
 
-    <!-- Search history section -->
+    <!-- 搜索历史区域 -->
     <LinearLayout
         android:id="@+id/search_history_section"
         android:layout_width="match_parent"
@@ -107,7 +108,7 @@
             android:orientation="horizontal" />
     </LinearLayout>
 
-    <!-- Results count -->
+    <!-- 结果数量 -->
     <TextView
         android:id="@+id/search_results_count"
         android:layout_width="match_parent"
@@ -116,7 +117,7 @@
         android:textAppearance="@style/TextAppearance.BodySmall"
         android:visibility="gone" />
 
-    <!-- Scrollable results -->
+    <!-- 可滚动结果列表 -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"

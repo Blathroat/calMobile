@@ -182,7 +182,7 @@ router.post('/', authenticate, authorize(['exhibitor', 'admin']), validateExhibi
       `INSERT INTO exhibitions (id, title, venue, day, month, year, time, status, open_for_registration, description, category, exhibitor_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [exhibitionId, title, venue, day, month, year, time, 
-       status || '报名中', openForRegistration !== false, description || '', category || '', req.user.userId]
+        status || '报名中', openForRegistration !== false, description || '', category || '', req.user.userId]
     );
     
     // 查询新创建的展会

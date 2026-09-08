@@ -25,6 +25,9 @@ import java.util.Locale;
  */
 public class ProfileActivity extends BaseActivity {
 
+    /** 从个人栏进入时直接打开编辑模式。 */
+    public static final String EXTRA_EDIT_MODE = "edit_mode";
+
     /** In-memory profile data (static to survive activity recreation within process). */
     private static String nickname = "";
     private static String bio = "";
@@ -86,6 +89,14 @@ public class ProfileActivity extends BaseActivity {
         });
 
         renderDisplayMode();
+        if (getIntent().getBooleanExtra(EXTRA_EDIT_MODE, false)) {
+            editFieldsSection.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    renderEditMode();
+                }
+            }, 120);
+        }
     }
 
     @Override

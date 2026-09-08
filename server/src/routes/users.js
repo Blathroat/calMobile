@@ -6,7 +6,6 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
-const bcrypt = require('bcryptjs');
 const { query } = require('../config/pool');
 const { authenticate, authorize } = require('../middleware/auth');
 
@@ -178,7 +177,7 @@ router.put('/:id', authenticate, validateUserUpdate, async (req, res) => {
       });
     }
     
-    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    updates.push('updated_at = CURRENT_TIMESTAMP');
     values.push(id);
     
     // 执行更新

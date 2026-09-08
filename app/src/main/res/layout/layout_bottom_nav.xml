@@ -19,6 +19,8 @@
         android:layout_height="@dimen/nav_bar_height"
         android:gravity="center_vertical"
         android:orientation="horizontal"
+        android:paddingLeft="@dimen/spacing_8dp"
+        android:paddingRight="@dimen/spacing_8dp"
         android:weightSum="4">
 
         <!-- ── Home tab ─────────────────────────────────────── -->

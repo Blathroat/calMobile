@@ -58,4 +58,18 @@ public class RegistrationManagerTest {
         assertEquals(false, manager.cancel("missing-id"));
         assertTrue(manager.list().isEmpty());
     }
+
+    @Test
+    public void activeRegistrationDetectsOnlyNonCancelledMatchingTitle() {
+        RegistrationManager manager = new RegistrationManager();
+        Registration registration = manager.submit(
+                "绿色能源装备展", 12, "10:00-18:00", "广州琶洲展馆 A 区",
+                "张三", "采购负责人", "需要洽谈");
+
+        assertTrue(manager.hasActiveRegistration("绿色能源装备展"));
+        assertEquals(false, manager.hasActiveRegistration("跨境电商选品会"));
+
+        manager.cancel(registration.getId());
+        assertEquals(false, manager.hasActiveRegistration("绿色能源装备展"));
+    }
 }

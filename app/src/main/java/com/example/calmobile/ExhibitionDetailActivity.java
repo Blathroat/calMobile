@@ -10,18 +10,17 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-/**
- * Activity displaying exhibition details received via Intent extras.
- * Shows title, venue, time, status, description, and provides buttons
- * for registration, reminder, and calendar integration.
- */
+/** 接收页面参数并展示展会详情，提供报名和系统日历操作。 */
 public class ExhibitionDetailActivity extends BaseActivity {
+
+    public static final String EXTRA_EXHIBITION_ID = "exhibition_id";
 
     private LinearLayout detailContent;
     private LinearLayout detailActions;
 
-    // Exhibition data from Intent
+    // 页面参数中的展会信息
     private int day;
+    private int month;
     private String title;
     private String venue;
     private String time;
@@ -29,8 +28,9 @@ public class ExhibitionDetailActivity extends BaseActivity {
     private boolean openForRegistration;
     private String description;
     private String category;
+    private String exhibitionId;
 
-    /** Tracks which exhibition is pending calendar permission approval. */
+    /** 标记正在等待日历权限的展会操作。 */
     private boolean pendingCalendarPermission = false;
 
     @Override
@@ -41,9 +41,11 @@ public class ExhibitionDetailActivity extends BaseActivity {
         detailContent = findViewById(R.id.detail_content);
         detailActions = findViewById(R.id.detail_actions);
 
-        // Read exhibition data from Intent extras
+        // 读取页面参数
         Intent intent = getIntent();
         day = intent.getIntExtra("day", 1);
+        month = intent.getIntExtra("month", 6);
+        exhibitionId = intent.getStringExtra(EXTRA_EXHIBITION_ID);
         title = intent.getStringExtra("title");
         venue = intent.getStringExtra("venue");
         time = intent.getStringExtra("time");
@@ -52,7 +54,7 @@ public class ExhibitionDetailActivity extends BaseActivity {
         description = intent.getStringExtra("description");
         category = intent.getStringExtra("category");
 
-        // Back button
+        // 返回按钮
         TextView backBtn = findViewById(R.id.detail_back);
         applyRippleToBackButton(backBtn);
         backBtn.setOnClickListener(new View.OnClickListener() {
@@ -72,9 +74,7 @@ public class ExhibitionDetailActivity extends BaseActivity {
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
-    /**
-     * Populate the detail content card with exhibition information.
-     */
+    /** 填充展会详情卡片。 */
     private void buildDetailContent() {
         detailContent.removeAllViews();
 
@@ -84,13 +84,13 @@ public class ExhibitionDetailActivity extends BaseActivity {
         addDivider(detailContent);
 
         addText(detailContent,
-                "时间：6月" + day + "日 " + time,
+                getString(R.string.detail_time, month, day, time),
                 R.color.text_secondary, 15, Typeface.NORMAL);
         addText(detailContent,
-                "地点：" + venue,
+                getString(R.string.detail_venue, venue),
                 R.color.text_secondary, 15, Typeface.NORMAL);
         addText(detailContent,
-                "状态：" + status,
+                getString(R.string.detail_status, status),
                 openForRegistration ? R.color.status_open : R.color.status_closed,
                 15, Typeface.BOLD);
 
@@ -98,17 +98,57 @@ public class ExhibitionDetailActivity extends BaseActivity {
 
         addText(detailContent, description, R.color.text_primary, 15, Typeface.NORMAL);
         addText(detailContent,
-                "说明：当前为本地假数据演示，报名结果不会提交到服务器。",
+                getString(R.string.detail_local_demo_note),
                 R.color.text_secondary, 14, Typeface.NORMAL);
     }
 
-    /**
-     * Build the action buttons: register, calendar toggle.
-     */
+    /** 构建报名与日历操作按钮。 */
     private void buildActionButtons() {
         detailActions.removeAllViews();
 
-        // Registration button
+        // 管理页详情提供与展商后台一致的编辑和报名入口。
+        if (exhibitionId != null && AuthManager.getInstance().canAccessExhibitor()) {
+            LinearLayout manageRow = new LinearLayout(this);
+            manageRow.setOrientation(LinearLayout.HORIZONTAL);
+
+            Button editButton = new Button(this);
+            styleSecondaryButton(editButton);
+            editButton.setText(R.string.exhibitor_edit_exhibition);
+            editButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Intent editIntent = new Intent(ExhibitionDetailActivity.this,
+                            ExhibitionFormActivity.class);
+                    editIntent.putExtra(ExhibitionFormActivity.EXTRA_EXHIBITION_ID, exhibitionId);
+                    navigateTo(editIntent);
+                }
+            });
+            LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            editParams.setMargins(0, 0, dp(4), 0);
+            manageRow.addView(editButton, editParams);
+
+            Button registrationsButton = new Button(this);
+            styleSecondaryButton(registrationsButton);
+            registrationsButton.setText(R.string.reg_mgmt_nav_btn);
+            registrationsButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Intent registrationsIntent = new Intent(ExhibitionDetailActivity.this,
+                            RegistrationManagementActivity.class);
+                    registrationsIntent.putExtra(RegistrationManagementActivity.EXTRA_EXHIBITION_ID,
+                            exhibitionId);
+                    navigateTo(registrationsIntent);
+                }
+            });
+            LinearLayout.LayoutParams registrationsParams = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            registrationsParams.setMargins(dp(4), 0, 0, 0);
+            manageRow.addView(registrationsButton, registrationsParams);
+            detailActions.addView(manageRow, fullWidthParams(0));
+        }
+
+        // 报名按钮
         Button registerButton = new Button(this);
         registerButton.setAllCaps(false);
         final boolean canRegister = AuthManager.getInstance().canRegisterForExhibitions();
@@ -134,6 +174,7 @@ public class ExhibitionDetailActivity extends BaseActivity {
                 Intent regIntent = new Intent(ExhibitionDetailActivity.this,
                         RegistrationFormActivity.class);
                 regIntent.putExtra("day", day);
+                regIntent.putExtra("month", month);
                 regIntent.putExtra("title", title);
                 regIntent.putExtra("venue", venue);
                 regIntent.putExtra("time", time);
@@ -146,7 +187,15 @@ public class ExhibitionDetailActivity extends BaseActivity {
         });
         detailActions.addView(registerButton, fullWidthParams(0));
 
-        // Calendar toggle button (add/remove)
+        TextView registrationHint = new TextView(this);
+        registrationHint.setText(openForRegistration
+                ? (canRegister ? R.string.registration_local_demo_hint
+                        : R.string.auth_login_required_registration)
+                : R.string.registration_closed);
+        registrationHint.setTextAppearance(this, R.style.TextAppearance_Caption);
+        detailActions.addView(registrationHint, fullWidthParams(6));
+
+        // 系统日历添加或移除按钮
         final boolean[] isInCalendar = {CalendarHelper.isInCalendar(this, title, day)};
         final Button calendarToggleBtn = new Button(this);
         calendarToggleBtn.setAllCaps(false);
@@ -163,13 +212,13 @@ public class ExhibitionDetailActivity extends BaseActivity {
                     CalendarHelper.removeFromCalendar(ExhibitionDetailActivity.this, title, day);
                     isInCalendar[0] = false;
                     Toast.makeText(ExhibitionDetailActivity.this,
-                            "已从日历移除", Toast.LENGTH_SHORT).show();
+                            R.string.calendar_removed_feedback, Toast.LENGTH_SHORT).show();
                 } else {
                     CalendarHelper.addToCalendar(ExhibitionDetailActivity.this,
                             title, venue, day, time, description);
                     isInCalendar[0] = true;
                     Toast.makeText(ExhibitionDetailActivity.this,
-                            "已添加到日历", Toast.LENGTH_SHORT).show();
+                            R.string.calendar_added_feedback, Toast.LENGTH_SHORT).show();
                 }
                 updateCalendarButton(calendarToggleBtn, isInCalendar[0]);
             }

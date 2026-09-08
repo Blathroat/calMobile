@@ -7,9 +7,7 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-/**
- * Registration activity for new user account creation.
- */
+/** 创建本地演示账号。 */
 public class RegisterActivity extends BaseActivity {
 
     private EditText usernameInput;
@@ -43,7 +41,7 @@ public class RegisterActivity extends BaseActivity {
         backToLoginBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                finish(); // go back to LoginActivity
+                finish(); // 返回登录页
             }
         });
     }
@@ -54,7 +52,7 @@ public class RegisterActivity extends BaseActivity {
         String password = passwordInput.getText().toString();
         String confirmPassword = passwordConfirmInput.getText().toString();
 
-        // Client-side validation
+        // 客户端输入校验
         if (!password.equals(confirmPassword)) {
             showError("两次输入的密码不一致");
             return;
@@ -66,10 +64,10 @@ public class RegisterActivity extends BaseActivity {
             return;
         }
 
-        // Registration success
+        // 注册成功
         errorText.setVisibility(View.GONE);
         Toast.makeText(this, "注册成功，请登录", Toast.LENGTH_SHORT).show();
-        finish(); // back to LoginActivity
+        finish(); // 返回登录页
     }
 
     private void showError(String message) {

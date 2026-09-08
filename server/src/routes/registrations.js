@@ -8,7 +8,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
 const { query } = require('../config/pool');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
 
 /**
  * 验证请求数据
@@ -171,7 +171,7 @@ router.post('/', authenticate, validateRegistration, async (req, res) => {
       `INSERT INTO registrations (id, exhibition_id, exhibition_title, exhibition_day, exhibition_time, exhibition_venue, visitor_name, visitor_type, needs_summary, status, visitor_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10)`,
       [registrationId, exhibitionId, exhibition.title, exhibition.day, exhibition.time, exhibition.venue,
-       visitorName, visitorType, needsSummary || '', req.user.userId]
+        visitorName, visitorType, needsSummary || '', req.user.userId]
     );
     
     // 查询新创建的报名

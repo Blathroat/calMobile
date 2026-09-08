@@ -7,10 +7,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 
-/**
- * Login activity for user authentication.
- * Redirects to MainActivity if the user is already logged in.
- */
+/** 处理用户登录；已登录用户直接进入首页。 */
 public class LoginActivity extends BaseActivity {
 
     private EditText usernameInput;
@@ -21,7 +18,7 @@ public class LoginActivity extends BaseActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // If already logged in, go straight to MainActivity
+        // 已登录时直接进入首页
         if (AuthManager.getInstance().isLoggedIn()) {
             startActivity(new Intent(this, MainActivity.class));
             finish();
@@ -65,7 +62,7 @@ public class LoginActivity extends BaseActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Re-check in case user registered and came back
+        // 注册完成返回时再次检查登录状态
         if (AuthManager.getInstance().isLoggedIn()) {
             startActivity(new Intent(this, MainActivity.class));
             finish();
@@ -83,7 +80,7 @@ public class LoginActivity extends BaseActivity {
             return;
         }
 
-        // Login success — go to MainActivity
+        // 登录成功后进入首页
         errorText.setVisibility(View.GONE);
         openHome();
     }

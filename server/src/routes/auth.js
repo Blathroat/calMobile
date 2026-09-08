@@ -10,12 +10,12 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { query } = require('../config/pool');
-
-// JWT 配置
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_here';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your_jwt_refresh_secret_here';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
-const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+const {
+  accessSecret,
+  refreshSecret,
+  accessExpiresIn,
+  refreshExpiresIn
+} = require('../config/auth');
 
 /**
  * 生成访问令牌和刷新令牌
@@ -25,14 +25,14 @@ const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
 function generateTokens(user) {
   const accessToken = jwt.sign(
     { userId: user.id, username: user.username, role: user.role },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
+    accessSecret,
+    { expiresIn: accessExpiresIn }
   );
   
   const refreshToken = jwt.sign(
     { userId: user.id },
-    JWT_REFRESH_SECRET,
-    { expiresIn: JWT_REFRESH_EXPIRES_IN }
+    refreshSecret,
+    { expiresIn: refreshExpiresIn }
   );
   
   return { accessToken, refreshToken };
@@ -231,7 +231,7 @@ router.post('/refresh', async (req, res) => {
     // 验证刷新令牌
     let decoded;
     try {
-      decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
+      decoded = jwt.verify(refreshToken, refreshSecret);
     } catch (error) {
       return res.status(401).json({
         error: '认证失败',

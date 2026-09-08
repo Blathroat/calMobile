@@ -5,9 +5,7 @@
 
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/pool');
-
-// JWT 配置
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_here';
+const { accessSecret } = require('../config/auth');
 
 /**
  * 认证中间件
@@ -29,7 +27,7 @@ async function authenticate(req, res, next) {
     // 验证令牌
     let decoded;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
+      decoded = jwt.verify(token, accessSecret);
     } catch (error) {
       if (error.name === 'TokenExpiredError') {
         return res.status(401).json({
@@ -127,7 +125,7 @@ async function optionalAuth(req, res, next) {
     const token = authHeader.split(' ')[1];
     
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, accessSecret);
       
       const result = await query(
         'SELECT id, username, email, nickname, role, status FROM users WHERE id = $1',

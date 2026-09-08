@@ -91,9 +91,9 @@ calMobile/
 ## 前置要求
 
 - Android Studio Arctic Fox 或更高版本
-- JDK 8 或更高版本
-- 已安装 API 30 的 Android SDK
-- Gradle 7.6.4（已通过 wrapper 包含）
+- JDK 17 或更高版本
+- 已安装 API 34 的 Android SDK
+- Gradle 8.5（已通过 wrapper 包含）
 
 ## 设置说明
 
@@ -115,7 +115,7 @@ cd calMobile
 
 1. 进入 File → Project Structure → SDK Location
 2. 确认 Android SDK location 设置正确
-3. 在 SDK Manager 中确认已安装 API 30
+3. 在 SDK Manager 中确认已安装 API 34
 
 ## 构建说明
 
@@ -260,9 +260,9 @@ node scripts/smoke-check.js
 - **底部导航行为**：4 个标签均分宽度，点击标签时在 `MainActivity` 内容容器中左右滑动切换，并保持底部导航栏可见。
 
 ### 最新验证
-- `node scripts/smoke-check.js` — 66 项脚手架检查通过（含底部导航、访客/权限辅助类、展会二级表单页检查）
+- `node scripts/smoke-check.js` — 56 项脚手架检查通过（含底部导航、访客/权限辅助类、展会二级表单页检查）
 - `gradlew.bat :app:testDebugUnitTest :app:assembleDebug` — BUILD SUCCESSFUL
-- ADB 模拟器验证：首页顶部搜索入口、More 页内通知设置、管理后台和展商后台页面可打开并渲染
+- ADB 模拟器验证：首页顶部搜索入口、通知设置、管理后台和展商后台页面可打开并渲染
 
 ### 待完成功能
 - 网络层（API integration）
@@ -297,16 +297,21 @@ node scripts/smoke-check.js
 
 ## 依赖
 
-### 当前依赖
+### Android 客户端依赖
 
-- **JUnit 4.13.2**：单元测试（仅 testImplementation）
+| 类别 | 依赖 |
+|------|------|
+| AndroidX | appcompat, core-ktx, lifecycle (livedata/viewmodel/runtime), recyclerview, swiperefreshlayout |
+| Material | com.google.android.material:material:1.11.0 |
+| Database | androidx.room:room-runtime + compiler:2.6.1 |
+| Network | retrofit2:2.9.0, converter-gson:2.9.0, okhttp3 logging-interceptor:4.12.0 |
+| JSON | com.google.code.gson:gson:2.10.1 |
+| Image | com.github.bumptech.glide:glide:4.16.0 |
+| Test | junit:4.13.2, espresso-core:3.5.1 |
 
-### 无外部依赖
+### 后端服务器依赖
 
-项目有意仅使用 Android SDK API，以便：
-- 最小化 APK 体积
-- 减少依赖冲突
-- 保持对代码库的完全控制
+详见 `server/package.json`：Express.js + PostgreSQL + JWT
 
 ## 权限
 

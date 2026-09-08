@@ -11,6 +11,7 @@ import android.view.View;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.ImageView;
@@ -22,19 +23,15 @@ import android.widget.Toast;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Main shell activity with in-place bottom navigation.
- * Tabs (Home / Profile / Exhibitor / Admin) switch content inside a
- * single FrameLayout with left/right slide animations.
- */
+/** 主容器页面，在单个 FrameLayout 内切换底部导航页面。 */
 public class MainActivity extends BaseActivity {
 
-    // ── Tab constants ─────────────────────────────────────────────
-    private static final int TAB_HOME = 0;
-    private static final int TAB_PROFILE = 1;
-    private static final int TAB_EXHIBITOR = 2;
-    private static final int TAB_ADMIN = 3;
-    private static final int TAB_COUNT = 4;
+    // ── 页面常量 ─────────────────────────────────────────────────
+    private static final int TAB_HOME = MainTabState.TAB_HOME;
+    private static final int TAB_PROFILE = MainTabState.TAB_PROFILE;
+    private static final int TAB_EXHIBITOR = MainTabState.TAB_EXHIBITOR;
+    private static final int TAB_ADMIN = MainTabState.TAB_ADMIN;
+    private static final int TAB_COUNT = MainTabState.TAB_COUNT;
 
     private static final int[] NAV_IDS = {
             R.id.nav_home, R.id.nav_exhibitor, R.id.nav_admin, R.id.nav_profile
@@ -45,19 +42,23 @@ public class MainActivity extends BaseActivity {
     private static final int[] NAV_ICON_IDS = {
             R.id.nav_home_icon, R.id.nav_exhibitor_icon, R.id.nav_admin_icon, R.id.nav_profile_icon
     };
-    // Mapping from NAV_IDS index to TAB constants
+    // 底部导航索引与页面常量的映射
     private static final int[] NAV_TO_TAB = {
-            TAB_HOME, TAB_EXHIBITOR, TAB_ADMIN, TAB_PROFILE
+            MainTabState.tabForNavigationIndex(0),
+            MainTabState.tabForNavigationIndex(1),
+            MainTabState.tabForNavigationIndex(2),
+            MainTabState.tabForNavigationIndex(3)
     };
 
-    // ── State ─────────────────────────────────────────────────────
+    // ── 页面状态 ─────────────────────────────────────────────────
     private int currentTab = TAB_HOME;
     private final View[] tabViews = new View[TAB_COUNT];
     private FrameLayout contentFrame;
 
-    // ── Home tab fields ───────────────────────────────────────────
+    // ── 首页字段 ─────────────────────────────────────────────────
     private int currentYear = 2026;
-    private int currentMonth = 6; // 1-12
+    private int currentMonth = 6; // 取值范围为 1 至 12
+    private int selectedDay = 12;
     private static final Exhibition[] SAMPLE_EXHIBITIONS = new Exhibition[] {
             new Exhibition(6, 6, "华南智能制造展", "深圳国际会展中心 6 号馆",
                     "09:30-17:00", "报名中", true,
@@ -89,28 +90,30 @@ public class MainActivity extends BaseActivity {
                     "汽车 / 新能源"),
     };
     private TextView homeStatusText;
+    private TextView homeExhibitionsTitle;
     private TextView monthTitleText;
     private GridLayout homeCalendarGrid;
     private LinearLayout homeExhibitionList;
     private LinearLayout homeRegistrationsList;
     private final RegistrationManager registrationManager = new RegistrationManager();
 
-    // ── Exhibitor tab fields ──────────────────────────────────────
+    // ── 展商页字段 ───────────────────────────────────────────────
     private LinearLayout exhListContainer;
     private LinearLayout exhFormContainer;
 
-    // ── Admin tab fields ──────────────────────────────────────────
+    // ── 管理页字段 ───────────────────────────────────────────────
     private static final int ADMIN_TAB_USERS = 0;
     private static final int ADMIN_TAB_EXHIBITIONS = 1;
     private int adminCurrentSubTab = ADMIN_TAB_USERS;
 
     // ══════════════════════════════════════════════════════════════
-    // Lifecycle
+    // 生命周期
     // ══════════════════════════════════════════════════════════════
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        AppSettings.applyWindowColors(this);
         setContentView(R.layout.activity_main);
 
         contentFrame = findViewById(R.id.content_frame);
@@ -119,6 +122,23 @@ public class MainActivity extends BaseActivity {
         showTab(TAB_HOME, false);
         setupBottomNav();
         applyRoleVisibility();
+        showStartupAnnouncement();
+    }
+
+    /** 管理员设置了公告时，在每次进入应用首页提示一次。 */
+    private void showStartupAnnouncement() {
+        if (!AppSettings.isAnnouncementEnabled(this)) {
+            return;
+        }
+        String announcement = AppSettings.getAnnouncement(this);
+        if (announcement.length() == 0) {
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("应用公告")
+                .setMessage(announcement)
+                .setPositiveButton("知道了", null)
+                .show();
     }
 
     @Override
@@ -128,7 +148,7 @@ public class MainActivity extends BaseActivity {
     }
 
     // ══════════════════════════════════════════════════════════════
-    // Tab switching with slide animations
+    // 带滑动动画的页面切换
     // ══════════════════════════════════════════════════════════════
 
     private void showTab(int tabIndex, boolean animate) {
@@ -138,7 +158,7 @@ public class MainActivity extends BaseActivity {
             animate = false;
         }
 
-        // Don't skip if tab was invalidated (tabViews[tabIndex] == null)
+        // 缓存已失效时仍需重新创建页面
         if (tabIndex == currentTab && contentFrame.getChildCount() > 0 && tabViews[tabIndex] != null) {
             return;
         }
@@ -148,7 +168,7 @@ public class MainActivity extends BaseActivity {
                 ? contentFrame.getChildAt(0) : null;
 
         if (animate && oldView != null) {
-            boolean movingRight = tabIndex > currentTab;
+            boolean movingRight = navigationPosition(tabIndex) > navigationPosition(currentTab);
             Animation exitAnim = AnimationUtils.loadAnimation(this,
                     movingRight ? R.anim.slide_out_left : R.anim.slide_out_right);
             Animation enterAnim = AnimationUtils.loadAnimation(this,
@@ -186,6 +206,16 @@ public class MainActivity extends BaseActivity {
         return tabViews[tabIndex];
     }
 
+    /** 按底部导航的视觉顺序返回页面位置，避免页面常量顺序影响动画方向。 */
+    private int navigationPosition(int tabIndex) {
+        for (int i = 0; i < NAV_TO_TAB.length; i++) {
+            if (NAV_TO_TAB[i] == tabIndex) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
     private View buildTabContent(int tabIndex) {
         switch (tabIndex) {
             case TAB_HOME:      return buildHomeContent();
@@ -196,13 +226,13 @@ public class MainActivity extends BaseActivity {
         }
     }
 
-    /** Force-refresh a tab's content on next visit. */
+    /** 下次进入时重新创建指定页面。 */
     private void invalidateTab(int tabIndex) {
         tabViews[tabIndex] = null;
     }
 
     // ══════════════════════════════════════════════════════════════
-    // Bottom nav setup & highlight
+    // 底部导航初始化与高亮
     // ══════════════════════════════════════════════════════════════
 
     private void setupBottomNav() {
@@ -243,22 +273,22 @@ public class MainActivity extends BaseActivity {
         boolean showExhibitor = auth.canAccessExhibitor();
         boolean showAdmin = auth.canAccessAdmin();
 
-        // Profile tab is always visible (for guest mode login access)
+        // 个人页始终可见，访客点击后进入登录页
         findViewById(R.id.nav_profile).setVisibility(View.VISIBLE);
         findViewById(R.id.nav_exhibitor).setVisibility(
                 showExhibitor ? View.VISIBLE : View.GONE);
         findViewById(R.id.nav_admin).setVisibility(
                 showAdmin ? View.VISIBLE : View.GONE);
 
-        // Update weightSum for dynamic equal distribution
+        // 按可见项目数平均分配导航宽度
         LinearLayout navRow = findViewById(R.id.nav_items_row);
-        int visibleCount = 1; // Home is always visible
+        int visibleCount = 1; // 首页始终可见
         if (showExhibitor) visibleCount++;
         if (showAdmin) visibleCount++;
-        visibleCount++; // Profile is always visible
+        visibleCount++; // 个人页始终可见
         navRow.setWeightSum(visibleCount);
 
-        // If guest, profile tab click should go to login
+        // 访客点击个人页时转到登录页
         if (!showProfile) {
             findViewById(R.id.nav_profile).setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -282,7 +312,7 @@ public class MainActivity extends BaseActivity {
         AuthManager auth = AuthManager.getInstance();
         switch (tabIndex) {
             case TAB_PROFILE:
-                return true; // Profile tab is always accessible (guest goes to login)
+                return true; // 访客点击个人页时会转到登录页
             case TAB_EXHIBITOR:
                 return auth.canAccessExhibitor();
             case TAB_ADMIN:
@@ -303,20 +333,47 @@ public class MainActivity extends BaseActivity {
     }
 
     // ══════════════════════════════════════════════════════════════
-    // Home content
+    // 首页内容
     // ══════════════════════════════════════════════════════════════
 
     private ScrollView buildHomeContent() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(24), dp(20), dp(32));
+        root.setPadding(dp(16), dp(18), dp(16), dp(32));
 
-        // Header
-        addText(root, getString(R.string.app_name), R.color.text_primary, 22, Typeface.BOLD);
-        homeStatusText = addText(root, getString(R.string.home_status),
-                R.color.text_secondary, 14, Typeface.NORMAL);
+        // 首页顶部采用深色欢迎卡，先给出今天的节奏，再进入日历和展会列表。
+        LinearLayout hero = new LinearLayout(this);
+        hero.setOrientation(LinearLayout.VERTICAL);
+        hero.setPadding(dp(20), dp(20), dp(20), dp(20));
+        hero.setBackgroundResource(R.drawable.bg_home_hero);
 
-        // Search bar
+        LinearLayout heroTop = new LinearLayout(this);
+        heroTop.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView brand = addText(heroTop, getString(R.string.app_name),
+                R.color.text_on_primary, 19, Typeface.BOLD);
+        brand.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        brand.setLetterSpacing(0.01f);
+        TextView mark = new TextView(this);
+        mark.setText(R.string.home_brand_mark);
+        mark.setTextColor(getResources().getColor(R.color.primary));
+        mark.setTextSize(16);
+        mark.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        mark.setGravity(android.view.Gravity.CENTER);
+        mark.setBackgroundResource(R.drawable.bg_brand_mark);
+        LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+        markParams.gravity = android.view.Gravity.RIGHT;
+        heroTop.addView(mark, markParams);
+        hero.addView(heroTop, fullWidthParams(0));
+
+        TextView heroTitle = addText(hero, getString(R.string.home_hero_title),
+                R.color.text_on_primary, 23, Typeface.BOLD);
+        heroTitle.setPadding(0, dp(18), 0, 0);
+        homeStatusText = addText(hero, getString(R.string.home_status),
+                R.color.primary_container, 13, Typeface.NORMAL);
+        homeStatusText.setPadding(0, dp(6), 0, 0);
+        root.addView(hero, fullWidthParams(0));
+
+        // 搜索入口
         LinearLayout searchBar = new LinearLayout(this);
         searchBar.setOrientation(LinearLayout.HORIZONTAL);
         searchBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -339,36 +396,15 @@ public class MainActivity extends BaseActivity {
         searchIcon.setImageResource(android.R.drawable.ic_menu_search);
         searchIcon.setColorFilter(getResources().getColor(R.color.text_tertiary));
         searchBar.addView(searchIcon, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        root.addView(searchBar, fullWidthParams(16));
+        root.addView(searchBar, fullWidthParams(14));
 
-        // Calendar section
+        // 日历区域
         LinearLayout calCard = new LinearLayout(this);
         calCard.setOrientation(LinearLayout.VERTICAL);
         calCard.setPadding(dp(16), dp(16), dp(16), dp(16));
         styleCard(calCard);
         final float[] touchX = new float[1];
-        calCard.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, android.view.MotionEvent event) {
-                switch (event.getAction()) {
-                    case android.view.MotionEvent.ACTION_DOWN:
-                        touchX[0] = event.getX();
-                        return true;
-                    case android.view.MotionEvent.ACTION_UP:
-                        float dx = event.getX() - touchX[0];
-                        if (Math.abs(dx) > 100) {
-                            if (dx > 0) {
-                                prevMonth();
-                            } else {
-                                nextMonth();
-                            }
-                            return true;
-                        }
-                        return false;
-                }
-                return false;
-            }
-        });
+        calCard.setOnTouchListener(createMonthSwipeListener(touchX));
 
         LinearLayout monthNav = new LinearLayout(this);
         monthNav.setOrientation(LinearLayout.HORIZONTAL);
@@ -386,6 +422,7 @@ public class MainActivity extends BaseActivity {
                 prevMonth();
             }
         });
+        prevBtn.setOnTouchListener(createMonthSwipeListener(new float[1]));
         monthNav.addView(prevBtn, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -412,43 +449,44 @@ public class MainActivity extends BaseActivity {
                 nextMonth();
             }
         });
+        nextBtn.setOnTouchListener(createMonthSwipeListener(new float[1]));
         monthNav.addView(nextBtn, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
         calCard.addView(monthNav, fullWidthParams(4));
+        monthNav.setOnTouchListener(createMonthSwipeListener(new float[1]));
         homeCalendarGrid = new GridLayout(this);
         homeCalendarGrid.setColumnCount(7);
-        // Calculate rows: 1 header row + enough rows for days + offset
+        // 标题行加日期格数共同决定日历行数
         java.util.Calendar cal = java.util.Calendar.getInstance();
         cal.set(currentYear, currentMonth - 1, 1);
         int dayOfWeek = cal.get(java.util.Calendar.DAY_OF_WEEK);
         int startOffset = (dayOfWeek == 1) ? 6 : dayOfWeek - 2;
         int totalCells = startOffset + getDaysInMonth(currentYear, currentMonth);
-        int rowCount = 1 + (totalCells + 6) / 7; // 1 header + day rows
+        int rowCount = 1 + (totalCells + 6) / 7; // 标题行加日期行
         homeCalendarGrid.setRowCount(rowCount);
         homeCalendarGrid.setAlignmentMode(GridLayout.ALIGN_MARGINS);
+        homeCalendarGrid.setOnTouchListener(createMonthSwipeListener(new float[1]));
         calCard.addView(homeCalendarGrid, fullWidthParams(12));
-        root.addView(calCard, fullWidthParams(28));
+        root.addView(calCard, fullWidthParams(20));
 
-        // Today's exhibitions
-        addText(root, getString(R.string.today_exhibitions),
-                R.color.text_primary, 17, Typeface.BOLD);
+        homeExhibitionsTitle = addText(root, "", R.color.text_primary, 20, Typeface.BOLD);
 
         homeExhibitionList = new LinearLayout(this);
         homeExhibitionList.setOrientation(LinearLayout.VERTICAL);
         root.addView(homeExhibitionList, fullWidthParams(8));
 
-        // My registrations
+        // 我的报名
         addText(root, getString(R.string.my_registrations_title),
                 R.color.text_primary, 17, Typeface.BOLD);
         homeRegistrationsList = new LinearLayout(this);
         homeRegistrationsList.setOrientation(LinearLayout.VERTICAL);
         root.addView(homeRegistrationsList, fullWidthParams(8));
 
-        // Build data
+        // 初始化日历和列表
         buildMonthGrid(getDaysInMonth(currentYear, currentMonth));
-        showExhibitionsForDay(12);
+        showExhibitionsForDay(selectedDay);
         renderMyRegistrations();
 
         ScrollView scroll = new ScrollView(this);
@@ -462,7 +500,7 @@ public class MainActivity extends BaseActivity {
     private void styleSearchBar(LinearLayout bar) {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(getResources().getColor(R.color.card_background));
-        bg.setCornerRadius(dp(12));
+        bg.setCornerRadius(dp(100));
         bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
         bar.setBackground(bg);
         bar.setElevation(dp(2));
@@ -473,12 +511,12 @@ public class MainActivity extends BaseActivity {
         bar.setLayoutParams(params);
     }
 
-    // ── Calendar grid ─────────────────────────────────────────────
+    // ── 日历网格 ─────────────────────────────────────────────────
 
     private void buildMonthGrid(int daysInMonth) {
         homeCalendarGrid.removeAllViews();
         
-        // Get current user's registrations to check which days have registrations
+        // 获取当前用户的报名日期
         List<Registration> userRegistrations = registrationManager.list();
         java.util.Set<Integer> registeredDays = new java.util.HashSet<>();
         for (Registration reg : userRegistrations) {
@@ -487,19 +525,19 @@ public class MainActivity extends BaseActivity {
             }
         }
         
-        // Add default registered day for demo (day 12 in current month)
+        // 本地演示默认将 6 月 12 日标记为已报名
         if (currentMonth == 6) {
             registeredDays.add(12);
         }
         
-        // Calculate day of week for the 1st (0=Sunday, 1=Monday, ..., 6=Saturday)
+        // 计算当月 1 日所处的星期
         java.util.Calendar cal = java.util.Calendar.getInstance();
         cal.set(currentYear, currentMonth - 1, 1);
         int dayOfWeek = cal.get(java.util.Calendar.DAY_OF_WEEK);
-        // Convert to Monday-first (1=Monday, ..., 7=Sunday)
+        // 转换为周一至周日的排列方式
         int startOffset = (dayOfWeek == 1) ? 6 : dayOfWeek - 2;
         
-        // Add weekday header row
+        // 添加星期标题行
         String[] weekDays = {"一", "二", "三", "四", "五", "六", "日"};
         for (String weekDay : weekDays) {
             TextView header = new TextView(this);
@@ -514,7 +552,7 @@ public class MainActivity extends BaseActivity {
             homeCalendarGrid.addView(header, headerParams);
         }
         
-        // Add empty cells for days before the 1st
+        // 补齐当月 1 日之前的空格
         for (int i = 0; i < startOffset; i++) {
             View empty = new View(this);
             GridLayout.LayoutParams emptyParams = new GridLayout.LayoutParams();
@@ -525,14 +563,15 @@ public class MainActivity extends BaseActivity {
         }
         
         for (int day = 1; day <= daysInMonth; day++) {
-            final int selectedDay = day;
+            final int dayForClick = day;
             int count = countExhibitionsForDay(day);
             boolean isRegistered = registeredDays.contains(day);
+            boolean isSelected = day == selectedDay;
             
             Button dayButton = new Button(this);
             dayButton.setAllCaps(false);
             
-            // Text: always use 2 lines for consistent alignment
+            // 固定使用两行文字，使日期格对齐
             if (isRegistered) {
                 dayButton.setText(day + "\n已报名");
             } else if (count > 0) {
@@ -541,10 +580,12 @@ public class MainActivity extends BaseActivity {
                 dayButton.setText(day + "\n ");
             }
             
-            // Text color: blue for registered, teal for exhibitions, gray for empty
+            // 已选日期优先显示深色，其他日期按报名和展会状态显示
             int textColor;
-            if (isRegistered) {
-                textColor = R.color.registered_blue; // Blue for registered
+            if (isSelected) {
+                textColor = R.color.date_selected_text;
+            } else if (isRegistered) {
+                textColor = R.color.registered_blue; // 已报名日期
             } else if (count > 0) {
                 textColor = R.color.date_active_text;
             } else {
@@ -556,10 +597,13 @@ public class MainActivity extends BaseActivity {
             dayButton.setTypeface(Typeface.DEFAULT,
                     (count > 0 || isRegistered) ? Typeface.BOLD : Typeface.NORMAL);
 
-            // Background: blue for registered, teal for exhibitions, white for empty
+            // 背景随选中、报名和展会状态变化
             GradientDrawable cellBg = new GradientDrawable();
             cellBg.setCornerRadius(dp(8));
-            if (isRegistered) {
+            if (isSelected) {
+                cellBg.setColor(getResources().getColor(R.color.date_selected_background));
+                cellBg.setStroke(dp(2), getResources().getColor(R.color.date_selected_stroke));
+            } else if (isRegistered) {
                 cellBg.setColor(getResources().getColor(R.color.registered_blue_bg));
                 cellBg.setStroke(dp(1), getResources().getColor(R.color.registered_blue));
             } else if (count > 0) {
@@ -579,9 +623,10 @@ public class MainActivity extends BaseActivity {
             dayButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showExhibitionsForDay(selectedDay);
+                    showExhibitionsForDay(dayForClick);
                 }
             });
+            dayButton.setOnTouchListener(createMonthSwipeListener(new float[1]));
 
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = 0;
@@ -590,6 +635,33 @@ public class MainActivity extends BaseActivity {
             params.setMargins(dp(2), dp(2), dp(2), dp(2));
             homeCalendarGrid.addView(dayButton, params);
         }
+    }
+
+    /** 为日历容器和日期按钮提供左右滑动切月，同时保留单击选日。 */
+    private View.OnTouchListener createMonthSwipeListener(final float[] downX) {
+        return new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View view, android.view.MotionEvent event) {
+                if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                    downX[0] = event.getX();
+                    return true;
+                }
+                if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
+                    float dx = event.getX() - downX[0];
+                    if (Math.abs(dx) > dp(56)) {
+                        if (dx > 0) {
+                            prevMonth();
+                        } else {
+                            nextMonth();
+                        }
+                    } else {
+                        view.performClick();
+                    }
+                    return true;
+                }
+                return true;
+            }
+        };
     }
 
     private void prevMonth() {
@@ -613,16 +685,17 @@ public class MainActivity extends BaseActivity {
     private void updateMonthDisplay() {
         monthTitleText.setText(currentYear + "年" + currentMonth + "月");
         int daysInMonth = getDaysInMonth(currentYear, currentMonth);
-        // Calculate rows: 1 header row + enough rows for days + offset
+        // 标题行加日期格数共同决定日历行数
         java.util.Calendar cal = java.util.Calendar.getInstance();
         cal.set(currentYear, currentMonth - 1, 1);
         int dayOfWeek = cal.get(java.util.Calendar.DAY_OF_WEEK);
         int startOffset = (dayOfWeek == 1) ? 6 : dayOfWeek - 2;
         int totalCells = startOffset + daysInMonth;
-        int rowCount = 1 + (totalCells + 6) / 7; // 1 header + day rows
+        int rowCount = 1 + (totalCells + 6) / 7; // 标题行加日期行
         homeCalendarGrid.setRowCount(rowCount);
+        selectedDay = findPreferredDay(daysInMonth);
         buildMonthGrid(daysInMonth);
-        showExhibitionsForDay(1);
+        showExhibitionsForDay(selectedDay);
     }
 
     private int getDaysInMonth(int year, int month) {
@@ -631,12 +704,27 @@ public class MainActivity extends BaseActivity {
         return cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH);
     }
 
-    // ── Exhibition list for a day ─────────────────────────────────
+    /** 返回当前月份第一个有展会的日期，空月份则选中 1 日。 */
+    private int findPreferredDay(int daysInMonth) {
+        for (Exhibition exhibition : SAMPLE_EXHIBITIONS) {
+            if (exhibition.month == currentMonth && exhibition.day <= daysInMonth) {
+                return exhibition.day;
+            }
+        }
+        return 1;
+    }
+
+    // ── 指定日期的展会列表 ───────────────────────────────────────
 
     private void showExhibitionsForDay(int day) {
+        selectedDay = day;
+        homeExhibitionsTitle.setText(getString(R.string.home_exhibitions_for_day,
+                currentMonth, selectedDay));
+        buildMonthGrid(getDaysInMonth(currentYear, currentMonth));
         homeExhibitionList.removeAllViews();
         List<Exhibition> exhibitions = getExhibitionsForDay(day);
-        homeStatusText.setText(getString(R.string.local_day_count, day, exhibitions.size()));
+        homeStatusText.setText(getString(R.string.local_day_count,
+                currentMonth, day, exhibitions.size()));
 
         if (exhibitions.isEmpty()) {
             showEmptyState(homeExhibitionList, getString(R.string.empty_exhibitions_day));
@@ -664,6 +752,9 @@ public class MainActivity extends BaseActivity {
                             ? R.color.status_open : R.color.status_closed,
                     14, Typeface.BOLD);
 
+            LinearLayout actionRow = new LinearLayout(this);
+            actionRow.setOrientation(LinearLayout.HORIZONTAL);
+
             Button detailButton = new Button(this);
             styleSecondaryButton(detailButton);
             detailButton.setText(R.string.exhibition_detail);
@@ -673,7 +764,10 @@ public class MainActivity extends BaseActivity {
                     openExhibitionDetail(exhibition);
                 }
             });
-            card.addView(detailButton, fullWidthParams(8));
+            LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            detailParams.setMargins(0, dp(8), dp(4), 0);
+            actionRow.addView(detailButton, detailParams);
 
             Button publicProfileButton = new Button(this);
             styleSecondaryButton(publicProfileButton);
@@ -684,7 +778,11 @@ public class MainActivity extends BaseActivity {
                     openUserPublicProfile();
                 }
             });
-            card.addView(publicProfileButton, fullWidthParams(4));
+            LinearLayout.LayoutParams profileParams = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            profileParams.setMargins(dp(4), dp(8), 0, 0);
+            actionRow.addView(publicProfileButton, profileParams);
+            card.addView(actionRow, fullWidthParams(0));
             homeExhibitionList.addView(card, fullWidthParams(10));
         }
         animateListItems(homeExhibitionList, 100);
@@ -704,6 +802,7 @@ public class MainActivity extends BaseActivity {
     private void openExhibitionDetail(Exhibition exhibition) {
         Intent intent = new Intent(this, ExhibitionDetailActivity.class);
         intent.putExtra("day", exhibition.day);
+        intent.putExtra("month", exhibition.month);
         intent.putExtra("title", exhibition.title);
         intent.putExtra("venue", exhibition.venue);
         intent.putExtra("time", exhibition.time);
@@ -714,7 +813,7 @@ public class MainActivity extends BaseActivity {
         navigateTo(intent);
     }
 
-    // ── My registrations ──────────────────────────────────────────
+    // ── 我的报名 ─────────────────────────────────────────────────
 
     private void renderMyRegistrations() {
         homeRegistrationsList.removeAllViews();
@@ -779,7 +878,7 @@ public class MainActivity extends BaseActivity {
         animateListItems(homeRegistrationsList, 50);
     }
 
-    // ── Ripple background helper ──────────────────────────────────
+    // ── 卡片点击波纹辅助方法 ─────────────────────────────────────
 
     private void applyRippleBackground(View view) {
         GradientDrawable shape = new GradientDrawable();
@@ -794,7 +893,7 @@ public class MainActivity extends BaseActivity {
     }
 
     // ══════════════════════════════════════════════════════════════
-    // Profile content
+    // 个人页内容
     // ══════════════════════════════════════════════════════════════
 
     private ScrollView buildProfileContent() {
@@ -815,7 +914,7 @@ public class MainActivity extends BaseActivity {
     private void renderProfileView(final LinearLayout root) {
         root.removeAllViews();
 
-        // Apply defaults if empty
+        // 资料为空时填充演示信息
         if (ProfileActivity.getProfileNickname().length() == 0) {
             ProfileActivity.setProfileNickname(getString(R.string.profile_default_nickname));
             ProfileActivity.setProfileBio(getString(R.string.profile_default_bio));
@@ -828,7 +927,7 @@ public class MainActivity extends BaseActivity {
         final String contact = ProfileActivity.getProfileContact();
         final String social = ProfileActivity.getProfileSocialMedia();
 
-        // Avatar + nickname card
+        // 头像和昵称卡片
         LinearLayout headerCard = new LinearLayout(this);
         headerCard.setOrientation(LinearLayout.VERTICAL);
         headerCard.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
@@ -853,7 +952,7 @@ public class MainActivity extends BaseActivity {
         addText(headerCard, nickname, R.color.text_primary, 22, Typeface.BOLD);
         root.addView(headerCard, fullWidthParams(0));
 
-        // Info card
+        // 资料卡片
         LinearLayout infoCard = new LinearLayout(this);
         infoCard.setOrientation(LinearLayout.VERTICAL);
         infoCard.setPadding(dp(16), dp(16), dp(16), dp(16));
@@ -869,19 +968,21 @@ public class MainActivity extends BaseActivity {
         addText(infoCard, social, R.color.text_primary, 16, Typeface.NORMAL);
         root.addView(infoCard, fullWidthParams(12));
 
-        // Edit button
+        // 编辑按钮
         Button editBtn = new Button(this);
         stylePrimaryButton(editBtn);
         editBtn.setText(R.string.profile_edit);
         editBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                navigateTo(ProfileActivity.class);
+                Intent intent = new Intent(MainActivity.this, ProfileActivity.class);
+                intent.putExtra(ProfileActivity.EXTRA_EDIT_MODE, true);
+                navigateTo(intent);
             }
         });
         root.addView(editBtn, fullWidthParams(12));
 
-        // Notification settings card
+        // 通知设置卡片
         LinearLayout notifCard = new LinearLayout(this);
         notifCard.setOrientation(LinearLayout.VERTICAL);
         notifCard.setPadding(dp(16), dp(16), dp(16), dp(16));
@@ -918,7 +1019,7 @@ public class MainActivity extends BaseActivity {
         notifCard.addView(regToggle, fullWidthParams(4));
         root.addView(notifCard, fullWidthParams(16));
 
-        // Notification history card
+        // 通知历史卡片
         List<NotificationHelper.NotificationRecord> records = helper.getHistory();
         LinearLayout historyCard = new LinearLayout(this);
         historyCard.setOrientation(LinearLayout.VERTICAL);
@@ -960,7 +1061,7 @@ public class MainActivity extends BaseActivity {
     }
 
     // ══════════════════════════════════════════════════════════════
-    // Exhibitor content
+    // 展商页内容
     // ══════════════════════════════════════════════════════════════
 
     private ScrollView buildExhibitorContent() {
@@ -981,7 +1082,7 @@ public class MainActivity extends BaseActivity {
         addBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                navigateTo(ExhibitorBackendActivity.class);
+                navigateTo(ExhibitionFormActivity.class);
             }
         });
         root.addView(addBtn, fullWidthParams(16));
@@ -1132,7 +1233,7 @@ public class MainActivity extends BaseActivity {
             statusBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    showExhibitorStatusDialog(exh);
+                    showInlineStatusPicker(card, exh);
                 }
             });
             LinearLayout.LayoutParams statusP = new LinearLayout.LayoutParams(
@@ -1254,30 +1355,8 @@ public class MainActivity extends BaseActivity {
         parentContainer.addView(pickerCard, fullWidthParams(10));
     }
 
-    private void showExhibitorStatusDialog(final ExhibitorExhibition exh) {
-        final String[] statuses = new String[] {
-                ExhibitorExhibition.STATUS_OPEN,
-                ExhibitorExhibition.STATUS_CLOSED,
-                ExhibitorExhibition.STATUS_ENDED
-        };
-
-        new android.app.AlertDialog.Builder(this)
-                .setTitle(R.string.exhibitor_change_status)
-                .setItems(statuses, new android.content.DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(android.content.DialogInterface dialog, int which) {
-                        ExhibitionManager.updateStatus(exh.getId(), statuses[which]);
-                        Toast.makeText(MainActivity.this,
-                                R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
-                        invalidateTab(TAB_EXHIBITOR);
-                        showTab(TAB_EXHIBITOR, false);
-                    }
-                })
-                .show();
-    }
-
     // ══════════════════════════════════════════════════════════════
-    // Admin content
+    // 管理页内容
     // ══════════════════════════════════════════════════════════════
 
     private ScrollView buildAdminContent() {
@@ -1471,7 +1550,7 @@ public class MainActivity extends BaseActivity {
                 @Override
                 public void onClick(View v) {
                     // Show status change dialog
-                    showUserStatusDialog(user);
+                    showAdminUserStatusPicker(card, detailPanel, user);
                 }
             });
             LinearLayout.LayoutParams sP = new LinearLayout.LayoutParams(
@@ -1516,36 +1595,14 @@ public class MainActivity extends BaseActivity {
         detailPanel.addView(closeBtn, fullWidthParams(8));
     }
 
-    private void showUserStatusDialog(final AdminUser user) {
-        final String[] statuses = {
-                AdminUser.STATUS_ACTIVE,
-                AdminUser.STATUS_BANNED,
-                AdminUser.STATUS_RESTRICTED
-        };
-        
-        new android.app.AlertDialog.Builder(this)
-                .setTitle(R.string.admin_change_user_status)
-                .setItems(statuses, new android.content.DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(android.content.DialogInterface dialog, int which) {
-                        AdminUserManager.updateStatus(user.getId(), statuses[which]);
-                        Toast.makeText(MainActivity.this,
-                                R.string.admin_user_status_changed, Toast.LENGTH_SHORT).show();
-                        invalidateTab(TAB_ADMIN);
-                        showTab(TAB_ADMIN, false);
-                    }
-                })
-                .show();
-    }
-
-    private void showAdminUserStatusPicker(final LinearLayout container,
+    private void showAdminUserStatusPicker(final LinearLayout cardHost,
                                            final LinearLayout detailPanel,
                                            final AdminUser user) {
         // Remove any existing picker
-        for (int i = container.getChildCount() - 1; i >= 0; i--) {
-            View child = container.getChildAt(i);
+        for (int i = cardHost.getChildCount() - 1; i >= 0; i--) {
+            View child = cardHost.getChildAt(i);
             if (child.getTag() != null && "user_status_picker".equals(child.getTag())) {
-                container.removeView(child);
+                cardHost.removeView(child);
             }
         }
 
@@ -1613,7 +1670,7 @@ public class MainActivity extends BaseActivity {
         cancelParams.setMargins(0, dp(8), 0, 0);
         pickerCard.addView(cancelBtn, cancelParams);
 
-        container.addView(pickerCard, fullWidthParams(10));
+        cardHost.addView(pickerCard, fullWidthParams(10));
     }
 
     private void renderAdminExhibitions(LinearLayout container, final LinearLayout detailPanel) {
@@ -1663,6 +1720,7 @@ public class MainActivity extends BaseActivity {
                 public void onClick(View v) {
                     // Open ExhibitionDetailActivity with exhibition details
                     Intent intent = new Intent(MainActivity.this, ExhibitionDetailActivity.class);
+                    intent.putExtra(ExhibitionDetailActivity.EXTRA_EXHIBITION_ID, exh.getId());
                     intent.putExtra("day", exh.getDay());
                     intent.putExtra("title", exh.getTitle());
                     intent.putExtra("venue", exh.getVenue());
@@ -1687,7 +1745,7 @@ public class MainActivity extends BaseActivity {
                 @Override
                 public void onClick(View v) {
                     // Show exhibition status change dialog
-                    showExhibitionStatusDialog(exh);
+                    showAdminExhibitionStatusPicker(card, exh);
                 }
             });
             LinearLayout.LayoutParams sP = new LinearLayout.LayoutParams(
@@ -1748,35 +1806,13 @@ public class MainActivity extends BaseActivity {
         detailPanel.addView(closeBtn, fullWidthParams(8));
     }
 
-    private void showExhibitionStatusDialog(final ExhibitorExhibition exh) {
-        final String[] statuses = {
-                ExhibitorExhibition.STATUS_OPEN,
-                ExhibitorExhibition.STATUS_CLOSED,
-                ExhibitorExhibition.STATUS_ENDED
-        };
-        
-        new android.app.AlertDialog.Builder(this)
-                .setTitle(R.string.admin_change_exhibition_status)
-                .setItems(statuses, new android.content.DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(android.content.DialogInterface dialog, int which) {
-                        ExhibitionManager.updateStatus(exh.getId(), statuses[which]);
-                        Toast.makeText(MainActivity.this,
-                                R.string.admin_exhibition_status_changed, Toast.LENGTH_SHORT).show();
-                        invalidateTab(TAB_ADMIN);
-                        showTab(TAB_ADMIN, false);
-                    }
-                })
-                .show();
-    }
-
-    private void showAdminExhibitionStatusPicker(final LinearLayout container,
+    private void showAdminExhibitionStatusPicker(final LinearLayout cardHost,
                                                   final ExhibitorExhibition exh) {
         // Remove any existing picker
-        for (int i = container.getChildCount() - 1; i >= 0; i--) {
-            View child = container.getChildAt(i);
+        for (int i = cardHost.getChildCount() - 1; i >= 0; i--) {
+            View child = cardHost.getChildAt(i);
             if (child.getTag() != null && "exh_status_picker".equals(child.getTag())) {
-                container.removeView(child);
+                cardHost.removeView(child);
             }
         }
 
@@ -1844,7 +1880,7 @@ public class MainActivity extends BaseActivity {
         cancelParams.setMargins(0, dp(8), 0, 0);
         pickerCard.addView(cancelBtn, cancelParams);
 
-        container.addView(pickerCard, fullWidthParams(10));
+        cardHost.addView(pickerCard, fullWidthParams(10));
     }
 
     private void toggleAdminExhibitionLock(ExhibitorExhibition exh) {
@@ -1862,6 +1898,46 @@ public class MainActivity extends BaseActivity {
     private void renderAdminSettings(LinearLayout container) {
         addText(container, getString(R.string.admin_settings_title),
                 R.color.text_primary, 20, Typeface.BOLD);
+
+        addText(container, "应用配色", R.color.text_primary, 17, Typeface.BOLD);
+        final int[] selectedTheme = {AppSettings.getThemeIndex(this)};
+        final LinearLayout colorRow = new LinearLayout(this);
+        colorRow.setOrientation(LinearLayout.HORIZONTAL);
+        int[] accentColors = AppSettings.getAccentColors();
+        for (int i = 0; i < accentColors.length; i++) {
+            final int index = i;
+            Button colorButton = new Button(this);
+            colorButton.setText("");
+            colorButton.setMinHeight(dp(46));
+            colorButton.setMinimumHeight(dp(46));
+            colorButton.setBackgroundColor(accentColors[i]);
+            colorButton.setContentDescription("配色 " + (i + 1));
+            colorButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    selectedTheme[0] = index;
+                    AppSettings.setThemeIndex(MainActivity.this, index);
+                    AppSettings.applyWindowColors(MainActivity.this);
+                    Toast.makeText(MainActivity.this, "配色已更新", Toast.LENGTH_SHORT).show();
+                }
+            });
+            LinearLayout.LayoutParams colorParams = new LinearLayout.LayoutParams(0, dp(46), 1f);
+            colorParams.setMargins(dp(3), 0, dp(3), 0);
+            colorRow.addView(colorButton, colorParams);
+        }
+        container.addView(colorRow, fullWidthParams(6));
+
+        addText(container, "进入应用时的公告", R.color.text_primary, 17, Typeface.BOLD);
+        final android.widget.EditText announcementInput = new android.widget.EditText(this);
+        announcementInput.setSingleLine(false);
+        announcementInput.setMinLines(2);
+        announcementInput.setHint("例如：本周末展馆开放时间调整");
+        announcementInput.setText(AppSettings.getAnnouncement(this));
+        container.addView(announcementInput, fullWidthParams(4));
+        final CheckBox announcementToggle = new CheckBox(this);
+        announcementToggle.setText("进入应用时显示公告");
+        announcementToggle.setChecked(AppSettings.isAnnouncementEnabled(this));
+        container.addView(announcementToggle, fullWidthParams(2));
 
         addText(container, getString(R.string.admin_settings_media_limit),
                 R.color.text_primary, 17, Typeface.BOLD);
@@ -1899,6 +1975,9 @@ public class MainActivity extends BaseActivity {
         saveBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                AppSettings.setThemeIndex(MainActivity.this, selectedTheme[0]);
+                AppSettings.saveAnnouncement(MainActivity.this,
+                        announcementInput.getText().toString(), announcementToggle.isChecked());
                 Toast.makeText(MainActivity.this,
                         R.string.admin_settings_saved, Toast.LENGTH_SHORT).show();
             }
@@ -1909,7 +1988,7 @@ public class MainActivity extends BaseActivity {
     }
 
     // ══════════════════════════════════════════════════════════════
-    // Data helpers
+    // 数据辅助方法
     // ══════════════════════════════════════════════════════════════
 
     private List<Exhibition> getExhibitionsForDay(int day) {
@@ -1932,7 +2011,7 @@ public class MainActivity extends BaseActivity {
         return count;
     }
 
-    /** Immutable exhibition model for sample data. */
+    /** 用于首页本地演示的不可变展会数据。 */
     private static class Exhibition {
         final int day;
         final int month;

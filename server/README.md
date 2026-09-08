@@ -64,8 +64,8 @@ DB_USER=postgres
 DB_PASSWORD=your_password
 
 # JWT 配置
-JWT_SECRET=your_jwt_secret_here
-JWT_REFRESH_SECRET=your_jwt_refresh_secret_here
+JWT_SECRET=replace-with-a-random-access-secret-at-least-32-characters
+JWT_REFRESH_SECRET=replace-with-a-random-refresh-secret-at-least-32-characters
 ```
 
 ### 3. 创建数据库
@@ -78,13 +78,13 @@ psql -U postgres -c "CREATE DATABASE calmobile_dev;"
 ### 4. 运行数据库迁移
 
 ```bash
-npm run db:migrate
+node src/config/migrate.js migrate
 ```
 
 ### 5. 插入示例数据（可选）
 
 ```bash
-npm run db:seed
+node src/config/migrate.js seed
 ```
 
 ### 6. 启动服务器

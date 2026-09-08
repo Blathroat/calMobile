@@ -3,150 +3,61 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/surface_background"
-    android:fillViewport="true">
-
+    android:fillViewport="true"
+    android:clipToPadding="false">
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:padding="@dimen/spacing_32dp">
-
-        <!-- Top spacer -->
-        <View
-            android:layout_width="0dp"
-            android:layout_height="@dimen/spacing_40dp" />
-
-        <!-- Title -->
-        <TextView
+        android:paddingBottom="@dimen/spacing_24dp">
+        <!-- 注册页沿用同一品牌区，降低页面切换的认知成本。 -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="@string/auth_register_title"
-            android:textAppearance="@style/TextAppearance.Headline" />
-
-        <!-- Subtitle -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/spacing_8dp"
-            android:gravity="center"
-            android:text="@string/auth_register_subtitle"
-            android:textAppearance="@style/TextAppearance.Subtitle" />
-
-        <!-- Form card -->
+            android:layout_height="196dp"
+            android:background="@drawable/bg_auth_hero"
+            android:gravity="bottom"
+            android:orientation="vertical"
+            android:paddingLeft="@dimen/spacing_24dp"
+            android:paddingRight="@dimen/spacing_24dp"
+            android:paddingBottom="@dimen/spacing_28dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="创建你的展会档案"
+                android:textColor="@color/text_on_primary"
+                android:textSize="25sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_6dp"
+                android:text="保存报名、收藏与行业灵感"
+                android:textColor="#BFE9E6"
+                android:textSize="15sp" />
+        </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/spacing_32dp"
+            android:layout_marginLeft="@dimen/spacing_20dp"
+            android:layout_marginRight="@dimen/spacing_20dp"
+            android:layout_marginTop="-20dp"
             android:background="@drawable/bg_card"
-            android:elevation="@dimen/elevation_low"
+            android:elevation="@dimen/elevation_medium"
             android:orientation="vertical"
             android:padding="@dimen/spacing_24dp">
-
-            <!-- Username label -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/auth_username_hint"
-                android:textAppearance="@style/TextAppearance.Label" />
-
-            <!-- Username input -->
-            <EditText
-                android:id="@+id/register_username"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_6dp"
-                android:hint="@string/auth_username_hint"
-                android:inputType="text"
-                android:singleLine="true"
-                style="@style/Widget.CalMobile.EditText" />
-
-            <!-- Email label -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_14dp"
-                android:text="@string/auth_email_hint"
-                android:textAppearance="@style/TextAppearance.Label" />
-
-            <!-- Email input -->
-            <EditText
-                android:id="@+id/register_email"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_6dp"
-                android:hint="@string/auth_email_hint"
-                android:inputType="textEmailAddress"
-                android:singleLine="true"
-                style="@style/Widget.CalMobile.EditText" />
-
-            <!-- Password label -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_14dp"
-                android:text="@string/auth_password_hint"
-                android:textAppearance="@style/TextAppearance.Label" />
-
-            <!-- Password input -->
-            <EditText
-                android:id="@+id/register_password"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_6dp"
-                android:hint="@string/auth_password_hint"
-                android:inputType="textPassword"
-                android:singleLine="true"
-                style="@style/Widget.CalMobile.EditText" />
-
-            <!-- Confirm Password label -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_14dp"
-                android:text="@string/auth_password_confirm_hint"
-                android:textAppearance="@style/TextAppearance.Label" />
-
-            <!-- Confirm Password input -->
-            <EditText
-                android:id="@+id/register_password_confirm"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_6dp"
-                android:hint="@string/auth_password_confirm_hint"
-                android:inputType="textPassword"
-                android:singleLine="true"
-                style="@style/Widget.CalMobile.EditText" />
-
-            <!-- Error text -->
-            <TextView
-                android:id="@+id/register_error"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_8dp"
-                android:textColor="@color/status_closed"
-                android:textSize="13sp"
-                android:visibility="gone" />
-
-            <!-- Register button -->
-            <Button
-                android:id="@+id/register_btn"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_24dp"
-                android:text="@string/auth_register_btn"
-                style="@style/Widget.CalMobile.Button.Primary" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="注册账号" android:textAppearance="@style/TextAppearance.Title" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/spacing_6dp" android:text="几步完成，马上开始安排你的展会之旅" android:textAppearance="@style/TextAppearance.BodySmall" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/spacing_22dp" android:text="用户名" android:textAppearance="@style/TextAppearance.Label" />
+            <EditText android:id="@+id/register_username" style="@style/Widget.CalMobile.EditText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/spacing_6dp" android:hint="设置用户名" android:inputType="text" android:singleLine="true" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/spacing_14dp" android:text="邮箱" android:textAppearance="@style/TextAppearance.Label" />
+            <EditText android:id="@+id/register_email" style="@style/Widget.CalMobile.EditText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/spacing_6dp" android:hint="输入常用邮箱" android:inputType="textEmailAddress" android:singleLine="true" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/spacing_14dp" android:text="密码" android:textAppearance="@style/TextAppearance.Label" />
+            <EditText android:id="@+id/register_password" style="@style/Widget.CalMobile.EditText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/spacing_6dp" android:hint="设置登录密码" android:inputType="textPassword" android:singleLine="true" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/spacing_14dp" android:text="确认密码" android:textAppearance="@style/TextAppearance.Label" />
+            <EditText android:id="@+id/register_password_confirm" style="@style/Widget.CalMobile.EditText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/spacing_6dp" android:hint="再次输入密码" android:inputType="textPassword" android:singleLine="true" />
+            <TextView android:id="@+id/register_error" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/spacing_8dp" android:textColor="@color/status_closed" android:textSize="13sp" android:visibility="gone" />
+            <Button android:id="@+id/register_btn" style="@style/Widget.CalMobile.Button.Primary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/spacing_20dp" android:text="创建账号" />
         </LinearLayout>
-
-        <!-- Back to login as text button -->
-        <Button
-            android:id="@+id/go_to_login_btn"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/spacing_16dp"
-            android:text="@string/auth_go_to_login"
-            style="@style/Widget.CalMobile.Button.Text" />
-
+        <Button android:id="@+id/go_to_login_btn" style="@style/Widget.CalMobile.Button.Text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:layout_marginTop="@dimen/spacing_14dp" android:text="已有账号？返回登录" />
     </LinearLayout>
 </ScrollView>

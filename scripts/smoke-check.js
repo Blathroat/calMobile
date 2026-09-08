@@ -3,6 +3,111 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 
+function parseAttributes(source) {
+  const attributes = {};
+  const attributePattern = /([:\w-]+)\s*=\s*(['"])(.*?)\2/g;
+  let match;
+  while ((match = attributePattern.exec(source)) !== null) {
+    attributes[match[1]] = match[3];
+  }
+  return attributes;
+}
+
+function findComponents(xml) {
+  const components = [];
+  const stack = [];
+  const tagPattern = /<!--[\s\S]*?-->|<[^>]+>/g;
+  const source = xml.replace(/<!--[\s\S]*?-->/g, '');
+  let match;
+
+  while ((match = tagPattern.exec(source)) !== null) {
+    const tag = match[0];
+    if (tag.startsWith('<!--') || tag.startsWith('<?') || tag.startsWith('<!')) {
+      continue;
+    }
+    if (tag.startsWith('</')) {
+      const closedType = tag.match(/^<\/\s*([\w-]+)/)?.[1];
+      const item = stack.pop();
+      if (item?.type === 'component' && item.nameType === closedType) {
+        components.push(item);
+      }
+      continue;
+    }
+
+    const opening = tag.match(/^<\s*([\w-]+)/);
+    if (!opening) {
+      continue;
+    }
+    const tagName = opening[1];
+    const selfClosing = /\/\s*>$/.test(tag);
+    const attributes = parseAttributes(tag);
+
+    if (tagName === 'activity' || tagName === 'activity-alias') {
+      const component = {
+        type: 'component',
+        nameType: tagName,
+        name: attributes['android:name'],
+        exported: attributes['android:exported'],
+        launcher: false
+      };
+      if (selfClosing) {
+        components.push(component);
+      } else {
+        stack.push(component);
+      }
+      continue;
+    }
+
+    if (tagName === 'intent-filter') {
+      const filter = { type: 'filter', hasMain: false, hasLauncher: false };
+      const component = [...stack].reverse().find((item) => item.type === 'component');
+      if (component) {
+        filter.component = component;
+      }
+      if (selfClosing) {
+        continue;
+      }
+      stack.push(filter);
+      continue;
+    }
+
+    if (tagName === 'action' || tagName === 'category') {
+      const attributes = parseAttributes(tag);
+      const filter = [...stack].reverse().find((item) => item.type === 'filter');
+      if (filter && attributes['android:name'] === 'android.intent.action.MAIN' && tagName === 'action') {
+        filter.hasMain = true;
+      }
+      if (filter && attributes['android:name'] === 'android.intent.category.LAUNCHER' && tagName === 'category') {
+        filter.hasLauncher = true;
+      }
+      if (filter?.hasMain && filter.hasLauncher) {
+        filter.component.launcher = true;
+      }
+      continue;
+    }
+
+    if (!selfClosing) {
+      stack.push({ type: 'other', nameType: tagName });
+    }
+  }
+
+  return components;
+}
+
+function findLauncherActivities(xml) {
+  return findComponents(xml)
+    .filter((component) => component.launcher)
+    .map((component) => component.name);
+}
+
+function validateLauncherManifest(xml) {
+  const launcherComponents = findComponents(xml).filter((component) => component.launcher);
+  const launcherActivities = launcherComponents.map((component) => component.name);
+  return launcherActivities.length === 1
+    && launcherActivities[0] === '.LoginActivity'
+    && launcherComponents[0].exported === 'true';
+}
+
 const checks = [
   {
     id: 'mobile-requirements-doc',
@@ -11,8 +116,8 @@ const checks = [
   },
   {
     id: 'agent-rules',
-    file: 'AGENT.md',
-    contains: ['与用户对话时使用中文', '优先使用 ctx_* 工具', 'Java', 'API 30']
+    file: 'AGENTS.md',
+    contains: ['# Repository Guidelines', 'Java 17', 'LoginActivity', 'node scripts/smoke-check.js']
   },
   {
     id: 'android-gradle-files',
@@ -22,7 +127,7 @@ const checks = [
   {
     id: 'android-manifest-main-activity',
     file: 'app/src/main/AndroidManifest.xml',
-    contains: ['android:name=".MainActivity"', 'android:exported="false"', 'android.intent.action.MAIN', 'android.intent.category.LAUNCHER']
+    validate: validateLauncherManifest
   },
   {
     id: 'base-activity-java',
@@ -265,11 +370,6 @@ const checks = [
     contains: ['新需求追踪', '底部导航移除', '访客/权限辅助', '二级展会表单']
   },
   {
-    id: 'chinese-doc-agent-new-requirements',
-    file: 'AGENT.md',
-    contains: ['GuestHelper', 'PermissionHelper', 'ExhibitionFormActivity', '已完成代码实现']
-  },
-  {
     id: 'chinese-doc-project-review-new-items',
     file: 'docs/PROJECT_REVIEW.md',
     contains: ['已完成', 'GuestHelper', 'PermissionHelper', 'ExhibitionFormActivity']
@@ -300,45 +400,61 @@ const checks = [
   }
 ];
 
-let failed = false;
-for (const check of checks) {
-  const fullPath = path.join(root, check.file);
-  if (!fs.existsSync(fullPath)) {
-    console.error(`FAIL ${check.id}: missing ${check.file}`);
-    failed = true;
-    continue;
-  }
-  const stat = fs.statSync(fullPath);
-  if (check.minBytes && stat.size < check.minBytes) {
-    console.error(`FAIL ${check.id}: ${check.file} is ${stat.size} bytes, expected at least ${check.minBytes}`);
-    failed = true;
-  }
-  if (!check.contains && !check.notContains) {
-    continue;
-  }
-  const content = fs.readFileSync(fullPath, 'utf8');
-  if (check.contains) {
-    for (const expected of check.contains) {
-      if (!content.includes(expected)) {
-        console.error(`FAIL ${check.id}: ${check.file} does not contain ${expected}`);
-        failed = true;
+function runChecks() {
+  let failed = false;
+  for (const check of checks) {
+    const fullPath = path.join(root, check.file);
+    if (!fs.existsSync(fullPath)) {
+      console.error(`FAIL ${check.id}: missing ${check.file}`);
+      failed = true;
+      continue;
+    }
+    const stat = fs.statSync(fullPath);
+    if (check.minBytes && stat.size < check.minBytes) {
+      console.error(`FAIL ${check.id}: ${check.file} is ${stat.size} bytes, expected at least ${check.minBytes}`);
+      failed = true;
+    }
+    const content = fs.readFileSync(fullPath, 'utf8');
+    if (check.validate && !check.validate(content)) {
+      console.error(`FAIL ${check.id}: ${check.file} failed its structural validation`);
+      failed = true;
+    }
+    if (!check.contains && !check.notContains) {
+      continue;
+    }
+    if (check.contains) {
+      for (const expected of check.contains) {
+        if (!content.includes(expected)) {
+          console.error(`FAIL ${check.id}: ${check.file} does not contain ${expected}`);
+          failed = true;
+        }
+      }
+    }
+    if (check.notContains) {
+      for (const forbidden of check.notContains) {
+        if (content.includes(forbidden)) {
+          console.error(`FAIL ${check.id}: ${check.file} should not contain ${forbidden}`);
+          failed = true;
+        }
       }
     }
   }
-  if (check.notContains) {
-    for (const forbidden of check.notContains) {
-      if (content.includes(forbidden)) {
-        console.error(`FAIL ${check.id}: ${check.file} should not contain ${forbidden}`);
-        failed = true;
-      }
-    }
+
+  if (failed) {
+    return false;
   }
+
+  console.log(`PASS smoke-check: ${checks.length} project scaffold checks passed`);
+  return true;
 }
 
-if (failed) {
-  process.exit(1);
+if (require.main === module) {
+  process.exitCode = runChecks() ? 0 : 1;
 }
 
-console.log(`PASS smoke-check: ${checks.length} project scaffold checks passed`);
-
+module.exports = {
+  findLauncherActivities,
+  runChecks,
+  validateLauncherManifest
+};
 
