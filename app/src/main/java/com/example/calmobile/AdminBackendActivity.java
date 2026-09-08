@@ -586,7 +586,7 @@ public class AdminBackendActivity extends BaseActivity {
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         closeParams.setMargins(dp(4), dp(8), 0, 0);
         actions.addView(closeBtn, closeParams);
-        exhibitionDetailPanel.addView(actions, fullWidthParams(0));
+        exhibitionDetailPanel.addView(actions, fullWidthParams(8));
         scrollToView(exhibitionDetailPanel);
     }
     private void showExhibitionStatusPicker(final LinearLayout cardHost,
@@ -749,10 +749,13 @@ public class AdminBackendActivity extends BaseActivity {
         for (int i = 0; i < accentColors.length; i++) {
             final int index = i;
             Button colorButton = new Button(this);
-            colorButton.setText("");
-            colorButton.setMinHeight(dp(46));
-            colorButton.setMinimumHeight(dp(46));
-            colorButton.setBackgroundColor(accentColors[i]);
+            colorButton.setText(String.format("#%06X", (0xFFFFFF & accentColors[i])));
+            colorButton.setTextSize(10);
+            colorButton.setTextColor(getResources().getColor(android.R.color.white));
+            GradientDrawable swatch = new GradientDrawable();
+            swatch.setColor(accentColors[i]);
+            swatch.setShape(GradientDrawable.OVAL);
+            colorButton.setBackground(swatch);
             colorButton.setContentDescription("配色 " + (i + 1));
             colorButton.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -780,6 +783,18 @@ public class AdminBackendActivity extends BaseActivity {
         announcementToggle.setText("进入应用时显示公告");
         announcementToggle.setChecked(AppSettings.isAnnouncementEnabled(this));
         settingsSection.addView(announcementToggle, fullWidthParams(2));
+
+        addText(settingsSection, "展会分类管理", R.color.text_primary, 17, Typeface.BOLD);
+        final EditText categoriesInput = new EditText(this);
+        categoriesInput.setSingleLine(false);
+        categoriesInput.setHint("每行一个分类，例如：智能家居");
+        categoriesInput.setText(android.text.TextUtils.join("\n", AppSettings.getCategories(this)));
+        settingsSection.addView(categoriesInput, fullWidthParams(4));
+
+        final CheckBox reviewToggle = new CheckBox(this);
+        reviewToggle.setText("允许修改已通过或已拒绝的报名");
+        reviewToggle.setChecked(AppSettings.canReviseReviewedRegistration(this));
+        settingsSection.addView(reviewToggle, fullWidthParams(2));
 
         // Data export section
         addText(settingsSection, "数据导出",
@@ -876,6 +891,12 @@ public class AdminBackendActivity extends BaseActivity {
                 AppSettings.setThemeIndex(AdminBackendActivity.this, selectedTheme[0]);
                 AppSettings.saveAnnouncement(AdminBackendActivity.this,
                         announcementInput.getText().toString(), announcementToggle.isChecked());
+                java.util.ArrayList<String> categories = new java.util.ArrayList<>();
+                for (String item : categoriesInput.getText().toString().split("\\n")) {
+                    if (!item.trim().isEmpty()) categories.add(item.trim());
+                }
+                if (!categories.isEmpty()) AppSettings.saveCategories(AdminBackendActivity.this, categories);
+                AppSettings.setCanReviseReviewedRegistration(AdminBackendActivity.this, reviewToggle.isChecked());
                 Toast.makeText(AdminBackendActivity.this,
                         R.string.admin_settings_saved, Toast.LENGTH_SHORT).show();
             }

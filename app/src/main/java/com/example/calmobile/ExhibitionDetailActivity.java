@@ -4,6 +4,8 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.text.Html;
+import android.widget.ImageView;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -96,7 +98,21 @@ public class ExhibitionDetailActivity extends BaseActivity {
 
         addDivider(detailContent);
 
-        addText(detailContent, description, R.color.text_primary, 15, Typeface.NORMAL);
+        TextView descriptionView = new TextView(this);
+        descriptionView.setText(Html.fromHtml(description == null ? "" : description, Html.FROM_HTML_MODE_LEGACY));
+        descriptionView.setTextColor(getResources().getColor(R.color.text_primary));
+        descriptionView.setTextSize(15);
+        descriptionView.setLineSpacing(0, 1.25f);
+        detailContent.addView(descriptionView, fullWidthParams(4));
+        if (exhibitionId != null) {
+            String imageUri = ExhibitionConfiguration.get(exhibitionId).imageUri;
+            if (imageUri != null && !imageUri.isEmpty()) {
+                ImageView image = new ImageView(this);
+                image.setAdjustViewBounds(true);
+                image.setImageURI(android.net.Uri.parse(imageUri));
+                detailContent.addView(image, fullWidthParams(6));
+            }
+        }
         addText(detailContent,
                 getString(R.string.detail_local_demo_note),
                 R.color.text_secondary, 14, Typeface.NORMAL);
@@ -182,6 +198,7 @@ public class ExhibitionDetailActivity extends BaseActivity {
                 regIntent.putExtra("openForRegistration", openForRegistration);
                 regIntent.putExtra("description", description);
                 regIntent.putExtra("category", category);
+                regIntent.putExtra(EXTRA_EXHIBITION_ID, exhibitionId);
                 navigateTo(regIntent);
             }
         });

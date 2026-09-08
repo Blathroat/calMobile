@@ -1,354 +1,99 @@
 package com.example.calmobile;
 
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.View;
-import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
-/**
- * Registration management activity for exhibitors.
- * Displays registration records for a specific exhibition,
- * allows approving/rejecting pending registrations, and shows details.
- */
+/** 展商和管理员查看展会报名记录的列表页面。 */
 public class RegistrationManagementActivity extends BaseActivity {
-
     public static final String EXTRA_EXHIBITION_ID = "exhibition_id";
+    public static final String STATUS_PENDING = "待审核";
+    public static final String STATUS_APPROVED = "已通过";
+    public static final String STATUS_REJECTED = "已拒绝";
 
-    /** Simple in-memory registration record for management purposes. */
     static class MgmtRecord {
         final String id;
         final String exhibitionId;
         final String visitorName;
-        final String visitorType;
         final String registrationTime;
         final String formAnswers;
         String status;
-
-        MgmtRecord(String id, String exhibitionId, String visitorName, String visitorType,
-                String registrationTime, String formAnswers, String status) {
-            this.id = id;
-            this.exhibitionId = exhibitionId;
-            this.visitorName = visitorName;
-            this.visitorType = visitorType;
-            this.registrationTime = registrationTime;
-            this.formAnswers = formAnswers;
-            this.status = status;
+        MgmtRecord(String id, String exhibitionId, String visitorName, String registrationTime,
+                String formAnswers, String status) {
+            this.id = id; this.exhibitionId = exhibitionId; this.visitorName = visitorName;
+            this.registrationTime = registrationTime; this.formAnswers = formAnswers; this.status = status;
         }
     }
 
-    /** Status constants for registration management. */
-    private static final String STATUS_PENDING = "待审核";
-    private static final String STATUS_APPROVED = "已通过";
-    private static final String STATUS_REJECTED = "已拒绝";
-
-    /** In-memory storage (session-only, no persistence). */
-    private static final List<MgmtRecord> allRecords = new ArrayList<>();
+    private static final List<MgmtRecord> RECORDS = new ArrayList<>();
     private static int nextId = 1;
-    private static boolean seeded = false;
-
     private LinearLayout listContainer;
-    private LinearLayout detailPanel;
     private TextView countText;
-
     private String exhibitionId;
-    private ExhibitorExhibition exhibition;
-    private String expandedRecordId;
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (!AuthManager.getInstance().canAccessExhibitor()) {
-            Toast.makeText(this, R.string.auth_exhibitor_required, Toast.LENGTH_SHORT).show();
-            finish();
-            return;
-        }
+        if (!AuthManager.getInstance().canAccessExhibitor()) { finish(); return; }
         setContentView(R.layout.activity_registration_management);
-
         exhibitionId = getIntent().getStringExtra(EXTRA_EXHIBITION_ID);
-        if (exhibitionId == null) {
-            finish();
-            return;
-        }
-
-        ExhibitionManager.ensureInitialized();
-        exhibition = ExhibitionManager.findById(exhibitionId);
-        if (exhibition == null) {
-            finish();
-            return;
-        }
-
-        // Seed sample data once
+        ExhibitorExhibition exhibition = ExhibitionManager.findById(exhibitionId);
+        if (exhibition == null) { finish(); return; }
         ensureSeeded(exhibitionId);
-
         listContainer = findViewById(R.id.reg_mgmt_list);
-        detailPanel = findViewById(R.id.reg_mgmt_detail);
         countText = findViewById(R.id.reg_mgmt_count);
-
-        // Subtitle
-        TextView subtitle = findViewById(R.id.reg_mgmt_subtitle);
-        subtitle.setText(exhibition.getTitle());
-
-        // Back button
-        TextView backBtn = findViewById(R.id.reg_mgmt_back);
-        applyRippleToBackButton(backBtn);
-        backBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                finish();
-            }
-        });
-
-        renderList();
+        ((TextView) findViewById(R.id.reg_mgmt_subtitle)).setText(exhibition.getTitle());
+        TextView back = findViewById(R.id.reg_mgmt_back);
+        applyRippleToBackButton(back); back.setOnClickListener(v -> finish());
     }
 
-    @Override
-    public void finish() {
-        super.finish();
-        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+    @Override protected void onResume() { super.onResume(); if (listContainer != null) renderList(); }
+    @Override public void finish() { super.finish(); overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right); }
+
+    public static void addSubmittedRecord(String exhibitionId, String visitorName, String answers) {
+        RECORDS.add(new MgmtRecord("registration-" + nextId++, exhibitionId, visitorName,
+                new SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(new Date()), answers, STATUS_PENDING));
     }
-
-    // ── Seed sample data ─────────────────────────────────────────────
-
-    private static void ensureSeeded(String exhId) {
-        if (seeded) {
-            return;
-        }
-        seeded = true;
-
-        allRecords.add(new MgmtRecord("mgmt-" + nextId++, exhId,
-                "张伟", "专业观众", "06-08 09:15",
-                "感兴趣领域：智能家居\n需要洽谈：是", STATUS_PENDING));
-        allRecords.add(new MgmtRecord("mgmt-" + nextId++, exhId,
-                "李娜", "采购负责人", "06-08 10:30",
-                "感兴趣领域：全屋方案\n需要洽谈：否", STATUS_PENDING));
-        allRecords.add(new MgmtRecord("mgmt-" + nextId++, exhId,
-                "王磊", "媒体或合作伙伴", "06-08 11:45",
-                "感兴趣领域：行业趋势\n需要洽谈：是", STATUS_APPROVED));
-        allRecords.add(new MgmtRecord("mgmt-" + nextId++, exhId,
-                "赵敏", "专业观众", "06-09 08:20",
-                "感兴趣领域：节能家电\n需要洽谈：否", STATUS_REJECTED));
-        allRecords.add(new MgmtRecord("mgmt-" + nextId++, exhId,
-                "陈晨", "采购负责人", "06-09 14:00",
-                "感兴趣领域：智能门锁\n需要洽谈：是", STATUS_PENDING));
+    private static void ensureSeeded(String id) {
+        for (MgmtRecord record : RECORDS) if (id.equals(record.exhibitionId)) return;
+        RECORDS.add(new MgmtRecord("registration-" + nextId++, id, "张伟", "06-08 09:15", "兴趣方向：智能家居\n洽谈需求：是", STATUS_PENDING));
+        RECORDS.add(new MgmtRecord("registration-" + nextId++, id, "李娜", "06-08 10:30", "兴趣方向：全屋方案\n洽谈需求：否", STATUS_APPROVED));
     }
-
-    // ── List rendering ───────────────────────────────────────────────
+    static MgmtRecord findRecord(String id) {
+        for (MgmtRecord record : RECORDS) if (record.id.equals(id)) return record;
+        return null;
+    }
+    static boolean updateStatus(String id, String status) {
+        MgmtRecord record = findRecord(id); if (record == null) return false; record.status = status; return true;
+    }
 
     private void renderList() {
         listContainer.removeAllViews();
-        detailPanel.setVisibility(View.GONE);
-
-        List<MgmtRecord> records = getRecordsForExhibition(exhibitionId);
-
+        List<MgmtRecord> records = new ArrayList<>();
+        for (MgmtRecord record : RECORDS) if (exhibitionId == null ? record.exhibitionId == null : exhibitionId.equals(record.exhibitionId)) records.add(record);
         countText.setText(getString(R.string.reg_mgmt_count, records.size()));
-
-        if (records.isEmpty()) {
-            addText(listContainer, getString(R.string.reg_mgmt_empty),
-                    R.color.text_secondary, 15, Typeface.NORMAL);
-            return;
-        }
-
-        for (final MgmtRecord record : records) {
-            LinearLayout card = new LinearLayout(this);
-            card.setOrientation(LinearLayout.VERTICAL);
-            card.setPadding(dp(14), dp(12), dp(14), dp(12));
-            styleCard(card);
-
-            // Visitor name + type row
-            LinearLayout nameRow = new LinearLayout(this);
-            nameRow.setOrientation(LinearLayout.HORIZONTAL);
-
-            TextView nameText = new TextView(this);
-            nameText.setText(record.visitorName);
-            nameText.setTextColor(getResources().getColor(R.color.text_primary));
-            nameText.setTextSize(16);
-            nameText.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-            LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            nameRow.addView(nameText, nameParams);
-
-            // Status badge
-            TextView statusBadge = new TextView(this);
-            statusBadge.setText(record.status);
-            statusBadge.setTextColor(getResources().getColor(getStatusColor(record.status)));
-            statusBadge.setTextSize(13);
-            statusBadge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-            nameRow.addView(statusBadge, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT));
-
-            card.addView(nameRow, fullWidthParams(0));
-
-            // Visitor type + time
-            addText(card, record.visitorType + " · " + record.registrationTime,
-                    R.color.text_secondary, 13, Typeface.NORMAL);
-
-            // 详情直接展开在当前用户卡片下方
-            final LinearLayout inlineDetail = new LinearLayout(this);
-            inlineDetail.setOrientation(LinearLayout.VERTICAL);
-            inlineDetail.setPadding(dp(12), dp(10), dp(12), dp(10));
-            inlineDetail.setBackgroundResource(R.drawable.bg_surface_variant);
-            inlineDetail.setVisibility(View.GONE);
-            card.addView(inlineDetail, fullWidthParams(8));
-
-            card.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    if (record.id.equals(expandedRecordId)) {
-                        expandedRecordId = null;
-                        inlineDetail.setVisibility(View.GONE);
-                    } else {
-                        expandedRecordId = record.id;
-                        renderDetail(inlineDetail, record);
-                        inlineDetail.setVisibility(View.VISIBLE);
-                    }
-                }
-            });
-
-            if (record.id.equals(expandedRecordId)) {
-                renderDetail(inlineDetail, record);
-                inlineDetail.setVisibility(View.VISIBLE);
-            }
-
+        if (records.isEmpty()) { addText(listContainer, getString(R.string.reg_mgmt_empty), R.color.text_secondary, 15, Typeface.NORMAL); return; }
+        for (MgmtRecord record : records) {
+            LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
+            card.setPadding(dp(14), dp(12), dp(14), dp(12)); styleCard(card);
+            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
+            TextView name = new TextView(this); name.setText(record.visitorName); name.setTextSize(16); name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            name.setTextColor(getResources().getColor(R.color.text_primary)); row.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+            TextView badge = new TextView(this); badge.setText(record.status); badge.setTextSize(13); badge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            badge.setTextColor(getResources().getColor(STATUS_APPROVED.equals(record.status) ? R.color.status_open : STATUS_REJECTED.equals(record.status) ? R.color.status_closed : R.color.status_pending)); row.addView(badge);
+            card.addView(row, fullWidthParams(0)); addText(card, record.registrationTime + " · 点击查看报名信息", R.color.text_secondary, 13, Typeface.NORMAL);
+            card.setOnClickListener(v -> { Intent i = new Intent(this, RegistrationDetailActivity.class); i.putExtra(RegistrationDetailActivity.EXTRA_RECORD_ID, record.id); startActivity(i); });
             listContainer.addView(card, fullWidthParams(8));
         }
-
-        animateListItems(listContainer, 100);
-    }
-
-    // ── Detail panel ─────────────────────────────────────────────────
-
-    private void renderDetail(final LinearLayout host, final MgmtRecord record) {
-        host.removeAllViews();
-
-        addText(host, getString(R.string.reg_mgmt_detail_title),
-                R.color.text_primary, 18, Typeface.BOLD);
-
-        addDetailRow(host, getString(R.string.reg_mgmt_label_name), record.visitorName);
-        addDetailRow(host, getString(R.string.reg_mgmt_label_type), record.visitorType);
-        addDetailRow(host, getString(R.string.reg_mgmt_label_time), record.registrationTime);
-        addDetailRow(host, getString(R.string.reg_mgmt_label_status), record.status);
-        addDetailRow(host, getString(R.string.reg_mgmt_label_answers), record.formAnswers);
-
-        // Approve / Reject buttons (only for pending)
-        if (STATUS_PENDING.equals(record.status)) {
-            LinearLayout buttons = new LinearLayout(this);
-            buttons.setOrientation(LinearLayout.HORIZONTAL);
-
-            Button approveBtn = new Button(this);
-            stylePrimaryButton(approveBtn);
-            approveBtn.setText(R.string.reg_mgmt_approve);
-            approveBtn.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    showConfirmDialog(
-                            getString(R.string.confirm_approve),
-                            new Runnable() {
-                                @Override
-                                public void run() {
-                                    record.status = STATUS_APPROVED;
-                                    NotificationHelper.getInstance(RegistrationManagementActivity.this)
-                                            .sendRegistrationStatusNotification(
-                                                    exhibition.getTitle(),
-                                                    record.visitorName,
-                                                    STATUS_APPROVED);
-                                    Toast.makeText(RegistrationManagementActivity.this,
-                                            R.string.reg_mgmt_approved, Toast.LENGTH_SHORT).show();
-                                    renderList();
-                                }
-                            });
-                }
-            });
-            LinearLayout.LayoutParams approveParams = new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            approveParams.setMargins(0, dp(8), dp(6), 0);
-            buttons.addView(approveBtn, approveParams);
-
-            Button rejectBtn = new Button(this);
-            styleDangerButton(rejectBtn);
-            rejectBtn.setText(R.string.reg_mgmt_reject);
-            rejectBtn.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    showConfirmDialog(
-                            getString(R.string.confirm_reject),
-                            new Runnable() {
-                                @Override
-                                public void run() {
-                                    record.status = STATUS_REJECTED;
-                                    NotificationHelper.getInstance(RegistrationManagementActivity.this)
-                                            .sendRegistrationStatusNotification(
-                                                    exhibition.getTitle(),
-                                                    record.visitorName,
-                                                    STATUS_REJECTED);
-                                    Toast.makeText(RegistrationManagementActivity.this,
-                                            R.string.reg_mgmt_rejected, Toast.LENGTH_SHORT).show();
-                                    renderList();
-                                }
-                            });
-                }
-            });
-            LinearLayout.LayoutParams rejectParams = new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            rejectParams.setMargins(dp(6), dp(8), 0, 0);
-            buttons.addView(rejectBtn, rejectParams);
-
-            host.addView(buttons, fullWidthParams(0));
-        }
-    }
-
-    private void addDetailRow(LinearLayout host, String label, String value) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(0, dp(6), 0, dp(2));
-
-        TextView labelText = new TextView(this);
-        labelText.setText(label);
-        labelText.setTextColor(getResources().getColor(R.color.text_secondary));
-        labelText.setTextSize(12);
-        labelText.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        row.addView(labelText, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        TextView valueText = new TextView(this);
-        valueText.setText(value);
-        valueText.setTextColor(getResources().getColor(R.color.text_primary));
-        valueText.setTextSize(15);
-        valueText.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
-        valueText.setLineSpacing(0, 1.3f);
-        row.addView(valueText, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        host.addView(row, fullWidthParams(0));
-    }
-
-    // ── Data helpers ─────────────────────────────────────────────────
-
-    private static List<MgmtRecord> getRecordsForExhibition(String exhId) {
-        List<MgmtRecord> result = new ArrayList<>();
-        for (MgmtRecord r : allRecords) {
-            if (r.exhibitionId.equals(exhId)) {
-                result.add(r);
-            }
-        }
-        return result;
-    }
-
-    private static int getStatusColor(String status) {
-        if (STATUS_APPROVED.equals(status)) {
-            return R.color.status_open;
-        } else if (STATUS_REJECTED.equals(status)) {
-            return R.color.status_closed;
-        } else {
-            return R.color.status_pending;
-        }
+        animateListItems(listContainer, 80);
     }
 }
