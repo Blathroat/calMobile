@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/surface_background"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/spacing_16dp"
+        android:paddingVertical="@dimen/spacing_12dp">
+
+        <TextView
+            android:id="@+id/rich_editor_back"
+            style="@style/Widget.CalMobile.BackButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="← 返回" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="编辑展会简介"
+            android:textAppearance="@style/TextAppearance.Title" />
+
+        <Button
+            android:id="@+id/rich_editor_save"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="完成" />
+    </LinearLayout>
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/rich_editor_toolbar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/spacing_12dp"
+            android:paddingBottom="@dimen/spacing_8dp" />
+    </HorizontalScrollView>
+
+    <jp.wasabeef.richeditor.RichEditor
+        android:id="@+id/rich_editor"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@color/card_background"
+        android:padding="@dimen/spacing_16dp" />
+</LinearLayout>

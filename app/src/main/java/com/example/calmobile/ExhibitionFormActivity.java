@@ -1,69 +1,331 @@
 package com.example.calmobile;
 
 import android.app.DatePickerDialog;
+import android.app.TimePickerDialog;
 import android.content.Intent;
 import android.os.Bundle;
-import android.text.Html;
-import android.text.Spanned;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Locale;
 
-/** 展商创建和编辑展会，包含富文本简介与报名收集配置。 */
+/** 展商创建和编辑展会，配置排期、简介与报名收集项。 */
 public class ExhibitionFormActivity extends BaseActivity {
     public static final String EXTRA_EXHIBITION_ID = "exhibition_id";
-    private LinearLayout form, fieldsBox; private EditText title, venue, eventDate, regStart, regEnd, time, description;
-    private Spinner category; private RadioGroup status; private String editingId, imageUri = ""; private ImageView preview;
-    private final List<LinearLayout> rows = new ArrayList<>();
-    @Override public void onCreate(Bundle state) {
-        super.onCreate(state); if (!AuthManager.getInstance().canAccessExhibitor()) { finish(); return; }
-        setContentView(R.layout.activity_exhibition_form); form = findViewById(R.id.exhibition_form);
-        editingId = getIntent().getStringExtra(EXTRA_EXHIBITION_ID); ExhibitorExhibition existing = editingId == null ? null : ExhibitionManager.findById(editingId);
-        if (editingId != null && existing == null) { finish(); return; }
-        TextView back = findViewById(R.id.exhibition_form_back); applyRippleToBackButton(back); back.setOnClickListener(v -> finish()); build(existing);
-    }
-    private void build(ExhibitorExhibition ex) {
-        form.removeAllViews(); ((TextView)findViewById(R.id.exhibition_form_title)).setText(ex == null ? "新建展会" : "编辑展会");
-        title = textField("展会名称", ex == null ? "" : ex.getTitle()); venue = textField("展馆地点", ex == null ? "" : ex.getVenue());
-        ExhibitionConfiguration.Data data = ex == null ? null : ExhibitionConfiguration.get(ex.getId());
-        String existingDate = data == null ? "" : data.exhibitionDate;
-        if (ex != null && (existingDate.isEmpty() || "2026-06-01".equals(existingDate))) {
-            existingDate = String.format(java.util.Locale.CHINA, "2026-06-%02d", ex.getDay());
+    private static final int REQUEST_DESCRIPTION = 3101;
+
+    private LinearLayout formContainer;
+    private LinearLayout fieldsContainer;
+    private EditText titleInput;
+    private EditText venueInput;
+    private TextView exhibitionDatePicker;
+    private TextView registrationStartPicker;
+    private TextView registrationEndPicker;
+    private TextView startTimePicker;
+    private TextView endTimePicker;
+    private TextView descriptionPreview;
+    private Spinner categorySpinner;
+    private RadioGroup statusGroup;
+    private String editingId;
+    private String descriptionHtml = "";
+    private String descriptionImageUri = "";
+    private final List<LinearLayout> fieldRows = new ArrayList<>();
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        if (!AuthManager.getInstance().canAccessExhibitor()) {
+            Toast.makeText(this, R.string.auth_exhibitor_required, Toast.LENGTH_SHORT).show();
+            finish();
+            return;
         }
-        eventDate = dateField("开展日期", existingDate); regStart = dateField("报名开始日期", data == null ? "" : data.registrationStart); regEnd = dateField("报名截止日期", data == null ? "" : data.registrationEnd);
-        time = textField("开展时间", ex == null ? "" : ex.getTime());
-        addLabel("展会分类"); category = new Spinner(this); List<String> items = AppSettings.getCategories(this); category.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, items)); if (ex != null) category.setSelection(Math.max(0, items.indexOf(ex.getCategory()))); form.addView(category, fullWidthParams(5));
-        addLabel("展会简介"); LinearLayout rich = new LinearLayout(this); rich.setOrientation(LinearLayout.HORIZONTAL);
-        Button bold = new Button(this); styleSecondaryButton(bold); bold.setText("加粗"); bold.setOnClickListener(v -> wrap("<b>", "</b>")); rich.addView(bold, new LinearLayout.LayoutParams(0,-2,1));
-        Button italic = new Button(this); styleSecondaryButton(italic); italic.setText("斜体"); italic.setOnClickListener(v -> wrap("<i>", "</i>")); rich.addView(italic, new LinearLayout.LayoutParams(0,-2,1)); form.addView(rich, fullWidthParams(2));
-        description = new EditText(this); description.setMinLines(4); description.setHint("支持加粗、斜体和图片说明"); description.setText(ex == null ? "" : ex.getDescription()); form.addView(description, fullWidthParams(3));
-        Button image = new Button(this); styleSecondaryButton(image); image.setText("插入图片"); image.setOnClickListener(v -> { Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.setType("image/*"); i.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(i, 2201); }); form.addView(image, fullWidthParams(3));
-        preview = new ImageView(this); preview.setAdjustViewBounds(true); preview.setMaxHeight(dp(160)); imageUri = data == null ? "" : data.imageUri; showPreview(); form.addView(preview, fullWidthParams(3));
-        addLabel("报名信息收集项"); fieldsBox = new LinearLayout(this); fieldsBox.setOrientation(LinearLayout.VERTICAL); form.addView(fieldsBox, fullWidthParams(2));
-        if (data != null && !data.fields.isEmpty()) for (RegistrationField f : data.fields) addRow(f); else addRow(null);
-        Button add = new Button(this); styleSecondaryButton(add); add.setText("新增收集项"); add.setOnClickListener(v -> addRow(null)); form.addView(add, fullWidthParams(5));
-        addLabel("展会状态"); status = new RadioGroup(this); addStatus(ExhibitorExhibition.STATUS_OPEN, ex == null || ExhibitorExhibition.STATUS_OPEN.equals(ex.getStatus())); addStatus(ExhibitorExhibition.STATUS_CLOSED, ex != null && ExhibitorExhibition.STATUS_CLOSED.equals(ex.getStatus())); form.addView(status, fullWidthParams(5));
-        Button save = new Button(this); stylePrimaryButton(save); save.setText("保存展会"); save.setOnClickListener(v -> save()); form.addView(save, fullWidthParams(12)); animateListItems(form, 50);
+        setContentView(R.layout.activity_exhibition_form);
+        formContainer = findViewById(R.id.exhibition_form);
+        editingId = getIntent().getStringExtra(EXTRA_EXHIBITION_ID);
+        ExhibitorExhibition exhibition = editingId == null ? null : ExhibitionManager.findById(editingId);
+        if (editingId != null && exhibition == null) {
+            Toast.makeText(this, R.string.exhibition_form_not_found, Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+        TextView back = findViewById(R.id.exhibition_form_back);
+        applyRippleToBackButton(back);
+        back.setOnClickListener(v -> finish());
+        buildForm(exhibition);
     }
-    private EditText textField(String label, String value) { addLabel(label); EditText e = new EditText(this); e.setText(value); form.addView(e, fullWidthParams(4)); return e; }
-    private EditText dateField(String label, String value) { EditText e = textField(label, value); e.setFocusable(false); e.setHint("选择日期"); e.setOnClickListener(v -> { Calendar c = Calendar.getInstance(); new DatePickerDialog(this, (x,y,m,d)->e.setText(String.format(java.util.Locale.CHINA,"%04d-%02d-%02d",y,m+1,d)),c.get(1),c.get(2),c.get(5)).show(); }); return e; }
-    private void addLabel(String text) { addText(form,text,R.color.text_secondary,13,android.graphics.Typeface.BOLD); }
-    private void wrap(String start, String end) { int a=description.getSelectionStart(), b=description.getSelectionEnd(); String s=description.getText().toString(); description.setText(s.substring(0,a)+start+s.substring(a,b)+end+s.substring(b)); description.setSelection(b+start.length()+end.length()); }
-    private void addStatus(String value, boolean check) { RadioButton b=new RadioButton(this); b.setText(value); b.setTag(value); b.setId(View.generateViewId()); status.addView(b); if(check)status.check(b.getId()); }
-    private void addRow(RegistrationField f) { LinearLayout r=new LinearLayout(this); r.setOrientation(LinearLayout.VERTICAL); EditText t=new EditText(this); t.setHint("条目标题"); if(f!=null)t.setText(f.getTitle()); Spinner type=new Spinner(this); String[] types={"文本","单选","多选"}; type.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,types)); if(f!=null)type.setSelection(java.util.Arrays.asList(types).indexOf(f.getType())); CheckBox required=new CheckBox(this); required.setText("必填"); if(f!=null)required.setChecked(f.isRequired()); EditText opts=new EditText(this); opts.setHint("单选、多选请以逗号分隔选项"); if(f!=null)opts.setText(f.getOptions()); Button remove=new Button(this); styleSecondaryButton(remove); remove.setText("删除此项"); remove.setOnClickListener(v->{fieldsBox.removeView(r);rows.remove(r);}); r.addView(t);r.addView(type);r.addView(required);r.addView(opts);r.addView(remove); fieldsBox.addView(r,fullWidthParams(5)); rows.add(r); }
-    private void save() { if(title.getText().toString().trim().isEmpty()||venue.getText().toString().trim().isEmpty()||eventDate.getText().toString().trim().isEmpty()){Toast.makeText(this,"请完成展会名称、地点和开展日期",Toast.LENGTH_SHORT).show();return;} int day=1; try{day=Integer.parseInt(eventDate.getText().toString().substring(8));}catch(Exception ignored){} RadioButton b=findViewById(status.getCheckedRadioButtonId()); String st=b==null?ExhibitorExhibition.STATUS_OPEN:b.getTag().toString(); if(editingId==null){ExhibitorExhibition created=ExhibitionManager.add(day,title.getText().toString(),venue.getText().toString(),time.getText().toString(),st,description.getText().toString(),category.getSelectedItem().toString()); editingId=created.getId();}else ExhibitionManager.update(editingId,day,title.getText().toString(),venue.getText().toString(),time.getText().toString(),st,description.getText().toString(),category.getSelectedItem().toString()); List<RegistrationField> fs=new ArrayList<>(); for(LinearLayout r:rows){String n=((EditText)r.getChildAt(0)).getText().toString().trim();if(!n.isEmpty())fs.add(new RegistrationField(n,((Spinner)r.getChildAt(1)).getSelectedItem().toString(),((CheckBox)r.getChildAt(2)).isChecked(),((EditText)r.getChildAt(3)).getText().toString()));} ExhibitionConfiguration.save(editingId,eventDate.getText().toString(),regStart.getText().toString(),regEnd.getText().toString(),imageUri,fs); Toast.makeText(this,"展会已保存",Toast.LENGTH_SHORT).show();finish(); }
-    @Override protected void onActivityResult(int r,int c,Intent d){super.onActivityResult(r,c,d);if(r==2201&&c==RESULT_OK&&d!=null&&d.getData()!=null){imageUri=d.getData().toString();try{getContentResolver().takePersistableUriPermission(d.getData(),d.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION));}catch(SecurityException ignored){}showPreview();}}
-    private void showPreview(){if(preview!=null&&!imageUri.isEmpty()){preview.setImageURI(android.net.Uri.parse(imageUri));preview.setVisibility(View.VISIBLE);}else if(preview!=null)preview.setVisibility(View.GONE);}
+
+    private void buildForm(ExhibitorExhibition exhibition) {
+        formContainer.removeAllViews();
+        ((TextView) findViewById(R.id.exhibition_form_title)).setText(
+                exhibition == null ? R.string.exhibitor_add_exhibition : R.string.exhibitor_edit_exhibition);
+        ExhibitionConfiguration.Data configuration = exhibition == null
+                ? null : ExhibitionConfiguration.get(exhibition.getId());
+        descriptionHtml = exhibition == null ? "" : exhibition.getDescription();
+        descriptionImageUri = configuration == null ? "" : configuration.imageUri;
+
+        titleInput = addTextField("展会名称", exhibition == null ? "" : exhibition.getTitle(), "请输入展会名称");
+        venueInput = addTextField("展馆地点", exhibition == null ? "" : exhibition.getVenue(), "请输入展馆地点");
+
+        String existingDate = configuration == null ? "" : configuration.exhibitionDate;
+        if (exhibition != null && (existingDate.isEmpty() || "2026-06-01".equals(existingDate))) {
+            existingDate = String.format(Locale.CHINA, "2026-06-%02d", exhibition.getDay());
+        }
+        addLabel("开展日期");
+        exhibitionDatePicker = addDatePicker(existingDate, "选择开展日期");
+
+        addLabel("报名时间");
+        LinearLayout registrationRow = new LinearLayout(this);
+        registrationRow.setOrientation(LinearLayout.HORIZONTAL);
+        registrationStartPicker = createPicker("开始日期", configuration == null ? "" : configuration.registrationStart);
+        registrationEndPicker = createPicker("截止日期", configuration == null ? "" : configuration.registrationEnd);
+        registrationStartPicker.setOnClickListener(v -> chooseDate(registrationStartPicker));
+        registrationEndPicker.setOnClickListener(v -> chooseDate(registrationEndPicker));
+        registrationRow.addView(registrationStartPicker, halfWidthParams(0, 6));
+        registrationRow.addView(registrationEndPicker, halfWidthParams(6, 0));
+        formContainer.addView(registrationRow, fullWidthParams(4));
+
+        addLabel("开展时间");
+        LinearLayout timeRow = new LinearLayout(this);
+        timeRow.setOrientation(LinearLayout.HORIZONTAL);
+        String[] existingTimes = exhibition == null ? new String[0] : exhibition.getTime().split("-");
+        startTimePicker = createPicker("开始时间", existingTimes.length > 0 ? existingTimes[0] : "");
+        endTimePicker = createPicker("结束时间", existingTimes.length > 1 ? existingTimes[1] : "");
+        startTimePicker.setOnClickListener(v -> chooseTime(startTimePicker));
+        endTimePicker.setOnClickListener(v -> chooseTime(endTimePicker));
+        timeRow.addView(startTimePicker, halfWidthParams(0, 6));
+        timeRow.addView(endTimePicker, halfWidthParams(6, 0));
+        formContainer.addView(timeRow, fullWidthParams(4));
+
+        addLabel("展会分类");
+        categorySpinner = new Spinner(this);
+        List<String> categories = AppSettings.getCategories(this);
+        categorySpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, categories));
+        if (exhibition != null) categorySpinner.setSelection(Math.max(0, categories.indexOf(exhibition.getCategory())));
+        formContainer.addView(categorySpinner, fullWidthParams(5));
+
+        addLabel("展会简介");
+        descriptionPreview = new TextView(this);
+        descriptionPreview.setTextColor(getResources().getColor(R.color.text_secondary));
+        descriptionPreview.setTextSize(15);
+        descriptionPreview.setGravity(Gravity.CENTER_VERTICAL);
+        descriptionPreview.setMinHeight(dp(72));
+        descriptionPreview.setBackgroundResource(R.drawable.bg_picker_field);
+        descriptionPreview.setPadding(dp(14), dp(12), dp(14), dp(12));
+        descriptionPreview.setOnClickListener(v -> openDescriptionEditor());
+        formContainer.addView(descriptionPreview, fullWidthParams(0));
+        Button editDescription = new Button(this);
+        styleSecondaryButton(editDescription);
+        editDescription.setText("编辑展会简介");
+        editDescription.setOnClickListener(v -> openDescriptionEditor());
+        formContainer.addView(editDescription, fullWidthParams(6));
+        updateDescriptionPreview();
+
+        addLabel("报名信息收集项");
+        fieldsContainer = new LinearLayout(this);
+        fieldsContainer.setOrientation(LinearLayout.VERTICAL);
+        formContainer.addView(fieldsContainer, fullWidthParams(2));
+        if (configuration != null && !configuration.fields.isEmpty()) {
+            for (RegistrationField field : configuration.fields) addFieldRow(field);
+        } else {
+            addFieldRow(null);
+        }
+        Button addField = new Button(this);
+        styleSecondaryButton(addField);
+        addField.setText("新增收集项");
+        addField.setOnClickListener(v -> addFieldRow(null));
+        formContainer.addView(addField, fullWidthParams(5));
+
+        addLabel("展会状态");
+        statusGroup = new RadioGroup(this);
+        addStatus(ExhibitorExhibition.STATUS_OPEN,
+                exhibition == null || ExhibitorExhibition.STATUS_OPEN.equals(exhibition.getStatus()));
+        addStatus(ExhibitorExhibition.STATUS_CLOSED,
+                exhibition != null && ExhibitorExhibition.STATUS_CLOSED.equals(exhibition.getStatus()));
+        formContainer.addView(statusGroup, fullWidthParams(5));
+
+        Button save = new Button(this);
+        stylePrimaryButton(save);
+        save.setText("保存展会");
+        save.setOnClickListener(v -> saveExhibition());
+        formContainer.addView(save, fullWidthParams(12));
+        animateListItems(formContainer, 50);
+    }
+
+    private EditText addTextField(String label, String value, String hint) {
+        addLabel(label);
+        EditText input = new EditText(this);
+        input.setText(value);
+        input.setHint(hint);
+        formContainer.addView(input, fullWidthParams(4));
+        return input;
+    }
+
+    private TextView addDatePicker(String value, String label) {
+        TextView picker = createPicker(label, value);
+        picker.setOnClickListener(v -> chooseDate(picker));
+        formContainer.addView(picker, fullWidthParams(4));
+        return picker;
+    }
+
+    private TextView createPicker(String label, String value) {
+        TextView picker = new TextView(this);
+        picker.setBackgroundResource(R.drawable.bg_picker_field);
+        picker.setGravity(Gravity.CENTER_VERTICAL);
+        picker.setMinHeight(dp(52));
+        picker.setPadding(dp(14), dp(8), dp(14), dp(8));
+        picker.setTextColor(getResources().getColor(value.isEmpty() ? R.color.text_hint : R.color.text_primary));
+        picker.setTextSize(15);
+        picker.setTag(label);
+        picker.setText(value.isEmpty() ? label : value);
+        return picker;
+    }
+
+    private LinearLayout.LayoutParams halfWidthParams(int leftMargin, int rightMargin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        params.setMargins(dp(leftMargin), 0, dp(rightMargin), 0);
+        return params;
+    }
+
+    private void chooseDate(TextView target) {
+        Calendar calendar = Calendar.getInstance();
+        new DatePickerDialog(this, (view, year, month, day) -> setPickerValue(target,
+                String.format(Locale.CHINA, "%04d-%02d-%02d", year, month + 1, day)),
+                calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show();
+    }
+
+    private void chooseTime(TextView target) {
+        Calendar calendar = Calendar.getInstance();
+        new TimePickerDialog(this, (view, hour, minute) -> setPickerValue(target,
+                String.format(Locale.CHINA, "%02d:%02d", hour, minute)),
+                calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show();
+    }
+
+    private void setPickerValue(TextView picker, String value) {
+        picker.setText(value);
+        picker.setTextColor(getResources().getColor(R.color.text_primary));
+    }
+
+    private boolean hasPickerValue(TextView picker) {
+        return !picker.getText().toString().equals(picker.getTag());
+    }
+
+    private void addLabel(String label) {
+        addText(formContainer, label, R.color.text_secondary, 13, android.graphics.Typeface.BOLD);
+    }
+
+    private void openDescriptionEditor() {
+        Intent intent = new Intent(this, RichDescriptionEditorActivity.class);
+        intent.putExtra(RichDescriptionEditorActivity.EXTRA_HTML, descriptionHtml);
+        intent.putExtra(RichDescriptionEditorActivity.EXTRA_IMAGE_URI, descriptionImageUri);
+        startActivityForResult(intent, REQUEST_DESCRIPTION);
+    }
+
+    private void updateDescriptionPreview() {
+        String plainText = android.text.Html.fromHtml(descriptionHtml == null ? "" : descriptionHtml,
+                android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim();
+        if (plainText.isEmpty()) {
+            descriptionPreview.setText("点击编辑简介，可插入图片与丰富排版");
+            descriptionPreview.setTextColor(getResources().getColor(R.color.text_hint));
+        } else {
+            descriptionPreview.setText(plainText);
+            descriptionPreview.setTextColor(getResources().getColor(R.color.text_primary));
+        }
+    }
+
+    private void addStatus(String value, boolean checked) {
+        RadioButton button = new RadioButton(this);
+        button.setId(View.generateViewId());
+        button.setText(value);
+        button.setTag(value);
+        statusGroup.addView(button);
+        if (checked) statusGroup.check(button.getId());
+    }
+
+    private void addFieldRow(RegistrationField field) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(dp(12), dp(8), dp(12), dp(8));
+        row.setBackgroundResource(R.drawable.bg_picker_field);
+        EditText fieldTitle = new EditText(this);
+        fieldTitle.setHint("条目标题");
+        if (field != null) fieldTitle.setText(field.getTitle());
+        Spinner type = new Spinner(this);
+        String[] types = {RegistrationField.TYPE_TEXT, RegistrationField.TYPE_SINGLE, RegistrationField.TYPE_MULTI};
+        type.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, types));
+        if (field != null) type.setSelection(Math.max(0, Arrays.asList(types).indexOf(field.getType())));
+        CheckBox required = new CheckBox(this);
+        required.setText("必填");
+        if (field != null) required.setChecked(field.isRequired());
+        EditText options = new EditText(this);
+        options.setHint("单选或多选时，用逗号分隔选项");
+        if (field != null) options.setText(field.getOptions());
+        Button remove = new Button(this);
+        styleSecondaryButton(remove);
+        remove.setText("删除此项");
+        remove.setOnClickListener(v -> { fieldsContainer.removeView(row); fieldRows.remove(row); });
+        row.addView(fieldTitle); row.addView(type); row.addView(required); row.addView(options); row.addView(remove);
+        fieldsContainer.addView(row, fullWidthParams(6));
+        fieldRows.add(row);
+    }
+
+    private void saveExhibition() {
+        if (titleInput.getText().toString().trim().isEmpty() || venueInput.getText().toString().trim().isEmpty()
+                || !hasPickerValue(exhibitionDatePicker) || !hasPickerValue(startTimePicker) || !hasPickerValue(endTimePicker)) {
+            Toast.makeText(this, "请完成展会名称、地点、日期和开展时间", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        int day = Integer.parseInt(exhibitionDatePicker.getText().toString().substring(8));
+        RadioButton selected = findViewById(statusGroup.getCheckedRadioButtonId());
+        String state = selected == null ? ExhibitorExhibition.STATUS_OPEN : selected.getTag().toString();
+        String time = startTimePicker.getText().toString() + "-" + endTimePicker.getText().toString();
+        if (editingId == null) {
+            ExhibitorExhibition created = ExhibitionManager.add(day, titleInput.getText().toString().trim(),
+                    venueInput.getText().toString().trim(), time, state, descriptionHtml,
+                    categorySpinner.getSelectedItem().toString());
+            editingId = created.getId();
+        } else {
+            ExhibitionManager.update(editingId, day, titleInput.getText().toString().trim(),
+                    venueInput.getText().toString().trim(), time, state, descriptionHtml,
+                    categorySpinner.getSelectedItem().toString());
+        }
+        List<RegistrationField> fields = new ArrayList<>();
+        for (LinearLayout row : fieldRows) {
+            String label = ((EditText) row.getChildAt(0)).getText().toString().trim();
+            if (!label.isEmpty()) fields.add(new RegistrationField(label,
+                    ((Spinner) row.getChildAt(1)).getSelectedItem().toString(),
+                    ((CheckBox) row.getChildAt(2)).isChecked(), ((EditText) row.getChildAt(3)).getText().toString()));
+        }
+        ExhibitionConfiguration.save(editingId, exhibitionDatePicker.getText().toString(),
+                hasPickerValue(registrationStartPicker) ? registrationStartPicker.getText().toString() : "",
+                hasPickerValue(registrationEndPicker) ? registrationEndPicker.getText().toString() : "",
+                descriptionImageUri, fields);
+        Toast.makeText(this, R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
+        setResult(RESULT_OK);
+        finish();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_DESCRIPTION || resultCode != RESULT_OK || data == null) return;
+        descriptionHtml = data.getStringExtra(RichDescriptionEditorActivity.EXTRA_HTML);
+        descriptionImageUri = data.getStringExtra(RichDescriptionEditorActivity.EXTRA_IMAGE_URI);
+        if (descriptionHtml == null) descriptionHtml = "";
+        if (descriptionImageUri == null) descriptionImageUri = "";
+        updateDescriptionPreview();
+    }
 }

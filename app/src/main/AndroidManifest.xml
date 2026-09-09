@@ -29,6 +29,7 @@
         <activity android:name=".UserPublicActivity" />
         <activity android:name=".ExhibitorBackendActivity" />
         <activity android:name=".ExhibitionFormActivity" />
+        <activity android:name=".RichDescriptionEditorActivity" />
         <activity android:name=".RegistrationManagementActivity" />
         <activity android:name=".RegistrationDetailActivity" />
         <activity android:name=".AdminBackendActivity" />

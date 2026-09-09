@@ -35,6 +35,9 @@ dependencies {
     
     // Material Design
     implementation 'com.google.android.material:material:1.11.0'
+
+    // 开源富文本编辑器，用于编辑展会简介
+    implementation 'jp.wasabeef:richeditor-android:2.0.0'
     
     // Room 数据库
     implementation 'androidx.room:room-runtime:2.6.1'
