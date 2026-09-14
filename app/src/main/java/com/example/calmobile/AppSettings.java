@@ -17,6 +17,9 @@ public final class AppSettings {
     private static final String KEY_ANNOUNCEMENT_ENABLED = "announcement_enabled";
     private static final String KEY_CATEGORIES = "categories";
     private static final String KEY_REVIEW_REEDIT = "review_reedit";
+    private static final String KEY_MEDIA_IMAGE_COUNT = "media_image_count";
+    private static final String KEY_MEDIA_IMAGE_SIZE = "media_image_size";
+    private static final String KEY_MEDIA_VIDEO_COUNT = "media_video_count";
 
     // 预设色号与 newUI 的橙色强调保持协调，管理员可在设置页直接选择。
     private static final int[] ACCENTS = {
@@ -72,10 +75,8 @@ public final class AppSettings {
     }
 
     public static List<String> getCategories(Context context) {
-        String saved = prefs(context).getString(KEY_CATEGORIES,
-                "智能家居|物流技术|医疗健康|新材料");
         List<String> result = new ArrayList<>();
-        for (String item : saved.split("\\|")) {
+        for (String item : categorySource(context).split("[|\\n]")) {
             if (item.trim().length() > 0) result.add(item.trim());
         }
         return result;
@@ -86,12 +87,42 @@ public final class AppSettings {
                 android.text.TextUtils.join("|", categories)).apply();
     }
 
+    /** 兼容旧版用换行分隔分类的历史数据，写入时统一使用竖线。 */
+    private static String categorySource(Context context) {
+        String saved = prefs(context).getString(KEY_CATEGORIES,
+                "智能家居|物流技术|医疗健康|新材料");
+        return saved == null ? "" : saved;
+    }
+
     public static boolean canReviseReviewedRegistration(Context context) {
         return prefs(context).getBoolean(KEY_REVIEW_REEDIT, false);
     }
 
     public static void setCanReviseReviewedRegistration(Context context, boolean enabled) {
         prefs(context).edit().putBoolean(KEY_REVIEW_REEDIT, enabled).apply();
+    }
+
+    // ── 富文本媒体限制（newUI 系统设置页） ─────────────────────
+    // 默认值与旧版系统设置表单保持一致，改动后同时作用于 WebView 富文本编辑器。
+
+    public static int getMediaImageLimit(Context context) {
+        return prefs(context).getInt(KEY_MEDIA_IMAGE_COUNT, 8);
+    }
+
+    public static int getMediaImageSizeMb(Context context) {
+        return prefs(context).getInt(KEY_MEDIA_IMAGE_SIZE, 10);
+    }
+
+    public static int getMediaVideoLimit(Context context) {
+        return prefs(context).getInt(KEY_MEDIA_VIDEO_COUNT, 2);
+    }
+
+    public static void saveMediaLimits(Context context, int imageCount, int imageSizeMb, int videoCount) {
+        prefs(context).edit()
+                .putInt(KEY_MEDIA_IMAGE_COUNT, Math.max(1, imageCount))
+                .putInt(KEY_MEDIA_IMAGE_SIZE, Math.max(1, imageSizeMb))
+                .putInt(KEY_MEDIA_VIDEO_COUNT, Math.max(0, videoCount))
+                .apply();
     }
 
     /** 将当前主题色应用到系统栏，进入页面时即可看到配色变化。 */

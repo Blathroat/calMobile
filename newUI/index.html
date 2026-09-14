@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>calMobile · 展会排期助手 · 移动端主流程线框</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio.
+       Put this @layer first; product CSS outside the layer always wins. */
+    @layer od-layout {
+      :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+
+      .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+      .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+      .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+      .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+      .od-fill    { flex: 1 1 0; min-width: 0; }
+      .od-fixed   { flex: none; }
+      .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+
+      .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+      :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+      .od-tile { display: grid; grid-template-rows: auto 1fr; }
+      :where(.od-tile) > :where(*) { display: block; }
+
+      .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+      .od-media-cover { object-fit: cover; }
+
+      .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+      .od-clamp-2 { -webkit-line-clamp: 2; }
+      .od-clamp-3 { -webkit-line-clamp: 3; }
+      .od-lines-2 { min-height: calc(2 * 1.4em); }
+      .od-nowrap  { white-space: nowrap; }
+      .od-keep    { word-break: keep-all; overflow-wrap: anywhere; }
+
+      .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+      .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+
+      .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+                 padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+      .od-rail::-webkit-scrollbar { display: none; }
+      :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+      :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+
+      .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+      .od-touch  { min-width: 44px; min-height: 44px; }
+    }
+    /* /OD-LAYOUT-PRIMITIVES v1 */
+
+    :root {
+      --board-bg: #f7f6f3;
+      --board-dot: #e4e1db;
+      --screen: #ffffff;
+      --ink: #1f2328;
+      --ink-2: #626a74;
+      --ink-3: #969da7;
+      --fill-1: #e7e9ec;
+      --fill-2: #cfd4da;
+      --fill-3: #f1f2f4;
+      --stroke: #c5cad1;
+      --accent: #c05621;
+      --accent-ink: #963f17;
+      --accent-tint: #faeadd;
+      --accent-edge: #e3b28d;
+      --frame: #252a31;
+      --dark-fill: #48515d;
+      --success-fill: #e4efe8;
+      --success-ink: #245d3c;
+      --font-board: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 24px;
+      --phone-width: 238px;
+      --phone-height: 522px;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-pill: 999px;
+      --motion-fast: 150ms;
+      --ease-standard: cubic-bezier(.2, 0, 0, 1);
+      --icon-size: 13px;
+      --icon-stroke: 1.35;
+      --icon-border: 1px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      min-height: 100dvh;
+      overflow-x: hidden;
+      background-color: var(--board-bg);
+      background-image: radial-gradient(circle, var(--board-dot) 1px, transparent 1.2px);
+      background-size: 22px 22px;
+      color: var(--ink);
+      font-family: var(--font-board);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    button, input { font: inherit; }
+    button { border: 0; }
+    button, input { color: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 3px rgba(192, 86, 33, .16);
+    }
+
+    .board { max-width: 1360px; margin: 0 auto; padding: 44px 28px 64px; }
+    .board-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-6); }
+    .head-main { min-width: 0; }
+    .wire-tag {
+      display: inline-block;
+      margin: 0 0 var(--space-3) 4px;
+      padding: 6px 10px;
+      border: 1.5px dashed var(--accent);
+      border-radius: 6px;
+      background: var(--screen);
+      color: var(--accent-ink);
+      font: 600 11px/1 var(--font-mono);
+      letter-spacing: .1em;
+      transform: rotate(-2deg);
+    }
+    .board-head h1 { margin: 0; font-size: 27px; font-weight: 800; letter-spacing: -.015em; }
+    .board-head .sub { margin: 8px 0 0; color: var(--ink-2); font-size: 13px; line-height: 1.5; }
+    .dateline {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 6px;
+      color: var(--ink-2);
+      font: 600 12px/1 var(--font-mono);
+      white-space: nowrap;
+    }
+    .flow-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 18px;
+      padding: 7px 11px;
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius-pill);
+      background: rgba(255, 255, 255, .72);
+      color: var(--ink-2);
+      font: 600 11px/1.2 var(--font-mono);
+    }
+    .flow-status::before { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); content: ""; }
+
+    .flow { margin-top: 4px; overflow-x: auto; padding: 0 8px; scrollbar-width: thin; }
+    .flow-inner { display: flex; align-items: flex-start; width: max-content; margin: 0 auto; padding: 34px 6px 18px; }
+    .phone-unit { position: relative; flex: none; display: flex; flex-direction: column; align-items: center; }
+    .phone-unit.is-active .phone { box-shadow: 0 0 0 3px var(--accent), 0 14px 30px rgba(31, 35, 40, .12); }
+    .cap { margin-top: 12px; color: var(--ink-2); font: 600 11px/1 var(--font-mono); letter-spacing: .035em; white-space: nowrap; }
+    .cap b { margin-inline-end: 6px; color: var(--accent-ink); }
+
+    .phone {
+      position: relative;
+      width: var(--phone-width);
+      height: var(--phone-height);
+      overflow: hidden;
+      border: 3px solid var(--frame);
+      border-radius: 30px;
+      background: var(--screen);
+      box-shadow: 0 14px 30px rgba(31, 35, 40, .12);
+      transition: box-shadow var(--motion-fast) var(--ease-standard);
+    }
+    .notch {
+      position: absolute;
+      z-index: 5;
+      top: 7px;
+      left: 50%;
+      width: 70px;
+      height: 14px;
+      border-radius: var(--radius-pill);
+      background: var(--frame);
+      transform: translateX(-50%);
+    }
+    .statusbar {
+      position: absolute;
+      z-index: 4;
+      inset: 0 0 auto;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 15px;
+      color: var(--ink-2);
+      font: 600 10px/1 var(--font-mono);
+      pointer-events: none;
+    }
+    .sb-ic { display: inline-flex; align-items: center; gap: 4px; }
+    .sb-ic i { display: block; height: 6px; border-radius: 2px; background: var(--fill-2); }
+    .sb-ic i:nth-child(1) { width: 11px; }
+    .sb-ic i:nth-child(2) { width: 9px; }
+    .sb-ic i:nth-child(3) { width: 13px; }
+    .screen {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 7px;
+      padding: 30px 10px 9px;
+      background: var(--screen);
+    }
+    .screen-head { min-height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .screen-scroll { min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; padding-bottom: 1px; }
+    .screen-scroll::-webkit-scrollbar { display: none; }
+    .screen-foot { min-height: 36px; }
+    .bar { display: block; flex: none; height: 9px; border-radius: var(--radius-pill); background: var(--fill-1); }
+    .bar.b-dark { background: var(--fill-2); }
+    .bar.w-100 { width: 100%; }
+    .bar.w-88 { width: 88%; }
+    .bar.w-76 { width: 76%; }
+    .bar.w-68 { width: 68%; }
+    .bar.w-58 { width: 58%; }
+    .bar.w-48 { width: 48%; }
+    .bar.w-42 { width: 42%; }
+    .bar.w-36 { width: 36%; }
+    .bar.w-30 { width: 30%; }
+    .bar.w-24 { width: 24%; }
+    .bar.w-18 { width: 18%; }
+    .bar.h-6 { height: 6px; }
+    .bar.h-8 { height: 8px; }
+    .bar.h-11 { height: 11px; }
+    .bar.h-13 { height: 13px; }
+
+    .ph-img {
+      flex: none;
+      border: 1.5px solid var(--stroke);
+      border-radius: 10px;
+      background:
+        linear-gradient(to top right, transparent calc(50% - .8px), var(--stroke) calc(50% - .8px) calc(50% + .8px), transparent calc(50% + .8px)),
+        linear-gradient(to bottom right, transparent calc(50% - .8px), var(--stroke) calc(50% - .8px) calc(50% + .8px), transparent calc(50% + .8px)),
+        var(--fill-3);
+    }
+    .ph-img.hero { height: 106px; }
+    .ph-img.detail-hero { height: 116px; }
+    .ph-img.thumb { width: 40px; height: 40px; border-radius: 7px; }
+    .ph-img.avatar { width: 28px; height: 28px; border-radius: 50%; }
+    .ph-img.brand-hero { width: 58px; height: 58px; margin-inline: auto; border-radius: 14px; }
+
+    .brand-lockup { display: flex; align-items: center; gap: 8px; }
+    .brand-mark {
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      background: var(--fill-2);
+      color: var(--frame);
+      font-size: 15px;
+      font-weight: 800;
+    }
+    .brand-mark.small { width: 22px; height: 22px; border-radius: 6px; font-size: 12px; }
+    .icon-button, .round-button {
+      flex: none;
+      width: 44px;
+      height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: var(--icon-border) solid var(--stroke);
+      border-radius: 50%;
+      background: var(--screen);
+      color: var(--ink-2);
+    }
+    .icon { width: var(--icon-size); height: var(--icon-size); fill: none; stroke: currentColor; stroke-width: var(--icon-stroke); stroke-linecap: round; stroke-linejoin: round; }
+    .auth-scroll { display: flex; flex-direction: column; justify-content: flex-start; gap: 9px; padding-block-start: 8px; }
+    .auth-intro { display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; }
+    .auth-intro h2 { margin: 0; font-size: 17px; line-height: 1.25; }
+    .auth-intro p { margin: 0; color: var(--ink-2); font-size: 10px; line-height: 1.4; }
+    .auth-form { display: grid; gap: 6px; }
+    .field { display: grid; gap: 3px; }
+    .field label { color: var(--ink-2); font-size: 10px; font-weight: 700; }
+    .wire-input {
+      width: 100%;
+      min-height: 34px;
+      padding: 0 8px;
+      border: 1px solid var(--stroke);
+      border-radius: 7px;
+      background: var(--fill-3);
+      color: var(--ink);
+      font-size: 11px;
+    }
+    .wire-input::placeholder { color: var(--ink-3); }
+    .cta {
+      width: 100%;
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      border-radius: 8px;
+      background: var(--dark-fill);
+      color: var(--screen);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+    }
+    .cta.ghost { background: var(--screen); color: var(--dark-fill); border: 1.5px solid var(--dark-fill); }
+    .auth-footer { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--ink-3); font-size: 10px; }
+    .text-action { padding: 6px; background: transparent; color: var(--accent-ink); font-size: 10px; font-weight: 700; }
+
+    .home-scroll { display: flex; flex-direction: column; gap: 6px; }
+    .home-title { display: flex; flex-direction: column; gap: 2px; }
+    .eyebrow { color: var(--ink-3); font: 600 9px/1.2 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+    .home-title strong { font-size: 16px; line-height: 1.3; }
+    .month-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .month-row strong { font-size: 12px; }
+    .month-actions { display: inline-flex; gap: 4px; }
+    .month-actions .round-button { width: 32px; height: 32px; }
+    .calendar { padding: 5px; border: 1px solid var(--stroke); border-radius: 9px; background: var(--fill-3); }
+    .week-row, .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+    .week-row { margin-bottom: 2px; color: var(--ink-3); font: 600 8px/1 var(--font-mono); text-align: center; }
+    .cal-day {
+      position: relative;
+      min-width: 0;
+      min-height: 25px;
+      padding: 2px 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--ink-2);
+      font-size: 10px;
+    }
+    .cal-day.muted { color: var(--ink-3); }
+    .cal-day.has-event::after { position: absolute; inset-inline-start: 50%; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); content: ""; transform: translateX(-50%); }
+    .cal-day.selected { background: var(--dark-fill); color: var(--screen); }
+    .cal-day.selected::after { background: var(--screen); }
+    .selected-date { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .selected-date strong { font-size: 12px; }
+    .selected-date span { color: var(--ink-3); font-size: 10px; }
+    .event-list { display: grid; gap: 5px; min-width: 0; }
+    .event-card {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 6px;
+      padding: 6px;
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      background: var(--screen);
+      text-align: start;
+    }
+    .event-copy { min-width: 0; flex: 1 1 auto; display: grid; gap: 3px; }
+    .event-title-row { min-width: 0; display: flex; align-items: center; gap: 3px; }
+    .event-title { min-width: 0; flex: 1 1 auto; font-size: 10px; font-weight: 700; }
+    .event-meta { color: var(--ink-2); font-size: 8px; line-height: 1.25; }
+    .status-tag { flex: none; padding: 2px 4px; border-radius: 4px; background: var(--accent-tint); color: var(--accent-ink); font: 600 7px/1 var(--font-mono); white-space: nowrap; }
+    .tabbar { display: flex; align-items: stretch; justify-content: space-around; gap: 2px; border-top: 1px solid var(--stroke); padding-top: 6px; }
+    .tab { min-width: 44px; min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 2px; background: transparent; color: var(--ink-3); font-size: 8px; }
+    .tab-icon { width: 12px; height: 12px; border: var(--icon-border) solid currentColor; border-radius: 3px; }
+    .tab.active { color: var(--dark-fill); font-weight: 700; }
+    .tab.active .tab-icon { background: var(--dark-fill); border-color: var(--dark-fill); }
+
+    .detail-scroll { display: flex; flex-direction: column; gap: 6px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .back-button { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border: var(--icon-border) solid var(--stroke); border-radius: 50%; background: var(--screen); color: var(--ink-2); }
+    .topbar-title { color: var(--ink-2); font-size: 11px; font-weight: 700; }
+    .detail-title { display: grid; gap: 4px; }
+    .detail-title h2 { margin: 0; font-size: 17px; line-height: 1.35; }
+    .detail-title p { margin: 0; color: var(--ink-2); font-size: 10px; }
+    .detail-meta { display: grid; gap: 5px; padding: 9px; border: 1px solid var(--stroke); border-radius: 9px; background: var(--fill-3); }
+    .meta-row { display: flex; align-items: center; gap: 7px; color: var(--ink-2); font-size: 10px; }
+    .meta-icon { width: 11px; height: 11px; flex: none; border: var(--icon-border) solid var(--ink-3); border-radius: 3px; }
+    .exhibitor-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; }
+    .exhibitor-copy { display: grid; gap: 2px; }
+    .exhibitor-copy strong { font-size: 11px; }
+    .exhibitor-copy span { color: var(--ink-2); font-size: 9px; }
+    .description { display: grid; gap: 6px; }
+    .description .section-label { color: var(--ink-2); font-size: 10px; font-weight: 700; }
+    .detail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .detail-actions .cta { min-height: 36px; font-size: 10px; }
+
+    .register-scroll { display: flex; flex-direction: column; gap: 6px; }
+    .register-summary { display: grid; gap: 4px; padding: 9px; border: 1px solid var(--stroke); border-radius: 9px; background: var(--fill-3); }
+    .register-summary strong { font-size: 12px; }
+    .register-summary span { color: var(--ink-2); font-size: 9px; }
+    .register-form { display: grid; gap: 6px; }
+    .choice-group { display: grid; gap: 4px; }
+    .choice-group legend { margin-bottom: 1px; color: var(--ink-2); font-size: 10px; font-weight: 700; }
+    .choice-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+    .choice { position: relative; min-width: 0; }
+    .choice input { position: absolute; opacity: 0; pointer-events: none; }
+    .choice label { min-height: 30px; display: flex; align-items: center; justify-content: center; padding: 3px; border: 1px solid var(--stroke); border-radius: 6px; background: var(--screen); color: var(--ink-2); font-size: 8px; text-align: center; }
+    .choice input:checked + label { border-color: var(--dark-fill); background: var(--dark-fill); color: var(--screen); }
+    .check-row { display: grid; gap: 5px; }
+    .check-label { min-height: 30px; display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--stroke); border-radius: 6px; background: var(--screen); color: var(--ink-2); font-size: 8px; }
+    .check-label input { width: 12px; height: 12px; accent-color: var(--accent); }
+    .register-foot { display: grid; gap: 6px; }
+    .submit-note { color: var(--ink-3); font-size: 9px; text-align: center; }
+    .success-state { display: grid; gap: 6px; justify-items: center; padding: 13px 9px; border: 1px dashed var(--success-ink); border-radius: 9px; background: var(--success-fill); color: var(--success-ink); text-align: center; }
+    .success-state[hidden] { display: none; }
+    .success-check { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 2px solid var(--success-ink); border-radius: 50%; font-size: 16px; font-weight: 700; }
+    .success-state strong { font-size: 12px; }
+    .success-state span { font-size: 9px; }
+
+    .connector { flex: none; width: 76px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding-top: 174px; }
+    .step-label { padding: 3px 8px; border: 1px dashed var(--accent); border-radius: var(--radius-pill); background: var(--screen); color: var(--accent-ink); font: 600 10px/1.4 var(--font-mono); white-space: nowrap; }
+    .arrow { display: block; }
+    .arrow line { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 4; stroke-linecap: round; }
+    .arrow path { fill: var(--accent); }
+    .sticky { position: absolute; z-index: 8; width: 150px; padding: 11px 12px; border: 1px solid var(--accent-edge); border-radius: 2px; background: var(--accent-tint); color: var(--accent-ink); box-shadow: 0 8px 16px rgba(163, 68, 16, .14); font-size: 11px; font-weight: 600; line-height: 1.5; }
+    .sticky::before { position: absolute; top: -8px; left: 50%; width: 18px; height: 18px; border: 1px dashed var(--accent); border-radius: 50%; background: rgba(192, 86, 33, .18); content: ""; transform: translateX(-50%); }
+    .note-login { top: -17px; right: -20px; transform: rotate(2.5deg); }
+    .note-register { top: -17px; right: -22px; transform: rotate(-2.5deg); }
+
+    @media (hover: hover) {
+      .cta:hover { background: var(--frame); }
+      .cta.ghost:hover, .icon-button:hover, .round-button:hover, .back-button:hover { border-color: var(--accent); color: var(--accent-ink); }
+      .event-card:hover { border-color: var(--accent); }
+      .tab:hover { color: var(--accent-ink); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
+    @media (max-width: 720px) {
+      .board { padding: 28px 16px 48px; }
+      .board-head { flex-direction: column; gap: 12px; }
+      .board-head h1 { font-size: 22px; }
+      .dateline { padding-top: 0; }
+      .flow-inner { margin-inline: 0; }
+    }
+
+    /* 20:9 long-phone tuning: quieter type, smaller symbols, more breathing room. */
+    :root { --phone-width: 216px; --phone-height: 480px; }
+    .board { padding-block: 40px 56px; }
+    .board-head h1 { font-size: 24px; }
+    .board-head .sub { font-size: 12px; }
+    .wire-tag { font-size: 10px; }
+    .dateline { font-size: 11px; }
+    .flow-status { margin-top: 16px; padding: 6px 10px; font-size: 10px; }
+    .flow-inner { padding-block: 28px 20px; }
+    .phone { border-width: 2px; border-radius: 28px; }
+    .notch { top: 6px; width: 58px; height: 11px; }
+    .statusbar { height: 27px; padding-inline: 13px; font-size: 9px; }
+    .sb-ic { gap: 3px; }
+    .sb-ic i { height: 5px; }
+    .sb-ic i:nth-child(1) { width: 9px; }
+    .sb-ic i:nth-child(2) { width: 8px; }
+    .sb-ic i:nth-child(3) { width: 11px; }
+    .screen { gap: 6px; padding: 28px 10px 8px; }
+    .screen-head { min-height: 22px; gap: 5px; }
+    .screen-foot { min-height: 34px; }
+    .icon-button, .back-button { width: 40px; height: 40px; }
+    .round-button { width: 36px; height: 36px; }
+    .month-actions .round-button { width: 32px; height: 32px; }
+    :root { --icon-size: 12px; --icon-stroke: 1.25; --icon-border: 1px; }
+    .ph-img.hero { height: 98px; }
+    .ph-img.detail-hero { height: 108px; }
+    .ph-img.thumb { width: 38px; height: 38px; }
+    .ph-img.avatar { width: 26px; height: 26px; }
+    .ph-img.brand-hero { width: 54px; height: 54px; }
+    .brand-mark { width: 24px; height: 24px; font-size: 13px; }
+    .brand-mark.small { width: 20px; height: 20px; font-size: 10px; }
+    .auth-scroll { gap: 7px; padding-block-start: 6px; }
+    .home-scroll, .detail-scroll, .register-scroll { gap: 6px; }
+    .auth-intro { gap: 5px; }
+    .auth-intro h2 { font-size: 15px; }
+    .auth-intro p { font-size: 9px; }
+    .auth-form, .register-form { gap: 6px; }
+    .field { gap: 3px; }
+    .field label, .choice-group legend { font-size: 9px; }
+    .wire-input { min-height: 34px; font-size: 10px; }
+    .cta { min-height: 36px; font-size: 10px; }
+    .auth-footer, .text-action { font-size: 9px; }
+    .home-title strong { font-size: 14px; }
+    .month-row strong, .selected-date strong { font-size: 11px; }
+    .selected-date span { font-size: 9px; }
+    .calendar { padding: 5px; }
+    .week-row { font-size: 7px; }
+    .cal-day { min-height: 25px; font-size: 9px; }
+    .event-list { gap: 5px; }
+    .event-card { gap: 5px; padding: 5px; }
+    .event-title { font-size: 9px; }
+    .event-meta { font-size: 7px; }
+    .status-tag { padding: 2px 3px; font-size: 6px; }
+    .tabbar { padding-top: 5px; }
+    .tab { min-width: 40px; min-height: 36px; font-size: 7px; }
+    .tab-icon { width: 10px; height: 10px; border-width: 1px; }
+    .topbar-title { font-size: 10px; }
+    .detail-title h2 { font-size: 15px; }
+    .detail-title p, .exhibitor-copy span, .register-summary span { font-size: 9px; }
+    .detail-meta { gap: 4px; padding: 7px; }
+    .meta-row { gap: 6px; font-size: 9px; }
+    .exhibitor-row { gap: 7px; padding-block: 5px; }
+    .exhibitor-copy strong, .register-summary strong { font-size: 10px; }
+    .description { gap: 5px; }
+    .description .section-label { font-size: 9px; }
+    .detail-actions { gap: 6px; }
+    .detail-actions .cta { min-height: 36px; font-size: 9px; }
+    .choice-row { gap: 4px; }
+    .choice label, .check-label { min-height: 30px; font-size: 8px; }
+    .check-label { gap: 6px; padding-inline: 6px; }
+    .check-label input { width: 12px; height: 12px; }
+    .submit-note { font-size: 8px; }
+    .success-state { gap: 5px; padding: 10px 8px; }
+    .success-check { width: 24px; height: 24px; font-size: 14px; }
+    .success-state strong { font-size: 11px; }
+    .success-state span { font-size: 8px; }
+    .connector { width: 64px; padding-top: 156px; }
+    .step-label { padding: 3px 7px; font-size: 9px; }
+    .sticky { width: 132px; padding: 9px 10px; font-size: 10px; }
+    .note-login, .note-register { top: -15px; }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <header class="board-head" data-od-id="board-header">
+      <div class="head-main">
+        <span class="wire-tag">WIREFRAME v0.1 · MOBILE</span>
+        <h1>calMobile · 展会排期助手</h1>
+        <p class="sub">普通用户主流程：登录 / 访客 → 月视图与展会列表 → 展会详情 → 报名信息</p>
+      </div>
+      <div class="dateline" aria-label="板面信息">
+        <span>2026-09-12</span><span>/</span><span>390 × 844</span><span>/</span><span>LO-FI</span>
+      </div>
+    </header>
+
+    <p class="flow-status" data-flow-status role="status" aria-live="polite">从左到右阅读；点击按钮可定位下一步</p>
+
+    <section class="flow" aria-label="calMobile 普通用户主流程">
+      <div class="flow-inner">
+        <figure class="phone-unit" data-od-id="screen-login">
+          <div class="phone">
+            <span class="notch" aria-hidden="true"></span>
+            <div class="statusbar" aria-hidden="true"><span>9:41</span><span class="sb-ic"><i></i><i></i><i></i></span></div>
+            <section class="screen od-screen" aria-label="登录或访客入口">
+              <header class="screen-head">
+                <div class="brand-lockup"><span class="brand-mark">展</span><span class="bar w-42 h-8"></span></div>
+                <span class="bar w-18 h-6"></span>
+              </header>
+              <div class="screen-scroll auth-scroll">
+                <div class="auth-intro">
+                  <div class="ph-img brand-hero" aria-hidden="true"></div>
+                  <h2>展会排期助手</h2>
+                  <p>找到值得参加的展会，保存日程并完成报名</p>
+                </div>
+                <form class="auth-form" data-login-form>
+                  <div class="field"><label for="login-account">账号</label><input class="wire-input" id="login-account" type="text" placeholder="昵称 / 邮箱" autocomplete="username" /></div>
+                  <div class="field"><label for="login-password">密码</label><input class="wire-input" id="login-password" type="password" placeholder="请输入密码" autocomplete="current-password" /></div>
+                  <button class="cta" type="submit">登录</button>
+                  <button class="cta ghost" type="button" data-action="go-home">以访客身份浏览</button>
+                </form>
+              </div>
+              <footer class="screen-foot auth-footer"><span>还没有账号？</span><button class="text-action" type="button" data-action="register-account">注册新账号</button></footer>
+            </section>
+          </div>
+          <figcaption class="cap"><b>01</b>入口 · LOGIN / GUEST</figcaption>
+          <aside class="sticky note-login" data-od-id="note-login">访客先看展会，报名时再引导登录</aside>
+        </figure>
+
+        <div class="connector" data-od-id="connector-1">
+          <span class="step-label">① 开始浏览</span>
+          <svg class="arrow" viewBox="0 0 64 22" width="64" height="22" aria-hidden="true"><line x1="2" y1="11" x2="50" y2="11"></line><path d="M50 4 L63 11 L50 18 Z"></path></svg>
+        </div>
+
+        <figure class="phone-unit" data-od-id="screen-home">
+          <div class="phone">
+            <span class="notch" aria-hidden="true"></span>
+            <div class="statusbar" aria-hidden="true"><span>9:41</span><span class="sb-ic"><i></i><i></i><i></i></span></div>
+            <section class="screen od-screen" aria-label="首页月视图与展会列表">
+              <header class="screen-head">
+                <div class="brand-lockup"><span class="brand-mark small">展</span><div class="home-title"><span class="eyebrow">calMobile</span><strong>发现展会</strong></div></div>
+                <button class="icon-button" type="button" data-action="search" aria-label="搜索展会"><svg class="icon" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 5 5"></path></svg></button>
+              </header>
+              <div class="screen-scroll home-scroll">
+                <div class="month-row"><strong>2026 年 6 月</strong><div class="month-actions"><button class="round-button" type="button" data-action="month-prev" aria-label="上一个月"><svg class="icon" viewBox="0 0 24 24"><path d="m14 5-7 7 7 7"></path></svg></button><button class="round-button" type="button" data-action="month-next" aria-label="下一个月"><svg class="icon" viewBox="0 0 24 24"><path d="m10 5 7 7-7 7"></path></svg></button></div></div>
+                <div class="calendar" aria-label="2026年6月日历">
+                  <div class="week-row" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+                  <div class="calendar-grid">
+                    <button class="cal-day muted" type="button" data-action="select-date" aria-label="5月25日">25</button><button class="cal-day muted" type="button" data-action="select-date" aria-label="5月26日">26</button><button class="cal-day muted" type="button" data-action="select-date" aria-label="5月27日">27</button><button class="cal-day muted" type="button" data-action="select-date" aria-label="5月28日">28</button><button class="cal-day muted" type="button" data-action="select-date" aria-label="5月29日">29</button><button class="cal-day muted" type="button" data-action="select-date" aria-label="5月30日">30</button><button class="cal-day muted" type="button" data-action="select-date" aria-label="5月31日">31</button>
+                    <button class="cal-day" type="button" data-action="select-date" aria-label="6月1日">1</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月2日">2</button><button class="cal-day has-event" type="button" data-action="select-date" aria-label="6月3日有展会">3</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月4日">4</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月5日">5</button><button class="cal-day has-event" type="button" data-action="select-date" aria-label="6月6日有展会">6</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月7日">7</button>
+                    <button class="cal-day" type="button" data-action="select-date" aria-label="6月8日">8</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月9日">9</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月10日">10</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月11日">11</button><button class="cal-day has-event selected" type="button" data-action="select-date" aria-label="6月12日有展会，已选择">12</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月13日">13</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月14日">14</button>
+                    <button class="cal-day" type="button" data-action="select-date" aria-label="6月15日">15</button><button class="cal-day has-event" type="button" data-action="select-date" aria-label="6月16日有展会">16</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月17日">17</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月18日">18</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月19日">19</button><button class="cal-day has-event" type="button" data-action="select-date" aria-label="6月20日有展会">20</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月21日">21</button>
+                    <button class="cal-day" type="button" data-action="select-date" aria-label="6月22日">22</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月23日">23</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月24日">24</button><button class="cal-day has-event" type="button" data-action="select-date" aria-label="6月25日有展会">25</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月26日">26</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月27日">27</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月28日">28</button>
+                    <button class="cal-day" type="button" data-action="select-date" aria-label="6月29日">29</button><button class="cal-day" type="button" data-action="select-date" aria-label="6月30日">30</button><button class="cal-day muted" type="button" data-action="select-date" aria-label="7月1日">1</button><button class="cal-day muted" type="button" data-action="select-date" aria-label="7月2日">2</button><button class="cal-day muted" type="button" data-action="select-date" aria-label="7月3日">3</button><button class="cal-day muted" type="button" data-action="select-date" aria-label="7月4日">4</button><button class="cal-day muted" type="button" data-action="select-date" aria-label="7月5日">5</button>
+                  </div>
+                </div>
+                <div class="selected-date"><strong>6 月 12 日的展会</strong><span>共 2 场 · 可滚动</span></div>
+                <div class="event-list">
+                  <button class="event-card od-tile" type="button" data-action="go-detail" aria-label="查看智能制造与工业自动化展详情"><span class="ph-img thumb" aria-hidden="true"></span><span class="event-copy"><span class="event-title-row"><span class="event-title od-truncate">智能制造与工业自动化展</span><span class="status-tag">报名中</span></span><span class="event-meta">北辰会展 · 6月12日 09:00–17:00</span><span class="event-meta od-truncate">上海新国际博览中心</span></span></button>
+                  <button class="event-card od-tile" type="button" data-action="go-detail" aria-label="查看绿色建筑材料展详情"><span class="ph-img thumb" aria-hidden="true"></span><span class="event-copy"><span class="event-title-row"><span class="event-title od-truncate">绿色建筑材料展</span><span class="status-tag">报名中</span></span><span class="event-meta">城市更新馆 · 6月12日 10:00–18:00</span><span class="event-meta od-truncate">国家会展中心 3 号馆</span></span></button>
+                </div>
+              </div>
+              <footer class="screen-foot tabbar" aria-label="底部导航"><button class="tab active" type="button" data-action="go-home"><span class="tab-icon" aria-hidden="true"></span><span>首页</span></button><button class="tab" type="button" data-action="go-registrations"><span class="tab-icon" aria-hidden="true"></span><span>我的报名</span></button><button class="tab" type="button" data-action="go-profile"><span class="tab-icon" aria-hidden="true"></span><span>个人</span></button></footer>
+            </section>
+          </div>
+          <figcaption class="cap"><b>02</b>首页 · CALENDAR / FEED</figcaption>
+        </figure>
+
+        <div class="connector" data-od-id="connector-2">
+          <span class="step-label">② 打开展会</span>
+          <svg class="arrow" viewBox="0 0 64 22" width="64" height="22" aria-hidden="true"><line x1="2" y1="11" x2="50" y2="11"></line><path d="M50 4 L63 11 L50 18 Z"></path></svg>
+        </div>
+
+        <figure class="phone-unit" data-od-id="screen-detail">
+          <div class="phone">
+            <span class="notch" aria-hidden="true"></span>
+            <div class="statusbar" aria-hidden="true"><span>9:41</span><span class="sb-ic"><i></i><i></i><i></i></span></div>
+            <section class="screen od-screen" aria-label="展会详情">
+              <header class="screen-head topbar"><button class="back-button" type="button" data-action="go-home" aria-label="返回首页"><svg class="icon" viewBox="0 0 24 24"><path d="m14 5-7 7 7 7"></path></svg></button><span class="topbar-title">展会详情</span><button class="icon-button" type="button" data-action="share" aria-label="分享展会"><svg class="icon" viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"></path></svg></button></header>
+              <div class="screen-scroll detail-scroll">
+                <div class="ph-img detail-hero" aria-hidden="true"></div>
+                <div class="detail-title"><h2>智能制造与工业自动化展</h2><p>北辰会展 · 面向产业链专业观众</p></div>
+                <div class="detail-meta"><div class="meta-row"><span class="meta-icon" aria-hidden="true"></span><span>6月12日（周五）09:00–17:00</span></div><div class="meta-row"><span class="meta-icon" aria-hidden="true"></span><span>上海新国际博览中心 · N3 馆</span></div><div class="meta-row"><span class="status-tag">报名中</span><span>需提交报名信息</span></div></div>
+                <div class="exhibitor-row"><span class="ph-img avatar" aria-hidden="true"></span><span class="exhibitor-copy"><strong>北辰会展</strong><span>查看展商公开主页 →</span></span></div>
+                <div class="description"><span class="section-label">展会介绍</span><span class="bar w-100 h-8"></span><span class="bar w-88 h-8"></span><span class="bar w-76 h-8"></span><span class="bar w-58 h-8"></span></div>
+                <div class="description"><span class="section-label">现场亮点</span><div class="od-cluster"><span class="status-tag">智能工厂</span><span class="status-tag">工业自动化</span><span class="status-tag">供需对接</span></div></div>
+              </div>
+              <footer class="screen-foot detail-actions"><button class="cta ghost" type="button" data-action="add-calendar">加入日历</button><button class="cta" type="button" data-action="go-register">立即报名</button></footer>
+            </section>
+          </div>
+          <figcaption class="cap"><b>03</b>详情 · EXHIBITION DETAIL</figcaption>
+        </figure>
+
+        <div class="connector" data-od-id="connector-3">
+          <span class="step-label">③ 立即报名</span>
+          <svg class="arrow" viewBox="0 0 64 22" width="64" height="22" aria-hidden="true"><line x1="2" y1="11" x2="50" y2="11"></line><path d="M50 4 L63 11 L50 18 Z"></path></svg>
+        </div>
+
+        <figure class="phone-unit" data-od-id="screen-register">
+          <div class="phone">
+            <span class="notch" aria-hidden="true"></span>
+            <div class="statusbar" aria-hidden="true"><span>9:41</span><span class="sb-ic"><i></i><i></i><i></i></span></div>
+            <section class="screen od-screen" aria-label="报名信息">
+              <header class="screen-head topbar"><button class="back-button" type="button" data-action="go-detail" aria-label="返回展会详情"><svg class="icon" viewBox="0 0 24 24"><path d="m14 5-7 7 7 7"></path></svg></button><span class="topbar-title">报名信息</span><span class="status-tag">待提交</span></header>
+              <div class="screen-scroll register-scroll">
+                <div class="register-summary"><strong>智能制造与工业自动化展</strong><span>6月12日 09:00–17:00 · 上海新国际博览中心</span></div>
+                <form class="register-form" data-registration-form>
+                  <div class="field"><label for="registration-name">姓名 / 公司名称 <span aria-hidden="true">*</span></label><input class="wire-input" id="registration-name" type="text" placeholder="请输入姓名或公司名称" required /></div>
+                  <fieldset class="choice-group"><legend>参观身份</legend><div class="choice-row"><span class="choice"><input id="visitor-pro" type="radio" name="visitor" checked /><label for="visitor-pro">专业观众</label></span><span class="choice"><input id="visitor-buy" type="radio" name="visitor" /><label for="visitor-buy">采购负责人</label></span><span class="choice"><input id="visitor-media" type="radio" name="visitor" /><label for="visitor-media">媒体伙伴</label></span></div></fieldset>
+                  <fieldset class="choice-group"><legend>报名需求</legend><div class="check-row"><label class="check-label"><input type="checkbox" name="meeting" />希望安排展商洽谈</label><label class="check-label"><input type="checkbox" name="reminder" checked />开展前一天提醒</label></div></fieldset>
+                  <div class="success-state" data-success-state hidden><span class="success-check" aria-hidden="true">✓</span><strong>报名已提交</strong><span>需审核的报名会在“我的报名”中显示状态</span></div>
+                  <p class="submit-note">提交前确认展会名称与报名方式</p>
+                  <button class="cta" type="submit" data-submit-registration>提交报名</button>
+                </form>
+              </div>
+              <footer class="screen-foot tabbar" aria-label="底部导航"><button class="tab" type="button" data-action="go-home"><span class="tab-icon" aria-hidden="true"></span><span>首页</span></button><button class="tab active" type="button" data-action="go-registrations"><span class="tab-icon" aria-hidden="true"></span><span>我的报名</span></button><button class="tab" type="button" data-action="go-profile"><span class="tab-icon" aria-hidden="true"></span><span>个人</span></button></footer>
+            </section>
+          </div>
+          <figcaption class="cap"><b>04</b>报名 · REGISTRATION</figcaption>
+          <aside class="sticky note-register" data-od-id="note-register">提交后进入待审核状态，结果回到“我的报名”</aside>
+        </figure>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const status = document.querySelector('[data-flow-status]');
+      const units = [...document.querySelectorAll('.phone-unit')];
+      const messages = {
+        'screen-login': '已回到入口：可登录，也可先以访客身份浏览',
+        'screen-home': '已定位首页：先选日期，再打开当天展会',
+        'screen-detail': '已定位详情：确认时间、地点和报名状态',
+        'screen-register': '已定位报名：填写身份后提交，状态进入我的报名'
+      };
+
+      function activate(id, message) {
+        units.forEach((unit) => unit.classList.toggle('is-active', unit.dataset.odId === id));
+        const target = document.querySelector(`[data-od-id="${id}"]`);
+        if (target) target.scrollIntoView({ block: 'nearest', inline: 'center' });
+        if (message) status.textContent = message;
+      }
+
+      document.addEventListener('click', (event) => {
+        const control = event.target.closest('[data-action]');
+        if (!control) return;
+        const action = control.dataset.action;
+        if (action === 'go-home') activate('screen-home', messages['screen-home']);
+        if (action === 'go-detail') activate('screen-detail', messages['screen-detail']);
+        if (action === 'go-register') activate('screen-register', messages['screen-register']);
+        if (action === 'go-registrations') status.textContent = '我的报名入口已标记：提交后可在此查看待审核状态';
+        if (action === 'go-profile') status.textContent = '个人入口已标记：账号资料与设置从这里进入';
+        if (action === 'register-account') status.textContent = '注册入口已标记：完成注册后回到登录';
+        if (action === 'search') status.textContent = '搜索入口已标记：可按展会、地点、分类或用户查找';
+        if (action === 'share') status.textContent = '分享入口已标记：详情可发送给同行或团队';
+        if (action === 'add-calendar') status.textContent = '已标记“添加到日历”：详情页保留日程动作';
+        if (action === 'month-prev' || action === 'month-next') status.textContent = '月份切换已标记：月视图支持前后浏览';
+        if (action === 'select-date') {
+          document.querySelectorAll('.cal-day').forEach((day) => day.classList.remove('selected'));
+          control.classList.add('selected');
+          status.textContent = `已选择 ${control.textContent.trim()} 日：列表显示当天展会`;
+        }
+      });
+
+      document.querySelector('[data-login-form]')?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        activate('screen-home', messages['screen-home']);
+      });
+
+      document.querySelector('[data-registration-form]')?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const success = form.querySelector('[data-success-state]');
+        const submit = form.querySelector('[data-submit-registration]');
+        success.hidden = false;
+        submit.textContent = '已提交 · 待审核';
+        submit.disabled = true;
+        status.textContent = '报名已提交：需要审核时将在“我的报名”显示待审核状态';
+      });
+    })();
+  </script>
+</body>
+</html>

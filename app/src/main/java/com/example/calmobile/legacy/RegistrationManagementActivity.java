@@ -10,11 +10,8 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 
 /** 展商和管理员查看展会报名记录的列表页面。 */
 public class RegistrationManagementActivity extends BaseActivity {
@@ -23,6 +20,7 @@ public class RegistrationManagementActivity extends BaseActivity {
     public static final String STATUS_APPROVED = "已通过";
     public static final String STATUS_REJECTED = "已拒绝";
 
+    /** 复用 {@link RegistrationReviewStore} 的记录类型，保证与 WebView 前端共享同一份审核数据。 */
     static class MgmtRecord {
         final String id;
         final String exhibitionId;
@@ -35,10 +33,13 @@ public class RegistrationManagementActivity extends BaseActivity {
             this.id = id; this.exhibitionId = exhibitionId; this.visitorName = visitorName;
             this.registrationTime = registrationTime; this.formAnswers = formAnswers; this.status = status;
         }
+
+        static MgmtRecord from(RegistrationReviewStore.Record record) {
+            return new MgmtRecord(record.id, record.exhibitionId, record.visitorName,
+                    record.registrationTime, record.formAnswers, record.status);
+        }
     }
 
-    private static final List<MgmtRecord> RECORDS = new ArrayList<>();
-    private static int nextId = 1;
     private LinearLayout listContainer;
     private TextView countText;
     private LinearLayout filterRow;
@@ -52,7 +53,7 @@ public class RegistrationManagementActivity extends BaseActivity {
         exhibitionId = getIntent().getStringExtra(EXTRA_EXHIBITION_ID);
         ExhibitorExhibition exhibition = ExhibitionManager.findById(exhibitionId);
         if (exhibition == null) { finish(); return; }
-        ensureSeeded(exhibitionId);
+        RegistrationReviewStore.ensureSeeded(exhibitionId);
         listContainer = findViewById(R.id.reg_mgmt_list);
         countText = findViewById(R.id.reg_mgmt_count);
         filterRow = findViewById(R.id.reg_mgmt_filter_row);
@@ -66,29 +67,25 @@ public class RegistrationManagementActivity extends BaseActivity {
     @Override public void finish() { super.finish(); overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right); }
 
     public static void addSubmittedRecord(String exhibitionId, String visitorName, String answers) {
-        RECORDS.add(new MgmtRecord("registration-" + nextId++, exhibitionId, visitorName,
-                new SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(new Date()), answers, STATUS_PENDING));
+        RegistrationReviewStore.add(exhibitionId, visitorName, answers);
     }
-    private static void ensureSeeded(String id) {
-        for (MgmtRecord record : RECORDS) if (id.equals(record.exhibitionId)) return;
-        RECORDS.add(new MgmtRecord("registration-" + nextId++, id, "张伟", "06-08 09:15", "兴趣方向：智能家居\n洽谈需求：是", STATUS_PENDING));
-        RECORDS.add(new MgmtRecord("registration-" + nextId++, id, "李娜", "06-08 10:30", "兴趣方向：全屋方案\n洽谈需求：否", STATUS_APPROVED));
-    }
+
     static MgmtRecord findRecord(String id) {
-        for (MgmtRecord record : RECORDS) if (record.id.equals(id)) return record;
-        return null;
+        RegistrationReviewStore.Record record = RegistrationReviewStore.find(id);
+        return record == null ? null : MgmtRecord.from(record);
     }
+
     static boolean updateStatus(String id, String status) {
-        MgmtRecord record = findRecord(id); if (record == null) return false; record.status = status; return true;
+        return RegistrationReviewStore.updateStatus(id, status);
     }
 
     private void renderList() {
         listContainer.removeAllViews();
+        RegistrationReviewStore.ensureSeeded(exhibitionId);
         List<MgmtRecord> records = new ArrayList<>();
-        for (MgmtRecord record : RECORDS) {
-            boolean sameExhibition = exhibitionId == null ? record.exhibitionId == null : exhibitionId.equals(record.exhibitionId);
-            if (sameExhibition && ("全部".equals(filterStatus) || filterStatus.equals(record.status))) {
-                records.add(record);
+        for (RegistrationReviewStore.Record stored : RegistrationReviewStore.listByExhibition(exhibitionId)) {
+            if ("全部".equals(filterStatus) || filterStatus.equals(stored.status)) {
+                records.add(MgmtRecord.from(stored));
             }
         }
         countText.setText(getString(R.string.reg_mgmt_count, records.size()));

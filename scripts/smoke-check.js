@@ -1,7 +1,19 @@
+/**
+ * 项目结构静态检查。
+ *
+ * 当前版本前端由 WebView 承载：
+ *   - Android 侧：WebShellActivity + WebAppBridge + WebAppActions 提供界面外壳与业务桥接；
+ *   - Web 侧：app/src/main/assets/web 下的页面模块按 newUI 的 17 屏拆分。
+ *
+ * 检查覆盖入口清单、桥接契约、页面文件、设计令牌与文档关键内容。
+ * 用法：node scripts/smoke-check.js
+ */
+
 const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
+const WEB_ROOT = 'app/src/main/assets/web';
 
 function parseAttributes(source) {
   const attributes = {};
@@ -80,7 +92,7 @@ function findComponents(xml) {
       if (filter && attributes['android:name'] === 'android.intent.category.LAUNCHER' && tagName === 'category') {
         filter.hasLauncher = true;
       }
-      if (filter?.hasMain && filter.hasLauncher) {
+      if (filter?.hasMain && filter?.hasLauncher) {
         filter.component.launcher = true;
       }
       continue;
@@ -100,104 +112,87 @@ function findLauncherActivities(xml) {
     .map((component) => component.name);
 }
 
+/** WebView 外壳是唯一启动入口，且必须显式导出。 */
 function validateLauncherManifest(xml) {
   const launcherComponents = findComponents(xml).filter((component) => component.launcher);
   const launcherActivities = launcherComponents.map((component) => component.name);
   return launcherActivities.length === 1
-    && launcherActivities[0] === '.LoginActivity'
+    && launcherActivities[0] === '.WebShellActivity'
     && launcherComponents[0].exported === 'true';
 }
 
+function walkScripts(directory) {
+  const files = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const full = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...walkScripts(full));
+    } else if (entry.name.endsWith('.js')) {
+      files.push(full);
+    }
+  }
+  return files;
+}
+
+/** 前端调用的动作名必须都在 WebAppActions 中实现。 */
+function validateBridgeContract() {
+  const actionsFile = 'app/src/main/java/com/example/calmobile/WebAppActions.java';
+  const source = fs.readFileSync(path.join(root, actionsFile), 'utf8');
+  const implemented = new Set();
+  const casePattern = /case "([a-zA-Z.]+)":/g;
+  let match;
+  while ((match = casePattern.exec(source)) !== null) {
+    implemented.add(match[1]);
+  }
+  if (implemented.size === 0) {
+    return 'WebAppActions.java 中未解析到任何动作分支';
+  }
+
+  for (const file of walkScripts(path.join(root, WEB_ROOT, 'js'))) {
+    const content = fs.readFileSync(file, 'utf8');
+    const callPattern = /\bcall\(\s*'([a-zA-Z.]+)'/g;
+    let callMatch;
+    while ((callMatch = callPattern.exec(content)) !== null) {
+      if (!implemented.has(callMatch[1])) {
+        return `${path.relative(root, file)} 调用了未实现的动作 ${callMatch[1]}`;
+      }
+    }
+  }
+  return true;
+}
+
+/** newUI 的 17 屏必须有对应的页面模块文件。 */
+const EXPECTED_PAGES = [
+  'login.js',
+  'home.js',
+  'detail.js',
+  'registration-form.js',
+  'register.js',
+  'search.js',
+  'my-registrations.js',
+  'registration-detail.js',
+  'profile.js',
+  'exhibitor.js',
+  'exhibition-form.js',
+  'rich-editor.js',
+  'review.js',
+  'user-public.js',
+  'admin.js',
+  'admin-exhibitions.js',
+  'admin-settings.js'
+];
+
+function validateScreenFiles() {
+  const missing = EXPECTED_PAGES.filter((file) => !fs.existsSync(path.join(root, WEB_ROOT, 'js', 'pages', file)));
+  return missing.length === 0 ? true : `缺少页面模块：${missing.join(', ')}`;
+}
+
 const checks = [
+  // ── 文档 ────────────────────────────────────────────────────────
   {
     id: 'project-documentation',
     file: 'README.md',
     contains: ['# CalMobile', '产品范围与角色', '已实现的关键交互', '路线图与已知限制']
-  },
-  {
-    id: 'agent-rules',
-    file: 'AGENTS.md',
-    contains: ['# Repository Guidelines', 'Java 17', 'LoginActivity', 'node scripts/smoke-check.js']
-  },
-  {
-    id: 'android-gradle-files',
-    file: 'app/build.gradle',
-    contains: ["compileSdk 34", "targetSdk 34", "namespace 'com.example.calmobile'"]
-  },
-  {
-    id: 'android-manifest-main-activity',
-    file: 'app/src/main/AndroidManifest.xml',
-    validate: validateLauncherManifest
-  },
-  {
-    id: 'base-activity-java',
-    file: 'app/src/main/java/com/example/calmobile/BaseActivity.java',
-    contains: ['package com.example.calmobile;', 'extends Activity', 'BaseActivity']
-  },
-  {
-    id: 'java-entry-activity',
-    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'setContentView(R.layout.activity_main)']
-  },
-  {
-    id: 'fake-data-flow-java',
-    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['class Exhibition', 'SAMPLE_EXHIBITIONS', 'buildMonthGrid', 'openExhibitionDetail', 'ExhibitionDetailActivity']
-  },
-  {
-    id: 'fake-data-flow-layout',
-    file: 'app/src/main/res/layout/activity_main.xml',
-    contains: ['@+id/content_frame', '@layout/layout_bottom_nav']
-  },
-  {
-    id: 'exhibition-detail-activity-java',
-    file: 'app/src/main/java/com/example/calmobile/ExhibitionDetailActivity.java',
-    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'RegistrationFormActivity', 'getStringExtra', 'openForRegistration']
-  },
-  {
-    id: 'exhibition-detail-layout',
-    file: 'app/src/main/res/layout/activity_exhibition_detail.xml',
-    contains: ['@+id/detail_content', '@+id/detail_back', '@+id/detail_actions']
-  },
-  {
-    id: 'registration-form-activity-java',
-    file: 'app/src/main/java/com/example/calmobile/RegistrationFormActivity.java',
-    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'RegistrationManager', 'submit', 'getStringExtra']
-  },
-  {
-    id: 'registration-form-layout',
-    file: 'app/src/main/res/layout/activity_registration_form.xml',
-    contains: ['@+id/reg_form', '@+id/reg_back', '@+id/reg_result']
-  },
-  {
-    id: 'fake-data-flow-strings',
-    file: 'app/src/main/res/values/strings.xml',
-    contains: ['报名信息', '提交报名', '今日展会', '展会详情', '我的报名', '取消报名', '暂无报名记录']
-  },
-  {
-    id: 'my-registrations-java-wiring',
-    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['RegistrationManager', 'renderMyRegistrations', 'registrationManager.list', 'registrationManager.cancel', 'homeRegistrationsList']
-  },
-  {
-    id: 'gradle-wrapper-properties',
-    file: 'gradle/wrapper/gradle-wrapper.properties',
-    contains: ['distributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-bin.zip']
-  },
-  {
-    id: 'gradle-wrapper-batch-script',
-    file: 'gradlew.bat',
-    contains: ['Gradle startup script for Windows', 'gradle\\wrapper\\gradle-wrapper.jar']
-  },
-  {
-    id: 'gradle-wrapper-shell-script',
-    file: 'gradlew',
-    contains: ['Gradle start up script for POSIX generated by Gradle', 'gradle/wrapper/gradle-wrapper.jar']
-  },
-  {
-    id: 'gradle-wrapper-jar',
-    file: 'gradle/wrapper/gradle-wrapper.jar',
-    minBytes: 30000
   },
   {
     id: 'consolidated-requirements-document',
@@ -205,198 +200,160 @@ const checks = [
     contains: ['历史上的', '验收场景', '报名收集项']
   },
   {
-    id: 'profile-activity-java',
-    file: 'app/src/main/java/com/example/calmobile/ProfileActivity.java',
-    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'ProfileActivity', 'nickname', 'bio', 'contact']
+    id: 'agent-rules',
+    file: 'AGENTS.md',
+    contains: ['# Repository Guidelines', 'Java 17', 'WebShellActivity', 'node scripts/smoke-check.js']
   },
   {
-    id: 'profile-activity-layout',
-    file: 'app/src/main/res/layout/activity_profile.xml',
-    contains: ['@+id/profile_header', '@+id/profile_info', '@+id/profile_edit_fields']
-  },
-  {
-    id: 'profile-manifest-registered',
-    file: 'app/src/main/AndroidManifest.xml',
-    contains: ['ProfileActivity']
-  },
-  {
-    id: 'profile-strings',
-    file: 'app/src/main/res/values/strings.xml',
-    contains: ['个人主页', '昵称', '简介', '联系方式']
-  },
-  {
-    id: 'profile-navigation',
-    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['ProfileActivity', 'nav_profile']
-  },
-  {
-    id: 'user-public-activity-java',
-    file: 'app/src/main/java/com/example/calmobile/UserPublicActivity.java',
-    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'UserPublicActivity', 'nickname', 'bio', 'contact']
-  },
-  {
-    id: 'user-public-activity-layout',
-    file: 'app/src/main/res/layout/activity_user_public.xml',
-    contains: ['@+id/user_public_header', '@+id/user_public_info', '@+id/user_public_registrations']
-  },
-  {
-    id: 'user-public-manifest-registered',
-    file: 'app/src/main/AndroidManifest.xml',
-    contains: ['UserPublicActivity']
-  },
-  {
-    id: 'user-public-strings',
-    file: 'app/src/main/res/values/strings.xml',
-    contains: ['user_public_title', 'user_public_view_profile_hint']
-  },
-  {
-    id: 'user-public-navigation',
-    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['UserPublicActivity', 'openUserPublicProfile']
-  },
-  {
-    id: 'exhibitor-backend-activity-java',
-    file: 'app/src/main/java/com/example/calmobile/ExhibitorBackendActivity.java',
-    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'ExhibitorBackendActivity', 'ExhibitionManager', 'ExhibitionFormActivity']
-  },
-  {
-    id: 'exhibitor-backend-navigation-layout',
-    file: 'app/src/main/res/layout/activity_main.xml',
-    contains: ['@layout/layout_bottom_nav']
-  },
-  {
-    id: 'exhibitor-backend-manifest',
-    file: 'app/src/main/AndroidManifest.xml',
-    contains: ['ExhibitorBackendActivity', 'ExhibitionFormActivity']
-  },
-  {
-    id: 'exhibitor-backend-strings',
-    file: 'app/src/main/res/values/strings.xml',
-    contains: ['exhibitor_backend_title', 'exhibitor_add_exhibition']
-  },
-  {
-    id: 'exhibitor-backend-navigation',
-    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['buildExhibitorContent', 'nav_exhibitor', 'canAccessExhibitor']
-  },
-  {
-    id: 'registration-management-activity-java',
-    file: 'app/src/main/java/com/example/calmobile/RegistrationManagementActivity.java',
-    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'RegistrationManagementActivity', 'MgmtRecord']
-  },
-  {
-    id: 'registration-management-manifest',
-    file: 'app/src/main/AndroidManifest.xml',
-    contains: ['RegistrationManagementActivity']
-  },
-  {
-    id: 'registration-management-strings',
-    file: 'app/src/main/res/values/strings.xml',
-    contains: ['reg_mgmt_approve', 'reg_mgmt_reject']
-  },
-  {
-    id: 'admin-backend-activity-java',
-    file: 'app/src/main/java/com/example/calmobile/AdminBackendActivity.java',
-    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'AdminBackendActivity', 'AdminUserManager']
-  },
-  {
-    id: 'admin-backend-layout',
-    file: 'app/src/main/res/layout/activity_admin_backend.xml',
-    contains: ['@+id/admin_tab_row']
-  },
-  {
-    id: 'admin-backend-manifest',
-    file: 'app/src/main/AndroidManifest.xml',
-    contains: ['AdminBackendActivity']
-  },
-  {
-    id: 'admin-backend-strings',
-    file: 'app/src/main/res/values/strings.xml',
-    contains: ['admin_backend_title', 'admin_tab_users', 'admin_tab_exhibitions']
-  },
-  {
-    id: 'admin-backend-navigation',
-    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['buildAdminContent', 'nav_admin', 'canAccessAdmin']
+    id: 'webui-documentation',
+    file: 'README.md',
+    contains: ['WebView', 'newUI', 'assets/web', 'WebAppBridge']
   },
 
-  // ── UI fix regression checks ────────────────────────────────────
+  // ── 构建与清单 ──────────────────────────────────────────────────
   {
-    id: 'base-activity-button-helpers',
+    id: 'android-gradle-files',
+    file: 'app/build.gradle',
+    contains: ['compileSdk 34', 'targetSdk 34', "namespace 'com.example.calmobile'"]
+  },
+  {
+    id: 'android-manifest-main-activity',
+    file: 'app/src/main/AndroidManifest.xml',
+    validate: validateLauncherManifest
+  },
+  {
+    id: 'manifest-legacy-activities-registered',
+    file: 'app/src/main/AndroidManifest.xml',
+    contains: ['MainActivity', 'ExhibitionDetailActivity', 'RegistrationFormActivity', 'AdminBackendActivity']
+  },
+  {
+    id: 'gradle-wrapper-properties',
+    file: 'gradle/wrapper/gradle-wrapper.properties',
+    contains: ['distributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-bin.zip']
+  },
+  {
+    id: 'gradle-wrapper-jar',
+    file: 'gradle/wrapper/gradle-wrapper.jar',
+    minBytes: 30000
+  },
+
+  // ── WebView 内核 ────────────────────────────────────────────────
+  {
+    id: 'web-shell-activity',
+    file: 'app/src/main/java/com/example/calmobile/WebShellActivity.java',
+    contains: ['package com.example.calmobile;', 'extends Activity', 'appassets.androidplatform.net',
+      'addJavascriptInterface', 'shouldInterceptRequest', 'assets/web/']
+  },
+  {
+    id: 'web-app-bridge',
+    file: 'app/src/main/java/com/example/calmobile/WebAppBridge.java',
+    contains: ['@JavascriptInterface', 'public void invoke(', 'CalMobileBridge', 'onActivityResult',
+      'onRequestPermissionsResult']
+  },
+  {
+    id: 'web-app-actions',
+    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    contains: ['ExhibitionManager', 'RegistrationManager', 'RegistrationReviewStore', 'AppSettings',
+      'CalendarHelper', 'NotificationHelper', 'ExportManager', 'case "bootstrap":', 'case "exhibitions.save":']
+  },
+  {
+    id: 'bridge-contract',
+    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    validate: validateBridgeContract
+  },
+  {
+    id: 'review-store-shared',
+    file: 'app/src/main/java/com/example/calmobile/RegistrationReviewStore.java',
+    contains: ['public final class RegistrationReviewStore', 'STATUS_PENDING', 'STATUS_APPROVED', 'STATUS_REJECTED']
+  },
+  {
+    id: 'profile-store',
+    file: 'app/src/main/java/com/example/calmobile/UserProfileStore.java',
+    contains: ['public final class UserProfileStore', 'showRegistrations']
+  },
+  {
+    id: 'exhibition-status-modes',
+    file: 'app/src/main/java/com/example/calmobile/ExhibitorExhibition.java',
+    contains: ['STATUS_REVIEW_REQUIRED', 'STATUS_REVIEW_OPTIONAL', 'STATUS_DISPLAY_ONLY']
+  },
+  {
+    id: 'media-limits-persisted',
+    file: 'app/src/main/java/com/example/calmobile/AppSettings.java',
+    contains: ['getMediaImageLimit', 'getMediaImageSizeMb', 'getMediaVideoLimit', 'saveMediaLimits']
+  },
+
+  // ── Web 前端资源 ────────────────────────────────────────────────
+  {
+    id: 'web-entry-file',
+    file: `${WEB_ROOT}/index.html`,
+    contains: ['styles/tokens.css', 'js/app.js', 'id="app"']
+  },
+  {
+    id: 'web-tokens',
+    file: `${WEB_ROOT}/styles/tokens.css`,
+    contains: ['--bg: #f7f6f3', '--screen: #ffffff', '--ink: #20252b', '--ink-2: #626a74',
+      '--stroke: #c5cad1', '--accent: #c05621', '--dark: #48515d', '--touch: 44px']
+  },
+  {
+    id: 'web-bridge-module',
+    file: `${WEB_ROOT}/js/core/bridge.js`,
+    contains: ['CalMobileNative', 'CalMobileBridge', 'export function call', 'export const state']
+  },
+  {
+    id: 'web-router-module',
+    file: `${WEB_ROOT}/js/core/router.js`,
+    contains: ['export function defineRoute', 'export function navigate', 'export function back',
+      'export function navItems']
+  },
+  {
+    id: 'web-components-module',
+    file: `${WEB_ROOT}/js/ui/components.js`,
+    contains: ['export function topbar', 'export function segmented', 'export function stateBlock',
+      'export function openSheet', 'export function toast']
+  },
+  {
+    id: 'web-sanitizer',
+    file: `${WEB_ROOT}/js/core/sanitize.js`,
+    contains: ['export function sanitizeHtml', 'ALLOWED_TAGS']
+  },
+  {
+    id: 'web-screen-files',
+    file: `${WEB_ROOT}/js/app.js`,
+    validate: validateScreenFiles
+  },
+  {
+    id: 'web-app-route-registry',
+    file: `${WEB_ROOT}/js/app.js`,
+    contains: ["defineRoute('login'", "defineRoute('home'", "defineRoute('detail'",
+      "defineRoute('registration-form'", "defineRoute('admin-settings'"]
+  },
+
+  // ── 复用中的原生能力 ────────────────────────────────────────────
+  {
+    id: 'base-activity-java',
     file: 'app/src/main/java/com/example/calmobile/BaseActivity.java',
-    contains: ['stylePrimaryButton', 'styleSecondaryButton', 'styleDangerButton', 'bg_button_primary', 'bg_button_secondary', 'bg_button_danger']
+    contains: ['package com.example.calmobile;', 'extends Activity', 'stylePrimaryButton', 'styleCard']
   },
   {
-    id: 'admin-backend-styled-buttons',
-    file: 'app/src/main/java/com/example/calmobile/AdminBackendActivity.java',
-    contains: ['styleSecondaryButton', 'stylePrimaryButton']
+    id: 'legacy-activities-archived',
+    file: 'app/src/main/java/com/example/calmobile/legacy/MainActivity.java',
+    contains: ['package com.example.calmobile;', 'class Exhibition', 'SAMPLE_EXHIBITIONS', 'buildMonthGrid']
   },
   {
-    id: 'exhibitor-backend-styled-buttons',
-    file: 'app/src/main/java/com/example/calmobile/ExhibitorBackendActivity.java',
-    contains: ['styleSecondaryButton', 'stylePrimaryButton', 'button_danger_bg']
+    id: 'legacy-registration-form',
+    file: 'app/src/main/java/com/example/calmobile/legacy/RegistrationFormActivity.java',
+    contains: ['RegistrationManager', 'RegistrationField', 'submit']
   },
   {
-    id: 'home-search-bar-layout',
-    file: 'app/src/main/res/layout/activity_main.xml',
-    contains: ['@+id/content_frame']
+    id: 'legacy-admin-backend',
+    file: 'app/src/main/java/com/example/calmobile/legacy/AdminBackendActivity.java',
+    contains: ['AdminUserManager', 'ExhibitionManager']
   },
   {
-    id: 'home-search-bar-wiring',
-    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['styleSearchBar', 'search_hint', 'SearchActivity']
-  },
-  {
-    id: 'calendar-alignment-fix',
-    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['setGravity', 'setIncludeFontPadding']
-  },
-  {
-    id: 'bottom-nav-home-active-state',
-    file: 'app/src/main/java/com/example/calmobile/MainActivity.java',
-    contains: ['item.setSelected(active)', 'R.id.nav_home', 'currentTab = TAB_HOME']
-  },
-  {
-    id: 'bottom-nav-weight-sum',
-    file: 'app/src/main/res/layout/layout_bottom_nav.xml',
-    contains: ['weightSum="4"']
-  },
-
-  // ── 新需求：中文文档检查 ─────────────────────────────────────────
-  // 以下检查验证文档已使用中文记录新需求，应立即通过。
-  {
-    id: 'chinese-doc-readme-new-requirements',
-    file: 'README.md',
-    contains: ['已实现的关键交互', '月份可左右滑动', 'GuestHelper', '二级表单']
-  },
-  {
-    id: 'chinese-doc-project-review-new-items',
-    file: 'README.md',
-    contains: ['已实现', 'GuestHelper', 'PermissionHelper', 'ExhibitionFormActivity']
-  },
-
-  // ── 新需求：代码实现检查 ─────────────────────────────────────────
-  // 以下检查覆盖展会二级表单页和 4 标签底部导航。
-  // 实现说明统一维护在 README.md 的「已实现的关键交互」和「路线图与已知限制」。
-  {
-    id: 'exhibition-form-activity-java',
-    file: 'app/src/main/java/com/example/calmobile/ExhibitionFormActivity.java',
-    contains: ['package com.example.calmobile;', 'extends BaseActivity', 'ExhibitionFormActivity']
-  },
-  {
-    id: 'exhibition-form-layout',
-    file: 'app/src/main/res/layout/activity_exhibition_form.xml',
-    contains: ['@+id/exhibition_form']
-  },
-  {
-    id: 'bottom-nav-4-tab',
-    file: 'app/src/main/res/layout/layout_bottom_nav.xml',
-    contains: ['weightSum="4"']
-  },
-  {
-    id: 'no-more-in-bottom-nav',
-    file: 'app/src/main/res/layout/layout_bottom_nav.xml',
-    notContains: ['nav_more']
+    id: 'strings-kept',
+    file: 'app/src/main/res/values/strings.xml',
+    contains: ['报名信息', '提交报名', '今日展会', '展会详情', '我的报名', '取消报名', '暂无报名记录',
+      '个人主页', '昵称', '简介', '联系方式']
   }
 ];
 
@@ -415,12 +372,14 @@ function runChecks() {
       failed = true;
     }
     const content = fs.readFileSync(fullPath, 'utf8');
-    if (check.validate && !check.validate(content)) {
-      console.error(`FAIL ${check.id}: ${check.file} failed its structural validation`);
-      failed = true;
-    }
-    if (!check.contains && !check.notContains) {
-      continue;
+    if (check.validate) {
+      const result = check.validate(content);
+      if (result !== true) {
+        const detail = typeof result === 'string' ? result : 'failed its structural validation';
+        console.error(`FAIL ${check.id}: ${check.file} ${detail}`);
+        failed = true;
+        continue;
+      }
     }
     if (check.contains) {
       for (const expected of check.contains) {
@@ -453,8 +412,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  EXPECTED_PAGES,
   findLauncherActivities,
   runChecks,
   validateLauncherManifest
 };
-

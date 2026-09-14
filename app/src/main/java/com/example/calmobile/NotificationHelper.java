@@ -153,8 +153,8 @@ public class NotificationHelper {
                 + "时间：" + time + "\n"
                 + "地点：" + venue;
 
-        // Intent to open MainActivity when notification is tapped
-        Intent intent = new Intent(appContext, MainActivity.class);
+        // Intent to open the WebView shell when notification is tapped
+        Intent intent = new Intent(appContext, WebShellActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 appContext, nextExhibitionNotifId, intent,
@@ -190,7 +190,7 @@ public class NotificationHelper {
                 + "展会：" + exhibitionTitle + "\n"
                 + "新状态：" + newStatus;
 
-        Intent intent = new Intent(appContext, MainActivity.class);
+        Intent intent = new Intent(appContext, WebShellActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 appContext, nextRegistrationNotifId, intent,
@@ -222,7 +222,7 @@ public class NotificationHelper {
         String body = "您已成功报名「" + exhibitionTitle + "」\n"
                 + "报名人：" + visitorName;
 
-        Intent intent = new Intent(appContext, MainActivity.class);
+        Intent intent = new Intent(appContext, WebShellActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 appContext, nextRegistrationNotifId, intent,
