@@ -1241,6 +1241,14 @@ final class WebAppActions {
     }
 
     private static Map<String, Object> saveSettings(Activity activity, Map<String, Object> payload) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        // 服务器设置与应用配色都只允许管理员修改，避免绕过页面直接调用桥接。
+        if (!AuthManager.getInstance().isAdmin()) {
+            result.put("ok", false);
+            result.put("error", "只有管理员可以修改服务器设置");
+            result.put("settings", settings(activity));
+            return result;
+        }
         if (payload.containsKey("themeIndex")) {
             AppSettings.setThemeIndex(activity, WebAppBridge.number(payload, "themeIndex", 0));
         }
@@ -1297,8 +1305,8 @@ final class WebAppActions {
         }
         AppSettings.applyWindowColors(activity);
 
-        Map<String, Object> result = new LinkedHashMap<>();
         result.put("ok", true);
+        result.put("error", "");
         result.put("settings", settings(activity));
         return result;
     }
