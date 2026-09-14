@@ -11,11 +11,12 @@ Android 客户端位于 `app/`，使用 Java 17。启动页是 `WebShellActivity
 ```bash
 node scripts/smoke-check.js
 node scripts/webui-check.js
+node --test scripts/smoke-check.test.js
 gradlew.bat :app:testDebugUnitTest
 gradlew.bat :app:assembleDebug
 ```
 
-`smoke-check` 校验清单入口、桥接契约、15 个页面模块、设计令牌、动效层、内置依赖与文档关键内容；`webui-check` 校验前端 ES 模块能否解析、动作名是否都有原生实现。POSIX 环境使用 `./gradlew`。后端进入 `server/` 后运行 `npm install`、`npm run db:migrate`、`npm run dev`；测试使用 `npm test -- --runInBand`，风格检查使用 `npm run lint`。本地 PostgreSQL 配置参考 `server/.env.example`，禁止提交 `.env`、密钥或真实用户数据。
+`smoke-check` 校验清单入口、桥接契约、15 个页面模块、设计令牌、动效层、内置依赖与文档关键内容；`webui-check` 校验前端 ES 模块能否解析、动作名是否都有原生实现；`smoke-check.test.js` 是检查脚本自身的单元测试。POSIX 环境使用 `./gradlew`。后端进入 `server/` 后运行 `npm install`、`npm run db:migrate`、`npm run dev`；测试使用 `npm test -- --runInBand`，风格检查使用 `npm run lint`。本地 PostgreSQL 配置参考 `server/.env.example`，禁止提交 `.env`、密钥或真实用户数据。
 
 ## 编码与界面规范
 
@@ -27,7 +28,7 @@ Android 改动按 smoke-check、webui-check、单元测试、调试构建的顺�
 
 ## 架构与工作区
 
-前端为 WebView 页面（HTML/CSS/ES 模块），通过 `WebAppBridge`/`WebAppActions` 调用原生业务；展会、报名和用户数据使用 SQLite，并在数据库不可用时回退到内存示例数据；应用设置、个人资料与上传的媒体文件使用 SharedPreferences 与应用私有目录 `files/media`（通过 `https://appassets.androidplatform.net/media/<文件名>` 引用，由 `WebShellActivity` 拦截放行）。新增页面时同时更新 `assets/web/js/app.js` 的路由注册、`README.md` 的屏幕对照表和 `scripts/smoke-check.js`、`scripts/webui-check.js` 的页面清单；管理类功能优先内联到现有页面，不新增二级页面。管理员在「管理-设置」中维护的是服务器级配置（软件中英文标题、公告、分类、审核策略、媒体与上传限制、表单字符数上限），保存后对所有用户生效；应用配色属于个人偏好，放在个人页的「设置」栏。表单校验统一走 `js/core/validate.js`，长度上限取自 `state.limits`，原生侧保存前再校验一次。Room、Retrofit、Repository 与 ViewModel 已搭建但尚未接入全部页面，后端 API 也未替换本地演示流。修改认证、持久化、导航、包名、签名或引入新框架前先确认。工作区可能包含其他任务的改动，只检查并提交本次涉及路径，不回退无关文件；`.omo/` 等运行记录不应加入提交。
+前端为 WebView 页面（HTML/CSS/ES 模块），通过 `WebAppBridge`/`WebAppActions` 调用原生业务；展会、报名和用户数据使用 SQLite，并在数据库不可用时回退到内存示例数据；应用设置、个人资料与上传的媒体文件使用 SharedPreferences 与应用私有目录 `files/media`（通过 `https://appassets.androidplatform.net/media/<文件名>` 引用，由 `WebShellActivity` 拦截放行）。新增页面时同时更新 `assets/web/js/app.js` 的路由注册、`README.md` 的屏幕对照表和 `scripts/smoke-check.js`、`scripts/webui-check.js` 的页面清单；管理类功能优先内联到现有页面，不新增二级页面。管理员在「管理-设置」中维护的是服务器级配置（软件中英文标题、公告、分类、审核策略、媒体与上传限制、表单字符数上限），保存后对所有用户生效；应用配色属于个人偏好，放在个人页的「设置」栏。表单校验统一走 `js/core/validate.js`，长度上限取自 `state.limits`，原生侧保存前再校验一次。Room、Retrofit、Repository 与 ViewModel 已搭建但尚未接入全部页面，后端 API 也未替换本地演示流。修改认证、持久化、导航、包名、签名或引入新框架前先确认。工作区可能包含其他任务的改动，只检查并提交本次涉及路径，不回退无关文件；`build/`、`.gradle-local/`、`.idea/`、`.omo/`、`.opencode/`、日志与 APK 已在 `.gitignore` 中，不要把它们加入提交，也不要为了“干净”删除本机缓存目录。
 
 ## 文档维护
 

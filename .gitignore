@@ -1,13 +1,31 @@
+# ── 构建产物 ──────────────────────────────────────────────────────
 .gradle/
 build/
 **/build/
-local.properties
-*.iml
-.idea/caches/
-.idea/libraries/
-.idea/modules.xml
-.idea/workspace.xml
-.DS_Store
 *.apk
 *.aab
 *.ap_
+*.hprof
+captures/
+.cxx/
+.externalNativeBuild/
+
+# ── 本机配置（各人环境不同，不入库） ──────────────────────────────
+local.properties
+gradle-local/
+.gradle-local/
+
+# ── IDE 工程文件：由 IDE 自行生成，不入库 ────────────────────────
+.idea/
+*.iml
+
+# ── 运行记录、本地工具与日志 ─────────────────────────────────────
+.omo/
+.opencode/
+.codegraph/
+*.log
+npm-debug.log*
+
+# ── 系统文件 ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

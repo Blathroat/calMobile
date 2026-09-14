@@ -184,6 +184,9 @@ node scripts/smoke-check.js
 # 前端静态检查（ES 模块解析、动作名与页面文件一致性）
 node scripts/webui-check.js
 
+# 检查脚本自身的单元测试（启动入口解析等）
+node --test scripts/smoke-check.test.js
+
 # Android 单元测试与调试 APK
 gradlew.bat :app:testDebugUnitTest
 gradlew.bat :app:assembleDebug
@@ -210,6 +213,20 @@ pwsh -File scripts\emu.ps1 logs
 ```
 
 预置演示账号：`demo/password`（管理员）、`exhibitor/password`（展商）、`user/password`（普通用户）；未登录用户只能浏览公开展会详情。
+
+### 仓库内容边界
+
+下列内容属于本机环境或运行记录，已写入 `.gitignore`，不随代码分发；如果之前已被跟踪，用 `git rm -r --cached <路径>` 停止跟踪（文件仍保留在本地）：
+
+| 路径 | 说明 |
+| --- | --- |
+| `build/`、`**/build/`、`*.apk`、`*.aab` | Gradle 构建产物 |
+| `.gradle/`、`.gradle-local/`、`local.properties` | Gradle 缓存与本机 SDK 路径 |
+| `.idea/`、`*.iml` | IDE 工程文件，由 IDE 自行生成 |
+| `.omo/`、`.opencode/`、`.codegraph/` | 编码助手运行记录与本地工具缓存 |
+| `*.log`、`captures/`、`*.hprof` | 日志与性能采样文件 |
+
+`docs/screenshots/` 只保留课程报告脚本 `scripts/generate_report.py` 引用的 8 张界面截图；其余迭代过程中的重复截图与 UI dump 已清理。
 
 ## 验收场景
 
