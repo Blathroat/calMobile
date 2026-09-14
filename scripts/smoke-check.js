@@ -110,9 +110,9 @@ function validateLauncherManifest(xml) {
 
 const checks = [
   {
-    id: 'mobile-requirements-doc',
-    file: 'docs/MOBILE_REQUIREMENTS.md',
-    contains: ['# 移动端需求文档', 'API 30', '移动端交互适配', '待确认的重要技术选型']
+    id: 'project-documentation',
+    file: 'README.md',
+    contains: ['# CalMobile', '产品范围与角色', '已实现的关键交互', '路线图与已知限制']
   },
   {
     id: 'agent-rules',
@@ -200,9 +200,9 @@ const checks = [
     minBytes: 30000
   },
   {
-    id: 'original-todo-preserved',
-    file: 'TODO.md',
-    contains: ['帮我做一个排期规划应用', '网站首页', '管理员页面']
+    id: 'consolidated-requirements-document',
+    file: 'README.md',
+    contains: ['历史上的', '验收场景', '报名收集项']
   },
   {
     id: 'profile-activity-java',
@@ -367,17 +367,17 @@ const checks = [
   {
     id: 'chinese-doc-readme-new-requirements',
     file: 'README.md',
-    contains: ['新需求追踪', '底部导航移除', '访客/权限辅助', '二级展会表单']
+    contains: ['已实现的关键交互', '月份可左右滑动', 'GuestHelper', '二级表单']
   },
   {
     id: 'chinese-doc-project-review-new-items',
-    file: 'docs/PROJECT_REVIEW.md',
-    contains: ['已完成', 'GuestHelper', 'PermissionHelper', 'ExhibitionFormActivity']
+    file: 'README.md',
+    contains: ['已实现', 'GuestHelper', 'PermissionHelper', 'ExhibitionFormActivity']
   },
 
   // ── 新需求：代码实现检查 ─────────────────────────────────────────
   // 以下检查覆盖展会二级表单页和 4 标签底部导航。
-  // 实现说明见 README.md「新需求追踪」和 docs/PROJECT_REVIEW.md 对应条目。
+  // 实现说明统一维护在 README.md 的「已实现的关键交互」和「路线图与已知限制」。
   {
     id: 'exhibition-form-activity-java',
     file: 'app/src/main/java/com/example/calmobile/ExhibitionFormActivity.java',

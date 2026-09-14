@@ -2,28 +2,32 @@
 
 ## 项目结构
 
-Android 客户端位于 `app/`，采用 Java 与 XML；入口为 `LoginActivity`，首页在 `MainActivity`。界面资源在 `app/src/main/res/`，单元测试在 `app/src/test/`。`server/` 是独立的 Node.js/Express 与 PostgreSQL 服务，并非 Gradle 模块。保留 `TODO.md`，实现与其冲突时以可执行配置为准。
+Android 客户端位于 `app/`，使用 Java 17 与 XML View；启动页是 `LoginActivity`，主容器是 `MainActivity`。页面资源在 `app/src/main/res/`，单元测试在 `app/src/test/`。`server/` 是独立的 Node.js、Express 与 PostgreSQL 服务，不属于 Gradle 模块。项目说明、架构、需求、设计令牌和路线图统一维护在根目录 `README.md`，后端运行细节维护在 `server/README.md`。
 
 ## 构建、测试与开发
 
 在仓库根目录运行：
 
 ```bash
-node scripts/smoke-check.js             # 静态结构检查
-gradlew.bat :app:testDebugUnitTest      # Android 单元测试（Windows）
-gradlew.bat :app:assembleDebug          # 生成调试 APK
+node scripts/smoke-check.js
+gradlew.bat :app:testDebugUnitTest
+gradlew.bat :app:assembleDebug
 ```
 
-POSIX 环境将 `gradlew.bat` 改为 `./gradlew`。后端进入 `server/` 后使用 `npm run dev` 启动，`npm test -- --runInBand` 测试，`npm run lint` 检查代码；先根据 `.env.example` 配置本地 PostgreSQL，绝不提交 `.env` 或凭据。
+POSIX 环境使用 `./gradlew`。后端进入 `server/` 后运行 `npm install`、`npm run db:migrate`、`npm run dev`；测试使用 `npm test -- --runInBand`，风格检查使用 `npm run lint`。本地 PostgreSQL 配置参考 `server/.env.example`，禁止提交 `.env`、密钥或真实用户数据。
 
 ## 编码与界面规范
 
-保持 Java 17、四空格缩进和 Java/XML 现有目录结构。类名使用 PascalCase，方法和资源名使用 camelCase、`snake_case`；界面文案写入 `strings.xml`，新增注释和文档使用中文。沿用深海蓝、青绿色和浅雾白的视觉令牌，触摸操作应提供明确的选中、禁用或完成反馈。
+Java 与 XML 使用四空格缩进；类名使用 PascalCase，方法、变量使用 camelCase，资源名使用 `snake_case`。用户可见文案放入 `strings.xml`，新增文档和注释使用中文。沿用深海蓝、青绿色、浅雾白令牌，优先使用圆角卡片、明确的状态标签和至少 48dp 的触控区域。日期、时间和状态选择使用页内卡片或选择器，不使用下划线输入框；动态展开内容必须出现在触发卡片附近，并提供选中、禁用、错误和完成反馈。
 
 ## 测试与提交
 
-Android 改动依次运行静态检查、单元测试和调试构建；聚焦测试使用 `:app:testDebugUnitTest --tests '包名.测试类'`。提交信息使用简洁中文动词短句，例如 `优化首页日期联动`。合并请求说明用户可见变化、验证命令及结果；涉及界面时附截图，关联对应问题。
+Android 改动按 smoke-check、单元测试、调试构建的顺序验证；聚焦测试可使用 `:app:testDebugUnitTest --tests '包名.测试类'`。涉及界面时使用可用的模拟器进行 ADB 回归。提交信息使用简洁中文动词短句，例如 `优化展会日期选择`。合并请求需说明用户可见变化、验证命令和结果；界面改动附截图或录屏并关联问题。
 
 ## 架构与工作区
 
-当前活动路径混用 SQLite、本地示例数据和内存会话；`database/`、`network/`、`repository/`、`viewmodel/` 的 Room/Retrofit 栈尚未接入主界面。变更认证、持久化、导航框架、包名或签名策略前先确认。工作区可能有其他修改，只检查和提交本次涉及路径，禁止回退无关文件。
+当前客户端以 Activity/XML + Manager 为主，展会、报名和用户数据使用 SQLite，并在数据库不可用时回退到内存示例数据；应用设置使用 SharedPreferences。Room、Retrofit、Repository 与 ViewModel 已搭建但尚未接入全部页面，后端 API 也未替换本地演示流。修改认证、持久化、导航、包名、签名或引入新框架前先确认。工作区可能包含其他任务的改动，只检查并提交本次涉及路径，不回退无关文件；`.omo/` 等运行记录不应加入提交。
+
+## 文档维护
+
+新增或更新需求先修改 `README.md`，不要再创建重复的需求、架构或 Review 文档。代码行为、依赖或命令变化后同步更新对应说明，并运行 `node scripts/smoke-check.js`。
