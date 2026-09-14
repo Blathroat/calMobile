@@ -32,6 +32,8 @@
         <activity android:name=".RichDescriptionEditorActivity" />
         <activity android:name=".RegistrationManagementActivity" />
         <activity android:name=".RegistrationDetailActivity" />
+        <activity android:name=".MyRegistrationsActivity" />
+        <activity android:name=".MyRegistrationDetailActivity" />
         <activity android:name=".AdminBackendActivity" />
         <activity android:name=".SearchActivity" />
         <activity android:name=".ExhibitionDetailActivity" />

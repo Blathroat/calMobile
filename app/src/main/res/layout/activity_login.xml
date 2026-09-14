@@ -3,70 +3,47 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/surface_background"
-    android:fillViewport="true"
-    android:clipToPadding="false">
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingBottom="@dimen/spacing_24dp">
+        android:padding="@dimen/spacing_20dp"
+        android:paddingBottom="@dimen/spacing_32dp">
 
-        <!-- 品牌区：用深色渐变建立登录页的第一视觉焦点。 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="236dp"
-            android:background="@drawable/bg_auth_hero"
-            android:gravity="bottom"
-            android:orientation="vertical"
-            android:paddingLeft="@dimen/spacing_24dp"
-            android:paddingRight="@dimen/spacing_24dp"
-            android:paddingBottom="@dimen/spacing_32dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_brand_mark"
-                android:gravity="center"
-                android:paddingLeft="@dimen/spacing_12dp"
-                android:paddingRight="@dimen/spacing_12dp"
-                android:paddingTop="@dimen/spacing_8dp"
-                android:paddingBottom="@dimen/spacing_8dp"
-                android:text="展"
-                android:textColor="@color/primary"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_14dp"
-                android:text="CALMOBILE · 展会灵感日历"
-                android:textColor="#BFE9E6"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_4dp"
-                android:text="把每一次相遇，排进日程"
-                android:textColor="@color/text_on_primary"
-                android:textSize="25sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <!-- 登录表单。 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginLeft="@dimen/spacing_20dp"
-            android:layout_marginRight="@dimen/spacing_20dp"
-            android:layout_marginTop="-24dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_brand_mark"
+                android:gravity="center"
+                android:text="展"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_12dp"
+                android:layout_weight="1"
+                android:text="展会排期助手"
+                android:textAppearance="@style/TextAppearance.Title" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_32dp"
             android:background="@drawable/bg_card"
-            android:elevation="@dimen/elevation_medium"
             android:orientation="vertical"
-            android:padding="@dimen/spacing_24dp">
+            android:padding="@dimen/spacing_20dp">
 
             <TextView
                 android:layout_width="match_parent"
@@ -78,14 +55,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_6dp"
-                android:text="登录后同步你的报名与展会日程"
+                android:text="找到值得参加的展会，保存日程并完成报名"
                 android:textAppearance="@style/TextAppearance.BodySmall" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_24dp"
-                android:text="用户名"
+                android:text="账号"
                 android:textAppearance="@style/TextAppearance.Label" />
 
             <EditText
@@ -94,7 +71,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_6dp"
-                android:hint="输入用户名"
+                android:hint="昵称 / 邮箱"
                 android:inputType="text"
                 android:singleLine="true" />
 
@@ -111,7 +88,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_6dp"
-                android:hint="输入密码"
+                android:hint="请输入密码"
                 android:inputType="textPassword"
                 android:singleLine="true" />
 
@@ -130,8 +107,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_20dp"
-                android:text="登录并开始探索" />
+                android:text="登录" />
         </LinearLayout>
+
+        <Button
+            android:id="@+id/guest_entry_btn"
+            style="@style/Widget.CalMobile.Button.Secondary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_12dp"
+            android:text="以访客身份浏览" />
 
         <Button
             android:id="@+id/go_to_register_btn"
@@ -139,16 +124,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
-            android:layout_marginTop="@dimen/spacing_14dp"
-            android:text="还没有账号？注册一个" />
-
-        <Button
-            android:id="@+id/guest_entry_btn"
-            style="@style/Widget.CalMobile.Button.Secondary"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="@dimen/spacing_4dp"
-            android:text="先逛逛（访客模式）" />
+            android:layout_marginTop="@dimen/spacing_8dp"
+            android:text="还没有账号？注册新账号" />
     </LinearLayout>
 </ScrollView>

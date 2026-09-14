@@ -16,25 +16,7 @@ import android.view.animation.DecelerateInterpolator;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/**
- * Base Activity class providing common UI helper methods shared across
- * all Activities in the calMobile application.
- *
- * <p>Subclasses inherit reusable helpers for:
- * <ul>
- *   <li>Dimension conversion ({@link #dp(int)})</li>
- *   <li>Layout parameter creation ({@link #fullWidthParams(int)})</li>
- *   <li>TextView creation ({@link #addText(LinearLayout, String, int, int, int)})</li>
- *   <li>Card styling ({@link #styleCard(LinearLayout)})</li>
- *   <li>Panel animations ({@link #animateShowPanel(View)}, {@link #animateHidePanel(View)})</li>
- *   <li>List item animations ({@link #animateListItems(LinearLayout, int)})</li>
- *   <li>Empty state display ({@link #showEmptyState(LinearLayout, String)})</li>
- *   <li>Confirmation dialogs ({@link #showConfirmDialog(String, Runnable)})</li>
- *   <li>Back button styling ({@link #applyRippleToBackButton(TextView)})</li>
- *   <li>Divider creation ({@link #addDivider(LinearLayout)})</li>
- *   <li>Navigation helpers ({@link #navigateTo(Class)}, {@link #navigateTo(Intent)})</li>
- * </ul>
- */
+/** 基础 Activity，集中维护 newUI 的间距、卡片、按钮和页面动画。 */
 public abstract class BaseActivity extends Activity {
 
     @Override
@@ -43,26 +25,16 @@ public abstract class BaseActivity extends Activity {
         AppSettings.applyWindowColors(this);
     }
 
-    // ── Dimension helpers ──────────────────────────────────────────────
+    // ── 尺寸辅助 ──────────────────────────────────────────────
 
-    /**
-     * Convert a dp value to pixels based on the current display density.
-     *
-     * @param value the dp value to convert
-     * @return the equivalent pixel value
-     */
+    /** 按当前屏幕密度把 dp 换算为像素。 */
     protected int dp(int value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    // ── Layout parameter helpers ───────────────────────────────────────
+    // ── 布局参数辅助 ───────────────────────────────────────────
 
-    /**
-     * Create full-width LinearLayout.LayoutParams with a top margin.
-     *
-     * @param topMarginDp top margin in dp
-     * @return LayoutParams for a full-width view with the specified top margin
-     */
+    /** 创建带顶部间距的全宽布局参数。 */
     protected LinearLayout.LayoutParams fullWidthParams(int topMarginDp) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -71,18 +43,9 @@ public abstract class BaseActivity extends Activity {
         return params;
     }
 
-    // ── TextView creation ──────────────────────────────────────────────
+    // ── 文本创建 ──────────────────────────────────────────────
 
-    /**
-     * Create and add a styled TextView to a parent LinearLayout.
-     *
-     * @param parent   the container to add the TextView to
-     * @param text     the text content
-     * @param colorRes the color resource ID for the text color
-     * @param sizeSp   the text size in sp
-     * @param style    the Typeface style constant (e.g. {@link Typeface#BOLD})
-     * @return the created TextView
-     */
+    /** 创建并添加统一样式的文本控件。 */
     protected TextView addText(LinearLayout parent, String text, int colorRes, int sizeSp, int style) {
         TextView textView = new TextView(this);
         textView.setText(text);
@@ -94,31 +57,39 @@ public abstract class BaseActivity extends Activity {
         return textView;
     }
 
+    /** 创建带文字、底色和描边的状态标签，避免仅依赖颜色表达状态。 */
+    protected TextView createStatusBadge(String text, boolean positive) {
+        TextView badge = new TextView(this);
+        badge.setText(text);
+        badge.setTextSize(12);
+        badge.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        badge.setGravity(android.view.Gravity.CENTER);
+        badge.setIncludeFontPadding(false);
+        badge.setPadding(dp(9), dp(6), dp(9), dp(6));
+        badge.setTextColor(getResources().getColor(positive
+                ? R.color.status_open : R.color.status_closed));
+        badge.setBackgroundResource(positive
+                ? R.drawable.bg_status_badge : R.drawable.bg_status_badge_closed);
+        badge.setContentDescription("状态：" + text);
+        return badge;
+    }
+
     // ── 卡片样式 ───────────────────────────────────────────────────────
 
-    /**
-     * Apply the standard card background, corner radius, stroke, and elevation
-     * to a LinearLayout using the design system values.
-     *
-     * @param card the LinearLayout to style
-     */
+    /** 按设计令牌设置卡片背景、圆角和描边。 */
     protected void styleCard(LinearLayout card) {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(getResources().getColor(R.color.card_background));
-        bg.setCornerRadius(dp(20));
-        bg.setStroke(dp(1), AppSettings.getAccentColor(this));
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
         card.setBackground(bg);
-        card.setElevation(dp(2));
+        card.setElevation(0);
         card.setClipToOutline(true);
     }
 
-    // ── Panel animations ───────────────────────────────────────────────
+    // ── 面板动画 ───────────────────────────────────────────────
 
-    /**
-     * Animate a panel into view with a fade-in and slide-up effect.
-     *
-     * @param panel the View to animate in
-     */
+    /** 以淡入和上移效果显示面板。 */
     protected void animateShowPanel(final View panel) {
         panel.setVisibility(View.VISIBLE);
         panel.setAlpha(0f);
@@ -132,12 +103,7 @@ public abstract class BaseActivity extends Activity {
                 .start();
     }
 
-    /**
-     * Animate a panel out of view with a fade-out and slide-down effect,
-     * then set its visibility to {@link View#GONE}.
-     *
-     * @param panel the View to animate out
-     */
+    /** 以淡出和下移效果隐藏面板，结束后设为 GONE。 */
     protected void animateHidePanel(final View panel) {
         panel.animate()
                 .alpha(0f)
@@ -155,15 +121,9 @@ public abstract class BaseActivity extends Activity {
                 .start();
     }
 
-    // ── List animations ────────────────────────────────────────────────
+    // ── 列表动画 ────────────────────────────────────────────────
 
-    /**
-     * Animate child views of a LinearLayout with a staggered fade-in and
-     * slide-up effect.
-     *
-     * @param container  the LinearLayout whose children to animate
-     * @param startDelay the initial delay in milliseconds before animation starts
-     */
+    /** 让列表子项按顺序淡入并上移。 */
     protected void animateListItems(LinearLayout container, int startDelay) {
         for (int i = 0; i < container.getChildCount(); i++) {
             View child = container.getChildAt(i);
@@ -179,15 +139,9 @@ public abstract class BaseActivity extends Activity {
         }
     }
 
-    // ── Empty state ────────────────────────────────────────────────────
+    // ── 空状态 ────────────────────────────────────────────────────
 
-    /**
-     * Display an empty state placeholder inside a LinearLayout container.
-     * Shows an icon and a message centered in a styled card.
-     *
-     * @param container the LinearLayout to populate with the empty state
-     * @param message   the message to display
-     */
+    /** 在容器中显示带提示文案的空状态卡片。 */
     protected void showEmptyState(LinearLayout container, String message) {
         container.removeAllViews();
 
@@ -202,7 +156,7 @@ public abstract class BaseActivity extends Activity {
         bg.setStroke(dp(1), getResources().getColor(R.color.card_stroke));
         emptyBox.setBackground(bg);
 
-        // Icon with subtle background circle
+        // 使用低对比度标记，避免空状态引入无关图标。
         TextView icon = new TextView(this);
         icon.setText(getString(R.string.empty_state_icon));
         icon.setTextSize(40);
@@ -230,14 +184,9 @@ public abstract class BaseActivity extends Activity {
         container.addView(emptyBox, fullWidthParams(8));
     }
 
-    // ── Confirmation dialog ────────────────────────────────────────────
+    // ── 确认操作 ────────────────────────────────────────────────
 
-    /**
-     * Show a confirmation dialog with Yes/No buttons.
-     *
-     * @param message    the confirmation message to display
-     * @param onConfirm  the action to execute when the user confirms
-     */
+    /** 显示带确定和取消按钮的确认对话框。 */
     protected void showConfirmDialog(String message, final Runnable onConfirm) {
         new AlertDialog.Builder(this)
                 .setTitle(R.string.confirm_title)
@@ -255,9 +204,9 @@ public abstract class BaseActivity extends Activity {
     // ── Button styling ─────────────────────────────────────────────────
 
     /**
-     * Apply the primary button style (solid indigo background, white text).
+     * 应用深石墨实心主按钮样式。
      *
-     * @param btn the Button to style
+     * @param btn 要设置样式的按钮
      */
     protected void stylePrimaryButton(android.widget.Button btn) {
         btn.setBackgroundResource(R.drawable.bg_button_primary);
@@ -267,20 +216,21 @@ public abstract class BaseActivity extends Activity {
         btn.setAllCaps(false);
         btn.setStateListAnimator(null);
         btn.setElevation(0);
-        btn.setTextSize(15);
-        btn.setMinHeight(dp(46));
-        btn.setMinimumHeight(dp(46));
+        btn.setTextSize(14);
+        btn.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        btn.setMinHeight(dp(48));
+        btn.setMinimumHeight(dp(48));
         btn.setPadding(dp(16), 0, dp(16), 0);
     }
 
     /**
-     * Apply the secondary button style (light grey background, dark text).
+     * 应用白底描边次按钮样式。
      *
-     * @param btn the Button to style
+     * @param btn 要设置样式的按钮
      */
     protected void styleSecondaryButton(android.widget.Button btn) {
         btn.setBackgroundResource(R.drawable.bg_button_secondary);
-        btn.setTextColor(AppSettings.getAccentColor(this));
+        btn.setTextColor(getResources().getColor(R.color.button_secondary_text));
         btn.setAllCaps(false);
         btn.setStateListAnimator(null);
         btn.setElevation(0);
@@ -290,11 +240,7 @@ public abstract class BaseActivity extends Activity {
         btn.setPadding(dp(14), 0, dp(14), 0);
     }
 
-    /**
-     * Apply the danger button style (light red background, red text).
-     *
-     * @param btn the Button to style
-     */
+    /** 设置浅橙危险操作按钮样式。 */
     protected void styleDangerButton(android.widget.Button btn) {
         btn.setBackgroundResource(R.drawable.bg_button_danger);
         btn.setTextColor(getResources().getColor(R.color.button_danger_text));
@@ -307,12 +253,32 @@ public abstract class BaseActivity extends Activity {
         btn.setPadding(dp(14), 0, dp(14), 0);
     }
 
-    /**
-     * Apply the logout button style (transparent background, red bold text).
-     * Used for the profile logout action.
-     *
-     * @param btn the Button to style
-     */
+    /** 为代码动态创建的输入框补齐可见描边和上下内边距。 */
+    protected void styleInputField(android.widget.EditText input) {
+        input.setBackgroundResource(R.drawable.bg_input_field);
+        input.setTextColor(getResources().getColor(R.color.text_primary));
+        input.setHintTextColor(getResources().getColor(R.color.text_hint));
+        input.setTextSize(15);
+        input.setPadding(dp(14), dp(12), dp(14), dp(12));
+        input.setMinHeight(dp(48));
+        input.setMinimumHeight(dp(48));
+        input.setIncludeFontPadding(false);
+    }
+
+    /** 为内嵌选择栏设置统一的灰底、描边和触摸反馈。 */
+    protected void stylePickerField(TextView field) {
+        field.setBackgroundResource(R.drawable.bg_picker_field);
+        field.setTextColor(getResources().getColor(R.color.text_primary));
+        field.setTextSize(15);
+        field.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        field.setMinHeight(dp(48));
+        field.setMinimumHeight(dp(48));
+        field.setPadding(dp(14), 0, dp(14), 0);
+        field.setClickable(true);
+        field.setFocusable(true);
+    }
+
+    /** 设置退出登录按钮样式。 */
     protected void styleLogoutButton(android.widget.Button btn) {
         btn.setBackgroundResource(R.drawable.bg_button_text);
         btn.setTextColor(getResources().getColor(R.color.status_closed));
@@ -323,33 +289,27 @@ public abstract class BaseActivity extends Activity {
         btn.setElevation(0);
     }
 
-    // ── Back button styling ────────────────────────────────────────────
+    // ── 返回按钮样式 ────────────────────────────────────────────
 
-    /**
-     * Apply a ripple background effect to a back button TextView.
-     *
-     * @param btn the TextView to style as a back button
-     */
+    /** 为返回控件设置透明触摸反馈。 */
     protected void applyRippleToBackButton(TextView btn) {
         GradientDrawable shape = new GradientDrawable();
-        shape.setCornerRadius(dp(20));
+        shape.setCornerRadius(dp(8));
         shape.setColor(Color.TRANSPARENT);
 
         RippleDrawable ripple = new RippleDrawable(
                 android.content.res.ColorStateList.valueOf(getResources().getColor(R.color.ripple_light)),
                 shape, null);
         btn.setBackground(ripple);
-        btn.setTextColor(AppSettings.getAccentColor(this));
-        btn.setPadding(dp(14), dp(8), dp(14), dp(8));
+        btn.setTextColor(getResources().getColor(R.color.primary));
+        btn.setPadding(dp(10), dp(8), dp(10), dp(8));
+        btn.setMinHeight(dp(44));
+        btn.setMinimumHeight(dp(44));
     }
 
-    // ── Divider ────────────────────────────────────────────────────────
+    // ── 分隔线 ────────────────────────────────────────────────────────
 
-    /**
-     * Add a horizontal divider line to a parent LinearLayout.
-     *
-     * @param parent the LinearLayout to add the divider to
-     */
+    /** 向容器添加一条水平分隔线。 */
     protected void addDivider(LinearLayout parent) {
         View divider = new View(this);
         divider.setBackgroundColor(getResources().getColor(R.color.divider_color));
@@ -359,23 +319,15 @@ public abstract class BaseActivity extends Activity {
         parent.addView(divider, params);
     }
 
-    // ── Navigation helpers ─────────────────────────────────────────────
+    // ── 导航辅助 ─────────────────────────────────────────────
 
-    /**
-     * Navigate to another Activity with a slide-in transition.
-     *
-     * @param activityClass the target Activity class
-     */
+    /** 以统一滑动动画打开目标页面。 */
     protected void navigateTo(Class<? extends Activity> activityClass) {
         startActivity(new Intent(this, activityClass));
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 
-    /**
-     * Navigate using a pre-built Intent with a slide-in transition.
-     *
-     * @param intent the Intent to start the target Activity
-     */
+    /** 使用已有 Intent 并应用统一滑动动画。 */
     protected void navigateTo(Intent intent) {
         startActivity(intent);
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);

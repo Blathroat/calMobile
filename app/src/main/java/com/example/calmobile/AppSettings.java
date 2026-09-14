@@ -18,15 +18,18 @@ public final class AppSettings {
     private static final String KEY_CATEGORIES = "categories";
     private static final String KEY_REVIEW_REEDIT = "review_reedit";
 
+    // 预设色号与 newUI 的橙色强调保持协调，管理员可在设置页直接选择。
     private static final int[] ACCENTS = {
-            Color.rgb(22, 78, 99),
-            Color.rgb(79, 70, 146),
-            Color.rgb(14, 116, 144),
-            Color.rgb(180, 83, 9),
-            Color.rgb(190, 24, 93),
-            Color.rgb(67, 56, 202),
-            Color.rgb(22, 101, 52),
-            Color.rgb(185, 28, 28)
+            Color.rgb(192, 86, 33),   // #C05621 焦糖橙
+            Color.rgb(72, 81, 93),    // #48515D 石墨
+            Color.rgb(36, 93, 60),    // #245D3C 森林绿
+            Color.rgb(47, 111, 143),  // #2F6F8F 海湾蓝
+            Color.rgb(138, 90, 68),   // #8A5A44 赤陶
+            Color.rgb(107, 91, 149),  // #6B5B95 紫灰
+            Color.rgb(47, 107, 90),   // #2F6B5A 松针
+            Color.rgb(122, 79, 90),   // #7A4F5A 酒红
+            Color.rgb(177, 125, 44),  // #B17D2C 琥珀
+            Color.rgb(86, 103, 116)   // #566774 雾蓝灰
     };
 
     private AppSettings() { }
@@ -36,8 +39,8 @@ public final class AppSettings {
     }
 
     public static int getThemeIndex(Context context) {
-        int value = prefs(context).getInt(KEY_THEME, 0);
-        return value >= 0 && value < ACCENTS.length ? value : 0;
+        int value = prefs(context).getInt(KEY_THEME, 1);
+        return value >= 0 && value < ACCENTS.length ? value : 1;
     }
 
     public static int getAccentColor(Context context) {

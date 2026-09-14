@@ -2,6 +2,7 @@ package com.example.calmobile;
 
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -12,6 +13,7 @@ public class RegistrationDetailActivity extends BaseActivity {
     public static final String EXTRA_RECORD_ID = "record_id";
     private String recordId;
     private LinearLayout content;
+    private LinearLayout statusPicker;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -25,6 +27,7 @@ public class RegistrationDetailActivity extends BaseActivity {
     }
     private void render() {
         content.removeAllViews();
+        statusPicker = null;
         RegistrationManagementActivity.MgmtRecord record = RegistrationManagementActivity.findRecord(recordId);
         if (record == null) { finish(); return; }
         addText(content, record.visitorName, R.color.text_primary, 21, Typeface.BOLD);
@@ -34,13 +37,11 @@ public class RegistrationDetailActivity extends BaseActivity {
         boolean revisable = RegistrationManagementActivity.STATUS_PENDING.equals(record.status)
                 || AppSettings.canReviseReviewedRegistration(this);
         if (revisable) {
-            LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
-            Button approve = new Button(this); stylePrimaryButton(approve); approve.setText(R.string.reg_mgmt_approve);
-            approve.setOnClickListener(v -> changeStatus(RegistrationManagementActivity.STATUS_APPROVED));
-            actions.addView(approve, weighted(0, 6));
-            Button reject = new Button(this); styleDangerButton(reject); reject.setText(R.string.reg_mgmt_reject);
-            reject.setOnClickListener(v -> changeStatus(RegistrationManagementActivity.STATUS_REJECTED));
-            actions.addView(reject, weighted(6, 0)); content.addView(actions, fullWidthParams(10));
+            Button change = new Button(this);
+            styleSecondaryButton(change);
+            change.setText(R.string.reg_mgmt_change_status);
+            change.setOnClickListener(v -> toggleStatusPicker(change, record));
+            content.addView(change, fullWidthParams(10));
         }
     }
     private LinearLayout.LayoutParams weighted(int left, int right) {
@@ -49,6 +50,45 @@ public class RegistrationDetailActivity extends BaseActivity {
     private void addDetail(String label, String value) {
         addText(content, label, R.color.text_secondary, 13, Typeface.BOLD);
         addText(content, value, R.color.text_primary, 15, Typeface.NORMAL);
+    }
+
+    /** 在报名卡片内展开审批选项，避免把操作移到页面底部。 */
+    private void toggleStatusPicker(Button trigger, RegistrationManagementActivity.MgmtRecord record) {
+        if (statusPicker != null && statusPicker.getParent() != null) {
+            ((LinearLayout) statusPicker.getParent()).removeView(statusPicker);
+            statusPicker = null;
+            trigger.setText(R.string.reg_mgmt_change_status);
+            return;
+        }
+
+        statusPicker = new LinearLayout(this);
+        statusPicker.setOrientation(LinearLayout.VERTICAL);
+        statusPicker.setPadding(dp(12), dp(12), dp(12), dp(12));
+        styleCard(statusPicker);
+        addText(statusPicker, getString(R.string.reg_mgmt_status_picker_title),
+                R.color.text_primary, 15, Typeface.BOLD);
+
+        addStatusOption(record, RegistrationManagementActivity.STATUS_APPROVED,
+                R.string.reg_mgmt_approve, false);
+        addStatusOption(record, RegistrationManagementActivity.STATUS_REJECTED,
+                R.string.reg_mgmt_reject, true);
+        content.addView(statusPicker, fullWidthParams(8));
+        trigger.setText(R.string.reg_mgmt_collapse_status);
+        animateShowPanel(statusPicker);
+    }
+
+    private void addStatusOption(RegistrationManagementActivity.MgmtRecord record,
+                                 String status, int labelRes, boolean danger) {
+        Button option = new Button(this);
+        if (danger) {
+            styleDangerButton(option);
+        } else {
+            stylePrimaryButton(option);
+        }
+        option.setText(labelRes);
+        option.setOnClickListener(v -> changeStatus(status));
+        // 选项直接放入当前详情卡片内，保持与触发操作同一层级。
+        statusPicker.addView(option, fullWidthParams(6));
     }
     private void changeStatus(String status) {
         RegistrationManagementActivity.updateStatus(recordId, status);

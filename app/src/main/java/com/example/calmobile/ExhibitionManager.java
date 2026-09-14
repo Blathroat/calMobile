@@ -12,12 +12,12 @@ import java.util.List;
  */
 public class ExhibitionManager {
 
-    // ── In-memory fallback (test environments) ────────────────────
+    // ── 内存回退（测试环境） ────────────────────
     private static final List<ExhibitorExhibition> fallbackExhibitions = new ArrayList<>();
     private static int fallbackNextId = 1;
     private static boolean initialized = false;
 
-    /** Seed sample data on first access. */
+    /** 首次访问时写入示例数据。 */
     public static void ensureInitialized() {
         if (initialized) {
             return;
@@ -26,12 +26,12 @@ public class ExhibitionManager {
 
         DatabaseHelper dbHelper = DatabaseHelper.getInstance();
         if (dbHelper != null) {
-            // SQLite mode — only seed if table is empty
+            // SQLite 模式：仅在数据表为空时写入示例数据
             if (dbHelper.getExhibitionCount() == 0) {
                 seedDatabase(dbHelper);
             }
         } else {
-            // In-memory fallback (test environment)
+            // 内存回退（测试环境）
             seedInMemory();
         }
     }
@@ -55,7 +55,7 @@ public class ExhibitionManager {
         if (dbHelper != null) {
             return dbHelper.updateExhibition(id, day, title, venue, time, status, description, category);
         }
-        // In-memory fallback
+        // 内存回退
         ExhibitorExhibition exhibition = findByIdInMemory(id);
         if (exhibition == null) {
             return false;
@@ -112,7 +112,7 @@ public class ExhibitionManager {
         return findByIdInMemory(id);
     }
 
-    /** Search exhibitions by title, venue, category, or description. */
+    /** 按标题、地点、分类或简介搜索展会。 */
     public static List<ExhibitorExhibition> search(String query) {
         if (query == null || query.trim().isEmpty()) {
             return new ArrayList<>();
@@ -121,7 +121,7 @@ public class ExhibitionManager {
         if (dbHelper != null) {
             return dbHelper.searchExhibitions(query.trim());
         }
-        // In-memory fallback
+        // 内存回退
         List<ExhibitorExhibition> results = new ArrayList<>();
         String lower = query.trim().toLowerCase();
         for (ExhibitorExhibition ex : fallbackExhibitions) {
@@ -135,10 +135,10 @@ public class ExhibitionManager {
         return results;
     }
 
-    /** Return fake registration records for a given exhibition. */
+    /** 返回指定展会的演示报名记录。 */
     public static List<String> getRegistrationRecords(ExhibitorExhibition exhibition) {
         List<String> records = new ArrayList<>();
-        // Generate deterministic fake records based on exhibition title
+        // 根据展会标题生成稳定的演示记录
         String title = exhibition.getTitle();
         records.add("张伟 · 专业观众 · 需要洽谈");
         records.add("李娜 · 采购负责人 · 仅参观");
@@ -153,7 +153,7 @@ public class ExhibitionManager {
         return records;
     }
 
-    // ── In-memory helpers ─────────────────────────────────────────
+    // ── 内存辅助方法 ─────────────────────────────────────────
 
     private static void seedDatabase(DatabaseHelper dbHelper) {
         dbHelper.insertExhibition(8, "华南智能家居展", "深圳会展中心 3 号馆", "09:00-17:30",
@@ -195,3 +195,4 @@ public class ExhibitionManager {
         return null;
     }
 }
+

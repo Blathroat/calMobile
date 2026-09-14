@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">展会排期助手</string>
-    <string name="home_status">本地假数据演示已就绪：点击带标记日期查看展会卡片、详情和报名表单。</string>
-    <string name="local_day_count">本地演示：%1$d月%2$d日共有 %3$d 场展会</string>
-    <string name="home_hero_title">今天，去遇见值得记住的展会</string>
+    <string name="home_status">按月浏览展会，点击日期查看当天安排</string>
+    <string name="local_day_count">%1$d月%2$d日共有 %3$d 场展会</string>
+    <string name="home_hero_title">发现展会</string>
     <string name="home_brand_mark">展</string>
+    <string name="home_previous_month">上一个月</string>
+    <string name="home_next_month">下一个月</string>
     <string name="home_exhibitions_for_day">%1$d月%2$d日的展会</string>
     <string name="today_exhibitions">今日展会</string>
     <string name="exhibition_detail">展会详情</string>
@@ -12,6 +14,8 @@
     <string name="submit_registration">提交报名</string>
     <string name="registration_closed">报名已截止</string>
     <string name="my_registrations_title">我的报名</string>
+    <string name="my_registrations_count">共 %1$d 条记录</string>
+    <string name="my_registrations_view_all">查看全部报名</string>
     <string name="my_registrations_empty">暂无报名记录，提交报名后将在此显示。</string>
     <string name="cancel_registration">取消报名</string>
     <string name="status_pending">待参加</string>
@@ -42,7 +46,7 @@
     <string name="user_public_edit_profile">编辑资料</string>
     <string name="user_public_view_profile_hint">查看该用户主页 →</string>
 
-    <!-- Exhibitor Backend -->
+    <!-- 展商后台 -->
     <string name="exhibitor_backend_title">展商后台</string>
     <string name="exhibitor_backend_empty">暂无展会，点击下方按钮创建。</string>
     <string name="exhibitor_add_exhibition">新建展会</string>
@@ -79,7 +83,7 @@
     <string name="exhibitor_validation_day_range">1-30</string>
     <string name="exhibitor_validation_day_number">请输入数字</string>
 
-    <!-- Registration Management -->
+    <!-- 报名管理 -->
     <string name="reg_mgmt_title">报名管理</string>
     <string name="reg_mgmt_count">共 %1$d 条报名</string>
     <string name="reg_mgmt_empty">暂无报名记录。</string>
@@ -93,10 +97,13 @@
     <string name="reg_mgmt_reject">拒绝</string>
     <string name="reg_mgmt_approved">已通过</string>
     <string name="reg_mgmt_rejected">已拒绝</string>
+    <string name="reg_mgmt_change_status">更改审核状态</string>
+    <string name="reg_mgmt_status_picker_title">选择审核状态</string>
+    <string name="reg_mgmt_collapse_status">收起状态选项</string>
     <string name="reg_mgmt_close_detail">关闭详情</string>
     <string name="reg_mgmt_nav_btn">查看报名</string>
 
-    <!-- Admin Backend -->
+    <!-- 管理后台 -->
     <string name="admin_backend_title">管理后台</string>
     <string name="admin_tab_users">用户管理</string>
     <string name="admin_tab_exhibitions">展会管理</string>
@@ -138,13 +145,13 @@
     <string name="admin_user_registered">注册：%1$s</string>
     <string name="admin_user_last_login">登录：%1$s</string>
 
-    <!-- Empty states -->
-    <string name="empty_state_icon">\uD83D\uDCCB</string>
+    <!-- 空状态 -->
+    <string name="empty_state_icon">—</string>
     <string name="empty_exhibitions_day">当天暂无展会，点击带标记日期查看样例展会。</string>
     <string name="empty_exhibitions_generic">暂无展会数据</string>
     <string name="empty_users_generic">暂无用户数据</string>
 
-    <!-- Confirmation dialogs -->
+    <!-- 确认对话框 -->
     <string name="confirm_title">确认操作</string>
     <string name="confirm_cancel_registration">确定要取消该报名吗？取消后无法恢复。</string>
     <string name="confirm_cancel_edit">确定要放弃编辑吗？未保存的修改将会丢失。</string>
@@ -154,7 +161,7 @@
     <string name="confirm_yes">确定</string>
     <string name="confirm_no">取消</string>
 
-    <!-- Confirmation dialogs -->
+    <!-- 认证与报名提示 -->
     <string name="auth_login_subtitle">登录您的账号</string>
     <string name="auth_username_hint">用户名</string>
     <string name="auth_password_hint">密码</string>
@@ -175,13 +182,13 @@
     <string name="registration_name_required">请填写姓名或公司名称</string>
     <string name="registration_already_submitted">你已报名该展会，无需重复提交</string>
     <string name="registration_submitting">正在提交…</string>
-    <string name="registration_local_demo_hint">本地演示：报名结果保存在当前设备。</string>
+    <string name="registration_local_demo_hint">报名记录会保存在当前设备，方便你随时查看。</string>
     <string name="registration_success_title">报名已提交</string>
     <string name="registration_success_message">我们已记录你的报名信息。</string>
     <string name="detail_time">时间：%1$d月%2$d日 %3$s</string>
     <string name="detail_venue">地点：%1$s</string>
     <string name="detail_status">状态：%1$s</string>
-    <string name="detail_local_demo_note">说明：当前为本地假数据演示，报名结果不会提交到服务器。</string>
+    <string name="detail_local_demo_note">报名信息会保存在当前设备。</string>
     <string name="calendar_removed_feedback">已从日历移除</string>
     <string name="calendar_added_feedback">已添加到日历</string>
     <string name="registration_exhibition_meta">%1$d月%2$d日 %3$s · %4$s</string>
@@ -205,7 +212,7 @@
     <string name="registration_type_label">身份：%1$s</string>
     <string name="registration_needs_label">需求：%1$s</string>
 
-    <!-- Search -->
+    <!-- 搜索 -->
     <string name="search_title">搜索</string>
     <string name="search_hint">搜索展会名称、地点、分类或用户昵称、邮箱…</string>
     <string name="search_btn">搜索</string>
@@ -217,7 +224,7 @@
     <string name="search_history_title">搜索历史</string>
     <string name="search_clear_history">清除</string>
 
-    <!-- Notification Settings -->
+    <!-- 通知设置 -->
     <string name="notification_settings_title">通知设置</string>
     <string name="notification_exhibition_reminder">展会提醒</string>
     <string name="notification_exhibition_reminder_desc">开展前一天提醒</string>
@@ -230,7 +237,7 @@
     <string name="notification_permission_hint">开启通知以接收展会提醒</string>
     <string name="notification_settings_saved">通知设置已保存</string>
 
-    <!-- Calendar Integration -->
+    <!-- 日历集成 -->
     <string name="calendar_add_to_calendar">添加到日历</string>
     <string name="calendar_remove_from_calendar">从日历移除</string>
     <string name="calendar_added">已添加到日历</string>
@@ -242,13 +249,13 @@
     <string name="calendar_permission_denied">日历权限未授予，无法操作</string>
     <string name="calendar_no_account">未找到可用的日历账号</string>
 
-    <!-- Bottom Navigation -->
+    <!-- 底部导航 -->
     <string name="nav_home">首页</string>
     <string name="nav_profile">个人</string>
     <string name="nav_exhibitor">展商</string>
     <string name="nav_admin">管理</string>
 
-    <!-- Data Export -->
+    <!-- 数据导出 -->
     <string name="export_exhibitions">导出展会数据</string>
     <string name="export_registrations">导出报名数据</string>
     <string name="export_users">导出用户数据</string>

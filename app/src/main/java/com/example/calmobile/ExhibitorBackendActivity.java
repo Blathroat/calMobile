@@ -6,7 +6,6 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -116,10 +115,9 @@ public class ExhibitorBackendActivity extends BaseActivity {
                     R.color.text_secondary, 14, Typeface.NORMAL);
 
             // Status line
-            int statusColor = exh.isOpenForRegistration()
-                    ? R.color.status_open : R.color.status_closed;
-            addText(card, exh.getStatus() + " · " + exh.getCategory(),
-                    statusColor, 14, Typeface.BOLD);
+            TextView statusBadge = createStatusBadge(exh.getStatus() + " · " + exh.getCategory(),
+                    exh.isOpenForRegistration());
+            card.addView(statusBadge, fullWidthParams(6));
 
             // Action buttons row
             LinearLayout actions = new LinearLayout(this);
@@ -162,15 +160,10 @@ public class ExhibitorBackendActivity extends BaseActivity {
 
             card.addView(actions, fullWidthParams(8));
 
-            // Delete button (circular trash icon)
-            ImageView deleteBtn = new ImageView(this);
-            deleteBtn.setImageResource(android.R.drawable.ic_menu_delete);
-            deleteBtn.setColorFilter(getResources().getColor(R.color.button_danger_text));
-            deleteBtn.setPadding(dp(12), dp(8), dp(12), dp(8));
-            GradientDrawable deleteBg = new GradientDrawable();
-            deleteBg.setShape(GradientDrawable.OVAL);
-            deleteBg.setColor(getResources().getColor(R.color.button_danger_bg));
-            deleteBtn.setBackground(deleteBg);
+            // 删除仍使用清晰文字，避免图标含义不明确；背景沿用 button_danger_bg 令牌。
+            Button deleteBtn = new Button(this);
+            styleDangerButton(deleteBtn);
+            deleteBtn.setText(R.string.exhibitor_delete);
             deleteBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -178,7 +171,7 @@ public class ExhibitorBackendActivity extends BaseActivity {
                 }
             });
             LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(
-                    dp(48), dp(48));
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             deleteParams.setMargins(dp(8), 0, 0, 0);
             card.addView(deleteBtn, deleteParams);
 

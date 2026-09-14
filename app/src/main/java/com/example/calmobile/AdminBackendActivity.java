@@ -436,10 +436,9 @@ public class AdminBackendActivity extends BaseActivity {
                     R.color.text_secondary, 14, Typeface.NORMAL);
 
             // Status line
-            int statusColor = exh.isOpenForRegistration()
-                    ? R.color.status_open : R.color.status_closed;
-            addText(card, exh.getStatus() + " · " + exh.getCategory(),
-                    statusColor, 14, Typeface.BOLD);
+            TextView statusBadge = createStatusBadge(exh.getStatus() + " · " + exh.getCategory(),
+                    exh.isOpenForRegistration());
+            card.addView(statusBadge, fullWidthParams(6));
 
             // Action buttons row
             LinearLayout actions = new LinearLayout(this);
@@ -512,7 +511,8 @@ public class AdminBackendActivity extends BaseActivity {
                 R.color.text_primary, 16, Typeface.BOLD);
         addText(exhibitionDetailPanel, getString(R.string.admin_exhibition_label_venue) + "：" + exh.getVenue(),
                 R.color.text_secondary, 15, Typeface.NORMAL);
-        addText(exhibitionDetailPanel, getString(R.string.admin_exhibition_label_date) + "：6月" + exh.getDay() + "日",
+        addText(exhibitionDetailPanel, getString(R.string.admin_exhibition_label_date) + "："
+                        + ExhibitionConfiguration.displayDate(exh.getId(), exh.getDay()),
                 R.color.text_secondary, 15, Typeface.NORMAL);
         addText(exhibitionDetailPanel, getString(R.string.admin_exhibition_label_time) + "：" + exh.getTime(),
                 R.color.text_secondary, 15, Typeface.NORMAL);
@@ -755,6 +755,9 @@ public class AdminBackendActivity extends BaseActivity {
             GradientDrawable swatch = new GradientDrawable();
             swatch.setColor(accentColors[i]);
             swatch.setShape(GradientDrawable.OVAL);
+            swatch.setStroke(dp(index == selectedTheme[0] ? 3 : 1),
+                    getResources().getColor(index == selectedTheme[0]
+                            ? R.color.text_primary : R.color.card_stroke));
             colorButton.setBackground(swatch);
             colorButton.setContentDescription("配色 " + (i + 1));
             colorButton.setOnClickListener(new View.OnClickListener() {
@@ -763,17 +766,30 @@ public class AdminBackendActivity extends BaseActivity {
                     selectedTheme[0] = index;
                     AppSettings.setThemeIndex(AdminBackendActivity.this, index);
                     AppSettings.applyWindowColors(AdminBackendActivity.this);
+                    for (int j = 0; j < colorRow.getChildCount(); j++) {
+                        View child = colorRow.getChildAt(j);
+                        if (child instanceof Button && child.getBackground() instanceof GradientDrawable) {
+                            ((GradientDrawable) child.getBackground()).setStroke(dp(j == index ? 3 : 1),
+                                    getResources().getColor(j == index ? R.color.text_primary : R.color.card_stroke));
+                        }
+                    }
                     Toast.makeText(AdminBackendActivity.this, "配色已更新", Toast.LENGTH_SHORT).show();
                 }
             });
-            LinearLayout.LayoutParams colorParams = new LinearLayout.LayoutParams(0, dp(46), 1f);
-            colorParams.setMargins(dp(3), 0, dp(3), 0);
+            LinearLayout.LayoutParams colorParams = new LinearLayout.LayoutParams(dp(52), dp(52));
+            colorParams.setMargins(dp(4), 0, dp(4), 0);
             colorRow.addView(colorButton, colorParams);
         }
-        settingsSection.addView(colorRow, fullWidthParams(6));
+        android.widget.HorizontalScrollView colorScroll = new android.widget.HorizontalScrollView(this);
+        colorScroll.setHorizontalScrollBarEnabled(false);
+        colorScroll.addView(colorRow, new android.widget.HorizontalScrollView.LayoutParams(
+                android.widget.HorizontalScrollView.LayoutParams.WRAP_CONTENT,
+                android.widget.HorizontalScrollView.LayoutParams.WRAP_CONTENT));
+        settingsSection.addView(colorScroll, fullWidthParams(6));
 
         addText(settingsSection, "进入应用时的公告", R.color.text_primary, 17, Typeface.BOLD);
         final EditText announcementInput = new EditText(this);
+        styleInputField(announcementInput);
         announcementInput.setSingleLine(false);
         announcementInput.setMinLines(2);
         announcementInput.setHint("例如：本周末展馆开放时间调整");
@@ -786,6 +802,7 @@ public class AdminBackendActivity extends BaseActivity {
 
         addText(settingsSection, "展会分类管理", R.color.text_primary, 17, Typeface.BOLD);
         final EditText categoriesInput = new EditText(this);
+        styleInputField(categoriesInput);
         categoriesInput.setSingleLine(false);
         categoriesInput.setHint("每行一个分类，例如：智能家居");
         categoriesInput.setText(android.text.TextUtils.join("\n", AppSettings.getCategories(this)));
@@ -854,6 +871,7 @@ public class AdminBackendActivity extends BaseActivity {
         addText(settingsSection, getString(R.string.admin_settings_image_limit),
                 R.color.text_secondary, 14, Typeface.NORMAL);
         final EditText imageLimitInput = new EditText(this);
+        styleInputField(imageLimitInput);
         imageLimitInput.setSingleLine(true);
         imageLimitInput.setInputType(InputType.TYPE_CLASS_NUMBER);
         imageLimitInput.setText("10");
@@ -863,6 +881,7 @@ public class AdminBackendActivity extends BaseActivity {
         addText(settingsSection, getString(R.string.admin_settings_video_limit),
                 R.color.text_secondary, 14, Typeface.NORMAL);
         final EditText videoLimitInput = new EditText(this);
+        styleInputField(videoLimitInput);
         videoLimitInput.setSingleLine(true);
         videoLimitInput.setInputType(InputType.TYPE_CLASS_NUMBER);
         videoLimitInput.setText("100");
@@ -872,6 +891,7 @@ public class AdminBackendActivity extends BaseActivity {
         addText(settingsSection, getString(R.string.admin_settings_gallery_limit),
                 R.color.text_secondary, 14, Typeface.NORMAL);
         final EditText galleryLimitInput = new EditText(this);
+        styleInputField(galleryLimitInput);
         galleryLimitInput.setSingleLine(true);
         galleryLimitInput.setInputType(InputType.TYPE_CLASS_NUMBER);
         galleryLimitInput.setText("50");

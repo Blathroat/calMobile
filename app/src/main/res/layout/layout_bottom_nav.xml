@@ -6,13 +6,13 @@
     android:elevation="@dimen/elevation_medium"
     android:orientation="vertical">
 
-    <!-- Top divider line -->
+    <!-- 顶部分隔线 -->
     <View
         android:layout_width="match_parent"
         android:layout_height="@dimen/stroke_thin"
         android:background="@color/divider_color" />
 
-    <!-- Navigation items row -->
+    <!-- 导航项目行 -->
     <LinearLayout
         android:id="@+id/nav_items_row"
         android:layout_width="match_parent"
@@ -23,7 +23,7 @@
         android:paddingRight="@dimen/spacing_8dp"
         android:weightSum="4">
 
-        <!-- ── Home tab ─────────────────────────────────────── -->
+        <!-- ── 首页 ─────────────────────────────────────── -->
         <LinearLayout
             android:id="@+id/nav_home"
             android:layout_width="0dp"
@@ -54,7 +54,7 @@
                 android:textSize="@dimen/nav_text_size" />
         </LinearLayout>
 
-        <!-- ── Exhibitor tab ────────────────────────────────── -->
+        <!-- ── 展商 ────────────────────────────────── -->
         <LinearLayout
             android:id="@+id/nav_exhibitor"
             android:layout_width="0dp"
@@ -85,7 +85,7 @@
                 android:textSize="@dimen/nav_text_size" />
         </LinearLayout>
 
-        <!-- ── Admin tab ────────────────────────────────────── -->
+        <!-- ── 管理 ────────────────────────────────────── -->
         <LinearLayout
             android:id="@+id/nav_admin"
             android:layout_width="0dp"
@@ -116,7 +116,7 @@
                 android:textSize="@dimen/nav_text_size" />
         </LinearLayout>
 
-        <!-- ── Profile tab (always visible, last position) ──── -->
+        <!-- ── 个人（始终显示在末尾） ──── -->
         <LinearLayout
             android:id="@+id/nav_profile"
             android:layout_width="0dp"
@@ -149,3 +149,4 @@
 
     </LinearLayout>
 </LinearLayout>
+

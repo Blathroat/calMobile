@@ -103,6 +103,9 @@ public class RegistrationFormActivity extends BaseActivity {
                 RadioButton button = new RadioButton(this);
                 button.setId(View.generateViewId());
                 button.setText(option);
+                button.setTextColor(getResources().getColor(R.color.text_primary));
+                button.setButtonTintList(android.content.res.ColorStateList.valueOf(
+                        getResources().getColor(R.color.secondary)));
                 group.addView(button, fullWidthParams(0));
             }
             return group;
@@ -113,11 +116,15 @@ public class RegistrationFormActivity extends BaseActivity {
             for (String option : optionsFor(field)) {
                 CheckBox box = new CheckBox(this);
                 box.setText(option);
+                box.setTextColor(getResources().getColor(R.color.text_primary));
+                box.setButtonTintList(android.content.res.ColorStateList.valueOf(
+                        getResources().getColor(R.color.secondary)));
                 group.addView(box, fullWidthParams(0));
             }
             return group;
         }
         EditText input = new EditText(this);
+        styleInputField(input);
         input.setHint("请输入" + field.getTitle());
         input.setMinLines(1);
         return input;

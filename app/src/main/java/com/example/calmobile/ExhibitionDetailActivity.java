@@ -6,6 +6,7 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.Html;
 import android.widget.ImageView;
+import android.widget.ImageButton;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -66,6 +67,10 @@ public class ExhibitionDetailActivity extends BaseActivity {
             }
         });
 
+        ImageButton shareButton = findViewById(R.id.detail_share);
+        shareButton.setColorFilter(getResources().getColor(R.color.text_primary));
+        shareButton.setOnClickListener(v -> shareExhibition());
+
         buildDetailContent();
         buildActionButtons();
     }
@@ -79,6 +84,19 @@ public class ExhibitionDetailActivity extends BaseActivity {
     /** 填充展会详情卡片。 */
     private void buildDetailContent() {
         detailContent.removeAllViews();
+
+        ImageView hero = new ImageView(this);
+        hero.setAdjustViewBounds(true);
+        hero.setMinimumHeight(dp(128));
+        hero.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        hero.setBackgroundResource(R.drawable.bg_surface_variant);
+        if (exhibitionId != null) {
+            String imageUri = ExhibitionConfiguration.get(exhibitionId).imageUri;
+            if (imageUri != null && !imageUri.isEmpty()) {
+                hero.setImageURI(android.net.Uri.parse(imageUri));
+            }
+        }
+        detailContent.addView(hero, fullWidthParams(0));
 
         addText(detailContent, title, R.color.text_primary, 20, Typeface.BOLD);
         addText(detailContent, category, R.color.text_secondary, 14, Typeface.NORMAL);
@@ -98,24 +116,25 @@ public class ExhibitionDetailActivity extends BaseActivity {
 
         addDivider(detailContent);
 
+        addText(detailContent, "展会介绍", R.color.text_secondary, 13, Typeface.BOLD);
         TextView descriptionView = new TextView(this);
         descriptionView.setText(Html.fromHtml(description == null ? "" : description, Html.FROM_HTML_MODE_LEGACY));
         descriptionView.setTextColor(getResources().getColor(R.color.text_primary));
         descriptionView.setTextSize(15);
         descriptionView.setLineSpacing(0, 1.25f);
         detailContent.addView(descriptionView, fullWidthParams(4));
-        if (exhibitionId != null) {
-            String imageUri = ExhibitionConfiguration.get(exhibitionId).imageUri;
-            if (imageUri != null && !imageUri.isEmpty()) {
-                ImageView image = new ImageView(this);
-                image.setAdjustViewBounds(true);
-                image.setImageURI(android.net.Uri.parse(imageUri));
-                detailContent.addView(image, fullWidthParams(6));
-            }
-        }
         addText(detailContent,
                 getString(R.string.detail_local_demo_note),
                 R.color.text_secondary, 14, Typeface.NORMAL);
+    }
+
+    /** 使用系统分享面板发送展会标题和时间地点。 */
+    private void shareExhibition() {
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("text/plain");
+        share.putExtra(Intent.EXTRA_TEXT, title + "\n" + month + "月" + day + "日 "
+                + time + " · " + venue);
+        startActivity(Intent.createChooser(share, "分享展会"));
     }
 
     /** 构建报名与日历操作按钮。 */

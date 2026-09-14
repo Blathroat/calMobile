@@ -1,5 +1,6 @@
 package com.example.calmobile;
 
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -174,8 +175,9 @@ public class SearchActivity extends BaseActivity {
         emptyBox.setBackground(bg);
 
         TextView icon = new TextView(this);
-        icon.setText("\uD83D\uDD0D");
-        icon.setTextSize(36);
+        icon.setText("⌕");
+        icon.setTextColor(getResources().getColor(R.color.text_tertiary));
+        icon.setTextSize(30);
         icon.setGravity(Gravity.CENTER);
         emptyBox.addView(icon, fullWidthParams(0));
 
@@ -212,6 +214,21 @@ public class SearchActivity extends BaseActivity {
                 ex.isOpenForRegistration() ? R.color.status_open : R.color.status_closed,
                 13, Typeface.BOLD);
 
+        card.setOnClickListener(v -> {
+            Intent intent = new Intent(SearchActivity.this, ExhibitionDetailActivity.class);
+            intent.putExtra(ExhibitionDetailActivity.EXTRA_EXHIBITION_ID, ex.getId());
+            intent.putExtra("day", ex.getDay());
+            intent.putExtra("month", 6);
+            intent.putExtra("title", ex.getTitle());
+            intent.putExtra("venue", ex.getVenue());
+            intent.putExtra("time", ex.getTime());
+            intent.putExtra("status", ex.getStatus());
+            intent.putExtra("openForRegistration", ex.isOpenForRegistration());
+            intent.putExtra("description", ex.getDescription());
+            intent.putExtra("category", ex.getCategory());
+            navigateTo(intent);
+        });
+
         return card;
     }
 
@@ -229,6 +246,16 @@ public class SearchActivity extends BaseActivity {
                 user.isActive() ? R.color.status_open
                         : user.isBanned() ? R.color.status_closed : R.color.status_pending,
                 13, Typeface.BOLD);
+
+        card.setOnClickListener(v -> {
+            Intent intent = new Intent(SearchActivity.this, UserPublicActivity.class);
+            intent.putExtra("nickname", user.getNickname());
+            intent.putExtra("contact", user.getEmail());
+            intent.putExtra("bio", getString(R.string.user_public_no_info));
+            intent.putExtra("showRegistrations", false);
+            intent.putExtra("isOwnProfile", false);
+            navigateTo(intent);
+        });
 
         return card;
     }

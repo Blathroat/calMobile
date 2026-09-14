@@ -10,29 +10,7 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/**
- * Displays a user's public profile page.
- *
- * <p>Expected Intent extras:
- * <ul>
- *   <li>{@code nickname} (String) — user display name</li>
- *   <li>{@code bio} (String) — short bio</li>
- *   <li>{@code contact} (String) — contact info</li>
- *   <li>{@code socialMedia} (String) — social media handle</li>
- *   <li>{@code showRegistrations} (boolean) — whether to show registrations section</li>
- *   <li>{@code isOwnProfile} (boolean) — whether to show edit button</li>
- * </ul>
- *
- * <p>Registration data (parallel arrays, optional):
- * <ul>
- *   <li>{@code regExhibitionTitles} (String[])</li>
- *   <li>{@code regExhibitionDays} (String[])</li>
- *   <li>{@code regExhibitionTimes} (String[])</li>
- *   <li>{@code regExhibitionVenues} (String[])</li>
- *   <li>{@code regStatuses} (String[])</li>
- *   <li>{@code regNeedsSummaries} (String[])</li>
- * </ul>
- */
+/** 用户公开资料与已参加展会页面。 */
 public class UserPublicActivity extends BaseActivity {
 
     private LinearLayout headerSection;
@@ -98,7 +76,9 @@ public class UserPublicActivity extends BaseActivity {
 
     private void renderHeader(String nickname) {
         headerSection.removeAllViews();
-        headerSection.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        headerSection.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        headerSection.setOrientation(LinearLayout.HORIZONTAL);
+        headerSection.setPadding(dp(16), dp(16), dp(16), dp(16));
         styleCard(headerSection);
 
         // Avatar placeholder (circle with initial)
@@ -109,18 +89,40 @@ public class UserPublicActivity extends BaseActivity {
         avatar.setTypeface(Typeface.DEFAULT_BOLD);
         avatar.setGravity(android.view.Gravity.CENTER);
 
-        int avatarSize = dp(72);
+        int avatarSize = dp(56);
         GradientDrawable circle = new GradientDrawable();
         circle.setShape(GradientDrawable.OVAL);
         circle.setColor(getResources().getColor(R.color.status_open));
         avatar.setBackground(circle);
 
         LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(avatarSize, avatarSize);
-        avatarParams.setMargins(0, dp(8), 0, dp(12));
+        avatarParams.setMargins(0, 0, dp(12), 0);
         headerSection.addView(avatar, avatarParams);
 
-        // Nickname below avatar
-        addText(headerSection, nickname, R.color.text_primary, 22, Typeface.BOLD);
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        TextView name = new TextView(this);
+        name.setText(nickname);
+        name.setTextColor(getResources().getColor(R.color.text_primary));
+        name.setTextSize(20);
+        name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        copy.addView(name);
+        TextView label = new TextView(this);
+        label.setText("公开资料");
+        label.setTextColor(getResources().getColor(R.color.text_secondary));
+        label.setTextSize(13);
+        copy.addView(label, fullWidthParams(4));
+        headerSection.addView(copy, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView publicTag = new TextView(this);
+        publicTag.setText("公开");
+        publicTag.setTextSize(11);
+        publicTag.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        publicTag.setTextColor(getResources().getColor(R.color.status_open));
+        publicTag.setBackgroundResource(R.drawable.bg_status_badge);
+        publicTag.setPadding(dp(8), dp(5), dp(8), dp(5));
+        headerSection.addView(publicTag);
 
         animateShowPanel(headerSection);
     }

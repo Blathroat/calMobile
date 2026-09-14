@@ -13,7 +13,7 @@
         android:paddingTop="@dimen/spacing_16dp"
         android:paddingBottom="@dimen/spacing_32dp">
 
-        <!-- Back / title row -->
+        <!-- 返回与标题栏。 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -35,13 +35,20 @@
                 android:text="@string/registration_title"
                 android:textAppearance="@style/TextAppearance.Title" />
 
-            <!-- Spacer to balance the back button -->
-            <View
-                android:layout_width="@dimen/spacing_56dp"
-                android:layout_height="@dimen/spacing_1dp" />
+            <TextView
+                android:id="@+id/reg_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_status_badge_pending"
+                android:paddingHorizontal="@dimen/spacing_8dp"
+                android:paddingVertical="@dimen/spacing_6dp"
+                android:text="待提交"
+                android:textColor="@color/status_pending"
+                android:textSize="12sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- Registration form card (populated programmatically) -->
+        <!-- 报名表单卡片，由代码填充。 -->
         <LinearLayout
             android:id="@+id/reg_form"
             android:layout_width="match_parent"
@@ -52,7 +59,7 @@
             android:orientation="vertical"
             android:padding="@dimen/spacing_20dp" />
 
-        <!-- Result card (populated after submission) -->
+        <!-- 提交结果卡片。 -->
         <LinearLayout
             android:id="@+id/reg_result"
             android:layout_width="match_parent"

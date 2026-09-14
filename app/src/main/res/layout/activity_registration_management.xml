@@ -13,7 +13,7 @@
         android:paddingTop="@dimen/spacing_16dp"
         android:paddingBottom="@dimen/spacing_32dp">
 
-        <!-- Back / title row -->
+        <!-- 返回与标题行 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -36,7 +36,7 @@
                 android:text="@string/reg_mgmt_title"
                 android:textAppearance="@style/TextAppearance.Title" />
 
-            <!-- Spacer to balance the back button -->
+            <!-- 平衡返回按钮宽度的占位 -->
             <View
                 android:layout_width="@dimen/spacing_56dp"
                 android:layout_height="@dimen/spacing_1dp" />
@@ -58,6 +58,15 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/spacing_4dp"
             android:textAppearance="@style/TextAppearance.Caption" />
+
+        <LinearLayout
+            android:id="@+id/reg_mgmt_filter_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_12dp"
+            android:background="@drawable/bg_surface_variant"
+            android:orientation="horizontal"
+            android:padding="@dimen/spacing_4dp" />
 
         <!-- Registration list section built programmatically -->
         <LinearLayout
@@ -81,3 +90,4 @@
 
     </LinearLayout>
 </ScrollView>
+

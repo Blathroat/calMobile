@@ -5,14 +5,14 @@
     android:background="@color/surface_background"
     android:orientation="vertical">
 
-    <!-- Content area: tab views are swapped in/out here -->
+    <!-- 内容区域：根据底部导航切换页面。 -->
     <FrameLayout
         android:id="@+id/content_frame"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <!-- Fixed bottom navigation bar -->
+    <!-- 固定底部导航栏。 -->
     <include layout="@layout/layout_bottom_nav" />
 
 </LinearLayout>

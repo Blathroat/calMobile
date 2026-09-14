@@ -8,13 +8,13 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
 import android.view.View;
-import android.view.animation.Animation;
-import android.view.animation.AnimationUtils;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.ImageView;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -25,6 +25,19 @@ import java.util.List;
 
 /** 主容器页面，在单个 FrameLayout 内切换底部导航页面。 */
 public class MainActivity extends BaseActivity {
+
+    /** 二级表单返回后刷新当前管理/展商列表。 */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (contentFrame == null) {
+            return;
+        }
+        if (currentTab == TAB_EXHIBITOR || currentTab == TAB_ADMIN) {
+            invalidateTab(currentTab);
+            showTab(currentTab, false);
+        }
+    }
 
     // ── 页面常量 ─────────────────────────────────────────────────
     private static final int TAB_HOME = MainTabState.TAB_HOME;
@@ -54,6 +67,7 @@ public class MainActivity extends BaseActivity {
     private int currentTab = TAB_HOME;
     private final View[] tabViews = new View[TAB_COUNT];
     private FrameLayout contentFrame;
+    private int tabAnimationGeneration;
 
     // ── 首页字段 ─────────────────────────────────────────────────
     private int currentYear = 2026;
@@ -164,32 +178,54 @@ public class MainActivity extends BaseActivity {
         }
 
         View newView = getOrCreateTabView(tabIndex);
-        View oldView = contentFrame.getChildCount() > 0
-                ? contentFrame.getChildAt(0) : null;
+        View oldView = currentTab >= 0 && currentTab < tabViews.length
+                ? tabViews[currentTab] : null;
+        if (oldView == null || oldView.getParent() != contentFrame) {
+            oldView = contentFrame.getChildCount() > 0
+                    ? contentFrame.getChildAt(contentFrame.getChildCount() - 1) : null;
+        }
+        final int animationGeneration = ++tabAnimationGeneration;
+        if (newView == oldView) {
+            return;
+        }
 
         if (animate && oldView != null) {
             boolean movingRight = navigationPosition(tabIndex) > navigationPosition(currentTab);
-            Animation exitAnim = AnimationUtils.loadAnimation(this,
-                    movingRight ? R.anim.slide_out_left : R.anim.slide_out_right);
-            Animation enterAnim = AnimationUtils.loadAnimation(this,
-                    movingRight ? R.anim.slide_in_right : R.anim.slide_in_left);
-
-            contentFrame.addView(newView, 0);
-            oldView.bringToFront();
-            oldView.startAnimation(exitAnim);
-            newView.startAnimation(enterAnim);
-
+            int width = Math.max(contentFrame.getWidth(), getResources().getDisplayMetrics().widthPixels);
+            // 新页面放在顶部，使用属性动画避免 View 动画的 disappearing-child 绘制竞态。
+            newView.animate().cancel();
+            oldView.animate().cancel();
+            if (newView.getParent() == contentFrame) {
+                contentFrame.removeView(newView);
+            } else if (newView.getParent() instanceof ViewGroup) {
+                ((ViewGroup) newView.getParent()).removeView(newView);
+            }
+            newView.setTranslationX(movingRight ? width : -width);
+            newView.setAlpha(0.85f);
+            contentFrame.addView(newView);
+            oldView.animate()
+                    .translationX(movingRight ? -width / 3f : width / 3f)
+                    .alpha(0.7f)
+                    .setDuration(300)
+                    .setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator())
+                    .start();
+            newView.animate()
+                    .translationX(0)
+                    .alpha(1f)
+                    .setDuration(300)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .start();
             final View removeTarget = oldView;
-            exitAnim.setAnimationListener(new Animation.AnimationListener() {
-                @Override
-                public void onAnimationStart(Animation animation) { }
-                @Override
-                public void onAnimationRepeat(Animation animation) { }
-                @Override
-                public void onAnimationEnd(Animation animation) {
+            contentFrame.postDelayed(() -> {
+                if (animationGeneration != tabAnimationGeneration) {
+                    return;
+                }
+                if (removeTarget.getParent() == contentFrame) {
                     contentFrame.removeView(removeTarget);
                 }
-            });
+                removeTarget.setTranslationX(0);
+                removeTarget.setAlpha(1f);
+            }, 330);
         } else {
             contentFrame.removeAllViews();
             contentFrame.addView(newView);
@@ -238,7 +274,7 @@ public class MainActivity extends BaseActivity {
     private void setupBottomNav() {
         for (int i = 0; i < NAV_IDS.length; i++) {
             final int navIndex = i;
-            final int tabIndex = NAV_TO_TAB[i];
+        final int tabIndex = NAV_TO_TAB[i];
             findViewById(NAV_IDS[i]).setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -246,7 +282,13 @@ public class MainActivity extends BaseActivity {
                         showAccessDeniedForTab(tabIndex);
                         return;
                     }
-                    showTab(tabIndex, true);
+                    if (tabIndex == MainTabState.TAB_PROFILE && AuthManager.getInstance().canAccessProfile()) {
+                        showTab(tabIndex, true);
+                    } else if (tabIndex == MainTabState.TAB_HOME) {
+                        showTab(tabIndex, true);
+                    } else {
+                        showTab(tabIndex, true);
+                    }
                 }
             });
         }
@@ -339,152 +381,124 @@ public class MainActivity extends BaseActivity {
     private ScrollView buildHomeContent() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(18), dp(16), dp(32));
+        root.setPadding(dp(16), dp(14), dp(16), dp(32));
 
-        // 首页顶部采用深色欢迎卡，先给出今天的节奏，再进入日历和展会列表。
-        LinearLayout hero = new LinearLayout(this);
-        hero.setOrientation(LinearLayout.VERTICAL);
-        hero.setPadding(dp(20), dp(20), dp(20), dp(20));
-        hero.setBackgroundResource(R.drawable.bg_home_hero);
-
-        LinearLayout heroTop = new LinearLayout(this);
-        heroTop.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        TextView brand = addText(heroTop, getString(R.string.app_name),
-                R.color.text_on_primary, 19, Typeface.BOLD);
-        brand.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        brand.setLetterSpacing(0.01f);
+        // 首页头部遵循 newUI：品牌标记、页面标题和圆形搜索入口保持同一基线。
+        LinearLayout topBar = new LinearLayout(this);
+        topBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
         TextView mark = new TextView(this);
         mark.setText(R.string.home_brand_mark);
-        mark.setTextColor(getResources().getColor(R.color.primary));
-        mark.setTextSize(16);
+        mark.setTextColor(getResources().getColor(R.color.text_primary));
+        mark.setTextSize(14);
         mark.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         mark.setGravity(android.view.Gravity.CENTER);
         mark.setBackgroundResource(R.drawable.bg_brand_mark);
-        LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(36), dp(36));
-        markParams.gravity = android.view.Gravity.RIGHT;
-        heroTop.addView(mark, markParams);
-        hero.addView(heroTop, fullWidthParams(0));
+        topBar.addView(mark, new LinearLayout.LayoutParams(dp(32), dp(32)));
 
-        TextView heroTitle = addText(hero, getString(R.string.home_hero_title),
-                R.color.text_on_primary, 23, Typeface.BOLD);
-        heroTitle.setPadding(0, dp(18), 0, 0);
-        homeStatusText = addText(hero, getString(R.string.home_status),
-                R.color.primary_container, 13, Typeface.NORMAL);
-        homeStatusText.setPadding(0, dp(6), 0, 0);
-        root.addView(hero, fullWidthParams(0));
+        LinearLayout titleBlock = new LinearLayout(this);
+        titleBlock.setOrientation(LinearLayout.VERTICAL);
+        titleBlock.setPadding(dp(10), 0, 0, 0);
+        TextView eyebrow = new TextView(this);
+        eyebrow.setText(getString(R.string.app_name));
+        eyebrow.setTextColor(getResources().getColor(R.color.text_secondary));
+        eyebrow.setTextSize(11);
+        titleBlock.addView(eyebrow);
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.home_hero_title));
+        title.setTextColor(getResources().getColor(R.color.text_primary));
+        title.setTextSize(20);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        titleBlock.addView(title, fullWidthParams(2));
+        topBar.addView(titleBlock, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        // 搜索入口
-        LinearLayout searchBar = new LinearLayout(this);
-        searchBar.setOrientation(LinearLayout.HORIZONTAL);
-        searchBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        searchBar.setPadding(dp(16), 0, dp(16), 0);
-        styleSearchBar(searchBar);
-        searchBar.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                navigateTo(SearchActivity.class);
-            }
+        ImageButton searchButton = new ImageButton(this);
+        searchButton.setImageResource(R.drawable.ic_search);
+        searchButton.setColorFilter(getResources().getColor(R.color.text_primary));
+        searchButton.setContentDescription(getString(R.string.search_title) + "，" + getString(R.string.search_hint));
+        searchButton.setBackgroundResource(R.drawable.bg_icon_button);
+        searchButton.setPadding(dp(11), dp(11), dp(11), dp(11));
+        searchButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { navigateTo(SearchActivity.class); }
         });
-        TextView hint = new TextView(this);
-        hint.setText(R.string.search_hint);
-        hint.setTextColor(getResources().getColor(R.color.text_hint));
-        hint.setTextSize(14);
-        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        searchBar.addView(hint, hintParams);
-        ImageView searchIcon = new ImageView(this);
-        searchIcon.setImageResource(android.R.drawable.ic_menu_search);
-        searchIcon.setColorFilter(getResources().getColor(R.color.text_tertiary));
-        searchBar.addView(searchIcon, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        root.addView(searchBar, fullWidthParams(14));
+        topBar.addView(searchButton, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        root.addView(topBar);
 
-        // 日历区域
+        homeStatusText = new TextView(this);
+        homeStatusText.setText(getString(R.string.home_status));
+        homeStatusText.setTextColor(getResources().getColor(R.color.text_secondary));
+        homeStatusText.setTextSize(13);
+        root.addView(homeStatusText, fullWidthParams(12));
+
+        // 日历卡片支持按钮和左右滑动两种切月方式。
         LinearLayout calCard = new LinearLayout(this);
         calCard.setOrientation(LinearLayout.VERTICAL);
-        calCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        calCard.setPadding(dp(12), dp(12), dp(12), dp(12));
         styleCard(calCard);
-        final float[] touchX = new float[1];
-        calCard.setOnTouchListener(createMonthSwipeListener(touchX));
+        calCard.setOnTouchListener(createMonthSwipeListener(new float[1]));
 
         LinearLayout monthNav = new LinearLayout(this);
-        monthNav.setOrientation(LinearLayout.HORIZONTAL);
         monthNav.setGravity(android.view.Gravity.CENTER_VERTICAL);
-
-        Button prevBtn = new Button(this);
-        prevBtn.setAllCaps(false);
-        prevBtn.setText("◀");
-        prevBtn.setTextSize(18);
-        prevBtn.setTextColor(getResources().getColor(R.color.text_primary));
-        prevBtn.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        ImageButton prevBtn = createMonthButton(R.drawable.ic_chevron_left,
+                getString(R.string.home_previous_month));
         prevBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                prevMonth();
-            }
+            @Override public void onClick(View v) { prevMonth(); }
         });
-        prevBtn.setOnTouchListener(createMonthSwipeListener(new float[1]));
-        monthNav.addView(prevBtn, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
+        monthNav.addView(prevBtn, new LinearLayout.LayoutParams(dp(40), dp(40)));
 
         monthTitleText = new TextView(this);
-        monthTitleText.setText(currentYear + "年" + currentMonth + "月");
+        monthTitleText.setText(currentYear + " 年 " + currentMonth + " 月");
         monthTitleText.setTextColor(getResources().getColor(R.color.text_primary));
         monthTitleText.setTextSize(17);
-        monthTitleText.setTypeface(Typeface.DEFAULT_BOLD);
+        monthTitleText.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         monthTitleText.setGravity(android.view.Gravity.CENTER);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        monthNav.addView(monthTitleText, titleParams);
+        monthNav.addView(monthTitleText, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        Button nextBtn = new Button(this);
-        nextBtn.setAllCaps(false);
-        nextBtn.setText("▶");
-        nextBtn.setTextSize(18);
-        nextBtn.setTextColor(getResources().getColor(R.color.text_primary));
-        nextBtn.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        ImageButton nextBtn = createMonthButton(R.drawable.ic_chevron_right,
+                getString(R.string.home_next_month));
         nextBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                nextMonth();
-            }
+            @Override public void onClick(View v) { nextMonth(); }
         });
-        nextBtn.setOnTouchListener(createMonthSwipeListener(new float[1]));
-        monthNav.addView(nextBtn, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        calCard.addView(monthNav, fullWidthParams(4));
+        monthNav.addView(nextBtn, new LinearLayout.LayoutParams(dp(40), dp(40)));
         monthNav.setOnTouchListener(createMonthSwipeListener(new float[1]));
+        calCard.addView(monthNav);
+
         homeCalendarGrid = new GridLayout(this);
         homeCalendarGrid.setColumnCount(7);
-        // 标题行加日期格数共同决定日历行数
-        java.util.Calendar cal = java.util.Calendar.getInstance();
-        cal.set(currentYear, currentMonth - 1, 1);
-        int dayOfWeek = cal.get(java.util.Calendar.DAY_OF_WEEK);
-        int startOffset = (dayOfWeek == 1) ? 6 : dayOfWeek - 2;
-        int totalCells = startOffset + getDaysInMonth(currentYear, currentMonth);
-        int rowCount = 1 + (totalCells + 6) / 7; // 标题行加日期行
-        homeCalendarGrid.setRowCount(rowCount);
         homeCalendarGrid.setAlignmentMode(GridLayout.ALIGN_MARGINS);
         homeCalendarGrid.setOnTouchListener(createMonthSwipeListener(new float[1]));
-        calCard.addView(homeCalendarGrid, fullWidthParams(12));
-        root.addView(calCard, fullWidthParams(20));
+        calCard.addView(homeCalendarGrid, fullWidthParams(8));
+        root.addView(calCard, fullWidthParams(12));
 
-        homeExhibitionsTitle = addText(root, "", R.color.text_primary, 20, Typeface.BOLD);
+        homeExhibitionsTitle = new TextView(this);
+        homeExhibitionsTitle.setTextColor(getResources().getColor(R.color.text_primary));
+        homeExhibitionsTitle.setTextSize(17);
+        homeExhibitionsTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        root.addView(homeExhibitionsTitle, fullWidthParams(18));
 
         homeExhibitionList = new LinearLayout(this);
         homeExhibitionList.setOrientation(LinearLayout.VERTICAL);
-        root.addView(homeExhibitionList, fullWidthParams(8));
+        root.addView(homeExhibitionList, fullWidthParams(6));
 
-        // 我的报名
-        addText(root, getString(R.string.my_registrations_title),
-                R.color.text_primary, 17, Typeface.BOLD);
+        TextView registrationsTitle = new TextView(this);
+        registrationsTitle.setText(getString(R.string.my_registrations_title));
+        registrationsTitle.setTextColor(getResources().getColor(R.color.text_primary));
+        registrationsTitle.setTextSize(17);
+        registrationsTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        root.addView(registrationsTitle, fullWidthParams(24));
         homeRegistrationsList = new LinearLayout(this);
         homeRegistrationsList.setOrientation(LinearLayout.VERTICAL);
-        root.addView(homeRegistrationsList, fullWidthParams(8));
+        root.addView(homeRegistrationsList, fullWidthParams(6));
 
-        // 初始化日历和列表
+        if (AuthManager.getInstance().canAccessProfile()) {
+            Button viewAllRegistrations = new Button(this);
+            styleSecondaryButton(viewAllRegistrations);
+            viewAllRegistrations.setText(R.string.my_registrations_view_all);
+            viewAllRegistrations.setOnClickListener(v -> navigateTo(MyRegistrationsActivity.class));
+            root.addView(viewAllRegistrations, fullWidthParams(8));
+        }
+
         buildMonthGrid(getDaysInMonth(currentYear, currentMonth));
         showExhibitionsForDay(selectedDay);
         renderMyRegistrations();
@@ -492,9 +506,20 @@ public class MainActivity extends BaseActivity {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.addView(root, new ScrollView.LayoutParams(
-                ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT));
+                ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
         return scroll;
+    }
+
+    /** 创建带圆形描边的月份切换按钮，触控区域固定为 40dp。 */
+    private ImageButton createMonthButton(int iconRes, String description) {
+        ImageButton button = new ImageButton(this);
+        button.setImageResource(iconRes);
+        button.setColorFilter(getResources().getColor(R.color.text_primary));
+        button.setContentDescription(description);
+        button.setBackgroundResource(R.drawable.bg_icon_button);
+        button.setPadding(dp(10), dp(10), dp(10), dp(10));
+        button.setOnTouchListener(createMonthSwipeListener(new float[1]));
+        return button;
     }
 
     private void styleSearchBar(LinearLayout bar) {
@@ -734,7 +759,7 @@ public class MainActivity extends BaseActivity {
         for (final Exhibition exhibition : exhibitions) {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
-            card.setPadding(dp(14), dp(12), dp(14), dp(12));
+            card.setPadding(dp(12), dp(12), dp(12), dp(12));
             styleCard(card);
             applyRippleBackground(card);
             card.setOnClickListener(new View.OnClickListener() {
@@ -744,13 +769,40 @@ public class MainActivity extends BaseActivity {
                 }
             });
 
-            addText(card, exhibition.title, R.color.text_primary, 18, Typeface.BOLD);
-            addText(card, exhibition.time + " · " + exhibition.venue,
-                    R.color.text_secondary, 14, Typeface.NORMAL);
-            addText(card, exhibition.status + " · " + exhibition.category,
-                    exhibition.openForRegistration
-                            ? R.color.status_open : R.color.status_closed,
-                    14, Typeface.BOLD);
+            LinearLayout summary = new LinearLayout(this);
+            summary.setGravity(android.view.Gravity.TOP);
+            View thumb = new View(this);
+            thumb.setBackgroundResource(R.drawable.bg_surface_variant);
+            summary.addView(thumb, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+            LinearLayout copy = new LinearLayout(this);
+            copy.setOrientation(LinearLayout.VERTICAL);
+            copy.setPadding(dp(10), 0, 0, 0);
+            TextView titleView = new TextView(this);
+            titleView.setText(exhibition.title);
+            titleView.setTextColor(getResources().getColor(R.color.text_primary));
+            titleView.setTextSize(16);
+            titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            copy.addView(titleView);
+            TextView metaView = new TextView(this);
+            metaView.setText(exhibition.time + " · " + exhibition.venue);
+            metaView.setTextColor(getResources().getColor(R.color.text_secondary));
+            metaView.setTextSize(13);
+            metaView.setMaxLines(2);
+            copy.addView(metaView, fullWidthParams(3));
+            TextView categoryView = new TextView(this);
+            categoryView.setText(exhibition.category);
+            categoryView.setTextColor(getResources().getColor(R.color.text_tertiary));
+            categoryView.setTextSize(12);
+            copy.addView(categoryView, fullWidthParams(2));
+            summary.addView(copy, new LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+            TextView statusView = createStatusBadge(exhibition.status,
+                    exhibition.openForRegistration);
+            summary.addView(statusView, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            card.addView(summary);
 
             LinearLayout actionRow = new LinearLayout(this);
             actionRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -833,6 +885,11 @@ public class MainActivity extends BaseActivity {
             card.setOrientation(LinearLayout.VERTICAL);
             card.setPadding(dp(14), dp(12), dp(14), dp(12));
             styleCard(card);
+            card.setOnClickListener(v -> {
+                Intent intent = new Intent(MainActivity.this, MyRegistrationDetailActivity.class);
+                intent.putExtra(MyRegistrationDetailActivity.EXTRA_REGISTRATION_ID, reg.getId());
+                navigateTo(intent);
+            });
 
             addText(card, reg.getExhibitionTitle(), R.color.text_primary, 16, Typeface.BOLD);
             addText(card, "6月" + reg.getExhibitionDay() + "日 "
@@ -929,9 +986,9 @@ public class MainActivity extends BaseActivity {
 
         // 头像和昵称卡片
         LinearLayout headerCard = new LinearLayout(this);
-        headerCard.setOrientation(LinearLayout.VERTICAL);
-        headerCard.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-        headerCard.setPadding(dp(24), dp(24), dp(24), dp(24));
+        headerCard.setOrientation(LinearLayout.HORIZONTAL);
+        headerCard.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        headerCard.setPadding(dp(16), dp(16), dp(16), dp(16));
         styleCard(headerCard);
 
         TextView avatar = new TextView(this);
@@ -939,17 +996,31 @@ public class MainActivity extends BaseActivity {
                 ? nickname.substring(0, 1)
                 : getString(R.string.profile_avatar_initial));
         avatar.setTextColor(getResources().getColor(R.color.avatar_text));
-        avatar.setTextSize(28);
+        avatar.setTextSize(22);
         avatar.setTypeface(Typeface.DEFAULT_BOLD);
         avatar.setGravity(android.view.Gravity.CENTER);
         GradientDrawable circle = new GradientDrawable();
         circle.setShape(GradientDrawable.OVAL);
         circle.setColor(getResources().getColor(R.color.avatar_bg));
         avatar.setBackground(circle);
-        LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(dp(72), dp(72));
-        avatarParams.setMargins(0, dp(8), 0, dp(12));
+        LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(dp(56), dp(56));
+        avatarParams.setMargins(0, 0, dp(12), 0);
         headerCard.addView(avatar, avatarParams);
-        addText(headerCard, nickname, R.color.text_primary, 22, Typeface.BOLD);
+        LinearLayout profileCopy = new LinearLayout(this);
+        profileCopy.setOrientation(LinearLayout.VERTICAL);
+        TextView profileName = new TextView(this);
+        profileName.setText(nickname);
+        profileName.setTextColor(getResources().getColor(R.color.text_primary));
+        profileName.setTextSize(20);
+        profileName.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        profileCopy.addView(profileName);
+        TextView profileMeta = new TextView(this);
+        profileMeta.setText("普通用户 · 已参加展会");
+        profileMeta.setTextColor(getResources().getColor(R.color.text_secondary));
+        profileMeta.setTextSize(13);
+        profileCopy.addView(profileMeta, fullWidthParams(4));
+        headerCard.addView(profileCopy, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         root.addView(headerCard, fullWidthParams(0));
 
         // 资料卡片
@@ -1179,10 +1250,9 @@ public class MainActivity extends BaseActivity {
                             + " " + exh.getTime() + " · " + exh.getVenue(),
                     R.color.text_secondary, 14, Typeface.NORMAL);
 
-            int statusColor = exh.isOpenForRegistration()
-                    ? R.color.status_open : R.color.status_closed;
-            addText(card, exh.getStatus() + " · " + exh.getCategory(),
-                    statusColor, 14, Typeface.BOLD);
+            TextView statusBadge = createStatusBadge(exh.getStatus() + " · " + exh.getCategory(),
+                    exh.isOpenForRegistration());
+            card.addView(statusBadge, fullWidthParams(6));
 
             // Action buttons row
             LinearLayout actions = new LinearLayout(this);
@@ -1241,16 +1311,10 @@ public class MainActivity extends BaseActivity {
             statusP.setMargins(dp(4), 0, dp(4), 0);
             actions.addView(statusBtn, statusP);
 
-            // Delete button (circular trash icon, same height as other buttons)
-            ImageView delBtn = new ImageView(this);
-            delBtn.setImageResource(android.R.drawable.ic_menu_delete);
-            delBtn.setColorFilter(getResources().getColor(R.color.button_danger_text));
-            delBtn.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-            delBtn.setPadding(dp(14), dp(14), dp(14), dp(14));
-            GradientDrawable delBg = new GradientDrawable();
-            delBg.setShape(GradientDrawable.OVAL);
-            delBg.setColor(getResources().getColor(R.color.button_danger_bg));
-            delBtn.setBackground(delBg);
+            // 删除仍保留文字，避免仅凭图标猜测操作含义。
+            Button delBtn = new Button(this);
+            styleDangerButton(delBtn);
+            delBtn.setText(R.string.exhibitor_delete);
             delBtn.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -1268,7 +1332,7 @@ public class MainActivity extends BaseActivity {
                 }
             });
             LinearLayout.LayoutParams delP = new LinearLayout.LayoutParams(
-                    dp(48), dp(48));
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             delP.setMargins(dp(4), 0, 0, 0);
             actions.addView(delBtn, delP);
 
@@ -1786,13 +1850,45 @@ public class MainActivity extends BaseActivity {
                 R.color.text_primary, 16, Typeface.BOLD);
         addText(detailPanel, getString(R.string.admin_exhibition_label_venue) + "：" + exh.getVenue(),
                 R.color.text_secondary, 15, Typeface.NORMAL);
-        addText(detailPanel, getString(R.string.admin_exhibition_label_date) + "：6月" + exh.getDay() + "日",
+        addText(detailPanel, getString(R.string.admin_exhibition_label_date) + "："
+                        + ExhibitionConfiguration.displayDate(exh.getId(), exh.getDay()),
                 R.color.text_secondary, 15, Typeface.NORMAL);
         addText(detailPanel, getString(R.string.admin_exhibition_label_time) + "：" + exh.getTime(),
                 R.color.text_secondary, 15, Typeface.NORMAL);
         int sc = exh.isOpenForRegistration() ? R.color.status_open : R.color.status_closed;
         addText(detailPanel, getString(R.string.admin_exhibition_label_status) + "：" + exh.getStatus(),
                 sc, 15, Typeface.BOLD);
+
+        // 管理员详情提供编辑展会和查看报名两个直接入口。
+        LinearLayout manageRow = new LinearLayout(this);
+        manageRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button editButton = new Button(this);
+        styleSecondaryButton(editButton);
+        editButton.setText(R.string.exhibitor_edit_exhibition);
+        editButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, ExhibitionFormActivity.class);
+            intent.putExtra(ExhibitionFormActivity.EXTRA_EXHIBITION_ID, exh.getId());
+            navigateTo(intent);
+        });
+        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        editParams.setMargins(0, dp(8), dp(4), 0);
+        manageRow.addView(editButton, editParams);
+
+        Button registrationsButton = new Button(this);
+        styleSecondaryButton(registrationsButton);
+        registrationsButton.setText(R.string.reg_mgmt_nav_btn);
+        registrationsButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, RegistrationManagementActivity.class);
+            intent.putExtra(RegistrationManagementActivity.EXTRA_EXHIBITION_ID, exh.getId());
+            navigateTo(intent);
+        });
+        LinearLayout.LayoutParams registrationsParams = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        registrationsParams.setMargins(dp(4), dp(8), 0, 0);
+        manageRow.addView(registrationsButton, registrationsParams);
+        detailPanel.addView(manageRow, fullWidthParams(0));
 
         Button closeBtn = new Button(this);
         styleSecondaryButton(closeBtn);
@@ -1907,10 +2003,18 @@ public class MainActivity extends BaseActivity {
         for (int i = 0; i < accentColors.length; i++) {
             final int index = i;
             Button colorButton = new Button(this);
-            colorButton.setText("");
-            colorButton.setMinHeight(dp(46));
-            colorButton.setMinimumHeight(dp(46));
-            colorButton.setBackgroundColor(accentColors[i]);
+            colorButton.setText(String.format(java.util.Locale.US, "#%06X", 0xFFFFFF & accentColors[i]));
+            colorButton.setTextSize(9);
+            colorButton.setTextColor(getResources().getColor(android.R.color.white));
+            colorButton.setMinHeight(dp(48));
+            colorButton.setMinimumHeight(dp(48));
+            GradientDrawable swatch = new GradientDrawable();
+            swatch.setShape(GradientDrawable.OVAL);
+            swatch.setColor(accentColors[i]);
+            swatch.setStroke(dp(index == selectedTheme[0] ? 3 : 1),
+                    getResources().getColor(index == selectedTheme[0]
+                            ? R.color.text_primary : R.color.card_stroke));
+            colorButton.setBackground(swatch);
             colorButton.setContentDescription("配色 " + (i + 1));
             colorButton.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -1918,17 +2022,30 @@ public class MainActivity extends BaseActivity {
                     selectedTheme[0] = index;
                     AppSettings.setThemeIndex(MainActivity.this, index);
                     AppSettings.applyWindowColors(MainActivity.this);
+                    for (int j = 0; j < colorRow.getChildCount(); j++) {
+                        View child = colorRow.getChildAt(j);
+                        if (child instanceof Button && child.getBackground() instanceof GradientDrawable) {
+                            ((GradientDrawable) child.getBackground()).setStroke(dp(j == index ? 3 : 1),
+                                    getResources().getColor(j == index ? R.color.text_primary : R.color.card_stroke));
+                        }
+                    }
                     Toast.makeText(MainActivity.this, "配色已更新", Toast.LENGTH_SHORT).show();
                 }
             });
-            LinearLayout.LayoutParams colorParams = new LinearLayout.LayoutParams(0, dp(46), 1f);
-            colorParams.setMargins(dp(3), 0, dp(3), 0);
+            LinearLayout.LayoutParams colorParams = new LinearLayout.LayoutParams(dp(52), dp(52));
+            colorParams.setMargins(dp(4), 0, dp(4), 0);
             colorRow.addView(colorButton, colorParams);
         }
-        container.addView(colorRow, fullWidthParams(6));
+        android.widget.HorizontalScrollView colorScroll = new android.widget.HorizontalScrollView(this);
+        colorScroll.setHorizontalScrollBarEnabled(false);
+        colorScroll.addView(colorRow, new android.widget.HorizontalScrollView.LayoutParams(
+                android.widget.HorizontalScrollView.LayoutParams.WRAP_CONTENT,
+                android.widget.HorizontalScrollView.LayoutParams.WRAP_CONTENT));
+        container.addView(colorScroll, fullWidthParams(6));
 
         addText(container, "进入应用时的公告", R.color.text_primary, 17, Typeface.BOLD);
         final android.widget.EditText announcementInput = new android.widget.EditText(this);
+        styleInputField(announcementInput);
         announcementInput.setSingleLine(false);
         announcementInput.setMinLines(2);
         announcementInput.setHint("例如：本周末展馆开放时间调整");
@@ -1939,12 +2056,27 @@ public class MainActivity extends BaseActivity {
         announcementToggle.setChecked(AppSettings.isAnnouncementEnabled(this));
         container.addView(announcementToggle, fullWidthParams(2));
 
+        addText(container, "展会分类管理", R.color.text_primary, 17, Typeface.BOLD);
+        final android.widget.EditText categoriesInput = new android.widget.EditText(this);
+        styleInputField(categoriesInput);
+        categoriesInput.setSingleLine(false);
+        categoriesInput.setMinLines(2);
+        categoriesInput.setHint("每行一个分类，例如：智能家居");
+        categoriesInput.setText(android.text.TextUtils.join("\n", AppSettings.getCategories(this)));
+        container.addView(categoriesInput, fullWidthParams(4));
+
+        final CheckBox reviewToggle = new CheckBox(this);
+        reviewToggle.setText("允许修改已通过或已拒绝的报名");
+        reviewToggle.setChecked(AppSettings.canReviseReviewedRegistration(this));
+        container.addView(reviewToggle, fullWidthParams(2));
+
         addText(container, getString(R.string.admin_settings_media_limit),
                 R.color.text_primary, 17, Typeface.BOLD);
 
         addText(container, getString(R.string.admin_settings_image_limit),
                 R.color.text_secondary, 14, Typeface.NORMAL);
         android.widget.EditText imageLimit = new android.widget.EditText(this);
+        styleInputField(imageLimit);
         imageLimit.setSingleLine(true);
         imageLimit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         imageLimit.setText("10");
@@ -1953,6 +2085,7 @@ public class MainActivity extends BaseActivity {
         addText(container, getString(R.string.admin_settings_video_limit),
                 R.color.text_secondary, 14, Typeface.NORMAL);
         android.widget.EditText videoLimit = new android.widget.EditText(this);
+        styleInputField(videoLimit);
         videoLimit.setSingleLine(true);
         videoLimit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         videoLimit.setText("100");
@@ -1961,6 +2094,7 @@ public class MainActivity extends BaseActivity {
         addText(container, getString(R.string.admin_settings_gallery_limit),
                 R.color.text_secondary, 14, Typeface.NORMAL);
         android.widget.EditText galleryLimit = new android.widget.EditText(this);
+        styleInputField(galleryLimit);
         galleryLimit.setSingleLine(true);
         galleryLimit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         galleryLimit.setText("50");
@@ -1978,6 +2112,12 @@ public class MainActivity extends BaseActivity {
                 AppSettings.setThemeIndex(MainActivity.this, selectedTheme[0]);
                 AppSettings.saveAnnouncement(MainActivity.this,
                         announcementInput.getText().toString(), announcementToggle.isChecked());
+                java.util.ArrayList<String> categories = new java.util.ArrayList<>();
+                for (String item : categoriesInput.getText().toString().split("\\n")) {
+                    if (!item.trim().isEmpty()) categories.add(item.trim());
+                }
+                if (!categories.isEmpty()) AppSettings.saveCategories(MainActivity.this, categories);
+                AppSettings.setCanReviseReviewedRegistration(MainActivity.this, reviewToggle.isChecked());
                 Toast.makeText(MainActivity.this,
                         R.string.admin_settings_saved, Toast.LENGTH_SHORT).show();
             }

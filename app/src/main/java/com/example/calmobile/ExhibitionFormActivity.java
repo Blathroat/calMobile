@@ -22,6 +22,9 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 /** 展商创建和编辑展会，配置排期、简介与报名收集项。 */
 public class ExhibitionFormActivity extends BaseActivity {
@@ -114,6 +117,9 @@ public class ExhibitionFormActivity extends BaseActivity {
         categorySpinner = new Spinner(this);
         List<String> categories = AppSettings.getCategories(this);
         categorySpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, categories));
+        categorySpinner.setBackgroundResource(R.drawable.bg_picker_field);
+        categorySpinner.setPadding(dp(10), 0, dp(10), 0);
+        categorySpinner.setMinimumHeight(dp(48));
         if (exhibition != null) categorySpinner.setSelection(Math.max(0, categories.indexOf(exhibition.getCategory())));
         formContainer.addView(categorySpinner, fullWidthParams(5));
 
@@ -168,6 +174,7 @@ public class ExhibitionFormActivity extends BaseActivity {
     private EditText addTextField(String label, String value, String hint) {
         addLabel(label);
         EditText input = new EditText(this);
+        styleInputField(input);
         input.setText(value);
         input.setHint(hint);
         formContainer.addView(input, fullWidthParams(4));
@@ -183,10 +190,7 @@ public class ExhibitionFormActivity extends BaseActivity {
 
     private TextView createPicker(String label, String value) {
         TextView picker = new TextView(this);
-        picker.setBackgroundResource(R.drawable.bg_picker_field);
-        picker.setGravity(Gravity.CENTER_VERTICAL);
-        picker.setMinHeight(dp(52));
-        picker.setPadding(dp(14), dp(8), dp(14), dp(8));
+        stylePickerField(picker);
         picker.setTextColor(getResources().getColor(value.isEmpty() ? R.color.text_hint : R.color.text_primary));
         picker.setTextSize(15);
         picker.setTag(label);
@@ -261,6 +265,7 @@ public class ExhibitionFormActivity extends BaseActivity {
         row.setPadding(dp(12), dp(8), dp(12), dp(8));
         row.setBackgroundResource(R.drawable.bg_picker_field);
         EditText fieldTitle = new EditText(this);
+        styleInputField(fieldTitle);
         fieldTitle.setHint("条目标题");
         if (field != null) fieldTitle.setText(field.getTitle());
         Spinner type = new Spinner(this);
@@ -271,6 +276,7 @@ public class ExhibitionFormActivity extends BaseActivity {
         required.setText("必填");
         if (field != null) required.setChecked(field.isRequired());
         EditText options = new EditText(this);
+        styleInputField(options);
         options.setHint("单选或多选时，用逗号分隔选项");
         if (field != null) options.setText(field.getOptions());
         Button remove = new Button(this);
@@ -288,7 +294,24 @@ public class ExhibitionFormActivity extends BaseActivity {
             Toast.makeText(this, "请完成展会名称、地点、日期和开展时间", Toast.LENGTH_SHORT).show();
             return;
         }
-        int day = Integer.parseInt(exhibitionDatePicker.getText().toString().substring(8));
+        String exhibitionDate = exhibitionDatePicker.getText().toString();
+        String registrationStart = hasPickerValue(registrationStartPicker)
+                ? registrationStartPicker.getText().toString() : "";
+        String registrationEnd = hasPickerValue(registrationEndPicker)
+                ? registrationEndPicker.getText().toString() : "";
+        if (registrationStart.isEmpty() != registrationEnd.isEmpty()) {
+            Toast.makeText(this, "请同时选择报名开始和截止日期", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!registrationStart.isEmpty() && compareDate(registrationStart, registrationEnd) > 0) {
+            Toast.makeText(this, "报名开始日期不能晚于截止日期", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (compareTime(startTimePicker.getText().toString(), endTimePicker.getText().toString()) > 0) {
+            Toast.makeText(this, "开展开始时间不能晚于结束时间", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        int day = Integer.parseInt(exhibitionDate.substring(8));
         RadioButton selected = findViewById(statusGroup.getCheckedRadioButtonId());
         String state = selected == null ? ExhibitorExhibition.STATUS_OPEN : selected.getTag().toString();
         String time = startTimePicker.getText().toString() + "-" + endTimePicker.getText().toString();
@@ -309,13 +332,27 @@ public class ExhibitionFormActivity extends BaseActivity {
                     ((Spinner) row.getChildAt(1)).getSelectedItem().toString(),
                     ((CheckBox) row.getChildAt(2)).isChecked(), ((EditText) row.getChildAt(3)).getText().toString()));
         }
-        ExhibitionConfiguration.save(editingId, exhibitionDatePicker.getText().toString(),
-                hasPickerValue(registrationStartPicker) ? registrationStartPicker.getText().toString() : "",
-                hasPickerValue(registrationEndPicker) ? registrationEndPicker.getText().toString() : "",
+        ExhibitionConfiguration.save(editingId, exhibitionDate, registrationStart, registrationEnd,
                 descriptionImageUri, fields);
         Toast.makeText(this, R.string.exhibitor_saved, Toast.LENGTH_SHORT).show();
         setResult(RESULT_OK);
         finish();
+    }
+
+    private int compareDate(String left, String right) {
+        try {
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
+            format.setLenient(false);
+            Date leftDate = format.parse(left);
+            Date rightDate = format.parse(right);
+            return leftDate.compareTo(rightDate);
+        } catch (ParseException exception) {
+            return 0;
+        }
+    }
+
+    private int compareTime(String left, String right) {
+        return left.compareTo(right);
     }
 
     @Override

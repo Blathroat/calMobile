@@ -12,12 +12,12 @@ import java.util.List;
  */
 public class AdminUserManager {
 
-    // ── In-memory fallback (test environments) ────────────────────
+    // ── 内存回退（测试环境） ────────────────────
     private static final List<AdminUser> fallbackUsers = new ArrayList<>();
     private static int fallbackNextId = 1;
     private static boolean initialized = false;
 
-    /** Seed sample data on first access. */
+    /** 首次访问时写入示例数据。 */
     public static void ensureInitialized() {
         if (initialized) {
             return;
@@ -26,12 +26,12 @@ public class AdminUserManager {
 
         DatabaseHelper dbHelper = DatabaseHelper.getInstance();
         if (dbHelper != null) {
-            // SQLite mode — only seed if table is empty
+            // SQLite 模式：仅在数据表为空时写入示例数据
             if (dbHelper.getUserCount() == 0) {
                 seedDatabase(dbHelper);
             }
         } else {
-            // In-memory fallback (test environment)
+            // 内存回退（测试环境）
             seedInMemory();
         }
     }
@@ -121,7 +121,7 @@ public class AdminUserManager {
         return count;
     }
 
-    // ── In-memory helpers ─────────────────────────────────────────
+    // ── 内存辅助方法 ─────────────────────────────────────────
 
     private static void seedDatabase(DatabaseHelper dbHelper) {
         dbHelper.insertUser("张伟", "zhangwei@example.com", AdminUser.STATUS_ACTIVE,
@@ -171,3 +171,4 @@ public class AdminUserManager {
         return null;
     }
 }
+

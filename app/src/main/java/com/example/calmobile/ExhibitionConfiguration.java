@@ -26,6 +26,14 @@ public final class ExhibitionConfiguration {
         return data;
     }
 
+    public static String displayDate(String exhibitionId, int fallbackDay) {
+        String date = get(exhibitionId).exhibitionDate;
+        if (date == null || date.isEmpty() || "2026-06-01".equals(date)) {
+            return String.format(java.util.Locale.CHINA, "2026-06-%02d", fallbackDay);
+        }
+        return date;
+    }
+
     public static void save(String exhibitionId, String exhibitionDate, String registrationStart,
                             String registrationEnd, String imageUri, List<RegistrationField> fields) {
         Data data = get(exhibitionId);

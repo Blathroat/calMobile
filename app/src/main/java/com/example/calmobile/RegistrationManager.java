@@ -12,7 +12,7 @@ import java.util.List;
  */
 public class RegistrationManager {
 
-    // ── In-memory fallback (test environments) ────────────────────
+    // ── 内存回退（测试环境） ────────────────────
     private final List<Registration> fallbackRegistrations = new ArrayList<>();
     private int fallbackNextId = 1;
 
@@ -32,7 +32,7 @@ public class RegistrationManager {
             }
             return null;
         }
-        // In-memory fallback
+        // 内存回退
         Registration registration = new Registration(
                 "registration-" + fallbackNextId,
                 exhibitionTitle,
@@ -71,7 +71,7 @@ public class RegistrationManager {
         if (dbHelper != null) {
             return dbHelper.updateRegistrationStatus(id, Registration.Status.CANCELLED.name());
         }
-        // In-memory fallback
+        // 内存回退
         for (Registration registration : fallbackRegistrations) {
             if (registration.getId().equals(id)) {
                 registration.cancel();
@@ -81,3 +81,4 @@ public class RegistrationManager {
         return false;
     }
 }
+

@@ -19,16 +19,13 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * User profile activity allowing users to view and edit their profile,
- * manage notification settings, and view notification history.
- */
+/** 个人资料、通知偏好和通知历史页面。 */
 public class ProfileActivity extends BaseActivity {
 
     /** 从个人栏进入时直接打开编辑模式。 */
     public static final String EXTRA_EDIT_MODE = "edit_mode";
 
-    /** In-memory profile data (static to survive activity recreation within process). */
+    /** 进程内保存的资料，确保页面切换后仍能显示最近编辑内容。 */
     private static String nickname = "";
     private static String bio = "";
     private static String contact = "";
@@ -68,10 +65,10 @@ public class ProfileActivity extends BaseActivity {
         notificationHistorySection = findViewById(R.id.profile_notification_history);
         logoutSection = findViewById(R.id.profile_logout_section);
 
-        // Request notification permission on API 33+
+        // Android 13 及以上请求通知权限。
         NotificationHelper.getInstance(this).requestNotificationPermission(this);
 
-        // Apply defaults on first launch
+        // 首次进入时填充演示资料。
         if (nickname.length() == 0) {
             nickname = getString(R.string.profile_default_nickname);
             bio = getString(R.string.profile_default_bio);
@@ -88,14 +85,16 @@ public class ProfileActivity extends BaseActivity {
             }
         });
 
-        renderDisplayMode();
         if (getIntent().getBooleanExtra(EXTRA_EDIT_MODE, false)) {
-            editFieldsSection.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    renderEditMode();
-                }
-            }, 120);
+            // 从个人栏点击“编辑资料”时直接进入表单，避免先闪现无用的展示页。
+            headerSection.setVisibility(View.GONE);
+            infoSection.setVisibility(View.GONE);
+            notificationSettingsSection.setVisibility(View.GONE);
+            notificationHistorySection.setVisibility(View.GONE);
+            logoutSection.setVisibility(View.GONE);
+            showEditFields();
+        } else {
+            renderDisplayMode();
         }
     }
 
@@ -109,6 +108,11 @@ public class ProfileActivity extends BaseActivity {
 
     private void renderDisplayMode() {
         editing = false;
+        headerSection.setVisibility(View.VISIBLE);
+        infoSection.setVisibility(View.VISIBLE);
+        notificationSettingsSection.setVisibility(View.VISIBLE);
+        notificationHistorySection.setVisibility(View.VISIBLE);
+        logoutSection.setVisibility(View.VISIBLE);
 
         // --- Header: avatar + nickname ---
         headerSection.removeAllViews();
@@ -394,6 +398,11 @@ public class ProfileActivity extends BaseActivity {
     private void renderEditMode() {
         editing = true;
 
+        headerSection.setVisibility(View.GONE);
+        notificationSettingsSection.setVisibility(View.GONE);
+        notificationHistorySection.setVisibility(View.GONE);
+        logoutSection.setVisibility(View.GONE);
+
         // Animate info out, then show edit
         animateHidePanel(infoSection);
 
@@ -414,6 +423,7 @@ public class ProfileActivity extends BaseActivity {
         // Nickname
         addText(editFieldsSection, getString(R.string.profile_nickname_label), R.color.text_secondary, 13, Typeface.BOLD);
         nicknameInput = new EditText(this);
+        styleInputField(nicknameInput);
         nicknameInput.setSingleLine(true);
         nicknameInput.setInputType(InputType.TYPE_CLASS_TEXT);
         nicknameInput.setText(nickname);
@@ -422,6 +432,7 @@ public class ProfileActivity extends BaseActivity {
         // Bio
         addText(editFieldsSection, getString(R.string.profile_bio_label), R.color.text_secondary, 13, Typeface.BOLD);
         bioInput = new EditText(this);
+        styleInputField(bioInput);
         bioInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         bioInput.setMinLines(2);
         bioInput.setText(bio);
@@ -430,6 +441,7 @@ public class ProfileActivity extends BaseActivity {
         // Contact
         addText(editFieldsSection, getString(R.string.profile_contact_label), R.color.text_secondary, 13, Typeface.BOLD);
         contactInput = new EditText(this);
+        styleInputField(contactInput);
         contactInput.setSingleLine(true);
         contactInput.setInputType(InputType.TYPE_CLASS_TEXT);
         contactInput.setText(contact);
@@ -438,6 +450,7 @@ public class ProfileActivity extends BaseActivity {
         // Social media
         addText(editFieldsSection, getString(R.string.profile_social_label), R.color.text_secondary, 13, Typeface.BOLD);
         socialInput = new EditText(this);
+        styleInputField(socialInput);
         socialInput.setSingleLine(true);
         socialInput.setInputType(InputType.TYPE_CLASS_TEXT);
         socialInput.setText(socialMedia);

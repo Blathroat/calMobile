@@ -13,7 +13,7 @@
         android:paddingTop="@dimen/spacing_16dp"
         android:paddingBottom="@dimen/spacing_32dp">
 
-        <!-- Back / title row -->
+        <!-- 返回与标题栏。 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -35,13 +35,17 @@
                 android:text="@string/exhibition_detail"
                 android:textAppearance="@style/TextAppearance.Title" />
 
-            <!-- Spacer to balance the back button -->
-            <View
-                android:layout_width="@dimen/spacing_56dp"
-                android:layout_height="@dimen/spacing_1dp" />
+            <ImageButton
+                android:id="@+id/detail_share"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_icon_button"
+                android:contentDescription="分享展会"
+                android:padding="11dp"
+                android:src="@drawable/ic_share" />
         </LinearLayout>
 
-        <!-- Detail content card (populated programmatically) -->
+        <!-- 详情内容卡片，由代码填充。 -->
         <LinearLayout
             android:id="@+id/detail_content"
             android:layout_width="match_parent"
@@ -52,7 +56,7 @@
             android:orientation="vertical"
             android:padding="@dimen/spacing_20dp" />
 
-        <!-- Action buttons area (populated programmatically) -->
+        <!-- 操作按钮区域，由代码填充。 -->
         <LinearLayout
             android:id="@+id/detail_actions"
             android:layout_width="match_parent"
