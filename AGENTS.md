@@ -10,6 +10,7 @@ Android 客户端位于 `app/`，使用 Java 17 与 XML View；启动页是 `Log
 
 ```bash
 node scripts/smoke-check.js
+node --test scripts/smoke-check.test.js
 gradlew.bat :app:testDebugUnitTest
 gradlew.bat :app:assembleDebug
 ```
@@ -26,7 +27,7 @@ Android 改动按 smoke-check、单元测试、调试构建的顺序验证；聚
 
 ## 架构与工作区
 
-当前客户端以 Activity/XML + Manager 为主，展会、报名和用户数据使用 SQLite，并在数据库不可用时回退到内存示例数据；应用设置使用 SharedPreferences。Room、Retrofit、Repository 与 ViewModel 已搭建但尚未接入全部页面，后端 API 也未替换本地演示流。修改认证、持久化、导航、包名、签名或引入新框架前先确认。工作区可能包含其他任务的改动，只检查并提交本次涉及路径，不回退无关文件；`.omo/` 等运行记录不应加入提交。
+当前客户端以 Activity/XML + Manager 为主，展会、报名和用户数据使用 SQLite，并在数据库不可用时回退到内存示例数据；应用设置使用 SharedPreferences。Room、Retrofit、Repository 与 ViewModel 已搭建但尚未接入全部页面，后端 API 也未替换本地演示流。修改认证、持久化、导航、包名、签名或引入新框架前先确认。工作区可能包含其他任务的改动，只检查并提交本次涉及路径，不回退无关文件；`build/`、`.gradle-local/`、`.idea/`、`.omo/`、`.opencode/`、日志与 APK 已在 `.gitignore` 中，不要把它们加入提交，也不要为了“干净”删除本机缓存目录。
 
 ## 文档维护
 
