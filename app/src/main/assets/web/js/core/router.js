@@ -48,24 +48,40 @@ export function navigate(id, params = {}, options = {}) {
         .join('&');
     const hash = `#/${id}${query ? `?${query}` : ''}`;
     if (location.hash === hash) {
+        setDirection('none');
         render(options);
         return;
     }
     if (options.replace) {
         history.replaceState({ id, params }, '', hash);
+        setDirection('replace');
         render(options);
         return;
     }
     history.pushState({ id, params }, '', hash);
+    setDirection('forward');
     render(options);
 }
 
 export function back(fallback = 'home') {
     if (history.length > 1 && current && current.id !== 'login') {
+        setDirection('back');
         history.back();
         return;
     }
+    setDirection('back');
     navigate(fallback, {}, { replace: true });
+}
+
+/** 页面切换方向：驱动 tokens 中的滑入 / 滑出动画。 */
+function setDirection(direction) {
+    if (typeof document === 'undefined') {
+        return;
+    }
+    const app = document.getElementById('app');
+    if (app) {
+        app.dataset.direction = direction;
+    }
 }
 
 /** 角色允许访问的页面；无权访问时回退到首页并说明。 */
@@ -141,7 +157,12 @@ export function start(defaultId = 'login') {
     if (!location.hash) {
         history.replaceState({ id: defaultId }, '', `#/${defaultId}`);
     }
-    window.addEventListener('popstate', () => render());
+    setDirection('none');
+    // 浏览器/系统返回键与页面内返回按钮共用同一套方向动画。
+    window.addEventListener('popstate', () => {
+        setDirection('back');
+        render();
+    });
     window.addEventListener('hashchange', () => render());
     return render();
 }

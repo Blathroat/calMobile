@@ -6,9 +6,9 @@
 
 import { call } from '../core/bridge.js';
 import { scaffold, topAction } from '../core/router.js';
-import { loadingBlock, stateBlock, toast } from '../ui/components.js';
+import { icon, loadingBlock, stateBlock, toast } from '../ui/components.js';
 import { el, append, replace } from '../core/dom.js';
-import { plainText } from '../core/sanitize.js';
+import { markdownSummary } from '../core/markdown.js';
 
 const MODES = [
     { value: '需审核', label: '需审核' },
@@ -71,7 +71,13 @@ export async function exhibitionFormPage(context) {
                 registrationStart: item.registrationStart || '',
                 registrationEnd: item.registrationEnd || '',
             });
-            fields = (data.fields || []).map((field) => ({ ...field }));
+            fields = (data.fields || []).map((field) => ({
+                title: field.title || '',
+                type: field.type || '文本',
+                required: field.required === true,
+                // 选项在模型里统一为数组，界面上按条目增删。
+                options: normalizeOptions(field.options),
+            }));
         }
     } catch (error) {
         replace(host, stateBlock({
@@ -148,13 +154,13 @@ export async function exhibitionFormPage(context) {
                     el('span', { class: 'section-label', text: '报名收集项' }),
                     el('span', { class: 'pill', text: `${fields.length} 项` }),
                 ]),
-                el('p', { class: 'field-hint', text: '收集项决定报名页展示的字段；删除全部后使用默认三项。' }),
+                el('p', { class: 'field-hint', text: '收集项决定报名页展示的字段；单选与多选可逐条增删选项，删除全部后使用默认三项。' }),
                 fieldsHost,
                 el('button', {
                     class: 'cta ghost',
                     type: 'button',
                     onclick: () => {
-                        fields.push({ title: '', type: '文本', required: false, options: '' });
+                        fields.push({ title: '', type: '文本', required: false, options: [] });
                         renderFields();
                     },
                 }, ['新增收集项']),
@@ -173,39 +179,79 @@ export async function exhibitionFormPage(context) {
 
     function updateDescriptionPreview() {
         descriptionPreview.textContent = model.description
-            ? (plainText(model.description, 70) || '已配置富文本简介')
-            : '还没有填写简介，可在富文本编辑器中插入图片与列表。';
+            ? (markdownSummary(model.description, 70) || '已配置 Markdown 简介')
+            : '还没有填写简介，可用 Markdown 编辑并插入图片。';
     }
 
     function renderFields() {
-        replace(fieldsHost, fields.map((item, index) => el('div', { class: 'card', 'data-tone': 'fill' }, [
-            el('div', { class: 'row', 'data-between': 'true' }, [
-                el('strong', { text: item.title || `收集项 ${index + 1}` }),
-                el('button', {
-                    class: 'icon-button',
-                    type: 'button',
-                    'aria-label': '删除该收集项',
-                    onclick: () => {
-                        fields.splice(index, 1);
+        replace(fieldsHost, fields.map((item, index) => {
+            const isChoice = item.type === '单选' || item.type === '多选';
+            const optionsHost = el('div', { class: 'stack', 'data-gap': 'sm' });
+
+            const renderOptions = () => {
+                replace(optionsHost, [
+                    el('span', { class: 'field-hint', text: item.type === '单选' ? '单选选项' : '多选选项' }),
+                    ...item.options.map((option, optionIndex) => el('div', { class: 'option-row' }, [
+                        textInput(`field-${index}-option-${optionIndex}`, 'text', option,
+                            `选项 ${optionIndex + 1}`, (value) => {
+                                item.options[optionIndex] = value;
+                            }),
+                        el('button', {
+                            class: 'icon-button option-remove',
+                            type: 'button',
+                            'aria-label': `删除选项 ${optionIndex + 1}`,
+                            onclick: () => {
+                                item.options.splice(optionIndex, 1);
+                                renderOptions();
+                            },
+                        }, [icon('trash', 'icon icon-sm')]),
+                    ])),
+                    el('button', {
+                        class: 'cta ghost',
+                        type: 'button',
+                        style: { minHeight: '44px', fontSize: 'var(--fs-label)' },
+                        onclick: () => {
+                            item.options.push('');
+                            renderOptions();
+                        },
+                    }, ['添加选项']),
+                ]);
+            };
+            if (isChoice) {
+                renderOptions();
+            }
+
+            return el('div', { class: 'card', 'data-tone': 'fill' }, [
+                el('div', { class: 'row', 'data-between': 'true' }, [
+                    el('strong', { text: item.title || `收集项 ${index + 1}` }),
+                    el('button', {
+                        class: 'icon-button',
+                        type: 'button',
+                        'aria-label': '删除该收集项',
+                        onclick: () => {
+                            fields.splice(index, 1);
+                            renderFields();
+                        },
+                    }, [icon('trash', 'icon icon-sm')]),
+                ]),
+                textInput(`field-title-${index}`, 'text', item.title, '字段标题', (value) => {
+                    item.title = value;
+                }),
+                el('div', { class: 'grid-cols-2' }, [
+                    selectInput(`field-type-${index}`, ['文本', '单选', '多选'], item.type, (value) => {
+                        item.type = value;
+                        if (value !== '文本' && item.options.length === 0) {
+                            item.options.push('', '');
+                        }
                         renderFields();
-                    },
-                }, [el('span', { text: '×', style: { fontSize: '20px' } })]),
-            ]),
-            textInput(`field-title-${index}`, 'text', item.title, '字段标题', (value) => {
-                item.title = value;
-            }),
-            el('div', { class: 'grid-cols-2' }, [
-                selectInput(`field-type-${index}`, ['文本', '单选', '多选'], item.type, (value) => {
-                    item.type = value;
-                }),
-                selectInput(`field-req-${index}`, ['选填', '必填'], item.required ? '必填' : '选填', (value) => {
-                    item.required = value === '必填';
-                }),
-            ]),
-            textInput(`field-options-${index}`, 'text', item.options, '选项用英文逗号分隔（单选 / 多选）', (value) => {
-                item.options = value;
-            }),
-        ])));
+                    }),
+                    selectInput(`field-req-${index}`, ['选填', '必填'], item.required ? '必填' : '选填', (value) => {
+                        item.required = value === '必填';
+                    }),
+                ]),
+                isChoice ? optionsHost : null,
+            ]);
+        }));
     }
 
     async function submit() {
@@ -220,9 +266,20 @@ export async function exhibitionFormPage(context) {
             status: model.status,
             category: categoryInput.value.trim(),
             description: model.description,
+            descriptionFormat: 'md',
             registrationStart: startInput.value,
             registrationEnd: endInput.value,
-            fields: fields.filter((item) => item.title.trim() !== ''),
+            // 空选项不下发，避免保存出无意义的选项条目。
+            fields: fields
+                .filter((item) => item.title.trim() !== '')
+                .map((item) => ({
+                    title: item.title.trim(),
+                    type: item.type,
+                    required: item.required,
+                    options: item.type === '文本'
+                        ? []
+                        : item.options.map((option) => option.trim()).filter(Boolean),
+                })),
         };
         if (!payload.title) {
             return fail('请填写展会名称', titleInput);
@@ -304,4 +361,15 @@ function hintFor(status) {
         return '用户提交后直接视为通过，仍可在报名管理中调整。';
     }
     return '只展示展会信息，报名入口保持禁用。';
+}
+
+/** 选项来源兼容字符串（逗号分隔）与数组，模型内统一为数组。 */
+function normalizeOptions(options) {
+    if (Array.isArray(options)) {
+        return options.map((item) => String(item));
+    }
+    return String(options || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
 }

@@ -161,7 +161,7 @@ function validateBridgeContract() {
   return true;
 }
 
-/** newUI 的 17 屏必须有对应的页面模块文件。 */
+/** newUI 的页面模块清单：17 屏中“管理-展会”“管理-设置”已内联，共 15 个模块。 */
 const EXPECTED_PAGES = [
   'login.js',
   'home.js',
@@ -177,9 +177,7 @@ const EXPECTED_PAGES = [
   'rich-editor.js',
   'review.js',
   'user-public.js',
-  'admin.js',
-  'admin-exhibitions.js',
-  'admin-settings.js'
+  'admin.js'
 ];
 
 function validateScreenFiles() {
@@ -207,7 +205,7 @@ const checks = [
   {
     id: 'webui-documentation',
     file: 'README.md',
-    contains: ['WebView', 'newUI', 'assets/web', 'WebAppBridge']
+    contains: ['WebView', 'newUI', 'assets/web', 'WebAppBridge', 'EasyMDE']
   },
 
   // ── 构建与清单 ──────────────────────────────────────────────────
@@ -281,6 +279,11 @@ const checks = [
     file: 'app/src/main/java/com/example/calmobile/AppSettings.java',
     contains: ['getMediaImageLimit', 'getMediaImageSizeMb', 'getMediaVideoLimit', 'saveMediaLimits']
   },
+  {
+    id: 'description-format-persisted',
+    file: 'app/src/main/java/com/example/calmobile/ExhibitionConfiguration.java',
+    contains: ['descriptionFormat']
+  },
 
   // ── Web 前端资源 ────────────────────────────────────────────────
   {
@@ -317,6 +320,26 @@ const checks = [
     contains: ['export function sanitizeHtml', 'ALLOWED_TAGS']
   },
   {
+    id: 'web-markdown-module',
+    file: `${WEB_ROOT}/js/core/markdown.js`,
+    contains: ['export function markdownToHtml', 'export function htmlToMarkdown', 'sanitizeHtml']
+  },
+  {
+    id: 'web-motion-styles',
+    file: `${WEB_ROOT}/styles/motion.css`,
+    contains: ['page-in-forward', 'drawer-up', 'toast-out', 'prefers-reduced-motion']
+  },
+  {
+    id: 'web-vendor-easymde',
+    file: `${WEB_ROOT}/vendor/easymde/easymde.min.js`,
+    minBytes: 100000
+  },
+  {
+    id: 'web-vendor-license',
+    file: `${WEB_ROOT}/vendor/easymde/LICENSE`,
+    contains: ['MIT']
+  },
+  {
     id: 'web-screen-files',
     file: `${WEB_ROOT}/js/app.js`,
     validate: validateScreenFiles
@@ -325,7 +348,12 @@ const checks = [
     id: 'web-app-route-registry',
     file: `${WEB_ROOT}/js/app.js`,
     contains: ["defineRoute('login'", "defineRoute('home'", "defineRoute('detail'",
-      "defineRoute('registration-form'", "defineRoute('admin-settings'"]
+      "defineRoute('registration-form'", "defineRoute('profile'", "defineRoute('admin'"]
+  },
+  {
+    id: 'no-secondary-admin-pages',
+    file: `${WEB_ROOT}/js/app.js`,
+    notContains: ['admin-exhibitions', 'admin-settings']
   },
 
   // ── 复用中的原生能力 ────────────────────────────────────────────

@@ -1,14 +1,19 @@
 /**
- * 屏幕 12 · 富文本编辑（展会简介与媒体）
+ * 屏幕 12 · 展会简介（Markdown 编辑）
  * 线框：newUI/remaining-ui.html #screen-rich-editor
- * 业务：保存到 ExhibitionManager.update 的 description 字段；媒体数量与大小遵循系统设置。
+ *
+ * 编辑器使用成熟的 EasyMDE（已随包内置在 assets/web/vendor/easymde，MIT），
+ * 不自行实现富文本；支持直接粘贴 Markdown 文本、实时预览与插图。
+ * 保存的是 Markdown 源码，详情页按 Markdown 渲染。
  */
 
 import { call, state } from '../core/bridge.js';
 import { scaffold, topAction } from '../core/router.js';
-import { loadingBlock, stateBlock, toast } from '../ui/components.js';
-import { sanitizeHtml, isBlankHtml } from '../core/sanitize.js';
+import { icon, loadingBlock, stateBlock, toast, openSheet } from '../ui/components.js';
+import { htmlToMarkdown, markdownSummary } from '../core/markdown.js';
 import { el, append, replace } from '../core/dom.js';
+
+const VENDOR_SCRIPT = 'vendor/easymde/easymde.min.js';
 
 export async function richEditorPage(context) {
     const host = el('div', { class: 'stack' });
@@ -25,8 +30,6 @@ export async function richEditorPage(context) {
     });
 
     let exhibition = null;
-    let tab = '正文';
-
     replace(host, loadingBlock(3));
     try {
         const data = await call('exhibitions.get', { id: context.params.id });
@@ -50,146 +53,291 @@ export async function richEditorPage(context) {
         return;
     }
 
-    const editor = el('div', {
-        class: 'editor-surface',
-        contenteditable: 'true',
-        role: 'textbox',
-        'aria-multiline': 'true',
-        'aria-label': '展会简介正文',
-        'data-placeholder': '输入展会简介，可插入标题、列表、链接与图片',
-    });
-    let bodyHtml = sanitizeHtml(exhibition.description || '');
-    editor.innerHTML = bodyHtml;
-    editor.addEventListener('input', () => {
-        bodyHtml = editor.innerHTML;
-    });
+    replace(host, loadingBlock(4));
+    let editor = null;
+    try {
+        await ensureVendorLoaded();
+        editor = mountEditor(host);
+    } catch (error) {
+        mountPlainFallback(error);
+        return;
+    }
 
-    render();
+    renderChrome(editor);
 
-    function render() {
-        const media = state.media || {};
-        const tabs = el('div', { class: 'seg', role: 'group', 'aria-label': '编辑区域' });
-        for (const name of ['正文', '图片', '视频']) {
-            append(tabs, el('button', {
-                type: 'button',
-                'aria-pressed': name === tab ? 'true' : 'false',
-                onclick: () => {
-                    tab = name;
-                    render();
-                },
-            }, [name]));
+    // ── 编辑器挂载 ─────────────────────────────────────────────────
+
+    /** EasyMDE 是全局脚本，只加载一次；失败时抛出以便回退到纯文本编辑。 */
+    async function ensureVendorLoaded() {
+        if (window.EasyMDE) {
+            return;
         }
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = VENDOR_SCRIPT;
+            script.onload = () => (window.EasyMDE ? resolve() : reject(new Error('EasyMDE 未注册到全局')));
+            script.onerror = () => reject(new Error('无法加载 EasyMDE 资源'));
+            document.head.appendChild(script);
+        });
+    }
 
-        // 切换标签时编辑器会重建，用最新内容恢复，避免丢失未保存的输入。
-        editor.innerHTML = bodyHtml;
+    function initialMarkdown() {
+        if (exhibition.descriptionFormat === 'html') {
+            return htmlToMarkdown(exhibition.description);
+        }
+        return String(exhibition.description || '');
+    }
 
+    function mountEditor(target) {
+        // EasyMDE 会就地替换传入的 textarea，并且 instance.element 指向 textarea 本身，
+        // 因此额外包一层容器用于页面渲染，避免把编辑器从 .EasyMDEContainer 中摘出来。
+        const container = el('div', { class: 'markdown-editor' });
+        const textarea = el('textarea', { id: 'rich-markdown' });
+        append(container, textarea);
+        append(target, container);
+
+        const instance = new window.EasyMDE({
+            element: textarea,
+            initialValue: initialMarkdown(),
+            autofocus: false,
+            spellChecker: false,
+            status: ['lines', 'words'],
+            minHeight: '260px',
+            placeholder: '输入展会简介，可直接粘贴 Markdown 文本',
+            // 使用项目内的细线 SVG，避免依赖外部图标字体。
+            toolbar: toolbarButtons(),
+        });
+        target.dataset.mode = 'easymde';
+
+        // 粘贴板里是 Markdown 时直接写入编辑器，保持排版不丢。
+        instance.codemirror.on('paste', (_, event) => {
+            const text = event.clipboardData?.getData('text/plain') || '';
+            if (text && /(^|\n)\s*(#{1,6}\s|[-*+]\s|>\s|```)/.test(text)) {
+                instance.value(text);
+                toast('已按 Markdown 写入粘贴内容', 'success');
+            }
+        });
+        container.__instance = instance;
+        // 页面渲染时以自定义容器为准，避免把编辑器从 .EasyMDEContainer 中摘出来。
+        instance.element = container;
+        return instance;
+    }
+
+    /** 兜底：EasyMDE 不可用时仍能编辑 Markdown 文本，并说明降级原因。 */
+    function mountPlainFallback(error) {
+        const area = el('textarea', { class: 'textarea', id: 'rich-markdown', rows: 12 });
+        area.value = initialMarkdown();
+        const wrapper = el('div', { class: 'stack' }, [
+            el('div', { class: 'notice', 'data-tone': 'accent' }, [
+                el('strong', { text: '已切换到纯文本模式' }),
+                el('span', { text: `${error?.message || '编辑器加载失败'}；内容仍以 Markdown 保存。` }),
+            ]),
+            area,
+        ]);
+        editor = {
+            value: (next) => {
+                if (typeof next === 'string') {
+                    area.value = next;
+                }
+                return area.value;
+            },
+        };
+        renderChrome(editor, wrapper);
+    }
+    /**
+     * 工具栏图标：与项目其它图标一致的细线 SVG。
+     * 动作优先使用 EasyMDE 提供的静态方法，缺失时退化为插入固定语法。
+     */
+    function toolbarButtons() {
+        const svg = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${PATHS[name] || ''}</svg>`;
+        const builtin = (method, fallbackPrefix, fallbackSuffix) => () => {
+            if (typeof window.EasyMDE[method] === 'function') {
+                window.EasyMDE[method](editor);
+                return;
+            }
+            surround(fallbackPrefix, fallbackSuffix);
+        };
+        return [
+            {
+                name: 'heading',
+                action: () => surround('## ', ''),
+                className: 'mde-heading',
+                title: '标题',
+                icon: svg('heading'),
+            },
+            {
+                name: 'bold',
+                action: builtin('toggleBold', '**', '**'),
+                className: 'mde-bold',
+                title: '加粗',
+                icon: svg('bold'),
+            },
+            {
+                name: 'italic',
+                action: builtin('toggleItalic', '*', '*'),
+                className: 'mde-italic',
+                title: '斜体',
+                icon: svg('italic'),
+            },
+            {
+                name: 'quote',
+                action: builtin('toggleBlockquote', '> ', ''),
+                className: 'mde-quote',
+                title: '引用',
+                icon: svg('quote'),
+            },
+            {
+                name: 'unordered-list',
+                action: builtin('toggleUnorderedList', '- ', ''),
+                className: 'mde-list',
+                title: '无序清单',
+                icon: svg('list'),
+            },
+            {
+                name: 'ordered-list',
+                action: builtin('toggleOrderedList', '1. ', ''),
+                className: 'mde-ordered',
+                title: '有序清单',
+                icon: svg('ordered'),
+            },
+            '|',
+            {
+                name: 'link',
+                action: () => {
+                    if (typeof window.EasyMDE.drawLink === 'function') {
+                        window.EasyMDE.drawLink(editor);
+                        return;
+                    }
+                    surround('[', '](https://)');
+                },
+                className: 'mde-link',
+                title: '插入链接',
+                icon: svg('link'),
+            },
+            { name: 'image', action: () => insertImage(), className: 'mde-image', title: '插入图片', icon: svg('image') },
+            {
+                name: 'table',
+                action: () => {
+                    if (typeof window.EasyMDE.drawTable === 'function') {
+                        window.EasyMDE.drawTable(editor);
+                        return;
+                    }
+                    appendText('\n\n| 列 1 | 列 2 |\n| --- | --- |\n| 内容 | 内容 |\n\n');
+                },
+                className: 'mde-table',
+                title: '插入表格',
+                icon: svg('table'),
+            },
+            '|',
+            {
+                name: 'preview',
+                action: () => {
+                    if (typeof window.EasyMDE.togglePreview === 'function') {
+                        window.EasyMDE.togglePreview(editor);
+                        return;
+                    }
+                    toast('当前编辑器为纯文本模式，无实时预览');
+                },
+                className: 'mde-preview',
+                title: '预览',
+                icon: svg('eye'),
+            },
+            { name: 'paste', action: () => openPasteSheet(), className: 'mde-paste', title: '粘贴 Markdown', icon: svg('paste') },
+            { name: 'clear', action: () => clearAll(), className: 'mde-clear', title: '清空内容', icon: svg('trash') },
+        ];
+    }
+
+    /** 在光标处包裹选中文本（无选中时插入占位文本）。 */
+    function surround(prefix, suffix) {
+        editor.value(`${editor.value().trimEnd()}${prefix}文本${suffix}`);
+    }
+
+    function appendText(text) {
+        editor.value(`${editor.value().trimEnd()}${text}`);
+    }
+
+    // ── 页面结构 ───────────────────────────────────────────────────
+
+    function renderChrome(instance, explicitNode) {
+        const editorNode = explicitNode || instance.element;
+        const media = state.media || {};
         replace(host, [
-            tabs,
-            tab === '正文' ? toolbar() : null,
-            tab === '正文' ? editor : null,
-            tab === '正文' ? null : mediaPanel(tab, media),
+            el('div', { class: 'card', 'data-tone': 'fill' }, [
+                el('strong', { text: exhibition.title }),
+                el('span', { class: 'row-meta', text: '简介以 Markdown 保存，详情页自动渲染标题、列表、链接与图片。' }),
+            ]),
+            editorNode,
+            el('div', { class: 'row', 'data-gap': 'md' }, [
+                ghostButton('粘贴 Markdown', () => openPasteSheet(), 'paste'),
+                ghostButton('插入图片', () => insertImage(), 'image'),
+            ]),
             el('p', { class: 'field-hint', text: `媒体数量与大小受系统设置限制：图片 ${media.imageCount || 8} 张 / 单张 ${media.imageSizeMb || 10} MB，视频 ${media.videoCount || 2} 个。` }),
         ]);
 
         replace(foot, el('div', { class: 'stack', 'data-gap': 'sm' }, [
             el('button', { class: 'cta', type: 'button', onclick: () => save() }, ['保存简介']),
-            el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: '保存后详情页会按富文本渲染。' }),
+            el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: '保存后详情页会按 Markdown 渲染。' }),
         ]));
     }
 
-    /** 工具栏：加粗、斜体、标题、列表、引用、链接与图片。 */
-    function toolbar() {
-        const bar = el('div', { class: 'toolbar', role: 'toolbar', 'aria-label': '富文本工具' });
-        const commands = [
-            { label: '标题', command: 'formatBlock', value: 'h3' },
-            { label: 'B', command: 'bold', title: '加粗' },
-            { label: 'I', command: 'italic', title: '斜体' },
-            { label: '清单', command: 'insertUnorderedList' },
-            { label: '编号', command: 'insertOrderedList' },
-            { label: '引用', command: 'formatBlock', value: 'blockquote' },
-            { label: '正文', command: 'formatBlock', value: 'p' },
-        ];
-        for (const item of commands) {
-            append(bar, el('button', {
-                type: 'button',
-                title: item.title || item.label,
-                onclick: () => {
-                    editor.focus();
-                    document.execCommand(item.command, false, item.value || null);
-                },
-            }, [item.label]));
-        }
-        append(bar, el('button', {
+    function ghostButton(label, onClick, iconName) {
+        return el('button', {
+            class: 'cta ghost',
             type: 'button',
-            title: '插入链接',
-            onclick: () => insertLink(),
-        }, ['链接']));
-        append(bar, el('button', {
-            type: 'button',
-            title: '插入图片',
-            onclick: () => insertImage(),
-        }, ['图片']));
-        append(bar, el('button', {
-            type: 'button',
-            title: '插入分割线',
-            onclick: () => {
-                editor.focus();
-                document.execCommand('insertHorizontalRule');
-            },
-        }, ['分割线']));
-        return bar;
+            style: { minHeight: '44px', fontSize: 'var(--fs-label)', flex: '1 1 0' },
+            onclick: onClick,
+        }, [icon(iconName, 'icon icon-sm'), label]);
     }
 
-    function mediaPanel(name, media) {
-        const images = Array.from(editor.querySelectorAll('img'));
-        const limit = name === '图片' ? (media.imageCount || 8) : (media.videoCount || 2);
-        const tiles = name === '图片' && images.length > 0
-            ? el('div', { class: 'media-grid' }, images.map((image, index) => el('div', { class: 'media-tile' }, [
-                el('img', { src: image.src, alt: image.alt || `展会图片 ${index + 1}` }),
-                el('button', {
-                    type: 'button',
-                    'aria-label': `删除第 ${index + 1} 张图片`,
-                    onclick: () => {
-                        image.remove();
-                        toast('已删除图片');
-                        render();
+    // ── 操作 ───────────────────────────────────────────────────────
+
+    /** 直接粘贴 Markdown：整段替换或追加到末尾。 */
+    function openPasteSheet() {
+        const area = el('textarea', { class: 'textarea', id: 'paste-markdown', rows: 8, placeholder: '在这里粘贴 Markdown 文本' });
+        openSheet({
+            title: '粘贴 Markdown',
+            size: 'full',
+            content: [
+                el('p', { class: 'row-meta', text: '粘贴后可直接替换当前内容，或在末尾追加。' }),
+                area,
+            ],
+            actions: [
+                { label: '取消', onClick: (close) => close() },
+                {
+                    label: '追加',
+                    onClick: (close) => {
+                        applyPaste(area.value, false);
+                        close();
                     },
-                }, ['×']),
-            ])))
-            : stateBlock({
-                iconName: name === '图片' ? 'image' : 'video',
-                title: name === '图片' ? '还没有插入图片' : '视频素材说明',
-                description: name === '图片'
-                    ? `当前 ${images.length} / ${limit} 张，点击下方按钮从设备选择。`
-                    : `演示环境使用系统媒体选择器，视频最多 ${limit} 个；上传能力待服务端接口接入。`,
-            });
-
-        const actions = el('div', { class: 'stack', 'data-gap': 'sm' }, [
-            el('button', {
-                class: 'cta ghost',
-                type: 'button',
-                disabled: name === '图片' ? (images.length >= limit ? true : null) : true,
-                onclick: () => (name === '图片' ? insertImage() : pickVideo()),
-            }, [name === '图片' ? '插入图片' : '选择视频']),
-        ]);
-
-        return el('div', { class: 'stack' }, [tiles, actions]);
+                },
+                {
+                    label: '替换',
+                    variant: 'primary',
+                    onClick: (close) => {
+                        applyPaste(area.value, true);
+                        close();
+                    },
+                },
+            ],
+        });
     }
 
-    function insertLink() {
-        const url = window.prompt('输入链接地址', 'https://');
-        if (!url) {
+    function applyPaste(text, replaceAll) {
+        const value = String(text || '').trim();
+        if (!value) {
+            toast('粘贴内容为空', 'error');
             return;
         }
-        editor.focus();
-        document.execCommand('createLink', false, url);
+        const current = editor.value();
+        editor.value(replaceAll || !current.trim() ? value : `${current.trimEnd()}\n\n${value}`);
+        toast(replaceAll ? '已替换为粘贴内容' : '已追加粘贴内容', 'success');
     }
 
     async function insertImage() {
         const media = state.media || {};
-        const images = editor.querySelectorAll('img').length;
         const limit = media.imageCount || 8;
-        if (images >= limit) {
+        const currentCount = (editor.value().match(/!\[[^\]]*]\([^)]*\)/g) || []).length;
+        if (currentCount >= limit) {
             toast(`图片数量已达上限（${limit} 张）`, 'error');
             return;
         }
@@ -203,20 +351,9 @@ export async function richEditorPage(context) {
                 toast(`图片超过 ${media.imageSizeMb || 10} MB 限制`, 'error');
                 return;
             }
-            editor.focus();
-            document.execCommand('insertHTML', false, `<img src="${result.dataUrl}" alt="展会图片" />`);
+            const markdown = `\n\n![展会图片](${result.dataUrl})\n\n`;
+            editor.value(`${editor.value().trimEnd()}${markdown}`);
             toast('图片已插入', 'success');
-            tab = '正文';
-            render();
-        } catch (error) {
-            toast(error.message, 'error');
-        }
-    }
-
-    async function pickVideo() {
-        try {
-            const result = await call('media.pickVideo');
-            toast(`已选择素材：${result?.uri ? '本地文件' : '未选择'}；视频上传待服务端接口接入`, 'success');
         } catch (error) {
             toast(error.message, 'error');
         }
@@ -228,8 +365,29 @@ export async function richEditorPage(context) {
         return bytes <= limitBytes;
     }
 
+    function clearAll() {
+        if (!editor.value().trim()) {
+            return;
+        }
+        openSheet({
+            title: '清空简介',
+            content: [el('p', { class: 'muted', text: '清空后需要重新编写，保存前不会影响已发布内容。' })],
+            actions: [
+                { label: '取消', onClick: (close) => close() },
+                {
+                    label: '清空',
+                    onClick: (close) => {
+                        editor.value('');
+                        close();
+                        toast('已清空编辑器内容');
+                    },
+                },
+            ],
+        });
+    }
+
     async function save() {
-        const html = isBlankHtml(bodyHtml) ? '' : sanitizeHtml(bodyHtml);
+        const markdown = String(editor.value() || '').trim();
         saveButton.disabled = true;
         try {
             const result = await call('exhibitions.save', {
@@ -240,7 +398,8 @@ export async function richEditorPage(context) {
                 status: exhibition.status,
                 category: exhibition.category,
                 date: exhibition.date,
-                description: html,
+                description: markdown,
+                descriptionFormat: 'md',
                 registrationStart: exhibition.registrationStart,
                 registrationEnd: exhibition.registrationEnd,
             });
@@ -249,8 +408,7 @@ export async function richEditorPage(context) {
                 return;
             }
             exhibition = result.exhibition;
-            bodyHtml = sanitizeHtml(exhibition.description || '');
-            toast('简介已保存', 'success');
+            toast(markdown ? `简介已保存（${markdownSummary(markdown, 20)}）` : '简介已清空', 'success');
             context.navigate('exhibition-form', { id: exhibition.id }, { replace: true });
         } catch (error) {
             toast(error.message, 'error');
@@ -259,3 +417,19 @@ export async function richEditorPage(context) {
         }
     }
 }
+
+/** 工具栏图标：与项目其它图标一致的细线风格。 */
+const PATHS = {
+    heading: '<path d="M6 5v14M18 5v14M6 12h12"/>',
+    bold: '<path d="M8 5h5.5a3.5 3.5 0 0 1 0 7H8Zm0 7h6.2a3.5 3.5 0 0 1 0 7H8Z"/>',
+    italic: '<path d="M15 5h-5M14 19H9M13.5 5 10.5 19"/>',
+    quote: '<path d="M7 7h4v4a4 4 0 0 1-4 4M15 7h4v4a4 4 0 0 1-4 4"/>',
+    list: '<path d="M8 6.5h12M8 12h12M8 17.5h12M4 6.5h.01M4 12h.01M4 17.5h.01"/>',
+    ordered: '<path d="M9.5 6.5H20M9.5 12H20M9.5 17.5H20M4 5.5h1.6v3M4 11.4c0-.6 1.6-.8 1.6.2 0 .8-1.6 1.4-1.6 2.4h1.8M4 16.6h1.4c.6 0 .8 1.2-.3 1.3.9.1 1 1.4-.1 1.4H4"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7L11.6 6.7"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1.4-1.4"/>',
+    image: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5"/>',
+    table: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 10h17M3.5 14.5h17M9.5 5v14M15 5v14"/>',
+    eye: '<path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.5"/>',
+    paste: '<rect x="6" y="4.5" width="12" height="15" rx="2"/><path d="M9.5 4.5V3.5h5v1M9 10h6M9 13.5h6"/>',
+    trash: '<path d="M4.5 7h15M9.5 7V4.8h5V7M7 7l1 12.2h8L17 7"/>',
+};

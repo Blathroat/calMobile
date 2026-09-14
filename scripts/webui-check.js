@@ -18,7 +18,7 @@ const webRoot = path.join(root, 'app', 'src', 'main', 'assets', 'web');
 const actionsFile = path.join(root, 'app', 'src', 'main', 'java', 'com', 'example', 'calmobile', 'WebAppActions.java');
 const appFile = path.join(webRoot, 'js', 'app.js');
 
-/** 设计稿中的 17 屏与页面模块的对应关系。 */
+/** 设计稿中的 17 屏与页面模块的对应关系（管理-展会、管理-设置已内联，共 15 个模块）。 */
 const EXPECTED_PAGES = [
     ['login.js', '01 入口'],
     ['home.js', '02 首页'],
@@ -28,15 +28,20 @@ const EXPECTED_PAGES = [
     ['search.js', '06 搜索'],
     ['my-registrations.js', '07 我的报名'],
     ['registration-detail.js', '08 报名详情'],
-    ['profile.js', '09 个人主页'],
+    ['profile.js', '09 个人主页（含设置）'],
     ['exhibitor.js', '10 展商后台'],
     ['exhibition-form.js', '11 展会编辑'],
-    ['rich-editor.js', '12 富文本编辑'],
+    ['rich-editor.js', '12 Markdown 简介编辑'],
     ['review.js', '13 报名审核'],
     ['user-public.js', '14 用户公开页'],
-    ['admin.js', '15 管理后台'],
-    ['admin-exhibitions.js', '16 展会管理'],
-    ['admin-settings.js', '17 系统设置'],
+    ['admin.js', '15 管理后台（用户 / 展会内联）'],
+];
+
+/** 内置的前端依赖：文件名 → 说明。 */
+const VENDOR_FILES = [
+    ['vendor/easymde/easymde.min.js', 'EasyMDE Markdown 编辑器脚本'],
+    ['vendor/easymde/easymde.min.css', 'EasyMDE 样式'],
+    ['vendor/easymde/LICENSE', 'EasyMDE 许可证'],
 ];
 
 const failures = [];
@@ -66,7 +71,13 @@ function checkFileLayout() {
             fail(`缺少页面模块 ${file}（${label}）`);
         }
     }
-    for (const required of ['index.html', 'styles/tokens.css', 'js/app.js', 'js/core/bridge.js', 'js/core/router.js', 'js/ui/components.js']) {
+    for (const [file, label] of VENDOR_FILES) {
+        if (!fs.existsSync(path.join(webRoot, file))) {
+            fail(`缺少内置依赖 ${file}（${label}）`);
+        }
+    }
+    for (const required of ['index.html', 'styles/tokens.css', 'styles/motion.css', 'js/app.js',
+        'js/core/bridge.js', 'js/core/router.js', 'js/core/markdown.js', 'js/ui/components.js']) {
         if (!fs.existsSync(path.join(webRoot, required))) {
             fail(`缺少前端资源 ${required}`);
         }
@@ -117,7 +128,8 @@ async function checkModules() {
     const modules = walk(webRoot, '.js');
     let checked = 0;
     for (const file of modules) {
-        if (file === appFile) {
+        // vendor 下是第三方 UMD 包，需要浏览器环境，这里只校验存在性。
+        if (file === appFile || file.includes(`${path.sep}vendor${path.sep}`)) {
             continue;
         }
         try {

@@ -23,10 +23,9 @@ import { richEditorPage } from './pages/rich-editor.js';
 import { reviewPage } from './pages/review.js';
 import { userPublicPage } from './pages/user-public.js';
 import { adminPage } from './pages/admin.js';
-import { adminExhibitionsPage } from './pages/admin-exhibitions.js';
-import { adminSettingsPage } from './pages/admin-settings.js';
 
 // 屏幕 01–17 与 newUI 线框的对应关系写在每个模块头部。
+// 管理-展会与管理-设置已内联到管理后台与个人页，不再保留二级页面。
 defineRoute('login', { title: '登录', render: loginPage });
 defineRoute('register', { title: '注册', render: registerPage });
 defineRoute('home', { title: '首页', render: homePage });
@@ -42,8 +41,6 @@ defineRoute('rich-editor', { title: '编辑展会简介', render: richEditorPage
 defineRoute('review', { title: '报名管理', render: reviewPage, roles: ['exhibitor', 'admin'] });
 defineRoute('user-public', { title: '用户公开页', render: userPublicPage });
 defineRoute('admin', { title: '管理后台', render: adminPage, roles: ['admin'] });
-defineRoute('admin-exhibitions', { title: '展会管理', render: adminExhibitionsPage, roles: ['admin'] });
-defineRoute('admin-settings', { title: '系统设置', render: adminSettingsPage, roles: ['admin'] });
 
 // 启动后进入的默认页面：登录态决定入口
 onRouteChange(async (route) => {

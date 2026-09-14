@@ -53,19 +53,6 @@ export async function homePage(context) {
         ],
     });
 
-    append(body, el('div', { class: 'row', 'data-gap': 'md' }, [
-        el('button', {
-            class: 'cta ghost',
-            type: 'button',
-            onclick: () => context.navigate('my-registrations'),
-        }, ['我的报名']),
-        el('button', {
-            class: 'cta ghost',
-            type: 'button',
-            onclick: () => context.navigate('profile'),
-        }, [state.user.loggedIn ? '个人主页' : '登录 / 注册']),
-    ]));
-
     announce();
     await load();
 

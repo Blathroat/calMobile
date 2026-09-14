@@ -418,6 +418,7 @@ final class WebAppActions {
         item.put("time", exhibition.getTime());
         item.put("category", safe(exhibition.getCategory()));
         item.put("description", safe(exhibition.getDescription()));
+        item.put("descriptionFormat", descriptionFormatOf(config, exhibition.getDescription()));
         item.put("status", exhibition.getStatus());
         item.put("mode", registrationMode(exhibition.getStatus()));
         item.put("modeLabel", modeLabel(exhibition.getStatus()));
@@ -563,6 +564,7 @@ final class WebAppActions {
         String time = WebAppBridge.text(payload, "time", "").trim();
         String status = WebAppBridge.text(payload, "status", ExhibitorExhibition.STATUS_OPEN);
         String description = WebAppBridge.text(payload, "description", "");
+        String descriptionFormat = WebAppBridge.text(payload, "descriptionFormat", "md");
         String category = WebAppBridge.text(payload, "category", "");
         String date = WebAppBridge.text(payload, "date", "");
         String registrationStart = WebAppBridge.text(payload, "registrationStart", "");
@@ -600,6 +602,7 @@ final class WebAppActions {
                 registrationEnd.isEmpty() ? config.registrationEnd : registrationEnd,
                 WebAppBridge.text(payload, "imageUri", config.imageUri),
                 config.fields);
+        config.descriptionFormat = "html".equals(descriptionFormat) ? "html" : "md";
         saveExhibitionFields(saved.getId(), payload);
 
         result.put("ok", true);
@@ -626,11 +629,45 @@ final class WebAppActions {
                 continue;
             }
             fields.add(new RegistrationField(title, WebAppBridge.text(item, "type", RegistrationField.TYPE_TEXT),
-                    WebAppBridge.flag(item, "required", false), WebAppBridge.text(item, "options", "")));
+                    WebAppBridge.flag(item, "required", false), optionsText(item.get("options"))));
         }
         ExhibitionConfiguration.Data config = ExhibitionConfiguration.get(exhibitionId);
         ExhibitionConfiguration.save(exhibitionId, config.exhibitionDate, config.registrationStart,
                 config.registrationEnd, config.imageUri, fields);
+    }
+
+    /** 选项兼容两种前端结构：字符串（逗号分隔）与字符串数组。 */
+    private static String optionsText(Object raw) {
+        if (raw instanceof List) {
+            StringBuilder builder = new StringBuilder();
+            for (Object item : (List<?>) raw) {
+                String value = String.valueOf(item).trim();
+                if (value.isEmpty()) {
+                    continue;
+                }
+                if (builder.length() > 0) {
+                    builder.append(',');
+                }
+                builder.append(value);
+            }
+            return builder.toString();
+        }
+        return raw == null ? "" : String.valueOf(raw);
+    }
+
+    /** 选项在桥接层统一输出为数组，前端可直接增删条目。 */
+    private static List<String> optionsList(String options) {
+        List<String> result = new ArrayList<>();
+        if (options == null) {
+            return result;
+        }
+        for (String item : options.split(",")) {
+            String value = item.trim();
+            if (!value.isEmpty()) {
+                result.add(value);
+            }
+        }
+        return result;
     }
 
     private static List<Map<String, Object>> fieldsPayload(String exhibitionId) {
@@ -641,27 +678,41 @@ final class WebAppActions {
     /** 展会未配置报名项时，按 newUI 报名页的默认字段渲染。 */
     private static List<Map<String, Object>> defaultFields() {
         List<Map<String, Object>> fields = new ArrayList<>();
-        fields.add(field("姓名 / 公司名称", RegistrationField.TYPE_TEXT, true, ""));
-        fields.add(field("参观身份", RegistrationField.TYPE_SINGLE, true, "专业观众,采购负责人,媒体伙伴"));
-        fields.add(field("报名需求", RegistrationField.TYPE_MULTI, false, "希望安排展商洽谈,开展前一天提醒"));
+        fields.add(field("姓名 / 公司名称", RegistrationField.TYPE_TEXT, true, new ArrayList<String>()));
+        fields.add(field("参观身份", RegistrationField.TYPE_SINGLE, true,
+                Arrays.asList("专业观众", "采购负责人", "媒体伙伴")));
+        fields.add(field("报名需求", RegistrationField.TYPE_MULTI, false,
+                Arrays.asList("希望安排展商洽谈", "开展前一天提醒")));
         return fields;
     }
 
     private static List<Map<String, Object>> fieldPayloads(List<RegistrationField> fields) {
         List<Map<String, Object>> result = new ArrayList<>();
         for (RegistrationField item : fields) {
-            result.add(field(item.getTitle(), item.getType(), item.isRequired(), item.getOptions()));
+            result.add(field(item.getTitle(), item.getType(), item.isRequired(), optionsList(item.getOptions())));
         }
         return result;
     }
 
-    private static Map<String, Object> field(String title, String type, boolean required, String options) {
+    private static Map<String, Object> field(String title, String type, boolean required, List<String> options) {
         Map<String, Object> field = new LinkedHashMap<>();
         field.put("title", title);
         field.put("type", type);
         field.put("required", required);
-        field.put("options", options == null ? "" : options);
+        field.put("options", options == null ? new ArrayList<String>() : options);
         return field;
+    }
+
+    /** 简介格式：旧数据没有格式标记时按内容特征推断，避免把 HTML 当作 Markdown 渲染。 */
+    private static String descriptionFormatOf(ExhibitionConfiguration.Data config, String description) {
+        if ("html".equals(config.descriptionFormat)) {
+            return "html";
+        }
+        String text = description == null ? "" : description.trim();
+        if (text.matches("(?s)^\\s*<(p|div|h[1-6]|ul|ol|blockquote|br|strong|em)\\b.*")) {
+            return "html";
+        }
+        return "md";
     }
 
     private static Map<String, Object> saveFields(String exhibitionId, Map<String, Object> payload) {

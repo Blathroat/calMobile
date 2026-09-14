@@ -12,6 +12,8 @@ public final class ExhibitionConfiguration {
         String registrationStart = "2026-05-01";
         String registrationEnd = "2026-05-31";
         String imageUri = "";
+        /** 简介内容的存储格式：html（旧富文本编辑器写入）或 md（EasyMDE 写入的 Markdown）。 */
+        String descriptionFormat = "md";
         final List<RegistrationField> fields = new ArrayList<>();
     }
 

@@ -1,0 +1,611 @@
+/* ============================================================================
+ * calMobile · 动效层
+ *
+ * 参照 newUI/remaining-ui.html 的交互语义：状态必须可见、过渡必须平滑，
+ * 但只动画 transform / opacity / filter 等合成属性，保证 WebView 中 60fps。
+ * 所有动画都受 prefers-reduced-motion 保护。
+ * ==========================================================================*/
+
+:root {
+    /* 时长与缓动：快反馈 120ms、常规 200ms、页面切换 260ms、抽屉 320ms */
+    --motion-instant: 120ms;
+    --motion-quick: 180ms;
+    --motion-normal: 240ms;
+    --motion-page: 280ms;
+    --motion-drawer: 340ms;
+    --ease-standard: cubic-bezier(.2, 0, 0, 1);
+    --ease-out: cubic-bezier(.16, 1, .3, 1);
+    --ease-in: cubic-bezier(.4, 0, 1, 1);
+    --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+    --press-scale: .975;
+}
+
+/* ── 页面切换：按导航方向左右滑动 ───────────────────────────────── */
+
+.app-body {
+    transition: opacity var(--motion-normal) var(--ease-standard);
+}
+
+@keyframes page-in-forward {
+    from {
+        opacity: 0;
+        transform: translate3d(22px, 0, 0);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes page-in-back {
+    from {
+        opacity: 0;
+        transform: translate3d(-22px, 0, 0);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes page-out-forward {
+    from {
+        opacity: 1;
+        transform: none;
+    }
+
+    to {
+        opacity: 0;
+        transform: translate3d(-12px, 0, 0);
+    }
+}
+
+@keyframes page-out-back {
+    from {
+        opacity: 1;
+        transform: none;
+    }
+
+    to {
+        opacity: 0;
+        transform: translate3d(12px, 0, 0);
+    }
+}
+
+.app[data-direction="forward"] .route-enter {
+    animation: page-in-forward var(--motion-page) var(--ease-out) both;
+}
+
+.app[data-direction="back"] .route-enter {
+    animation: page-in-back var(--motion-page) var(--ease-out) both;
+}
+
+.app[data-direction="replace"] .route-enter,
+.app[data-direction="none"] .route-enter {
+    animation: route-in var(--motion-normal) var(--ease-out) both;
+}
+
+/* 顶部栏标题随页面轻微上浮，强化“整页切换”的观感 */
+@keyframes title-in {
+    from {
+        opacity: 0;
+        transform: translate3d(0, 6px, 0);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.app[data-direction="forward"] .topbar-title,
+.app[data-direction="back"] .topbar-title {
+    animation: title-in var(--motion-normal) var(--ease-out) both;
+}
+
+/* 列表项依次淡入，最多排队 8 项，避免长列表等待 */
+@keyframes item-in {
+    from {
+        opacity: 0;
+        transform: translate3d(0, 10px, 0);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.app-body .list > *,
+.app-body .card,
+.app-body .row-card {
+    animation: item-in var(--motion-normal) var(--ease-out) both;
+}
+
+.app-body .list > *:nth-child(1) { animation-delay: 0ms; }
+.app-body .list > *:nth-child(2) { animation-delay: 24ms; }
+.app-body .list > *:nth-child(3) { animation-delay: 48ms; }
+.app-body .list > *:nth-child(4) { animation-delay: 72ms; }
+.app-body .list > *:nth-child(5) { animation-delay: 96ms; }
+.app-body .list > *:nth-child(6) { animation-delay: 110ms; }
+.app-body .list > *:nth-child(n+7) { animation-delay: 120ms; }
+
+/* ── 按钮与可点区域的按压、悬浮反馈 ─────────────────────────────── */
+
+.cta,
+.icon-button,
+.round-action,
+.round-save,
+.tab,
+.seg button,
+.pill,
+.cal-day,
+.choice label,
+.check-label,
+.toolbar button,
+.link-button,
+.text-action,
+.switch span,
+.switch span::after {
+    transition:
+        transform var(--motion-instant) var(--ease-standard),
+        background-color var(--motion-quick) var(--ease-standard),
+        border-color var(--motion-quick) var(--ease-standard),
+        color var(--motion-quick) var(--ease-standard),
+        box-shadow var(--motion-quick) var(--ease-standard),
+        opacity var(--motion-quick) var(--ease-standard);
+}
+
+.cta:active:not([disabled]),
+.round-action:active,
+.icon-button:active,
+.tab:active,
+.seg button:active,
+.pill:active,
+.cal-day:active,
+.choice label:active,
+.check-label:active,
+.toolbar button:active,
+.link-button:active,
+.text-action:active {
+    transform: scale(var(--press-scale));
+}
+
+/* 波纹：白底描边按钮与图标按钮的按压反馈 */
+.cta,
+.icon-button[data-variant="outlined"],
+.round-action,
+.row-card,
+.card[data-pressable="true"] {
+    position: relative;
+    overflow: hidden;
+}
+
+.cta::before,
+.icon-button[data-variant="outlined"]::before,
+.round-action::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(circle at center, currentColor 12%, transparent 70%);
+    opacity: 0;
+    transform: scale(.4);
+    transition: opacity var(--motion-quick) var(--ease-standard), transform var(--motion-quick) var(--ease-out);
+    pointer-events: none;
+}
+
+.cta:active::before,
+.icon-button[data-variant="outlined"]:active::before,
+.round-action:active::before {
+    opacity: .16;
+    transform: scale(1.6);
+    transition-duration: 60ms;
+}
+
+/* 主按钮在悬浮时上浮 1px，按下回落到原高度 */
+@media (hover: hover) {
+    .cta:hover:not([disabled]) {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(37, 42, 49, .18);
+    }
+
+    .cta.ghost:hover,
+    .cta.danger:hover {
+        box-shadow: 0 6px 16px rgba(192, 86, 33, .18);
+    }
+
+    .round-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 30px rgba(31, 35, 40, .22);
+    }
+
+    .icon-button:hover {
+        transform: translateY(-1px);
+    }
+
+    .row-card[data-pressable="true"]:hover,
+    .card[data-pressable="true"]:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 24px rgba(31, 35, 40, .1);
+    }
+}
+
+.cta:active:not([disabled]):hover {
+    transform: scale(var(--press-scale));
+    box-shadow: none;
+}
+
+.row-card[data-pressable="true"]:active,
+.card[data-pressable="true"]:active {
+    transform: scale(.992);
+}
+
+/* 输入类控件的聚焦过渡 */
+.input,
+.textarea,
+.select,
+.field-static,
+.editor-surface,
+.check-label,
+.choice label,
+.toolbar {
+    transition:
+        border-color var(--motion-quick) var(--ease-standard),
+        background-color var(--motion-quick) var(--ease-standard),
+        box-shadow var(--motion-quick) var(--ease-standard);
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+    box-shadow: 0 0 0 3px rgba(192, 86, 33, .12);
+}
+
+/* ── 底部导航：选中指示条与图标弹跳 ─────────────────────────────── */
+
+.tab {
+    position: relative;
+}
+
+.tab::after {
+    content: "";
+    position: absolute;
+    inset-inline: 50%;
+    bottom: 4px;
+    height: 3px;
+    width: 0;
+    border-radius: var(--r-pill);
+    background: currentColor;
+    opacity: 0;
+    transform: translateX(-50%);
+    transition: width var(--motion-normal) var(--ease-spring), opacity var(--motion-quick) var(--ease-standard);
+}
+
+.tab[aria-current="page"]::after {
+    width: 22px;
+    opacity: 1;
+}
+
+.tab svg {
+    transition: transform var(--motion-normal) var(--ease-spring);
+}
+
+.tab[aria-current="page"] svg {
+    transform: translateY(-1px) scale(1.08);
+}
+
+.tab:active svg {
+    transform: scale(.9);
+}
+
+/* ── 分段控件：选中滑块淡入 + 按钮轻微缩放 ──────────────────────── */
+
+.seg button[aria-pressed="true"] {
+    animation: seg-pop var(--motion-normal) var(--ease-spring) both;
+}
+
+@keyframes seg-pop {
+    from {
+        transform: scale(.96);
+    }
+
+    to {
+        transform: scale(1);
+    }
+}
+
+/* ── 状态标签与提示的出现动画 ──────────────────────────────────── */
+
+.status-tag,
+.pill,
+.notice {
+    animation: item-in var(--motion-normal) var(--ease-out) both;
+}
+
+@keyframes tag-pop {
+    from {
+        opacity: 0;
+        transform: scale(.86);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.status-tag[data-tone] {
+    animation: tag-pop var(--motion-quick) var(--ease-spring) both;
+}
+
+/* ── 抽屉 / 底部面板 ──────────────────────────────────────────── */
+
+.sheet {
+    animation: fade-in var(--motion-quick) var(--ease-standard) both;
+}
+
+.sheet[data-closing="true"] {
+    animation: fade-out var(--motion-quick) var(--ease-in) both;
+}
+
+@keyframes fade-out {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+.sheet-panel {
+    animation: drawer-up var(--motion-drawer) var(--ease-out) both;
+}
+
+.sheet[data-closing="true"] .sheet-panel {
+    animation: drawer-down var(--motion-quick) var(--ease-in) both;
+}
+
+@keyframes drawer-up {
+    from {
+        transform: translate3d(0, 100%, 0);
+    }
+
+    to {
+        transform: none;
+    }
+}
+
+@keyframes drawer-down {
+    from {
+        transform: none;
+    }
+
+    to {
+        transform: translate3d(0, 100%, 0);
+    }
+}
+
+/* 面板内的内容错峰出现 */
+.sheet-panel > * {
+    animation: item-in var(--motion-drawer) var(--ease-out) both;
+}
+
+.sheet-panel > *:nth-child(2) { animation-delay: 40ms; }
+.sheet-panel > *:nth-child(3) { animation-delay: 70ms; }
+.sheet-panel > *:nth-child(n+4) { animation-delay: 90ms; }
+
+/* ── 轻提示 ───────────────────────────────────────────────────── */
+
+.toast {
+    animation: toast-in var(--motion-normal) var(--ease-spring) both;
+}
+
+.toast[data-leaving="true"] {
+    animation: toast-out var(--motion-quick) var(--ease-in) both;
+}
+
+@keyframes toast-out {
+    from {
+        opacity: 1;
+        transform: none;
+    }
+
+    to {
+        opacity: 0;
+        transform: translate3d(0, 8px, 0) scale(.98);
+    }
+}
+
+/* ── 加载骨架与状态块 ─────────────────────────────────────────── */
+
+.skeleton-row {
+    animation: shimmer 1.4s ease infinite, item-in var(--motion-normal) var(--ease-out) both;
+}
+
+.state {
+    animation: item-in var(--motion-normal) var(--ease-out) both;
+}
+
+.state[data-tone="success"] .state-icon {
+    animation: success-pop var(--motion-drawer) var(--ease-spring) both;
+}
+
+@keyframes success-pop {
+    from {
+        opacity: 0;
+        transform: scale(.6);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* ── 展会编辑：报名方式切换时的说明文字淡入 ─────────────────────── */
+
+.field-hint {
+    transition: color var(--motion-quick) var(--ease-standard), opacity var(--motion-quick) var(--ease-standard);
+}
+
+/* ── 媒体与图片 ───────────────────────────────────────────────── */
+
+.thumb,
+.hero,
+.media-tile,
+.ph-img > img {
+    transition: transform var(--motion-normal) var(--ease-out), opacity var(--motion-normal) var(--ease-standard);
+}
+
+.hero > img,
+.thumb > img {
+    animation: fade-in var(--motion-normal) var(--ease-standard) both;
+}
+
+/* ── 富文本编辑器（EasyMDE）外观对齐设计令牌 ───────────────────── */
+
+.EasyMDEContainer {
+    display: grid;
+    gap: var(--s2);
+    animation: item-in var(--motion-normal) var(--ease-out) both;
+    /* 覆盖 EasyMDE 自带的橙色主题变量，统一走 newUI 令牌 */
+    --editor-background: var(--screen);
+    --editor-border: var(--stroke);
+    --editor-border-radius: var(--r-input);
+    --editor-color: var(--ink);
+    --editor-cursor-color: var(--accent);
+    --editor-selection-background: var(--accent-tint);
+}
+
+/* 编辑器容器：让 EasyMDE 与页面其它卡片保持同一节奏 */
+.markdown-editor {
+    display: block;
+}
+
+/* EasyMDE 用自定义属性拼 var(--editor-border)，直接覆盖 --stroke 会拼出非法值，
+   这里显式声明颜色与边框，避免样式失效回退到橙色主题。 */
+.EasyMDEContainer .CodeMirror,
+.EasyMDEContainer .editor-toolbar,
+.EasyMDEContainer .editor-statusbar,
+.EasyMDEContainer .editor-preview,
+.EasyMDEContainer .editor-preview-side {
+    border-color: #c5cad1;
+}
+
+.EasyMDEContainer .editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    padding: var(--s2);
+    border: var(--hairline) solid var(--stroke);
+    border-radius: var(--r-input);
+    background: var(--f3);
+    opacity: 1;
+}
+
+.EasyMDEContainer .editor-toolbar button {
+    width: 44px;
+    height: 40px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: var(--hairline) solid var(--stroke) !important;
+    border-radius: var(--r-chip);
+    background: var(--screen);
+    color: var(--ink-2);
+    font-size: var(--fs-label);
+    font-weight: 700;
+    text-decoration: none !important;
+}
+
+.EasyMDEContainer .editor-toolbar button:hover,
+.EasyMDEContainer .editor-toolbar button.active {
+    background: var(--dark);
+    border-color: var(--dark) !important;
+    color: var(--screen);
+}
+
+.EasyMDEContainer .editor-toolbar button svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.EasyMDEContainer .editor-toolbar .separator {
+    display: none;
+}
+
+.EasyMDEContainer .CodeMirror {
+    min-height: 260px;
+    padding: var(--s3);
+    border: var(--hairline) solid var(--stroke);
+    border-radius: var(--r-input);
+    background: var(--screen);
+    color: var(--ink);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "PingFang SC", "Microsoft YaHei", monospace;
+    font-size: var(--fs-label);
+    line-height: 1.65;
+}
+
+.EasyMDEContainer .CodeMirror-focused {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(192, 86, 33, .12);
+}
+
+.EasyMDEContainer .CodeMirror-cursor {
+    border-left: 2px solid var(--accent);
+}
+
+.EasyMDEContainer .editor-statusbar {
+    color: var(--ink-3);
+    font-size: var(--fs-tag);
+}
+
+.EasyMDEContainer .editor-preview,
+.EasyMDEContainer .editor-preview-side {
+    background: var(--screen);
+    color: var(--ink);
+}
+
+.EasyMDEContainer .editor-preview pre,
+.EasyMDEContainer .CodeMirror pre {
+    border-radius: var(--r-chip);
+    background: var(--f3);
+}
+
+/* ── 减弱动效偏好 ─────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+
+    .app-body .list > *,
+    .app-body .card,
+    .app-body .row-card,
+    .sheet,
+    .sheet-panel,
+    .sheet-panel > *,
+    .toast,
+    .state,
+    .status-tag,
+    .pill,
+    .notice,
+    .EasyMDEContainer {
+        animation: none !important;
+    }
+
+    .cta:hover,
+    .row-card[data-pressable="true"]:hover,
+    .card[data-pressable="true"]:hover,
+    .round-action:hover {
+        transform: none;
+    }
+}

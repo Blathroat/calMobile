@@ -8,6 +8,7 @@ import { call, state } from '../core/bridge.js';
 import { scaffold, topAction } from '../core/router.js';
 import { stateBlock, loadingBlock, statusTag, statusTone, toast, openSheet } from '../ui/components.js';
 import { sanitizeHtml, plainText } from '../core/sanitize.js';
+import { markdownToHtml } from '../core/markdown.js';
 import { el, append, replace, formatDateWithWeekday } from '../core/dom.js';
 
 export async function detailPage(context) {
@@ -131,15 +132,23 @@ export async function detailPage(context) {
     }
 
     function descriptionBlock() {
-        const html = String(exhibition.description || '');
-        if (/<[a-z][\s\S]*>/i.test(html)) {
-            return el('div', { class: 'rich-content', html: sanitizeHtml(html) });
+        const raw = String(exhibition.description || '');
+        if (exhibition.descriptionFormat === 'html') {
+            if (/<[a-z][\s\S]*>/i.test(raw)) {
+                return el('div', { class: 'rich-content', html: sanitizeHtml(raw) });
+            }
+            const text = plainText(raw, 4000);
+            return text
+                ? el('p', { class: 'row-meta', style: { fontSize: 'var(--fs-body)', color: 'var(--ink)' }, text })
+                : el('p', { class: 'muted', text: '展商还没有补充展会介绍。' });
         }
-        const text = plainText(html, 4000);
-        if (!text) {
+
+        // 默认按 Markdown 渲染（编辑器保存的格式），空内容时给出可执行的下一步。
+        const html = markdownToHtml(raw);
+        if (!html) {
             return el('p', { class: 'muted', text: '展商还没有补充展会介绍。' });
         }
-        return el('p', { class: 'row-meta', style: { fontSize: 'var(--fs-body)', color: 'var(--ink)' }, text });
+        return el('div', { class: 'rich-content', html });
     }
 
     function metaRow(iconName, text) {

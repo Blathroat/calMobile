@@ -273,9 +273,18 @@ export function openSheet({ title, content, actions = [], size }) {
     });
     append(host, overlay);
 
+    let closing = false;
+
+    /** 关闭时先播放退场动画，再移除节点，避免抽屉“瞬间消失”。 */
     function close() {
-        overlay.remove();
+        if (closing) {
+            return;
+        }
+        closing = true;
         document.removeEventListener('keydown', onKey);
+        overlay.dataset.closing = 'true';
+        const delay = prefersReducedMotion() ? 0 : 220;
+        setTimeout(() => overlay.remove(), delay);
     }
 
     function onKey(event) {
@@ -285,9 +294,15 @@ export function openSheet({ title, content, actions = [], size }) {
     }
 
     document.addEventListener('keydown', onKey);
-    const focusTarget = panel.querySelector('input, textarea, button');
+    const focusTarget = panel.querySelector('textarea, input, button');
     focusTarget?.focus();
     return { close, panel };
+}
+
+function prefersReducedMotion() {
+    return typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 /** 二次确认，用于删除与撤销等不可逆操作。 */
@@ -328,7 +343,11 @@ export function toast(message, tone = 'neutral') {
     const id = `toast-${toastSequence++}`;
     const node = el('div', { class: 'toast', id, dataset: { tone }, role: 'status', text: message });
     append(host, node);
-    setTimeout(() => node.remove(), 2600);
+    // 退场动画结束后再移除，避免提示突然消失。
+    setTimeout(() => {
+        node.dataset.leaving = 'true';
+        setTimeout(() => node.remove(), prefersReducedMotion() ? 0 : 200);
+    }, 2400);
 }
 
 /** 图片或占位：src 为空时保持线框的斜线占位。 */
