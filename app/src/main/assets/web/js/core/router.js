@@ -197,16 +197,39 @@ export function topAction(name, label, onClick) {
     }, [icon(name)]);
 }
 
-/** 角色化底部导航；与 newUI 的 tab 文案一致。 */
+/** 角色化底部导航；与 newUI 的 tab 文案一致，选中指示条在切换时滑动过去。 */
 export function tabbar({ items, active }) {
     const bar = el('nav', { class: 'tabbar', 'aria-label': '底部导航' });
+    const indicator = el('span', { class: 'tabbar-indicator', 'aria-hidden': 'true' });
+    append(bar, indicator);
+
+    const buttons = [];
     for (const item of items) {
-        append(bar, el('button', {
+        const button = el('button', {
             class: 'tab',
             type: 'button',
             'aria-current': item.id === active ? 'page' : null,
             onclick: () => navigate(item.id, {}, { replace: item.id === active }),
-        }, [icon(item.icon, 'icon'), el('span', { text: item.label })]));
+        }, [icon(item.icon, 'icon'), el('span', { text: item.label })]);
+        buttons.push(button);
+        append(bar, button);
+    }
+
+    // 首次定位不加过渡，之后的切换由 CSS 负责滑动。
+    const position = () => {
+        const current = buttons.find((button) => button.getAttribute('aria-current') === 'page');
+        if (!current || current.offsetWidth === 0) {
+            indicator.dataset.hidden = 'true';
+            return;
+        }
+        indicator.dataset.hidden = 'false';
+        indicator.style.transform = `translate3d(${current.offsetLeft + (current.offsetWidth / 2)}px, 0, 0)`;
+    };
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => {
+            position();
+            indicator.dataset.ready = 'true';
+        });
     }
     return bar;
 }

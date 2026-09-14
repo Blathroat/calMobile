@@ -9,12 +9,15 @@ import { scaffold } from '../core/router.js';
 import { loadingBlock, stateBlock, statusTag, statusTone, toast, openSheet, segmented } from '../ui/components.js';
 import { el, replace, answerLines, truncate } from '../core/dom.js';
 
+const FILTERS = ['待审核', '已通过', '已拒绝', '全部'];
+
 export async function reviewPage(context) {
     const exhibitionId = context.params.exhibitionId || '';
     const listHost = el('div', { class: 'stack' });
     const countPill = el('span', { class: 'pill', text: '—' });
     const filterHost = el('div');
     let filter = '待审核';
+    let filterSeg = null;
     let title = '报名管理';
     let records = [];
 
@@ -73,20 +76,24 @@ export async function reviewPage(context) {
     await load();
 
     function renderFilter(counts) {
-        replace(filterHost, segmented({
-            label: '审核状态',
-            value: filter,
-            items: [
-                { value: '待审核', label: `待审核 ${counts['待审核'] ?? 0}` },
-                { value: '已通过', label: `已通过 ${counts['已通过'] ?? 0}` },
-                { value: '已拒绝', label: `已拒绝 ${counts['已拒绝'] ?? 0}` },
-                { value: '全部', label: `全部 ${counts.total ?? 0}` },
-            ],
-            onChange: (value) => {
-                filter = value;
-                load();
-            },
-        }));
+        const labels = FILTERS.map((value) => `${value} ${counts[value] ?? (value === '全部' ? counts.total : 0) ?? 0}`);
+        if (!filterSeg) {
+            filterSeg = segmented({
+                label: '审核状态',
+                value: filter,
+                items: FILTERS.map((value) => ({ value, label: value })),
+                onChange: (value) => {
+                    filter = value;
+                    load();
+                },
+            });
+            replace(filterHost, filterSeg);
+        }
+        // 文案先更新，再让滑块滑到当前状态，动画因此不会被重新渲染打断。
+        filterSeg.querySelectorAll('button').forEach((button, index) => {
+            button.textContent = labels[index];
+        });
+        filterSeg.setValue(filter, true);
     }
 
     async function load() {

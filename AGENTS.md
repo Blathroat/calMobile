@@ -19,7 +19,7 @@ gradlew.bat :app:assembleDebug
 
 ## 编码与界面规范
 
-Java 使用四空格缩进；类名使用 PascalCase，方法、变量使用 camelCase，资源名使用 `snake_case`。前端 CSS 类使用 kebab-case，页面模块使用 kebab-case 文件名。用户可见文案优先复用 `strings.xml` 与页面内的中文常量，新增文档和注释使用中文。沿用 newUI 令牌（`#F7F6F3` 背景、`#FFFFFF` 页面、`#20252B` 主文字、`#626A74` 次文字、`#C5CAD1` 描边、`#48515D` 主按钮、`#C05621` 强调色），颜色、字号、间距、圆角只在 `styles/tokens.css` 声明，交互动效只在 `styles/motion.css` 声明，页面不重复定义。线框尺寸按 390dp 逻辑宽度等比换算，触控区域不小于 44px。并排字段用 `.grid-cols-2`（flex 等高）保证输入框对齐。日期、时间和状态选择使用选择器、分段控件或页内面板，不使用下划线输入框；动态展开内容必须出现在触发卡片附近，并提供选中、禁用、错误、加载和完成反馈。Markdown 与 HTML 渲染前必须经过 `js/core/sanitize.js` 清洗。第三方前端库必须内置到 `assets/web/vendor/` 并记录版本与许可证，不引用 CDN 或图标字体。
+Java 使用四空格缩进；类名使用 PascalCase，方法、变量使用 camelCase，资源名使用 `snake_case`。前端 CSS 类使用 kebab-case，页面模块使用 kebab-case 文件名。用户可见文案优先复用 `strings.xml` 与页面内的中文常量，新增文档和注释使用中文。沿用 newUI 令牌（`#F7F6F3` 背景、`#FFFFFF` 页面、`#20252B` 主文字、`#626A74` 次文字、`#C5CAD1` 描边、`#48515D` 主按钮、`#C05621` 强调色），颜色、字号、间距、圆角只在 `styles/tokens.css` 声明，交互动效只在 `styles/motion.css` 声明，页面不重复定义；强调色只能通过 `--accent*` 变量使用，不得写死具体色值，否则管理员配色会失效。线框尺寸按 390dp 逻辑宽度等比换算，触控区域不小于 44px；展会图片按设计稿的 1080×1920（9:16）竖向比例展示。并排字段用 `.grid-cols-2`（flex 等高）保证输入框对齐。日期、时间和状态选择使用选择器、分段控件或页内面板，不使用下划线输入框；切换类控件使用 `segmented()` 的滑动滑块，不重建 DOM。动态展开内容必须出现在触发卡片附近，并提供选中、禁用、错误、加载和完成反馈。Markdown 与 HTML 渲染前必须经过 `js/core/sanitize.js` 清洗，渲染 Markdown 用 `core/markdown.js` 的 `renderMarkdown`（会自动按需加载引擎）。第三方前端库必须内置到 `assets/web/vendor/` 并记录版本与许可证，不引用 CDN 或图标字体。
 
 ## 测试与提交
 
@@ -27,7 +27,7 @@ Android 改动按 smoke-check、webui-check、单元测试、调试构建的顺�
 
 ## 架构与工作区
 
-前端为 WebView 页面（HTML/CSS/ES 模块），通过 `WebAppBridge`/`WebAppActions` 调用原生业务；展会、报名和用户数据使用 SQLite，并在数据库不可用时回退到内存示例数据；应用设置与个人资料使用 SharedPreferences。新增页面时同时更新 `assets/web/js/app.js` 的路由注册、`README.md` 的屏幕对照表和 `scripts/smoke-check.js`、`scripts/webui-check.js` 的页面清单；管理类功能优先内联到现有页面，不新增二级页面。Room、Retrofit、Repository 与 ViewModel 已搭建但尚未接入全部页面，后端 API 也未替换本地演示流。修改认证、持久化、导航、包名、签名或引入新框架前先确认。工作区可能包含其他任务的改动，只检查并提交本次涉及路径，不回退无关文件；`.omo/` 等运行记录不应加入提交。
+前端为 WebView 页面（HTML/CSS/ES 模块），通过 `WebAppBridge`/`WebAppActions` 调用原生业务；展会、报名和用户数据使用 SQLite，并在数据库不可用时回退到内存示例数据；应用设置、个人资料与上传的媒体文件使用 SharedPreferences 与应用私有目录 `files/media`（通过 `https://appassets.androidplatform.net/media/<文件名>` 引用，由 `WebShellActivity` 拦截放行）。新增页面时同时更新 `assets/web/js/app.js` 的路由注册、`README.md` 的屏幕对照表和 `scripts/smoke-check.js`、`scripts/webui-check.js` 的页面清单；管理类功能优先内联到现有页面，不新增二级页面。管理员在「管理-设置」中维护的是服务器级配置（公告、分类、审核策略、媒体与上传限制、表单字符数上限），保存后对所有用户生效；应用配色属于个人偏好，放在个人页的「设置」栏。表单校验统一走 `js/core/validate.js`，长度上限取自 `state.limits`，原生侧保存前再校验一次。Room、Retrofit、Repository 与 ViewModel 已搭建但尚未接入全部页面，后端 API 也未替换本地演示流。修改认证、持久化、导航、包名、签名或引入新框架前先确认。工作区可能包含其他任务的改动，只检查并提交本次涉及路径，不回退无关文件；`.omo/` 等运行记录不应加入提交。
 
 ## 文档维护
 

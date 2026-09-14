@@ -6,7 +6,7 @@
 
 import { call } from '../core/bridge.js';
 import { scaffold, tabbar, navItems, topAction } from '../core/router.js';
-import { loadingBlock, stateBlock, statusTag, statusTone, toast, confirmSheet, openSheet } from '../ui/components.js';
+import { loadingBlock, stateBlock, statusTag, statusTone, toast, confirmSheet, openSheet, mediaBox } from '../ui/components.js';
 import { el, replace } from '../core/dom.js';
 
 export async function exhibitorPage(context) {
@@ -63,7 +63,7 @@ export async function exhibitorPage(context) {
                 style: { border: '0', padding: '0', background: 'transparent' },
                 onclick: () => context.navigate('detail', { id: item.id }),
             }, [
-                el('span', { class: 'thumb ph-img', 'aria-hidden': 'true' }),
+                mediaBox({ src: item.imageUri, className: 'thumb thumb-cover' }),
                 el('span', { class: 'row-copy' }, [
                     el('strong', { class: 'row-title truncate', text: item.title }),
                     el('span', { class: 'row-meta', text: `${item.dateLabel} ${item.time}` }),

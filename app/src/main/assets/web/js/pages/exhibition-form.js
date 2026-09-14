@@ -6,9 +6,10 @@
 
 import { call } from '../core/bridge.js';
 import { scaffold, topAction } from '../core/router.js';
-import { icon, loadingBlock, stateBlock, toast } from '../ui/components.js';
+import { icon, loadingBlock, stateBlock, segmented, toast } from '../ui/components.js';
 import { el, append, replace } from '../core/dom.js';
 import { markdownSummary } from '../core/markdown.js';
+import { fieldValidator, validateAll, limit, allowedFormats, PATTERNS } from '../core/validate.js';
 
 const MODES = [
     { value: '需审核', label: '需审核' },
@@ -40,6 +41,7 @@ export async function exhibitionFormPage(context) {
         status: '需审核',
         category: '',
         description: '',
+        imageUri: '',
         registrationStart: '',
         registrationEnd: '',
     };
@@ -68,6 +70,7 @@ export async function exhibitionFormPage(context) {
                 status: MODES.some((mode) => mode.value === item.status) ? item.status : '需审核',
                 category: item.category || '',
                 description: item.description || '',
+                imageUri: item.imageUri || '',
                 registrationStart: item.registrationStart || '',
                 registrationEnd: item.registrationEnd || '',
             });
@@ -101,20 +104,16 @@ export async function exhibitionFormPage(context) {
     const errorBox = el('p', { class: 'field-error', role: 'alert', hidden: true });
     const fieldsHost = el('div', { class: 'stack', 'data-gap': 'sm' });
 
-    const modeHost = el('div', { class: 'seg', role: 'group', 'aria-label': '报名方式' });
     const modeHint = el('p', { class: 'field-hint', text: hintFor(model.status) });
-    const modeButtons = MODES.map((mode) => el('button', {
-        type: 'button',
-        'aria-pressed': mode.value === model.status ? 'true' : 'false',
-        onclick: () => {
-            model.status = mode.value;
-            modeButtons.forEach((button, index) => {
-                button.setAttribute('aria-pressed', MODES[index].value === model.status ? 'true' : 'false');
-            });
-            modeHint.textContent = hintFor(model.status);
+    const modeHost = segmented({
+        label: '报名方式',
+        value: model.status,
+        items: MODES,
+        onChange: (value) => {
+            model.status = value;
+            modeHint.textContent = hintFor(value);
         },
-    }, [mode.label]));
-    append(modeHost, modeButtons);
+    });
 
     const descriptionPreview = el('p', { class: 'row-meta' });
     const descriptionButton = el('button', {
@@ -124,11 +123,151 @@ export async function exhibitionFormPage(context) {
         onclick: () => context.navigate('rich-editor', { id: model.id }),
     }, [isCreate ? '保存后可编辑简介' : '编辑富文本与媒体']);
 
+    const coverPreview = el('div', { class: 'cover-preview' });
+    const coverHint = el('p', {
+        class: 'field-hint',
+        text: `建议使用 1080×1920（9:16）的竖版图片，当前允许 ${formatsHint()}。`,
+    });
+
     render();
+
+    function formatsHint() {
+        const list = allowedFormats('image');
+        return list.length > 0 ? list.map((item) => `.${item}`).join('/') : '常见图片格式';
+    }
+
+    function renderCover() {
+        replace(coverPreview, [
+            model.imageUri
+                ? el('div', { class: 'hero ph-img hero-compact' }, [el('img', { src: model.imageUri, alt: '展会封面' })])
+                : el('div', { class: 'hero ph-img hero-compact', 'aria-hidden': 'true' }),
+            el('div', { class: 'row', 'data-gap': 'md' }, [
+                coverButton(),
+                model.imageUri
+                    ? el('button', {
+                        class: 'cta ghost',
+                        type: 'button',
+                        style: { minHeight: '44px', fontSize: 'var(--fs-label)', flex: '1 1 0' },
+                        onclick: () => {
+                            model.imageUri = '';
+                            renderCover();
+                        },
+                    }, ['移除封面'])
+                    : null,
+            ]),
+        ]);
+    }
+
+    function coverButton() {
+        const button = el('button', {
+            class: 'cta ghost',
+            type: 'button',
+            style: { minHeight: '44px', fontSize: 'var(--fs-label)', flex: '1 1 0' },
+            onclick: () => pickCover(button),
+        }, [model.imageUri ? '更换封面' : '上传封面']);
+        return button;
+    }
+
+    /** 封面直接落盘成短 URL，避免把图片塞进简介或展会记录。 */
+    async function pickCover(button) {
+        button.disabled = true;
+        try {
+            const stored = await call('media.import', { kind: 'image' });
+            if (!stored?.url) {
+                toast('未能读取所选图片', 'error');
+                return;
+            }
+            model.imageUri = stored.url;
+            renderCover();
+            toast(stored.compressed ? '封面已压缩并上传' : '封面已上传', 'success');
+        } catch (error) {
+            if (String(error.message).includes('取消')) {
+                return;
+            }
+            toast(error.message, 'error');
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    // ── 前端校验：上限来自「管理-设置」的服务器设置 ────────────────
+
+    const validators = [
+        fieldValidator({
+            control: titleInput,
+            label: '展会名称',
+            required: true,
+            max: limit('exhibitionTitle', 60),
+        }),
+        fieldValidator({
+            control: venueInput,
+            label: '展会地点',
+            required: true,
+            max: limit('exhibitionVenue', 60),
+        }),
+        fieldValidator({
+            control: dateInput,
+            label: '开展日期',
+            required: true,
+            pattern: PATTERNS.date,
+            patternMessage: '请选择开展日期',
+        }),
+        fieldValidator({
+            control: timeInput,
+            label: '开展时间',
+            max: 20,
+            pattern: PATTERNS.timeRange,
+            patternMessage: '请按 09:00-17:00 的格式填写',
+        }),
+        fieldValidator({
+            control: endInput,
+            label: '报名截止日期',
+            custom: () => {
+                const start = startInput.value;
+                const end = endInput.value;
+                if (start && end && end < start) {
+                    return '报名截止日期不能早于开始日期';
+                }
+                return '';
+            },
+        }),
+        fieldValidator({
+            control: categoryInput,
+            label: '展会分类',
+            max: limit('category', 20),
+            pattern: PATTERNS.category,
+            patternMessage: '分类只能包含中英文、数字与常见分隔符',
+        }),
+        fieldValidator({
+            control: startInput,
+            label: '报名开始日期',
+            custom: () => {
+                if (startInput.value && dateInput.value && startInput.value > dateInput.value) {
+                    return '报名开始日期不能晚于展会开展日期';
+                }
+                return '';
+            },
+        }),
+    ];
+
+    function validateFieldTitles() {
+        const max = limit('fieldTitle', 30);
+        for (const item of fields) {
+            const title = String(item.title || '').trim();
+            if (title.length === 0) {
+                continue;
+            }
+            if (title.length > max) {
+                return `收集项标题最多 ${max} 个字符`;
+            }
+        }
+        return '';
+    }
 
     function render() {
         updateDescriptionPreview();
         renderFields();
+        renderCover();
         replace(host, [
             el('div', { class: 'form' }, [
                 field('展会名称', titleInput, true),
@@ -140,9 +279,18 @@ export async function exhibitionFormPage(context) {
                 el('div', { class: 'grid-cols-2' }, [
                     field('报名开始', startInput),
                     field('报名截止', endInput, false, '截止后用户不可再提交报名'),
-                ]),                el('div', { class: 'field' }, [el('label', { text: '报名方式' }), modeHost, modeHint]),
+                ]),
+                el('div', { class: 'field' }, [el('label', { text: '报名方式' }), modeHost, modeHint]),
                 field('展会分类', categoryInput, false, '分类用于首页与搜索筛选'),
                 errorBox,
+            ]),
+            el('div', { class: 'card' }, [
+                el('div', { class: 'row', 'data-between': 'true' }, [
+                    el('span', { class: 'section-label', text: '展会封面' }),
+                    el('span', { class: 'pill', text: '1080 × 1920' }),
+                ]),
+                coverPreview,
+                coverHint,
             ]),
             el('div', { class: 'card' }, [
                 el('span', { class: 'section-label', text: '展会介绍' }),
@@ -236,7 +384,7 @@ export async function exhibitionFormPage(context) {
                 ]),
                 textInput(`field-title-${index}`, 'text', item.title, '字段标题', (value) => {
                     item.title = value;
-                }),
+                }, limit('fieldTitle', 30)),
                 el('div', { class: 'grid-cols-2' }, [
                     selectInput(`field-type-${index}`, ['文本', '单选', '多选'], item.type, (value) => {
                         item.type = value;
@@ -256,6 +404,14 @@ export async function exhibitionFormPage(context) {
 
     async function submit() {
         errorBox.hidden = true;
+        const result = validateAll(validators);
+        if (!result.ok) {
+            return fail(result.message, result.validator.control);
+        }
+        const fieldTitleError = validateFieldTitles();
+        if (fieldTitleError) {
+            return fail(fieldTitleError);
+        }
         const payload = {
             id: model.id,
             title: titleInput.value.trim(),
@@ -267,6 +423,7 @@ export async function exhibitionFormPage(context) {
             category: categoryInput.value.trim(),
             description: model.description,
             descriptionFormat: 'md',
+            imageUri: model.imageUri,
             registrationStart: startInput.value,
             registrationEnd: endInput.value,
             // 空选项不下发，避免保存出无意义的选项条目。
@@ -281,25 +438,16 @@ export async function exhibitionFormPage(context) {
                         : item.options.map((option) => option.trim()).filter(Boolean),
                 })),
         };
-        if (!payload.title) {
-            return fail('请填写展会名称', titleInput);
-        }
-        if (!payload.date) {
-            return fail('请选择开展日期', dateInput);
-        }
-        if (payload.registrationStart && payload.registrationEnd
-            && payload.registrationEnd < payload.registrationStart) {
-            return fail('报名截止日期不能早于开始日期', endInput);
-        }
         saveButton.disabled = true;
         try {
-            const result = await call('exhibitions.save', payload);
-            if (!result?.ok) {
+            const saved = await call('exhibitions.save', payload);
+            if (!saved?.ok) {
                 saveButton.disabled = false;
-                return fail(result?.error || '保存失败');
+                return fail(saved?.error || '保存失败');
             }
-            model.id = result.exhibition.id;
-            model.description = result.exhibition.description || model.description;
+            model.id = saved.exhibition.id;
+            model.description = saved.exhibition.description || model.description;
+            model.imageUri = saved.exhibition.imageUri || model.imageUri;
             toast(isCreate ? '展会已创建' : '展会已保存', 'success');
             if (isCreate) {
                 context.navigate('exhibition-form', { id: model.id }, { replace: true });
@@ -321,8 +469,11 @@ export async function exhibitionFormPage(context) {
 
     // ── 控件工厂 ───────────────────────────────────────────────────
 
-    function textInput(id, type, value, placeholder, onInput) {
+    function textInput(id, type, value, placeholder, onInput, maxLength) {
         const control = el('input', { class: 'input', id, type, placeholder, value: value || '' });
+        if (maxLength > 0) {
+            control.setAttribute('maxlength', String(maxLength));
+        }
         if (onInput) {
             control.addEventListener('input', () => onInput(control.value));
         }

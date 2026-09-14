@@ -8,6 +8,7 @@ import { call, state, whenReady } from '../core/bridge.js';
 import { scaffold } from '../core/router.js';
 import { toast } from '../ui/components.js';
 import { el, append } from '../core/dom.js';
+import { fieldValidator, validateAll, limit } from '../core/validate.js';
 
 export async function loginPage(context) {
     const body = scaffold({
@@ -44,6 +45,12 @@ export async function loginPage(context) {
         submit,
         guest,
     ]);
+
+    // 登录只校验必填与长度上限，不套用注册时的最短长度，避免老账号无法登录。
+    const validators = [
+        fieldValidator({ control: account, label: '账号', required: true, max: limit('usernameMax', 20) }),
+        fieldValidator({ control: password, label: '密码', required: true, max: limit('passwordMax', 32) }),
+    ];
 
     const intro = el('div', { class: 'stack', style: { textAlign: 'center', justifyItems: 'center' } }, [
         el('span', {
@@ -117,8 +124,9 @@ export async function loginPage(context) {
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         errorBox.hidden = true;
-        if (!account.value.trim() || !password.value) {
-            showError('请输入账号和密码');
+        const checked = validateAll(validators);
+        if (!checked.ok) {
+            showError(checked.message);
             return;
         }
         submit.dataset.loading = 'true';

@@ -8,6 +8,7 @@ import { call, state } from '../core/bridge.js';
 import { scaffold } from '../core/router.js';
 import { loadingBlock, stateBlock, toast, statusTag, statusTone } from '../ui/components.js';
 import { el, append, replace, formatDateWithWeekday } from '../core/dom.js';
+import { check, limit } from '../core/validate.js';
 
 export async function registrationFormPage(context) {
     const host = el('div', { class: 'stack' });
@@ -84,13 +85,19 @@ export async function registrationFormPage(context) {
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
             errorBox.hidden = true;
+            const answerLimit = limit('answer', 200);
             const answers = [];
             for (const field of fields) {
                 const value = readValue(field, inputs);
-                if (field.required && !value) {
-                    errorBox.textContent = `请完成：${field.title}`;
+                const error = check(value, {
+                    label: field.title,
+                    required: field.required,
+                    max: field.type === '文本' ? answerLimit : 0,
+                });
+                if (error) {
+                    errorBox.textContent = error;
                     errorBox.hidden = false;
-                    inputs.get(field.title)?.focus?.();
+                    focusField(field, inputs);
                     return;
                 }
                 answers.push(`${field.title}：${value || '未填写'}`);
@@ -103,6 +110,7 @@ export async function registrationFormPage(context) {
 
             const profile = state.user || {};
             const visitorName = profile.nickname || profile.username || '报名用户';
+            const autoApprove = exhibition.status === '无需审核';
             submit.dataset.loading = 'true';
             submit.disabled = true;
             try {
@@ -121,10 +129,15 @@ export async function registrationFormPage(context) {
                     errorBox.hidden = false;
                     return;
                 }
+                const approved = result.autoApproved === true || autoApprove;
+                success.querySelector('strong').textContent = approved ? '报名已通过' : '报名已提交';
+                success.querySelector('p').textContent = approved
+                    ? '该展会无需审核，已直接为你通过，可在“我的报名”查看。'
+                    : '需要审核的报名会在“我的报名”中显示状态。';
                 success.hidden = false;
-                submit.textContent = '已提交 · 待审核';
+                submit.textContent = approved ? '已提交 · 已通过' : '已提交 · 待审核';
                 submit.disabled = true;
-                toast('报名已提交', 'success');
+                toast(approved ? '报名已提交并通过' : '报名已提交', 'success');
                 setTimeout(() => context.navigate('my-registrations', {}, { replace: true }), 900);
             } catch (error) {
                 errorBox.textContent = error.message;
@@ -133,6 +146,20 @@ export async function registrationFormPage(context) {
                 submit.dataset.loading = 'false';
             }
         });
+    }
+
+    /** 校验失败时把焦点移到对应控件，单选/多选聚焦到第一项。 */
+    function focusField(field, inputs) {
+        const control = inputs.get(field.title);
+        if (!control) {
+            return;
+        }
+        if (control.querySelector) {
+            const inner = control.querySelector('input');
+            (inner || control).focus?.();
+            return;
+        }
+        control.focus?.();
     }
 
     function buildControl(field, inputs) {
@@ -188,6 +215,7 @@ export async function registrationFormPage(context) {
             id,
             type: 'text',
             placeholder: `请输入${field.title}`,
+            maxlength: String(limit('answer', 200)),
         });
         if (existing) {
             const match = new RegExp(`${escapeRegExp(field.title)}：(.*)`).exec(existing.answers || '');

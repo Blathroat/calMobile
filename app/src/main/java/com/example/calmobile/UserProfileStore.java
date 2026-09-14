@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * 个人主页与用户公开页的资料存储。
  * <p>
- * 现有 {@code AdminUser} 只保存昵称、邮箱和账号状态，个人简介、联系方式和公开策略属于新增字段，
+ * 现有 {@code AdminUser} 只保存昵称、邮箱和账号状态，个人简介、所在地区、头像和公开策略属于新增字段，
  * 统一放在 SharedPreferences 中持久化，键为登录用户名。
  */
 public final class UserProfileStore {
@@ -20,7 +20,10 @@ public final class UserProfileStore {
         public String nickname = "";
         public String email = "";
         public String bio = "";
-        public String contact = "";
+        /** 所在地区，代替旧版的“联系方式”。 */
+        public String region = "";
+        /** 头像图片的本地 URL（见 WebShellActivity.MEDIA_URL）。 */
+        public String avatar = "";
         public String socialMedia = "";
         public boolean showRegistrations = false;
     }
@@ -33,7 +36,7 @@ public final class UserProfileStore {
     }
 
     public static void save(Context context, String username, String nickname, String email, String bio,
-            String contact, String socialMedia, boolean showRegistrations) {
+            String region, String avatar, String socialMedia, boolean showRegistrations) {
         if (username == null || username.isEmpty()) {
             return;
         }
@@ -41,7 +44,8 @@ public final class UserProfileStore {
                 .putString(username + ".nickname", safe(nickname))
                 .putString(username + ".email", safe(email))
                 .putString(username + ".bio", safe(bio))
-                .putString(username + ".contact", safe(contact))
+                .putString(username + ".region", safe(region))
+                .putString(username + ".avatar", safe(avatar))
                 .putString(username + ".social", safe(socialMedia))
                 .putBoolean(username + ".showRegistrations", showRegistrations)
                 .apply();
@@ -60,7 +64,10 @@ public final class UserProfileStore {
         profile.nickname = store.getString(username + ".nickname", "");
         profile.email = store.getString(username + ".email", "");
         profile.bio = store.getString(username + ".bio", "");
-        profile.contact = store.getString(username + ".contact", "");
+        // 旧数据里“联系方式”写在 contact 键上，读取时作为所在地区的回退值。
+        String region = store.getString(username + ".region", "");
+        profile.region = region.isEmpty() ? store.getString(username + ".contact", "") : region;
+        profile.avatar = store.getString(username + ".avatar", "");
         profile.socialMedia = store.getString(username + ".social", "");
         profile.showRegistrations = store.getBoolean(username + ".showRegistrations", false);
         return profile;

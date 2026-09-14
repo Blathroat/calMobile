@@ -1,21 +1,43 @@
 /**
- * 屏幕 15 · 管理后台（用户 / 展会）
- * 线框：newUI/remaining-ui.html #screen-admin-backend
- * 业务：AdminUserManager 用户状态管理、ExhibitionManager 展会管理。
- * 展会卡片与展商后台保持一致；搜索、暂停与导出直接内联在本页，不再进入二级页面。
+ * 屏幕 15 · 管理后台（用户 / 展会 / 设置）
+ * 线框：newUI/remaining-ui.html #screen-admin-backend、#screen-admin-settings
+ * 业务：AdminUserManager 用户状态管理、ExhibitionManager 展会管理、AppSettings 服务器设置。
+ *
+ * 展会卡片与展商后台保持一致；搜索、暂停与导出直接内联在本页。
+ * 启动公告、展会分类、审核策略、媒体与上传限制、字符数上限都属于服务器设置，
+ * 保存后对所有用户生效，因此统一放在「设置」分区，不再有二级页面。
  */
 
-import { call } from '../core/bridge.js';
+import { call, state, applySettings } from '../core/bridge.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
-import { loadingBlock, stateBlock, statusTag, statusTone, toast, openSheet, segmented, confirmSheet } from '../ui/components.js';
+import {
+    loadingBlock,
+    stateBlock,
+    statusTag,
+    statusTone,
+    toast,
+    openSheet,
+    segmented,
+    confirmSheet,
+    switchRow,
+    mediaBox,
+} from '../ui/components.js';
 import { el, replace, truncate, formatDateWithWeekday } from '../core/dom.js';
+import { fieldValidator, validateAll } from '../core/validate.js';
 
 const USER_STATUSES = ['正常', '受限', '封禁'];
 
+const TABS = [
+    { value: '用户', label: '用户' },
+    { value: '展会', label: '展会' },
+    { value: '设置', label: '设置' },
+];
+
 export async function adminPage(context) {
     const host = el('div', { class: 'stack' });
-    let tab = context.params.tab || '用户';
+    let tab = TABS.some((item) => item.value === context.params.tab) ? context.params.tab : '用户';
     let query = '';
+    let settings = null;
 
     scaffold({
         title: '管理后台',
@@ -25,39 +47,30 @@ export async function adminPage(context) {
         children: [host],
     });
 
-    renderTabs();
-
-    function renderTabs() {
-        replace(host, [
-            segmented({
-                label: '管理分区',
-                value: tab,
-                items: [
-                    { value: '用户', label: '用户' },
-                    { value: '展会', label: '展会' },
-                ],
-                onChange: (value) => {
-                    tab = value;
-                    query = '';
-                    renderTabs();
-                },
-            }),
-            el('div', { class: 'stack', id: 'admin-panel' }),
-        ]);
-        loadPanel();
-    }
+    // 分段控件只创建一次，切换时滑块平滑滑动，面板内容单独更新。
+    const tabs = segmented({
+        label: '管理分区',
+        value: tab,
+        items: TABS,
+        onChange: (value) => {
+            tab = value;
+            query = '';
+            loadPanel();
+        },
+    });
+    const panel = el('div', { class: 'stack', id: 'admin-panel' });
+    replace(host, [tabs, panel]);
+    loadPanel();
 
     async function loadPanel() {
-        const panel = host.querySelector('#admin-panel');
-        if (!panel) {
-            return;
-        }
         replace(panel, loadingBlock(3));
         try {
             if (tab === '用户') {
                 await renderUsers(panel);
-            } else {
+            } else if (tab === '展会') {
                 await renderExhibitions(panel);
+            } else {
+                await renderSettings(panel);
             }
         } catch (error) {
             replace(panel, stateBlock({
@@ -71,7 +84,7 @@ export async function adminPage(context) {
 
     // ── 用户管理 ───────────────────────────────────────────────────
 
-    async function renderUsers(panel) {
+    async function renderUsers(target) {
         const users = await call('users.list', { query });
         const cards = el('div', { class: 'list', 'data-gap': 'sm' }, users.map((user) => el('div', { class: 'card' }, [
             el('div', { class: 'row', 'data-gap': 'md' }, [
@@ -89,7 +102,7 @@ export async function adminPage(context) {
             ]),
         ])));
 
-        replace(panel, [
+        replace(target, [
             el('div', { class: 'row', 'data-between': 'true' }, [
                 el('span', { class: 'section-label', text: '用户管理' }),
                 el('span', { class: 'pill', text: `${users.length} 位用户` }),
@@ -101,7 +114,10 @@ export async function adminPage(context) {
                     loadPanel();
                 }),
             ]),
-            el('p', { class: 'row-meta', text: '账号状态、权限与最近登录；状态变更会立即写入本地数据库。' }),
+            el('div', { class: 'notice' }, [
+                el('strong', { text: '账号状态' }),
+                el('span', { text: '状态变更会立即写入本地数据库，受限用户保留登录但限制报名。' }),
+            ]),
             users.length > 0
                 ? cards
                 : stateBlock({ title: query ? `没有找到与“${query}”相关的用户` : '暂无用户数据' }),
@@ -159,9 +175,9 @@ export async function adminPage(context) {
 
     // ── 展会管理 ───────────────────────────────────────────────────
 
-    async function renderExhibitions(panel) {
+    async function renderExhibitions(target) {
         const items = await call('exhibitions.list', { query });
-        replace(panel, [
+        replace(target, [
             el('div', { class: 'field' }, [
                 el('label', { for: 'admin-exhibition-search', text: '搜索展会' }),
                 searchInput('admin-exhibition-search', '展会名称、地点或分类', (value) => {
@@ -203,7 +219,7 @@ export async function adminPage(context) {
                 style: { border: '0', padding: '0', background: 'transparent' },
                 onclick: () => context.navigate('detail', { id: item.id }),
             }, [
-                el('span', { class: 'thumb ph-img', 'aria-hidden': 'true' }),
+                mediaBox({ src: item.imageUri, className: 'thumb thumb-cover' }),
                 el('span', { class: 'row-copy' }, [
                     el('strong', { class: 'row-title truncate', text: item.title }),
                     el('span', { class: 'row-meta', text: `${formatDateWithWeekday(item.date)} ${item.time}` }),
@@ -260,6 +276,202 @@ export async function adminPage(context) {
         }
     }
 
+    // ── 服务器设置 ─────────────────────────────────────────────────
+
+    async function renderSettings(target) {
+        const data = settings || await call('settings.get');
+        settings = data;
+
+        const announcement = textarea('settings-announcement', data?.announcement?.text || '', 3);
+        const categories = textarea('settings-categories', (data?.categories || []).join('\n'), 4);
+        const imageCount = numberInput('settings-image-count', data?.media?.imageCount ?? state.media.imageCount ?? 8);
+        const imageSize = numberInput('settings-image-size', data?.media?.imageSizeMb ?? state.media.imageSizeMb ?? 10);
+        const videoCount = numberInput('settings-video-count', data?.media?.videoCount ?? state.media.videoCount ?? 2);
+        const avatarSize = numberInput('settings-avatar-size', data?.upload?.avatarSizeMb ?? state.server.avatarSizeMb ?? 2);
+        const imageFormats = textInput('settings-image-formats',
+            (data?.upload?.imageFormats || state.server.imageFormats || []).join(','), 'jpg,jpeg,png,webp');
+        const videoFormats = textInput('settings-video-formats',
+            (data?.upload?.videoFormats || state.server.videoFormats || []).join(','), 'mp4,mov,webm');
+        const limits = data?.limits || state.limits;
+
+        const titleLimit = numberInput('limit-exhibition-title', limits.exhibitionTitle);
+        const venueLimit = numberInput('limit-exhibition-venue', limits.exhibitionVenue);
+        const categoryLimit = numberInput('limit-category', limits.category);
+        const fieldLimit = numberInput('limit-field-title', limits.fieldTitle);
+        const usernameMin = numberInput('limit-username-min', limits.usernameMin);
+        const usernameMax = numberInput('limit-username-max', limits.usernameMax);
+        const passwordMin = numberInput('limit-password-min', limits.passwordMin);
+        const passwordMax = numberInput('limit-password-max', limits.passwordMax);
+        const nicknameLimit = numberInput('limit-nickname', limits.nickname);
+        const bioLimit = numberInput('limit-bio', limits.bio);
+        const regionLimit = numberInput('limit-region', limits.region);
+        const answerLimit = numberInput('limit-answer', limits.answer);
+
+        let announcementEnabled = Boolean(data?.announcement?.enabled);
+        let canRevise = Boolean(data?.review?.canRevise);
+
+        const validators = [
+            fieldValidator({
+                control: imageFormats,
+                label: '图片格式',
+                max: 120,
+                pattern: /^[A-Za-z0-9]+(\s*,\s*[A-Za-z0-9]+)*$/,
+                patternMessage: '请用英文逗号分隔后缀，例如 jpg,png',
+            }),
+            fieldValidator({
+                control: videoFormats,
+                label: '视频格式',
+                max: 120,
+                pattern: /^[A-Za-z0-9]+(\s*,\s*[A-Za-z0-9]+)*$/,
+                patternMessage: '请用英文逗号分隔后缀，例如 mp4,mov',
+            }),
+        ];
+        const errorBox = el('p', { class: 'field-error', role: 'alert', hidden: true });
+
+        replace(target, [
+            el('div', { class: 'notice', dataset: { tone: 'accent' } }, [
+                el('strong', { text: '服务器设置' }),
+                el('span', { text: '这里的配置保存在服务端，保存后对所有用户与展商同时生效。' }),
+            ]),
+            el('div', { class: 'card' }, [
+                el('span', { class: 'section-label', text: '进入应用时的公告' }),
+                announcement,
+                switchRow({
+                    id: 'settings-announcement-enabled',
+                    label: '进入应用时显示公告',
+                    description: '用户打开首页时展示一次',
+                    checked: announcementEnabled,
+                    onChange: (value) => {
+                        announcementEnabled = value;
+                    },
+                }),
+            ]),
+            el('div', { class: 'card' }, [
+                el('span', { class: 'section-label', text: '展会分类管理' }),
+                categories,
+                el('p', { class: 'field-hint', text: '每行一个分类，用于展商填写与搜索筛选。' }),
+            ]),
+            el('div', { class: 'card' }, [
+                el('span', { class: 'section-label', text: '审核策略' }),
+                switchRow({
+                    id: 'settings-revise',
+                    label: '允许修改已通过或已拒绝的报名',
+                    description: '开启后展商可以重新审核已处理的报名；无需审核的展会提交后直接通过。',
+                    checked: canRevise,
+                    onChange: (value) => {
+                        canRevise = value;
+                    },
+                }),
+            ]),
+            el('div', { class: 'card' }, [
+                el('span', { class: 'section-label', text: '富文本媒体限制' }),
+                numberField('每篇图片数量上限', imageCount, '张'),
+                numberField('单张图片大小', imageSize, 'MB'),
+                numberField('视频数量上限', videoCount, '个'),
+            ]),
+            el('div', { class: 'card' }, [
+                el('span', { class: 'section-label', text: '上传格式限制' }),
+                el('div', { class: 'field' }, [
+                    el('label', { for: imageFormats.id, text: '允许的图片后缀' }),
+                    imageFormats,
+                    el('p', { class: 'field-hint', text: '由文件后缀与英文逗号组成，例如 jpg,jpeg,png,webp。' }),
+                ]),
+                el('div', { class: 'field' }, [
+                    el('label', { for: videoFormats.id, text: '允许的视频后缀' }),
+                    videoFormats,
+                    el('p', { class: 'field-hint', text: '例如 mp4,mov,webm，超出列表的文件会被拒绝。' }),
+                ]),
+                numberField('头像大小上限', avatarSize, 'MB'),
+            ]),
+            el('div', { class: 'card' }, [
+                el('span', { class: 'section-label', text: '表单字符数上限' }),
+                el('p', { class: 'field-hint', text: '作用于普通用户与展商可自由填写的字段，超长时前端即时提示。' }),
+                el('div', { class: 'grid-cols-2' }, [
+                    numberField('展会名称', titleLimit, '字'),
+                    numberField('展会地点', venueLimit, '字'),
+                ]),
+                el('div', { class: 'grid-cols-2' }, [
+                    numberField('展会分类', categoryLimit, '字'),
+                    numberField('收集项标题', fieldLimit, '字'),
+                ]),
+                el('div', { class: 'grid-cols-2' }, [
+                    numberField('用户名最短', usernameMin, '字'),
+                    numberField('用户名最长', usernameMax, '字'),
+                ]),
+                el('div', { class: 'grid-cols-2' }, [
+                    numberField('密码最短', passwordMin, '位'),
+                    numberField('密码最长', passwordMax, '位'),
+                ]),
+                el('div', { class: 'grid-cols-2' }, [
+                    numberField('昵称上限', nicknameLimit, '字'),
+                    numberField('简介上限', bioLimit, '字'),
+                ]),
+                numberField('地区上限', regionLimit, '字'),
+                numberField('报名填写内容', answerLimit, '字'),
+            ]),
+            errorBox,
+            el('button', {
+                class: 'cta',
+                type: 'button',
+                onclick: () => saveSettings(),
+            }, ['保存服务器设置']),
+            el('p', {
+                class: 'field-hint',
+                style: { textAlign: 'center' },
+                text: '保存后立即下发到所有用户的表单校验与上传校验。',
+            }),
+        ]);
+
+        async function saveSettings() {
+            const result = validateAll(validators);
+            if (!result.ok) {
+                errorBox.textContent = result.message;
+                errorBox.hidden = false;
+                result.validator.focus();
+                return;
+            }
+            errorBox.hidden = true;
+            try {
+                const saved = await call('settings.save', {
+                    announcement: announcement.value.trim(),
+                    announcementEnabled,
+                    categories: categories.value.split('\n').map((item) => item.trim()).filter(Boolean),
+                    canRevise,
+                    imageCount: Number(imageCount.value) || 0,
+                    imageSizeMb: Number(imageSize.value) || 0,
+                    videoCount: Number(videoCount.value) || 0,
+                    avatarSizeMb: Number(avatarSize.value) || 0,
+                    imageFormats: imageFormats.value.trim(),
+                    videoFormats: videoFormats.value.trim(),
+                    exhibitionTitle: Number(titleLimit.value) || 0,
+                    exhibitionVenue: Number(venueLimit.value) || 0,
+                    category: Number(categoryLimit.value) || 0,
+                    fieldTitle: Number(fieldLimit.value) || 0,
+                    usernameMin: Number(usernameMin.value) || 0,
+                    usernameMax: Number(usernameMax.value) || 0,
+                    passwordMin: Number(passwordMin.value) || 0,
+                    passwordMax: Number(passwordMax.value) || 0,
+                    nickname: Number(nicknameLimit.value) || 0,
+                    bio: Number(bioLimit.value) || 0,
+                    region: Number(regionLimit.value) || 0,
+                    answer: Number(answerLimit.value) || 0,
+                });
+                if (!saved?.ok) {
+                    errorBox.textContent = '保存失败，请稍后重试';
+                    errorBox.hidden = false;
+                    return;
+                }
+                settings = saved.settings;
+                applySettings(settings);
+                toast('服务器设置已保存', 'success');
+                loadPanel();
+            } catch (error) {
+                errorBox.textContent = error.message;
+                errorBox.hidden = false;
+            }
+        }
+    }
+
     // ── 小工具 ─────────────────────────────────────────────────────
 
     function smallButton(label, onClick) {
@@ -269,6 +481,37 @@ export async function adminPage(context) {
             style: { minHeight: '44px', fontSize: 'var(--fs-label)', flex: '1 1 0' },
             onclick: onClick,
         }, [label]);
+    }
+
+    function numberField(label, control, suffix) {
+        return el('div', { class: 'field' }, [
+            el('label', { for: control.id, text: label }),
+            el('div', { class: 'row', 'data-gap': 'md' }, [
+                control,
+                el('span', { class: 'row-meta', text: suffix }),
+            ]),
+        ]);
+    }
+
+    function textarea(id, value, rows) {
+        const control = el('textarea', { class: 'textarea', id, rows: rows || 3 });
+        control.value = value || '';
+        return control;
+    }
+
+    function textInput(id, value, placeholder) {
+        return el('input', { class: 'input', id, type: 'text', value: value || '', placeholder });
+    }
+
+    function numberInput(id, value) {
+        return el('input', {
+            class: 'input',
+            id,
+            type: 'number',
+            min: '0',
+            value: String(value ?? 0),
+            inputmode: 'numeric',
+        });
     }
 
     /** 搜索框带 220ms 防抖，避免每次按键都触发一次桥接。 */

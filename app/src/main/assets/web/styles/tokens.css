@@ -363,7 +363,7 @@ svg {
 }
 
 .eyebrow {
-    color: var(--ink-3);
+    color: var(--accent-ink);
     font-size: var(--fs-eyebrow);
     font-weight: 600;
     letter-spacing: .08em;
@@ -388,10 +388,33 @@ svg {
     border: 0;
 }
 
+/* 区块标题前的小色条随管理员配色变化，让配色改动一眼可见 */
 .section-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
     color: var(--ink-2);
     font-size: var(--fs-label);
     font-weight: 700;
+}
+
+.section-label::before {
+    content: "";
+    width: 3px;
+    height: 14px;
+    border-radius: var(--r-pill);
+    background: var(--accent);
+}
+
+/* 顶部栏标题下的强调短线，同样跟随配色 */
+.topbar-title::after {
+    content: "";
+    display: block;
+    width: 18px;
+    height: 2px;
+    margin-top: 3px;
+    border-radius: var(--r-pill);
+    background: var(--accent);
 }
 
 /* ============================================================================
@@ -553,10 +576,11 @@ svg {
     line-height: 1.35;
 }
 
+/* 展会图片统一按设计稿的 1080×1920（9:16）竖版比例展示，避免图片被拉成方块 */
 .thumb {
     flex: none;
-    width: 56px;
-    height: 56px;
+    width: 45px;
+    height: 80px;
     border: var(--hairline) solid var(--stroke);
     border-radius: var(--r-input);
     background: var(--f3);
@@ -578,9 +602,31 @@ svg {
     overflow: hidden;
 }
 
+.avatar.has-image {
+    border-color: var(--accent-edge);
+}
+
+.avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.avatar-lg {
+    width: 64px;
+    height: 64px;
+    font-size: 24px;
+}
+
 .thumb-sm {
-    width: 44px;
-    height: 44px;
+    width: 38px;
+    height: 68px;
+}
+
+/* 9:16 的短视频/封面槽位（展会卡片、报名记录等） */
+.thumb-cover {
+    aspect-ratio: 1080 / 1920;
 }
 
 /* 图片占位：线框的 .ph-img 斜线方块 */
@@ -600,13 +646,19 @@ svg {
     display: block;
 }
 
+/* 展会封面：1080×1920 的竖版海报，宽度收窄后居中展示 */
 .hero {
-    width: 100%;
-    aspect-ratio: 16 / 9;
+    width: min(100%, 260px);
+    aspect-ratio: 1080 / 1920;
+    margin-inline: auto;
     border: var(--hairline) solid var(--stroke);
     border-radius: var(--r-panel);
     background: var(--f3);
     overflow: hidden;
+}
+
+.hero-compact {
+    width: min(100%, 168px);
 }
 
 .hero > img {
@@ -614,6 +666,94 @@ svg {
     height: 100%;
     object-fit: cover;
     display: block;
+}
+
+/* 圆形头像裁剪 */
+.crop-wrap {
+    display: grid;
+    place-items: center;
+    padding: var(--s3) 0;
+}
+
+.crop-stage {
+    position: relative;
+    border-radius: var(--r-pill);
+    background: var(--f3);
+    box-shadow: 0 0 0 2px var(--accent-edge), 0 12px 28px rgba(31, 35, 40, .18);
+    overflow: hidden;
+    touch-action: none;
+    cursor: grab;
+}
+
+.crop-stage[data-dragging="true"] {
+    cursor: grabbing;
+}
+
+.crop-image {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: none;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.crop-zoom {
+    width: 100%;
+    accent-color: var(--accent);
+}
+
+/* 表单字数计数与密码强度 */
+.field-counter {
+    align-self: flex-end;
+    color: var(--ink-3);
+    font-size: var(--fs-tag);
+    font-variant-numeric: tabular-nums;
+}
+
+.field-counter[data-over="true"] {
+    color: var(--danger-ink);
+}
+
+.password-meter {
+    min-width: 56px;
+    padding: 2px var(--s2);
+    border-radius: var(--r-chip);
+    background: var(--f1);
+    color: var(--ink-2);
+    font-size: var(--fs-tag);
+    font-weight: 700;
+    text-align: center;
+}
+
+.password-meter[data-level="2"] {
+    background: #f6ecd7;
+    color: var(--warn-ink);
+}
+
+.password-meter[data-level="3"] {
+    background: var(--accent-tint);
+    color: var(--accent-ink);
+}
+
+/* 配色色板 */
+.swatch {
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    border: var(--hairline) solid var(--stroke);
+    border-radius: var(--r-pill);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+}
+
+.swatch[aria-pressed="true"] {
+    border: 3px solid var(--ink);
+    box-shadow: 0 0 0 3px var(--accent-tint);
 }
 
 /* ============================================================================
@@ -1057,6 +1197,7 @@ svg {
  * ==========================================================================*/
 
 .seg {
+    position: relative;
     display: flex;
     gap: var(--s1);
     padding: var(--s1);
@@ -1071,7 +1212,31 @@ svg {
     display: none;
 }
 
+/* 选中滑块：由脚本定位到当前按钮，切换时平滑滑动过去 */
+.seg-indicator {
+    position: absolute;
+    top: var(--s1);
+    left: 0;
+    bottom: var(--s1);
+    width: 0;
+    z-index: 0;
+    border-radius: var(--r-chip);
+    background: var(--accent);
+    box-shadow: 0 4px 12px rgba(31, 35, 40, .16);
+    pointer-events: none;
+}
+
+.seg-indicator[data-animate="true"] {
+    transition: transform var(--motion-normal) var(--ease-out), width var(--motion-normal) var(--ease-out);
+}
+
+.seg-indicator[data-hidden="true"] {
+    opacity: 0;
+}
+
 .seg button {
+    position: relative;
+    z-index: 1;
     flex: 1 1 auto;
     min-width: 76px;
     min-height: 44px;
@@ -1087,9 +1252,9 @@ svg {
 }
 
 .seg button[aria-pressed="true"] {
-    background: var(--dark);
+    background: transparent;
     color: var(--screen);
-    border-color: var(--dark);
+    border-color: transparent;
 }
 
 /* ============================================================================
@@ -1097,6 +1262,7 @@ svg {
  * ==========================================================================*/
 
 .tabbar {
+    position: relative;
     display: flex;
     align-items: stretch;
     justify-content: space-around;
@@ -1105,6 +1271,28 @@ svg {
     padding-inline: var(--s2);
     border-top: var(--hairline) solid var(--stroke);
     background: var(--screen);
+}
+
+/* 底部导航的选中指示条：切换标签时从上一个位置滑到下一个位置 */
+.tabbar-indicator {
+    position: absolute;
+    bottom: 4px;
+    left: 0;
+    width: 22px;
+    height: 3px;
+    margin-left: -11px;
+    border-radius: var(--r-pill);
+    background: var(--accent);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.tabbar-indicator[data-hidden="false"] {
+    opacity: 1;
+}
+
+.tabbar-indicator[data-ready="true"] {
+    transition: transform var(--motion-normal) var(--ease-spring), opacity var(--motion-quick) var(--ease-standard);
 }
 
 .tab {
@@ -1130,7 +1318,7 @@ svg {
 }
 
 .tab[aria-current="page"] {
-    color: var(--dark);
+    color: var(--accent-ink);
     font-weight: 700;
 }
 
@@ -1490,11 +1678,20 @@ svg {
  * 日历（首页月视图）
  * ==========================================================================*/
 
+/* 日历外层：横向手势由脚本接管，纵向仍然交给页面滚动 */
+.calendar-swipe {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--r-panel);
+    touch-action: pan-y;
+}
+
 .calendar {
     padding: var(--s2);
     border: var(--hairline) solid var(--stroke);
     border-radius: var(--r-panel);
     background: var(--f3);
+    will-change: transform;
 }
 
 .week-row,
@@ -1526,6 +1723,16 @@ svg {
     transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
 }
 
+/* 需要六行才能排满的月份：额外增加一行，同时压缩行高保证整卡仍然可见 */
+.calendar[data-rows="6"] .cal-day {
+    min-height: 38px;
+    font-size: var(--fs-meta);
+}
+
+.calendar[data-rows="6"] .week-row {
+    margin-bottom: 2px;
+}
+
 .cal-day[data-muted="true"] {
     color: var(--ink-3);
 }
@@ -1542,8 +1749,12 @@ svg {
     transform: translateX(-50%);
 }
 
+.calendar[data-rows="6"] .cal-day[data-has-event="true"]::after {
+    bottom: 3px;
+}
+
 .cal-day[aria-pressed="true"] {
-    background: var(--dark);
+    background: var(--accent);
     color: var(--screen);
     font-weight: 700;
 }
@@ -1591,7 +1802,7 @@ svg {
     }
 
     .cal-day[aria-pressed="true"]:hover {
-        background: var(--dark);
+        background: var(--accent);
         color: var(--screen);
     }
 
@@ -1602,8 +1813,8 @@ svg {
     }
 
     .seg button[aria-pressed="true"]:hover {
-        background: var(--dark);
-        border-color: var(--dark);
+        background: transparent;
+        border-color: transparent;
         color: var(--screen);
     }
 

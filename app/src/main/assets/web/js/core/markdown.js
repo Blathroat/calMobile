@@ -9,11 +9,67 @@
 
 import { sanitizeHtml } from './sanitize.js';
 
+/** 内置的 Markdown 引擎：EasyMDE 打包了 marked，这里按需加载同一个文件。 */
+export const MARKED_SCRIPT = 'vendor/easymde/easymde.min.js';
+
+/** 调用 EasyMDE.prototype.markdown 时的最小上下文，避免它访问 options 报错。 */
+const MARKDOWN_CONTEXT = { options: {} };
+
+/**
+ * 取出可用的 Markdown 渲染函数。
+ * <p>
+ * EasyMDE 的构建产物只把自身挂到 window.EasyMDE，内置的 marked 并不导出到全局，
+ * 因此优先使用 marked，其次复用 EasyMDE.prototype.markdown —— 它渲染出来的结果
+ * 与编辑器的实时预览完全一致。
+ */
 function resolveMarked() {
     if (typeof window === 'undefined') {
         return null;
     }
-    return window.marked || null;
+    const marked = window.marked;
+    if (marked && typeof marked.parse === 'function') {
+        return (source) => marked.parse(source);
+    }
+    const easyMDE = window.EasyMDE;
+    if (easyMDE && easyMDE.prototype && typeof easyMDE.prototype.markdown === 'function') {
+        return (source) => easyMDE.prototype.markdown.call(MARKDOWN_CONTEXT, source);
+    }
+    return null;
+}
+
+let markedPromise = null;
+
+/**
+ * 确保 Markdown 渲染函数可用。
+ * <p>
+ * 只有编辑简介的页面会主动加载 EasyMDE，而展会详情同样需要渲染 Markdown，
+ * 因此在展示前按需加载同一个内置文件，避免详情页把 Markdown 当成空内容。
+ */
+export function ensureMarked() {
+    const render = resolveMarked();
+    if (render) {
+        return Promise.resolve(render);
+    }
+    if (typeof document === 'undefined') {
+        return Promise.reject(new Error('当前环境不支持 Markdown 渲染'));
+    }
+    if (!markedPromise) {
+        markedPromise = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = MARKED_SCRIPT;
+            script.onload = () => {
+                const loaded = resolveMarked();
+                if (loaded) {
+                    resolve(loaded);
+                } else {
+                    reject(new Error('Markdown 引擎未注册到全局'));
+                }
+            };
+            script.onerror = () => reject(new Error('无法加载 Markdown 引擎'));
+            document.head.appendChild(script);
+        });
+    }
+    return markedPromise;
 }
 
 /** Markdown → 清洗后的 HTML。 */
@@ -22,12 +78,21 @@ export function markdownToHtml(markdown) {
     if (source.trim() === '') {
         return '';
     }
-    const marked = resolveMarked();
-    if (!marked) {
+    const render = resolveMarked();
+    if (!render) {
         return '';
     }
-    const html = typeof marked.parse === 'function' ? marked.parse(source) : marked(source);
-    return sanitizeHtml(html);
+    return sanitizeHtml(render(source));
+}
+
+/** 先确保引擎可用再渲染，供详情页等异步场景使用。 */
+export async function renderMarkdown(markdown) {
+    try {
+        await ensureMarked();
+    } catch (error) {
+        return '';
+    }
+    return markdownToHtml(markdown);
 }
 
 /** 判断文本是否包含 Markdown 结构，用于旧数据的格式推断。 */

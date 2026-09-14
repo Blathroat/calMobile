@@ -34,7 +34,7 @@ const EXPECTED_PAGES = [
     ['rich-editor.js', '12 Markdown 简介编辑'],
     ['review.js', '13 报名审核'],
     ['user-public.js', '14 用户公开页'],
-    ['admin.js', '15 管理后台（用户 / 展会内联）'],
+    ['admin.js', '15 管理后台（用户 / 展会 / 设置）'],
 ];
 
 /** 内置的前端依赖：文件名 → 说明。 */
@@ -77,7 +77,8 @@ function checkFileLayout() {
         }
     }
     for (const required of ['index.html', 'styles/tokens.css', 'styles/motion.css', 'js/app.js',
-        'js/core/bridge.js', 'js/core/router.js', 'js/core/markdown.js', 'js/ui/components.js']) {
+        'js/core/bridge.js', 'js/core/router.js', 'js/core/markdown.js', 'js/core/validate.js',
+        'js/ui/components.js']) {
         if (!fs.existsSync(path.join(webRoot, required))) {
             fail(`缺少前端资源 ${required}`);
         }

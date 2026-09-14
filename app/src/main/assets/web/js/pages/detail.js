@@ -8,7 +8,7 @@ import { call, state } from '../core/bridge.js';
 import { scaffold, topAction } from '../core/router.js';
 import { stateBlock, loadingBlock, statusTag, statusTone, toast, openSheet } from '../ui/components.js';
 import { sanitizeHtml, plainText } from '../core/sanitize.js';
-import { markdownToHtml } from '../core/markdown.js';
+import { renderMarkdown } from '../core/markdown.js';
 import { el, append, replace, formatDateWithWeekday } from '../core/dom.js';
 
 export async function detailPage(context) {
@@ -117,17 +117,24 @@ export async function detailPage(context) {
         ]);
     }
 
+    /** 展会封面：设计比例为 1080×1920 的竖版海报。 */
     function heroBlock() {
         const box = el('div', { class: 'hero ph-img' });
-        if (exhibition.imageUri) {
-            call('media.imageData', { uri: exhibition.imageUri })
-                .then((dataUrl) => {
-                    if (dataUrl) {
-                        append(box, el('img', { src: dataUrl, alt: `${exhibition.title} 展会图片` }));
-                    }
-                })
-                .catch(() => undefined);
+        const uri = String(exhibition.imageUri || '');
+        if (!uri) {
+            return box;
         }
+        if (/^(https?:|data:)/.test(uri)) {
+            append(box, el('img', { src: uri, alt: `${exhibition.title} 展会图片` }));
+            return box;
+        }
+        call('media.imageData', { uri })
+            .then((dataUrl) => {
+                if (dataUrl) {
+                    append(box, el('img', { src: dataUrl, alt: `${exhibition.title} 展会图片` }));
+                }
+            })
+            .catch(() => undefined);
         return box;
     }
 
@@ -143,12 +150,21 @@ export async function detailPage(context) {
                 : el('p', { class: 'muted', text: '展商还没有补充展会介绍。' });
         }
 
-        // 默认按 Markdown 渲染（编辑器保存的格式），空内容时给出可执行的下一步。
-        const html = markdownToHtml(raw);
-        if (!html) {
+        // 默认按 Markdown 渲染（编辑器保存的格式）；marked 需要按需加载，因此先占位再填充。
+        if (raw.trim() === '') {
             return el('p', { class: 'muted', text: '展商还没有补充展会介绍。' });
         }
-        return el('div', { class: 'rich-content', html });
+        const box = el('div', { class: 'rich-content' }, [loadingBlock(2)]);
+        renderMarkdown(raw)
+            .then((html) => {
+                replace(box, html
+                    ? [el('div', { class: 'rich-content', html })]
+                    : [el('p', { class: 'muted', text: '展商还没有补充展会介绍。' })]);
+            })
+            .catch(() => {
+                replace(box, [el('p', { class: 'muted', text: '简介渲染失败，请稍后重试。' })]);
+            });
+        return box;
     }
 
     function metaRow(iconName, text) {

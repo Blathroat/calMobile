@@ -78,18 +78,75 @@ export function topbar({ title, onBack, actions = [], showBack = true }) {
     return bar;
 }
 
-/** 分段控件：保持 newUI 的选中态与悬浮语义。 */
+/**
+ * 分段控件：选中态是一个会滑动的滑块，切换时平滑移动到目标按钮。
+ *
+ * 返回的节点额外暴露 `setValue`，页面可以只更新选中项而不重建 DOM，
+ * 滑动动画因此不会因为重新渲染而中断（管理后台的 用户/展会/设置 就依赖这一点）。
+ */
 export function segmented({ items, value, onChange, label }) {
     const group = el('div', { class: 'seg', role: 'group', 'aria-label': label || '筛选' });
+    const indicator = el('span', { class: 'seg-indicator', 'aria-hidden': 'true' });
+    append(group, indicator);
+
+    const buttons = [];
+    let current = String(value ?? '');
+    let mounted = false;
+
     for (const item of items) {
-        const active = String(item.value) === String(value);
-        append(group, el('button', {
+        const button = el('button', {
             type: 'button',
-            'aria-pressed': active ? 'true' : 'false',
-            onclick: () => onChange?.(item.value),
-        }, [item.label]));
+            'aria-pressed': String(item.value) === current ? 'true' : 'false',
+            onclick: () => {
+                if (String(item.value) === current) {
+                    return;
+                }
+                setValue(item.value, true);
+                onChange?.(item.value);
+            },
+        }, [item.label]);
+        button.dataset.value = String(item.value);
+        buttons.push(button);
+        append(group, button);
     }
+
+    /** 滑块跟随选中按钮；首次定位不加过渡，避免从左侧滑过来。 */
+    function position(animate) {
+        const active = buttons.find((button) => button.dataset.value === current);
+        if (!active || active.offsetWidth === 0) {
+            indicator.dataset.hidden = 'true';
+            return;
+        }
+        indicator.dataset.hidden = 'false';
+        indicator.dataset.animate = animate && mounted ? 'true' : 'false';
+        indicator.style.width = `${active.offsetWidth}px`;
+        indicator.style.transform = `translate3d(${active.offsetLeft}px, 0, 0)`;
+        mounted = true;
+    }
+
+    function setValue(next, animate = true) {
+        current = String(next ?? '');
+        for (const button of buttons) {
+            button.setAttribute('aria-pressed', button.dataset.value === current ? 'true' : 'false');
+        }
+        position(animate);
+    }
+
+    // 挂载后才知道真实宽度，因此在下一帧再定位。
+    const schedule = () => {
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => position(false));
+        }
+    };
+    schedule();
+    group.setValue = setValue;
+    group.syncIndicator = () => position(false);
     return group;
+}
+
+/** 让已挂载的分段控件在尺寸变化后重新对齐滑块（例如旋转屏幕）。 */
+export function syncSegments(root = document) {
+    root.querySelectorAll?.('.seg').forEach((group) => group.syncIndicator?.());
 }
 
 /** 空 / 加载 / 错误 / 成功状态，均给出下一步说明。 */
@@ -362,4 +419,163 @@ export function mediaBox({ src, className = 'thumb', alt = '', fallbackText = ''
         box.setAttribute('aria-hidden', 'true');
     }
     return box;
+}
+
+// ── 头像 ──────────────────────────────────────────────────────────
+
+/** 圆形头像：有图时展示图片，没有头像时回落到昵称首字。 */
+export function avatarNode({ src, name = '', className = 'avatar', label }) {
+    const box = el('span', {
+        class: `${className}${src ? ' has-image' : ''}`,
+        'aria-label': label || `${name || '用户'}的头像`,
+    });
+    if (src) {
+        append(box, el('img', { src, alt: '' }));
+    } else {
+        append(box, el('span', { text: (name || '用').slice(0, 1), 'aria-hidden': 'true' }));
+    }
+    return box;
+}
+
+const CROP_OUTPUT_SIZE = 512;
+
+/**
+ * 简单的圆形头像裁剪：拖动平移、滑块缩放，确认后导出方形画布。
+ * 只依赖 canvas，不引入任何图像处理库；输出的 data URL 交给
+ * `media.store` 落盘并换成短 URL。
+ */
+export function openAvatarCropper({ source, onDone, onError }) {
+    const stageSize = 248;
+    const state = { x: 0, y: 0, zoom: 1, base: 1, width: 0, height: 0, ready: false };
+
+    const image = el('img', { class: 'crop-image', src: source, alt: '' });
+    const stage = el('div', { class: 'crop-stage' }, [image]);
+    stage.style.width = `${stageSize}px`;
+    stage.style.height = `${stageSize}px`;
+
+    const zoom = el('input', {
+        class: 'crop-zoom',
+        id: 'avatar-zoom',
+        type: 'range',
+        min: '1',
+        max: '3',
+        step: '0.01',
+        value: '1',
+        'aria-label': '缩放头像',
+    });
+    const hint = el('p', { class: 'field-hint', text: '拖动图片调整位置，使用滑块缩放。' });
+
+    function clamp() {
+        const displayWidth = state.width * state.base * state.zoom;
+        const displayHeight = state.height * state.base * state.zoom;
+        const maxX = Math.max(0, (displayWidth - stageSize) / 2);
+        const maxY = Math.max(0, (displayHeight - stageSize) / 2);
+        state.x = Math.min(maxX, Math.max(-maxX, state.x));
+        state.y = Math.min(maxY, Math.max(-maxY, state.y));
+    }
+
+    function paint() {
+        if (!state.ready) {
+            return;
+        }
+        clamp();
+        const scale = state.base * state.zoom;
+        image.style.width = `${state.width * scale}px`;
+        image.style.height = `${state.height * scale}px`;
+        image.style.transform = `translate(-50%, -50%) translate3d(${state.x}px, ${state.y}px, 0)`;
+    }
+
+    image.addEventListener('load', () => {
+        state.width = image.naturalWidth || stageSize;
+        state.height = image.naturalHeight || stageSize;
+        state.base = Math.max(stageSize / state.width, stageSize / state.height);
+        state.ready = true;
+        paint();
+    });
+    image.addEventListener('error', () => {
+        if (hint) {
+            hint.textContent = '图片加载失败，请重新选择。';
+            hint.dataset.tone = 'error';
+        }
+    });
+
+    let dragging = false;
+    let startX = 0;
+    let startY = 0;
+    let originX = 0;
+    let originY = 0;
+
+    stage.addEventListener('pointerdown', (event) => {
+        dragging = true;
+        startX = event.clientX;
+        startY = event.clientY;
+        originX = state.x;
+        originY = state.y;
+        stage.setPointerCapture?.(event.pointerId);
+        stage.dataset.dragging = 'true';
+    });
+    stage.addEventListener('pointermove', (event) => {
+        if (!dragging) {
+            return;
+        }
+        state.x = originX + (event.clientX - startX);
+        state.y = originY + (event.clientY - startY);
+        paint();
+    });
+    const stopDrag = () => {
+        dragging = false;
+        stage.dataset.dragging = 'false';
+    };
+    stage.addEventListener('pointerup', stopDrag);
+    stage.addEventListener('pointercancel', stopDrag);
+
+    zoom.addEventListener('input', () => {
+        state.zoom = Number(zoom.value) || 1;
+        paint();
+    });
+
+    return openSheet({
+        title: '裁剪头像',
+        content: [
+            el('div', { class: 'crop-wrap' }, [stage]),
+            el('div', { class: 'field' }, [el('label', { for: zoom.id, text: '缩放' }), zoom]),
+            hint,
+        ],
+        actions: [
+            { label: '取消', onClick: (close) => close() },
+            {
+                label: '使用这张',
+                variant: 'primary',
+                onClick: async (close) => {
+                    if (!state.ready) {
+                        toast('图片还在加载，请稍候', 'error');
+                        return;
+                    }
+                    try {
+                        const dataUrl = renderCrop();
+                        close();
+                        await onDone?.(dataUrl);
+                    } catch (error) {
+                        onError?.(error);
+                    }
+                },
+            },
+        ],
+    });
+
+    function renderCrop() {
+        const scale = state.base * state.zoom;
+        const sourceSize = stageSize / scale;
+        const left = (stageSize / 2 + state.x) - (state.width * scale) / 2;
+        const top = (stageSize / 2 + state.y) - (state.height * scale) / 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = CROP_OUTPUT_SIZE;
+        canvas.height = CROP_OUTPUT_SIZE;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, CROP_OUTPUT_SIZE, CROP_OUTPUT_SIZE);
+        context.drawImage(image, -left / scale, -top / scale, sourceSize, sourceSize,
+            0, 0, CROP_OUTPUT_SIZE, CROP_OUTPUT_SIZE);
+        return canvas.toDataURL('image/jpeg', 0.9);
+    }
 }

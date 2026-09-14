@@ -2,12 +2,24 @@
  * 屏幕 05 · 注册（创建账号）
  * 线框：newUI/remaining-ui.html #screen-register-account
  * 业务：AuthManager.register（用户名、密码、邮箱校验）。
+ *
+ * 校验规则来自「管理-设置」里的服务器设置：用户名长度区间、密码长度区间与邮箱格式，
+ * 前端即时提示，原生侧保存前再校验一次，避免绕过页面直接调用桥接。
  */
 
 import { call, state } from '../core/bridge.js';
 import { scaffold } from '../core/router.js';
 import { toast } from '../ui/components.js';
 import { el, append } from '../core/dom.js';
+import {
+    fieldValidator,
+    validateAll,
+    usernameRule,
+    passwordRule,
+    passwordStrength,
+    matchRule,
+    PATTERNS,
+} from '../core/validate.js';
 
 export async function registerPage(context) {
     const body = scaffold({ title: '注册', backTo: 'login', children: [] });
@@ -25,12 +37,47 @@ export async function registerPage(context) {
     const email = input('register-email', 'email', '输入常用邮箱', 'email');
     const password = input('register-password', 'password', '设置登录密码', 'new-password');
     const confirm = input('register-confirm', 'password', '再次输入密码', 'new-password');
+    const strength = el('span', { class: 'password-meter', dataset: { level: '0' }, text: '未填写' });
+
+    const account = usernameRule();
+    const secret = passwordRule();
+
+    const validators = [
+        fieldValidator({ control: username, required: true, ...account }),
+        fieldValidator({
+            control: email,
+            label: '邮箱',
+            required: true,
+            max: 60,
+            pattern: PATTERNS.email,
+            patternMessage: '邮箱格式不正确',
+        }),
+        fieldValidator({
+            control: password,
+            required: true,
+            min: secret.min,
+            max: secret.max,
+            custom: matchRule(password, confirm),
+        }),
+        fieldValidator({ control: confirm, label: '确认密码', required: true, max: secret.max }),
+    ];
+
+    // 密码强度只做提示，不参与拦截。
+    password.addEventListener('input', () => {
+        const result = passwordStrength(password.value);
+        strength.textContent = result.label;
+        strength.dataset.level = String(result.level);
+    });
 
     append(form, [
-        field('用户名', username),
+        field(`用户名（${account.min}–${account.max} 个字符）`, username, '可用中英文、数字与下划线'),
         field('邮箱', email),
-        field('密码', password, '至少 4 个字符'),
+        field(`密码（${secret.min}–${secret.max} 个字符）`, password, `至少 ${secret.min} 个字符`),
         field('确认密码', confirm),
+        el('div', { class: 'row', 'data-between': 'true' }, [
+            el('span', { class: 'row-meta', text: '密码强度' }),
+            strength,
+        ]),
         errorBox,
         submit,
     ]);
@@ -45,32 +92,23 @@ export async function registerPage(context) {
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         errorBox.hidden = true;
-        const values = {
-            username: username.value.trim(),
-            email: email.value.trim(),
-            password: password.value,
-            confirmPassword: confirm.value,
-        };
-        if (!values.username) {
-            return showError('请输入用户名');
-        }
-        if (!values.email) {
-            return showError('请输入邮箱');
-        }
-        if (values.password.length < 4) {
-            return showError('密码至少需要 4 个字符');
-        }
-        if (values.password !== values.confirmPassword) {
-            return showError('两次输入的密码不一致');
+        const result = validateAll(validators);
+        if (!result.ok) {
+            return showError(result.message, result.validator);
         }
         submit.dataset.loading = 'true';
         submit.disabled = true;
         try {
-            const result = await call('auth.register', values);
-            if (!result?.ok) {
-                return showError(result?.error || '注册失败');
+            const saved = await call('auth.register', {
+                username: username.value.trim(),
+                email: email.value.trim(),
+                password: password.value,
+                confirmPassword: confirm.value,
+            });
+            if (!saved?.ok) {
+                return showError(saved?.error || '注册失败');
             }
-            Object.assign(state.user, result.user || {});
+            Object.assign(state.user, saved.user || {});
             toast('账号已创建，已为你登录', 'success');
             context.navigate('home', {}, { replace: true });
         } catch (error) {
@@ -81,9 +119,10 @@ export async function registerPage(context) {
         }
     });
 
-    function showError(message) {
+    function showError(message, validator) {
         errorBox.textContent = message;
         errorBox.hidden = false;
+        validator?.focus?.();
     }
 
     function input(id, type, placeholder, autocomplete) {

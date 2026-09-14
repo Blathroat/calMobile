@@ -22,12 +22,29 @@ const readyPromise = new Promise((resolve) => {
 /** 应用级状态：原生在 bootstrap 时下发，页面只读。 */
 export const state = {
     booted: false,
-    user: { loggedIn: false, guest: true, role: 'guest', roleLabel: '访客', nickname: '', can: {} },
+    user: { loggedIn: false, guest: true, role: 'guest', roleLabel: '访客', nickname: '', avatar: '', can: {} },
     theme: { index: 0, colors: [] },
     capabilities: {},
     categories: [],
     review: { canRevise: false, statuses: [] },
     media: { imageCount: 8, imageSizeMb: 10, videoCount: 2 },
+    /** 服务器设置：上传格式与头像大小限制，管理员保存后对所有用户生效。 */
+    server: { avatarSizeMb: 2, imageFormats: [], videoFormats: [] },
+    /** 服务器设置：普通用户与展商可自由填写的表单字符数上限。 */
+    limits: {
+        exhibitionTitle: 60,
+        exhibitionVenue: 60,
+        category: 20,
+        fieldTitle: 30,
+        usernameMin: 3,
+        usernameMax: 20,
+        passwordMin: 6,
+        passwordMax: 32,
+        nickname: 20,
+        bio: 200,
+        region: 40,
+        answer: 200,
+    },
     announcement: { enabled: false, text: '' },
     calendar: { available: false },
 };
@@ -122,22 +139,53 @@ export function applyBootstrap(data) {
     Object.assign(state.capabilities, data.capabilities || {});
     Object.assign(state.review, data.review || {});
     Object.assign(state.media, data.media || {});
+    Object.assign(state.server, data.server || {});
+    Object.assign(state.limits, data.limits || {});
     Object.assign(state.announcement, data.announcement || {});
     Object.assign(state.calendar, data.calendar || {});
     state.categories = Array.isArray(data.categories) ? data.categories : [];
     applyTheme();
 }
 
-/** 管理员配色写入 CSS 变量，页面无需重复声明颜色。 */
+/** 服务器设置保存后同步一次，界面无需重新 bootstrap。 */
+export function applySettings(settings) {
+    if (!settings) {
+        return;
+    }
+    Object.assign(state.theme, settings.theme || {});
+    Object.assign(state.media, settings.media || {});
+    Object.assign(state.server, settings.upload || {});
+    Object.assign(state.limits, settings.limits || {});
+    Object.assign(state.review, settings.review || {});
+    Object.assign(state.announcement, settings.announcement || {});
+    if (Array.isArray(settings.categories)) {
+        state.categories = settings.categories;
+    }
+    applyTheme();
+}
+
+/**
+ * 管理员配色写入 CSS 变量，页面无需重复声明颜色。
+ * <p>
+ * 强调色不只驱动事件圆点与浅底，还驱动分段控件滑块、选中日期、导航与区块标题，
+ * 这样改配色在触屏设备上也能立刻看到整屏变化。
+ */
 export function applyTheme() {
     if (typeof document === 'undefined') {
         return;
     }
-    const accent = state.theme.colors?.[state.theme.index] || '#c05621';
-    document.documentElement.style.setProperty('--accent', accent);
-    document.documentElement.style.setProperty('--accent-ink', shade(accent, -0.28));
-    document.documentElement.style.setProperty('--accent-tint', mix(accent, '#ffffff', 0.86));
-    document.documentElement.style.setProperty('--accent-edge', mix(accent, '#ffffff', 0.6));
+    const colors = Array.isArray(state.theme.colors) ? state.theme.colors : [];
+    const index = Number(state.theme.index) || 0;
+    const accent = colors[index] || '#c05621';
+    const root = document.documentElement;
+    root.style.setProperty('--accent', accent);
+    root.style.setProperty('--accent-ink', shade(accent, -0.28));
+    root.style.setProperty('--accent-tint', mix(accent, '#ffffff', 0.86));
+    root.style.setProperty('--accent-edge', mix(accent, '#ffffff', 0.6));
+    root.style.setProperty('--accent-soft', mix(accent, '#ffffff', 0.72));
+    root.style.setProperty('--accent-glow', rgba(accent, 0.14));
+    root.style.setProperty('--accent-shadow', rgba(accent, 0.2));
+    root.dataset.accent = String(index);
 }
 
 /** 刷新用户态，用于登录、注册、退出后同步导航与权限。 */
@@ -188,4 +236,10 @@ function mix(hex, other, amount) {
 
 function shade(hex, amount) {
     return amount < 0 ? mix(hex, '#000000', -amount) : mix(hex, '#ffffff', amount);
+}
+
+/** 半透明强调色，用于聚焦光晕与投影，跟随管理员配色一起变化。 */
+function rgba(hex, alpha) {
+    const { r, g, b } = toRgb(hex);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

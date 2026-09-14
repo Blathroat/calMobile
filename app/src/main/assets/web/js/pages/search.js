@@ -104,7 +104,7 @@ export async function searchPage(context) {
                     dataset: { pressable: 'true' },
                     onclick: () => context.navigate('detail', { id: item.id }),
                 }, [
-                    mediaBox({ className: 'thumb thumb-sm' }),
+                    mediaBox({ src: item.imageUri, className: 'thumb thumb-sm thumb-cover' }),
                     el('span', { class: 'row-copy' }, [
                         el('span', { class: 'row', 'data-gap': 'md' }, [
                             el('strong', { class: 'row-title truncate', text: item.title }),

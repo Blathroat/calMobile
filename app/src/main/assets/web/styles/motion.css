@@ -147,6 +147,7 @@
 .toolbar button,
 .link-button,
 .text-action,
+.swatch,
 .switch span,
 .switch span::after {
     transition:
@@ -214,7 +215,7 @@
 
     .cta.ghost:hover,
     .cta.danger:hover {
-        box-shadow: 0 6px 16px rgba(192, 86, 33, .18);
+        box-shadow: 0 6px 16px var(--accent-shadow, rgba(192, 86, 33, .18));
     }
 
     .round-action:hover {
@@ -261,7 +262,7 @@
 .input:focus,
 .textarea:focus,
 .select:focus {
-    box-shadow: 0 0 0 3px rgba(192, 86, 33, .12);
+    box-shadow: 0 0 0 3px var(--accent-glow, rgba(192, 86, 33, .12));
 }
 
 /* ── 底部导航：选中指示条与图标弹跳 ─────────────────────────────── */
@@ -301,20 +302,139 @@
     transform: scale(.9);
 }
 
-/* ── 分段控件：选中滑块淡入 + 按钮轻微缩放 ──────────────────────── */
+/* ── 分段控件：选中滑块由一个元素滑动到目标按钮 ─────────────────── */
 
-.seg button[aria-pressed="true"] {
-    animation: seg-pop var(--motion-normal) var(--ease-spring) both;
+.seg button {
+    transition:
+        color var(--motion-quick) var(--ease-standard),
+        background-color var(--motion-quick) var(--ease-standard),
+        border-color var(--motion-quick) var(--ease-standard),
+        transform var(--motion-instant) var(--ease-standard);
 }
 
-@keyframes seg-pop {
+.seg-indicator[data-animate="true"] {
+    transition:
+        transform var(--motion-normal) var(--ease-out),
+        width var(--motion-normal) var(--ease-out),
+        opacity var(--motion-quick) var(--ease-standard);
+}
+
+/* ── 首页日历：拖动跟手、松手回弹、切月滑入滑出 ─────────────────── */
+
+.calendar[data-drag="true"] {
+    cursor: grabbing;
+    box-shadow: 0 12px 26px rgba(31, 35, 40, .12);
+}
+
+.calendar[data-leave="left"] {
+    animation: cal-out-left var(--motion-quick) var(--ease-in) both;
+}
+
+.calendar[data-leave="right"] {
+    animation: cal-out-right var(--motion-quick) var(--ease-in) both;
+}
+
+.calendar[data-enter="right"] .calendar-grid {
+    animation: cal-in-right var(--motion-normal) var(--ease-out) both;
+}
+
+.calendar[data-enter="left"] .calendar-grid {
+    animation: cal-in-left var(--motion-normal) var(--ease-out) both;
+}
+
+@keyframes cal-out-left {
     from {
-        transform: scale(.96);
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
     }
 
     to {
-        transform: scale(1);
+        opacity: 0;
+        transform: translate3d(-18%, 0, 0);
     }
+}
+
+@keyframes cal-out-right {
+    from {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+
+    to {
+        opacity: 0;
+        transform: translate3d(18%, 0, 0);
+    }
+}
+
+@keyframes cal-in-right {
+    from {
+        opacity: 0;
+        transform: translate3d(16%, 0, 0);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes cal-in-left {
+    from {
+        opacity: 0;
+        transform: translate3d(-16%, 0, 0);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* 日历里的事件圆点随选中日期轻微弹入 */
+.cal-day[aria-pressed="true"]::after {
+    animation: tag-pop var(--motion-quick) var(--ease-spring) both;
+}
+
+.cal-day[data-has-event="true"]:not([aria-pressed="true"])::after {
+    animation: tag-pop var(--motion-normal) var(--ease-spring) both;
+}
+
+/* ── 头像裁剪与配色色板 ───────────────────────────────────────── */
+
+.crop-stage {
+    transition: box-shadow var(--motion-quick) var(--ease-standard);
+}
+
+.crop-image {
+    transition: width var(--motion-quick) var(--ease-out), height var(--motion-quick) var(--ease-out);
+}
+
+.crop-stage[data-dragging="true"] .crop-image {
+    transition: none;
+}
+
+.swatch {
+    transition:
+        transform var(--motion-instant) var(--ease-standard),
+        box-shadow var(--motion-quick) var(--ease-standard),
+        border-color var(--motion-quick) var(--ease-standard);
+}
+
+.swatch:active {
+    transform: scale(.94);
+}
+
+.swatch[aria-pressed="true"] {
+    animation: tag-pop var(--motion-normal) var(--ease-spring) both;
+}
+
+.password-meter,
+.field-counter {
+    transition: background-color var(--motion-quick) var(--ease-standard), color var(--motion-quick) var(--ease-standard);
+}
+
+.password-meter[data-level] {
+    animation: tag-pop var(--motion-quick) var(--ease-spring) both;
 }
 
 /* ── 状态标签与提示的出现动画 ──────────────────────────────────── */
@@ -559,7 +679,7 @@
 
 .EasyMDEContainer .CodeMirror-focused {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(192, 86, 33, .12);
+    box-shadow: 0 0 0 3px var(--accent-glow, rgba(192, 86, 33, .12));
 }
 
 .EasyMDEContainer .CodeMirror-cursor {
@@ -598,8 +718,17 @@
     .status-tag,
     .pill,
     .notice,
+    .swatch,
+    .password-meter,
+    .cal-day::after,
+    .calendar,
+    .calendar-grid,
     .EasyMDEContainer {
         animation: none !important;
+    }
+
+    .calendar {
+        transition: none !important;
     }
 
     .cta:hover,

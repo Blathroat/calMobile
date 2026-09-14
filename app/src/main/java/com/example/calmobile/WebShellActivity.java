@@ -2,6 +2,7 @@ package com.example.calmobile;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -21,6 +22,8 @@ import android.widget.FrameLayout;
 
 import com.google.gson.Gson;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
@@ -38,7 +41,19 @@ public class WebShellActivity extends Activity {
     public static final String BASE_URL =
             "https://appassets.androidplatform.net/assets/web/";
 
+    /** 用户上传的图片与视频的虚拟目录：内容存放在应用私有目录，URL 里只出现文件名。 */
+    public static final String MEDIA_URL = "https://appassets.androidplatform.net/media/";
+
     private static final String TAG = "WebShellActivity";
+
+    /** 上传文件的落盘目录（files/media），图片以短 URL 引用，避免把 base64 写进长简介。 */
+    public static File mediaDir(Context context) {
+        File dir = new File(context.getFilesDir(), "media");
+        if (!dir.exists() && !dir.mkdirs()) {
+            Log.w(TAG, "无法创建媒体目录: " + dir);
+        }
+        return dir;
+    }
 
     private WebView webView;
     private WebAppBridge bridge;
@@ -210,7 +225,13 @@ public class WebShellActivity extends Activity {
             return null;
         }
         String path = uri.getPath();
-        if (path == null || !path.startsWith("/assets/web/")) {
+        if (path == null) {
+            return null;
+        }
+        if (path.startsWith("/media/")) {
+            return serveMedia(path.substring("/media/".length()));
+        }
+        if (!path.startsWith("/assets/web/")) {
             return null;
         }
         String assetPath = path.substring("/assets/".length());
@@ -237,5 +258,55 @@ public class WebShellActivity extends Activity {
         headers.put("Cache-Control", "no-store");
         headers.put("X-Content-Type-Options", "nosniff");
         return headers;
+    }
+
+    /**
+     * 读取用户上传的媒体文件。
+     * <p>
+     * 只允许访问 {@code files/media} 下的单层文件名，路径中带分隔符或 {@code ..} 一律拒绝，
+     * 避免通过 URL 读取应用私有目录里的其它文件。
+     */
+    private WebResourceResponse serveMedia(String name) {
+        if (name.isEmpty() || name.contains("/") || name.contains("\\") || name.contains("..")) {
+            return new WebResourceResponse("text/plain", "utf-8", 403, "Forbidden",
+                    securityHeaders(), null);
+        }
+        File file = new File(mediaDir(this), name);
+        if (!file.isFile()) {
+            return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found",
+                    securityHeaders(), null);
+        }
+        String extension = name.contains(".")
+                ? name.substring(name.lastIndexOf('.') + 1).toLowerCase()
+                : "bin";
+        String mime = MIME_TYPES.containsKey(extension)
+                ? MIME_TYPES.get(extension)
+                : guessMediaMime(extension);
+        try {
+            return new WebResourceResponse(mime, "utf-8", 200, "OK", securityHeaders(),
+                    new FileInputStream(file));
+        } catch (IOException error) {
+            Log.w(TAG, "媒体文件读取失败: " + name, error);
+            return new WebResourceResponse("text/plain", "utf-8", 500, "Error",
+                    securityHeaders(), null);
+        }
+    }
+
+    private static String guessMediaMime(String extension) {
+        switch (extension) {
+            case "mp4":
+            case "m4v":
+                return "video/mp4";
+            case "webm":
+                return "video/webm";
+            case "mov":
+                return "video/quicktime";
+            case "gif":
+                return "image/gif";
+            case "bmp":
+                return "image/bmp";
+            default:
+                return "application/octet-stream";
+        }
     }
 }

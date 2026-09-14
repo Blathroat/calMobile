@@ -10,10 +10,9 @@
 import { call, state } from '../core/bridge.js';
 import { scaffold, topAction } from '../core/router.js';
 import { icon, loadingBlock, stateBlock, toast, openSheet } from '../ui/components.js';
-import { htmlToMarkdown, markdownSummary } from '../core/markdown.js';
+import { htmlToMarkdown, markdownSummary, ensureMarked } from '../core/markdown.js';
+import { allowedFormats } from '../core/validate.js';
 import { el, append, replace } from '../core/dom.js';
-
-const VENDOR_SCRIPT = 'vendor/easymde/easymde.min.js';
 
 export async function richEditorPage(context) {
     const host = el('div', { class: 'stack' });
@@ -72,13 +71,11 @@ export async function richEditorPage(context) {
         if (window.EasyMDE) {
             return;
         }
-        await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = VENDOR_SCRIPT;
-            script.onload = () => (window.EasyMDE ? resolve() : reject(new Error('EasyMDE 未注册到全局')));
-            script.onerror = () => reject(new Error('无法加载 EasyMDE 资源'));
-            document.head.appendChild(script);
-        });
+        // 详情页可能已经按需加载过同一个文件，这里复用 core/markdown 的加载器。
+        await ensureMarked();
+        if (!window.EasyMDE) {
+            throw new Error('EasyMDE 未注册到全局');
+        }
     }
 
     function initialMarkdown() {
@@ -271,7 +268,7 @@ export async function richEditorPage(context) {
                 ghostButton('粘贴 Markdown', () => openPasteSheet(), 'paste'),
                 ghostButton('插入图片', () => insertImage(), 'image'),
             ]),
-            el('p', { class: 'field-hint', text: `媒体数量与大小受系统设置限制：图片 ${media.imageCount || 8} 张 / 单张 ${media.imageSizeMb || 10} MB，视频 ${media.videoCount || 2} 个。` }),
+            el('p', { class: 'field-hint', text: `媒体数量与大小受服务器设置限制：图片 ${media.imageCount || 8} 张 / 单张 ${media.imageSizeMb || 10} MB，视频 ${media.videoCount || 2} 个；图片插入后以短 URL 引用，简介正文不会因此变长。` }),
         ]);
 
         replace(foot, el('div', { class: 'stack', 'data-gap': 'sm' }, [
@@ -333,6 +330,13 @@ export async function richEditorPage(context) {
         toast(replaceAll ? '已替换为粘贴内容' : '已追加粘贴内容', 'success');
     }
 
+    /**
+     * 插入图片：交给原生落盘后只写入短 URL。
+     * <p>
+     * 早期版本把图片写成内联 base64，长简介因此体积巨大、编辑器载入缓慢；
+     * 现在统一走 {@code media.import}，Markdown 里只保留
+     * {@code ![展会图片](https://appassets.androidplatform.net/media/xxx.jpg)}。
+     */
     async function insertImage() {
         const media = state.media || {};
         const limit = media.imageCount || 8;
@@ -341,28 +345,38 @@ export async function richEditorPage(context) {
             toast(`图片数量已达上限（${limit} 张）`, 'error');
             return;
         }
+        const formats = allowedFormats('image');
         try {
-            const result = await call('media.pickImage');
-            if (!result?.dataUrl) {
+            const result = await call('media.import', { kind: 'image' });
+            if (!result?.url) {
                 toast('未能读取所选图片', 'error');
                 return;
             }
-            if (!isWithinSizeLimit(result.dataUrl, (media.imageSizeMb || 10) * 1024 * 1024)) {
-                toast(`图片超过 ${media.imageSizeMb || 10} MB 限制`, 'error');
+            const markdown = `\n\n![展会图片](${result.url})\n\n`;
+            editor.value(`${editor.value().trimEnd()}${markdown}`);
+            const size = formatBytes(result.bytes);
+            toast(result.compressed ? `图片已压缩为 ${size} 并插入` : `图片已插入（${size}）`, 'success');
+        } catch (error) {
+            if (String(error.message).includes('取消')) {
                 return;
             }
-            const markdown = `\n\n![展会图片](${result.dataUrl})\n\n`;
-            editor.value(`${editor.value().trimEnd()}${markdown}`);
-            toast('图片已插入', 'success');
-        } catch (error) {
-            toast(error.message, 'error');
+            toast(error.message || `请选择 ${formatsHint(formats)} 格式的图片`, 'error');
         }
     }
 
-    function isWithinSizeLimit(dataUrl, limitBytes) {
-        const base64 = String(dataUrl).split(',')[1] || '';
-        const bytes = Math.floor((base64.length * 3) / 4);
-        return bytes <= limitBytes;
+    function formatsHint(formats) {
+        return formats.length > 0 ? formats.map((item) => `.${item}`).join('/') : '常见';
+    }
+
+    function formatBytes(bytes) {
+        const value = Number(bytes) || 0;
+        if (value >= 1024 * 1024) {
+            return `${(value / 1024 / 1024).toFixed(1)} MB`;
+        }
+        if (value >= 1024) {
+            return `${Math.round(value / 1024)} KB`;
+        }
+        return `${value} B`;
     }
 
     function clearAll() {

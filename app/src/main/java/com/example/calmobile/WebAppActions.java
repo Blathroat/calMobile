@@ -63,7 +63,7 @@ final class WebAppActions {
                 callback.success(saveProfile(activity, payload));
                 return;
             case "profile.password":
-                callback.success(changePassword(payload));
+                callback.success(changePassword(activity, payload));
                 return;
             case "notify.preferences":
                 callback.success(notificationPreferences(activity));
@@ -161,6 +161,12 @@ final class WebAppActions {
             case "media.pickVideo":
                 pickFile(bridge, "video/*", "选择视频", callback);
                 return;
+            case "media.import":
+                importMedia(bridge, payload, callback);
+                return;
+            case "media.store":
+                callback.success(storeDataUrl(activity, payload));
+                return;
             case "share.text":
                 shareText(activity, payload);
                 callback.success(true);
@@ -188,6 +194,8 @@ final class WebAppActions {
         data.put("review", reviewPolicy(activity));
         data.put("media", mediaLimits(activity));
         data.put("announcement", announcement(activity));
+        data.put("limits", textLimits(activity));
+        data.put("server", serverSettings(activity));
         Map<String, Object> calendar = new LinkedHashMap<>();
         calendar.put("available", CalendarHelper.hasCalendarPermissions(activity));
         data.put("calendar", calendar);
@@ -216,7 +224,8 @@ final class WebAppActions {
         user.put("email", stored != null && !stored.email.isEmpty() ? stored.email
                 : safe(auth.getCurrentUserEmail()));
         user.put("bio", stored == null ? "" : stored.bio);
-        user.put("contact", stored == null ? "" : stored.contact);
+        user.put("region", stored == null ? "" : stored.region);
+        user.put("avatar", stored == null ? "" : stored.avatar);
         user.put("socialMedia", stored == null ? "" : stored.socialMedia);
         user.put("showRegistrations", stored != null && stored.showRegistrations);
         user.put("role", roleKey(auth));
@@ -283,6 +292,33 @@ final class WebAppActions {
         return media;
     }
 
+    /** 服务器设置：头像与上传格式限制，管理员保存后对所有用户生效。 */
+    private static Map<String, Object> serverSettings(Activity activity) {
+        Map<String, Object> server = new LinkedHashMap<>();
+        server.put("avatarSizeMb", AppSettings.getMediaAvatarSizeMb(activity));
+        server.put("imageFormats", AppSettings.getImageFormats(activity));
+        server.put("videoFormats", AppSettings.getVideoFormats(activity));
+        return server;
+    }
+
+    /** 服务器设置：普通用户与展商可自由填写的表单字符数上限。 */
+    private static Map<String, Object> textLimits(Activity activity) {
+        Map<String, Object> limits = new LinkedHashMap<>();
+        limits.put("exhibitionTitle", AppSettings.getExhibitionTitleLimit(activity));
+        limits.put("exhibitionVenue", AppSettings.getExhibitionVenueLimit(activity));
+        limits.put("category", AppSettings.getCategoryLimit(activity));
+        limits.put("fieldTitle", AppSettings.getFieldTitleLimit(activity));
+        limits.put("usernameMin", AppSettings.getUsernameMin(activity));
+        limits.put("usernameMax", AppSettings.getUsernameMax(activity));
+        limits.put("passwordMin", AppSettings.getPasswordMin(activity));
+        limits.put("passwordMax", AppSettings.getPasswordMax(activity));
+        limits.put("nickname", AppSettings.getNicknameLimit(activity));
+        limits.put("bio", AppSettings.getBioLimit(activity));
+        limits.put("region", AppSettings.getRegionLimit(activity));
+        limits.put("answer", AppSettings.getAnswerLimit(activity));
+        return limits;
+    }
+
     private static Map<String, Object> announcement(Activity activity) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("enabled", AppSettings.isAnnouncementEnabled(activity));
@@ -308,21 +344,71 @@ final class WebAppActions {
         String confirm = WebAppBridge.text(payload, "confirmPassword", "");
         String email = WebAppBridge.text(payload, "email", "");
         Map<String, Object> result = new LinkedHashMap<>();
+        String error = "";
         if (!confirm.isEmpty() && !confirm.equals(password)) {
-            result.put("ok", false);
-            result.put("error", "两次输入的密码不一致");
-            result.put("user", userPayload(activity));
-            return result;
+            error = "两次输入的密码不一致";
+        } else {
+            error = validateUsername(activity, username);
+            if (error.isEmpty()) {
+                error = validatePassword(activity, password);
+            }
+            if (error.isEmpty() && !email.isEmpty() && !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                error = "邮箱格式不正确";
+            }
         }
-        String error = AuthManager.getInstance().register(username, password, email);
-        if (error == null) {
-            UserProfileStore.save(activity, username.trim().toLowerCase(), username.trim(), email, "",
-                    "", "", false);
+        if (error.isEmpty()) {
+            error = AuthManager.getInstance().register(username, password, email);
         }
-        result.put("ok", error == null);
+        if (error == null || error.isEmpty()) {
+            UserProfileStore.save(activity, username.trim().toLowerCase(), username.trim(), email,
+                    "", "", "", "", false);
+            error = "";
+        }        result.put("ok", error.isEmpty());
         result.put("error", error == null ? "" : error);
         result.put("user", userPayload(activity));
         return result;
+    }
+
+    // ── 表单字符数校验（与前端校验保持一致，避免绕过页面直接调用桥接） ──
+
+    private static String validateUsername(Activity activity, String username) {
+        String value = username == null ? "" : username.trim();
+        int min = AppSettings.getUsernameMin(activity);
+        int max = AppSettings.getUsernameMax(activity);
+        if (value.isEmpty()) {
+            return "请输入用户名";
+        }
+        if (value.length() < min) {
+            return "用户名至少需要 " + min + " 个字符";
+        }
+        if (value.length() > max) {
+            return "用户名最多 " + max + " 个字符";
+        }
+        if (!value.matches("[A-Za-z0-9_\\u4e00-\\u9fa5]+")) {
+            return "用户名只能包含中英文、数字与下划线";
+        }
+        return "";
+    }
+
+    private static String validatePassword(Activity activity, String password) {
+        String value = password == null ? "" : password;
+        int min = AppSettings.getPasswordMin(activity);
+        int max = AppSettings.getPasswordMax(activity);
+        if (value.isEmpty()) {
+            return "请输入密码";
+        }
+        if (value.length() < min) {
+            return "密码至少需要 " + min + " 个字符";
+        }
+        if (value.length() > max) {
+            return "密码最多 " + max + " 个字符";
+        }
+        return "";
+    }
+
+    private static String validateLength(Activity activity, String value, int limit, String label) {
+        int length = value == null ? 0 : value.trim().length();
+        return length > limit ? label + "最多 " + limit + " 个字符" : "";
     }
 
     private static Map<String, Object> saveProfile(Activity activity, Map<String, Object> payload) {
@@ -330,7 +416,8 @@ final class WebAppActions {
         String nickname = WebAppBridge.text(payload, "nickname", "").trim();
         String email = WebAppBridge.text(payload, "email", "").trim();
         String bio = WebAppBridge.text(payload, "bio", "").trim();
-        String contact = WebAppBridge.text(payload, "contact", "").trim();
+        String region = WebAppBridge.text(payload, "region", "").trim();
+        String avatar = WebAppBridge.text(payload, "avatar", "").trim();
         String socialMedia = WebAppBridge.text(payload, "socialMedia", "").trim();
         boolean showRegistrations = WebAppBridge.flag(payload, "showRegistrations", false);
         String error = "";
@@ -340,8 +427,21 @@ final class WebAppActions {
             error = "昵称不能为空";
         }
         if (error.isEmpty()) {
-            UserProfileStore.save(activity, auth.getCurrentUsername(), nickname, email, bio, contact,
-                    socialMedia, showRegistrations);
+            error = validateLength(activity, nickname, AppSettings.getNicknameLimit(activity), "昵称");
+        }
+        if (error.isEmpty() && !email.isEmpty()
+                && !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            error = "邮箱格式不正确";
+        }
+        if (error.isEmpty()) {
+            error = validateLength(activity, bio, AppSettings.getBioLimit(activity), "个人简介");
+        }
+        if (error.isEmpty()) {
+            error = validateLength(activity, region, AppSettings.getRegionLimit(activity), "地区");
+        }
+        if (error.isEmpty()) {
+            UserProfileStore.save(activity, auth.getCurrentUsername(), nickname, email, bio, region,
+                    avatar, socialMedia, showRegistrations);
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("ok", error.isEmpty());
@@ -350,7 +450,7 @@ final class WebAppActions {
         return result;
     }
 
-    private static Map<String, Object> changePassword(Map<String, Object> payload) {
+    private static Map<String, Object> changePassword(Activity activity, Map<String, Object> payload) {
         String current = WebAppBridge.text(payload, "currentPassword", "");
         String next = WebAppBridge.text(payload, "newPassword", "");
         String confirm = WebAppBridge.text(payload, "confirmPassword", "");
@@ -359,10 +459,14 @@ final class WebAppActions {
             error = "请先登录";
         } else if (current.isEmpty() || next.isEmpty()) {
             error = "请填写完整密码";
-        } else if (next.length() < 4) {
-            error = "新密码至少需要 4 个字符";
-        } else if (!next.equals(confirm)) {
+        } else {
+            error = validatePassword(activity, next);
+        }
+        if (error.isEmpty() && !next.equals(confirm)) {
             error = "两次输入的新密码不一致";
+        }
+        if (error.isEmpty() && current.equals(next)) {
+            error = "新密码不能与当前密码相同";
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("ok", error.isEmpty());
@@ -474,6 +578,8 @@ final class WebAppActions {
         int year = WebAppBridge.number(payload, "year", 2026);
         int month = WebAppBridge.number(payload, "month", 6);
         int selectedDay = WebAppBridge.number(payload, "day", 0);
+        // 用户主动翻月（滑动或箭头）时不再回退到有数据的月份，空月份如实展示。
+        boolean explicit = WebAppBridge.flag(payload, "explicit", false);
         List<Map<String, Object>> all = exhibitions(activity, new LinkedHashMap<String, Object>());
 
         // 请求的月份没有展会时落到最早有展会的月份，避免首页首次进入是空列表。
@@ -500,7 +606,7 @@ final class WebAppActions {
                 break;
             }
         }
-        if (!matched && !months.isEmpty()) {
+        if (!matched && !months.isEmpty() && !explicit) {
             year = months.get(0)[0];
             month = months.get(0)[1];
             selectedDay = 0;
@@ -577,11 +683,31 @@ final class WebAppActions {
             result.put("error", "展会名称不能为空");
             return result;
         }
+        String lengthError = validateLength(activity, title, AppSettings.getExhibitionTitleLimit(activity), "展会名称");
+        if (lengthError.isEmpty()) {
+            lengthError = validateLength(activity, venue, AppSettings.getExhibitionVenueLimit(activity), "展会地点");
+        }
+        if (lengthError.isEmpty()) {
+            lengthError = validateLength(activity, category, AppSettings.getCategoryLimit(activity), "展会分类");
+        }
+        if (!lengthError.isEmpty()) {
+            result.put("ok", false);
+            result.put("error", lengthError);
+            return result;
+        }
         if (day <= 0) {
             result.put("ok", false);
             result.put("error", "请选择展会日期");
             return result;
         }
+        if (!registrationStart.isEmpty() && !registrationEnd.isEmpty()
+                && registrationEnd.compareTo(registrationStart) < 0) {
+            result.put("ok", false);
+            result.put("error", "报名截止日期不能早于开始日期");
+            return result;
+        }
+        // 长简介里的内联图片改写成本地文件 URL，避免 base64 撑大正文。
+        description = inlineDataUrlsToFiles(activity, description);
 
         ExhibitorExhibition saved;
         if (id.isEmpty()) {
@@ -799,6 +925,16 @@ final class WebAppActions {
                 visitorName = "报名用户";
             }
         }
+        int answerLimit = AppSettings.getAnswerLimit(activity);
+        for (String line : answers.split("\n")) {
+            int separator = line.indexOf('：');
+            String value = (separator >= 0 ? line.substring(separator + 1) : line).trim();
+            if (value.length() > answerLimit && !"未填写".equals(value)) {
+                result.put("ok", false);
+                result.put("error", "报名填写内容最多 " + answerLimit + " 个字符");
+                return result;
+            }
+        }
         RegistrationManager manager = new RegistrationManager();
         if (manager.hasActiveRegistration(title)) {
             result.put("ok", false);
@@ -811,12 +947,44 @@ final class WebAppActions {
             result.put("error", "提交失败，请稍后重试");
             return result;
         }
-        RegistrationReviewStore.add(exhibitionId, visitorName, answers);
-        NotificationHelper.getInstance(activity).sendRegistrationConfirmation(title, visitorName);
+        RegistrationReviewStore.Record record = RegistrationReviewStore.add(exhibitionId, visitorName, answers);
+        // “无需审核”的展会提交即视为通过，展商仍可在报名管理中调整结果。
+        boolean autoApproved = autoApprove(activity, exhibitionId, record);
+        NotificationHelper helper = NotificationHelper.getInstance(activity);
+        if (autoApproved) {
+            helper.sendRegistrationStatusNotification(title, visitorName, RegistrationReviewStore.STATUS_APPROVED);
+        } else {
+            helper.sendRegistrationConfirmation(title, visitorName);
+        }
         result.put("ok", true);
         result.put("error", "");
+        result.put("autoApproved", autoApproved);
+        result.put("statusLabel", autoApproved ? RegistrationReviewStore.STATUS_APPROVED
+                : RegistrationReviewStore.STATUS_PENDING);
         result.put("registration", registrationPayload(registration));
         return result;
+    }
+
+    /**
+     * 无需审核的展会：报名记录直接置为已通过。
+     *
+     * @return 是否发生了自动通过
+     */
+    private static boolean autoApprove(Activity activity, String exhibitionId,
+            RegistrationReviewStore.Record record) {
+        if (record == null) {
+            return false;
+        }
+        ExhibitorExhibition exhibition = ExhibitionManager.findById(exhibitionId);
+        if (exhibition == null || !ExhibitorExhibition.STATUS_REVIEW_OPTIONAL.equals(exhibition.getStatus())) {
+            return false;
+        }
+        RegistrationReviewStore.updateStatus(record.id, RegistrationReviewStore.STATUS_APPROVED);
+        DatabaseHelper database = DatabaseHelper.getInstance();
+        if (database != null) {
+            database.updateRegistrationStatus(record.id, RegistrationReviewStore.STATUS_APPROVED);
+        }
+        return true;
     }
 
     private static Map<String, Object> cancelRegistration(Activity activity, String id) {
@@ -1019,7 +1187,8 @@ final class WebAppActions {
         profile.put("nickname", safe(user.getNickname()));
         profile.put("role", roleFromNickname(user.getNickname()));
         profile.put("bio", stored == null ? "" : stored.bio);
-        profile.put("contact", stored == null ? "" : stored.contact);
+        profile.put("region", stored == null ? "" : stored.region);
+        profile.put("avatar", stored == null ? "" : stored.avatar);
         profile.put("socialMedia", stored == null ? "" : stored.socialMedia);
         profile.put("showRegistrations", stored != null && stored.showRegistrations);
 
@@ -1065,15 +1234,20 @@ final class WebAppActions {
         data.put("categories", AppSettings.getCategories(activity));
         data.put("review", reviewPolicy(activity));
         data.put("media", mediaLimits(activity));
+        data.put("upload", serverSettings(activity));
+        data.put("limits", textLimits(activity));
         data.put("notify", notificationPreferences(activity));
         return data;
     }
 
     private static Map<String, Object> saveSettings(Activity activity, Map<String, Object> payload) {
-        AppSettings.setThemeIndex(activity,
-                WebAppBridge.number(payload, "themeIndex", AppSettings.getThemeIndex(activity)));
-        AppSettings.saveAnnouncement(activity, WebAppBridge.text(payload, "announcement", ""),
-                WebAppBridge.flag(payload, "announcementEnabled", false));
+        if (payload.containsKey("themeIndex")) {
+            AppSettings.setThemeIndex(activity, WebAppBridge.number(payload, "themeIndex", 0));
+        }
+        if (payload.containsKey("announcement") || payload.containsKey("announcementEnabled")) {
+            AppSettings.saveAnnouncement(activity, WebAppBridge.text(payload, "announcement", ""),
+                    WebAppBridge.flag(payload, "announcementEnabled", false));
+        }
 
         List<Object> rawCategories = WebAppBridge.list(payload, "categories");
         if (!rawCategories.isEmpty()) {
@@ -1088,12 +1262,32 @@ final class WebAppActions {
                 AppSettings.saveCategories(activity, categories);
             }
         }
-        AppSettings.setCanReviseReviewedRegistration(activity,
-                WebAppBridge.flag(payload, "canRevise", AppSettings.canReviseReviewedRegistration(activity)));
+        if (payload.containsKey("canRevise")) {
+            AppSettings.setCanReviseReviewedRegistration(activity,
+                    WebAppBridge.flag(payload, "canRevise", false));
+        }
         AppSettings.saveMediaLimits(activity,
                 WebAppBridge.number(payload, "imageCount", AppSettings.getMediaImageLimit(activity)),
                 WebAppBridge.number(payload, "imageSizeMb", AppSettings.getMediaImageSizeMb(activity)),
                 WebAppBridge.number(payload, "videoCount", AppSettings.getMediaVideoLimit(activity)));
+        AppSettings.saveUploadLimits(activity,
+                WebAppBridge.number(payload, "avatarSizeMb", AppSettings.getMediaAvatarSizeMb(activity)),
+                WebAppBridge.text(payload, "imageFormats", ""),
+                WebAppBridge.text(payload, "videoFormats", ""));
+        AppSettings.saveTextLimits(activity, new int[] {
+                WebAppBridge.number(payload, "exhibitionTitle", 0),
+                WebAppBridge.number(payload, "exhibitionVenue", 0),
+                WebAppBridge.number(payload, "category", 0),
+                WebAppBridge.number(payload, "fieldTitle", 0),
+                WebAppBridge.number(payload, "usernameMin", 0),
+                WebAppBridge.number(payload, "usernameMax", 0),
+                WebAppBridge.number(payload, "passwordMin", 0),
+                WebAppBridge.number(payload, "passwordMax", 0),
+                WebAppBridge.number(payload, "nickname", 0),
+                WebAppBridge.number(payload, "bio", 0),
+                WebAppBridge.number(payload, "region", 0),
+                WebAppBridge.number(payload, "answer", 0),
+        });
         if (payload.containsKey("notify")) {
             @SuppressWarnings("unchecked")
             Map<String, Object> notify = payload.get("notify") instanceof Map
@@ -1202,8 +1396,344 @@ final class WebAppActions {
         }
     }
 
-    private static void shareText(Activity activity, Map<String, Object> payload) {
-        Intent share = new Intent(Intent.ACTION_SEND);
+    // ── 上传文件落盘（长简介与头像统一改用短 URL 引用） ──────────
+
+    /** 打开系统选择器并直接把所选文件存进应用私有目录，返回可引用的 URL。 */
+    private static void importMedia(WebAppBridge bridge, Map<String, Object> payload,
+            WebAppBridge.ResultCallback callback) {
+        String kind = WebAppBridge.text(payload, "kind", "image");
+        boolean video = "video".equals(kind);
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(video ? "video/*" : "image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        WebAppBridge.PendingResult pending =
+                new WebAppBridge.PendingResult("media.import", callback);
+        pending.context.put("kind", kind);
+        pending.context.put("avatar", Boolean.valueOf("avatar".equals(kind)));
+        bridge.startForResult(Intent.createChooser(intent, video ? "选择视频" : "选择图片"),
+                bridge.nextRequestCode(), pending);
+    }
+
+    /** 把前端裁剪好的 data URL 落盘，返回短 URL。 */
+    private static Map<String, Object> storeDataUrl(Context context, Map<String, Object> payload) {
+        String dataUrl = WebAppBridge.text(payload, "dataUrl", "");
+        String kind = WebAppBridge.text(payload, "kind", "image");
+        Map<String, Object> result = new LinkedHashMap<>();
+        java.util.regex.Matcher matcher = DATA_URL.matcher(dataUrl);
+        if (!matcher.matches()) {
+            result.put("ok", false);
+            result.put("error", "无法识别的图片数据");
+            return result;
+        }
+        String mime = matcher.group(1).toLowerCase(java.util.Locale.US);
+        String extension = mime.contains("png") ? "png" : "jpg";
+        boolean avatar = "avatar".equals(kind);
+        List<String> formats = imageFormatsFor(context, kind);
+        boolean allowedFormat = formats.contains(extension)
+                || ("jpg".equals(extension) && formats.contains("jpeg"));
+        if (!allowedFormat) {
+            result.put("ok", false);
+            result.put("error", "服务器设置不允许上传 ." + extension + " 格式，允许："
+                    + String.join("、", formats));
+            return result;
+        }
+        byte[] bytes;
+        try {
+            bytes = Base64.decode(matcher.group(2), Base64.DEFAULT);
+        } catch (Exception error) {
+            result.put("ok", false);
+            result.put("error", "图片数据解析失败");
+            return result;
+        }
+        int limitMb = avatar ? AppSettings.getMediaAvatarSizeMb(context)
+                : AppSettings.getMediaImageSizeMb(context);
+        if (bytes.length > limitMb * 1024L * 1024L) {
+            result.put("ok", false);
+            result.put("error", (avatar ? "头像" : "图片") + "超过 " + limitMb + " MB 限制");
+            return result;
+        }
+        String fileName = nextFileName(context, avatar ? "avatar" : "image", extension);
+        if (!writeFile(context, fileName, bytes)) {
+            result.put("ok", false);
+            result.put("error", "文件写入失败");
+            return result;
+        }
+        result.put("ok", true);
+        result.put("error", "");
+        result.put("url", WebShellActivity.MEDIA_URL + fileName);
+        result.put("bytes", bytes.length);
+        result.put("fileName", fileName);
+        return result;
+    }
+
+    private static List<String> imageFormatsFor(Context context, String kind) {
+        return AppSettings.getImageFormats(context);
+    }
+
+    /** 所选文件按格式与大小限制落盘；图片过大时先等比缩放再写 JPEG。 */
+    private static Map<String, Object> storeUri(Context context, Uri uri, boolean avatar) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        String mime = context.getContentResolver().getType(uri);
+        boolean video = mime != null && mime.startsWith("video/");
+        List<String> formats = video ? AppSettings.getVideoFormats(context)
+                : AppSettings.getImageFormats(context);
+        String extension = extensionOf(context, uri, mime);
+        if (extension.isEmpty() || !formats.contains(extension)) {
+            result.put("ok", false);
+            result.put("error", "服务器设置不允许上传 ." + (extension.isEmpty() ? "未知" : extension)
+                    + " 格式，允许：" + String.join("、", formats));
+            return result;
+        }
+        int limitMb = video ? 0 : (avatar ? AppSettings.getMediaAvatarSizeMb(context)
+                : AppSettings.getMediaImageSizeMb(context));
+        try {
+            if (video) {
+                String fileName = nextFileName(context, "video", extension);
+                long bytes = copyToFile(context, uri, fileName);
+                if (bytes <= 0) {
+                    result.put("ok", false);
+                    result.put("error", "视频读取失败");
+                    return result;
+                }
+                result.put("ok", true);
+                result.put("error", "");
+                result.put("url", WebShellActivity.MEDIA_URL + fileName);
+                result.put("mimeType", mime == null ? "" : mime);
+                result.put("bytes", bytes);
+                result.put("fileName", fileName);
+                return result;
+            }
+            byte[] raw = readBytes(context, uri);
+            if (raw == null || raw.length == 0) {
+                result.put("ok", false);
+                result.put("error", "图片读取失败");
+                return result;
+            }
+            boolean small = raw.length <= limitMb * 1024L * 1024L;
+            Bitmap bitmap = small ? null : decodeScaled(raw, avatar ? 640 : 1920);
+            if (bitmap == null) {
+                // 未超限或无法解码时保持原文件，保留 GIF/PNG 等格式的原始数据。
+                String fileName = nextFileName(context, avatar ? "avatar" : "image", extension);
+                if (!writeFile(context, fileName, raw)) {
+                    result.put("ok", false);
+                    result.put("error", "文件写入失败");
+                    return result;
+                }
+                result.put("ok", true);
+                result.put("error", "");
+                result.put("url", WebShellActivity.MEDIA_URL + fileName);
+                result.put("mimeType", mime == null ? "" : mime);
+                result.put("bytes", raw.length);
+                result.put("fileName", fileName);
+                return result;
+            }
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 86, output);
+            byte[] compressed = output.toByteArray();
+            String fileName = nextFileName(context, avatar ? "avatar" : "image", "jpg");
+            if (!writeFile(context, fileName, compressed)) {
+                result.put("ok", false);
+                result.put("error", "文件写入失败");
+                return result;
+            }
+            result.put("ok", true);
+            result.put("error", "");
+            result.put("url", WebShellActivity.MEDIA_URL + fileName);
+            result.put("mimeType", "image/jpeg");
+            result.put("bytes", compressed.length);
+            result.put("fileName", fileName);
+            result.put("compressed", true);
+            return result;
+        } catch (Exception error) {
+            Log.w(TAG, "上传文件处理失败: " + uri, error);
+            result.put("ok", false);
+            result.put("error", "上传失败：" + error.getMessage());
+            return result;
+        }
+    }
+
+    private static final java.util.regex.Pattern DATA_URL = java.util.regex.Pattern.compile(
+            "^data:(image/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\\s]+)$",
+            java.util.regex.Pattern.DOTALL);
+
+    private static final java.util.regex.Pattern INLINE_IMAGE = java.util.regex.Pattern.compile(
+            "data:image/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+");
+
+    private static final java.util.concurrent.atomic.AtomicInteger FILE_SEQUENCE =
+            new java.util.concurrent.atomic.AtomicInteger(1);
+
+    /**
+     * 把简介里的内联 base64 图片改写成落盘后的短 URL。
+     * <p>
+     * 历史内容与外部粘贴的 Markdown 都可能带内联图片，保存时统一转换，
+     * 长简介因此不再因为 base64 体积过大而拖慢编辑器与详情页。
+     */
+    static String inlineDataUrlsToFiles(Context context, String description) {
+        if (description == null || !description.contains("data:image/")) {
+            return description;
+        }
+        java.util.regex.Matcher matcher = INLINE_IMAGE.matcher(description);
+        StringBuilder builder = new StringBuilder();
+        int count = 0;
+        while (matcher.find()) {
+            String dataUrl = matcher.group();
+            java.util.regex.Matcher parts = DATA_URL.matcher(dataUrl);
+            if (!parts.matches()) {
+                continue;
+            }
+            byte[] bytes;
+            try {
+                bytes = Base64.decode(parts.group(2), Base64.DEFAULT);
+            } catch (Exception error) {
+                continue;
+            }
+            int maxBytes = AppSettings.getMediaImageSizeMb(context) * 1024 * 1024;
+            String extension = parts.group(1).contains("png") ? "png" : "jpg";
+            byte[] payload = bytes;
+            String usedExtension = extension;
+            if (bytes.length > maxBytes) {
+                Bitmap bitmap = decodeScaled(bytes, 1920);
+                if (bitmap != null) {
+                    ByteArrayOutputStream output = new ByteArrayOutputStream();
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 86, output);
+                    payload = output.toByteArray();
+                    usedExtension = "jpg";
+                }
+            }
+            String fileName = nextFileName(context, "desc", usedExtension);
+            if (!writeFile(context, fileName, payload)) {
+                continue;
+            }
+            matcher.appendReplacement(builder,
+                    java.util.regex.Matcher.quoteReplacement(WebShellActivity.MEDIA_URL + fileName));
+            count += 1;
+        }
+        matcher.appendTail(builder);
+        if (count > 0) {
+            Log.d(TAG, "简介内联图片已改写为本地 URL，共 " + count + " 张");
+        }
+        return builder.toString();
+    }
+
+    private static String nextFileName(Context context, String prefix, String extension) {
+        String safePrefix = prefix == null || prefix.isEmpty() ? "file" : prefix;
+        return safePrefix + "-" + System.currentTimeMillis() + "-" + FILE_SEQUENCE.getAndIncrement()
+                + "." + extension;
+    }
+
+    private static boolean writeFile(Context context, String fileName, byte[] bytes) {
+        try (java.io.FileOutputStream output =
+                     new java.io.FileOutputStream(new java.io.File(WebShellActivity.mediaDir(context), fileName))) {
+            output.write(bytes);
+            output.flush();
+            return true;
+        } catch (Exception error) {
+            Log.w(TAG, "文件写入失败: " + fileName, error);
+            return false;
+        }
+    }
+
+    private static long copyToFile(Context context, Uri uri, String fileName) throws Exception {
+        try (InputStream input = context.getContentResolver().openInputStream(uri);
+             java.io.FileOutputStream output =
+                     new java.io.FileOutputStream(new java.io.File(WebShellActivity.mediaDir(context), fileName))) {
+            if (input == null) {
+                return -1;
+            }
+            byte[] buffer = new byte[8192];
+            long total = 0;
+            int read;
+            while ((read = input.read(buffer)) > 0) {
+                output.write(buffer, 0, read);
+                total += read;
+            }
+            output.flush();
+            return total;
+        }
+    }
+
+    private static byte[] readBytes(Context context, Uri uri) {
+        try (InputStream input = context.getContentResolver().openInputStream(uri)) {
+            if (input == null) {
+                return null;
+            }
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) > 0) {
+                output.write(buffer, 0, read);
+            }
+            return output.toByteArray();
+        } catch (Exception error) {
+            Log.w(TAG, "文件读取失败: " + uri, error);
+            return null;
+        }
+    }
+
+    /** 按长边上限等比缩小解码，避免超大图片直接进入内存。 */
+    private static Bitmap decodeScaled(byte[] bytes, int maxSide) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            return null;
+        }
+        int sample = 1;
+        while (Math.max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) {
+            sample *= 2;
+        }
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = sample;
+        Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+        if (bitmap == null) {
+            return null;
+        }
+        int longSide = Math.max(bitmap.getWidth(), bitmap.getHeight());
+        if (longSide <= maxSide) {
+            return bitmap;
+        }
+        float ratio = maxSide / (float) longSide;
+        return Bitmap.createScaledBitmap(bitmap, Math.max(1, Math.round(bitmap.getWidth() * ratio)),
+                Math.max(1, Math.round(bitmap.getHeight() * ratio)), true);
+    }
+
+    /** 从 Uri 推断后缀：优先取显示名，其次按 MIME 映射。 */
+    private static String extensionOf(Context context, Uri uri, String mime) {
+        String name = null;
+        try (android.database.Cursor cursor = context.getContentResolver()
+                .query(uri, null, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                if (index >= 0) {
+                    name = cursor.getString(index);
+                }
+            }
+        } catch (Exception ignored) {
+            // 查询失败时退回 MIME 推断
+        }
+        if (name != null && name.contains(".")) {
+            return name.substring(name.lastIndexOf('.') + 1).toLowerCase(java.util.Locale.US);
+        }
+        if (mime == null) {
+            return "";
+        }
+        String lower = mime.toLowerCase(java.util.Locale.US);
+        if (lower.startsWith("image/")) {
+            String subtype = lower.substring("image/".length());
+            return "jpeg".equals(subtype) ? "jpg" : subtype;
+        }
+        if (lower.startsWith("video/")) {
+            String subtype = lower.substring("video/".length());
+            if ("quicktime".equals(subtype)) {
+                return "mov";
+            }
+            return subtype;
+        }
+        return "";
+    }
+
+    private static void shareText(Activity activity, Map<String, Object> payload) {        Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("text/plain");
         share.putExtra(Intent.EXTRA_SUBJECT, WebAppBridge.text(payload, "title", ""));
         share.putExtra(Intent.EXTRA_TEXT, WebAppBridge.text(payload, "text", ""));
@@ -1259,6 +1789,15 @@ final class WebAppActions {
             return;
         }
         Uri uri = data.getData();
+        if ("media.import".equals(pending.action)) {
+            Map<String, Object> stored = storeUri(activity, uri, Boolean.TRUE.equals(pending.context.get("avatar")));
+            if (Boolean.TRUE.equals(stored.get("ok"))) {
+                pending.callback.success(stored);
+            } else {
+                pending.callback.failure(String.valueOf(stored.get("error")));
+            }
+            return;
+        }
         String mime = activity.getContentResolver().getType(uri);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("ok", true);

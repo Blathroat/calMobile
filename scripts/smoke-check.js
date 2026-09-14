@@ -277,7 +277,29 @@ const checks = [
   {
     id: 'media-limits-persisted',
     file: 'app/src/main/java/com/example/calmobile/AppSettings.java',
-    contains: ['getMediaImageLimit', 'getMediaImageSizeMb', 'getMediaVideoLimit', 'saveMediaLimits']
+    contains: ['getMediaImageLimit', 'getMediaImageSizeMb', 'getMediaVideoLimit', 'saveMediaLimits',
+      'saveUploadLimits', 'saveTextLimits', 'getAnswerLimit']
+  },
+  {
+    id: 'media-uploaded-as-url',
+    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    contains: ['inlineDataUrlsToFiles', 'storeDataUrl', 'storeUri', 'MEDIA_URL', 'case "media.import":',
+      'case "media.store":']
+  },
+  {
+    id: 'media-url-served-by-shell',
+    file: 'app/src/main/java/com/example/calmobile/WebShellActivity.java',
+    contains: ['MEDIA_URL', 'serveMedia', 'mediaDir']
+  },
+  {
+    id: 'review-optional-auto-approve',
+    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    contains: ['autoApprove', 'STATUS_REVIEW_OPTIONAL', 'autoApproved']
+  },
+  {
+    id: 'avatar-and-region-profile',
+    file: 'app/src/main/java/com/example/calmobile/UserProfileStore.java',
+    contains: ['public String region', 'public String avatar', 'showRegistrations']
   },
   {
     id: 'description-format-persisted',
@@ -312,7 +334,35 @@ const checks = [
     id: 'web-components-module',
     file: `${WEB_ROOT}/js/ui/components.js`,
     contains: ['export function topbar', 'export function segmented', 'export function stateBlock',
-      'export function openSheet', 'export function toast']
+      'export function openSheet', 'export function toast', 'export function avatarNode',
+      'export function openAvatarCropper', 'seg-indicator']
+  },
+  {
+    id: 'web-validate-module',
+    file: `${WEB_ROOT}/js/core/validate.js`,
+    contains: ['export function fieldValidator', 'export function validateAll', 'export function limit',
+      'state.limits', 'state.server']
+  },
+  {
+    id: 'web-server-limits-forms',
+    file: `${WEB_ROOT}/js/pages/admin.js`,
+    contains: ['服务器设置', '允许的图片后缀', '头像大小上限', '表单字符数上限', 'TABS']
+  },
+  {
+    id: 'web-server-settings-not-in-profile',
+    file: `${WEB_ROOT}/js/pages/profile.js`,
+    notContains: ['用户公开页', '展会分类管理', '富文本媒体限制', '设置范围明确']
+  },
+  {
+    id: 'web-media-url-reference',
+    file: `${WEB_ROOT}/js/pages/rich-editor.js`,
+    contains: ["call('media.import'", 'allowedFormats'],
+    notContains: ['data:image/jpeg;base64']
+  },
+  {
+    id: 'web-calendar-swipe',
+    file: `${WEB_ROOT}/js/pages/home.js`,
+    contains: ['calendar-swipe', 'SWIPE_THRESHOLD', 'data-rows', 'shiftMonth']
   },
   {
     id: 'web-sanitizer',
@@ -327,7 +377,23 @@ const checks = [
   {
     id: 'web-motion-styles',
     file: `${WEB_ROOT}/styles/motion.css`,
-    contains: ['page-in-forward', 'drawer-up', 'toast-out', 'prefers-reduced-motion']
+    contains: ['page-in-forward', 'drawer-up', 'toast-out', 'prefers-reduced-motion',
+      'cal-in-right', 'cal-out-left', 'seg-indicator']
+  },
+  {
+    id: 'web-portrait-cover-ratio',
+    file: `${WEB_ROOT}/styles/tokens.css`,
+    contains: ['aspect-ratio: 1080 / 1920', 'thumb-cover', 'hero-compact', 'crop-stage']
+  },
+  {
+    id: 'web-calendar-six-rows',
+    file: `${WEB_ROOT}/styles/tokens.css`,
+    contains: ['.calendar[data-rows="6"]', '.calendar-swipe', '.tabbar-indicator']
+  },
+  {
+    id: 'web-accent-theme-applied',
+    file: `${WEB_ROOT}/js/core/bridge.js`,
+    contains: ['export function applyTheme', '--accent-tint', '--accent-glow', 'export function applySettings']
   },
   {
     id: 'web-vendor-easymde',

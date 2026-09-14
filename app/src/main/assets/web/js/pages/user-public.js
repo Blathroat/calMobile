@@ -1,12 +1,13 @@
 /**
  * 屏幕 14 · 用户公开页
  * 线框：newUI/remaining-ui.html #screen-user-public
- * 业务：展示用户允许公开的昵称、简介、联系方式与报名记录（受“展示我的报名”策略控制）。
+ * 业务：展示用户允许公开的昵称、简介、所在地区与报名记录（受“展示我的报名”策略控制）。
+ * 入口保留在管理后台的“公开页”按钮，个人页不再提供入口。
  */
 
 import { call, state } from '../core/bridge.js';
 import { scaffold } from '../core/router.js';
-import { loadingBlock, stateBlock, statusTag, statusTone } from '../ui/components.js';
+import { avatarNode, loadingBlock, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace, formatDateWithWeekday } from '../core/dom.js';
 
 export async function userPublicPage(context) {
@@ -58,7 +59,7 @@ export async function userPublicPage(context) {
         replace(host, [
             el('div', { class: 'card' }, [
                 el('div', { class: 'row', 'data-gap': 'md' }, [
-                    el('span', { class: 'avatar', text: (profile.nickname || '用').slice(0, 1), 'aria-hidden': 'true' }),
+                    avatarNode({ src: profile.avatar, name: profile.nickname, className: 'avatar' }),
                     el('span', { class: 'row-copy' }, [
                         el('strong', { class: 'row-title', text: profile.nickname }),
                         el('span', { class: 'row-meta', text: `${profile.role}${isOwn ? ' · 这是你的公开页' : ''}` }),
@@ -68,15 +69,15 @@ export async function userPublicPage(context) {
                 ]),
             ]),
             el('div', { class: 'card' }, [
-                el('span', { class: 'section-label', text: '联系方式' }),
-                row('邮箱 / 电话', profile.contact || '未公开'),
+                el('span', { class: 'section-label', text: '公开资料' }),
+                row('地区', profile.region || '未公开'),
                 row('社交账号', profile.socialMedia || '已隐藏'),
             ]),
             el('div', { class: 'card' }, [
                 el('span', { class: 'section-label', text: '已参加展会' }),
                 registrations.length > 0
                     ? el('div', { class: 'list', 'data-gap': 'sm' }, registrations.map((record) => el('div', { class: 'row-card' }, [
-                        el('span', { class: 'thumb ph-img thumb-sm', 'aria-hidden': 'true' }),
+                        el('span', { class: 'thumb thumb-cover ph-img thumb-sm', 'aria-hidden': 'true' }),
                         el('span', { class: 'row-copy' }, [
                             el('strong', { class: 'row-title truncate', text: record.exhibitionTitle }),
                             el('span', { class: 'row-meta', text: `${formatDateWithWeekday(`2026-06-${String(record.exhibitionDay).padStart(2, '0')}`)} · ${record.statusLabel}` }),
