@@ -42,10 +42,16 @@ public final class AppSettings {
     private static final String KEY_LIMIT_BIO = "limit_bio";
     private static final String KEY_LIMIT_REGION = "limit_region";
     private static final String KEY_LIMIT_ANSWER = "limit_answer";
+    private static final String KEY_APP_TITLE_ZH = "app_title_zh";
+    private static final String KEY_APP_TITLE_EN = "app_title_en";
 
     /** 默认允许上传的图片与视频格式（英文逗号分隔的后缀列表）。 */
     public static final String DEFAULT_IMAGE_FORMATS = "jpg,jpeg,png,webp,gif";
     public static final String DEFAULT_VIDEO_FORMATS = "mp4,mov,webm,m4v";
+
+    /** 软件标题的默认值，与设计稿首页上方的中英文标题一致。 */
+    public static final String DEFAULT_APP_TITLE_ZH = "发现展会";
+    public static final String DEFAULT_APP_TITLE_EN = "calMobile";
 
     // 预设色号与 newUI 的橙色强调保持协调，管理员可在设置页直接选择。
     private static final int[] ACCENTS = {
@@ -165,6 +171,28 @@ public final class AppSettings {
         int g = Color.green(color) + Math.round((255 - Color.green(color)) * amount);
         int b = Color.blue(color) + Math.round((255 - Color.blue(color)) * amount);
         return Color.rgb(Math.min(255, r), Math.min(255, g), Math.min(255, b));
+    }
+
+    // ── 软件标题（服务器设置） ─────────────────────────────────────
+
+    public static String getAppTitleZh(Context context) {
+        String value = prefs(context).getString(KEY_APP_TITLE_ZH, DEFAULT_APP_TITLE_ZH);
+        return value == null || value.trim().isEmpty() ? DEFAULT_APP_TITLE_ZH : value.trim();
+    }
+
+    public static String getAppTitleEn(Context context) {
+        String value = prefs(context).getString(KEY_APP_TITLE_EN, DEFAULT_APP_TITLE_EN);
+        return value == null || value.trim().isEmpty() ? DEFAULT_APP_TITLE_EN : value.trim();
+    }
+
+    /** 保存中英文标题；空值回落到默认标题，避免首页出现空白。 */
+    public static void saveAppTitle(Context context, String zh, String en) {
+        String titleZh = zh == null || zh.trim().isEmpty() ? DEFAULT_APP_TITLE_ZH : zh.trim();
+        String titleEn = en == null || en.trim().isEmpty() ? DEFAULT_APP_TITLE_EN : en.trim();
+        prefs(context).edit()
+                .putString(KEY_APP_TITLE_ZH, titleZh)
+                .putString(KEY_APP_TITLE_EN, titleEn)
+                .apply();
     }
 
     // ── 上传格式与头像限制 ─────────────────────────────────────

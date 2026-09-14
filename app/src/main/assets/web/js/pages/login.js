@@ -69,7 +69,7 @@ export async function loginPage(context) {
             text: '展',
             'aria-hidden': 'true',
         }),
-        el('h2', { text: '展会排期助手' }),
+        el('h2', { text: state.brand.zh }),
         el('p', { class: 'muted', text: '找到值得参加的展会，保存日程并完成报名' }),
     ]);
 

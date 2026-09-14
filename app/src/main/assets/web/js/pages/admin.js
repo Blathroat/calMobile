@@ -283,6 +283,8 @@ export async function adminPage(context) {
         settings = data;
 
         const announcement = textarea('settings-announcement', data?.announcement?.text || '', 3);
+        const titleZh = textInput('settings-title-zh', data?.brand?.zh || state.brand.zh, '例如：发现展会');
+        const titleEn = textInput('settings-title-en', data?.brand?.en || state.brand.en, '例如：calMobile');
         const categories = textarea('settings-categories', (data?.categories || []).join('\n'), 4);
         const imageCount = numberInput('settings-image-count', data?.media?.imageCount ?? state.media.imageCount ?? 8);
         const imageSize = numberInput('settings-image-size', data?.media?.imageSizeMb ?? state.media.imageSizeMb ?? 10);
@@ -311,6 +313,15 @@ export async function adminPage(context) {
         let canRevise = Boolean(data?.review?.canRevise);
 
         const validators = [
+            fieldValidator({ control: titleZh, label: '中文标题', required: true, max: 20 }),
+            fieldValidator({
+                control: titleEn,
+                label: '英文标题',
+                required: true,
+                max: 24,
+                pattern: /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/,
+                patternMessage: '英文标题只能包含字母、数字、空格与 . _ -',
+            }),
             fieldValidator({
                 control: imageFormats,
                 label: '图片格式',
@@ -332,6 +343,19 @@ export async function adminPage(context) {
             el('div', { class: 'notice', dataset: { tone: 'accent' } }, [
                 el('strong', { text: '服务器设置' }),
                 el('span', { text: '这里的配置保存在服务端，保存后对所有用户与展商同时生效。' }),
+            ]),
+            el('div', { class: 'card' }, [
+                el('span', { class: 'section-label', text: '软件标题' }),
+                el('p', { class: 'field-hint', text: '中文标题显示在首页上方的“发现展会”位置，英文标题显示在它上方与其他展示应用名称的位置。' }),
+                el('div', { class: 'field' }, [
+                    el('label', { for: titleZh.id, text: '中文标题' }),
+                    titleZh,
+                ]),
+                el('div', { class: 'field' }, [
+                    el('label', { for: titleEn.id, text: '英文标题' }),
+                    titleEn,
+                    el('p', { class: 'field-hint', text: '同时显示在首页、我的报名、报名管理等页面的品牌行。' }),
+                ]),
             ]),
             el('div', { class: 'card' }, [
                 el('span', { class: 'section-label', text: '进入应用时的公告' }),
@@ -433,6 +457,8 @@ export async function adminPage(context) {
             errorBox.hidden = true;
             try {
                 const saved = await call('settings.save', {
+                    appTitleZh: titleZh.value.trim(),
+                    appTitleEn: titleEn.value.trim(),
                     announcement: announcement.value.trim(),
                     announcementEnabled,
                     categories: categories.value.split('\n').map((item) => item.trim()).filter(Boolean),

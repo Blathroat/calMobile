@@ -46,6 +46,8 @@ export const state = {
         answer: 200,
     },
     announcement: { enabled: false, text: '' },
+    /** 软件中英文标题，由管理-设置维护，显示在首页上方与其它展示应用名称的位置。 */
+    brand: { zh: '发现展会', en: 'calMobile' },
     calendar: { available: false },
 };
 
@@ -142,6 +144,7 @@ export function applyBootstrap(data) {
     Object.assign(state.server, data.server || {});
     Object.assign(state.limits, data.limits || {});
     Object.assign(state.announcement, data.announcement || {});
+    Object.assign(state.brand, data.brand || {});
     Object.assign(state.calendar, data.calendar || {});
     state.categories = Array.isArray(data.categories) ? data.categories : [];
     applyTheme();
@@ -158,6 +161,7 @@ export function applySettings(settings) {
     Object.assign(state.limits, settings.limits || {});
     Object.assign(state.review, settings.review || {});
     Object.assign(state.announcement, settings.announcement || {});
+    Object.assign(state.brand, settings.brand || {});
     if (Array.isArray(settings.categories)) {
         state.categories = settings.categories;
     }

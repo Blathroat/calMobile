@@ -72,6 +72,8 @@
 
     /* ── 行为尺寸 ────────────────────────────────────────────────────── */
     --touch: 44px;
+    /* 顶部栏内容高度：12px 上下内边距 + 44px 触控高度，所有页面统一 */
+    --topbar-h: 68px;
     --ctrl: 48px;
     --app-max: 720px;
     --safe-top: env(safe-area-inset-top, 0px);
@@ -220,6 +222,12 @@ svg {
     padding: var(--s4);
     overflow-y: auto;
     overscroll-behavior: contain;
+}
+
+/* 内容是纵向滚动的，固定高度区块不允许被压缩：否则日历等区块会被 flex 压扁，
+   配合 overflow: hidden 直接裁掉下边框。只对日历容器生效，其它卡片保持默认。 */
+.calendar-swipe {
+    flex: none;
 }
 
 .app-body[data-pad="none"] {
@@ -406,25 +414,16 @@ svg {
     background: var(--accent);
 }
 
-/* 顶部栏标题下的强调短线，同样跟随配色 */
-.topbar-title::after {
-    content: "";
-    display: block;
-    width: 18px;
-    height: 2px;
-    margin-top: 3px;
-    border-radius: var(--r-pill);
-    background: var(--accent);
-}
-
 /* ============================================================================
  * 顶部栏：返回、标题与页面级操作
  * ==========================================================================*/
 
+/* 顶部栏统一高度：有返回/操作按钮与只有标题的页面保持一致，与首页对齐 */
 .topbar {
     display: flex;
     align-items: center;
     gap: var(--s2);
+    min-height: calc(var(--safe-top) + var(--topbar-h));
     padding: calc(var(--s3) + var(--safe-top)) var(--s4) var(--s3);
     background: var(--screen);
     border-bottom: var(--hairline) solid var(--stroke);
@@ -832,7 +831,7 @@ svg {
     gap: var(--s2);
     padding: 0 var(--s4);
     border-radius: var(--r-input);
-    background: var(--dark);
+    background: var(--accent);
     color: var(--screen);
     font-size: var(--fs-body);
     font-weight: 700;
@@ -841,9 +840,9 @@ svg {
 }
 
 .cta.ghost {
-    background: var(--screen);
-    color: var(--dark);
-    border: 1.5px solid var(--dark);
+    background: var(--accent-tint);
+    color: var(--accent-ink);
+    border: 1.5px solid var(--accent-edge);
 }
 
 .cta.danger {
@@ -877,7 +876,7 @@ svg {
 }
 
 .cta.ghost[data-loading="true"]::after {
-    color: var(--dark);
+    color: var(--accent-ink);
 }
 
 @keyframes spin {
@@ -896,7 +895,7 @@ svg {
     justify-content: center;
     padding: 0;
     border-radius: var(--r-pill);
-    background: var(--dark);
+    background: var(--accent);
     color: var(--screen);
     font-size: 0;
     box-shadow: var(--shadow-float);
@@ -908,9 +907,9 @@ svg {
 }
 
 .round-action[data-variant="ghost"] {
-    background: var(--screen);
-    color: var(--dark);
-    border: 1.5px solid var(--dark);
+    background: var(--accent-tint);
+    color: var(--accent-ink);
+    border: 1.5px solid var(--accent-edge);
     box-shadow: none;
 }
 
@@ -1180,7 +1179,7 @@ svg {
 }
 
 .switch input:checked + span {
-    background: var(--dark);
+    background: var(--accent);
 }
 
 .switch input:checked + span::after {
@@ -1681,6 +1680,7 @@ svg {
 /* 日历外层：横向手势由脚本接管，纵向仍然交给页面滚动 */
 .calendar-swipe {
     position: relative;
+    flex: none;
     overflow: hidden;
     border-radius: var(--r-panel);
     touch-action: pan-y;
@@ -1769,7 +1769,7 @@ svg {
 
 @media (hover: hover) {
     .cta:hover {
-        background: var(--frame);
+        background: var(--accent-ink);
     }
 
     .cta.ghost:hover {
@@ -1824,7 +1824,7 @@ svg {
     }
 
     .round-action:hover {
-        background: var(--frame);
+        background: var(--accent-ink);
     }
 
     .round-action[data-variant="ghost"]:hover {

@@ -396,6 +396,33 @@ const checks = [
     contains: ['export function applyTheme', '--accent-tint', '--accent-glow', 'export function applySettings']
   },
   {
+    id: 'web-accent-drives-controls',
+    file: `${WEB_ROOT}/styles/tokens.css`,
+    contains: ['background: var(--accent);', '.switch input:checked + span', '.seg-indicator',
+      '.cal-day[aria-pressed="true"]', '.tabbar-indicator'],
+    notContains: ['.topbar-title::after']
+  },
+  {
+    id: 'web-topbar-uniform-height',
+    file: `${WEB_ROOT}/styles/tokens.css`,
+    contains: ['--topbar-h: 68px', 'min-height: calc(var(--safe-top) + var(--topbar-h))']
+  },
+  {
+    id: 'app-title-setting',
+    file: 'app/src/main/java/com/example/calmobile/AppSettings.java',
+    contains: ['getAppTitleZh', 'getAppTitleEn', 'saveAppTitle', 'DEFAULT_APP_TITLE_ZH']
+  },
+  {
+    id: 'app-title-bridge-and-pages',
+    file: `${WEB_ROOT}/js/pages/admin.js`,
+    contains: ['软件标题', 'appTitleZh', 'appTitleEn']
+  },
+  {
+    id: 'app-title-shown-on-pages',
+    file: `${WEB_ROOT}/js/pages/home.js`,
+    contains: ['state.brand.en', 'state.brand.zh']
+  },
+  {
     id: 'web-vendor-easymde',
     file: `${WEB_ROOT}/vendor/easymde/easymde.min.js`,
     minBytes: 100000

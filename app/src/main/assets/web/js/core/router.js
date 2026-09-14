@@ -149,7 +149,7 @@ export async function render() {
         });
     }
 
-    document.title = `${definition.title || 'CalMobile'} · CalMobile`;
+    document.title = `${definition.title || state.brand.zh} · ${state.brand.zh}`;
     onNavigate?.(current);
 }
 

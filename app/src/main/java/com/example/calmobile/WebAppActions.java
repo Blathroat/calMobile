@@ -194,6 +194,7 @@ final class WebAppActions {
         data.put("review", reviewPolicy(activity));
         data.put("media", mediaLimits(activity));
         data.put("announcement", announcement(activity));
+        data.put("brand", brand(activity));
         data.put("limits", textLimits(activity));
         data.put("server", serverSettings(activity));
         Map<String, Object> calendar = new LinkedHashMap<>();
@@ -323,6 +324,14 @@ final class WebAppActions {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("enabled", AppSettings.isAnnouncementEnabled(activity));
         data.put("text", AppSettings.getAnnouncement(activity));
+        return data;
+    }
+
+    /** 软件中英文标题：显示在首页上方与其它展示应用名称的位置。 */
+    private static Map<String, Object> brand(Activity activity) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("zh", AppSettings.getAppTitleZh(activity));
+        data.put("en", AppSettings.getAppTitleEn(activity));
         return data;
     }
 
@@ -1231,6 +1240,7 @@ final class WebAppActions {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("theme", themePayload(activity));
         data.put("announcement", announcement(activity));
+        data.put("brand", brand(activity));
         data.put("categories", AppSettings.getCategories(activity));
         data.put("review", reviewPolicy(activity));
         data.put("media", mediaLimits(activity));
@@ -1256,6 +1266,10 @@ final class WebAppActions {
             AppSettings.saveAnnouncement(activity, WebAppBridge.text(payload, "announcement", ""),
                     WebAppBridge.flag(payload, "announcementEnabled", false));
         }
+        if (payload.containsKey("appTitleZh") || payload.containsKey("appTitleEn")) {
+            AppSettings.saveAppTitle(activity, WebAppBridge.text(payload, "appTitleZh", ""),
+                    WebAppBridge.text(payload, "appTitleEn", ""));
+        }
 
         List<Object> rawCategories = WebAppBridge.list(payload, "categories");
         if (!rawCategories.isEmpty()) {
@@ -1274,28 +1288,37 @@ final class WebAppActions {
             AppSettings.setCanReviseReviewedRegistration(activity,
                     WebAppBridge.flag(payload, "canRevise", false));
         }
-        AppSettings.saveMediaLimits(activity,
-                WebAppBridge.number(payload, "imageCount", AppSettings.getMediaImageLimit(activity)),
-                WebAppBridge.number(payload, "imageSizeMb", AppSettings.getMediaImageSizeMb(activity)),
-                WebAppBridge.number(payload, "videoCount", AppSettings.getMediaVideoLimit(activity)));
-        AppSettings.saveUploadLimits(activity,
-                WebAppBridge.number(payload, "avatarSizeMb", AppSettings.getMediaAvatarSizeMb(activity)),
-                WebAppBridge.text(payload, "imageFormats", ""),
-                WebAppBridge.text(payload, "videoFormats", ""));
-        AppSettings.saveTextLimits(activity, new int[] {
-                WebAppBridge.number(payload, "exhibitionTitle", 0),
-                WebAppBridge.number(payload, "exhibitionVenue", 0),
-                WebAppBridge.number(payload, "category", 0),
-                WebAppBridge.number(payload, "fieldTitle", 0),
-                WebAppBridge.number(payload, "usernameMin", 0),
-                WebAppBridge.number(payload, "usernameMax", 0),
-                WebAppBridge.number(payload, "passwordMin", 0),
-                WebAppBridge.number(payload, "passwordMax", 0),
-                WebAppBridge.number(payload, "nickname", 0),
-                WebAppBridge.number(payload, "bio", 0),
-                WebAppBridge.number(payload, "region", 0),
-                WebAppBridge.number(payload, "answer", 0),
-        });
+        // 只写入本次真正提交的字段：个人页保存配色时不会顺带把服务器设置改回默认值。
+        if (payload.containsKey("imageCount") || payload.containsKey("imageSizeMb")
+                || payload.containsKey("videoCount")) {
+            AppSettings.saveMediaLimits(activity,
+                    WebAppBridge.number(payload, "imageCount", AppSettings.getMediaImageLimit(activity)),
+                    WebAppBridge.number(payload, "imageSizeMb", AppSettings.getMediaImageSizeMb(activity)),
+                    WebAppBridge.number(payload, "videoCount", AppSettings.getMediaVideoLimit(activity)));
+        }
+        if (payload.containsKey("avatarSizeMb") || payload.containsKey("imageFormats")
+                || payload.containsKey("videoFormats")) {
+            AppSettings.saveUploadLimits(activity,
+                    WebAppBridge.number(payload, "avatarSizeMb", AppSettings.getMediaAvatarSizeMb(activity)),
+                    WebAppBridge.text(payload, "imageFormats", ""),
+                    WebAppBridge.text(payload, "videoFormats", ""));
+        }
+        if (payload.containsKey("exhibitionTitle")) {
+            AppSettings.saveTextLimits(activity, new int[] {
+                    WebAppBridge.number(payload, "exhibitionTitle", 0),
+                    WebAppBridge.number(payload, "exhibitionVenue", 0),
+                    WebAppBridge.number(payload, "category", 0),
+                    WebAppBridge.number(payload, "fieldTitle", 0),
+                    WebAppBridge.number(payload, "usernameMin", 0),
+                    WebAppBridge.number(payload, "usernameMax", 0),
+                    WebAppBridge.number(payload, "passwordMin", 0),
+                    WebAppBridge.number(payload, "passwordMax", 0),
+                    WebAppBridge.number(payload, "nickname", 0),
+                    WebAppBridge.number(payload, "bio", 0),
+                    WebAppBridge.number(payload, "region", 0),
+                    WebAppBridge.number(payload, "answer", 0),
+            });
+        }
         if (payload.containsKey("notify")) {
             @SuppressWarnings("unchecked")
             Map<String, Object> notify = payload.get("notify") instanceof Map

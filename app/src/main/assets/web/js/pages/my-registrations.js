@@ -21,7 +21,7 @@ export async function myRegistrationsPage(context) {
         children: [
             el('div', { class: 'row', 'data-between': 'true' }, [
                 el('div', { class: 'stack', 'data-gap': 'sm' }, [
-                    el('span', { class: 'eyebrow', text: 'calMobile' }),
+                    el('span', { class: 'eyebrow', text: state.brand.en }),
                     el('h2', { text: '我的报名' }),
                 ]),
                 countPill,

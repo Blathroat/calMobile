@@ -40,8 +40,8 @@ export async function homePage(context) {
         children: [
             el('header', { class: 'row', 'data-between': 'true' }, [
                 el('div', { class: 'stack', 'data-gap': 'sm' }, [
-                    el('span', { class: 'eyebrow', text: 'calMobile' }),
-                    el('h2', { text: '发现展会' }),
+                    el('span', { class: 'eyebrow', text: state.brand.en }),
+                    el('h2', { text: state.brand.zh }),
                 ]),
             ]),
             noticeHost,
