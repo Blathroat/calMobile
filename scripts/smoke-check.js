@@ -284,9 +284,16 @@ const checks = [
   },
   {
     id: 'web-app-actions',
+    // 业务动作按域拆分后，Manager 调用分散在各动作类；分发入口只保留动作清单。
     file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
-    contains: ['ExhibitionManager', 'RegistrationManager', 'RegistrationReviewStore', 'AppSettings',
-      'CalendarHelper', 'NotificationHelper', 'ExportManager', 'case "bootstrap":', 'case "exhibitions.save":']
+    contains: ['case "bootstrap":', 'case "exhibitions.save":', 'case "registrations.submit":',
+      'case "review.updateStatus":', 'case "users.list":']
+  },
+  {
+    id: 'native-managers-wired',
+    // 各域类仍然复用既有 Manager / 配置，没有另起一套业务规则
+    file: 'app/src/main/java/com/example/calmobile/ExhibitionActions.java',
+    contains: ['ExhibitionManager', 'ExhibitionConfiguration', 'RegistrationField']
   },
   {
     id: 'bridge-contract',
@@ -316,9 +323,9 @@ const checks = [
   },
   {
     id: 'media-uploaded-as-url',
-    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
-    contains: ['inlineDataUrlsToFiles', 'storeDataUrl', 'storeUri', 'MEDIA_URL', 'case "media.import":',
-      'case "media.store":']
+    // 落盘逻辑已随拆分移入 MediaActions
+    file: 'app/src/main/java/com/example/calmobile/MediaActions.java',
+    contains: ['inlineDataUrlsToFiles', 'storeDataUrl', 'storeUri', 'MEDIA_URL', 'importMedia']
   },
   {
     id: 'media-url-served-by-shell',
@@ -327,7 +334,7 @@ const checks = [
   },
   {
     id: 'review-optional-auto-approve',
-    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    file: 'app/src/main/java/com/example/calmobile/RegistrationActions.java',
     contains: ['autoApprove', 'STATUS_REVIEW_OPTIONAL', 'autoApproved']
   },
   {
@@ -343,9 +350,9 @@ const checks = [
   },
   {
     id: 'registration-code-and-checkin',
-    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
-    contains: ['REGISTRATION_CODE_PREFIX', 'registrationCode', 'case "checkin.scan":',
-      'case "camera.ensurePermission":', 'parseCheckInCode', 'STATUS_ATTENDED']
+    file: 'app/src/main/java/com/example/calmobile/RegistrationActions.java',
+    contains: ['REGISTRATION_CODE_PREFIX', 'registrationCode', 'parseCheckInCode',
+      'STATUS_ATTENDED', 'canCheckInExhibition']
   },
   {
     id: 'attended-status-defined',
@@ -364,12 +371,12 @@ const checks = [
   },
   {
     id: 'admin-can-always-review',
-    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    file: 'app/src/main/java/com/example/calmobile/RegistrationActions.java',
     contains: ['AuthManager.getInstance().isAdmin()']
   },
   {
     id: 'admin-public-profile-unrestricted',
-    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    file: 'app/src/main/java/com/example/calmobile/AdminActions.java',
     contains: ['viewedAsAdmin', 'asAdmin']
   },
   {
@@ -700,10 +707,30 @@ const checks = [
 
   // ── 复用中的原生能力 ────────────────────────────────────────────
   {
-    id: 'native-core-classes',
+    id: 'native-actions-dispatcher',
+    // 分发入口只做路由：不出现任何业务实现细节
     file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
-    contains: ['ExhibitionManager', 'RegistrationManager', 'RegistrationReviewStore', 'AppSettings',
-      'CalendarHelper', 'NotificationHelper', 'ExportManager', 'UserProfileStore']
+    contains: ['static void handle(', 'SessionActions.bootstrap', 'RegistrationActions.checkIn',
+      'MediaActions.exportCsv'],
+    notContains: ['ExhibitionManager.findById', 'DatabaseHelper.getInstance()']
+  },
+  {
+    id: 'native-actions-split',
+    file: 'scripts/split-webapp-actions.js',
+    // 拆分脚本自身：按方法边界切分 + 归属覆盖校验
+    contains: ['function scanMethods', 'OWNERS', 'FAIL 以下方法没有分配归属',
+      'git', 'WebAppActions.java']
+  },
+  {
+    id: 'native-actions-checklist',
+    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    contains: ['case "checkin.scan":', 'case "camera.ensurePermission":', 'case "settings.uiMode":',
+      'case "export.csv":']
+  },
+  {
+    id: 'native-actions-domains',
+    file: 'app/src/main/java/com/example/calmobile/SessionActions.java',
+    contains: ['static Map<String, Object> bootstrap(', 'static Map<String, Object> userPayload(']
   },
   {
     id: 'legacy-removed',

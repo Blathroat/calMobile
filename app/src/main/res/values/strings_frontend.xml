@@ -142,6 +142,7 @@
     <string name="s_1kmur0r">换个关键词，或清空搜索查看全部展会。</string>
     <string name="s_1kokqyk">清空后需要重新编写，保存前不会影响已发布内容。</string>
     <string name="s_1kqdxz5">保存简介</string>
+    <string name="s_1kyf8ic">当前公开：其他用户能在你的公开页看到已参加展会。</string>
     <string name="s_1kzh3gd">个人主页</string>
     <string name="s_1l65wvf">有序清单</string>
     <string name="s_1l8hptt">服务器设置</string>
@@ -216,6 +217,7 @@
     <string name="s_1u7mlaq">删除展会</string>
     <string name="s_1u8rnsb">撤销报名</string>
     <string name="s_1umrk9v">提交报名</string>
+    <string name="s_1utpn11">在公开页展示我的报名记录</string>
     <string name="s_1v7py1m">展会分类管理</string>
     <string name="s_1va7jf9">已取消导出</string>
     <string name="s_1ve1f4n">展会详情</string>
@@ -230,7 +232,9 @@
     <string name="s_1w7zwsp">筛选</string>
     <string name="s_1w8qxkd">未获得摄像头权限，可在系统设置里开启，或使用“手动输入报名码”。</string>
     <string name="s_1wed2to">例如：发现展会</string>
+    <string name="s_1wgtu4f">关闭后其他人看不到你参加过的展会</string>
     <string name="s_1wh1onp">报名记录加载失败</string>
+    <string name="s_1wlb9mw">现场向展商出示此码，扫码后报名状态会变为“已参加”。</string>
     <string name="s_1wlt01z">视频数量上限</string>
     <string name="s_1wogqko">引用</string>
     <string name="s_1wz04v2">保存后可编辑</string>
@@ -270,6 +274,7 @@
     <string name="s_3rxr06">头像已更新</string>
     <string name="s_3xcdlm">未启用：报名详情不展示报名码，展商仍可在报名管理中手动调整状态。</string>
     <string name="s_3zbkfg">找到值得参加的展会，保存日程并完成报名</string>
+    <string name="s_413sl5">当前不公开：其他用户看不到你的报名记录，管理员查看时不受此限制。</string>
     <string name="s_4e7do4">展会列表加载失败</string>
     <string name="s_4hjltm">密码已更新</string>
     <string name="s_4l0yq7">保存后详情页会按 Markdown 渲染。</string>
@@ -301,6 +306,7 @@
     <string name="s_8kqs1o">还没有可展示的报名记录。</string>
     <string name="s_8peqwe">出错了</string>
     <string name="s_8wvztz">没有可公开的资料</string>
+    <string name="s_92i7f7">已开启公开展示</string>
     <string name="s_94aane">图片还在加载，请稍候</string>
     <string name="s_9dpkko">简介以 Markdown 保存，详情页自动渲染标题、列表、链接与图片。</string>
     <string name="s_9mbwb2">清空</string>
@@ -327,6 +333,7 @@
     <string name="s_cq6xrf">这段内容不是本应用的报名码，请确认后重试。</string>
     <string name="s_crec0c">标记为已参加</string>
     <string name="s_d5a1x9">个</string>
+    <string name="s_dn42iy">已关闭公开展示</string>
     <string name="s_dn4ida">返回展商后台</string>
     <string name="s_dnmrxz">已核销为已参加</string>
     <string name="s_doztlr">设置用户名</string>
@@ -335,6 +342,7 @@
     <string name="s_dtadu0">用户名最短</string>
     <string name="s_dte5kz">页面加载失败</string>
     <string name="s_dvh8t7">移出日历</string>
+    <string name="s_dyicmi">未获得摄像头权限，可在系统设置里开启，或使用“手动输入报名码”。</string>
     <string name="s_e1wq8p">分享展会</string>
     <string name="s_e4jezx">上一个月</string>
     <string name="s_e6tqxb">密码最短</string>
@@ -399,6 +407,7 @@
     <string name="s_kthke1">允许的图片后缀</string>
     <string name="s_kvpltc">加载失败</string>
     <string name="s_l2amry">中文标题显示在首页上方的“发现展会”位置，英文标题显示在它上方与其他展示应用名称的位置。</string>
+    <string name="s_lh9gvq">隐私设置</string>
     <string name="s_lltmb4">已隐藏</string>
     <string name="s_lp789j">已清空编辑器内容</string>
     <string name="s_lswd2v">重试</string>
@@ -479,6 +488,4 @@
     <string name="s_zienpw">报名码内容</string>
     <string name="s_zkl7t2">准备扫码</string>
     <string name="s_zqzoiq">核销报名码</string>
-    <string name="s_dyicmi">未获得摄像头权限，可在系统设置里开启，或使用“手动输入报名码”。</string>
-    <string name="s_1wlb9mw">现场向展商出示此码，扫码后报名状态会变为“已参加”。</string>
 </resources>

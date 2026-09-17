@@ -678,6 +678,28 @@ test('核销页能够用假桥接完成一次扫码核销', async () => {
     assert.ok(collectText(dom.app).includes('核销成功'), '核销结果没有渲染出来');
 });
 
+test('个人页提供「在公开页展示我的报名记录」开关并能保存', async () => {
+    const { dom, calls } = await renderRoute('profile', {});
+    const root = sharedDocument.documentElement;
+    const label = root.querySelectorAll((node) => node.tagName === 'LABEL')
+        .find((node) => collectText(node.parentNode).includes('在公开页展示我的报名记录'));
+    assert.ok(label, '个人页没有渲染出隐私设置开关');
+
+    const input = label.querySelectorAll((node) => node.tagName === 'INPUT')[0];
+    assert.ok(input, '隐私开关缺少 checkbox');
+    assert.strictEqual(input.checked, false, '默认应当是不公开');
+
+    // 打开开关后必须真的提交给后端（此前只透传恒为 false 的值，等于没有入口）
+    input.checked = true;
+    input.dispatch('change', { target: input });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    const saved = calls.filter((item) => item.action === 'profile.save').pop();
+    assert.ok(saved, '切换隐私开关没有调用 profile.save');
+    assert.strictEqual(saved.payload.showRegistrations, true,
+        '隐私开关没有把 true 提交给后端');
+});
+
 test('用户公开页在管理视角下展示已参加展会', async () => {
     const { app } = await renderRoute('user-public', { userId: 'user-1' });
     const text = collectText(app);

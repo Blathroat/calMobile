@@ -135,6 +135,9 @@ function userPayload(username) {
             can: { register: false, profile: false, exhibitor: false, admin: false },
         };
     }
+    // 个人资料与隐私偏好统一放在 account.profile 上（首次访问时补默认值），
+    // 这样 userPayload 与 users.public 读的是同一份数据。
+    const profile = account.profile || (account.profile = {});
     return {
         loggedIn: true,
         guest: false,
@@ -143,11 +146,11 @@ function userPayload(username) {
         username: account.username,
         nickname: account.nickname,
         email: account.email,
-        bio: '',
-        region: '',
-        socialMedia: '',
-        avatar: '',
-        showRegistrations: false,
+        bio: profile.bio || '',
+        region: profile.region || '',
+        socialMedia: profile.socialMedia || '',
+        avatar: profile.avatar || '',
+        showRegistrations: profile.showRegistrations === true,
         status: '正常',
         can: {
             register: true,
@@ -229,15 +232,24 @@ const handlers = {
         if (body.email !== undefined) {
             account.email = String(body.email).trim();
         }
-        const user = userPayload(account.username);
-        Object.assign(user, {
-            bio: String(body.bio || ''),
-            region: String(body.region || ''),
-            socialMedia: String(body.socialMedia || ''),
-            avatar: String(body.avatar || ''),
-            showRegistrations: Boolean(body.showRegistrations),
-        });
-        return { ok: true, error: '', user };
+        const profile = account.profile || (account.profile = {});
+        if (body.bio !== undefined) {
+            profile.bio = String(body.bio);
+        }
+        if (body.region !== undefined) {
+            profile.region = String(body.region);
+        }
+        if (body.socialMedia !== undefined) {
+            profile.socialMedia = String(body.socialMedia);
+        }
+        if (body.avatar !== undefined) {
+            profile.avatar = String(body.avatar);
+        }
+        // 隐私开关：只在这里写入，users.public 直接读它
+        if (body.showRegistrations !== undefined) {
+            profile.showRegistrations = body.showRegistrations === true;
+        }
+        return { ok: true, error: '', user: userPayload(account.username) };
     },
 
     'profile.password': (body) => {
@@ -535,24 +547,27 @@ const handlers = {
     'users.status': () => true,
 
     'users.public': (body) => {
-        const account = ACCOUNTS.find((item) => item.id === body.userId)
-            || ACCOUNTS.find((item) => item.nickname === body.nickname)
-            || ACCOUNTS[Number(String(body.userId || '').replace('user-', '')) - 1];
+        const index = Number(String(body.userId || '').replace('user-', '')) - 1;
+        const account = ACCOUNTS.find((item) => item.nickname === body.nickname)
+            || (Number.isFinite(index) && index >= 0 ? ACCOUNTS[index] : null);
         if (!account) {
             return { found: false, error: '用户不存在或未公开' };
         }
         const isAdmin = userPayload(currentUsername()).role === 'admin';
+        const profile = account.profile || {};
+        // 普通访问者按用户的隐私设置过滤；管理员不受限制。
+        const showRegistrations = profile.showRegistrations === true;
         return {
             found: true,
             nickname: account.nickname,
             role: ROLE_LABEL[account.role],
-            bio: '',
-            region: '',
-            avatar: '',
-            socialMedia: '',
-            showRegistrations: false,
+            bio: profile.bio || '',
+            region: profile.region || '',
+            avatar: profile.avatar || '',
+            socialMedia: profile.socialMedia || '',
+            showRegistrations,
             viewedAsAdmin: isAdmin,
-            registrations: isAdmin
+            registrations: (isAdmin || showRegistrations)
                 ? REGISTRATIONS.filter((item) => item.visitorName === account.nickname)
                     .map(registrationPayload)
                 : [],

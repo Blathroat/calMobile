@@ -187,12 +187,40 @@ test('settings 保存后可读回，外观模式受限于三个取值', () => {
     invoke('settings.uiMode', { mode: 'auto' });
 });
 
+test('隐私开关保存后会持久，并决定公开页是否展示报名记录', () => {
+    // users.list 的 id 按 ACCOUNTS 顺序生成：user-1=demo、user-2=exhibitor、user-3=user
+    const userAccount = 'user-3';
+    // 默认不公开
+    const before = invoke('users.public', { userId: userAccount }, 'user');
+    assert.strictEqual(before.showRegistrations, false, '默认应当不公开');
+
+    // 用户打开开关
+    const saved = invoke('profile.save', { showRegistrations: true }, 'user');
+    assert.strictEqual(saved.ok, true);
+    assert.strictEqual(saved.user.showRegistrations, true, '保存结果里应当带上开关状态');
+
+    // 读回仍然是 true（此前 userPayload 会把它重置成默认值）
+    const after = invoke('profile.get', {}, 'user');
+    assert.strictEqual(after.showRegistrations, true, '隐私开关没有持久化');
+
+    // 公开页随之按该设置放行；管理员始终可见
+    const publicView = invoke('users.public', { userId: userAccount }, 'exhibitor');
+    assert.strictEqual(publicView.showRegistrations, true, '公开页没有读到隐私开关');
+    const adminView = invoke('users.public', { userId: userAccount }, 'demo');
+    assert.strictEqual(adminView.viewedAsAdmin, true);
+    assert.ok(adminView.registrations.length >= publicView.registrations.length,
+        '管理员应当至少能看到普通访问者能看到的记录');
+
+    // 还原
+    invoke('profile.save', { showRegistrations: false }, 'user');
+});
+
 test('管理员查看用户公开页不受隐私设置影响', () => {
-    const asAdmin = invoke('users.public', { userId: 'user-1' }, 'demo');
+    const asAdmin = invoke('users.public', { userId: 'user-3' }, 'demo');
     assert.strictEqual(asAdmin.found, true);
     assert.strictEqual(asAdmin.viewedAsAdmin, true, '管理员视角应当被标记');
 
-    const asUser = invoke('users.public', { userId: 'user-1' }, 'user');
+    const asUser = invoke('users.public', { userId: 'user-3' }, 'user');
     assert.strictEqual(asUser.viewedAsAdmin, false, '普通用户不应是管理视角');
 });
 

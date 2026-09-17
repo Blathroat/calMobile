@@ -68,6 +68,7 @@ export async function profilePage(context) {
                     infoRow(t('s_1hnvqec'), user.socialMedia || t('s_15h5nhd')),
                 ]),
             ]),
+            privacyCard(user),
             el('div', { class: 'list', 'data-gap': 'sm' }, [
                 menuRow(t('s_1y0imfq'), t('s_16sgm5m'), () => openEditor()),
                 menuRow(t('s_1pt7oo1'), `至少 ${passwordRule().min} 个字符`, () => openPasswordSheet()),
@@ -225,6 +226,58 @@ export async function profilePage(context) {
         } catch (error) {
             toast(`外观已切换，但未能保存：${error.message}`, 'error');
         }
+    }
+
+    /**
+     * 隐私设置：是否在公开页展示自己的报名记录。
+     * <p>
+     * 这条开关此前只在保存资料时透传 `state.user.showRegistrations`（恒为 false），
+     * 界面上没有任何入口，于是「公开」分支永远走不到。这里补上开关；
+     * 管理员查看公开页不受该设置影响（见 AdminActions.publicProfile）。
+     */
+    function privacyCard(user) {
+        return el('div', { class: 'card' }, [
+            el('span', { class: 'section-label', text: t('s_lh9gvq') }),
+            switchRow({
+                id: 'privacy-registrations',
+                label: t('s_1utpn11'),
+                description: t('s_1wgtu4f'),
+                checked: user.showRegistrations === true,
+                onChange: (value) => savePrivacy(value),
+            }),
+            el('p', {
+                class: 'field-hint',
+                text: user.showRegistrations === true ? t('s_1kyf8ic') : t('s_413sl5'),
+            }),
+        ]);
+    }
+
+    /** 隐私开关立即生效：失败时回滚界面状态，避免看起来已保存。 */
+    async function savePrivacy(value) {
+        const previous = state.user.showRegistrations === true;
+        state.user.showRegistrations = value;
+        try {
+            const saved = await profileApi.save({
+                nickname: state.user.nickname || '',
+                email: state.user.email || '',
+                bio: state.user.bio || '',
+                region: state.user.region || '',
+                socialMedia: state.user.socialMedia || '',
+                avatar: state.user.avatar || '',
+                showRegistrations: value,
+            });
+            if (!saved?.ok) {
+                state.user.showRegistrations = previous;
+                toast(saved?.error || t('s_1q9u8le'), 'error');
+            } else {
+                Object.assign(state.user, saved.user || {});
+                toast(value ? t('s_92i7f7') : t('s_dn42iy'), 'success');
+            }
+        } catch (error) {
+            state.user.showRegistrations = previous;
+            toast(error.message, 'error');
+        }
+        render();
     }
 
     function infoRow(label, value) {

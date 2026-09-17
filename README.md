@@ -166,6 +166,7 @@ app/src/main/
 | `RegistrationReviewStore` | 审核状态与报名人记录（会话内，旧页面与新前端共用） |
 | `AdminUserManager` | 用户列表、搜索与账号状态 |
 | `AuthManager` | 登录、注册、访客与角色权限 |
+| `WebAppActions` 分发 + `SessionActions` / `ProfileActions` / `ExhibitionActions` / `RegistrationActions` / `AdminActions` / `MediaActions` / `SystemActions` / `ActionSupport` | 桥接动作按域拆分后的实现类 |
 | `AppSettings` + `UserProfileStore` | 服务器设置（公告、分类、审核策略、媒体与上传限制、字符数上限）、应用配色与外观模式、个人资料（含地区、头像） |
 | `ExhibitionConfiguration` | 展会扩展配置：开展/报名日期、封面、简介格式、报名收集项、报名二维码开关 |
 | `CalendarHelper` / `NotificationHelper` / `ExportManager` | 系统日历、通知与 CSV 导出 |
@@ -291,7 +292,7 @@ adb reverse tcp:4000 tcp:4000         # 真机与模拟器都适用
 
 | # | 位置 | 状态 |
 | --- | --- | --- |
-| 1 ★ | `WebAppActions.java` 2,100 行：桥接分发、业务规则、文件 IO、权限申请混在一个类 | 待做：按域拆成 `AuthActions` / `ExhibitionActions` / `RegistrationActions` / `ReviewActions` / `MediaActions` / `SettingsActions` |
+| 1 ★ | `WebAppActions.java` 2,100 行 | **已完成**：按方法边界拆成 8 个域类（分发入口 196 行），归属由 `scripts/split-webapp-actions.js` 保证覆盖 |
 | 2 ★ | `ExhibitionConfiguration` 用进程内 `static Map` 当存储，`save()` 是位置参数 | 待做：改 builder；后端化时整层由 API 取代 |
 | 3 ★ | `RegistrationReviewStore` 把示例数据与真实记录混在一个列表，主键 `registration-N` 会与 SQLite 报名撞号 | 待做：demo 播种拆到独立类 |
 | 4 | 5 处复制页脚 | 已完成：`.page-foot` + `pageFoot()` |
@@ -305,7 +306,7 @@ adb reverse tcp:4000 tcp:4000         # 真机与模拟器都适用
 | 12 | 过期兼容 shim（`contact`→`region` 键回退、分类换行分隔、引用已删类的注释） | 已完成：随旧页面一起删除 |
 | 13 | 旧原生页面（16 Activity + `BaseActivity` + `MainTabState`）+ 17 个布局 + 专属资源 | 已完成：全部删除，`res` 只剩 `themes.xml` + 两个 `strings` + `colors.xml` |
 | 14 | `database/`+`models/`+`network/`+`repository/`+`viewmodel/` | 已完成：删除，连带清掉 Room/Retrofit/Glide/AndroidX/Material/richeditor 依赖 |
-| 15 | `showRegistrations` 隐私开关用户无法开启 | 待做（产品决策）：补开关控件，或把该字段从表单链路去掉 |
+| 15 | `showRegistrations` 隐私开关用户无法开启 | **已完成**：个人页新增「隐私设置」开关，`profile.save` 持久化，公开页按它过滤（管理员不受限） |
 
 ## 构建、测试与运行
 
@@ -438,6 +439,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 ## 变更记录
 
+- 2026-09-17：按动作域拆分 `WebAppActions`（2,156 行 → 8 个域类 + 196 行分发入口，行为不变）；个人页新增「在公开页展示我的报名记录」隐私开关并打通持久化与公开页过滤；演示后端同步支持该字段。
 - 2026-09-17：删除旧原生页面与旧架构层（legacy 16 个 Activity、BaseActivity、MainTabState、17 个布局、Room/Retrofit/Repository/ViewModel，以及只服务它们的 drawable/anim/values 资源），依赖收敛到 Gson + JUnit；前端文案迁入 `strings_frontend.xml`（475 条，原生注入 + 三处一致性校验）；APK 内静态脚本样式改为可缓存、三个内置库改为按需加载；修复演示后端把用户选中的日期回落到有展会的日子，导致首页日历「点日期没反应」。
 - 2026-09-14：首页日历去掉选中日期的方框底色，改为「强调色加粗数字 + 数字下方一小段下划线」，保留键盘焦点环；次按钮的浅色底统一取页面底色，应用配色只改边框与文字；新增深色模式（跟随系统 / 浅色 / 深色，含原生状态栏与底色）；开关等按钮去掉点击时的系统蓝色高亮方框；首页日历「有展会」圆点改为与上方数字同轴居中；头像裁剪由滑块改为双指捏合缩放；展商卡片只保留查看报名与编辑展会，报名方式 / 编辑简介 / 删除展会移入编辑展会二级界面；修复管理后台从展会二级页面返回后跳回用户分区；管理员查看报名始终可切换报名人状态、查看用户公开页不受隐私设置影响；新增报名二维码与展商扫码核销。
 - 2026-09-14：应用配色扩展到主按钮填充、次按钮边框/填充/文字与开关打开态；新增软件中英文标题设置并显示在首页及其它品牌位；顶部导航栏统一高度并去掉标题下的强调短线；修复日历滑动切月后卡片被压缩导致下边框显示不全。
