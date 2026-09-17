@@ -44,6 +44,12 @@ public final class AppSettings {
     private static final String KEY_LIMIT_ANSWER = "limit_answer";
     private static final String KEY_APP_TITLE_ZH = "app_title_zh";
     private static final String KEY_APP_TITLE_EN = "app_title_en";
+    private static final String KEY_UI_MODE = "ui_mode";
+
+    /** 外观模式：auto 跟随系统，light / dark 由用户显式选择。 */
+    public static final String MODE_AUTO = "auto";
+    public static final String MODE_LIGHT = "light";
+    public static final String MODE_DARK = "dark";
 
     /** 默认允许上传的图片与视频格式（英文逗号分隔的后缀列表）。 */
     public static final String DEFAULT_IMAGE_FORMATS = "jpg,jpeg,png,webp,gif";
@@ -161,9 +167,59 @@ public final class AppSettings {
 
     /** 将当前主题色应用到系统栏，进入页面时即可看到配色变化。 */
     public static void applyWindowColors(Activity activity) {
+        if (isDarkMode(activity)) {
+            // 深色模式下状态栏跟随页面底色，避免顶部出现一条亮色。
+            int surface = Color.rgb(0x17, 0x1A, 0x1F);
+            activity.getWindow().setStatusBarColor(surface);
+            activity.getWindow().setNavigationBarColor(surface);
+            return;
+        }
         int accent = getAccentColor(activity);
         activity.getWindow().setStatusBarColor(lighten(accent, 0.88f));
         activity.getWindow().setNavigationBarColor(Color.WHITE);
+    }
+
+    /** 页面底色：深色模式下的容器与 WebView 底色，避免首帧闪白。 */
+    public static int getScreenColor(Context context) {
+        return isDarkMode(context) ? Color.rgb(0x17, 0x1A, 0x1F) : Color.WHITE;
+    }
+
+    // ── 外观模式（深色模式） ───────────────────────────────────
+    // 与配色一样属于个人偏好，保存在本机；前端据此给 <html> 写 data-mode。
+
+    /** 读取外观模式，非法值回落到跟随系统。 */
+    public static String getUiMode(Context context) {
+        String value = prefs(context).getString(KEY_UI_MODE, MODE_AUTO);
+        if (MODE_LIGHT.equals(value) || MODE_DARK.equals(value)) {
+            return value;
+        }
+        return MODE_AUTO;
+    }
+
+    public static void setUiMode(Context context, String mode) {
+        prefs(context).edit().putString(KEY_UI_MODE, normalizeMode(mode)).apply();
+    }
+
+    /** 归一化外观模式，供桥接层与设置页共用。 */
+    public static String normalizeMode(String mode) {
+        if (MODE_LIGHT.equals(mode) || MODE_DARK.equals(mode)) {
+            return mode;
+        }
+        return MODE_AUTO;
+    }
+
+    /** 当前是否使用深色外观：auto 时跟随系统。 */
+    public static boolean isDarkMode(Context context) {
+        String mode = getUiMode(context);
+        if (MODE_DARK.equals(mode)) {
+            return true;
+        }
+        if (MODE_LIGHT.equals(mode)) {
+            return false;
+        }
+        return (context.getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
     }
 
     private static int lighten(int color, float amount) {

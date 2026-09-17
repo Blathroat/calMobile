@@ -19,6 +19,8 @@ public final class RegistrationReviewStore {
     public static final String STATUS_APPROVED = "已通过";
     public static final String STATUS_REJECTED = "已拒绝";
     public static final String STATUS_CANCELLED = "已撤销";
+    /** 展商扫码核销后的状态：报名码只能核销一次。 */
+    public static final String STATUS_ATTENDED = "已参加";
 
     /** 一位报名人的审核记录。 */
     public static final class Record {

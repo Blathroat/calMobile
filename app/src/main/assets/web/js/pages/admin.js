@@ -33,9 +33,34 @@ const TABS = [
     { value: '设置', label: '设置' },
 ];
 
+/**
+ * 记住上一次停留的管理分区。
+ * <p>
+ * 从展会卡片进二级页面再返回时，返回的哈希是 `#/admin`（不带 tab 参数），
+ * 如果每次都回落到“用户”，展商就会以为自己的操作丢失了。这里用模块级变量
+ * 记住选择，并把 tab 写进哈希，两者一起保证返回后仍在原来的分区。
+ */
+let lastTab = TABS[0].value;
+
+/** 同步当前分区到地址栏；用 replaceState 以免污染返回栈。 */
+function keepTabInUrl(tab) {
+    if (typeof history === 'undefined' || !history.replaceState) {
+        return;
+    }
+    const hash = `#/admin?tab=${encodeURIComponent(tab)}`;
+    if (location.hash === hash) {
+        return;
+    }
+    history.replaceState({ id: 'admin', params: { tab } }, '', hash);
+}
+
 export async function adminPage(context) {
     const host = el('div', { class: 'stack' });
-    let tab = TABS.some((item) => item.value === context.params.tab) ? context.params.tab : '用户';
+    const requested = TABS.some((item) => item.value === context.params.tab)
+        ? context.params.tab
+        : lastTab;
+    let tab = TABS.some((item) => item.value === requested) ? requested : TABS[0].value;
+    lastTab = tab;
     let query = '';
     let settings = null;
 
@@ -54,12 +79,16 @@ export async function adminPage(context) {
         items: TABS,
         onChange: (value) => {
             tab = value;
+            lastTab = value;
             query = '';
+            keepTabInUrl(value);
             loadPanel();
         },
     });
     const panel = el('div', { class: 'stack', id: 'admin-panel' });
     replace(host, [tabs, panel]);
+    // 首次进入时把分区写进地址，返回本页时可以直接恢复。
+    keepTabInUrl(tab);
     loadPanel();
 
     async function loadPanel() {

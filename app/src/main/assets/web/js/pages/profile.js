@@ -7,7 +7,7 @@
  * 已迁回「管理-设置」，普通用户在这里只会看到属于自己的通知开关与配色。
  */
 
-import { call, state, applyTheme, applySettings } from '../core/bridge.js';
+import { call, state, applyTheme, applySettings, applyMode } from '../core/bridge.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
 import {
     avatarNode,
@@ -15,6 +15,7 @@ import {
     loadingBlock,
     stateBlock,
     switchRow,
+    segmented,
     toast,
     openSheet,
 } from '../ui/components.js';
@@ -103,6 +104,7 @@ export async function profilePage(context) {
                     }, ['开启系统通知权限']),
                 isAdmin ? themeBlock() : null,
             ]),
+            appearanceCard(),
         ];
 
         if (isAdmin) {
@@ -184,6 +186,52 @@ export async function profilePage(context) {
             palette,
             el('p', { class: 'field-hint', text: '配色作用于强调色、选中态与系统栏，保存后立即生效。' }),
         ]);
+    }
+
+    /**
+     * 深色模式：跟随系统 / 浅色 / 深色三选一，切换立即生效并保存在本机。
+     * 保存失败（例如尚未登录）只提示一次，本次会话的外观仍然保留。
+     */
+    function appearanceCard() {
+        const card = el('div', { class: 'card' });
+        const hint = el('p', { class: 'field-hint', text: modeHint() });
+        const seg = segmented({
+            label: '深色模式',
+            value: state.ui.mode,
+            items: [
+                { value: 'auto', label: '跟随系统' },
+                { value: 'light', label: '浅色' },
+                { value: 'dark', label: '深色' },
+            ],
+            onChange: (value) => changeMode(value),
+        });
+        replace(card, [
+            el('span', { class: 'section-label', text: '深色模式' }),
+            seg,
+            hint,
+        ]);
+        return card;
+    }
+
+    function modeHint() {
+        if (state.ui.mode === 'auto') {
+            return '当前跟随系统的深浅色设置，系统切换时应用同步变化。';
+        }
+        return state.ui.mode === 'dark' ? '当前始终使用深色外观。' : '当前始终使用浅色外观。';
+    }
+
+    async function changeMode(value) {
+        applyMode(value);
+        render();
+        try {
+            const result = await call('settings.uiMode', { mode: value });
+            if (result?.mode) {
+                applyMode(result.mode);
+                render();
+            }
+        } catch (error) {
+            toast(`外观已切换，但未能保存：${error.message}`, 'error');
+        }
     }
 
     function infoRow(label, value) {

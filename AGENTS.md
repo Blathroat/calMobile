@@ -12,11 +12,12 @@ Android 客户端位于 `app/`，使用 Java 17。启动页是 `WebShellActivity
 node scripts/smoke-check.js
 node scripts/webui-check.js
 node --test scripts/smoke-check.test.js
+node --test scripts/webui-render.test.js
 gradlew.bat :app:testDebugUnitTest
 gradlew.bat :app:assembleDebug
 ```
 
-`smoke-check` 校验清单入口、桥接契约、15 个页面模块、设计令牌、动效层、内置依赖与文档关键内容；`webui-check` 校验前端 ES 模块能否解析、动作名是否都有原生实现；`smoke-check.test.js` 是检查脚本自身的单元测试。POSIX 环境使用 `./gradlew`。后端进入 `server/` 后运行 `npm install`、`npm run db:migrate`、`npm run dev`；测试使用 `npm test -- --runInBand`，风格检查使用 `npm run lint`。本地 PostgreSQL 配置参考 `server/.env.example`，禁止提交 `.env`、密钥或真实用户数据。
+`smoke-check` 校验清单入口、桥接契约、页面模块、设计令牌、动效层、内置依赖与文档关键内容；`webui-check` 校验前端 ES 模块能否解析、动作名是否都有原生实现；`webui-render.test.js` 用最小 DOM 打桩与假桥接把每个页面真正渲染一次，捕获只在运行时才暴露的接线错误（新增页面或桥接动作后要同步补上约定返回值与用例）；`smoke-check.test.js` 是检查脚本自身的单元测试。POSIX 环境使用 `./gradlew`。后端进入 `server/` 后运行 `npm install`、`npm run db:migrate`、`npm run dev`；测试使用 `npm test -- --runInBand`，风格检查使用 `npm run lint`。本地 PostgreSQL 配置参考 `server/.env.example`，禁止提交 `.env`、密钥或真实用户数据。
 
 ## 编码与界面规范
 

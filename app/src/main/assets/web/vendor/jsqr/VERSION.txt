@@ -1,0 +1,4 @@
+jsQR 1.4.0 (Apache-2.0)
+来源：https://registry.npmjs.org/jsqr/-/jsqr-1.4.0.tgz
+文件：dist/jsQR.js、LICENSE
+说明：纯 JavaScript 二维码解码，暴露全局 jsQR(imageData, width, height)，供展商核销页在摄像头画面上实时识别报名码。

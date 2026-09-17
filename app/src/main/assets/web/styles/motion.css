@@ -210,7 +210,7 @@
 @media (hover: hover) {
     .cta:hover:not([disabled]) {
         transform: translateY(-1px);
-        box-shadow: 0 6px 16px rgba(37, 42, 49, .18);
+    box-shadow: var(--shadow-float);
     }
 
     .cta.ghost:hover,
@@ -220,7 +220,7 @@
 
     .round-action:hover {
         transform: translateY(-2px);
-        box-shadow: 0 14px 30px rgba(31, 35, 40, .22);
+    box-shadow: var(--shadow-float);
     }
 
     .icon-button:hover {
@@ -230,7 +230,7 @@
     .row-card[data-pressable="true"]:hover,
     .card[data-pressable="true"]:hover {
         transform: translateY(-1px);
-        box-shadow: 0 10px 24px rgba(31, 35, 40, .1);
+    box-shadow: var(--shadow-card);
     }
 }
 
@@ -323,7 +323,7 @@
 
 .calendar[data-drag="true"] {
     cursor: grabbing;
-    box-shadow: 0 12px 26px rgba(31, 35, 40, .12);
+    box-shadow: var(--shadow-panel);
 }
 
 .calendar[data-leave="left"] {
@@ -613,7 +613,7 @@
 .EasyMDEContainer .editor-statusbar,
 .EasyMDEContainer .editor-preview,
 .EasyMDEContainer .editor-preview-side {
-    border-color: #c5cad1;
+    border-color: var(--stroke);
 }
 
 .EasyMDEContainer .editor-toolbar {

@@ -1,6 +1,7 @@
 package com.example.calmobile;
 
 import android.annotation.SuppressLint;
+import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -67,12 +68,14 @@ public class WebShellActivity extends Activity {
         FrameLayout container = new FrameLayout(this);
         container.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        container.setBackgroundColor(0xFFFFFFFF);
+        // 底色跟随外观模式，深色模式下不会在页面切换时闪出白底。
+        int surfaceColor = AppSettings.getScreenColor(this);
+        container.setBackgroundColor(surfaceColor);
 
         webView = new WebView(this);
         webView.setLayoutParams(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        webView.setBackgroundColor(0xFFFFFFFF);
+        webView.setBackgroundColor(surfaceColor);
         container.addView(webView);
         setContentView(container);
 
@@ -85,9 +88,11 @@ public class WebShellActivity extends Activity {
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
-        settings.setMediaPlaybackRequiresUserGesture(true);
+        // 核销页的摄像头预览由脚本在授权后自行 play()，因此不再要求用户手势。
+        settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // 深色模式由前端令牌控制，这里始终关掉系统强制反色。
             settings.setForceDark(WebSettings.FORCE_DARK_OFF);
         }
 
@@ -127,13 +132,33 @@ public class WebShellActivity extends Activity {
                 return true;
             }
 
-            /** 页面不申请摄像头/麦克风，统一拒绝并把结果交回前端。 */
+            /**
+             * 摄像头只用于展商核销页的扫码取景。
+             * <p>
+             * 应用层权限由前端先通过 {@code camera.ensurePermission} 申请，用户同意后
+             * WebView 的 getUserMedia 请求才会被放行；其它权限仍然一律拒绝。
+             */
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
+                final String[] resources = request.getResources();
+                boolean videoOnly = resources != null && resources.length > 0;
+                if (videoOnly) {
+                    for (String resource : resources) {
+                        if (!PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
+                            videoOnly = false;
+                            break;
+                        }
+                    }
+                }
+                final boolean granted = videoOnly && hasCameraPermission();
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        request.deny();
+                        if (granted) {
+                            request.grant(resources);
+                        } else {
+                            request.deny();
+                        }
                     }
                 });
             }
@@ -197,6 +222,12 @@ public class WebShellActivity extends Activity {
     }
 
     // ── 本地资源加载 ───────────────────────────────────────────
+
+    /** 应用是否已拿到摄像头权限，供 WebView 的取景请求判断是否放行。 */
+    private boolean hasCameraPermission() {
+        return checkSelfPermission(Manifest.permission.CAMERA)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
 
     private static final Map<String, String> MIME_TYPES = new HashMap<>();
 

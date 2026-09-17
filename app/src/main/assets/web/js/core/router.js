@@ -12,9 +12,34 @@ import { el, append, qs } from './dom.js';
 const routes = new Map();
 let current = null;
 let onNavigate = null;
+/** 当前页面注册的清理回调（摄像头、定时器等），页面被替换前执行。 */
+let pageStopHandlers = [];
 
 export function defineRoute(id, options) {
     routes.set(id, { id, ...options });
+}
+
+/**
+ * 注册当前页面的清理回调：页面被下一次渲染替换前调用。
+ * 用于释放摄像头、定时器这类跨渲染存活的资源。
+ */
+export function onPageStop(handler) {
+    if (typeof handler === 'function') {
+        pageStopHandlers.push(handler);
+    }
+}
+
+/** 执行并清空清理回调；单个回调出错不影响其它回调与页面切换。 */
+function runPageStopHandlers() {
+    const handlers = pageStopHandlers;
+    pageStopHandlers = [];
+    for (const handler of handlers) {
+        try {
+            handler();
+        } catch (error) {
+            console.error(error);
+        }
+    }
 }
 
 /** 注册路由变化监听，app.js 用它同步底部导航。 */
@@ -120,6 +145,8 @@ export async function render() {
         definition = routes.get(route.id) || routes.get('home');
     }
 
+    // 先释放上一页占用的资源（例如扫码页的摄像头），再渲染新页面。
+    runPageStopHandlers();
     current = { id: route.id, params: route.params, definition, denied: resolved.denied };
     const context = {
         params: route.params,

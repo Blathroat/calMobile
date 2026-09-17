@@ -1,7 +1,8 @@
 /**
  * 屏幕 13 · 报名管理 / 审核
  * 线框：newUI/remaining-ui.html #screen-registration-management
- * 业务：RegistrationReviewStore，状态为待审核 / 已通过 / 已拒绝；是否允许重新审核由管理员设置决定。
+ * 业务：RegistrationReviewStore，状态为待审核 / 已通过 / 已拒绝 / 已参加；
+ * 展商能否重新审核由管理员设置决定，管理员自己不受该开关限制。
  */
 
 import { call, state } from '../core/bridge.js';
@@ -9,10 +10,12 @@ import { scaffold } from '../core/router.js';
 import { loadingBlock, stateBlock, statusTag, statusTone, toast, openSheet, segmented } from '../ui/components.js';
 import { el, replace, answerLines, truncate } from '../core/dom.js';
 
-const FILTERS = ['待审核', '已通过', '已拒绝', '全部'];
+const FILTERS = ['待审核', '已通过', '已拒绝', '已参加', '全部'];
 
 export async function reviewPage(context) {
     const exhibitionId = context.params.exhibitionId || '';
+    // 管理员在管理后台查看报名时始终可以切换报名人状态。
+    const isAdmin = state.user.can?.admin === true;
     const listHost = el('div', { class: 'stack' });
     const countPill = el('span', { class: 'pill', text: '—' });
     const filterHost = el('div');
@@ -23,7 +26,7 @@ export async function reviewPage(context) {
 
     scaffold({
         title: '报名管理',
-        backTo: 'exhibitor',
+        backTo: isAdmin ? 'admin' : 'exhibitor',
         bodyProps: { 'data-gap': 'tight' },
         children: [
             el('div', { class: 'row', 'data-between': 'true' }, [
@@ -34,6 +37,9 @@ export async function reviewPage(context) {
                 countPill,
             ]),
             el('p', { class: 'row-meta', text: '审核结果会同步到用户的“我的报名”，并触发状态通知。' }),
+            isAdmin
+                ? el('p', { class: 'field-hint', text: '管理员可以随时切换报名人状态，不受“允许修改已通过或已拒绝的报名”开关影响。' })
+                : null,
             filterHost,
             listHost,
         ],
@@ -76,7 +82,10 @@ export async function reviewPage(context) {
     await load();
 
     function renderFilter(counts) {
-        const labels = FILTERS.map((value) => `${value} ${counts[value] ?? (value === '全部' ? counts.total : 0) ?? 0}`);
+        const labels = FILTERS.map((value) => {
+            const count = value === '全部' ? (counts.total ?? 0) : (counts[value] ?? 0);
+            return `${value} ${count}`;
+        });
         if (!filterSeg) {
             filterSeg = segmented({
                 label: '审核状态',
@@ -144,7 +153,9 @@ export async function reviewPage(context) {
 
     function openDetail(record) {
         const answers = answerLines(record.answers);
-        const revisable = record.status === '待审核' || state.review.canRevise;
+        // 管理员始终可以切换状态；展商按“允许修改已通过或已拒绝的报名”开关决定。
+        const revisable = isAdmin || record.status === '待审核' || state.review.canRevise;
+        const attended = record.status === '已参加';
         const sheet = openSheet({
             title: record.visitorName,
             content: [
@@ -160,23 +171,34 @@ export async function reviewPage(context) {
                         ]))
                         : [el('span', { class: 'row-meta', text: '未收集额外信息' })]),
                     revisable
-                        ? el('div', { class: 'grid-cols-2' }, [
+                        ? el('div', { class: 'stack', 'data-gap': 'sm' }, [
+                            el('div', { class: 'grid-cols-2' }, [
+                                el('button', {
+                                    class: 'cta ghost',
+                                    type: 'button',
+                                    onclick: async () => {
+                                        sheet.close();
+                                        await changeStatus(record, '已拒绝');
+                                    },
+                                }, ['拒绝']),
+                                el('button', {
+                                    class: 'cta',
+                                    type: 'button',
+                                    onclick: async () => {
+                                        sheet.close();
+                                        await changeStatus(record, '已通过');
+                                    },
+                                }, ['通过']),
+                            ]),
                             el('button', {
                                 class: 'cta ghost',
                                 type: 'button',
+                                disabled: attended ? true : null,
                                 onclick: async () => {
                                     sheet.close();
-                                    await changeStatus(record, '已拒绝');
+                                    await changeStatus(record, '已参加');
                                 },
-                            }, ['拒绝']),
-                            el('button', {
-                                class: 'cta',
-                                type: 'button',
-                                onclick: async () => {
-                                    sheet.close();
-                                    await changeStatus(record, '已通过');
-                                },
-                            }, ['通过']),
+                            }, [attended ? '已核销为已参加' : '标记为已参加']),
                         ])
                         : el('p', { class: 'field-hint', text: '该报名已完成审核，管理员未开启“允许重新审核”。' }),
                 ]),
@@ -193,10 +215,20 @@ export async function reviewPage(context) {
                 toast(result?.error || '更新失败', 'error');
                 return;
             }
-            toast(status === '已通过' ? '已通过该报名' : '已拒绝该报名', 'success');
+            toast(statusMessage(status), 'success');
             await load();
         } catch (error) {
             toast(error.message, 'error');
         }
+    }
+
+    function statusMessage(status) {
+        if (status === '已通过') {
+            return '已通过该报名';
+        }
+        if (status === '已拒绝') {
+            return '已拒绝该报名';
+        }
+        return `已将报名标记为${status}`;
     }
 }

@@ -213,6 +213,7 @@ export function statusTone(status) {
         case '已通过':
         case '报名中':
         case '无需审核':
+        case '已参加':
             return 'ok';
         case '待审核':
         case '需审核':
@@ -440,7 +441,7 @@ export function avatarNode({ src, name = '', className = 'avatar', label }) {
 const CROP_OUTPUT_SIZE = 512;
 
 /**
- * 简单的圆形头像裁剪：拖动平移、滑块缩放，确认后导出方形画布。
+ * 圆形头像裁剪：单指拖动平移、双指捏合缩放，确认后导出方形画布。
  * 只依赖 canvas，不引入任何图像处理库；输出的 data URL 交给
  * `media.store` 落盘并换成短 URL。
  */
@@ -453,17 +454,11 @@ export function openAvatarCropper({ source, onDone, onError }) {
     stage.style.width = `${stageSize}px`;
     stage.style.height = `${stageSize}px`;
 
-    const zoom = el('input', {
-        class: 'crop-zoom',
-        id: 'avatar-zoom',
-        type: 'range',
-        min: '1',
-        max: '3',
-        step: '0.01',
-        value: '1',
-        'aria-label': '缩放头像',
+    const scaleLabel = el('span', { class: 'crop-scale', text: '1.0×' });
+    const hint = el('p', {
+        class: 'field-hint',
+        text: '拖动图片调整位置，双指捏合缩放；松开手指后即完成调整。',
     });
-    const hint = el('p', { class: 'field-hint', text: '拖动图片调整位置，使用滑块缩放。' });
 
     function clamp() {
         const displayWidth = state.width * state.base * state.zoom;
@@ -483,6 +478,7 @@ export function openAvatarCropper({ source, onDone, onError }) {
         image.style.width = `${state.width * scale}px`;
         image.style.height = `${state.height * scale}px`;
         image.style.transform = `translate(-50%, -50%) translate3d(${state.x}px, ${state.y}px, 0)`;
+        scaleLabel.textContent = `${state.zoom.toFixed(1)}×`;
     }
 
     image.addEventListener('load', () => {
@@ -499,46 +495,136 @@ export function openAvatarCropper({ source, onDone, onError }) {
         }
     });
 
-    let dragging = false;
-    let startX = 0;
-    let startY = 0;
+    // ── 手势：单指拖动、双指捏合 ──────────────────────────────────
+    // 用 Pointer Events 统一处理触摸与鼠标：按下时记录所有活动触点，
+    // 两个触点同时按下时进入捏合模式，缩放比例取两指间距之比。
+
+    const MIN_ZOOM = 1;
+    const MAX_ZOOM = 4;
+    const pointers = new Map();
+    let pinchStartDistance = 0;
+    // 捏合锚点：手势开始时两指中点（相对裁剪框中心）与当时的平移量。
+    let pinchFocal = { x: 0, y: 0 };
+    let pinchStartX = 0;
+    let pinchStartY = 0;
+    let pinchStartZoom = 1;
+    let dragStartX = 0;
+    let dragStartY = 0;
     let originX = 0;
     let originY = 0;
 
-    stage.addEventListener('pointerdown', (event) => {
-        dragging = true;
-        startX = event.clientX;
-        startY = event.clientY;
+    function distance() {
+        const [a, b] = [...pointers.values()];
+        return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    /** 两指中点在元素坐标系里的位置，用于把缩放锚在手指下方。 */
+    function focalPoint() {
+        const rect = stage.getBoundingClientRect();
+        const [a, b] = [...pointers.values()];
+        return {
+            x: ((a.x + b.x) / 2) - rect.left - (rect.width / 2),
+            y: ((a.y + b.y) / 2) - rect.top - (rect.height / 2),
+        };
+    }
+
+    function beginDrag(event) {
+        dragStartX = event.clientX;
+        dragStartY = event.clientY;
         originX = state.x;
         originY = state.y;
-        stage.setPointerCapture?.(event.pointerId);
         stage.dataset.dragging = 'true';
-    });
-    stage.addEventListener('pointermove', (event) => {
-        if (!dragging) {
+    }
+
+    stage.addEventListener('pointerdown', (event) => {
+        if (!state.ready) {
             return;
         }
-        state.x = originX + (event.clientX - startX);
-        state.y = originY + (event.clientY - startY);
-        paint();
+        pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        stage.setPointerCapture?.(event.pointerId);
+        if (pointers.size === 1) {
+            beginDrag(event);
+        } else if (pointers.size === 2) {
+            // 第二根手指落下时切换到捏合：记录基准间距、锚点与当时的缩放。
+            pinchStartDistance = distance();
+            pinchStartZoom = state.zoom;
+            pinchStartX = state.x;
+            pinchStartY = state.y;
+            pinchFocal = focalPoint();
+            stage.dataset.pinching = 'true';
+        }
     });
-    const stopDrag = () => {
-        dragging = false;
+
+    stage.addEventListener('pointermove', (event) => {
+        if (!pointers.has(event.pointerId)) {
+            return;
+        }
+        pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (pointers.size >= 2) {
+            if (pinchStartDistance <= 0) {
+                pinchStartDistance = distance();
+                pinchStartZoom = state.zoom;
+                pinchStartX = state.x;
+                pinchStartY = state.y;
+                pinchFocal = focalPoint();
+                return;
+            }
+            const ratio = distance() / pinchStartDistance;
+            const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinchStartZoom * ratio));
+            // 手指下的那一点保持不动：按缩放比把锚点相对平移量一起放大。
+            const grow = next / pinchStartZoom;
+            state.zoom = next;
+            state.x = pinchFocal.x - ((pinchFocal.x - pinchStartX) * grow);
+            state.y = pinchFocal.y - ((pinchFocal.y - pinchStartY) * grow);
+            paint();
+            return;
+        }
+        if (pointers.size === 1) {
+            state.x = originX + (event.clientX - dragStartX);
+            state.y = originY + (event.clientY - dragStartY);
+            paint();
+        }
+    });
+
+    const endPointer = (event) => {
+        if (!pointers.has(event.pointerId)) {
+            return;
+        }
+        pointers.delete(event.pointerId);
+        if (pointers.size >= 2) {
+            return;
+        }
+        stage.dataset.pinching = 'false';
+        pinchStartDistance = 0;
+        if (pointers.size === 1) {
+            // 松开一根手指后，剩下那根继续接管拖动，避免画面“粘住”。
+            beginDrag(event);
+            return;
+        }
         stage.dataset.dragging = 'false';
     };
-    stage.addEventListener('pointerup', stopDrag);
-    stage.addEventListener('pointercancel', stopDrag);
+    stage.addEventListener('pointerup', endPointer);
+    stage.addEventListener('pointercancel', endPointer);
 
-    zoom.addEventListener('input', () => {
-        state.zoom = Number(zoom.value) || 1;
+    // 桌面或鼠标环境没有第二根手指，用滚轮作为捏合的等价操作。
+    stage.addEventListener('wheel', (event) => {
+        if (!state.ready) {
+            return;
+        }
+        event.preventDefault();
+        const step = event.deltaY < 0 ? 0.12 : -0.12;
+        state.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, state.zoom + step));
         paint();
-    });
+    }, { passive: false });
 
     return openSheet({
         title: '裁剪头像',
         content: [
             el('div', { class: 'crop-wrap' }, [stage]),
-            el('div', { class: 'field' }, [el('label', { for: zoom.id, text: '缩放' }), zoom]),
+            el('div', { class: 'row', 'data-between': 'true' }, [
+                el('span', { class: 'field-hint', text: '双指捏合缩放' }),
+                scaleLabel,
+            ]),
             hint,
         ],
         actions: [

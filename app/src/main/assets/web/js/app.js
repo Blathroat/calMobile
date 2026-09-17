@@ -23,6 +23,7 @@ import { richEditorPage } from './pages/rich-editor.js';
 import { reviewPage } from './pages/review.js';
 import { userPublicPage } from './pages/user-public.js';
 import { adminPage } from './pages/admin.js';
+import { checkinPage } from './pages/checkin.js';
 
 // 屏幕 01–17 与 newUI 线框的对应关系写在每个模块头部。
 // 管理-展会与管理-设置已内联到管理后台与个人页，不再保留二级页面。
@@ -39,6 +40,8 @@ defineRoute('exhibitor', { title: '展商后台', render: exhibitorPage, roles: 
 defineRoute('exhibition-form', { title: '编辑展会', render: exhibitionFormPage, roles: ['exhibitor', 'admin'] });
 defineRoute('rich-editor', { title: '编辑展会简介', render: richEditorPage, roles: ['exhibitor', 'admin'] });
 defineRoute('review', { title: '报名管理', render: reviewPage, roles: ['exhibitor', 'admin'] });
+// 核销报名码属于展商后台的现场工具，不单独占一屏设计稿。
+defineRoute('checkin', { title: '核销报名码', render: checkinPage, roles: ['exhibitor', 'admin'] });
 defineRoute('user-public', { title: '用户公开页', render: userPublicPage });
 defineRoute('admin', { title: '管理后台', render: adminPage, roles: ['admin'] });
 

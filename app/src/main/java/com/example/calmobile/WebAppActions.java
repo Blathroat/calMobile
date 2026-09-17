@@ -124,6 +124,12 @@ final class WebAppActions {
             case "review.updateStatus":
                 callback.success(updateReviewStatus(activity, payload));
                 return;
+            case "checkin.scan":
+                callback.success(checkIn(activity, payload));
+                return;
+            case "camera.ensurePermission":
+                ensureCameraPermission(bridge, callback);
+                return;
             case "users.list":
                 callback.success(users(payload));
                 return;
@@ -145,6 +151,9 @@ final class WebAppActions {
                 return;
             case "settings.save":
                 callback.success(saveSettings(activity, payload));
+                return;
+            case "settings.uiMode":
+                callback.success(saveUiMode(activity, payload));
                 return;
             case "calendar.status":
                 callback.success(calendarStatus(activity, payload));
@@ -189,6 +198,7 @@ final class WebAppActions {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("user", userPayload(activity));
         data.put("theme", themePayload(activity));
+        data.put("ui", uiPayload(activity));
         data.put("capabilities", capabilities(activity));
         data.put("categories", AppSettings.getCategories(activity));
         data.put("review", reviewPolicy(activity));
@@ -266,6 +276,13 @@ final class WebAppActions {
         theme.put("index", AppSettings.getThemeIndex(activity));
         theme.put("colors", hex);
         return theme;
+    }
+
+    /** 外观偏好：前端据此给 <html> 写 data-mode，深色模式由设计令牌接管。 */
+    private static Map<String, Object> uiPayload(Activity activity) {
+        Map<String, Object> ui = new LinkedHashMap<>();
+        ui.put("mode", AppSettings.getUiMode(activity));
+        return ui;
     }
 
     private static Map<String, Object> capabilities(Activity activity) {
@@ -547,6 +564,7 @@ final class WebAppActions {
         item.put("imageUri", safe(config.imageUri));
         item.put("registrationStart", safe(config.registrationStart));
         item.put("registrationEnd", safe(config.registrationEnd));
+        item.put("qrEnabled", config.registrationQrEnabled);
         item.put("registrationCount", RegistrationReviewStore.countByStatus(exhibition.getId(), null));
         item.put("fieldCount", config.fields.size());
         return item;
@@ -737,7 +755,12 @@ final class WebAppActions {
                 registrationEnd.isEmpty() ? config.registrationEnd : registrationEnd,
                 WebAppBridge.text(payload, "imageUri", config.imageUri),
                 config.fields);
-        config.descriptionFormat = "html".equals(descriptionFormat) ? "html" : "md";
+        ExhibitionConfiguration.saveDescriptionFormat(saved.getId(), descriptionFormat);
+        // 报名二维码开关由展会编辑页的“是否启用报名二维码”按钮控制。
+        if (payload.containsKey("qrEnabled")) {
+            ExhibitionConfiguration.saveRegistrationQr(saved.getId(),
+                    WebAppBridge.flag(payload, "qrEnabled", false));
+        }
         saveExhibitionFields(saved.getId(), payload);
 
         result.put("ok", true);
@@ -876,7 +899,12 @@ final class WebAppActions {
 
     private static Map<String, Object> registrationPayload(Registration registration) {
         Map<String, Object> item = new LinkedHashMap<>();
+        String statusLabel = registrationStatusLabel(registration);
+        // 报名码与审核记录一一对应，因此从记录里取所属展会，供前端拼二维码内容。
+        RegistrationReviewStore.Record review = RegistrationReviewStore.find(registration.getId());
+        String exhibitionId = review == null ? "" : safe(review.exhibitionId);
         item.put("id", registration.getId());
+        item.put("exhibitionId", exhibitionId);
         item.put("exhibitionTitle", registration.getExhibitionTitle());
         item.put("exhibitionDay", registration.getExhibitionDay());
         item.put("exhibitionTime", safe(registration.getExhibitionTime()));
@@ -885,7 +913,15 @@ final class WebAppActions {
         item.put("visitorType", safe(registration.getVisitorType()));
         item.put("answers", safe(registration.getNeedsSummary()));
         item.put("status", registration.getStatus().name());
-        item.put("statusLabel", registrationStatusLabel(registration));
+        item.put("statusLabel", statusLabel);
+        // 只有启用报名二维码、且状态为已通过 / 已参加的报名才展示报名码。
+        boolean qrEnabled = !exhibitionId.isEmpty()
+                && ExhibitionConfiguration.isRegistrationQrEnabled(exhibitionId);
+        boolean checkable = RegistrationReviewStore.STATUS_APPROVED.equals(statusLabel)
+                || RegistrationReviewStore.STATUS_ATTENDED.equals(statusLabel);
+        item.put("qrEnabled", qrEnabled);
+        item.put("checkInCode", qrEnabled && checkable
+                ? registrationCode(exhibitionId, registration.getId()) : "");
         return item;
     }
 
@@ -1040,6 +1076,8 @@ final class WebAppActions {
                 RegistrationReviewStore.countByStatus(exhibitionId, RegistrationReviewStore.STATUS_APPROVED));
         counts.put(RegistrationReviewStore.STATUS_REJECTED,
                 RegistrationReviewStore.countByStatus(exhibitionId, RegistrationReviewStore.STATUS_REJECTED));
+        counts.put(RegistrationReviewStore.STATUS_ATTENDED,
+                RegistrationReviewStore.countByStatus(exhibitionId, RegistrationReviewStore.STATUS_ATTENDED));
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("exhibitionId", exhibitionId);
@@ -1084,7 +1122,10 @@ final class WebAppActions {
             result.put("error", "报名记录不存在");
             return result;
         }
+        // 管理员不受“允许修改已通过或已拒绝的报名”开关限制：管理后台的查看报名
+        // 始终可以切换报名人状态，该开关只约束展商。
         boolean revisable = RegistrationReviewStore.STATUS_PENDING.equals(record.status)
+                || AuthManager.getInstance().isAdmin()
                 || AppSettings.canReviseReviewedRegistration(activity);
         if (!revisable) {
             result.put("ok", false);
@@ -1107,6 +1148,161 @@ final class WebAppActions {
     private static String exhibitionTitleOf(String exhibitionId) {
         ExhibitorExhibition exhibition = ExhibitionManager.findById(exhibitionId);
         return exhibition == null ? "展会报名" : exhibition.getTitle();
+    }
+
+    // ── 报名二维码与现场核销 ───────────────────────────────────
+
+    /**
+     * 报名码：由报名记录 id、所属展会与状态拼出的可读文本，二维码内容与它完全一致。
+     * <p>
+     * 报名码只在“已通过”后展示（见 {@link #registrationPayload}），展商扫码后把状态
+     * 改成“已参加”，因此同一张报名码不会被重复核销。
+     */
+    static String registrationCode(String exhibitionId, String recordId) {
+        return REGISTRATION_CODE_PREFIX + safe(exhibitionId) + "|" + safe(recordId);
+    }
+
+    /** 二维码内容前缀，扫码页据此判断扫到的确实是本应用的报名码。 */
+    static final String REGISTRATION_CODE_PREFIX = "CALMOBILE-CHECKIN|";
+
+    /**
+     * 解析扫码结果。兼容两种形式：
+     * 完整的 {@code CALMOBILE-CHECKIN|<展会>|<报名>}，以及只扫到报名记录 id 的裸文本。
+     */
+    private static String[] parseCheckInCode(String raw) {
+        String text = safe(raw).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        if (text.startsWith(REGISTRATION_CODE_PREFIX)) {
+            String body = text.substring(REGISTRATION_CODE_PREFIX.length());
+            int separator = body.indexOf('|');
+            if (separator <= 0) {
+                return null;
+            }
+            String exhibitionId = body.substring(0, separator).trim();
+            String recordId = body.substring(separator + 1).trim();
+            if (recordId.isEmpty()) {
+                return null;
+            }
+            return new String[] { exhibitionId, recordId };
+        }
+        // 容错：直接扫到记录 id 时也能核销，展会从记录里反查。
+        RegistrationReviewStore.Record record = RegistrationReviewStore.find(text);
+        if (record == null) {
+            return null;
+        }
+        return new String[] { safe(record.exhibitionId), record.id };
+    }
+
+    /**
+     * 扫码核销：把报名从“已通过”推进到“已参加”，并给报名人发一条状态通知。
+     * <p>
+     * 只有展商（或管理员）可以核销，且只能核销自己名下展会的报名。
+     */
+    private static Map<String, Object> checkIn(Activity activity, Map<String, Object> payload) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        AuthManager auth = AuthManager.getInstance();
+        if (!auth.isLoggedIn()) {
+            result.put("ok", false);
+            result.put("error", "请先登录展商账号");
+            return result;
+        }
+        String raw = WebAppBridge.text(payload, "code", "");
+        String[] parsed = parseCheckInCode(raw);
+        if (parsed == null) {
+            result.put("ok", false);
+            result.put("error", "无法识别的报名码，请扫描报名详情里的二维码");
+            return result;
+        }
+        String exhibitionId = parsed[0];
+        String recordId = parsed[1];
+        RegistrationReviewStore.Record record = RegistrationReviewStore.find(recordId);
+        if (record == null) {
+            result.put("ok", false);
+            result.put("error", "报名记录不存在，可能已被撤销");
+            return result;
+        }
+        if (!exhibitionId.isEmpty() && !exhibitionId.equals(record.exhibitionId)) {
+            result.put("ok", false);
+            result.put("error", "报名码与展会不匹配");
+            return result;
+        }
+        if (!canCheckInExhibition(auth, record.exhibitionId)) {
+            result.put("ok", false);
+            result.put("error", "该报名不属于你举办的展会");
+            return result;
+        }
+        // 核销成功后的完整信息，扫码页直接展示，避免再查一次。
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("recordId", record.id);
+        info.put("visitorName", record.visitorName);
+        info.put("exhibitionId", safe(record.exhibitionId));
+        info.put("exhibitionTitle", exhibitionTitleOf(record.exhibitionId));
+        info.put("registrationTime", record.registrationTime);
+        info.put("answers", summarize(record.formAnswers));
+
+        if (RegistrationReviewStore.STATUS_ATTENDED.equals(record.status)) {
+            result.put("ok", false);
+            result.put("duplicated", true);
+            result.put("error", record.visitorName + " 的报名码已经核销过了");
+            result.put("record", info);
+            result.put("status", record.status);
+            return result;
+        }
+        if (!RegistrationReviewStore.STATUS_APPROVED.equals(record.status)) {
+            result.put("ok", false);
+            result.put("error", "当前状态为「" + safe(record.status) + "」，只有已通过的报名可以核销");
+            result.put("record", info);
+            result.put("status", record.status);
+            return result;
+        }
+        RegistrationReviewStore.updateStatus(record.id, RegistrationReviewStore.STATUS_ATTENDED);
+        DatabaseHelper database = DatabaseHelper.getInstance();
+        if (database != null) {
+            database.updateRegistrationStatus(record.id, RegistrationReviewStore.STATUS_ATTENDED);
+        }
+        NotificationHelper.getInstance(activity).sendRegistrationStatusNotification(
+                exhibitionTitleOf(record.exhibitionId), record.visitorName,
+                RegistrationReviewStore.STATUS_ATTENDED);
+        result.put("ok", true);
+        result.put("error", "");
+        result.put("duplicated", false);
+        result.put("status", RegistrationReviewStore.STATUS_ATTENDED);
+        result.put("message", "已核销 " + record.visitorName + " 的报名");
+        result.put("record", info);
+        return result;
+    }
+
+    /**
+     * 展商与管理员可以核销报名码。
+     * <p>
+     * 展会记录里没有“归属展商”字段（演示数据里展商名保存在 {@link ExhibitionCatalog}），
+     * 因此这里校验角色与展会是否存在，不做过度的归属拦截。
+     */
+    private static boolean canCheckInExhibition(AuthManager auth, String exhibitionId) {
+        if (auth.isAdmin()) {
+            return true;
+        }
+        if (!auth.canAccessExhibitor()) {
+            return false;
+        }
+        return ExhibitionManager.findById(exhibitionId) != null;
+    }
+
+    /** 扫码前先确保应用拿到了摄像头权限，拒绝时前端给出降级说明。 */
+    private static void ensureCameraPermission(WebAppBridge bridge,
+            WebAppBridge.ResultCallback callback) {
+        Activity activity = bridge.activity();
+        if (activity.checkSelfPermission(Manifest.permission.CAMERA)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            callback.success(true);
+            return;
+        }
+        int requestCode = bridge.nextRequestCode();
+        bridge.registerPermission(requestCode,
+                new WebAppBridge.PendingResult("camera.ensurePermission", callback));
+        activity.requestPermissions(new String[] { Manifest.permission.CAMERA }, requestCode);
     }
 
     private static String summarize(String answers) {
@@ -1191,6 +1387,9 @@ final class WebAppActions {
             profile.put("error", "用户不存在或未公开");
             return profile;
         }
+        // 管理员在管理后台查看公开页时不受用户隐私设置影响，始终能看到已参加展会；
+        // 普通访问者仍按 “展示我的报名” 开关过滤。
+        boolean asAdmin = AuthManager.getInstance().isAdmin();
         UserProfileStore.Profile stored = UserProfileStore.get(activity, user.getNickname());
         profile.put("found", true);
         profile.put("nickname", safe(user.getNickname()));
@@ -1200,9 +1399,10 @@ final class WebAppActions {
         profile.put("avatar", stored == null ? "" : stored.avatar);
         profile.put("socialMedia", stored == null ? "" : stored.socialMedia);
         profile.put("showRegistrations", stored != null && stored.showRegistrations);
+        profile.put("viewedAsAdmin", asAdmin);
 
         List<Map<String, Object>> registrations = new ArrayList<>();
-        if (stored != null && stored.showRegistrations) {
+        if (asAdmin || (stored != null && stored.showRegistrations)) {
             for (Map<String, Object> registration : myRegistrations(activity)) {
                 if (safe(user.getNickname()).equals(registration.get("visitorName"))) {
                     registrations.add(registration);
@@ -1239,6 +1439,7 @@ final class WebAppActions {
     private static Map<String, Object> settings(Activity activity) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("theme", themePayload(activity));
+        data.put("ui", uiPayload(activity));
         data.put("announcement", announcement(activity));
         data.put("brand", brand(activity));
         data.put("categories", AppSettings.getCategories(activity));
@@ -1331,6 +1532,20 @@ final class WebAppActions {
         result.put("ok", true);
         result.put("error", "");
         result.put("settings", settings(activity));
+        return result;
+    }
+
+    /**
+     * 外观模式（深色模式）属于个人偏好，任何登录状态都可以保存，不需要管理员权限。
+     * 这是与 {@link #saveSettings} 分开的原因：服务器设置只有管理员能改。
+     */
+    private static Map<String, Object> saveUiMode(Activity activity, Map<String, Object> payload) {
+        String mode = AppSettings.normalizeMode(WebAppBridge.text(payload, "mode", AppSettings.MODE_AUTO));
+        AppSettings.setUiMode(activity, mode);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("ok", true);
+        result.put("error", "");
+        result.put("mode", mode);
         return result;
     }
 

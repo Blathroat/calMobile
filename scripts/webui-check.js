@@ -35,6 +35,7 @@ const EXPECTED_PAGES = [
     ['review.js', '13 报名审核'],
     ['user-public.js', '14 用户公开页'],
     ['admin.js', '15 管理后台（用户 / 展会 / 设置）'],
+    ['checkin.js', '展商核销报名码（展商后台的现场工具，不占独立设计稿）'],
 ];
 
 /** 内置的前端依赖：文件名 → 说明。 */
@@ -42,6 +43,10 @@ const VENDOR_FILES = [
     ['vendor/easymde/easymde.min.js', 'EasyMDE Markdown 编辑器脚本'],
     ['vendor/easymde/easymde.min.css', 'EasyMDE 样式'],
     ['vendor/easymde/LICENSE', 'EasyMDE 许可证'],
+    ['vendor/qrcode-generator/qrcode.js', '二维码生成（报名码）'],
+    ['vendor/qrcode-generator/LICENSE', 'qrcode-generator 许可证'],
+    ['vendor/jsqr/jsQR.js', '二维码解码（展商扫码核销）'],
+    ['vendor/jsqr/LICENSE', 'jsQR 许可证'],
 ];
 
 const failures = [];

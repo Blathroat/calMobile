@@ -228,7 +228,6 @@ export async function homePage(context) {
             'aria-pressed': selected ? 'true' : 'false',
             'aria-label': `${view.month}月${day}日${hasEvent ? '有展会' : ''}${selected ? '，已选择' : ''}`,
             disabled: disabled ? true : null,
-            text: String(day),
             onclick: () => {
                 if (view.day === day) {
                     return;
@@ -236,7 +235,10 @@ export async function homePage(context) {
                 view.day = day;
                 load();
             },
-        });
+        }, [
+            // 数字单独一层：选中态只在数字下方画一小段下划线，不给整格加方框。
+            el('span', { class: 'cal-day-num', text: String(day) }),
+        ]);
     }
 
     function renderList(data) {

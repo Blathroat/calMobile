@@ -14,6 +14,8 @@ public final class ExhibitionConfiguration {
         String imageUri = "";
         /** 简介内容的存储格式：html（旧富文本编辑器写入）或 md（EasyMDE 写入的 Markdown）。 */
         String descriptionFormat = "md";
+        /** 是否启用报名二维码：开启后报名通过的用户在报名详情里展示报名码，展商可扫码核销。 */
+        boolean registrationQrEnabled = false;
         final List<RegistrationField> fields = new ArrayList<>();
     }
 
@@ -26,6 +28,10 @@ public final class ExhibitionConfiguration {
             DATA.put(exhibitionId, data);
         }
         return data;
+    }
+
+    public static boolean isRegistrationQrEnabled(String exhibitionId) {
+        return get(exhibitionId).registrationQrEnabled;
     }
 
     public static String displayDate(String exhibitionId, int fallbackDay) {
@@ -45,5 +51,16 @@ public final class ExhibitionConfiguration {
         data.imageUri = imageUri == null ? "" : imageUri;
         data.fields.clear();
         data.fields.addAll(fields);
+    }
+
+    /** 单独保存报名二维码开关：保存展会时页面渲染是多段写入的，分开可以避免互相覆盖。 */
+    public static void saveRegistrationQr(String exhibitionId, boolean enabled) {
+        Data data = get(exhibitionId);
+        data.registrationQrEnabled = enabled;
+    }
+
+    /** 设置简介格式；保存展会时与其它字段分开写入。 */
+    public static void saveDescriptionFormat(String exhibitionId, String format) {
+        get(exhibitionId).descriptionFormat = "html".equals(format) ? "html" : "md";
     }
 }

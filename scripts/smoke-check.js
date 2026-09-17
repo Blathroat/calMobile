@@ -177,7 +177,9 @@ const EXPECTED_PAGES = [
   'rich-editor.js',
   'review.js',
   'user-public.js',
-  'admin.js'
+  'admin.js',
+  // 展商后台的现场核销工具，不占独立设计稿
+  'checkin.js'
 ];
 
 function validateScreenFiles() {
@@ -200,7 +202,8 @@ const checks = [
   {
     id: 'agent-rules',
     file: 'AGENTS.md',
-    contains: ['# Repository Guidelines', 'Java 17', 'WebShellActivity', 'node scripts/smoke-check.js']
+    contains: ['# Repository Guidelines', 'Java 17', 'WebShellActivity', 'node scripts/smoke-check.js',
+      'node --test scripts/webui-render.test.js']
   },
   {
     id: 'webui-documentation',
@@ -304,7 +307,44 @@ const checks = [
   {
     id: 'description-format-persisted',
     file: 'app/src/main/java/com/example/calmobile/ExhibitionConfiguration.java',
-    contains: ['descriptionFormat']
+    contains: ['descriptionFormat', 'registrationQrEnabled', 'isRegistrationQrEnabled',
+      'saveRegistrationQr']
+  },
+  {
+    id: 'registration-code-and-checkin',
+    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    contains: ['REGISTRATION_CODE_PREFIX', 'registrationCode', 'case "checkin.scan":',
+      'case "camera.ensurePermission":', 'parseCheckInCode', 'STATUS_ATTENDED']
+  },
+  {
+    id: 'attended-status-defined',
+    file: 'app/src/main/java/com/example/calmobile/RegistrationReviewStore.java',
+    contains: ['STATUS_ATTENDED']
+  },
+  {
+    id: 'camera-permission-declared',
+    file: 'app/src/main/AndroidManifest.xml',
+    contains: ['android.permission.CAMERA', 'android.hardware.camera']
+  },
+  {
+    id: 'webview-grants-camera',
+    file: 'app/src/main/java/com/example/calmobile/WebShellActivity.java',
+    contains: ['RESOURCE_VIDEO_CAPTURE', 'hasCameraPermission', 'PERMISSION_GRANTED']
+  },
+  {
+    id: 'admin-can-always-review',
+    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    contains: ['AuthManager.getInstance().isAdmin()']
+  },
+  {
+    id: 'admin-public-profile-unrestricted',
+    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    contains: ['viewedAsAdmin', 'asAdmin']
+  },
+  {
+    id: 'ui-mode-persisted',
+    file: 'app/src/main/java/com/example/calmobile/AppSettings.java',
+    contains: ['getUiMode', 'setUiMode', 'MODE_DARK', 'isDarkMode', 'getScreenColor']
   },
 
   // ── Web 前端资源 ────────────────────────────────────────────────
@@ -433,6 +473,109 @@ const checks = [
     contains: ['MIT']
   },
   {
+    id: 'web-vendor-qrcode-generator',
+    file: `${WEB_ROOT}/vendor/qrcode-generator/qrcode.js`,
+    minBytes: 40000
+  },
+  {
+    id: 'web-vendor-qrcode-license',
+    file: `${WEB_ROOT}/vendor/qrcode-generator/LICENSE`,
+    contains: ['MIT License', 'Kazuhiko Arase']
+  },
+  {
+    id: 'web-vendor-jsqr',
+    file: `${WEB_ROOT}/vendor/jsqr/jsQR.js`,
+    minBytes: 200000
+  },
+  {
+    id: 'web-vendor-jsqr-license',
+    file: `${WEB_ROOT}/vendor/jsqr/LICENSE`,
+    contains: ['Apache License']
+  },
+  {
+    id: 'web-vendor-scripts-in-entry',
+    file: `${WEB_ROOT}/index.html`,
+    contains: ['vendor/qrcode-generator/qrcode.js', 'vendor/jsqr/jsQR.js']
+  },
+  {
+    id: 'web-dark-mode-tokens',
+    file: `${WEB_ROOT}/styles/tokens.css`,
+    contains: [':root[data-mode="dark"]', 'prefers-color-scheme: dark', '--on-dark', '--scrim',
+      'color-scheme: dark']
+  },
+  {
+    id: 'web-bridge-dark-mode',
+    file: `${WEB_ROOT}/js/core/bridge.js`,
+    contains: ['export function applyMode', 'export function effectiveMode', 'calmobile.mode',
+      'data-mode']
+  },
+  {
+    id: 'web-dark-mode-toggle',
+    file: `${WEB_ROOT}/js/pages/profile.js`,
+    contains: ['深色模式', 'settings.uiMode', 'applyMode']
+  },
+  {
+    id: 'web-accent-light-background',
+    file: `${WEB_ROOT}/styles/tokens.css`,
+    contains: ['.cta.ghost', 'background: var(--screen)'],
+    notContains: ['.cta.ghost {\n    background: var(--accent-tint)']
+  },
+  {
+    id: 'web-tap-highlight-removed',
+    file: `${WEB_ROOT}/styles/tokens.css`,
+    contains: [':focus-visible', '-webkit-tap-highlight-color: transparent']
+  },
+  {
+    id: 'web-calendar-dot-centered',
+    file: `${WEB_ROOT}/styles/tokens.css`,
+    contains: ['.cal-day[data-has-event="true"]::after', 'align-items: center']
+  },
+  {
+    id: 'web-calendar-selection-no-box',
+    file: `${WEB_ROOT}/styles/tokens.css`,
+    contains: ['--accent-tint: #ffffff', '.cal-day-num', '.cal-day[aria-pressed="true"]',
+      'border-bottom-color: var(--accent)']
+  },
+  {
+    id: 'web-avatar-pinch-zoom',
+    file: `${WEB_ROOT}/js/ui/components.js`,
+    contains: ['pinchStartDistance', 'focalPoint', 'crop-scale'],
+    notContains: ['crop-zoom']
+  },
+  {
+    id: 'web-exhibitor-card-trimmed',
+    file: `${WEB_ROOT}/js/pages/exhibitor.js`,
+    contains: ['编辑展会', '查看报名', '核销报名码'],
+    // 卡片上只留“查看报名 / 编辑展会”，其余动作都搬进编辑展会的二级界面
+    notContains: ["actionButton('报名方式'", "actionButton('编辑简介'", "actionButton('删除展会'",
+      'askDelete', 'changeStatus(']
+  },
+  {
+    id: 'web-exhibition-form-secondary-actions',
+    file: `${WEB_ROOT}/js/pages/exhibition-form.js`,
+    contains: ['删除展会', '编辑简介', '启用报名二维码', '报名与简介设置']
+  },
+  {
+    id: 'web-admin-tab-persisted',
+    file: `${WEB_ROOT}/js/pages/admin.js`,
+    contains: ['lastTab', 'keepTabInUrl']
+  },
+  {
+    id: 'web-registration-code-shown',
+    file: `${WEB_ROOT}/js/pages/registration-detail.js`,
+    contains: ['checkInCode', 'drawQr', 'window.qrcode']
+  },
+  {
+    id: 'web-checkin-page',
+    file: `${WEB_ROOT}/js/pages/checkin.js`,
+    contains: ['checkin.scan', 'camera.ensurePermission', 'jsQR', 'onPageStop']
+  },
+  {
+    id: 'device-qr-verification-script',
+    file: 'scripts/decode-shot.js',
+    contains: ['decodePng', 'inversionAttempts', 'vendor/jsqr']
+  },
+  {
     id: 'web-screen-files',
     file: `${WEB_ROOT}/js/app.js`,
     validate: validateScreenFiles
@@ -441,7 +584,8 @@ const checks = [
     id: 'web-app-route-registry',
     file: `${WEB_ROOT}/js/app.js`,
     contains: ["defineRoute('login'", "defineRoute('home'", "defineRoute('detail'",
-      "defineRoute('registration-form'", "defineRoute('profile'", "defineRoute('admin'"]
+      "defineRoute('registration-form'", "defineRoute('profile'", "defineRoute('admin'",
+      "defineRoute('checkin'"]
   },
   {
     id: 'no-secondary-admin-pages',
