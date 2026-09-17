@@ -5,6 +5,7 @@
  */
 
 import { call, state } from '../core/bridge.js';
+import { exhibitions } from '../core/api.js';
 import { scaffold, topAction } from '../core/router.js';
 import { loadErrorBlock, loadingBlock, notFoundBlock, openSheet, pageFoot, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { sanitizeHtml, plainText } from '../core/sanitize.js';
@@ -28,7 +29,7 @@ export async function detailPage(context) {
 
     replace(host, loadingBlock(3));
     try {
-        const data = await call('exhibitions.get', { id: context.params.id });
+        const data = await exhibitions.get(context.params.id);
         if (!data?.found) {
             replace(host, notFoundBlock({
                 title: '展会不存在',

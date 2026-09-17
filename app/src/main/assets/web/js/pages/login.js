@@ -5,6 +5,7 @@
  */
 
 import { call, state, whenReady } from '../core/bridge.js';
+import { auth } from '../core/api.js';
 import { scaffold } from '../core/router.js';
 import { toast } from '../ui/components.js';
 import { el, append } from '../core/dom.js';
@@ -103,7 +104,7 @@ export async function loginPage(context) {
     append(body, footer);
 
     guest.addEventListener('click', async () => {
-        await call('auth.guest');
+        await auth.guest();
         Object.assign(state.user, { loggedIn: false, guest: true, role: 'guest', roleLabel: '访客' });
         await whenReady();
         context.navigate(context.params.redirect || 'home', redirectParams(), { replace: true });
@@ -132,10 +133,7 @@ export async function loginPage(context) {
         submit.dataset.loading = 'true';
         submit.disabled = true;
         try {
-            const result = await call('auth.login', {
-                username: account.value.trim(),
-                password: password.value,
-            });
+            const result = await auth.login(account.value.trim(), password.value);
             if (!result?.ok) {
                 showError(result?.error || '登录失败');
                 return;

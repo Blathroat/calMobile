@@ -8,6 +8,7 @@
  */
 
 import { call, state } from '../core/bridge.js';
+import { registrations } from '../core/api.js';
 import { scaffold } from '../core/router.js';
 import { confirmSheet, loadErrorBlock, loadingBlock, notFoundBlock, pageFoot, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, replace, answerLines, formatDateWithWeekday } from '../core/dom.js';
@@ -27,7 +28,7 @@ export async function registrationDetailPage(context) {
     replace(host, loadingBlock(3));
     let record = null;
     try {
-        const data = await call('registrations.get', { id: context.params.id });
+        const data = await registrations.get(context.params.id);
         if (!data?.found) {
             replace(host, notFoundBlock({
                 title: '报名记录不存在',
@@ -234,7 +235,7 @@ export async function registrationDetailPage(context) {
             tone: 'danger',
             onConfirm: async () => {
                 try {
-                    const result = await call('registrations.cancel', { id: record.id });
+                    const result = await registrations.cancel(record.id);
                     if (!result?.ok) {
                         toast(result?.error || '撤销失败', 'error');
                         return;

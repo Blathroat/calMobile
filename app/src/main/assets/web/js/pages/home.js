@@ -8,6 +8,7 @@
  */
 
 import { call, state } from '../core/bridge.js';
+import { exhibitions } from '../core/api.js';
 import { scaffold, tabbar, navItems, topAction } from '../core/router.js';
 import { icon, loadErrorBlock, loadingBlock, mediaBox, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, append, replace, daysInMonth, firstWeekdayOffset, addMonths, monthLabel } from '../core/dom.js';
@@ -167,7 +168,7 @@ export async function homePage(context) {
         replace(calendarHost, loadingBlock(1));
         replace(listHost, loadingBlock(2));
         try {
-            const data = await call('exhibitions.month', { ...view, explicit });
+            const data = await exhibitions.month({ ...view, explicit });
             view.month = data.month;
             view.year = data.year;
             // 选中日期以服务端结果为准，首次进入与翻月后都能正确高亮。

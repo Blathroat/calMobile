@@ -8,6 +8,7 @@
  */
 
 import { call } from '../core/bridge.js';
+import { exhibitions } from '../core/api.js';
 import { scaffold, topAction } from '../core/router.js';
 import { confirmSheet, icon, loadErrorBlock, loadingBlock, notFoundBlock, openSheet, pageFoot, stateBlock, switchRow, toast } from '../ui/components.js';
 import { el, append, replace } from '../core/dom.js';
@@ -51,7 +52,7 @@ export async function exhibitionFormPage(context) {
     replace(host, loadingBlock(4));
     try {
         if (!isCreate) {
-            const data = await call('exhibitions.get', { id: context.params.id });
+            const data = await exhibitions.get(context.params.id);
             if (!data?.found) {
                 replace(host, notFoundBlock({
                     title: '展会不存在',
@@ -447,7 +448,7 @@ export async function exhibitionFormPage(context) {
     /** 只提交报名方式（状态），保存后停留在当前页，不打断展商的编辑。 */
     async function saveStatusOnly() {
         try {
-            const saved = await call('exhibitions.save', buildPayload());
+            const saved = await exhibitions.save(buildPayload());
             if (!saved?.ok) {
                 toast(saved?.error || '报名方式保存失败', 'error');
                 return;
@@ -466,7 +467,7 @@ export async function exhibitionFormPage(context) {
             tone: 'danger',
             onConfirm: async () => {
                 try {
-                    const ok = await call('exhibitions.delete', { id: model.id });
+                    const ok = await exhibitions.remove(model.id);
                     toast(ok ? '展会已删除' : '删除失败', ok ? 'success' : 'error');
                     if (ok) {
                         context.navigate('exhibitor', {}, { replace: true });
@@ -592,7 +593,7 @@ export async function exhibitionFormPage(context) {
         }
         saveButton.disabled = true;
         try {
-            const saved = await call('exhibitions.save', buildPayload());
+            const saved = await exhibitions.save(buildPayload());
             if (!saved?.ok) {
                 saveButton.disabled = false;
                 return fail(saved?.error || '保存失败');

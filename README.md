@@ -205,11 +205,25 @@ Android 依赖集中在 `app/build.gradle`：AndroidX、Material、`richeditor-a
 
 ## 前后端边界（重构后端时看这一节）
 
-前端不直接访问网络，**所有数据都经过 `js/core/bridge.js` 的 `call(action, payload)`**，由 `WebAppBridge` 分发到 `WebAppActions`。因此做前后端分离时，改造面收敛在 `WebAppActions` 一个文件里：把「读写本地 SQLite / SharedPreferences / 会话内存储」的分支换成对 `server/` 的 HTTP 调用，页面与 CSS 不需要改动。
+前端不直接访问网络，**页面也不直接调用桥接**。数据统一走 `js/core/api.js` 这个唯一入口：
 
-### 47 个桥接动作的分类
+```js
+import { exhibitions, registrations } from '../core/api.js';
 
-`WebAppActions.handle()` 的分发 switch 共 47 个动作（另有 3 个 `case "display|closed|ended"` 属于 `modeLabel()` 内部的字符串分支，不是桥接动作）。
+const items = await exhibitions.list({ query });   // ← 页面只写到这里
+const one = await exhibitions.get(id);
+await registrations.submit(payload);
+```
+
+`api.js` 内部再调用 `bridge.js` 的 `call(动作名, 参数)`，由 `WebAppBridge` 分发到 `WebAppActions`。因此做前后端分离时，**改造面只有两个文件**：`api.js` 换成 fetch 到 `server/`，`WebAppActions` 里对应的本机实现删除。页面、组件与 CSS 一行都不用改（`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法）。
+
+`api.js` 的命名与后端资源路径同构（`exhibitions.list` ↔ `GET /api/exhibitions`），返回值字段与状态文案也一一对应；`users` / `profile` / `settings` 三个域额外提供 `usersApi` / `profileApi` / `settingsApi` 别名，避免被页面里的同名局部变量遮蔽。
+
+系统能力（摄像头、日历、分享、媒体选择、CSV 导出、通知权限）不属于数据接口，仍由页面直接调 `bridge.js`，后端化后保持不变。
+
+### 44 个桥接动作的分类
+
+`WebAppActions.handle()` 的分发 switch 共 47 个动作（其中 3 个 `case "display|closed|ended"` 属于 `modeLabel()` 内部的字符串分支，不是桥接动作），前端实际使用 44 个。
 
 | 类别 | 动作 | 后端重构时的处理 |
 | --- | --- | --- |

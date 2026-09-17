@@ -9,6 +9,7 @@
  */
 
 import { call, state, applySettings } from '../core/bridge.js';
+import { exhibitions, settingsApi, usersApi } from '../core/api.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
 import { confirmSheet, loadErrorBlock, loadingBlock, mediaBox, openSheet, segmented, smallCta, stateBlock, statusTag, statusTone, switchRow, toast } from '../ui/components.js';
 import { el, replace, truncate, formatDateWithWeekday } from '../core/dom.js';
@@ -103,7 +104,7 @@ export async function adminPage(context) {
     // ── 用户管理 ───────────────────────────────────────────────────
 
     async function renderUsers(target) {
-        const users = await call('users.list', { query });
+        const users = await usersApi.list({ query });
         const cards = el('div', { class: 'list', 'data-gap': 'sm' }, users.map((user) => el('div', { class: 'card' }, [
             el('div', { class: 'row', 'data-gap': 'md' }, [
                 el('span', { class: 'avatar', text: (user.nickname || '用').slice(0, 1), 'aria-hidden': 'true' }),
@@ -181,7 +182,7 @@ export async function adminPage(context) {
 
     async function updateUserStatus(user, status) {
         try {
-            const ok = await call('users.status', { id: user.id, status });
+            const ok = await usersApi.setStatus(user.id, status);
             toast(ok ? `已将 ${user.nickname} 设为${status}` : '更新失败', ok ? 'success' : 'error');
             if (ok) {
                 loadPanel();
@@ -194,7 +195,7 @@ export async function adminPage(context) {
     // ── 展会管理 ───────────────────────────────────────────────────
 
     async function renderExhibitions(target) {
-        const items = await call('exhibitions.list', { query });
+        const items = await exhibitions.list({ query });
         replace(target, [
             el('div', { class: 'field' }, [
                 el('label', { for: 'admin-exhibition-search', text: '搜索展会' }),
@@ -267,7 +268,7 @@ export async function adminPage(context) {
             confirmLabel: title,
             onConfirm: async () => {
                 try {
-                    const ok = await call('exhibitions.status', { id: item.id, status: nextStatus });
+                    const ok = await exhibitions.setStatus(item.id, nextStatus);
                     toast(ok ? `已${title}` : '操作失败', ok ? 'success' : 'error');
                     if (ok) {
                         loadPanel();
@@ -298,7 +299,7 @@ export async function adminPage(context) {
     // ── 服务器设置 ─────────────────────────────────────────────────
 
     async function renderSettings(target) {
-        const data = settings || await call('settings.get');
+        const data = settings || await settingsApi.get();
         settings = data;
 
         const announcement = textarea('settings-announcement', data?.announcement?.text || '', 3);
@@ -475,7 +476,7 @@ export async function adminPage(context) {
             }
             errorBox.hidden = true;
             try {
-                const saved = await call('settings.save', {
+                const saved = await settingsApi.save({
                     appTitleZh: titleZh.value.trim(),
                     appTitleEn: titleEn.value.trim(),
                     announcement: announcement.value.trim(),

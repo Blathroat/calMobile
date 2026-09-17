@@ -1,10 +1,11 @@
 /**
  * WebView 前端静态检查。
  *
- * 校验三件事：
+ * 校验四件事：
  * 1. assets/web 下的页面与脚本能作为 ES 模块解析（语法与导入路径）；
  * 2. 前端调用的动作名都在 WebAppActions 中实现；
- * 3. 页面文件与设计的屏幕编号一一对应，避免新增页面后漏登记路由。
+ * 3. 页面文件与设计的屏幕编号一一对应，避免新增页面后漏登记路由；
+ * 4. 页面只通过 `core/api.js` 取数据，不绕过它直接调用桥接的数据类动作。
  *
  * 用法：node scripts/webui-check.js
  */
@@ -17,6 +18,27 @@ const root = path.resolve(__dirname, '..');
 const webRoot = path.join(root, 'app', 'src', 'main', 'assets', 'web');
 const actionsFile = path.join(root, 'app', 'src', 'main', 'java', 'com', 'example', 'calmobile', 'WebAppActions.java');
 const appFile = path.join(webRoot, 'js', 'app.js');
+const apiFile = path.join(webRoot, 'js', 'core', 'api.js');
+
+/**
+ * 数据类动作：只允许 core/api.js 调用，页面必须走 api 的方法。
+ * 系统能力（摄像头、日历、分享、媒体、导出）仍可直接调用。
+ */
+const DATA_ACTIONS = [
+    'bootstrap',
+    'auth.login', 'auth.register', 'auth.guest', 'auth.logout',
+    'profile.get', 'profile.save', 'profile.password',
+    'notify.preferences', 'notify.savePreferences',
+    'exhibitions.list', 'exhibitions.month', 'exhibitions.get', 'exhibitions.save',
+    'exhibitions.delete', 'exhibitions.status', 'exhibitions.categories',
+    'exhibitions.fields', 'exhibitions.saveFields',
+    'registrations.list', 'registrations.get', 'registrations.submit', 'registrations.cancel',
+    'review.list', 'review.get', 'review.updateStatus',
+    'checkin.scan',
+    'users.list', 'users.get', 'users.status', 'users.public',
+    'search.query',
+    'settings.get', 'settings.save', 'settings.uiMode',
+];
 
 /** 设计稿中的 17 屏与页面模块的对应关系（管理-展会、管理-设置已内联，共 15 个模块）。 */
 const EXPECTED_PAGES = [
@@ -130,6 +152,28 @@ function checkActions() {
     return called.size;
 }
 
+/**
+ * 页面不得绕过 core/api.js 直接调用数据类动作。
+ * 这样前后端分离时只要替换 api.js 的实现，页面就不需要改动。
+ */
+function checkApiBoundary() {
+    const pagesDir = path.join(webRoot, 'js', 'pages');
+    const allowed = new Set(DATA_ACTIONS);
+    let violations = 0;
+    for (const file of walk(pagesDir, '.js')) {
+        const source = fs.readFileSync(file, 'utf8');
+        const pattern = /\bcall\(\s*'([a-zA-Z.]+)'/g;
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+            if (allowed.has(match[1])) {
+                fail(`${path.relative(root, file)} 直接调用了数据类动作 ${match[1]}，请改走 core/api.js`);
+                violations += 1;
+            }
+        }
+    }
+    return violations;
+}
+
 async function checkModules() {
     const modules = walk(webRoot, '.js');
     let checked = 0;
@@ -152,6 +196,7 @@ async function checkModules() {
 async function main() {
     const fileCount = checkFileLayout();
     const actionCount = checkActions();
+    checkApiBoundary();
     const moduleCount = await checkModules();
 
     if (failures.length > 0) {
@@ -159,11 +204,16 @@ async function main() {
         process.exitCode = 1;
         return;
     }
-    console.log(`PASS webui-check: ${fileCount} 个前端文件、${moduleCount} 个模块与 ${actionCount} 个桥接动作校验通过`);
+    console.log(`PASS webui-check: ${fileCount} 个前端文件、${moduleCount} 个模块与 ${actionCount} 个桥接动作校验通过；页面均通过 core/api.js 取数据`);
 }
 
 if (require.main === module) {
     main();
 }
 
-module.exports = { EXPECTED_PAGES, collectCalledActions, collectImplementedActions };
+module.exports = {
+    EXPECTED_PAGES,
+    DATA_ACTIONS,
+    collectCalledActions,
+    collectImplementedActions,
+};

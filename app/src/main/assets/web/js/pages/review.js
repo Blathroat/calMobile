@@ -6,6 +6,7 @@
  */
 
 import { call, state } from '../core/bridge.js';
+import { exhibitions, review } from '../core/api.js';
 import { scaffold } from '../core/router.js';
 import { loadErrorBlock, loadingBlock, openSheet, segmented, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, replace, answerLines, truncate } from '../core/dom.js';
@@ -48,7 +49,7 @@ export async function reviewPage(context) {
         // 未指定展会时，先让展商选择要审核的展会
         replace(listHost, loadingBlock(2));
         try {
-            const items = await call('exhibitions.list');
+            const items = await exhibitions.list();
             replace(filterHost, []);
             replace(listHost, [
                 el('span', { class: 'section-label', text: '选择要审核的展会' }),
@@ -105,7 +106,7 @@ export async function reviewPage(context) {
 
     async function load() {
         try {
-            const data = await call('review.list', { exhibitionId, status: filter });
+            const data = await review.list({ exhibitionId, status: filter });
             records = data.records || [];
             renderFilter(data.counts || {});
             countPill.textContent = `待审核 ${data.counts?.[REGISTRATION_STATUS.PENDING] ?? 0}`;
@@ -207,7 +208,7 @@ export async function reviewPage(context) {
 
     async function changeStatus(record, status) {
         try {
-            const result = await call('review.updateStatus', { id: record.id, status });
+            const result = await review.updateStatus(record.id, status);
             if (!result?.ok) {
                 toast(result?.error || '更新失败', 'error');
                 return;

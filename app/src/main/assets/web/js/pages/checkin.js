@@ -10,6 +10,7 @@
  */
 
 import { call } from '../core/bridge.js';
+import { checkIn } from '../core/api.js';
 import { scaffold, onPageStop } from '../core/router.js';
 import { loadingBlock, stateBlock, statusTag, toast, openSheet } from '../ui/components.js';
 import { el, replace } from '../core/dom.js';
@@ -277,7 +278,7 @@ export async function checkinPage(context) {
         submitting = true;
         replace(statusHost, loadingBlock(1));
         try {
-            const result = await call('checkin.scan', { code: raw });
+            const result = await checkIn(raw);
             renderResult(result, raw);
         } catch (error) {
             replace(resultHost, []);

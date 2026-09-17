@@ -8,6 +8,7 @@
  */
 
 import { call, state } from '../core/bridge.js';
+import { users } from '../core/api.js';
 import { scaffold } from '../core/router.js';
 import { avatarNode, loadErrorBlock, loadingBlock, pageFoot, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace, formatDateWithWeekday } from '../core/dom.js';
@@ -29,7 +30,7 @@ export async function userPublicPage(context) {
     replace(host, loadingBlock(3));
     let profile = null;
     try {
-        const data = await call('users.public', {
+        const data = await users.publicProfile({
             nickname: context.params.nickname || '',
             userId: context.params.userId || '',
         });

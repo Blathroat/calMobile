@@ -5,6 +5,7 @@
  */
 
 import { call } from '../core/bridge.js';
+import { api } from '../core/api.js';
 import { scaffold } from '../core/router.js';
 import { loadErrorBlock, loadingBlock, mediaBox, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace, truncate } from '../core/dom.js';
@@ -68,7 +69,7 @@ export async function searchPage(context) {
         }
         replace(resultsHost, loadingBlock(2));
         try {
-            const data = await call('search.query', { query });
+            const data = await api.search(query);
             countText.textContent = `${data.count} 条结果`;
             render(data, query);
         } catch (error) {

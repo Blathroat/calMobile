@@ -8,6 +8,7 @@
  */
 
 import { call, state } from '../core/bridge.js';
+import { exhibitions } from '../core/api.js';
 import { scaffold, topAction } from '../core/router.js';
 import { icon, loadErrorBlock, loadingBlock, notFoundBlock, openSheet, pageFoot, stateBlock, toast } from '../ui/components.js';
 import { htmlToMarkdown, markdownSummary, ensureMarked } from '../core/markdown.js';
@@ -31,7 +32,7 @@ export async function richEditorPage(context) {
     let exhibition = null;
     replace(host, loadingBlock(3));
     try {
-        const data = await call('exhibitions.get', { id: context.params.id });
+        const data = await exhibitions.get(context.params.id);
         if (!data?.found) {
             replace(host, notFoundBlock({
                 title: '展会不存在',
@@ -403,7 +404,7 @@ export async function richEditorPage(context) {
         const markdown = String(editor.value() || '').trim();
         saveButton.disabled = true;
         try {
-            const result = await call('exhibitions.save', {
+            const result = await exhibitions.save({
                 id: exhibition.id,
                 title: exhibition.title,
                 venue: exhibition.venue,

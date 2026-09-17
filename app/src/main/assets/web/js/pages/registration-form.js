@@ -5,6 +5,7 @@
  */
 
 import { call, state } from '../core/bridge.js';
+import { exhibitions, registrations } from '../core/api.js';
 import { scaffold } from '../core/router.js';
 import { loadErrorBlock, loadingBlock, notFoundBlock, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, append, replace, formatDateWithWeekday } from '../core/dom.js';
@@ -26,7 +27,7 @@ export async function registrationFormPage(context) {
 
     replace(host, loadingBlock(3));
     try {
-        const data = await call('exhibitions.get', { id: context.params.id });
+        const data = await exhibitions.get(context.params.id);
         if (!data?.found) {
             replace(host, notFoundBlock({
                 title: '展会不存在',
@@ -39,7 +40,7 @@ export async function registrationFormPage(context) {
         exhibition = data.exhibition;
         fields = data.fields || [];
         if (context.params.registrationId) {
-            const record = await call('registrations.get', { id: context.params.registrationId });
+            const record = await registrations.get(context.params.registrationId);
             existing = record?.found ? record.registration : null;
         }
     } catch (error) {
@@ -114,7 +115,7 @@ export async function registrationFormPage(context) {
             submit.dataset.loading = 'true';
             submit.disabled = true;
             try {
-                const result = await call('registrations.submit', {
+                const result = await registrations.submit({
                     exhibitionId: exhibition.id,
                     title: exhibition.title,
                     venue: exhibition.venue,

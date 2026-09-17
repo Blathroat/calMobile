@@ -5,6 +5,7 @@
  */
 
 import { call, state } from '../core/bridge.js';
+import { registrations } from '../core/api.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
 import { loadErrorBlock, loadingBlock, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace, truncate, formatDateWithWeekday } from '../core/dom.js';
@@ -43,7 +44,7 @@ export async function myRegistrationsPage(context) {
 
     replace(listHost, loadingBlock(3));
     try {
-        const records = await call('registrations.list');
+        const records = await registrations.list();
         countPill.textContent = `${records.length} 条记录`;
         if (records.length === 0) {
             replace(listHost, stateBlock({

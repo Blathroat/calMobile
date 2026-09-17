@@ -8,6 +8,7 @@
  */
 
 import { call, state, applyTheme, applySettings, applyMode } from '../core/bridge.js';
+import { authApi, profileApi, settingsApi } from '../core/api.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
 import { avatarNode, loadingBlock, openAvatarCropper, openSheet, segmented, smallCta, stateBlock, switchRow, toast } from '../ui/components.js';
 import { el, append, replace } from '../core/dom.js';
@@ -37,8 +38,8 @@ export async function profilePage(context) {
 
     // 通知偏好与个人配色并行拉取，任一失败都保留可用默认值。
     const [notifyResult, settingsResult] = await Promise.allSettled([
-        call('notify.preferences'),
-        call('settings.get'),
+        profileApi.notifications(),
+        settingsApi.get(),
     ]);
 
     const notify = notifyResult.status === 'fulfilled' && notifyResult.value
@@ -215,7 +216,7 @@ export async function profilePage(context) {
         applyMode(value);
         render();
         try {
-            const result = await call('settings.uiMode', { mode: value });
+            const result = await settingsApi.saveUiMode(value);
             if (result?.mode) {
                 applyMode(result.mode);
                 render();
@@ -283,7 +284,7 @@ export async function profilePage(context) {
 
     async function saveAvatar(url) {
         try {
-            const result = await call('profile.save', {
+            const result = await profileApi.save({
                 nickname: state.user.nickname || state.user.username,
                 email: state.user.email || '',
                 bio: state.user.bio || '',
@@ -306,7 +307,7 @@ export async function profilePage(context) {
 
     async function saveTheme() {
         try {
-            const result = await call('settings.save', { themeIndex });
+            const result = await settingsApi.save({ themeIndex });
             if (!result?.ok) {
                 toast('保存失败', 'error');
                 return;
@@ -323,7 +324,7 @@ export async function profilePage(context) {
 
     async function savePreferences(patch) {
         try {
-            const updated = await call('notify.savePreferences', patch);
+            const updated = await profileApi.saveNotifications(patch);
             Object.assign(notify, updated || {});
             toast('通知设置已更新', 'success');
         } catch (error) {
@@ -405,7 +406,7 @@ export async function profilePage(context) {
                             return;
                         }
                         try {
-                            const saved = await call('profile.save', {
+                            const saved = await profileApi.save({
                                 nickname: nickname.value.trim(),
                                 email: email.value.trim(),
                                 bio: bio.value.trim(),
@@ -479,7 +480,7 @@ export async function profilePage(context) {
                             return;
                         }
                         try {
-                            const saved = await call('profile.password', {
+                            const saved = await profileApi.changePassword({
                                 currentPassword: current.value,
                                 newPassword: next.value,
                                 confirmPassword: confirm.value,
@@ -502,7 +503,7 @@ export async function profilePage(context) {
     }
 
     function logout() {
-        call('auth.logout').then(() => {
+        authApi.logout().then(() => {
             Object.assign(state.user, {
                 loggedIn: false,
                 guest: true,

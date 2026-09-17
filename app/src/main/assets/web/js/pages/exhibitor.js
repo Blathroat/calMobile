@@ -9,6 +9,7 @@
  */
 
 import { call } from '../core/bridge.js';
+import { exhibitions } from '../core/api.js';
 import { scaffold, tabbar, navItems, topAction } from '../core/router.js';
 import { loadErrorBlock, loadingBlock, mediaBox, smallCta, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace } from '../core/dom.js';
@@ -29,7 +30,7 @@ export async function exhibitorPage(context) {
 
     replace(listHost, loadingBlock(3));
     try {
-        const items = await call('exhibitions.list');
+        const items = await exhibitions.list();
         if (items.length === 0) {
             replace(listHost, stateBlock({
                 iconName: 'briefcase',

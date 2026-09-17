@@ -512,7 +512,12 @@ const checks = [
   {
     id: 'web-dark-mode-toggle',
     file: `${WEB_ROOT}/js/pages/profile.js`,
-    contains: ['深色模式', 'settings.uiMode', 'applyMode']
+    contains: ['深色模式', 'settingsApi.saveUiMode', 'applyMode']
+  },
+  {
+    id: 'web-api-entry',
+    file: `${WEB_ROOT}/js/core/api.js`,
+    contains: ['export const api', 'exhibitions', 'registrations', 'review', 'checkIn', 'settingsApi']
   },
   {
     id: 'web-accent-light-background',

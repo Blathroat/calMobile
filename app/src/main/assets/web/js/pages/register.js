@@ -8,6 +8,7 @@
  */
 
 import { call, state } from '../core/bridge.js';
+import { auth } from '../core/api.js';
 import { scaffold } from '../core/router.js';
 import { toast } from '../ui/components.js';
 import { el, append } from '../core/dom.js';
@@ -99,7 +100,7 @@ export async function registerPage(context) {
         submit.dataset.loading = 'true';
         submit.disabled = true;
         try {
-            const saved = await call('auth.register', {
+            const saved = await auth.register({
                 username: username.value.trim(),
                 email: email.value.trim(),
                 password: password.value,
