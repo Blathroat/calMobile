@@ -97,21 +97,13 @@ final class SystemActions {
                     WebAppBridge.text(payload, "imageFormats", ""),
                     WebAppBridge.text(payload, "videoFormats", ""));
         }
-        if (payload.containsKey("exhibitionTitle")) {
-            AppSettings.saveTextLimits(activity, new int[] {
-                    WebAppBridge.number(payload, "exhibitionTitle", 0),
-                    WebAppBridge.number(payload, "exhibitionVenue", 0),
-                    WebAppBridge.number(payload, "category", 0),
-                    WebAppBridge.number(payload, "fieldTitle", 0),
-                    WebAppBridge.number(payload, "usernameMin", 0),
-                    WebAppBridge.number(payload, "usernameMax", 0),
-                    WebAppBridge.number(payload, "passwordMin", 0),
-                    WebAppBridge.number(payload, "passwordMax", 0),
-                    WebAppBridge.number(payload, "nickname", 0),
-                    WebAppBridge.number(payload, "bio", 0),
-                    WebAppBridge.number(payload, "region", 0),
-                    WebAppBridge.number(payload, "answer", 0),
-            });
+        if (payload.containsKey(AppSettings.TextLimit.EXHIBITION_TITLE.wireName)) {
+            // 上限清单只有一份（AppSettings.TextLimit），这里按键名逐个取值，不再按下标对齐。
+            Map<String, Integer> limits = new LinkedHashMap<>();
+            for (AppSettings.TextLimit limit : AppSettings.TextLimit.values()) {
+                limits.put(limit.wireName, WebAppBridge.number(payload, limit.wireName, 0));
+            }
+            AppSettings.saveTextLimits(activity, limits);
         }
         if (payload.containsKey("notify")) {
             @SuppressWarnings("unchecked")

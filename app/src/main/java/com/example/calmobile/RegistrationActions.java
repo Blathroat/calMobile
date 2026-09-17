@@ -134,7 +134,9 @@ final class RegistrationActions {
             result.put("error", "提交失败，请稍后重试");
             return result;
         }
-        RegistrationReviewStore.Record record = RegistrationReviewStore.add(exhibitionId, visitorName, answers);
+        // 审核记录用报名表自己的 id：核销、撤销都要按同一个 id 更新报名行。
+        RegistrationReviewStore.Record record =
+                RegistrationReviewStore.add(registration.getId(), exhibitionId, visitorName, answers);
         // “无需审核”的展会提交即视为通过，展商仍可在报名管理中调整结果。
         boolean autoApproved = autoApprove(activity, exhibitionId, record);
         NotificationHelper helper = NotificationHelper.getInstance(activity);
@@ -162,11 +164,24 @@ final class RegistrationActions {
             return false;
         }
         RegistrationReviewStore.updateStatus(record.id, RegistrationReviewStore.STATUS_APPROVED);
+        updateRegistrationRow(record, RegistrationReviewStore.STATUS_APPROVED);
+        return true;
+    }
+
+    /**
+     * 把审核状态写回报名表。
+     * <p>
+     * 示例记录（{@code demo-} 前缀）在报名表里没有对应行，跳过即可——它们本来就是
+     * 为了让展商后台一进去有内容可看而造的，不参与真实报名状态的流转。
+     */
+    static void updateRegistrationRow(RegistrationReviewStore.Record record, String status) {
+        if (record == null || record.demo) {
+            return;
+        }
         DatabaseHelper database = DatabaseHelper.getInstance();
         if (database != null) {
-            database.updateRegistrationStatus(record.id, RegistrationReviewStore.STATUS_APPROVED);
+            database.updateRegistrationStatus(record.id, status);
         }
-        return true;
     }
 
     static Map<String, Object> cancelRegistration(Activity activity, String id) {
@@ -195,7 +210,7 @@ final class RegistrationActions {
     static Map<String, Object> reviewList(Map<String, Object> payload) {
         String exhibitionId = WebAppBridge.text(payload, "exhibitionId", "");
         String status = WebAppBridge.text(payload, "status", "全部");
-        RegistrationReviewStore.ensureSeeded(exhibitionId);
+        RegistrationReviewStore.seedDemoIfEmpty(exhibitionId);
         List<Map<String, Object>> items = new ArrayList<>();
         for (RegistrationReviewStore.Record record : RegistrationReviewStore.listByExhibition(exhibitionId)) {
             if (!"全部".equals(status) && !status.isEmpty() && !status.equals(record.status)) {
@@ -373,10 +388,7 @@ final class RegistrationActions {
             return result;
         }
         RegistrationReviewStore.updateStatus(record.id, RegistrationReviewStore.STATUS_ATTENDED);
-        DatabaseHelper database = DatabaseHelper.getInstance();
-        if (database != null) {
-            database.updateRegistrationStatus(record.id, RegistrationReviewStore.STATUS_ATTENDED);
-        }
+        updateRegistrationRow(record, RegistrationReviewStore.STATUS_ATTENDED);
         NotificationHelper.getInstance(activity).sendRegistrationStatusNotification(
                 exhibitionTitleOf(record.exhibitionId), record.visitorName,
                 RegistrationReviewStore.STATUS_ATTENDED);

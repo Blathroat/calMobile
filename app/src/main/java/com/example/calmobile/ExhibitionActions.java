@@ -245,16 +245,17 @@ final class ExhibitionActions {
         }
 
         ExhibitionConfiguration.Data config = ExhibitionConfiguration.get(saved.getId());
-        ExhibitionConfiguration.save(saved.getId(), date.isEmpty() ? config.exhibitionDate : date,
-                registrationStart.isEmpty() ? config.registrationStart : registrationStart,
-                registrationEnd.isEmpty() ? config.registrationEnd : registrationEnd,
-                WebAppBridge.text(payload, "imageUri", config.imageUri),
-                config.fields);
-        ExhibitionConfiguration.saveDescriptionFormat(saved.getId(), descriptionFormat);
+        ExhibitionConfiguration.save(saved.getId(), new ExhibitionConfiguration.Patch()
+                .dates(date.isEmpty() ? config.exhibitionDate : date,
+                        registrationStart.isEmpty() ? config.registrationStart : registrationStart,
+                        registrationEnd.isEmpty() ? config.registrationEnd : registrationEnd)
+                .image(WebAppBridge.text(payload, "imageUri", config.imageUri))
+                .descriptionFormat(descriptionFormat)
+                .fields(config.fields));
         // 报名二维码开关由展会编辑页的“是否启用报名二维码”按钮控制。
         if (payload.containsKey("qrEnabled")) {
-            ExhibitionConfiguration.saveRegistrationQr(saved.getId(),
-                    WebAppBridge.flag(payload, "qrEnabled", false));
+            ExhibitionConfiguration.save(saved.getId(), new ExhibitionConfiguration.Patch()
+                    .registrationQr(WebAppBridge.flag(payload, "qrEnabled", false)));
         }
         saveExhibitionFields(saved.getId(), payload);
 
@@ -283,9 +284,8 @@ final class ExhibitionActions {
             fields.add(new RegistrationField(title, WebAppBridge.text(item, "type", RegistrationField.TYPE_TEXT),
                     WebAppBridge.flag(item, "required", false), optionsText(item.get("options"))));
         }
-        ExhibitionConfiguration.Data config = ExhibitionConfiguration.get(exhibitionId);
-        ExhibitionConfiguration.save(exhibitionId, config.exhibitionDate, config.registrationStart,
-                config.registrationEnd, config.imageUri, fields);
+        // 收集项只覆盖这一个字段，日期、图片等其它段保持原值。
+        ExhibitionConfiguration.save(exhibitionId, new ExhibitionConfiguration.Patch().fields(fields));
     }
 
     static String optionsText(Object raw) {

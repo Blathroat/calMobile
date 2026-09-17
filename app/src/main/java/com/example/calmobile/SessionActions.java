@@ -151,20 +151,12 @@ final class SessionActions {
         return server;
     }
 
+    /** 前端 limits：键名与取值范围由 {@link AppSettings.TextLimit} 单点维护。 */
     static Map<String, Object> textLimits(Activity activity) {
         Map<String, Object> limits = new LinkedHashMap<>();
-        limits.put("exhibitionTitle", AppSettings.getExhibitionTitleLimit(activity));
-        limits.put("exhibitionVenue", AppSettings.getExhibitionVenueLimit(activity));
-        limits.put("category", AppSettings.getCategoryLimit(activity));
-        limits.put("fieldTitle", AppSettings.getFieldTitleLimit(activity));
-        limits.put("usernameMin", AppSettings.getUsernameMin(activity));
-        limits.put("usernameMax", AppSettings.getUsernameMax(activity));
-        limits.put("passwordMin", AppSettings.getPasswordMin(activity));
-        limits.put("passwordMax", AppSettings.getPasswordMax(activity));
-        limits.put("nickname", AppSettings.getNicknameLimit(activity));
-        limits.put("bio", AppSettings.getBioLimit(activity));
-        limits.put("region", AppSettings.getRegionLimit(activity));
-        limits.put("answer", AppSettings.getAnswerLimit(activity));
+        for (AppSettings.TextLimit limit : AppSettings.TextLimit.values()) {
+            limits.put(limit.wireName, AppSettings.getTextLimit(activity, limit));
+        }
         return limits;
     }
 

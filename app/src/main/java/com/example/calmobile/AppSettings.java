@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * 保存管理员可调整的应用设置。
@@ -300,76 +301,127 @@ public final class AppSettings {
 
     // ── 表单字符数上限（普通用户与展商可自由填写的字段） ─────────
 
+    /**
+     * 字符数上限的唯一来源。
+     *
+     * 之前这里散着四组按位置对齐的数组（键名、默认值、下限、上限）外加十二个
+     * getter，新增一项上限要同时改六处、还要保证下标不错位；前端也各抄一份键名。
+     * 现在只有这张表：{@code wireName} 就是前端 {@code state.limits} 的键，
+     * 读（{@link #getTextLimit}）、写（{@link #saveTextLimits}）、与前端交换
+     * （{@link SessionActions#textLimits}、{@link SystemActions#saveSettings}）全部由它派生。
+     */
+    public enum TextLimit {
+        EXHIBITION_TITLE("exhibitionTitle", KEY_LIMIT_TITLE, 60, 4, 120),
+        EXHIBITION_VENUE("exhibitionVenue", KEY_LIMIT_VENUE, 60, 4, 120),
+        CATEGORY("category", KEY_LIMIT_CATEGORY, 20, 2, 60),
+        FIELD_TITLE("fieldTitle", KEY_LIMIT_FIELD, 30, 2, 60),
+        USERNAME_MIN("usernameMin", KEY_LIMIT_USERNAME_MIN, 3, 2, 20),
+        USERNAME_MAX("usernameMax", KEY_LIMIT_USERNAME_MAX, 20, 4, 40),
+        PASSWORD_MIN("passwordMin", KEY_LIMIT_PASSWORD_MIN, 6, 4, 24),
+        PASSWORD_MAX("passwordMax", KEY_LIMIT_PASSWORD_MAX, 32, 8, 64),
+        NICKNAME("nickname", KEY_LIMIT_NICKNAME, 20, 2, 40),
+        BIO("bio", KEY_LIMIT_BIO, 200, 20, 1000),
+        REGION("region", KEY_LIMIT_REGION, 40, 4, 120),
+        ANSWER("answer", KEY_LIMIT_ANSWER, 200, 20, 1000);
+
+        /** 前端 {@code state.limits} 里的键名，也是设置接口的字段名。 */
+        public final String wireName;
+        private final String prefKey;
+        /** 取值范围与默认值；包内可见，便于单测直接校验这张表本身是否自洽。 */
+        final int fallback;
+        final int min;
+        final int max;
+
+        TextLimit(String wireName, String prefKey, int fallback, int min, int max) {
+            this.wireName = wireName;
+            this.prefKey = prefKey;
+            this.fallback = fallback;
+            this.min = min;
+            this.max = max;
+        }
+    }
+
+    /** 读取一项上限；越界值按该项的范围收敛。 */
+    public static int getTextLimit(Context context, TextLimit limit) {
+        int value = prefs(context).getInt(limit.prefKey, limit.fallback);
+        value = Math.max(limit.min, Math.min(limit.max, value));
+        // 成对的两项：上限不能小于下限，否则校验规则会互相打架。
+        return Math.max(value, pairedFloor(context, limit));
+    }
+
+    /** 用户名 / 密码的「上限」以各自下限为地板。 */
+    private static int pairedFloor(Context context, TextLimit limit) {
+        switch (limit) {
+            case USERNAME_MAX:
+                return getTextLimit(context, TextLimit.USERNAME_MIN);
+            case PASSWORD_MAX:
+                return getTextLimit(context, TextLimit.PASSWORD_MIN);
+            default:
+                return 0;
+        }
+    }
+
     public static int getExhibitionTitleLimit(Context context) {
-        return limit(context, KEY_LIMIT_TITLE, 60, 4, 120);
+        return getTextLimit(context, TextLimit.EXHIBITION_TITLE);
     }
 
     public static int getExhibitionVenueLimit(Context context) {
-        return limit(context, KEY_LIMIT_VENUE, 60, 4, 120);
+        return getTextLimit(context, TextLimit.EXHIBITION_VENUE);
     }
 
     public static int getCategoryLimit(Context context) {
-        return limit(context, KEY_LIMIT_CATEGORY, 20, 2, 60);
+        return getTextLimit(context, TextLimit.CATEGORY);
     }
 
     public static int getFieldTitleLimit(Context context) {
-        return limit(context, KEY_LIMIT_FIELD, 30, 2, 60);
+        return getTextLimit(context, TextLimit.FIELD_TITLE);
     }
 
     public static int getUsernameMin(Context context) {
-        return limit(context, KEY_LIMIT_USERNAME_MIN, 3, 2, 20);
+        return getTextLimit(context, TextLimit.USERNAME_MIN);
     }
 
     public static int getUsernameMax(Context context) {
-        return Math.max(getUsernameMin(context), limit(context, KEY_LIMIT_USERNAME_MAX, 20, 4, 40));
+        return getTextLimit(context, TextLimit.USERNAME_MAX);
     }
 
     public static int getPasswordMin(Context context) {
-        return limit(context, KEY_LIMIT_PASSWORD_MIN, 6, 4, 24);
+        return getTextLimit(context, TextLimit.PASSWORD_MIN);
     }
 
     public static int getPasswordMax(Context context) {
-        return Math.max(getPasswordMin(context), limit(context, KEY_LIMIT_PASSWORD_MAX, 32, 8, 64));
+        return getTextLimit(context, TextLimit.PASSWORD_MAX);
     }
 
     public static int getNicknameLimit(Context context) {
-        return limit(context, KEY_LIMIT_NICKNAME, 20, 2, 40);
+        return getTextLimit(context, TextLimit.NICKNAME);
     }
 
     public static int getBioLimit(Context context) {
-        return limit(context, KEY_LIMIT_BIO, 200, 20, 1000);
+        return getTextLimit(context, TextLimit.BIO);
     }
 
     public static int getRegionLimit(Context context) {
-        return limit(context, KEY_LIMIT_REGION, 40, 4, 120);
+        return getTextLimit(context, TextLimit.REGION);
     }
 
     /** 报名表单里用户自由填写的文本长度上限。 */
     public static int getAnswerLimit(Context context) {
-        return limit(context, KEY_LIMIT_ANSWER, 200, 20, 1000);
+        return getTextLimit(context, TextLimit.ANSWER);
     }
 
-    /** 一次性写入全部字符数上限，越界值按上下限收敛。 */
-    public static void saveTextLimits(Context context, int[] values) {
-        String[] keys = {
-                KEY_LIMIT_TITLE, KEY_LIMIT_VENUE, KEY_LIMIT_CATEGORY, KEY_LIMIT_FIELD,
-                KEY_LIMIT_USERNAME_MIN, KEY_LIMIT_USERNAME_MAX, KEY_LIMIT_PASSWORD_MIN,
-                KEY_LIMIT_PASSWORD_MAX, KEY_LIMIT_NICKNAME, KEY_LIMIT_BIO, KEY_LIMIT_REGION,
-                KEY_LIMIT_ANSWER,
-        };
-        int[] defaults = { 60, 60, 20, 30, 3, 20, 6, 32, 20, 200, 40, 200 };
-        int[] bounds = { 4, 4, 2, 2, 2, 4, 4, 8, 2, 20, 4, 20 };
-        int[] ceiling = { 120, 120, 60, 60, 20, 40, 24, 64, 40, 1000, 120, 1000 };
+    /**
+     * 一次性写入全部字符数上限。
+     *
+     * @param values 前端提交的键值对，缺项或非正数保持默认值，越界值按上下限收敛
+     */
+    public static void saveTextLimits(Context context, Map<String, Integer> values) {
         SharedPreferences.Editor editor = prefs(context).edit();
-        for (int index = 0; index < keys.length; index += 1) {
-            int value = index < values.length && values[index] > 0 ? values[index] : defaults[index];
-            editor.putInt(keys[index], Math.max(bounds[index], Math.min(ceiling[index], value)));
+        for (TextLimit limit : TextLimit.values()) {
+            Integer submitted = values == null ? null : values.get(limit.wireName);
+            int value = submitted != null && submitted > 0 ? submitted : limit.fallback;
+            editor.putInt(limit.prefKey, Math.max(limit.min, Math.min(limit.max, value)));
         }
         editor.apply();
-    }
-
-    private static int limit(Context context, String key, int fallback, int min, int max) {
-        int value = prefs(context).getInt(key, fallback);
-        return Math.max(min, Math.min(max, value));
     }
 }
