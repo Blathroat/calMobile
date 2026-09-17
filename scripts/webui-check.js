@@ -117,7 +117,9 @@ function collectCalledActions() {
     const actions = new Set();
     for (const file of walk(webRoot, '.js')) {
         const source = fs.readFileSync(file, 'utf8');
-        const pattern = /\bcall\(\s*'([a-zA-Z.]+)'/g;
+        // 数据类动作现在写在 core/api.js 的 request('动作名', ...) 里；
+        // 系统能力仍由页面直接调用 call('动作名', ...)。
+        const pattern = /\b(?:call|request)\(\s*'([a-zA-Z.]+)'/g;
         let match;
         while ((match = pattern.exec(source)) !== null) {
             actions.add(match[1]);

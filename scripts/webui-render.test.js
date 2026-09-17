@@ -257,24 +257,41 @@ const sharedWindow = {
     addEventListener() {},
     removeEventListener() {},
     getComputedStyle: () => ({ getPropertyValue: () => '' }),
-    navigator: { mediaDevices: null, userAgent: 'node' },
+    navigator: { userAgent: 'node' },
+    /** 探测后端必然失败，测试固定走原生桥接这条路径。 */
+    fetch: () => Promise.reject(new Error('测试环境不访问网络')),
     console,
 };
 sharedWindow.window = sharedWindow;
 
+/** 覆盖一个全局变量；Node 会把 navigator 等定义成 getter，直接赋值会静默失败。 */
+function setGlobal(name, value) {
+    try {
+        global[name] = value;
+    } catch (ignored) {
+        Object.defineProperty(global, name, {
+            value, writable: true, configurable: true, enumerable: true,
+        });
+    }
+}
+
 function installGlobals() {
-    global.window = sharedWindow;
-    global.document = sharedDocument;
-    global.navigator = sharedWindow.navigator;
-    global.location = sharedWindow.location;
-    global.history = sharedWindow.history;
-    global.localStorage = sharedWindow.localStorage;
-    global.requestAnimationFrame = sharedWindow.requestAnimationFrame;
-    global.cancelAnimationFrame = sharedWindow.cancelAnimationFrame;
-    global.getComputedStyle = sharedWindow.getComputedStyle;
-    global.Node = StubNode;
-    global.Element = StubNode;
-    global.CustomEvent = class {};
+    // Node 在 globalThis 上预置了 window / navigator / fetch：只写 global.window
+    // 不会覆盖模块看到的 globalThis.window，必须用 defineProperty 显式接管。
+    setGlobal('window', sharedWindow);
+    setGlobal('document', sharedDocument);
+    setGlobal('navigator', sharedWindow.navigator);
+    setGlobal('location', sharedWindow.location);
+    setGlobal('history', sharedWindow.history);
+    setGlobal('localStorage', sharedWindow.localStorage);
+    setGlobal('requestAnimationFrame', sharedWindow.requestAnimationFrame);
+    setGlobal('cancelAnimationFrame', sharedWindow.cancelAnimationFrame);
+    setGlobal('getComputedStyle', sharedWindow.getComputedStyle);
+    // api.js 的连通性探测要求 window 上也有 fetch；打桩成“不可达”即走原生桥接。
+    setGlobal('fetch', sharedWindow.fetch);
+    setGlobal('Node', StubNode);
+    setGlobal('Element', StubNode);
+    setGlobal('CustomEvent', class {});
 }
 
 // ── 假的桥接层：覆盖前端会用到的全部动作 ─────────────────────────
@@ -462,6 +479,9 @@ async function renderRoute(routeId, params = {}) {
 
     // 必须与 app.js 解析到同一个模块实例，否则拿不到已注册的路由。
     const router = await import(pathToFileURL(path.join(webRoot, 'js', 'core', 'router.js')).href);
+    // 首次渲染要等 bootstrap（可能是异步的远端请求）落定，不能自己猜时序。
+    await router.whenStarted();
+
     const query = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
     sharedWindow.location.hash = `#/${routeId}${query ? `?${query}` : ''}`;
     await router.render();

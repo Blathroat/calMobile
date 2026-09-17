@@ -215,11 +215,27 @@ const one = await exhibitions.get(id);
 await registrations.submit(payload);
 ```
 
-`api.js` 内部再调用 `bridge.js` 的 `call(动作名, 参数)`，由 `WebAppBridge` 分发到 `WebAppActions`。因此做前后端分离时，**改造面只有两个文件**：`api.js` 换成 fetch 到 `server/`，`WebAppActions` 里对应的本机实现删除。页面、组件与 CSS 一行都不用改（`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法）。
+`api.js` 内部有两条传输层，按启动时的连通性探测自动选择：
 
-`api.js` 的命名与后端资源路径同构（`exhibitions.list` ↔ `GET /api/exhibitions`），返回值字段与状态文案也一一对应；`users` / `profile` / `settings` 三个域额外提供 `usersApi` / `profileApi` / `settingsApi` 别名，避免被页面里的同名局部变量遮蔽。
+| 传输层 | 条件 | 说明 |
+| --- | --- | --- |
+| `remote` | `GET /ping` 可达 | 请求 `server/` 的 HTTP 接口；当前由演示后端提供服务 |
+| `native` | 探测失败 | 退回 `bridge.js` 的 `call(动作名, 参数)`，走 `WebAppActions` 的本机实现 |
+
+因此**应用在没有后端时仍然完整可用**（离线演示），后端起来后同一个页面就自动改读 HTTP 数据。彻底分离后删掉 `api.js` 里的 `callNative` 分支与探测逻辑即可，页面、组件与 CSS 一行都不用改（`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法）。
+
+`api.js` 的命名与后端资源路径同构（`exhibitions.list` ↔ `POST /exhibitions.list`），返回值字段与状态文案也一一对应；`users` / `profile` / `settings` 三个域额外提供 `usersApi` / `profileApi` / `settingsApi` 别名，避免被页面里的同名局部变量遮蔽。
 
 系统能力（摄像头、日历、分享、媒体选择、CSV 导出、通知权限）不属于数据接口，仍由页面直接调 `bridge.js`，后端化后保持不变。
+
+### 演示后端与连通性
+
+```bash
+node server/src/demo-server.js        # 零依赖，内存示例数据，默认 4000 端口
+adb reverse tcp:4000 tcp:4000         # 真机与模拟器都适用
+```
+
+细节见 `server/README.md`；`server/test/demo-api.test.js` 是前后端契约测试，逐接口断言页面真正用到的字段都在，字段漂移会在这里失败而不是静默渲染成空。
 
 ### 44 个桥接动作的分类
 
@@ -297,6 +313,9 @@ node --test scripts/smoke-check.test.js
 # 前端页面渲染冒烟测试（最小 DOM 打桩 + 假桥接，逐页渲染并校验关键交互）
 node --test scripts/webui-render.test.js
 
+# 前后端契约测试（逐接口断言页面用到的字段都在）
+node --test server/test/demo-api.test.js
+
 # Android 单元测试与调试 APK
 gradlew.bat :app:testDebugUnitTest
 gradlew.bat :app:assembleDebug
@@ -307,7 +326,7 @@ gradlew.bat :app:testDebugUnitTest --tests 'com.example.calmobile.CalendarHelper
 
 后端开发请进入 `server/`，按 `server/README.md` 创建 PostgreSQL 数据库并复制 `.env.example`；常用命令为 `npm install`、`npm run db:migrate`、`npm run db:seed`、`npm run dev`、`npm test -- --runInBand` 和 `npm run lint`。
 
-客户端测试位于 `app/src/test/java/com/example/calmobile/`，覆盖认证、数据库、展会、报名、用户管理、导出、通知、日历、富文本和搜索等 Manager/Helper 流程；Activity 级 UI 测试仍在路线图中。前端另有 `scripts/webui-render.test.js`：它用最小 DOM 打桩加假桥接，把 18 个页面路由各渲染一次，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销与用户公开页管理视角等关键交互，用来补足纯静态检查发现不了的接线错误。
+客户端测试位于 `app/src/test/java/com/example/calmobile/`，覆盖认证、数据库、展会、报名、用户管理、导出、通知、日历、富文本和搜索等 Manager/Helper 流程；Activity 级 UI 测试仍在路线图中。前端后端契约测试位于 `server/test/demo-api.test.js`（14 项，逐接口断言页面用到的字段都在）。前端另有 `scripts/webui-render.test.js`：它用最小 DOM 打桩加假桥接，把 18 个页面路由各渲染一次，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销与用户公开页管理视角等关键交互，用来补足纯静态检查发现不了的接线错误。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，不依赖固定的 sleep 时长。
 
 可用模拟器时，可安装并逐屏回归：
 

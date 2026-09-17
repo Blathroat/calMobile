@@ -53,9 +53,10 @@ onRouteChange(async (route) => {
 });
 
 async function main() {
-    if (hasNative()) {
-        await whenReady();
-    } else {
+    // 无论走原生还是远端，都要等 bootstrap 落定再决定入口：
+    // 否则登录态尚未写入 state，router 的 guard 会把已登录用户送去登录页。
+    await whenReady();
+    if (!hasNative()) {
         append(qs('#app'), el('div', { class: 'bridge-warning' },
             ['当前在浏览器中预览，原生数据不可用；请在 Android 应用中打开以加载真实业务数据。']));
     }

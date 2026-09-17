@@ -520,6 +520,31 @@ const checks = [
     contains: ['export const api', 'exhibitions', 'registrations', 'review', 'checkIn', 'settingsApi']
   },
   {
+    id: 'frontend-api-transport',
+    file: `${WEB_ROOT}/js/core/api.js`,
+    contains: ['BASE_URL', 'export async function probe', 'TransportError', 'callRemote', 'request(']
+  },
+  {
+    id: 'demo-backend',
+    file: 'server/src/demo-server.js',
+    contains: ['createServer', 'Access-Control-Allow-Origin', 'demo-api', 'DEMO_PORT']
+  },
+  {
+    id: 'demo-backend-api-surface',
+    file: 'server/src/demo-api.js',
+    contains: ["'exhibitions.month'", "'checkin.scan'", "'settings.uiMode'", 'parseCheckInCode']
+  },
+  {
+    id: 'frontend-backend-contract-test',
+    file: 'server/test/demo-api.test.js',
+    contains: ['exhibitions.list', 'checkInCode', 'qrEnabled', 'viewedAsAdmin']
+  },
+  {
+    id: 'docs-frontend-backend-boundary',
+    file: 'README.md',
+    contains: ['前后端边界', 'core/api.js', 'adb reverse', 'server/test/demo-api.test.js']
+  },
+  {
     id: 'web-accent-light-background',
     file: `${WEB_ROOT}/styles/tokens.css`,
     contains: ['.cta.ghost', 'background: var(--screen)'],

@@ -126,7 +126,13 @@ if (hasWindow) {
 }
 
 function start() {
-    return boot().then(() => readyResolve());
+    return boot()
+        .then(() => readyResolve())
+        .catch((error) => {
+            // bootstrap 失败也要放行：调用方据此走访客/登录流程，避免整页卡住。
+            reportError(error);
+            readyResolve();
+        });
 }
 
 /** 等待原生就绪并完成 bootstrap。 */
@@ -139,11 +145,13 @@ export function boot() {
         return bootPromise;
     }
     bootPromise = (async () => {
-        if (!hasNative()) {
+        if (!hasNative() && typeof fetch !== 'function') {
             return state;
         }
-        const data = await call('bootstrap');
-        applyBootstrap(data);
+        // 动态导入避免与 api.js 形成循环依赖：api.js 依赖本模块的 call()，
+        // 而 bootstrap 又要走 api 的统一入口。
+        const { bootstrap: fetchBootstrap } = await import('./api.js');
+        applyBootstrap(await fetchBootstrap());
         return state;
     })();
     return bootPromise;

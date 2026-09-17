@@ -12,6 +12,8 @@ import { el, append, qs } from './dom.js';
 const routes = new Map();
 let current = null;
 let onNavigate = null;
+/** 首次渲染的 Promise，供 whenStarted() 等待。 */
+let started = null;
 /** 当前页面注册的清理回调（摄像头、定时器等），页面被替换前执行。 */
 let pageStopHandlers = [];
 
@@ -187,7 +189,17 @@ export function start(defaultId = 'login') {
         render();
     });
     window.addEventListener('hashchange', () => render());
-    return render();
+    started = render();
+    return started;
+}
+
+/**
+ * 等待应用完成首次渲染。
+ * 首次渲染要等 bootstrap（可能是异步的远端请求）落定后再执行，因此测试与
+ * 其它需要“页面已经就绪”的场景应当 await 它，而不是自己猜时序。
+ */
+export function whenStarted() {
+    return started || Promise.resolve();
 }
 
 // ── 布局辅助 ──────────────────────────────────────────────────────
