@@ -43,7 +43,6 @@ app/src/main/
 │   ├── WebAppActions.java      业务动作实现（复用现有 Manager / Helper）
 │   ├── RegistrationReviewStore.java  报名审核记录（旧页面与新前端共用）
 │   ├── UserProfileStore.java   个人资料（含地区、头像）与公开策略持久化
-│   └── legacy/                 旧 Java/XML 页面，保留编译与清单注册，仅用于对照与回退
 ```
 
 上传文件保存在应用私有目录 `files/media`，通过 `https://appassets.androidplatform.net/media/<文件名>` 引用；`WebShellActivity` 只放行该目录下的单层文件名，路径穿越一律拒绝。
@@ -185,7 +184,7 @@ app/src/main/
 
 ## 技术选型与权限
 
-Android 依赖集中在 `app/build.gradle`：AndroidX、Material、`richeditor-android`（旧页面使用）、Room、Retrofit/OkHttp、Gson、Glide、JUnit 和 Espresso。WebView 容器只使用平台 API，不额外引入 `androidx.webkit`，资源映射由 `WebShellActivity` 自行实现。
+Android 依赖只有 `app/build.gradle` 里的 Gson（桥接层 JSON）与 JUnit（单元测试）：界面在 WebView 里，旧原生页面与 Room/Retrofit/Glide/richeditor 等依赖已随旧代码删除。WebView 容器只用平台 API，不额外引入 `androidx.webkit`，资源映射由 `WebShellActivity` 自行实现。
 
 前端的第三方运行时依赖全部内置在 `assets/web/vendor/`，不依赖 CDN、图标字体或构建工具，版本与来源记录在各目录的 `VERSION.txt`：
 
@@ -199,9 +198,21 @@ Android 依赖集中在 `app/build.gradle`：AndroidX、Material、`richeditor-a
 
 ### 原生界面与 WebView 的取舍
 
-本版本已经把界面迁移到 WebView，原生 Activity 全部归档到 `legacy/` 并保留编译与清单注册，仅用于对照与回退。选择 WebView 的原因是：`newUI/` 交付件本身就是 HTML/CSS，直接复用可保证视觉一致；页面模块化后改动集中在 `assets/web`，无需重新编译 XML 布局。
+界面只有 WebView 一处入口：`WebShellActivity` 是清单里唯一的 Activity，界面代码全部在 `assets/web`。选择 WebView 的原因是 `newUI/` 交付件本身就是 HTML/CSS，直接复用可保证视觉一致；页面模块化后改动集中在 `assets/web`，无需重新编译 XML 布局。
 
-代价与边界：离线资源由 APK 内置，媒体文件仍保存在设备本地；JavaScript 与 Android 返回栈通过 `history` 与 `WebView.canGoBack()` 同步；文件选择、日历写入、通知权限、CSV 导出和分享通过桥接调用系统界面；简介编辑器改为内置 EasyMDE，旧页面的 `RichEditor` 仍保留在 `legacy/`。
+**旧的原生页面已经删除**（原 `legacy/` 包 16 个 Activity + `BaseActivity` + `MainTabState` + 17 个布局 + 只服务它们的 strings/colors/dimens/styles/drawable/anim），旧架构层（`database/`、`models/`、`network/`、`repository/`、`viewmodel/`）也一并删除，`AppDatabase` 从未被实例化、`viewmodel/` 无人调用，留着只会在接 API 时与新模型并存。`app/build.gradle` 因此只剩 Gson 与 JUnit：AndroidX、Material、Room、Retrofit、Glide、richeditor 都不再需要。
+
+代价与边界：离线资源由 APK 内置，媒体文件仍保存在设备本地；JavaScript 与 Android 返回栈通过 `history` 与 `WebView.canGoBack()` 同步；文件选择、日历写入、通知权限、CSV 导出和分享通过桥接调用系统界面；简介编辑器使用内置 EasyMDE（Markdown）。
+
+### 界面文案
+
+用户可见文案统一维护在 `app/src/main/res/values/strings_frontend.xml`（475 条），由 `scripts/extract-strings.js` 从 `assets/web/js` 生成，原生在 `onPageStarted` 注入 `window.CalMobileStrings`，前端用 `core/strings.js` 的 `t('key')` 取用。改文案请改前端源码后重跑脚本，再用 `node scripts/check-strings.js` 校验三处（源码、资源、`FrontendStrings.NAMES`）一致——任何一边漏了都会在合入前失败，而不是在界面上静默显示成 key。
+
+### 静态资源缓存与按需加载
+
+APK 内的 `.js` / `.css` 由 `WebShellActivity` 以 `Cache-Control: max-age=86400` 返回（HTML 仍为 `no-store`），WebView 因此不必每次导航都重新下载并解析前端模块。改动前端后需要重新安装 APK（安装会换掉应用数据目录，缓存自然失效）。
+
+EasyMDE、qrcode-generator、jsQR 三个内置库全部改为按需加载（`core/vendor.js`）：它们随 APK 打包不依赖 CDN，但合计约 660KB，启动时全量解析会明显拖慢首帧。
 
 ## 前后端边界（重构后端时看这一节）
 
@@ -276,25 +287,25 @@ adb reverse tcp:4000 tcp:4000         # 真机与模拟器都适用
 
 ## 待优化的结构（前后端分离前可先做的部分）
 
-以下是纯客户端、与后端无关的清理项，按收益排序。带 ★ 的会直接影响后续接 API 的成本。
+纯客户端、与后端无关的清理项。第 4～15 项已在本轮完成，保留记录便于回看。
 
-| # | 位置 | 问题 | 建议 |
-| --- | --- | --- | --- |
-| 1 ★ | `WebAppActions.java` 2,100 行 | 桥接分发、业务规则、文件 IO、权限申请混在一个类；接 API 时所有改动都挤在这里 | 按动作域拆成 `AuthActions` / `ExhibitionActions` / `RegistrationActions` / `ReviewActions` / `MediaActions` / `SettingsActions`，`handle()` 只做路由表分发 |
-| 2 ★ | `ExhibitionConfiguration`（`static Map`） | 用进程内静态表当存储，重启即丢；`save()` 是位置参数，调用方必须先把现值读回来再原样传进去 | 改为有序的 setter 集合或 builder；后端化时这层整体被 API 取代 |
-| 3 ★ | `RegistrationReviewStore` | 「示例数据播种」与「真实记录」混在一个列表，主键 `registration-N` 会与 SQLite 报名记录撞号（ADB 回归时看到管理员报名出现在普通用户列表里，根因在此） | 把 demo 播种拆到独立 `DemoData`，或播种时用不冲突的前缀 |
-| 4 | 5 处复制页脚 | `detail.js:16`、`registration-detail.js:17`、`exhibition-form.js:34`、`rich-editor.js:19`、`user-public.js:19` 各写一遍内联页脚容器样式 | 提为组件（如 `components.js` 的 `pageFoot()`）或 `.page-foot` 类 |
-| 5 | 3 处复制按钮工厂 | `admin.js:532 smallButton`、`profile.js:259 smallButton`、`exhibitor.js:106 actionButton` 三份几乎相同 | 合并到 `components.js`，用 `size`/`variant` 参数区分 |
-| 6 | 43 处 `catch (error) { toast(...) }` | 同样的错误提示模板重复 43 次 | 收成 `guard(promise, fallbackMessage)` 辅助函数 |
-| 7 | 状态字符串散落 | `'待审核' / '已通过' / '已拒绝' / '已参加' / '已撤销' / '需审核' / '无需审核' / '仅展示'` 在 7 个前端文件里共出现 40 次，且与原生常量各写一份 | 抽 `js/core/status.js` 集中声明并导出 `statusTone()`，与原生 `RegistrationReviewStore` / `ExhibitorExhibition` 的常量一一对应 |
-| 8 | 原生侧双份表单上限 | `AppSettings.saveTextLimits` 用两个 `int[]`（12 个位置魔数），而 `textLimits()` 用命名 key，同一份数据两套真相；中文标签在 `admin.js` 又抄一遍 | 改为 `Map<String,Integer>` 或直接把 limits 存成 JSON，前后端共用同一份键名 |
-| 9 | 19 个从未被调用的前端导出 | `app.js:syncUser`、`bridge.js:isReady`、`dom.js:delegate\|formatDate\|orDash\|today`、`markdown.js:looksLikeMarkdown`、`router.js:currentRoute`、`sanitize.js:isBlankHtml`、`validate.js:formatsText\|isEmpty\|isEmail\|dateOrderRule\|extensionAllowed`、`components.js:syncSegments\|rowCard\|textField\|textAreaField\|selectField` | 直接删除；`rowCard`/`textField` 等若打算在重构里用，就补上使用点或标注为公共组件 |
-| 10 | `--accent-soft` | `bridge.js:258` 每帧写入，CSS 里零消费 | 删除该变量的计算 |
-| 11 | `media.imageData` 动作 | 唯一调用点 `detail.js:131` 只在 `imageUri` 非 `http(s):/data:` 时触发，而落地后的 `imageUri` 一定是 `https://appassets.../media/...`，是死分支 | 删掉该分支与对应原生动作（可与媒体上云一起做） |
-| 12 | 过期的向后兼容 shim | `UserProfileStore.java:67` 的 `contact` → `region` 键回退（旧 `ProfileActivity` 写的键）；`AppSettings.java:130` 的分类换行分隔兼容；`ExhibitionCatalog.java:9`、`ExhibitorExhibition.java:5` 引用了已归档的 `MainActivity` | 随 `legacy/` 一起删除 |
-| 13 | `legacy/` 整包 + 16 个布局 + `res/values` 四件套 | 5,448 行 Java + 1,199 行布局 + `strings/colors/dimens/styles`（303 次 `R.string`、308 次 `R.color/dimen` 引用全部来自 legacy），已零引用：唯一渲染入口是 `WebShellActivity.setContentView(container)`；仅 `MainTabStateTest`（24 行）依赖 | 删包、删布局、删 `MainTabStateTest`，`res/values` 只留 `AppTheme` 与 `app_name`；同步改 `smoke-check.js` 的 4 处断言与本文档「原生界面与 WebView 的取舍」 |
-| 14 | `database/` + `models/` + `network/` + `repository/` + `viewmodel/` | 2,043 行，只在内部互相引用（`AppDatabase` 从未实例化，`viewmodel/` 无人调用）；`models/Exhibition`、`models/Registration` 与根包 `ExhibitorExhibition`、`Registration` 是同名不同类的两份模型 | **前后端分离后这层会被真正的 API 客户端取代**，可按新 API 的形状重写而不是维持；重写前建议连同 `app/build.gradle` 里的 Room/Retrofit 依赖一起清掉，避免两套数据模型并存 |
-| 15 | `showRegistrations` 隐私开关 | 用户**无法打开**：资料编辑表单里没有这个控件，`profile.js` 两处保存都传 `state.user.showRegistrations === true`（恒为 false），于是 `user-public.js` 的「公开」分支与「还没有可展示的报名记录」文案都是死路径 | 补一个开关控件，或把该字段从表单链路里去掉 |
+| # | 位置 | 状态 |
+| --- | --- | --- |
+| 1 ★ | `WebAppActions.java` 2,100 行：桥接分发、业务规则、文件 IO、权限申请混在一个类 | 待做：按域拆成 `AuthActions` / `ExhibitionActions` / `RegistrationActions` / `ReviewActions` / `MediaActions` / `SettingsActions` |
+| 2 ★ | `ExhibitionConfiguration` 用进程内 `static Map` 当存储，`save()` 是位置参数 | 待做：改 builder；后端化时整层由 API 取代 |
+| 3 ★ | `RegistrationReviewStore` 把示例数据与真实记录混在一个列表，主键 `registration-N` 会与 SQLite 报名撞号 | 待做：demo 播种拆到独立类 |
+| 4 | 5 处复制页脚 | 已完成：`.page-foot` + `pageFoot()` |
+| 5 | 3 处复制按钮工厂 | 已完成：`components.js` 的 `smallCta()` |
+| 6 | 43 处 `catch → toast` | 部分完成：错误态收敛为 `loadErrorBlock()` / `notFoundBlock()`（18 处）；其余 catch 各自带上下文，保留 |
+| 7 | 状态字符串散落 40 处 | 已完成：`core/status.js` 统一声明，字面量清零 |
+| 8 | 原生侧双份表单上限（`int[]` 位置魔数 vs 命名 key） | 待做：统一成 `Map` 或 JSON |
+| 9 | 19 个从未被调用的前端导出 | 已完成：删除 |
+| 10 | `--accent-soft` 写入但无消费 | 已完成：删除 |
+| 11 | `media.imageData` 死分支 | 已完成：删除前端分支与原生动作 |
+| 12 | 过期兼容 shim（`contact`→`region` 键回退、分类换行分隔、引用已删类的注释） | 已完成：随旧页面一起删除 |
+| 13 | 旧原生页面（16 Activity + `BaseActivity` + `MainTabState`）+ 17 个布局 + 专属资源 | 已完成：全部删除，`res` 只剩 `themes.xml` + 两个 `strings` + `colors.xml` |
+| 14 | `database/`+`models/`+`network/`+`repository/`+`viewmodel/` | 已完成：删除，连带清掉 Room/Retrofit/Glide/AndroidX/Material/richeditor 依赖 |
+| 15 | `showRegistrations` 隐私开关用户无法开启 | 待做（产品决策）：补开关控件，或把该字段从表单链路去掉 |
 
 ## 构建、测试与运行
 
@@ -401,7 +412,6 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 - 「服务器设置」目前保存在本机 SharedPreferences，界面按“保存后对所有用户生效”的语义呈现；接入服务端后应改为下发配置。
 - 视频上传待服务端接口：Markdown 编辑器可调用系统选择器，但不做真实上传与转码。
 - 媒体文件保存到应用私有目录 `files/media` 并通过短 URL 引用，仍属于设备本地存储；卸载应用会一并清除。
-- 旧 `legacy/` 页面与新前端共用 `RegistrationReviewStore`，删除旧页面时需同步检查该引用。
 - 认证仍是明文比对的内置账号，缺少密码哈希与安全持久化。
 - 报名码的二维码开关与核销状态保存在会话内（`ExhibitionConfiguration` 与 `RegistrationReviewStore`），重启应用后需要重新开启；接入服务端后应随展会与报名记录落库。
 - 继续补齐前端页面的无障碍检查，并把剩余硬编码文案迁移到 `strings.xml`。
@@ -428,6 +438,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 ## 变更记录
 
+- 2026-09-17：删除旧原生页面与旧架构层（legacy 16 个 Activity、BaseActivity、MainTabState、17 个布局、Room/Retrofit/Repository/ViewModel，以及只服务它们的 drawable/anim/values 资源），依赖收敛到 Gson + JUnit；前端文案迁入 `strings_frontend.xml`（475 条，原生注入 + 三处一致性校验）；APK 内静态脚本样式改为可缓存、三个内置库改为按需加载；修复演示后端把用户选中的日期回落到有展会的日子，导致首页日历「点日期没反应」。
 - 2026-09-14：首页日历去掉选中日期的方框底色，改为「强调色加粗数字 + 数字下方一小段下划线」，保留键盘焦点环；次按钮的浅色底统一取页面底色，应用配色只改边框与文字；新增深色模式（跟随系统 / 浅色 / 深色，含原生状态栏与底色）；开关等按钮去掉点击时的系统蓝色高亮方框；首页日历「有展会」圆点改为与上方数字同轴居中；头像裁剪由滑块改为双指捏合缩放；展商卡片只保留查看报名与编辑展会，报名方式 / 编辑简介 / 删除展会移入编辑展会二级界面；修复管理后台从展会二级页面返回后跳回用户分区；管理员查看报名始终可切换报名人状态、查看用户公开页不受隐私设置影响；新增报名二维码与展商扫码核销。
 - 2026-09-14：应用配色扩展到主按钮填充、次按钮边框/填充/文字与开关打开态；新增软件中英文标题设置并显示在首页及其它品牌位；顶部导航栏统一高度并去掉标题下的强调短线；修复日历滑动切月后卡片被压缩导致下边框显示不全。
 - 2026-09-14：无需审核的展会提交即通过；长简介图片改为落盘短 URL 并自动改写历史内联图片；服务器设置迁回「管理-设置」并新增上传格式与字符数上限；修复应用配色不生效并扩大强调色覆盖面；个人页去掉用户公开页入口、联系方式改为地区、新增头像上传与圆形裁剪；分段控件与底部导航改为滑动指示动效；展会图片统一为 1080×1920 竖向比例并支持上传封面；首页日历支持左右滑动切换月份并适配六行月份；所有表单补齐前端数据格式校验。

@@ -299,8 +299,10 @@ const handlers = {
 
         const days = payloads.filter((item) => item.year === year && item.month === month);
         const eventDays = [...new Set(days.map((item) => item.day))].sort((a, b) => a - b);
+        // 选中日期以调用方为准：用户点的可能是没有展会的那一天，页面会显示空状态。
+        // 只有在调用方没指定日期（进入页面 / 翻月）时才回落到第一个有展会的日期。
         let day = Number(body.day) || 0;
-        if (day <= 0 || !eventDays.includes(day)) {
+        if (day <= 0) {
             day = eventDays[0] || 0;
         }
         const selected = days.filter((item) => item.day === day);

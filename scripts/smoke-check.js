@@ -251,9 +251,12 @@ const checks = [
     validate: validateLauncherManifest
   },
   {
-    id: 'manifest-legacy-activities-registered',
+    id: 'manifest-only-webview-entry',
     file: 'app/src/main/AndroidManifest.xml',
-    contains: ['MainActivity', 'ExhibitionDetailActivity', 'RegistrationFormActivity', 'AdminBackendActivity']
+    contains: ['.WebShellActivity'],
+    // 旧原生页面已随 WebView 迁移删除，清单里不应再出现它们的注册
+    notContains: ['MainActivity', 'ExhibitionDetailActivity', 'RegistrationFormActivity',
+      'AdminBackendActivity', 'RichDescriptionEditorActivity', 'LoginActivity', 'ProfileActivity']
   },
   {
     id: 'gradle-wrapper-properties',
@@ -697,30 +700,28 @@ const checks = [
 
   // ── 复用中的原生能力 ────────────────────────────────────────────
   {
-    id: 'base-activity-java',
-    file: 'app/src/main/java/com/example/calmobile/BaseActivity.java',
-    contains: ['package com.example.calmobile;', 'extends Activity', 'stylePrimaryButton', 'styleCard']
+    id: 'native-core-classes',
+    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    contains: ['ExhibitionManager', 'RegistrationManager', 'RegistrationReviewStore', 'AppSettings',
+      'CalendarHelper', 'NotificationHelper', 'ExportManager', 'UserProfileStore']
   },
   {
-    id: 'legacy-activities-archived',
-    file: 'app/src/main/java/com/example/calmobile/legacy/MainActivity.java',
-    contains: ['package com.example.calmobile;', 'class Exhibition', 'SAMPLE_EXHIBITIONS', 'buildMonthGrid']
-  },
-  {
-    id: 'legacy-registration-form',
-    file: 'app/src/main/java/com/example/calmobile/legacy/RegistrationFormActivity.java',
-    contains: ['RegistrationManager', 'RegistrationField', 'submit']
-  },
-  {
-    id: 'legacy-admin-backend',
-    file: 'app/src/main/java/com/example/calmobile/legacy/AdminBackendActivity.java',
-    contains: ['AdminUserManager', 'ExhibitionManager']
+    id: 'legacy-removed',
+    // 旧原生页面与其专属资源已删除，仓库里不应再出现
+    file: 'app/src/main/AndroidManifest.xml',
+    notContains: ['legacy', 'BaseActivity', 'MainTabState']
   },
   {
     id: 'strings-kept',
     file: 'app/src/main/res/values/strings.xml',
-    contains: ['报名信息', '提交报名', '今日展会', '展会详情', '我的报名', '取消报名', '暂无报名记录',
-      '个人主页', '昵称', '简介', '联系方式']
+    // 只保留应用名与 CalendarHelper 用到的提示；前端文案在 strings_frontend.xml
+    contains: ['app_name', 'calendar_added', 'calendar_permission_denied', 'calendar_removed']
+  },
+  {
+    id: 'resources-trimmed',
+    file: 'app/src/main/AndroidManifest.xml',
+    contains: ['@style/AppTheme'],
+    notContains: []
   }
 ];
 

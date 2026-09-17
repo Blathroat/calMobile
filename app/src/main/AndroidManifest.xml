@@ -23,7 +23,8 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
-        <!-- WebView 前端容器：唯一入口，承载 newUI 的全部页面 -->
+        <!-- WebView 前端容器：唯一入口，承载 newUI 的全部页面。
+             旧的原生页面已随 WebView 迁移一并删除，界面只有这一处入口。 -->
         <activity
             android:name=".WebShellActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
@@ -34,24 +35,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- 以下原生页面保留编译与清单注册，仅用于对照与回退，不再由启动入口进入 -->
-        <activity android:name=".LoginActivity" />
-        <activity android:name=".RegisterActivity" />
-        <activity android:name=".MainActivity" />
-        <activity android:name=".ProfileActivity" />
-        <activity android:name=".UserPublicActivity" />
-        <activity android:name=".ExhibitorBackendActivity" />
-        <activity android:name=".ExhibitionFormActivity" />
-        <activity android:name=".RichDescriptionEditorActivity" />
-        <activity android:name=".RegistrationManagementActivity" />
-        <activity android:name=".RegistrationDetailActivity" />
-        <activity android:name=".MyRegistrationsActivity" />
-        <activity android:name=".MyRegistrationDetailActivity" />
-        <activity android:name=".AdminBackendActivity" />
-        <activity android:name=".SearchActivity" />
-        <activity android:name=".ExhibitionDetailActivity" />
-        <activity android:name=".RegistrationFormActivity" />
     </application>
 
 </manifest>

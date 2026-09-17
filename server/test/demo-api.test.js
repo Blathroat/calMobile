@@ -69,6 +69,23 @@ test('月视图返回 eventDays / exhibitions / selected 三块', () => {
     assert.ok(data.eventDays.includes(data.day), '选中日期应当是有展会的日期');
 });
 
+test('选中没有展会的日期时原样返回该日期，不回落到有展会的日子', () => {
+    // 用户点的是没有展会的那一天：服务端必须原样返回，由页面显示空状态；
+    // 之前这里会回落到 eventDays[0]，表现为“点了日期没反应”。
+    const data = invoke('exhibitions.month', { year: 2026, month: 6, day: 16, explicit: true });
+    assert.strictEqual(data.day, 16, '选中日期被服务端改写了');
+    assert.strictEqual(data.selected.length, 0, '没有展会的日期不应返回展会');
+
+    // 有展会的日期照常返回对应展会
+    const withEvent = invoke('exhibitions.month', { year: 2026, month: 6, day: 15, explicit: true });
+    assert.strictEqual(withEvent.day, 15);
+    assert.ok(withEvent.selected.length > 0, '有展会的日期应当返回展会');
+
+    // 不带日期时才回落到第一个有展会的日期
+    const fallback = invoke('exhibitions.month', { year: 2026, month: 6 });
+    assert.strictEqual(fallback.day, 8, '进入页面时应落到第一个有展会的日期');
+});
+
 test('月视图在请求空月份时回落到有数据的月份', () => {
     const data = invoke('exhibitions.month', { year: 2026, month: 1 });
     assert.notStrictEqual(data.month, 1, '空月份应回落到有展会的月份');
