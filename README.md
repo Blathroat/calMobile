@@ -230,18 +230,20 @@ const one = await exhibitions.get(id);
 await registrations.submit(payload);
 ```
 
-`api.js` 内部有两条传输层，按启动时的连通性探测自动选择：
+`api.js` 内部有两层：一层是**动作名 → REST 请求**的映射表（`ENDPOINTS`），另一层是传输选择。
 
 | 传输层 | 条件 | 说明 |
 | --- | --- | --- |
-| `remote` | `GET /ping` 可达 | 请求 `server/` 的 HTTP 接口；当前由演示后端提供服务 |
-| `native` | 探测失败 | 退回 `bridge.js` 的 `call(动作名, 参数)`，走 `WebAppActions` 的本机实现 |
+| `remote` | 能连上 `server/` | 按 `ENDPOINTS` 把动作翻成 `GET/POST/PUT/DELETE /api/v1/...`，带 `Authorization: Bearer`；访问令牌过期（401）时自动用刷新令牌换一次再重试 |
+| `native` | 连不上 / 5xx | 退回 `bridge.js` 的 `call(动作名, 参数)`，走 `WebAppActions` 的本机实现 |
 
-因此**应用在没有后端时仍然完整可用**（离线演示），后端起来后同一个页面就自动改读 HTTP 数据。彻底分离后删掉 `api.js` 里的 `callNative` 分支与探测逻辑即可，页面、组件与 CSS 一行都不用改（`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法）。
+因此**应用在没有后端时仍然完整可用**（离线演示，已实测：停掉后端后仍能登录、看日历、看报名），后端起来后同一个页面就自动改读 HTTP 数据。两条路径的响应字段与状态文案完全一致，所以页面不需要知道数据来自哪一边；`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法。
 
-`api.js` 的命名与后端资源路径同构（`exhibitions.list` ↔ `POST /exhibitions.list`），返回值字段与状态文案也一一对应；`users` / `profile` / `settings` 三个域额外提供 `usersApi` / `profileApi` / `settingsApi` 别名，避免被页面里的同名局部变量遮蔽。
+注意状态码的用法：**4xx 是业务/权限问题**（抛出错误由页面提示，不降级），**只有 5xx 与连不上才退回原生**——否则一次「无权访问」会在另一套实现上被重放一遍。
 
-系统能力（摄像头、日历、分享、媒体选择、CSV 导出、通知权限）不属于数据接口，仍由页面直接调 `bridge.js`，后端化后保持不变。
+`users` / `profile` / `settings` 三个域额外提供 `usersApi` / `profileApi` / `settingsApi` 别名，避免被页面里的同名局部变量遮蔽。
+
+系统能力（摄像头、日历、分享、媒体选择、CSV 导出、通知权限）不属于数据接口，仍由页面直接调 `bridge.js`，不随后端化改变。
 
 ### 取数体验：先画缓存、再后台刷新
 
@@ -293,38 +295,46 @@ adb reverse tcp:3000 tcp:3000
 
 `WebAppActions.handle()` 的分发 switch 共 47 个动作（其中 3 个 `case "display|closed|ended"` 属于 `modeLabel()` 内部的字符串分支，不是桥接动作），前端实际使用 44 个。
 
-| 类别 | 动作 | 后端重构时的处理 |
+| 类别 | 动作 | 现状 |
 | --- | --- | --- |
-| **当前由本机数据提供（需换成 API）** | `bootstrap`、`auth.login`、`auth.register`、`auth.logout`、`auth.guest`、`profile.get`、`profile.save`、`profile.password`、`exhibitions.list`、`exhibitions.month`、`exhibitions.get`、`exhibitions.save`、`exhibitions.delete`、`exhibitions.status`、`exhibitions.categories`、`exhibitions.fields`、`exhibitions.saveFields`、`registrations.list`、`registrations.get`、`registrations.submit`、`registrations.cancel`、`review.list`、`review.get`、`review.updateStatus`、`checkin.scan`、`users.list`、`users.get`、`users.status`、`users.public`、`search.query`、`settings.get`、`settings.save` | 逐个对应到 `server/` 的路由；本机实现整体删除 |
-| **服务器级配置（现在是 SharedPreferences 模拟）** | `settings.get` / `settings.save` | 现在按“保存后对所有用户生效”呈现，实际只写本机。重构后应改为服务端下发 |
-| **系统能力（保留原生，不进 API）** | `calendar.status`、`calendar.toggle`、`notify.requestPermission`、`media.pickImage`、`media.pickVideo`、`media.import`、`media.store`、`media.imageData`、`share.text`、`export.csv`、`toast`、`camera.ensurePermission` | 依赖 Android 系统界面与硬件，继续留在 `WebAppActions` |
-| **个人偏好（保留本机）** | `notify.preferences`、`notify.savePreferences`、`settings.uiMode` | 属于设备级偏好，不必上云；换新机不必同步，如需多端同步再随用户资料下发 |
+| **已由后端提供（HTTP 主路径）** | `bootstrap`、`auth.login`、`auth.register`、`auth.logout`、`auth.guest`、`profile.get`、`profile.save`、`profile.password`、`exhibitions.list`、`exhibitions.month`、`exhibitions.get`、`exhibitions.save`、`exhibitions.delete`、`exhibitions.status`、`exhibitions.categories`、`exhibitions.fields`、`exhibitions.saveFields`、`registrations.list`、`registrations.get`、`registrations.submit`、`registrations.cancel`、`review.list`、`review.get`、`review.updateStatus`、`checkin.scan`、`users.list`、`users.get`、`users.status`、`users.public`、`search.query`、`settings.get`、`settings.save` | 已全部落到 `server/` 的 REST 路由（接口清单见 `server/README.md`）；本机实现保留为离线降级，连不上后端时才会走到 |
+| **服务器级配置** | `settings.get` / `settings.save` | 存在后端 `app_settings` 表，管理员保存后对所有用户生效 |
+| **系统能力（保留原生，不进 API）** | `calendar.status`、`calendar.toggle`、`notify.requestPermission`、`media.pickImage`、`media.pickVideo`、`media.import`、`media.store`、`media.imageData`、`share.text`、`export.csv`、`toast`、`camera.ensurePermission` | 依赖 Android 系统界面与硬件，永远留在 `WebAppActions` |
+| **个人偏好** | `notify.preferences`、`notify.savePreferences`、`settings.uiMode` | 存在后端（`notification_preferences` 表与 `users.ui_mode`），因此换设备也能同步 |
 
-### 现在只存在于客户端的业务数据（后端需要补的表/字段）
+离线降级那份本机实现（SQLite + SharedPreferences）目前仍在，作为没有后端时的兜底；要不要删掉它取决于「应用是否允许必须连后端」，见「冲突与待裁决清单」。
 
-`server/src/config/migrate.js` 已有 `users` / `exhibitions` / `registrations` / `notifications` / `calendar_events` 五张表，但下列字段与数据目前**只在客户端**，重构时要补上：
+### 数据落在哪：后端表 vs 客户端（离线降级）
 
-| 数据 | 当前存放位置 | 缺什么 |
+后端的表结构在 `server/src/config/migrate.js`（迁移按编号记录，可反复执行）：`users` / `exhibitions` / `exhibition_fields` / `registrations` / `app_settings` / `notification_preferences` / `refresh_tokens` / `notifications`。展会扩展字段、收集项、审核状态与核销时间都已经有了正式的列，不再是「进程内的示例存储」。
+
+**仍然只在客户端**的只有两类：
+
+| 数据 | 存放位置 | 说明 |
 | --- | --- | --- |
-| 展会扩展配置 | `ExhibitionConfiguration`（`static Map`，进程内） | 开展日期、报名起止、封面 URL、简介格式、报名二维码开关；`exhibitions` 表只有 `day/month/year` |
-| 报名收集项 | `ExhibitionConfiguration.fields`（选项以英文逗号拼接） | 独立的收集项表（标题 / 类型 / 选项 / 必填） |
-| 报名审核记录 | `RegistrationReviewStore`（`static Map`，进程内） | 审核状态、报名码、核销时间；`registrations` 表没有这些列。真实记录的 id 已经与报名表对齐（核销 / 撤销能更新到同一行），示例记录带 `demo-` 前缀 |
-| 通知与提醒偏好 | `NotificationHelper` + SharedPreferences | 用户维度的通知开关 |
-| 个人资料扩展 | `UserProfileStore`（SharedPreferences） | 昵称、简介、地区、社交账号、头像 URL、`showRegistrations` 隐私开关 |
-| 应用配色 / 外观模式 / 服务器设置 | `AppSettings`（SharedPreferences） | 需要服务端配置表 + 下发接口；字符数上限已收敛到 `AppSettings.TextLimit` 一张表，前端对应 `admin.js` 的 `TEXT_LIMITS` |
-| 上传的媒体 | 应用私有目录 `files/media` | 需要对象存储与上传接口（现在用 `appassets.androidplatform.net/media/<文件名>` 短 URL 引用） |
+| 离线降级的那份业务数据 | SQLite（`DatabaseHelper`）+ `ExhibitionConfiguration` / `RegistrationReviewStore`（进程内） | 只在连不上后端时使用；后端可用时页面读的是 HTTP 数据 |
+| 上传的媒体 | 应用私有目录 `files/media` | 需要对象存储与上传接口；现在用 `appassets.androidplatform.net/media/<文件名>` 短 URL 引用 |
+| 设备能力状态 | `AppSettings`（SharedPreferences） | 外观模式的本地镜像、日历权限等；服务器级配置的权威副本在后端 |
 
-### `server/` 已有端点与桥接动作的对应
+### `server/` 端点与桥接动作的对应
+
+健康检查与连通性：`GET /ping`、`GET /health`；其余都在 `/api/v1` 下。完整清单（含请求参数、权限与响应形状）见 `server/README.md` 的「接口清单」，这里只列骨架：
 
 | 已有路由 | 对应桥接动作 |
 | --- | --- |
-| `POST /api/auth/login\|register\|refresh\|logout` | `auth.login`、`auth.register`、`auth.logout` |
-| `GET /api/exhibitions`、`GET /api/exhibitions/search`、`GET /api/exhibitions/:id` | `exhibitions.list`、`search.query`、`exhibitions.get`、`exhibitions.month`（月份筛选已支持 query 参数） |
-| `POST\|PUT\|DELETE /api/exhibitions`、`PUT /api/exhibitions/:id/status` | `exhibitions.save`、`exhibitions.delete`、`exhibitions.status` |
-| `GET\|POST\|PUT\|DELETE /api/registrations` | `registrations.list`、`registrations.get`、`registrations.submit`、`registrations.cancel` |
-| `GET\|PUT\|DELETE /api/users`、`PUT /api/users/:id/status` | `users.list`、`users.get`、`users.status`、`users.public` |
+| `GET /api/v1/bootstrap` | `bootstrap`（一次拉取用户态 + 全部配置） |
+| `POST /api/v1/auth/login\|register\|guest\|logout\|refresh` | `auth.login`、`auth.register`、`auth.guest`、`auth.logout`（刷新令牌轮换） |
+| `GET\|PUT /api/v1/profile`、`POST /profile/password`、`GET\|PUT /profile/notifications` | `profile.get`、`profile.save`、`profile.password`、`notify.preferences`、`notify.savePreferences` |
+| `GET /api/v1/exhibitions`、`/month`、`/categories`、`/:id`、`/:id/fields` | `exhibitions.list`、`exhibitions.month`、`exhibitions.categories`、`exhibitions.get`、`exhibitions.fields` |
+| `POST /api/v1/exhibitions`、`PUT\|DELETE /:id`、`PUT /:id/status`、`PUT /:id/fields` | `exhibitions.save`、`exhibitions.delete`、`exhibitions.status`、`exhibitions.saveFields` |
+| `GET\|POST /api/v1/registrations`、`GET\|DELETE /:id` | `registrations.list`、`registrations.get`、`registrations.submit`、`registrations.cancel` |
+| `GET /api/v1/review`、`GET /:id`、`PUT /:id/status` | `review.list`、`review.get`、`review.updateStatus` |
+| `POST /api/v1/checkin` | `checkin.scan`（现场核销） |
+| `GET /api/v1/users`、`/:id`、`PUT /:id/status`、`GET /users/public` | `users.list`、`users.get`、`users.status`、`users.public` |
+| `GET /api/v1/search` | `search.query` |
+| `GET\|PUT /api/v1/settings`、`PUT /settings/ui-mode` | `settings.get`、`settings.save`、`settings.uiMode` |
 
-**尚无对应端点的动作**（重构时需要新增）：`review.list`、`review.get`、`review.updateStatus`、`checkin.scan`（核销）、`exhibitions.categories`、`exhibitions.fields`、`exhibitions.saveFields`、`settings.get`、`settings.save`、`bootstrap`（一次拉取用户态 + 全部配置的聚合接口）。
+前端动作名与这些路径的映射写在 `js/core/api.js` 的 `ENDPOINTS` 表里，新增接口要同时改那张表、后端路由与 `server/test/api.test.js`。
 
 ### 月视图与日历落点（已固定的两处契约）
 
@@ -335,11 +345,11 @@ adb reverse tcp:3000 tcp:3000
 | 首次打开看哪个月由 `bootstrap` 的 `calendar.landing = { year, month }` 决定 | 落点规则属于「界面先给用户看什么」，不属于月视图接口；`exhibitions.month` 因此不需要 `explicit` 参数 |
 | 选中日期由前端本地决定 | 月视图一次返回整月数据，点日期不再往返一次 |
 
-本机桥接（`ExhibitionActions`）暂未下发 `calendar.landing`，前端会回落到内置默认月份（2026 年 6 月，与演示数据一致）；接入真实后端时按上表补齐即可。
+后端的示例展会日期是**相对今天**生成的（`db:seed` 用 `CURRENT_DATE + N days`），因此日历落点、报名窗口这些与「今天」有关的规则永远有可演示的数据。离线降级那份本机数据仍用固定月份。
 
 ## 待优化的结构（前后端分离前可先做的部分）
 
-纯客户端、与后端无关的清理项。第 4～15 项已在本轮完成，保留记录便于回看。
+纯客户端、与后端无关的清理项，清单已全部完成，保留记录便于回看。
 
 | # | 位置 | 状态 |
 | --- | --- | --- |
@@ -375,10 +385,13 @@ node scripts/webui-check.js
 # 检查脚本自身的单元测试（启动入口解析等）
 node --test scripts/smoke-check.test.js
 
-# 前端页面渲染冒烟测试（最小 DOM 打桩 + 假桥接，逐页渲染并校验关键交互）
+# 前端页面渲染冒烟测试（最小 DOM 打桩 + 假桥接，逐页渲染并校验关键交互与 REST 映射）
 node --test scripts/webui-render.test.js
 
-# 前后端契约测试（逐接口断言页面用到的字段都在）
+# 后端契约与规则测试（真实 PostgreSQL，自动建/重建 calmobile_test 库）
+node --test server/test/api.test.js
+
+# 旧的零依赖演示后端契约测试（`npm run demo` 那套，与上面互不影响）
 node --test server/test/demo-api.test.js
 
 # Android 单元测试与调试 APK
@@ -389,9 +402,13 @@ gradlew.bat :app:assembleDebug
 gradlew.bat :app:testDebugUnitTest --tests 'com.example.calmobile.CalendarHelperTest'
 ```
 
-后端开发请进入 `server/`，按 `server/README.md` 创建 PostgreSQL 数据库并复制 `.env.example`；常用命令为 `npm install`、`npm run db:migrate`、`npm run db:seed`、`npm run dev`、`npm test -- --runInBand` 和 `npm run lint`。
+后端开发请进入 `server/`，按 `server/README.md` 起好 PostgreSQL 并复制 `.env.example`；常用命令为 `npm install`、`npm run db:migrate`、`npm run db:seed`、`npm run dev`、`npm test`（jest 单测）、`npm run test:contract`（接口契约）和 `npm run lint`。
 
-客户端测试位于 `app/src/test/java/com/example/calmobile/`，覆盖认证、数据库、展会、报名、用户管理、导出、通知、日历、富文本和搜索等 Manager/Helper 流程；Activity 级 UI 测试仍在路线图中。前端后端契约测试位于 `server/test/demo-api.test.js`（17 项，逐接口断言页面用到的字段都在）。前端另有 `scripts/webui-render.test.js`：它用最小 DOM 打桩加假桥接，把 18 个页面路由各渲染一次，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销、用户公开页管理视角，以及「点日期与切月份不再取数」「缓存命中时同步出内容」「过期缓存仍可先画一屏」「并发请求去重」「标签页预加载」等取数体验。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，用例涉及预加载时先 `await settle()` 排空空闲队列再开始计数，不依赖固定的 sleep 猜测时序。
+客户端测试位于 `app/src/test/java/com/example/calmobile/`，覆盖认证、数据库、展会、报名、用户管理、导出、通知、日历、富文本和搜索等 Manager/Helper 流程；Activity 级 UI 测试仍在路线图中。
+
+后端测试分三层：`server/test/api.test.js`（33 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、以及报名窗口 / 重复报名 / 自动通过 / 核销流转 / 隐私开关这些业务规则；`server/src/**/*.test.js`（jest，15 项）是不依赖数据库的纯函数与中间件单测；`server/test/demo-api.test.js`（17 项）守着旧的零依赖演示后端。库结构变更后跑 `npm run db:migrate` 即可，迁移是幂等的。
+
+前端另有 `scripts/webui-render.test.js`（17 项）：它用最小 DOM 打桩加假桥接，把 18 个页面路由各渲染一次，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销、用户公开页管理视角、「点日期与切月份不再取数」「缓存命中时同步出内容」「过期缓存仍可先画一屏」「并发请求去重」「标签页预加载」等取数体验，以及 `api.js` 的动作到 REST 路径映射与 401 自动续期。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，用例涉及预加载时先 `await settle()` 排空空闲队列再开始计数，不依赖固定的 sleep 猜测时序。
 
 可用模拟器时，可安装并逐屏回归：
 
@@ -488,20 +505,24 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 | --- | --- | --- |
 | 报名方式“需审核 / 无需审核 / 仅展示” | 新增状态常量并入库；`报名中` 在界面上按“需审核”展示 | 是否需要数据迁移，把历史 `报名中` 记录改写为具体方式 |
 | “无需审核”的自动通过 | 提交后直接置为已通过，展商仍可在报名管理中调整 | 已按确认实现；如需改为“提交后仍待展商确认”请说明 |
-| 报名收集项持久化 | 仍保存在 `ExhibitionConfiguration` 会话内，选项以英文逗号拼接后存储 | 是否纳入 SQLite 表结构 |
-| 报名审核记录 | 仍为会话内存储 | 是否纳入 SQLite 表结构 |
+| 报名收集项持久化 | **已落库**：后端 `exhibition_fields` 表（标题 / 类型 / 选项 / 必填 / 顺序）；离线降级仍用进程内配置 | 无 |
+| 报名审核记录 | **已落库**：后端 `registrations.status` + `check_in_time`，与报名同一行 | 无 |
 | 简介存储格式 | 统一以 Markdown 保存并记录 `descriptionFormat`，历史 HTML 打开编辑器时自动转换，内联图片保存时改写为短 URL | 是否需要一次性把所有历史简介转换并回写 |
-| 服务器设置生效范围 | 以 SharedPreferences 模拟服务端配置，界面已按“对所有用户生效”呈现 | 接入 `server/` 后是否改为服务端下发 |
+| 服务器设置生效范围 | **已落库**：后端 `app_settings` 表，管理员保存后对所有用户生效；个人外观模式在 `users.ui_mode` | 无 |
 | 首页示例展会 | 首页展示 SQLite 中的 4 条展会，`ExhibitionCatalog` 提供月份/展商/亮点补充 | 是否把首页 7 条样例一并写入数据库 |
 | “修改报名” | 打开报名页并回填已提交的回答，保存时受“已提交过该展会”限制 | 是否需要真正的报名更新接口 |
 | 视频上传 | 仅有系统选择器占位，格式与数量按服务器设置校验 | 是否接入服务端媒体接口 |
 | 管理员角色 | 继续用 `admin` 覆盖超级管理员 | 是否需要独立超级管理员 |
 | 设计稿 16/17 屏 | 内容内联到管理后台与个人页，不再保留二级页面 | 是否需要保留独立入口 |
-| 报名二维码的启用开关 | 保存在 `ExhibitionConfiguration` 会话内，默认关闭；核销状态写入 `RegistrationReviewStore` | 是否需要随展会落库并支持按展会查询核销记录 |
-| 核销权限 | 展商与管理员都可以核销；展会记录没有“归属展商”字段，因此只校验角色与展会是否存在 | 是否需要给展会补充归属展商字段并收紧为“只能核销自己的展会” |
+| 报名二维码的启用开关 | **已落库**：后端 `exhibitions.qr_enabled`，核销状态在 `registrations` 上 | 无 |
+| 核销权限 | **已收紧**：后端按 `exhibitions.exhibitor_id` 校验，展商只能核销自己举办的展会（管理员不限） | 无 |
+| 离线降级是否保留 | 后端是主路径，连不上时退回本机 SQLite / SharedPreferences 实现（已实测可用） | 是否删掉本机数据实现、让应用必须连后端（删掉后没起后端就用不了） |
+| 旧的零依赖演示后端 | `src/demo-server.js` + `demo-api.js` + `demo-data.js` 已被 Express + PostgreSQL 取代，暂时保留作为「不装数据库也能跑通前端」的备用 | 是否删除（删掉后 `npm run demo` 与 `test:demo` 一并移除） |
+| 首页示例展会 | 后端示例数据是 4 场**相对今天**生成的展会；离线降级那份用 SQLite 里的固定数据 | 是否需要更多示例展会或按分类铺开 |
 
 ## 变更记录
 
+- 2026-09-17：**后端补齐为真实服务**（Express + PostgreSQL）：重写迁移脚本（按编号记录、可反复执行，8 张表把展会扩展字段、报名收集项、审核状态与核销时间、服务器设置、通知偏好、刷新令牌全部落库）；新增 `src/domain/` 业务层（状态词汇表、SQL 片段、响应映射、权限、校验、设置、会话）；实现前端全部 35 个数据动作的 REST 路由，服务端兜住角色权限、报名窗口、重复报名、自动通过、核销流转与隐私开关；密码改 bcrypt、令牌改 JWT + 可撤销的刷新令牌轮换；示例数据改为相对今天生成，演示不会过期。前端 `api.js` 增加「动作 → REST 路径」映射表与 401 自动续期，页面不需要知道数据来自哪一边，也不会因为换后端而改动。新增后端契约测试 33 项、前端 REST 映射用例 1 项，`npm run lint` 全绿。
 - 2026-09-17：前端取数改为「先画缓存、再后台刷新」（新增 `core/loadable.js` 与 `core/preload.js`，`api.js` 的只读接口提供 `peek()` / `warm()` 并按参数排序做缓存键、并发去重），切页面与切月份不再先闪骨架屏；首页日历的选中日期改为纯本地状态，点日期与切换月份都不再重新取数；`exhibitions.month` 改为原样返回请求的月份，日历落点由 `bootstrap.calendar.landing` 下发；收敛原生三处结构（`ExhibitionConfiguration` 改 `Patch` 写入、`RegistrationReviewStore` 统一报名 id 并把示例数据显式标注、字符数上限收敛到 `AppSettings.TextLimit` 单表）；补 3 个原生单测与 6 个前端渲染用例。
 - 2026-09-17：按动作域拆分 `WebAppActions`（2,156 行 → 8 个域类 + 196 行分发入口，行为不变）；个人页新增「在公开页展示我的报名记录」隐私开关并打通持久化与公开页过滤；演示后端同步支持该字段。
 - 2026-09-17：删除旧原生页面与旧架构层（legacy 16 个 Activity、BaseActivity、MainTabState、17 个布局、Room/Retrofit/Repository/ViewModel，以及只服务它们的 drawable/anim/values 资源），依赖收敛到 Gson + JUnit；前端文案迁入 `strings_frontend.xml`（475 条，原生注入 + 三处一致性校验）；APK 内静态脚本样式改为可缓存、三个内置库改为按需加载；修复演示后端把用户选中的日期回落到有展会的日子，导致首页日历「点日期没反应」。
