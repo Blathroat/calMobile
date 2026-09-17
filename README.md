@@ -264,16 +264,30 @@ await registrations.submit(payload);
 
 日历卡片另外有一条规则：`exhibitions.month` 一次返回**整月**展会，所以「选中哪一天」完全在本地完成，点日期既不重新取数也不重建日历 DOM。
 
-### 演示后端与连通性
+### 后端与连通性
+
+后端是 `server/` 里的 Express + PostgreSQL 服务，接口按 REST 组织，路径与前端 `api.js` 的动作一一对应（映射表在 `js/core/api.js` 的 `ENDPOINTS`）。
 
 ```bash
-node server/src/demo-server.js        # 零依赖，内存示例数据，默认 4000 端口
-adb reverse tcp:4000 tcp:4000         # 真机与模拟器都适用
+# 1. 起数据库（二选一）
+pwsh -File scripts\db.ps1 start     # 本机 WSL 里的 PostgreSQL 16
+docker run -d --name calmobile-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16-alpine
+
+# 2. 建表 + 示例数据（可反复执行）
+cd server && npm install
+cp .env.example .env                # 按需改数据库连接与 JWT 密钥
+npm run db:migrate && npm run db:seed
+npm run dev                         # http://127.0.0.1:3000
+
+# 3. 真机 / 模拟器访问本机后端
+adb reverse tcp:3000 tcp:3000
 ```
 
-改了 `server/src/*.js` 之后要**重启后端进程**：Node 会缓存已加载的模块，旧进程会继续按老逻辑应答（现象是接口行为和新代码不一致）。
+示例账号 `demo` / `exhibitor` / `user`，密码都是 `password`（角色分别是管理员、展商、普通用户）。
 
-细节见 `server/README.md`；`server/test/demo-api.test.js` 是前后端契约测试，逐接口断言页面真正用到的字段都在，字段漂移会在这里失败而不是静默渲染成空。
+**改了 `server/src/*.js` 要重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
+
+细节见 `server/README.md`；`server/test/api.test.js` 是前后端契约与接口测试，逐接口断言页面真正用到的字段都在、权限与业务规则都拦得住，字段漂移会在这里失败而不是静默渲染成空。
 
 ### 44 个桥接动作的分类
 

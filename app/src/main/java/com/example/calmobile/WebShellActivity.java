@@ -92,7 +92,7 @@ public class WebShellActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         // 页面运行在 https://appassets.androidplatform.net 上下文里，访问明文后端
-        // （演示服务 http://127.0.0.1:4000）会被判定为混合内容。正式后端改用 HTTPS
+        // （本机服务 http://127.0.0.1:3000）会被判定为混合内容。后端改用 HTTPS
         // 后应当把这一行改回 MIXED_CONTENT_NEVER_ALLOW。
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

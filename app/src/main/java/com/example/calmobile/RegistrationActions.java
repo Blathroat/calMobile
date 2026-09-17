@@ -39,8 +39,20 @@ final class RegistrationActions {
         return registration.getStatus() == Registration.Status.CANCELLED ? "已撤销" : "待审核";
     }
 
-    static Map<String, Object> registrationPayload(Registration registration) {
-        Map<String, Object> item = new LinkedHashMap<>();
+    /** 从 YYYY-MM-DD 里取年（offset 0）或月（offset 5）；取不到返回 0。 */
+    private static int datePart(String isoDate, int offset) {
+        int length = offset == 0 ? 4 : 2;
+        if (isoDate == null || isoDate.length() < offset + length) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(isoDate.substring(offset, offset + length));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    static Map<String, Object> registrationPayload(Registration registration) {        Map<String, Object> item = new LinkedHashMap<>();
         String statusLabel = registrationStatusLabel(registration);
         // 报名码与审核记录一一对应，因此从记录里取所属展会，供前端拼二维码内容。
         RegistrationReviewStore.Record review = RegistrationReviewStore.find(registration.getId());
@@ -49,6 +61,13 @@ final class RegistrationActions {
         item.put("exhibitionId", exhibitionId);
         item.put("exhibitionTitle", registration.getExhibitionTitle());
         item.put("exhibitionDay", registration.getExhibitionDay());
+        // 展会实际日期：前端按 exhibitionDate 渲染，缺了它就只能拿日号猜月份。
+        // 与 HTTP 后端 registrationPayload 的字段保持一致（离线降级时页面不用改）。
+        String exhibitionDate = exhibitionId.isEmpty()
+                ? "" : ExhibitionConfiguration.displayDate(exhibitionId, registration.getExhibitionDay());
+        item.put("exhibitionDate", exhibitionDate);
+        item.put("exhibitionYear", datePart(exhibitionDate, 0));
+        item.put("exhibitionMonth", datePart(exhibitionDate, 5));
         item.put("exhibitionTime", ActionSupport.safe(registration.getExhibitionTime()));
         item.put("exhibitionVenue", ActionSupport.safe(registration.getExhibitionVenue()));
         item.put("visitorName", registration.getVisitorName());

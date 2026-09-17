@@ -15,6 +15,12 @@ local.properties
 gradle-local/
 .gradle-local/
 
+# 后端依赖与本机配置：node_modules 体积大，.env 里有数据库口令与 JWT 密钥
+node_modules/
+server/.env
+.env
+.env.local
+
 # ── IDE 工程文件：由 IDE 自行生成，不入库 ────────────────────────
 .idea/
 *.iml
