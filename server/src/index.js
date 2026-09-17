@@ -109,4 +109,4 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, start };
+module.exports = { app, start, routes };

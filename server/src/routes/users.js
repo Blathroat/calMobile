@@ -74,8 +74,15 @@ router.get('/', authenticate, async (req, res, next) => {
 
 /**
  * GET /api/v1/users/public?userId=&nickname=
- * 用户公开页的另一种入口：前端 `core/api.js` 的 `users.public` 打的就是这个路径
- * （按 userId 优先、昵称兜底），后面的 `/:id/public` 是同一段实现的资源式写法。
+ * 用户公开页（访客可读）：前端 `core/api.js` 的 `users.public` 打的就是这里。
+ *
+ * 一个入口同时支持两种定位方式，不再另设 `/:id/public`——同一份实现的两种写法
+ * 只会让「哪个才是真的」变成下一个人的疑问；`?userId=` 与 `/:id` 的语义完全等价。
+ * 注意本路由必须声明在 `/:id` 之前，否则 `public` 会被当成一个 id。
+ *
+ * 隐私规则：**本人或管理员**总能看报名记录，其余访问者只在用户打开了
+ * `show_registrations` 时才能看；管理员视角由 `viewedAsAdmin` 标记，
+ * 页面据此说明「当前是管理视角」。
  */
 router.get('/public', optionalAuth, async (req, res, next) => {
   try {
@@ -136,22 +143,6 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
       const updated = await findUserById(req.params.id);
       return { user: statusPayload(updated || row) };
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
- * GET /api/v1/users/:id/public
- * 用户公开页（访客可读）。
- *
- * 隐私规则：**本人或管理员**总能看报名记录，其余访问者只在用户打开了
- * `show_registrations` 时才能看；管理员视角由 `viewedAsAdmin` 标记，
- * 页面据此说明「当前是管理视角」。
- */
-router.get('/:id/public', optionalAuth, async (req, res, next) => {
-  try {
-    res.json(await publicProfile(req, await findPublicTarget({ id: String(req.params.id || '') })));
   } catch (error) {
     next(error);
   }

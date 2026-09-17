@@ -24,13 +24,15 @@ process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'calmobile-te
 const test = require('node:test');
 const assert = require('node:assert');
 const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 const { before, after } = require('node:test');
 const { Client } = require('pg');
 
 const database = require('../src/config/database');
 const { pool } = require('../src/config/pool');
 const { migrate, seed } = require('../src/config/migrate');
-const { app } = require('../src/index');
+const { app, routes } = require('../src/index');
 
 let server;
 
@@ -760,4 +762,152 @@ test('未知路径返回 404 而不是 500', async () => {
   const response = await get('/api/v1/not-an-endpoint');
   assert.strictEqual(response.status, 404);
   assert.ok(response.body.error);
+});
+
+// ── 与前端映射表的交叉校验 ───────────────────────────────────────
+
+/**
+ * 把前端 `api.js` 里的 `ENDPOINTS` 对象取出来求值。
+ *
+ * 这段代码是纯字面量 + 箭头函数，因此在 Node 里可以直接算；用花括号配平（跳过字符串）
+ * 而不是正则在对象里找结尾，避免被值里的 `{ ... }` 骗到。
+ */
+function frontendEndpoints() {
+  const file = path.join(__dirname, '..', '..', 'app', 'src', 'main', 'assets', 'web', 'js', 'core', 'api.js');
+  const source = fs.readFileSync(file, 'utf8');
+  const start = source.indexOf('const ENDPOINTS = {');
+  assert.ok(start > 0, 'api.js 里找不到 ENDPOINTS');
+  const open = source.indexOf('{', start);
+  let depth = 0;
+  let quote = '';
+  let end = -1;
+  for (let index = open; index < source.length; index += 1) {
+    const char = source[index];
+    if (quote) {
+      if (char === '\\') {
+        index += 1;
+      } else if (char === quote) {
+        quote = '';
+      }
+      continue;
+    }
+    if (char === '\'' || char === '"' || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        end = index;
+        break;
+      }
+    }
+  }
+  assert.ok(end > open, 'ENDPOINTS 对象没有配平');
+  // eslint-disable-next-line no-new-func
+  return new Function(`return ${source.slice(open, end + 1)};`)();
+}
+
+/** 把 `/exhibitions/:id/status` 这样的声明转成匹配用的正则。 */
+function routePattern(full) {
+  const segments = full.split('/').map((segment) => (segment.startsWith(':')
+    ? '[^/]+'
+    : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  return new RegExp(`^${segments.join('/')}$`);
+}
+
+/** 后端实际注册的路由表：[方法, 匹配用的正则]。 */
+function backendRoutes() {
+  const declared = [];
+  for (const [prefix, router] of Object.entries(routes)) {
+    const base = `/api/v1${prefix ? `/${prefix}` : ''}`;
+    for (const layer of router.stack) {
+      if (!layer.route) {
+        continue;
+      }
+      const full = `${base}${layer.route.path === '/' ? '' : layer.route.path}`;
+      for (const method of Object.keys(layer.route.methods)) {
+        declared.push({ method: method.toUpperCase(), path: full, pattern: routePattern(full) });
+      }
+    }
+  }
+  return declared;
+}
+
+/**
+ * 前端每个数据动作都必须能在后端找到对应路由。
+ *
+ * 这条断言是「35 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
+ * 同步 `ENDPOINTS`，都会在这里失败，而不是等到某个页面在真机上静默报错。
+ */
+test('前端每个数据动作都对应后端已注册的路由', () => {
+  const endpoints = frontendEndpoints();
+  const actions = Object.keys(endpoints);
+  assert.strictEqual(actions.length, 35,
+    `前端数据动作数量变了（期望 35）：${actions.length} 个 —— ${actions.join(', ')}`);
+
+  const declared = backendRoutes();
+  // 用「带 id 的完整参数」和「空参数」各算一次：像 exhibitions.save 这种
+  // 按有没有 id 分派到 POST / PUT 的映射，两个分支都要能对上路由。
+  const payloads = [
+    {},
+    {
+      id: 'sample-id', userId: 'sample-id', exhibitionId: 'sample-id', nickname: 'n',
+      query: 'q', year: 2026, month: 6, day: 1, status: '待审核', code: 'c',
+    },
+  ];
+
+  const missing = [];
+  for (const action of actions) {
+    for (const payload of payloads) {
+      const request = endpoints[action](payload);
+      assert.ok(request && request.method && request.path, `${action} 的映射没返回 method/path`);
+      // 前端映射里的 path 是 BASE_URL（…/api/v1）之后的相对路径。
+      const full = `/api/v1${request.path}`;
+      const hit = declared.some((route) => route.method === request.method
+        && route.pattern.test(full));
+      if (!hit) {
+        missing.push(`${action} → ${request.method} ${full}`);
+      }
+    }
+  }
+
+  assert.deepStrictEqual(missing, [],
+    `以下前端动作在后端没有对应路由：\n  ${missing.join('\n  ')}`);
+});
+
+test('后端没有前端用不到的孤立路由', () => {
+  const declared = backendRoutes();
+  const endpoints = frontendEndpoints();
+  const payloads = [
+    {},
+    {
+      id: 'sample-id', userId: 'sample-id', exhibitionId: 'sample-id', nickname: 'n',
+      query: 'q', year: 2026, month: 6, day: 1, status: '待审核', code: 'c',
+    },
+  ];
+  const used = new Set();
+  for (const action of Object.keys(endpoints)) {
+    for (const payload of payloads) {
+      const request = endpoints[action](payload);
+      const full = `/api/v1${request.path}`;
+      for (const route of declared) {
+        if (route.method === request.method && route.pattern.test(full)) {
+          used.add(`${route.method} ${route.path}`);
+        }
+      }
+    }
+  }
+  // 这几个是刻意保留、不走前端动作表的：刷新令牌与「撤销全部会话」由 api.js 直接调用。
+  const intentional = new Set([
+    'POST /api/v1/auth/refresh',
+    'POST /api/v1/auth/logout-all',
+  ]);
+  const orphans = declared
+    .map((route) => `${route.method} ${route.path}`)
+    .filter((key) => !used.has(key) && !intentional.has(key));
+  assert.deepStrictEqual(orphans, [],
+    `以下后端路由没有任何前端动作用到，属于冗余：\n  ${orphans.join('\n  ')}`);
 });
