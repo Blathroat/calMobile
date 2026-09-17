@@ -27,10 +27,10 @@
 }
 
 /* 正在后台刷新时，屏幕上的旧内容只做一点弱化，不整块换成骨架屏。
-   数据通常在下一次重绘前就回来了，所以这层提示一般根本不会露面。
-   见 core/loadable.js。 */
+   数据通常在下一次重绘前就回来了，所以这层提示一般根本不会露面；
+   刷新慢时它也只是「略暗」，不会让正文读不了。见 core/loadable.js。 */
 .app-body [data-busy="true"] {
-    opacity: .55;
+    opacity: .72;
     transition: opacity var(--motion-quick) var(--ease-standard);
 }
 

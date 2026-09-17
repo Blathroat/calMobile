@@ -380,7 +380,7 @@ export const api = {
     // ── 展会 ───────────────────────────────────────────────────────
     exhibitions: {
         list: reader('exhibitions.list'),
-        /** 月视图：year / month / day / explicit */
+        /** 月视图：只带 year / month（day 可选），见 README「月视图与日历落点」 */
         month: reader('exhibitions.month'),
         get: reader('exhibitions.get', byId),
         save: (payload) => request('exhibitions.save', payload),
