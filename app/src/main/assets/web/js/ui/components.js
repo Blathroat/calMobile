@@ -5,6 +5,9 @@
 
 import { el, append, replace, qs } from '../core/dom.js';
 
+// 状态文案与色调集中在 core/status.js；这里再导出一次，页面只需引一个模块。
+export { statusTone } from '../core/status.js';
+
 // ── 图标（统一细线 SVG，对应 newUI 的 .icon 规格） ────────────────
 
 const PATHS = {
@@ -177,31 +180,58 @@ export function card(children, props = {}) {
     return el('div', { class: 'card', ...props }, children);
 }
 
-export function statusTag(text, tone = 'pending') {
-    return el('span', { class: 'status-tag', dataset: { tone }, text: text || '' });
+/**
+ * 页面底部的固定操作区：与顶部栏一样是页面的固定行，样式只在 tokens.css 里声明。
+ * 调用方只负责往里面放按钮或提示。
+ */
+export function pageFoot(children = []) {
+    return el('div', { class: 'page-foot' }, children);
 }
 
-/** 状态 → 标签色，颜色不作为唯一线索，始终带文字。 */
-export function statusTone(status) {
-    switch (status) {
-        case '已通过':
-        case '报名中':
-        case '无需审核':
-        case '已参加':
-            return 'ok';
-        case '待审核':
-        case '需审核':
-            return 'pending';
-        case '已拒绝':
-        case '已撤销':
-            return 'danger';
-        case '截止报名':
-            return 'warn';
-        case '仅展示':
-            return 'info';
-        default:
-            return 'muted';
-    }
+/**
+ * 数据加载失败：原位给出说明与「重试」按钮，不使用全局错误页。
+ * 页面只要把自己那块容器和一个重新加载的回调传进来即可。
+ */
+export function loadErrorBlock({ title = '加载失败', description, onRetry } = {}) {
+    return stateBlock({
+        tone: 'error',
+        title,
+        description,
+        action: onRetry ? { label: '重试', onClick: onRetry } : null,
+    });
+}
+
+/**
+ * 找不到目标（展会已删除、报名已撤销这类）：说明原因并给出返回入口。
+ * 与 {@link loadErrorBlock} 分开，是因为此时重试没有意义，只能离开。
+ */
+export function notFoundBlock({ iconName = 'info', title, description, backLabel, onBack } = {}) {
+    return stateBlock({
+        tone: 'error',
+        iconName,
+        title,
+        description,
+        action: onBack ? { label: backLabel || '返回', onClick: onBack } : null,
+    });
+}
+
+/**
+ * 卡片内的次级按钮：比 `.cta` 矮一档，用于「查看报名 / 编辑展会」这类并排小按钮。
+ * `grow` 为真时等分父容器宽度（配合 `.grid-cols-2` 使用）。
+ */
+export function smallCta(label, onClick, { grow = true, danger = false, disabled = false } = {}) {
+    return el('button', {
+        class: `cta ${danger ? 'danger' : 'ghost'}`,
+        type: 'button',
+        dataset: { size: 'small' },
+        style: grow ? { flex: '1 1 0' } : null,
+        disabled: disabled ? true : null,
+        onclick: onClick,
+    }, [label]);
+}
+
+export function statusTag(text, tone = 'pending') {
+    return el('span', { class: 'status-tag', dataset: { tone }, text: text || '' });
 }
 
 export function switchRow({ id, label, description, checked, onChange }) {

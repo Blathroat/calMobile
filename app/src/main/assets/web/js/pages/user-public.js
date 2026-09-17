@@ -9,14 +9,14 @@
 
 import { call, state } from '../core/bridge.js';
 import { scaffold } from '../core/router.js';
-import { avatarNode, loadingBlock, stateBlock, statusTag, statusTone } from '../ui/components.js';
+import { avatarNode, loadErrorBlock, loadingBlock, pageFoot, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace, formatDateWithWeekday } from '../core/dom.js';
 
 export async function userPublicPage(context) {
     const host = el('div', { class: 'stack' });
     const isOwn = Boolean(context.params.nickname && state.user.nickname
         && context.params.nickname === state.user.nickname);
-    const foot = el('div', { style: { padding: 'var(--s4)', background: 'var(--screen)', borderTop: '1px solid var(--stroke)' } });
+    const foot = pageFoot();
 
     scaffold({
         title: '用户公开页',
@@ -45,11 +45,10 @@ export async function userPublicPage(context) {
         }
         profile = data;
     } catch (error) {
-        replace(host, stateBlock({
-            tone: 'error',
+        replace(host, loadErrorBlock({
             title: '加载失败',
             description: error.message,
-            action: { label: '重试', onClick: () => context.refresh() },
+            onRetry: () => context.refresh(),
         }));
         return;
     }

@@ -10,19 +10,9 @@
 
 import { call, state, applySettings } from '../core/bridge.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
-import {
-    loadingBlock,
-    stateBlock,
-    statusTag,
-    statusTone,
-    toast,
-    openSheet,
-    segmented,
-    confirmSheet,
-    switchRow,
-    mediaBox,
-} from '../ui/components.js';
+import { confirmSheet, loadErrorBlock, loadingBlock, mediaBox, openSheet, segmented, smallCta, stateBlock, statusTag, statusTone, switchRow, toast } from '../ui/components.js';
 import { el, replace, truncate, formatDateWithWeekday } from '../core/dom.js';
+import { EXHIBITION_STATUS } from '../core/status.js';
 import { fieldValidator, validateAll } from '../core/validate.js';
 
 const USER_STATUSES = ['正常', '受限', '封禁'];
@@ -102,11 +92,10 @@ export async function adminPage(context) {
                 await renderSettings(panel);
             }
         } catch (error) {
-            replace(panel, stateBlock({
-                tone: 'error',
+            replace(panel, loadErrorBlock({
                 title: '加载失败',
                 description: error.message,
-                action: { label: '重试', onClick: () => loadPanel() },
+                onRetry: () => loadPanel(),
             }));
         }
     }
@@ -126,8 +115,8 @@ export async function adminPage(context) {
                 statusTag(user.status, statusTone(user.status)),
             ]),
             el('div', { class: 'row', 'data-gap': 'md' }, [
-                smallButton('管理', () => manageUser(user)),
-                smallButton('公开页', () => context.navigate('user-public', { userId: user.id })),
+                smallCta('管理', () => manageUser(user)),
+                smallCta('公开页', () => context.navigate('user-public', { userId: user.id })),
             ]),
         ])));
 
@@ -258,15 +247,16 @@ export async function adminPage(context) {
                 statusTag(item.modeLabel || item.status, statusTone(item.status)),
             ]),
             el('div', { class: 'row', 'data-gap': 'md' }, [
-                smallButton('查看报名', () => context.navigate('review', { exhibitionId: item.id })),
-                smallButton('编辑展会', () => context.navigate('exhibition-form', { id: item.id })),
-                smallButton(item.openForRegistration ? '暂停报名' : '恢复报名', () => toggleLock(item)),
+                smallCta('查看报名', () => context.navigate('review', { exhibitionId: item.id })),
+                smallCta('编辑展会', () => context.navigate('exhibition-form', { id: item.id })),
+                smallCta(item.openForRegistration ? '暂停报名' : '恢复报名', () => toggleLock(item)),
             ]),
         ]);
     }
 
     function toggleLock(item) {
-        const nextStatus = item.openForRegistration ? '截止报名' : '需审核';
+        const nextStatus = item.openForRegistration
+            ? EXHIBITION_STATUS.CLOSED : EXHIBITION_STATUS.REVIEW_REQUIRED;
         const title = item.openForRegistration ? '暂停报名' : '恢复报名';
         const message = item.openForRegistration
             ? `暂停后「${item.title}」不可报名，展商不能自行恢复。`
@@ -528,15 +518,6 @@ export async function adminPage(context) {
     }
 
     // ── 小工具 ─────────────────────────────────────────────────────
-
-    function smallButton(label, onClick) {
-        return el('button', {
-            class: 'cta ghost',
-            type: 'button',
-            style: { minHeight: '44px', fontSize: 'var(--fs-label)', flex: '1 1 0' },
-            onclick: onClick,
-        }, [label]);
-    }
 
     function numberField(label, control, suffix) {
         return el('div', { class: 'field' }, [

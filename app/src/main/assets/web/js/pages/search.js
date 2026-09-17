@@ -6,7 +6,7 @@
 
 import { call } from '../core/bridge.js';
 import { scaffold } from '../core/router.js';
-import { loadingBlock, stateBlock, statusTag, statusTone, mediaBox } from '../ui/components.js';
+import { loadErrorBlock, loadingBlock, mediaBox, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace, truncate } from '../core/dom.js';
 
 export async function searchPage(context) {
@@ -72,11 +72,10 @@ export async function searchPage(context) {
             countText.textContent = `${data.count} 条结果`;
             render(data, query);
         } catch (error) {
-            replace(resultsHost, stateBlock({
-                tone: 'error',
+            replace(resultsHost, loadErrorBlock({
                 title: '搜索失败',
                 description: error.message,
-                action: { label: '重试', onClick: () => run(query) },
+                onRetry: () => run(query),
             }));
         }
     }

@@ -13,6 +13,7 @@ import { call } from '../core/bridge.js';
 import { scaffold, onPageStop } from '../core/router.js';
 import { loadingBlock, stateBlock, statusTag, toast, openSheet } from '../ui/components.js';
 import { el, replace } from '../core/dom.js';
+import { REGISTRATION_STATUS } from '../core/status.js';
 
 /** 报名码前缀，与原生 WebAppActions.REGISTRATION_CODE_PREFIX 保持一致。 */
 const CODE_PREFIX = 'CALMOBILE-CHECKIN|';
@@ -52,7 +53,7 @@ export async function checkinPage(context) {
         children: [
             el('div', { class: 'row', 'data-between': 'true' }, [
                 el('span', { class: 'section-label', text: '扫码核销' }),
-                el('span', { class: 'pill', text: '已参加' }),
+                el('span', { class: 'pill', text: REGISTRATION_STATUS.ATTENDED }),
             ]),
             el('p', {
                 class: 'row-meta',
@@ -307,7 +308,7 @@ export async function checkinPage(context) {
             el('div', { class: 'card' }, [
                 el('div', { class: 'row', 'data-between': 'true' }, [
                     el('span', { class: 'section-label', text: ok ? '核销成功' : '未能核销' }),
-                    statusTag(ok ? '已参加' : (result?.status || '未通过'), ok ? 'ok' : 'danger'),
+                    statusTag(ok ? REGISTRATION_STATUS.ATTENDED : (result?.status || '未通过'), ok ? 'ok' : 'danger'),
                 ]),
                 el('p', { class: 'row-meta', text: result?.message || result?.error || '' }),
                 details,

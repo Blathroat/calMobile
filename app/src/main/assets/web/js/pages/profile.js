@@ -9,16 +9,7 @@
 
 import { call, state, applyTheme, applySettings, applyMode } from '../core/bridge.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
-import {
-    avatarNode,
-    openAvatarCropper,
-    loadingBlock,
-    stateBlock,
-    switchRow,
-    segmented,
-    toast,
-    openSheet,
-} from '../ui/components.js';
+import { avatarNode, loadingBlock, openAvatarCropper, openSheet, segmented, smallCta, stateBlock, switchRow, toast } from '../ui/components.js';
 import { el, append, replace } from '../core/dom.js';
 import { fieldValidator, validateAll, limit, passwordRule, matchRule } from '../core/validate.js';
 
@@ -149,9 +140,9 @@ export async function profilePage(context) {
                 }),
             ]),
             el('div', { class: 'row', 'data-gap': 'md' }, [
-                smallButton('上传头像', () => pickAvatar()),
+                smallCta('上传头像', () => pickAvatar()),
                 user.avatar
-                    ? smallButton('移除头像', () => saveAvatar(''))
+                    ? smallCta('移除头像', () => saveAvatar(''))
                     : null,
             ]),
         ]);
@@ -254,15 +245,6 @@ export async function profilePage(context) {
             ]),
             el('span', { class: 'dim', 'aria-hidden': 'true', text: '›' }),
         ]);
-    }
-
-    function smallButton(label, onClick) {
-        return el('button', {
-            class: 'cta ghost',
-            type: 'button',
-            style: { minHeight: '44px', fontSize: 'var(--fs-label)', flex: '1 1 0' },
-            onclick: onClick,
-        }, [label]);
     }
 
     // ── 头像：选择 → 圆形裁剪 → 落盘换成短 URL ────────────────────

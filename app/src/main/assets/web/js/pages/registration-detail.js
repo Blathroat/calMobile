@@ -9,12 +9,13 @@
 
 import { call, state } from '../core/bridge.js';
 import { scaffold } from '../core/router.js';
-import { loadingBlock, stateBlock, statusTag, statusTone, toast, confirmSheet } from '../ui/components.js';
+import { confirmSheet, loadErrorBlock, loadingBlock, notFoundBlock, pageFoot, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, replace, answerLines, formatDateWithWeekday } from '../core/dom.js';
+import { REGISTRATION_STATUS } from '../core/status.js';
 
 export async function registrationDetailPage(context) {
     const host = el('div', { class: 'stack' });
-    const foot = el('div', { style: { padding: 'var(--s4)', background: 'var(--screen)', borderTop: '1px solid var(--stroke)' } });
+    const foot = pageFoot();
     scaffold({
         title: '报名详情',
         backTo: 'my-registrations',
@@ -28,21 +29,20 @@ export async function registrationDetailPage(context) {
     try {
         const data = await call('registrations.get', { id: context.params.id });
         if (!data?.found) {
-            replace(host, stateBlock({
-                tone: 'error',
+            replace(host, notFoundBlock({
                 title: '报名记录不存在',
                 description: data?.error || '该记录可能已被撤销。',
-                action: { label: '返回列表', onClick: () => context.navigate('my-registrations') },
+                backLabel: '返回列表',
+                onBack: () => context.navigate('my-registrations'),
             }));
             return;
         }
         record = data.registration;
     } catch (error) {
-        replace(host, stateBlock({
-            tone: 'error',
+        replace(host, loadErrorBlock({
             title: '加载失败',
             description: error.message,
-            action: { label: '重试', onClick: () => context.refresh() },
+            onRetry: () => context.refresh(),
         }));
         return;
     }
@@ -87,7 +87,7 @@ export async function registrationDetailPage(context) {
         if (!record.checkInCode) {
             return null;
         }
-        const attended = record.statusLabel === '已参加';
+        const attended = record.statusLabel === REGISTRATION_STATUS.ATTENDED;
         const canvas = el('canvas', {
             class: 'qr-canvas',
             width: 480,
@@ -169,16 +169,16 @@ export async function registrationDetailPage(context) {
     }
 
     function statusHint(status) {
-        if (status === '待审核') {
+        if (status === REGISTRATION_STATUS.PENDING) {
             return '展商审核后会更新状态';
         }
-        if (status === '已通过') {
+        if (status === REGISTRATION_STATUS.APPROVED) {
             return state.review.canRevise ? '展商仍可修改审核结果' : '展商已完成审核';
         }
-        if (status === '已参加') {
+        if (status === REGISTRATION_STATUS.ATTENDED) {
             return '展商已扫码核销，祝参展顺利';
         }
-        if (status === '已撤销') {
+        if (status === REGISTRATION_STATUS.CANCELLED) {
             return '该报名已由你撤销';
         }
         return '如需修改请联系展商';
@@ -192,8 +192,8 @@ export async function registrationDetailPage(context) {
     }
 
     function renderFooter() {
-        const cancelled = record.statusLabel === '已撤销';
-        const revise = state.review.canRevise || record.statusLabel === '待审核';
+        const cancelled = record.statusLabel === REGISTRATION_STATUS.CANCELLED;
+        const revise = state.review.canRevise || record.statusLabel === REGISTRATION_STATUS.PENDING;
 
         const modify = el('button', {
             class: 'cta ghost',
@@ -207,7 +207,7 @@ export async function registrationDetailPage(context) {
             type: 'button',
             disabled: cancelled ? true : null,
             onclick: () => askCancel(),
-        }, [cancelled ? '已撤销' : '撤销报名']);
+        }, [cancelled ? REGISTRATION_STATUS.CANCELLED : '撤销报名']);
 
         replace(foot, el('div', { class: 'stack', 'data-gap': 'sm' }, [
             el('div', { class: 'grid-cols-2' }, [modify, cancel]),

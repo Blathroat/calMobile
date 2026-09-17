@@ -9,7 +9,7 @@
 
 import { call, state } from '../core/bridge.js';
 import { scaffold, tabbar, navItems, topAction } from '../core/router.js';
-import { icon, loadingBlock, stateBlock, statusTag, statusTone, toast, mediaBox } from '../ui/components.js';
+import { icon, loadErrorBlock, loadingBlock, mediaBox, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, append, replace, daysInMonth, firstWeekdayOffset, addMonths, monthLabel } from '../core/dom.js';
 
 const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
@@ -176,11 +176,10 @@ export async function homePage(context) {
             renderCalendar(data);
             renderList(data);
         } catch (error) {
-            replace(calendarHost, stateBlock({
-                tone: 'error',
+            replace(calendarHost, loadErrorBlock({
                 title: '展会数据加载失败',
                 description: error.message,
-                action: { label: '重试', onClick: () => load() },
+                onRetry: () => load(),
             }));
             replace(listHost, []);
         }

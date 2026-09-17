@@ -10,7 +10,7 @@
 
 import { call } from '../core/bridge.js';
 import { scaffold, tabbar, navItems, topAction } from '../core/router.js';
-import { loadingBlock, stateBlock, statusTag, statusTone, mediaBox } from '../ui/components.js';
+import { loadErrorBlock, loadingBlock, mediaBox, smallCta, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace } from '../core/dom.js';
 
 export async function exhibitorPage(context) {
@@ -63,11 +63,10 @@ export async function exhibitorPage(context) {
             }, ['新建展会']),
         ]);
     } catch (error) {
-        replace(listHost, stateBlock({
-            tone: 'error',
+        replace(listHost, loadErrorBlock({
             title: '展会列表加载失败',
             description: error.message,
-            action: { label: '重试', onClick: () => context.refresh() },
+            onRetry: () => context.refresh(),
         }));
     }
 
@@ -97,18 +96,9 @@ export async function exhibitorPage(context) {
                 statusTag(item.modeLabel, statusTone(item.status)),
             ]),
             el('div', { class: 'grid-cols-2' }, [
-                actionButton('查看报名', () => context.navigate('review', { exhibitionId: item.id })),
-                actionButton('编辑展会', () => context.navigate('exhibition-form', { id: item.id })),
+                smallCta('查看报名', () => context.navigate('review', { exhibitionId: item.id }), { grow: false }),
+                smallCta('编辑展会', () => context.navigate('exhibition-form', { id: item.id }), { grow: false }),
             ]),
         ]);
-    }
-
-    function actionButton(label, onClick) {
-        return el('button', {
-            class: 'cta ghost',
-            type: 'button',
-            style: { minHeight: '44px', fontSize: 'var(--fs-label)' },
-            onclick: onClick,
-        }, [label]);
     }
 }

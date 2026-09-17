@@ -6,8 +6,9 @@
 
 import { call, state } from '../core/bridge.js';
 import { scaffold } from '../core/router.js';
-import { loadingBlock, stateBlock, toast, statusTag, statusTone } from '../ui/components.js';
+import { loadErrorBlock, loadingBlock, notFoundBlock, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, append, replace, formatDateWithWeekday } from '../core/dom.js';
+import { EXHIBITION_STATUS } from '../core/status.js';
 import { check, limit } from '../core/validate.js';
 
 export async function registrationFormPage(context) {
@@ -27,11 +28,11 @@ export async function registrationFormPage(context) {
     try {
         const data = await call('exhibitions.get', { id: context.params.id });
         if (!data?.found) {
-            replace(host, stateBlock({
-                tone: 'error',
+            replace(host, notFoundBlock({
                 title: '展会不存在',
                 description: data?.error || '无法加载报名信息。',
-                action: { label: '返回首页', onClick: () => context.navigate('home') },
+                backLabel: '返回首页',
+                onBack: () => context.navigate('home'),
             }));
             return;
         }
@@ -42,11 +43,10 @@ export async function registrationFormPage(context) {
             existing = record?.found ? record.registration : null;
         }
     } catch (error) {
-        replace(host, stateBlock({
-            tone: 'error',
+        replace(host, loadErrorBlock({
             title: '加载失败',
             description: error.message,
-            action: { label: '重试', onClick: () => context.refresh() },
+            onRetry: () => context.refresh(),
         }));
         return;
     }
@@ -110,7 +110,7 @@ export async function registrationFormPage(context) {
 
             const profile = state.user || {};
             const visitorName = profile.nickname || profile.username || '报名用户';
-            const autoApprove = exhibition.status === '无需审核';
+            const autoApprove = exhibition.status === EXHIBITION_STATUS.REVIEW_OPTIONAL;
             submit.dataset.loading = 'true';
             submit.disabled = true;
             try {

@@ -7,10 +7,9 @@
 
 import { call, state } from '../core/bridge.js';
 import { scaffold } from '../core/router.js';
-import { loadingBlock, stateBlock, statusTag, statusTone, toast, openSheet, segmented } from '../ui/components.js';
+import { loadErrorBlock, loadingBlock, openSheet, segmented, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, replace, answerLines, truncate } from '../core/dom.js';
-
-const FILTERS = ['待审核', '已通过', '已拒绝', '已参加', '全部'];
+import { REGISTRATION_STATUS, REVIEW_FILTERS } from '../core/status.js';
 
 export async function reviewPage(context) {
     const exhibitionId = context.params.exhibitionId || '';
@@ -19,7 +18,7 @@ export async function reviewPage(context) {
     const listHost = el('div', { class: 'stack' });
     const countPill = el('span', { class: 'pill', text: '—' });
     const filterHost = el('div');
-    let filter = '待审核';
+    let filter = REGISTRATION_STATUS.PENDING;
     let filterSeg = null;
     let title = '报名管理';
     let records = [];
@@ -68,11 +67,10 @@ export async function reviewPage(context) {
             ]);
             countPill.textContent = `${items.length} 个展会`;
         } catch (error) {
-            replace(listHost, stateBlock({
-                tone: 'error',
+            replace(listHost, loadErrorBlock({
                 title: '加载失败',
                 description: error.message,
-                action: { label: '重试', onClick: () => context.refresh() },
+                onRetry: () => context.refresh(),
             }));
         }
         return;
@@ -82,7 +80,7 @@ export async function reviewPage(context) {
     await load();
 
     function renderFilter(counts) {
-        const labels = FILTERS.map((value) => {
+        const labels = REVIEW_FILTERS.map((value) => {
             const count = value === '全部' ? (counts.total ?? 0) : (counts[value] ?? 0);
             return `${value} ${count}`;
         });
@@ -90,7 +88,7 @@ export async function reviewPage(context) {
             filterSeg = segmented({
                 label: '审核状态',
                 value: filter,
-                items: FILTERS.map((value) => ({ value, label: value })),
+                items: REVIEW_FILTERS.map((value) => ({ value, label: value })),
                 onChange: (value) => {
                     filter = value;
                     load();
@@ -110,7 +108,7 @@ export async function reviewPage(context) {
             const data = await call('review.list', { exhibitionId, status: filter });
             records = data.records || [];
             renderFilter(data.counts || {});
-            countPill.textContent = `待审核 ${data.counts?.['待审核'] ?? 0}`;
+            countPill.textContent = `待审核 ${data.counts?.[REGISTRATION_STATUS.PENDING] ?? 0}`;
             if (title !== '报名管理' && data.records?.length) {
                 title = data.records[0].exhibitionTitle || title;
             }
@@ -124,11 +122,10 @@ export async function reviewPage(context) {
             }
             replace(listHost, el('div', { class: 'list', 'data-gap': 'sm' }, records.map(row)));
         } catch (error) {
-            replace(listHost, stateBlock({
-                tone: 'error',
+            replace(listHost, loadErrorBlock({
                 title: '报名列表加载失败',
                 description: error.message,
-                action: { label: '重试', onClick: () => load() },
+                onRetry: () => load(),
             }));
         }
     }
@@ -154,8 +151,8 @@ export async function reviewPage(context) {
     function openDetail(record) {
         const answers = answerLines(record.answers);
         // 管理员始终可以切换状态；展商按“允许修改已通过或已拒绝的报名”开关决定。
-        const revisable = isAdmin || record.status === '待审核' || state.review.canRevise;
-        const attended = record.status === '已参加';
+        const revisable = isAdmin || record.status === REGISTRATION_STATUS.PENDING || state.review.canRevise;
+        const attended = record.status === REGISTRATION_STATUS.ATTENDED;
         const sheet = openSheet({
             title: record.visitorName,
             content: [
@@ -178,7 +175,7 @@ export async function reviewPage(context) {
                                     type: 'button',
                                     onclick: async () => {
                                         sheet.close();
-                                        await changeStatus(record, '已拒绝');
+                                        await changeStatus(record, REGISTRATION_STATUS.REJECTED);
                                     },
                                 }, ['拒绝']),
                                 el('button', {
@@ -186,7 +183,7 @@ export async function reviewPage(context) {
                                     type: 'button',
                                     onclick: async () => {
                                         sheet.close();
-                                        await changeStatus(record, '已通过');
+                                        await changeStatus(record, REGISTRATION_STATUS.APPROVED);
                                     },
                                 }, ['通过']),
                             ]),
@@ -196,7 +193,7 @@ export async function reviewPage(context) {
                                 disabled: attended ? true : null,
                                 onclick: async () => {
                                     sheet.close();
-                                    await changeStatus(record, '已参加');
+                                    await changeStatus(record, REGISTRATION_STATUS.ATTENDED);
                                 },
                             }, [attended ? '已核销为已参加' : '标记为已参加']),
                         ])
@@ -223,10 +220,10 @@ export async function reviewPage(context) {
     }
 
     function statusMessage(status) {
-        if (status === '已通过') {
+        if (status === REGISTRATION_STATUS.APPROVED) {
             return '已通过该报名';
         }
-        if (status === '已拒绝') {
+        if (status === REGISTRATION_STATUS.REJECTED) {
             return '已拒绝该报名';
         }
         return `已将报名标记为${status}`;

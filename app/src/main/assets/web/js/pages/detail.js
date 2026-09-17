@@ -6,14 +6,14 @@
 
 import { call, state } from '../core/bridge.js';
 import { scaffold, topAction } from '../core/router.js';
-import { stateBlock, loadingBlock, statusTag, statusTone, toast, openSheet } from '../ui/components.js';
+import { loadErrorBlock, loadingBlock, notFoundBlock, openSheet, pageFoot, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { sanitizeHtml, plainText } from '../core/sanitize.js';
 import { renderMarkdown } from '../core/markdown.js';
 import { el, append, replace, formatDateWithWeekday } from '../core/dom.js';
 
 export async function detailPage(context) {
     const host = el('div', { class: 'stack' });
-    const foot = el('div', { style: { padding: 'var(--s4)', background: 'var(--screen)', borderTop: '1px solid var(--stroke)' } });
+    const foot = pageFoot();
     scaffold({
         title: '展会详情',
         bodyProps: { 'data-gap': 'tight' },
@@ -30,11 +30,11 @@ export async function detailPage(context) {
     try {
         const data = await call('exhibitions.get', { id: context.params.id });
         if (!data?.found) {
-            replace(host, stateBlock({
-                tone: 'error',
+            replace(host, notFoundBlock({
                 title: '展会不存在',
                 description: data?.error || '该展会可能已被展商删除。',
-                action: { label: '返回首页', onClick: () => context.navigate('home') },
+                backLabel: '返回首页',
+                onBack: () => context.navigate('home'),
             }));
             replace(foot, []);
             return;
@@ -42,11 +42,10 @@ export async function detailPage(context) {
         exhibition = data.exhibition;
         fields = data.fields || [];
     } catch (error) {
-        replace(host, stateBlock({
-            tone: 'error',
+        replace(host, loadErrorBlock({
             title: '加载失败',
             description: error.message,
-            action: { label: '重试', onClick: () => context.refresh() },
+            onRetry: () => context.refresh(),
         }));
         return;
     }

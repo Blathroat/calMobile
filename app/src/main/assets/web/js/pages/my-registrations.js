@@ -6,7 +6,7 @@
 
 import { call, state } from '../core/bridge.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
-import { loadingBlock, stateBlock, statusTag, statusTone } from '../ui/components.js';
+import { loadErrorBlock, loadingBlock, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace, truncate, formatDateWithWeekday } from '../core/dom.js';
 
 export async function myRegistrationsPage(context) {
@@ -71,11 +71,10 @@ export async function myRegistrationsPage(context) {
             statusTag(record.statusLabel, statusTone(record.statusLabel)),
         ])));
     } catch (error) {
-        replace(listHost, stateBlock({
-            tone: 'error',
+        replace(listHost, loadErrorBlock({
             title: '报名记录加载失败',
             description: error.message,
-            action: { label: '重试', onClick: () => context.refresh() },
+            onRetry: () => context.refresh(),
         }));
     }
 }

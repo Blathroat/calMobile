@@ -9,14 +9,14 @@
 
 import { call, state } from '../core/bridge.js';
 import { scaffold, topAction } from '../core/router.js';
-import { icon, loadingBlock, stateBlock, toast, openSheet } from '../ui/components.js';
+import { icon, loadErrorBlock, loadingBlock, notFoundBlock, openSheet, pageFoot, stateBlock, toast } from '../ui/components.js';
 import { htmlToMarkdown, markdownSummary, ensureMarked } from '../core/markdown.js';
 import { allowedFormats } from '../core/validate.js';
 import { el, append, replace } from '../core/dom.js';
 
 export async function richEditorPage(context) {
     const host = el('div', { class: 'stack' });
-    const foot = el('div', { style: { padding: 'var(--s4)', background: 'var(--screen)', borderTop: '1px solid var(--stroke)' } });
+    const foot = pageFoot();
     const saveButton = topAction('save', '保存简介', () => save());
 
     scaffold({
@@ -33,21 +33,20 @@ export async function richEditorPage(context) {
     try {
         const data = await call('exhibitions.get', { id: context.params.id });
         if (!data?.found) {
-            replace(host, stateBlock({
-                tone: 'error',
+            replace(host, notFoundBlock({
                 title: '展会不存在',
                 description: data?.error || '无法加载展会简介。',
-                action: { label: '返回展商后台', onClick: () => context.navigate('exhibitor') },
+                backLabel: '返回展商后台',
+                onBack: () => context.navigate('exhibitor'),
             }));
             return;
         }
         exhibition = data.exhibition;
     } catch (error) {
-        replace(host, stateBlock({
-            tone: 'error',
+        replace(host, loadErrorBlock({
             title: '加载失败',
             description: error.message,
-            action: { label: '重试', onClick: () => context.refresh() },
+            onRetry: () => context.refresh(),
         }));
         return;
     }

@@ -9,29 +9,18 @@
 
 import { call } from '../core/bridge.js';
 import { scaffold, topAction } from '../core/router.js';
-import {
-    icon,
-    loadingBlock,
-    stateBlock,
-    switchRow,
-    openSheet,
-    confirmSheet,
-    toast,
-} from '../ui/components.js';
+import { confirmSheet, icon, loadErrorBlock, loadingBlock, notFoundBlock, openSheet, pageFoot, stateBlock, switchRow, toast } from '../ui/components.js';
 import { el, append, replace } from '../core/dom.js';
+import { EXHIBITION_STATUS, REGISTRATION_MODES, modeHint as hintFor, statusTone } from '../core/status.js';
 import { markdownSummary } from '../core/markdown.js';
 import { fieldValidator, validateAll, limit, allowedFormats, PATTERNS } from '../core/validate.js';
 
-const MODES = [
-    { value: '需审核', label: '需审核' },
-    { value: '无需审核', label: '无需审核' },
-    { value: '仅展示', label: '仅展示' },
-];
+const MODES = REGISTRATION_MODES.map((value) => ({ value, label: value }));
 
 export async function exhibitionFormPage(context) {
     const isCreate = !context.params.id;
     const host = el('div', { class: 'stack' });
-    const foot = el('div', { style: { padding: 'var(--s4)', background: 'var(--screen)', borderTop: '1px solid var(--stroke)' } });
+    const foot = pageFoot();
     const saveButton = topAction('save', isCreate ? '创建展会' : '保存展会', () => submit());
 
     scaffold({
@@ -49,7 +38,7 @@ export async function exhibitionFormPage(context) {
         venue: '',
         date: '',
         time: '09:00-17:00',
-        status: '需审核',
+        status: EXHIBITION_STATUS.REVIEW_REQUIRED,
         category: '',
         description: '',
         imageUri: '',
@@ -64,11 +53,11 @@ export async function exhibitionFormPage(context) {
         if (!isCreate) {
             const data = await call('exhibitions.get', { id: context.params.id });
             if (!data?.found) {
-                replace(host, stateBlock({
-                    tone: 'error',
+                replace(host, notFoundBlock({
                     title: '展会不存在',
                     description: data?.error || '无法加载展会信息。',
-                    action: { label: '返回展商后台', onClick: () => context.navigate('exhibitor') },
+                    backLabel: '返回展商后台',
+                    onBack: () => context.navigate('exhibitor'),
                 }));
                 return;
             }
@@ -79,7 +68,7 @@ export async function exhibitionFormPage(context) {
                 venue: item.venue,
                 date: item.date,
                 time: item.time,
-                status: MODES.some((mode) => mode.value === item.status) ? item.status : '需审核',
+                status: MODES.some((mode) => mode.value === item.status) ? item.status : EXHIBITION_STATUS.REVIEW_REQUIRED,
                 category: item.category || '',
                 description: item.description || '',
                 imageUri: item.imageUri || '',
@@ -96,11 +85,10 @@ export async function exhibitionFormPage(context) {
             }));
         }
     } catch (error) {
-        replace(host, stateBlock({
-            tone: 'error',
+        replace(host, loadErrorBlock({
             title: '加载失败',
             description: error.message,
-            action: { label: '重试', onClick: () => context.refresh() },
+            onRetry: () => context.refresh(),
         }));
         return;
     }
@@ -415,7 +403,7 @@ export async function exhibitionFormPage(context) {
     }
 
     function statusTagFor(status) {
-        const tone = status === '需审核' ? 'pending' : (status === '无需审核' ? 'ok' : 'info');
+        const tone = statusTone(status);
         return el('span', { class: 'status-tag', dataset: { tone }, text: status });
     }
 
@@ -666,16 +654,6 @@ function field(label, control, required, hint) {
         control,
         hint ? el('p', { class: 'field-hint', text: hint }) : null,
     ]);
-}
-
-function hintFor(status) {
-    if (status === '需审核') {
-        return '用户提交后进入待审核，展商在报名管理中通过或拒绝。';
-    }
-    if (status === '无需审核') {
-        return '用户提交后直接视为通过，仍可在报名管理中调整。';
-    }
-    return '只展示展会信息，报名入口保持禁用。';
 }
 
 /** 选项来源兼容字符串（逗号分隔）与数组，模型内统一为数组。 */

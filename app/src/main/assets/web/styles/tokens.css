@@ -351,6 +351,20 @@ label {
     justify-content: center;
 }
 
+/* 二级页底部固定操作区：detail / registration-detail / exhibition-form /
+   rich-editor / user-public 共用同一种容器，样式只在这里声明一次。 */
+.page-foot {
+    padding: var(--s4);
+    background: var(--screen);
+    border-top: var(--hairline) solid var(--stroke);
+}
+
+/* 卡片内的次级按钮：比标准 .cta 矮一档，字号也更小 */
+.cta[data-size="small"] {
+    min-height: var(--touch);
+    font-size: var(--fs-label);
+}
+
 /* 页面切换过渡：与旧版滑入/滑出动画保持同一方向语义 */
 .route-enter {
     animation: route-in var(--motion-base) var(--ease) both;
