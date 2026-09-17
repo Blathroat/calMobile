@@ -1,303 +1,180 @@
 /**
- * 认证路由
- * 处理用户登录、注册、刷新令牌等
+ * 认证路由：登录 / 注册 / 访客 / 退出 / 刷新令牌。
+ *
+ * 响应保持应用层信封 `{ ok, error, ... }`（与原生桥接一致，页面按 `.ok` 判断），
+ * HTTP 状态码只用于传输与认证问题：401 / 403 会被前端 api.js 当作错误抛出并就地提示。
  */
 
 const express = require('express');
-const router = express.Router();
-const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
 const { query } = require('../config/pool');
+const { USER_COLUMNS, USER_FROM } = require('../domain/queries');
+const { userPayload, guestPayload } = require('../domain/payloads');
+const { capabilities } = require('../domain/permissions');
+const { limits } = require('../domain/validation');
 const {
-  accessSecret,
-  refreshSecret,
-  accessExpiresIn,
-  refreshExpiresIn
-} = require('../config/auth');
+  issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser,
+} = require('../domain/session');
+const { badRequest } = require('../domain/errors');
+const { authenticate } = require('../middleware/auth');
 
-/**
- * 生成访问令牌和刷新令牌
- * @param {Object} user - 用户对象
- * @returns {Object} 包含 accessToken 和 refreshToken
- */
-function generateTokens(user) {
-  const accessToken = jwt.sign(
-    { userId: user.id, username: user.username, role: user.role },
-    accessSecret,
-    { expiresIn: accessExpiresIn }
-  );
-  
-  const refreshToken = jwt.sign(
-    { userId: user.id },
-    refreshSecret,
-    { expiresIn: refreshExpiresIn }
-  );
-  
-  return { accessToken, refreshToken };
+const router = express.Router();
+
+/** 响应统一信封：成功时 ok=true 且 error 为空串。 */
+function failure(message) {
+  return { ok: false, error: message };
+}
+
+/** 读取一个用户行并拼成前端要的用户态。 */
+async function loadUser(id) {
+  const result = await query(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id]);
+  if (result.rows.length === 0) {
+    return null;
+  }
+  const row = result.rows[0];
+  return userPayload(row, capabilities(row.role));
 }
 
 /**
- * 验证请求数据
- */
-const validateLogin = [
-  body('username').notEmpty().withMessage('用户名不能为空'),
-  body('password').notEmpty().withMessage('密码不能为空')
-];
-
-const validateRegister = [
-  body('username').notEmpty().withMessage('用户名不能为空'),
-  body('password').isLength({ min: 6 }).withMessage('密码至少6个字符'),
-  body('email').isEmail().withMessage('邮箱格式不正确'),
-  body('nickname').notEmpty().withMessage('昵称不能为空')
-];
-
-/**
  * POST /api/v1/auth/login
- * 用户登录
+ * 用户名 + 密码换令牌。密码错误与账号不存在给同一条提示，避免暴露账号是否存在。
  */
-router.post('/login', validateLogin, async (req, res) => {
+router.post('/login', async (req, res, next) => {
   try {
-    // 验证请求数据
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        error: '验证失败',
-        message: errors.array()[0].msg
-      });
+    const username = String(req.body.username || '').trim();
+    const password = String(req.body.password || '');
+    if (!username || !password) {
+      res.json(failure('请输入账号与密码'));
+      return;
     }
-    
-    const { username, password } = req.body;
-    
-    // 查找用户
     const result = await query(
-      'SELECT * FROM users WHERE username = $1',
-      [username]
+      'SELECT id, username, password_hash, status FROM users WHERE lower(username) = lower($1)',
+      [username],
     );
-    
-    if (result.rows.length === 0) {
-      return res.status(401).json({
-        error: '认证失败',
-        message: '用户名或密码错误'
-      });
+    const account = result.rows[0];
+    const matched = account ? await bcrypt.compare(password, account.password_hash) : false;
+    if (!account || !matched) {
+      res.json(failure('账号或密码不正确'));
+      return;
     }
-    
-    const user = result.rows[0];
-    
-    // 验证密码
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
-    if (!isValidPassword) {
-      return res.status(401).json({
-        error: '认证失败',
-        message: '用户名或密码错误'
-      });
+    if (account.status === 'banned') {
+      res.json(failure('账号已被封禁，请联系管理员'));
+      return;
     }
-    
-    // 检查用户状态
-    if (user.status !== 'active') {
-      return res.status(403).json({
-        error: '访问被拒绝',
-        message: '账号已被禁用'
-      });
-    }
-    
-    // 更新最后登录时间
-    await query(
-      'UPDATE users SET last_login_time = CURRENT_TIMESTAMP WHERE id = $1',
-      [user.id]
-    );
-    
-    // 生成令牌
-    const tokens = generateTokens(user);
-    
-    // 返回用户信息和令牌
-    res.json({
-      data: {
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          nickname: user.nickname,
-          role: user.role,
-          status: user.status
-        },
-        ...tokens
-      }
-    });
-    
+    await query('UPDATE users SET last_login_time = now() WHERE id = $1', [account.id]);
+    const session = await issueSession(account);
+    res.json({ ok: true, error: '', ...session, user: await loadUser(account.id) });
   } catch (error) {
-    console.error('登录错误：', error);
-    res.status(500).json({
-      error: '服务器错误',
-      message: '登录失败，请稍后重试'
-    });
+    next(error);
   }
 });
 
 /**
  * POST /api/v1/auth/register
- * 用户注册
+ * 自助注册固定为普通用户；用户名 / 密码长度按管理员配置的上限校验。
  */
-router.post('/register', validateRegister, async (req, res) => {
+router.post('/register', async (req, res, next) => {
   try {
-    // 验证请求数据
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        error: '验证失败',
-        message: errors.array()[0].msg
-      });
+    const textLimits = await limits();
+    const username = String(req.body.username || '').trim();
+    const password = String(req.body.password || '');
+    const email = String(req.body.email || '').trim();
+
+    if (username.length < textLimits.usernameMin || username.length > textLimits.usernameMax) {
+      res.json(failure(`用户名长度需在 ${textLimits.usernameMin}-${textLimits.usernameMax} 个字符之间`));
+      return;
     }
-    
-    const { username, password, email, nickname } = req.body;
-    
-    // 检查用户名是否已存在
-    const existingUser = await query(
-      'SELECT id FROM users WHERE username = $1 OR email = $2',
-      [username, email]
+    if (!/^[A-Za-z0-9_.-]+$/.test(username)) {
+      res.json(failure('用户名只能包含字母、数字、下划线、点或横线'));
+      return;
+    }
+    if (password.length < textLimits.passwordMin || password.length > textLimits.passwordMax) {
+      res.json(failure(`密码长度需在 ${textLimits.passwordMin}-${textLimits.passwordMax} 个字符之间`));
+      return;
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) {
+      res.json(failure('请输入有效的邮箱地址'));
+      return;
+    }
+    const existing = await query(
+      'SELECT username, email FROM users WHERE lower(username) = lower($1) OR lower(email) = lower($2)',
+      [username, email],
     );
-    
-    if (existingUser.rows.length > 0) {
-      return res.status(409).json({
-        error: '冲突',
-        message: '用户名或邮箱已存在'
-      });
+    if (existing.rows.some((row) => row.username.toLowerCase() === username.toLowerCase())) {
+      res.json(failure('该用户名已被注册'));
+      return;
     }
-    
-    // 加密密码
+    if (existing.rows.some((row) => String(row.email).toLowerCase() === email.toLowerCase())) {
+      res.json(failure('该邮箱已被注册'));
+      return;
+    }
+    const id = `usr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     const passwordHash = await bcrypt.hash(password, 10);
-    
-    // 生成用户 ID
-    const userId = `usr-${uuidv4()}`;
-    
-    // 插入用户
-    await query(
-      `INSERT INTO users (id, username, password_hash, email, nickname, role, status)
-       VALUES ($1, $2, $3, $4, $5, 'user', 'active')`,
-      [userId, username, passwordHash, email, nickname]
-    );
-    
-    // 查询新创建的用户
-    const result = await query(
-      'SELECT * FROM users WHERE id = $1',
-      [userId]
-    );
-    
-    const user = result.rows[0];
-    
-    // 生成令牌
-    const tokens = generateTokens(user);
-    
-    // 返回用户信息和令牌
-    res.status(201).json({
-      data: {
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          nickname: user.nickname,
-          role: user.role,
-          status: user.status
-        },
-        ...tokens
-      }
-    });
-    
+    await query(`
+            INSERT INTO users (id, username, password_hash, email, nickname, role)
+            VALUES ($1, $2, $3, $4, $5, 'user')
+        `, [id, username, passwordHash, email, username]);
+    const session = await issueSession({ id, username, role: 'user' });
+    res.json({ ok: true, error: '', ...session, user: await loadUser(id) });
   } catch (error) {
-    console.error('注册错误：', error);
-    res.status(500).json({
-      error: '服务器错误',
-      message: '注册失败，请稍后重试'
-    });
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/auth/guest
+ * 「以访客身份浏览」：不建账号、不发令牌，只返回访客态。
+ */
+router.post('/guest', (req, res) => {
+  res.json({ ok: true, error: '', user: guestPayload() });
+});
+
+/**
+ * POST /api/v1/auth/logout
+ * 撤销刷新令牌；访问令牌等自然过期。
+ */
+router.post('/logout', async (req, res, next) => {
+  try {
+    await revokeRefreshToken(String(req.body.refreshToken || ''));
+    res.json({ ok: true, error: '' });
+  } catch (error) {
+    next(error);
   }
 });
 
 /**
  * POST /api/v1/auth/refresh
- * 刷新令牌
+ * 用刷新令牌换新的访问令牌（旧的刷新令牌立即作废）。
  */
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
-    
-    if (!refreshToken) {
-      return res.status(400).json({
-        error: '验证失败',
-        message: '刷新令牌不能为空'
-      });
+    const token = String(req.body.refreshToken || '');
+    if (!token) {
+      throw badRequest('缺少刷新令牌');
     }
-    
-    // 验证刷新令牌
-    let decoded;
-    try {
-      decoded = jwt.verify(refreshToken, refreshSecret);
-    } catch (error) {
-      return res.status(401).json({
-        error: '认证失败',
-        message: '刷新令牌无效或已过期'
-      });
-    }
-    
-    // 查询用户
-    const result = await query(
-      'SELECT * FROM users WHERE id = $1',
-      [decoded.userId]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(401).json({
-        error: '认证失败',
-        message: '用户不存在'
-      });
-    }
-    
-    const user = result.rows[0];
-    
-    // 检查用户状态
-    if (user.status !== 'active') {
-      return res.status(403).json({
-        error: '访问被拒绝',
-        message: '账号已被禁用'
-      });
-    }
-    
-    // 生成新令牌
-    const tokens = generateTokens(user);
-    
-    // 返回新令牌
+    const rotated = await rotateRefreshToken(token);
     res.json({
-      data: tokens
+      ok: true,
+      error: '',
+      token: rotated.token,
+      refreshToken: rotated.refreshToken,
+      user: await loadUser(rotated.user.id),
     });
-    
   } catch (error) {
-    console.error('刷新令牌错误：', error);
-    res.status(500).json({
-      error: '服务器错误',
-      message: '刷新令牌失败，请稍后重试'
-    });
+    next(error);
   }
 });
 
 /**
- * POST /api/v1/auth/logout
- * 用户登出
+ * POST /api/v1/auth/logout-all
+ * 改密码、封禁等场景：撤销该用户全部刷新令牌。
  */
-router.post('/logout', async (req, res) => {
+router.post('/logout-all', authenticate, async (req, res, next) => {
   try {
-    // 在实际应用中，这里应该将令牌加入黑名单
-    // 目前简单返回成功
-    res.json({
-      data: {
-        message: '登出成功'
-      }
-    });
+    await revokeAllForUser(req.user.userId);
+    res.json({ ok: true, error: '' });
   } catch (error) {
-    console.error('登出错误：', error);
-    res.status(500).json({
-      error: '服务器错误',
-      message: '登出失败，请稍后重试'
-    });
+    next(error);
   }
 });
 

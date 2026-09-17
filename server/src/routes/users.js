@@ -1,312 +1,216 @@
 /**
- * 用户路由
- * 处理用户相关操作
+ * users：用户管理（列表 / 单个 / 账号状态）与用户公开页。
+ *
+ * 权限（见 domain/permissions.js）：列表、单个用户、改状态都是管理员专属，
+ * 判定写在 `mutate()` 外面或 try 里直接抛，让前端拿到 403 而不是 200 + `{ ok:false }`；
+ * 用户公开页访客也能看（`optionalAuth`），报名记录按用户隐私开关过滤。
+ *
+ * 字段一律取 `queries.js` 的 `USER_COLUMNS`，它不含 `password_hash`。
  */
 
 const express = require('express');
-const router = express.Router();
-const { body, validationResult } = require('express-validator');
 const { query } = require('../config/pool');
-const { authenticate, authorize } = require('../middleware/auth');
+const {
+  USER_COLUMNS, USER_FROM, REGISTRATION_COLUMNS, REGISTRATION_FROM,
+} = require('../domain/queries');
+const { adminUserPayload, registrationPayload } = require('../domain/payloads');
+const labels = require('../domain/labels');
+const { requireAdmin } = require('../domain/permissions');
+const { normalizeUserStatus } = require('../domain/settings');
+const { mutate } = require('../domain/respond');
+const { badRequest, notFound } = require('../domain/errors');
+const { revokeAllForUser } = require('../domain/session');
+const { authenticate, optionalAuth } = require('../middleware/auth');
 
-/**
- * 验证请求数据
- */
-const validateUserUpdate = [
-  body('nickname').optional().notEmpty().withMessage('昵称不能为空'),
-  body('email').optional().isEmail().withMessage('邮箱格式不正确'),
-  body('bio').optional().isString().withMessage('简介必须是字符串'),
-  body('contact').optional().isString().withMessage('联系方式必须是字符串'),
-  body('socialMedia').optional().isString().withMessage('社交账号必须是字符串')
-];
+const router = express.Router();
+
+/** 用户列表 / 公开页的统一排序：先注册的在前，id 兜底保证顺序稳定。 */
+const USER_ORDER = 'ORDER BY u.registration_time, u.id';
+
+/** ILIKE 的转义：把 % _ \ 变成字面量，避免用户输入被当成通配符。 */
+function likePattern(keyword) {
+  return `%${keyword.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+}
+
+/** 读一行用户（对外字段，不带密码哈希）；不存在返回 null。 */
+async function findUserById(id) {
+  const result = await query(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id]);
+  return result.rows[0] || null;
+}
+
+/** 改状态后回给页面的用户摘要（`role` / `status` 都是中文标签）。 */
+function statusPayload(row) {
+  return {
+    id: row.id,
+    nickname: row.nickname,
+    role: labels.ROLE_LABEL[row.role] || row.role,
+    roleCode: row.role,
+    status: labels.USER_STATUS[row.status] || labels.USER_STATUS.active,
+  };
+}
 
 /**
  * GET /api/v1/users
- * 获取用户列表（仅管理员）
+ * 用户列表（管理员）。可选 `?query=` 按昵称 / 用户名 / 邮箱模糊匹配。
  */
-router.get('/', authenticate, authorize(['admin']), async (req, res) => {
+router.get('/', authenticate, async (req, res, next) => {
   try {
-    const result = await query(
-      `SELECT id, username, email, nickname, role, status, 
-              registration_time, last_login_time
-       FROM users
-       ORDER BY registration_time DESC`
-    );
-    
-    res.json({
-      data: result.rows
-    });
-    
+    requireAdmin(req, '只有管理员可以查看用户列表');
+    const keyword = String(req.query.query === undefined ? '' : req.query.query).trim();
+    const result = keyword
+      ? await query(`
+                SELECT ${USER_COLUMNS} ${USER_FROM}
+                WHERE u.nickname ILIKE $1 ESCAPE '\\'
+                   OR u.username ILIKE $1 ESCAPE '\\'
+                   OR u.email ILIKE $1 ESCAPE '\\'
+                ${USER_ORDER}
+            `, [likePattern(keyword)])
+      : await query(`SELECT ${USER_COLUMNS} ${USER_FROM} ${USER_ORDER}`);
+    res.json(result.rows.map((row, index) => adminUserPayload(row, index)));
   } catch (error) {
-    console.error('获取用户列表错误：', error);
-    res.status(500).json({
-      error: '服务器错误',
-      message: '获取用户列表失败'
-    });
+    next(error);
+  }
+});
+
+/**
+ * GET /api/v1/users/public?userId=&nickname=
+ * 用户公开页的另一种入口：前端 `core/api.js` 的 `users.public` 打的就是这个路径
+ * （按 userId 优先、昵称兜底），后面的 `/:id/public` 是同一段实现的资源式写法。
+ */
+router.get('/public', optionalAuth, async (req, res, next) => {
+  try {
+    const id = String(req.query.userId === undefined ? '' : req.query.userId).trim();
+    const nickname = String(req.query.nickname === undefined ? '' : req.query.nickname).trim();
+    res.json(await publicProfile(req, await findPublicTarget({ id, nickname })));
+  } catch (error) {
+    next(error);
   }
 });
 
 /**
  * GET /api/v1/users/:id
- * 获取单个用户信息
+ * 单个用户（管理员）；页面只用到 id / 昵称 / 角色，形状与演示后端一致。
  */
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', authenticate, async (req, res, next) => {
   try {
-    const { id } = req.params;
-    
-    // 普通用户只能查看自己的信息
-    if (req.user.role !== 'admin' && req.user.userId !== id) {
-      return res.status(403).json({
-        error: '访问被拒绝',
-        message: '无权查看其他用户信息'
-      });
-    }
-    
-    const result = await query(
-      `SELECT id, username, email, nickname, role, status, 
-              bio, contact, social_media, registration_time, last_login_time
-       FROM users
-       WHERE id = $1`,
-      [id]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        error: '未找到',
-        message: '用户不存在'
-      });
-    }
-    
-    res.json({
-      data: result.rows[0]
-    });
-    
-  } catch (error) {
-    console.error('获取用户信息错误：', error);
-    res.status(500).json({
-      error: '服务器错误',
-      message: '获取用户信息失败'
-    });
-  }
-});
-
-/**
- * PUT /api/v1/users/:id
- * 更新用户信息
- */
-router.put('/:id', authenticate, validateUserUpdate, async (req, res) => {
-  try {
-    // 验证请求数据
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        error: '验证失败',
-        message: errors.array()[0].msg
-      });
-    }
-    
-    const { id } = req.params;
-    const { nickname, email, bio, contact, socialMedia } = req.body;
-    
-    // 普通用户只能更新自己的信息
-    if (req.user.role !== 'admin' && req.user.userId !== id) {
-      return res.status(403).json({
-        error: '访问被拒绝',
-        message: '无权修改其他用户信息'
-      });
-    }
-    
-    // 检查用户是否存在
-    const existingUser = await query(
-      'SELECT id FROM users WHERE id = $1',
-      [id]
-    );
-    
-    if (existingUser.rows.length === 0) {
-      return res.status(404).json({
-        error: '未找到',
-        message: '用户不存在'
-      });
-    }
-    
-    // 如果更新邮箱，检查是否已存在
-    if (email) {
-      const existingEmail = await query(
-        'SELECT id FROM users WHERE email = $1 AND id != $2',
-        [email, id]
-      );
-      
-      if (existingEmail.rows.length > 0) {
-        return res.status(409).json({
-          error: '冲突',
-          message: '邮箱已被其他用户使用'
-        });
+    requireAdmin(req, '只有管理员可以查看用户资料');
+    const row = await findUserById(req.params.id);
+    res.json(row
+      ? {
+        found: true,
+        user: {
+          id: row.id,
+          nickname: row.nickname,
+          role: labels.ROLE_LABEL[row.role] || row.role,
+        },
       }
-    }
-    
-    // 构建更新语句
-    const updates = [];
-    const values = [];
-    let paramIndex = 1;
-    
-    if (nickname) {
-      updates.push(`nickname = $${paramIndex++}`);
-      values.push(nickname);
-    }
-    if (email) {
-      updates.push(`email = $${paramIndex++}`);
-      values.push(email);
-    }
-    if (bio !== undefined) {
-      updates.push(`bio = $${paramIndex++}`);
-      values.push(bio);
-    }
-    if (contact !== undefined) {
-      updates.push(`contact = $${paramIndex++}`);
-      values.push(contact);
-    }
-    if (socialMedia !== undefined) {
-      updates.push(`social_media = $${paramIndex++}`);
-      values.push(socialMedia);
-    }
-    
-    if (updates.length === 0) {
-      return res.status(400).json({
-        error: '验证失败',
-        message: '没有要更新的数据'
-      });
-    }
-    
-    updates.push('updated_at = CURRENT_TIMESTAMP');
-    values.push(id);
-    
-    // 执行更新
-    await query(
-      `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
-      values
-    );
-    
-    // 查询更新后的用户
-    const result = await query(
-      `SELECT id, username, email, nickname, role, status, 
-              bio, contact, social_media, registration_time, last_login_time
-       FROM users
-       WHERE id = $1`,
-      [id]
-    );
-    
-    res.json({
-      data: result.rows[0]
-    });
-    
+      : { found: false, user: null });
   } catch (error) {
-    console.error('更新用户信息错误：', error);
-    res.status(500).json({
-      error: '服务器错误',
-      message: '更新用户信息失败'
-    });
-  }
-});
-
-/**
- * DELETE /api/v1/users/:id
- * 删除用户（仅管理员）
- */
-router.delete('/:id', authenticate, authorize(['admin']), async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // 检查用户是否存在
-    const existingUser = await query(
-      'SELECT id FROM users WHERE id = $1',
-      [id]
-    );
-    
-    if (existingUser.rows.length === 0) {
-      return res.status(404).json({
-        error: '未找到',
-        message: '用户不存在'
-      });
-    }
-    
-    // 删除用户
-    await query(
-      'DELETE FROM users WHERE id = $1',
-      [id]
-    );
-    
-    res.json({
-      data: {
-        message: '用户删除成功'
-      }
-    });
-    
-  } catch (error) {
-    console.error('删除用户错误：', error);
-    res.status(500).json({
-      error: '服务器错误',
-      message: '删除用户失败'
-    });
+    next(error);
   }
 });
 
 /**
  * PUT /api/v1/users/:id/status
- * 更新用户状态（仅管理员）
+ * 改账号状态：接受中文标签（正常 / 受限 / 封禁）或代码。
+ * 管理员不能改自己的状态（避免把自己锁在门外）；封禁后立即撤销其刷新令牌。
  */
-router.put('/:id/status', authenticate, authorize(['admin']), async (req, res) => {
+router.put('/:id/status', authenticate, async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const { status } = req.body;
-    
-    // 验证状态值
-    const validStatuses = ['active', 'banned', 'restricted'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({
-        error: '验证失败',
-        message: '无效的状态值'
-      });
-    }
-    
-    // 检查用户是否存在
-    const existingUser = await query(
-      'SELECT id FROM users WHERE id = $1',
-      [id]
-    );
-    
-    if (existingUser.rows.length === 0) {
-      return res.status(404).json({
-        error: '未找到',
-        message: '用户不存在'
-      });
-    }
-    
-    // 更新状态
-    await query(
-      'UPDATE users SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [status, id]
-    );
-    
-    // 查询更新后的用户
-    const result = await query(
-      `SELECT id, username, email, nickname, role, status, 
-              registration_time, last_login_time
-       FROM users
-       WHERE id = $1`,
-      [id]
-    );
-    
-    res.json({
-      data: result.rows[0]
+    requireAdmin(req, '只有管理员可以修改账号状态');
+    await mutate(res, next, async () => {
+      const status = normalizeUserStatus((req.body || {}).status);
+      if (req.params.id === req.user.userId) {
+        throw badRequest('不能修改自己的账号状态');
+      }
+      const row = await findUserById(req.params.id);
+      if (!row) {
+        throw notFound('用户不存在或已删除');
+      }
+      await query('UPDATE users SET status = $2, updated_at = now() WHERE id = $1', [
+        req.params.id, status,
+      ]);
+      if (status === 'banned') {
+        await revokeAllForUser(req.params.id);
+      }
+      const updated = await findUserById(req.params.id);
+      return { user: statusPayload(updated || row) };
     });
-    
   } catch (error) {
-    console.error('更新用户状态错误：', error);
-    res.status(500).json({
-      error: '服务器错误',
-      message: '更新用户状态失败'
-    });
+    next(error);
   }
 });
+
+/**
+ * GET /api/v1/users/:id/public
+ * 用户公开页（访客可读）。
+ *
+ * 隐私规则：**本人或管理员**总能看报名记录，其余访问者只在用户打开了
+ * `show_registrations` 时才能看；管理员视角由 `viewedAsAdmin` 标记，
+ * 页面据此说明「当前是管理视角」。
+ */
+router.get('/:id/public', optionalAuth, async (req, res, next) => {
+  try {
+    res.json(await publicProfile(req, await findPublicTarget({ id: String(req.params.id || '') })));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** 公开页的查询目标：按 id 精确匹配，昵称兜底（昵称没有唯一约束，取最早注册的一个）。 */
+async function findPublicTarget({ id, nickname }) {
+  if (id) {
+    return findUserById(id);
+  }
+  if (nickname) {
+    const result = await query(`
+            SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.nickname = $1 ${USER_ORDER} LIMIT 1
+        `, [nickname]);
+    return result.rows[0] || null;
+  }
+  return null;
+}
+
+/** 组装公开页响应：资料 + 按隐私规则过滤后的报名记录。 */
+async function publicProfile(req, target) {
+  if (!target) {
+    return { found: false, error: '用户不存在或未公开' };
+  }
+  const viewer = req.user;
+  const viewedAsAdmin = viewer?.role === 'admin';
+  const isSelf = Boolean(viewer) && viewer.userId === target.id;
+  const showRegistrations = target.show_registrations === true;
+
+  // 只有已通过 / 已参加的报名对外展示，待审核与已拒绝属于内部流转状态。
+  let registrations = [];
+  if (viewedAsAdmin || isSelf || showRegistrations) {
+    const result = await query(`
+            SELECT ${REGISTRATION_COLUMNS} ${REGISTRATION_FROM}
+            WHERE r.visitor_id = $1 AND r.status IN ('approved', 'attended')
+            ORDER BY e.exhibition_date DESC, r.created_at DESC
+        `, [target.id]);
+    registrations = result.rows.map(registrationPayload);
+  }
+
+  const profile = {
+    nickname: target.nickname,
+    role: labels.ROLE_LABEL[target.role] || target.role,
+    bio: target.bio || '',
+    region: target.region || '',
+    avatar: target.avatar || '',
+    socialMedia: target.social_media || '',
+    registrationTime: target.registration_time || '',
+  };
+  return {
+    found: true,
+    // 页面（user-public.js）直接读顶层字段，与演示后端同形；
+    // 同时按接口约定给出 `profile` 分组，两种取法都能拿到。
+    ...profile,
+    profile,
+    viewedAsAdmin,
+    showRegistrations,
+    registrations,
+  };
+}
 
 module.exports = router;

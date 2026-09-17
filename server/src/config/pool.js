@@ -38,8 +38,10 @@ async function query(text, params) {
   const start = Date.now();
   try {
     const result = await pool.query(text, params);
-    const duration = Date.now() - start;
-    console.log('执行查询', { text, duration, rows: result.rowCount });
+    // 逐条 SQL 只在 LOG_LEVEL=debug 时打印：默认级别下每个请求都刷一整条语句太吵。
+    if (process.env.LOG_LEVEL === 'debug') {
+      console.log('执行查询', { text, duration: Date.now() - start, rows: result.rowCount });
+    }
     return result;
   } catch (error) {
     console.error('查询错误：', { text, error: error.message });

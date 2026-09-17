@@ -1,6 +1,10 @@
 /**
  * 展会排期助手后端服务器
- * 主入口文件
+ *
+ * 与客户端的约定见 server/README.md：
+ * - 读取类接口直接返回数据本身（数组或对象）；
+ * - 写入类接口返回应用层信封 `{ ok, error, ... }`，业务失败也是 200，页面按 `.ok` 判断；
+ * - 认证 / 授权 / 服务器错误用 4xx / 5xx + `{ error }`，前端会当作异常处理。
  */
 
 require('dotenv').config();
@@ -8,144 +12,101 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { pool } = require('./config/pool');
+const { ApiError } = require('./domain/errors');
 
-// 导入路由
-const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/users');
-const exhibitionRoutes = require('./routes/exhibitions');
-const registrationRoutes = require('./routes/registrations');
-
-// 创建 Express 应用
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 
-// 中间件
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-  credentials: true
+  origin: process.env.CORS_ORIGIN || '*',
+  credentials: false,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// 请求日志中间件
-app.use((req, res, next) => {
-  const start = Date.now();
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
+// 请求日志：LOG_LEVEL=quiet 可关掉，测试与联调时更清爽。
+if (LOG_LEVEL !== 'quiet') {
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
+    });
+    next();
   });
-  next();
+}
+
+// ── 路由 ────────────────────────────────────────────────────────
+// 路径与前端 `js/core/api.js` 的 api 域一一对应（见 README「前后端边界」）。
+const routes = {
+  '': require('./routes/bootstrap'),
+  auth: require('./routes/auth'),
+  profile: require('./routes/profile'),
+  exhibitions: require('./routes/exhibitions'),
+  registrations: require('./routes/registrations'),
+  review: require('./routes/review'),
+  checkin: require('./routes/checkin'),
+  users: require('./routes/users'),
+  search: require('./routes/search'),
+  settings: require('./routes/settings'),
+};
+
+for (const [prefix, router] of Object.entries(routes)) {
+  app.use(`/api/v1${prefix ? `/${prefix}` : ''}`, router);
+}
+
+/** 连通性检查：前端启动时探一次，失败就退回原生桥接。 */
+app.get(['/ping', '/api/v1/ping'], (req, res) => {
+  res.json({ ok: true, service: 'calmobile-server', version: '1.0.0' });
 });
 
-// 路由
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/exhibitions', exhibitionRoutes);
-app.use('/api/v1/registrations', registrationRoutes);
-
-// 健康检查端点
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime() });
 });
 
-// API 文档端点
-app.get('/api', (req, res) => {
-  res.json({
-    name: '展会排期助手 API',
-    version: '1.0.0',
-    description: '展会排期助手后端 API 文档',
-    endpoints: {
-      auth: {
-        login: 'POST /api/v1/auth/login',
-        register: 'POST /api/v1/auth/register',
-        refresh: 'POST /api/v1/auth/refresh',
-        logout: 'POST /api/v1/auth/logout'
-      },
-      users: {
-        list: 'GET /api/v1/users',
-        get: 'GET /api/v1/users/:id',
-        update: 'PUT /api/v1/users/:id',
-        delete: 'DELETE /api/v1/users/:id'
-      },
-      exhibitions: {
-        list: 'GET /api/v1/exhibitions',
-        get: 'GET /api/v1/exhibitions/:id',
-        create: 'POST /api/v1/exhibitions',
-        update: 'PUT /api/v1/exhibitions/:id',
-        delete: 'DELETE /api/v1/exhibitions/:id',
-        search: 'GET /api/v1/exhibitions/search'
-      },
-      registrations: {
-        list: 'GET /api/v1/registrations',
-        get: 'GET /api/v1/registrations/:id',
-        create: 'POST /api/v1/registrations',
-        update: 'PUT /api/v1/registrations/:id',
-        delete: 'DELETE /api/v1/registrations/:id'
-      }
-    }
-  });
-});
-
-// 404 处理
+// 404：路径不存在（不是「资源不存在」，那种情况由各路由给 404 + error）
 app.use((req, res) => {
-  res.status(404).json({
-    error: '未找到',
-    message: `路径 ${req.originalUrl} 不存在`
+  res.status(404).json({ error: `路径 ${req.originalUrl} 不存在` });
+});
+
+// 统一错误处理：ApiError 用自带状态码，其余按 500，且不把堆栈发给客户端。
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  const status = err instanceof ApiError ? err.status : 500;
+  if (status >= 500) {
+    console.error('服务器错误：', err);
+  }
+  res.status(status).json({
+    error: err.message || '服务器内部错误',
+    ...(process.env.NODE_ENV === 'development' && status >= 500 ? { stack: err.stack } : {}),
   });
 });
 
-// 错误处理中间件
-app.use((err, req, res, next) => {
-  console.error('服务器错误：', err);
-  
-  const statusCode = err.statusCode || 500;
-  const message = err.message || '内部服务器错误';
-  
-  res.status(statusCode).json({
-    error: '服务器错误',
-    message: message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
-});
-
-// 启动服务器
 async function start() {
   try {
-    // 测试数据库连接
     const client = await pool.connect();
-    console.log('数据库连接成功');
     client.release();
-    
-    // 启动服务器
-    app.listen(PORT, () => {
+    console.log('数据库连接成功');
+    return app.listen(PORT, () => {
       console.log(`服务器运行在 http://localhost:${PORT}`);
-      console.log(`API 文档：http://localhost:${PORT}/api`);
+      console.log(`连通性检查：http://localhost:${PORT}/ping`);
       console.log(`健康检查：http://localhost:${PORT}/health`);
     });
   } catch (error) {
-    console.error('服务器启动失败：', error);
+    console.error('服务器启动失败：', error.message);
     process.exit(1);
   }
 }
 
-// 优雅关闭
-process.on('SIGTERM', async () => {
-  console.log('收到 SIGTERM 信号，正在关闭服务器...');
-  await pool.close();
+async function shutdown(signal) {
+  console.log(`收到 ${signal} 信号，正在关闭服务器...`);
+  await pool.end();
   process.exit(0);
-});
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
-process.on('SIGINT', async () => {
-  console.log('收到 SIGINT 信号，正在关闭服务器...');
-  await pool.close();
-  process.exit(0);
-});
+if (require.main === module) {
+  start();
+}
 
-// 启动服务器
-start();
-
-module.exports = app;
+module.exports = { app, start };
