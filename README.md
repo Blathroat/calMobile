@@ -35,13 +35,16 @@ app/src/main/
 │   └── js/
 │       ├── app.js              路由注册与应用启动
 │       ├── core/               bridge.js（原生桥）、router.js（哈希路由与导航）、dom.js、sanitize.js、markdown.js、validate.js
+│       │                       api.js（唯一取数入口）、loadable.js（先画缓存）、preload.js（预加载）
 │       ├── ui/components.js    顶部栏、卡片、分段控件、头像与裁剪、状态块、弹层、轻提示
 │       └── pages/*.js          15 个页面模块，一屏一文件
 ├── java/com/example/calmobile/
 │   ├── WebShellActivity.java   WebView 容器：资源与上传文件拦截、返回栈、结果与权限转发
 │   ├── WebAppBridge.java       JavaScript 接口与回调分发
-│   ├── WebAppActions.java      业务动作实现（复用现有 Manager / Helper）
-│   ├── RegistrationReviewStore.java  报名审核记录（旧页面与新前端共用）
+│   ├── WebAppActions.java      动作分发入口（按域转给下面 8 个类）
+│   ├── SessionActions.java / ProfileActions.java / ExhibitionActions.java / RegistrationActions.java
+│   │                           AdminActions.java / MediaActions.java / SystemActions.java / ActionSupport.java
+│   ├── RegistrationReviewStore.java  报名审核记录（示例数据与真实报名共用一个 id 空间）
 │   ├── UserProfileStore.java   个人资料（含地区、头像）与公开策略持久化
 ```
 
@@ -240,12 +243,35 @@ await registrations.submit(payload);
 
 系统能力（摄像头、日历、分享、媒体选择、CSV 导出、通知权限）不属于数据接口，仍由页面直接调 `bridge.js`，后端化后保持不变。
 
+### 取数体验：先画缓存、再后台刷新
+
+只读接口在 `api.js` 里由 `reader()` 包装，同一个函数有三种用法：
+
+| 用法 | 语义 |
+| --- | --- |
+| `exhibitions.list(params)` | 取数；缓存新鲜时直接用缓存，不重复请求 |
+| `exhibitions.list.peek(params)` | **同步**返回缓存（可以是过期数据），没有再返回 `undefined` |
+| `exhibitions.list.warm(params)` | 后台预取，失败静默 |
+
+页面不自己判断「要不要先画骨架屏」，统一交给 `js/core/loadable.js` 的 `loadInto(host, { read, params, render })`：
+
+1. 缓存命中 → **同步**渲染一屏，一个 await 都不等；
+2. 缓存没有且容器是空的 → 才画骨架屏（真正的首次加载）；
+3. 容器里已有内容时**不清空**，只把旧内容标记 `data-busy` 淡一点；
+4. 远端结果回来，内容真的变了才重绘（避免列表入场动画被无谓重放）。
+
+配套的 `js/core/preload.js` 在空闲回调里预取「下一步大概率要看的数据」：底部导航各页（`preloadTabs()`）、当前页面的相邻月份与列表首项详情（`preloadFollowUps()`），以及列表行 `pointerdown` 时就起跑的 `warmOnPress()`。缓存键按参数名排序并忽略空值（见 `api.js` 的 `cacheKey`），预加载与页面取数因此一定能对上；同一份数据的并发请求会去重。
+
+日历卡片另外有一条规则：`exhibitions.month` 一次返回**整月**展会，所以「选中哪一天」完全在本地完成，点日期既不重新取数也不重建日历 DOM。
+
 ### 演示后端与连通性
 
 ```bash
 node server/src/demo-server.js        # 零依赖，内存示例数据，默认 4000 端口
 adb reverse tcp:4000 tcp:4000         # 真机与模拟器都适用
 ```
+
+改了 `server/src/*.js` 之后要**重启后端进程**：Node 会缓存已加载的模块，旧进程会继续按老逻辑应答（现象是接口行为和新代码不一致）。
 
 细节见 `server/README.md`；`server/test/demo-api.test.js` 是前后端契约测试，逐接口断言页面真正用到的字段都在，字段漂移会在这里失败而不是静默渲染成空。
 
@@ -268,10 +294,10 @@ adb reverse tcp:4000 tcp:4000         # 真机与模拟器都适用
 | --- | --- | --- |
 | 展会扩展配置 | `ExhibitionConfiguration`（`static Map`，进程内） | 开展日期、报名起止、封面 URL、简介格式、报名二维码开关；`exhibitions` 表只有 `day/month/year` |
 | 报名收集项 | `ExhibitionConfiguration.fields`（选项以英文逗号拼接） | 独立的收集项表（标题 / 类型 / 选项 / 必填） |
-| 报名审核记录 | `RegistrationReviewStore`（`static List`，进程内） | 审核状态、报名码、核销时间；`registrations` 表没有这些列 |
+| 报名审核记录 | `RegistrationReviewStore`（`static Map`，进程内） | 审核状态、报名码、核销时间；`registrations` 表没有这些列。真实记录的 id 已经与报名表对齐（核销 / 撤销能更新到同一行），示例记录带 `demo-` 前缀 |
 | 通知与提醒偏好 | `NotificationHelper` + SharedPreferences | 用户维度的通知开关 |
 | 个人资料扩展 | `UserProfileStore`（SharedPreferences） | 昵称、简介、地区、社交账号、头像 URL、`showRegistrations` 隐私开关 |
-| 应用配色 / 外观模式 / 服务器设置 | `AppSettings`（SharedPreferences） | 需要服务端配置表 + 下发接口 |
+| 应用配色 / 外观模式 / 服务器设置 | `AppSettings`（SharedPreferences） | 需要服务端配置表 + 下发接口；字符数上限已收敛到 `AppSettings.TextLimit` 一张表，前端对应 `admin.js` 的 `TEXT_LIMITS` |
 | 上传的媒体 | 应用私有目录 `files/media` | 需要对象存储与上传接口（现在用 `appassets.androidplatform.net/media/<文件名>` 短 URL 引用） |
 
 ### `server/` 已有端点与桥接动作的对应
@@ -286,6 +312,17 @@ adb reverse tcp:4000 tcp:4000         # 真机与模拟器都适用
 
 **尚无对应端点的动作**（重构时需要新增）：`review.list`、`review.get`、`review.updateStatus`、`checkin.scan`（核销）、`exhibitions.categories`、`exhibitions.fields`、`exhibitions.saveFields`、`settings.get`、`settings.save`、`bootstrap`（一次拉取用户态 + 全部配置的聚合接口）。
 
+### 月视图与日历落点（已固定的两处契约）
+
+| 约定 | 说明 |
+| --- | --- |
+| `exhibitions.month` 的参数只有 `year` / `month`（`day` 可选，用于深链定位初始选中日期） | 参数形状固定，前端与预加载才发得出同一个缓存键 |
+| 请求哪个月就返回哪个月 | 不再「请求的月份没有展会就悄悄换成有展会的月份」；空月份正常返回 `eventDays: []`、`day: 0` |
+| 首次打开看哪个月由 `bootstrap` 的 `calendar.landing = { year, month }` 决定 | 落点规则属于「界面先给用户看什么」，不属于月视图接口；`exhibitions.month` 因此不需要 `explicit` 参数 |
+| 选中日期由前端本地决定 | 月视图一次返回整月数据，点日期不再往返一次 |
+
+本机桥接（`ExhibitionActions`）暂未下发 `calendar.landing`，前端会回落到内置默认月份（2026 年 6 月，与演示数据一致）；接入真实后端时按上表补齐即可。
+
 ## 待优化的结构（前后端分离前可先做的部分）
 
 纯客户端、与后端无关的清理项。第 4～15 项已在本轮完成，保留记录便于回看。
@@ -293,13 +330,13 @@ adb reverse tcp:4000 tcp:4000         # 真机与模拟器都适用
 | # | 位置 | 状态 |
 | --- | --- | --- |
 | 1 ★ | `WebAppActions.java` 2,100 行 | **已完成**：按方法边界拆成 8 个域类（分发入口 196 行），归属由 `scripts/split-webapp-actions.js` 保证覆盖 |
-| 2 ★ | `ExhibitionConfiguration` 用进程内 `static Map` 当存储，`save()` 是位置参数 | 待做：改 builder；后端化时整层由 API 取代 |
-| 3 ★ | `RegistrationReviewStore` 把示例数据与真实记录混在一个列表，主键 `registration-N` 会与 SQLite 报名撞号 | 待做：demo 播种拆到独立类 |
+| 2 ★ | `ExhibitionConfiguration` 用进程内 `static Map` 当存储，`save()` 是位置参数 | **已完成**：五个位置参数（其中三个都是日期字符串）改成具名 `Patch` 链式写入，`get()` 不再「读一次就插入一条」，收集项写入改为复制（原先传回自己的列表会把收集项清空）。存储仍是进程内的示例数据，后端化时整层由 API 取代 |
+| 3 ★ | `RegistrationReviewStore` 把示例数据与真实记录混在一个列表，主键 `registration-N` 会与 SQLite 报名撞号 | **已完成**：真实记录改用报名表自己的 id（核销与撤销因此能更新到同一行），示例记录加 `demo-` 前缀与 `demo` 标记，写回报名行时跳过 |
 | 4 | 5 处复制页脚 | 已完成：`.page-foot` + `pageFoot()` |
 | 5 | 3 处复制按钮工厂 | 已完成：`components.js` 的 `smallCta()` |
 | 6 | 43 处 `catch → toast` | 部分完成：错误态收敛为 `loadErrorBlock()` / `notFoundBlock()`（18 处）；其余 catch 各自带上下文，保留 |
 | 7 | 状态字符串散落 40 处 | 已完成：`core/status.js` 统一声明，字面量清零 |
-| 8 | 原生侧双份表单上限（`int[]` 位置魔数 vs 命名 key） | 待做：统一成 `Map` 或 JSON |
+| 8 | 原生侧双份表单上限（`int[]` 位置魔数 vs 命名 key） | **已完成**：`AppSettings.TextLimit` 一张表声明键名 / 默认值 / 上下限，读、写、与前端交换全部由它派生；前端 `admin.js` 的 `TEXT_LIMITS` 一张表同时生成控件与提交内容 |
 | 9 | 19 个从未被调用的前端导出 | 已完成：删除 |
 | 10 | `--accent-soft` 写入但无消费 | 已完成：删除 |
 | 11 | `media.imageData` 死分支 | 已完成：删除前端分支与原生动作 |
@@ -307,6 +344,8 @@ adb reverse tcp:4000 tcp:4000         # 真机与模拟器都适用
 | 13 | 旧原生页面（16 Activity + `BaseActivity` + `MainTabState`）+ 17 个布局 + 专属资源 | 已完成：全部删除，`res` 只剩 `themes.xml` + 两个 `strings` + `colors.xml` |
 | 14 | `database/`+`models/`+`network/`+`repository/`+`viewmodel/` | 已完成：删除，连带清掉 Room/Retrofit/Glide/AndroidX/Material/richeditor 依赖 |
 | 15 | `showRegistrations` 隐私开关用户无法开启 | **已完成**：个人页新增「隐私设置」开关，`profile.save` 持久化，公开页按它过滤（管理员不受限） |
+
+清单已全部完成。后续新增的结构问题继续往下加，不要另建文档。
 
 ## 构建、测试与运行
 
@@ -338,7 +377,7 @@ gradlew.bat :app:testDebugUnitTest --tests 'com.example.calmobile.CalendarHelper
 
 后端开发请进入 `server/`，按 `server/README.md` 创建 PostgreSQL 数据库并复制 `.env.example`；常用命令为 `npm install`、`npm run db:migrate`、`npm run db:seed`、`npm run dev`、`npm test -- --runInBand` 和 `npm run lint`。
 
-客户端测试位于 `app/src/test/java/com/example/calmobile/`，覆盖认证、数据库、展会、报名、用户管理、导出、通知、日历、富文本和搜索等 Manager/Helper 流程；Activity 级 UI 测试仍在路线图中。前端后端契约测试位于 `server/test/demo-api.test.js`（14 项，逐接口断言页面用到的字段都在）。前端另有 `scripts/webui-render.test.js`：它用最小 DOM 打桩加假桥接，把 18 个页面路由各渲染一次，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销与用户公开页管理视角等关键交互，用来补足纯静态检查发现不了的接线错误。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，不依赖固定的 sleep 时长。
+客户端测试位于 `app/src/test/java/com/example/calmobile/`，覆盖认证、数据库、展会、报名、用户管理、导出、通知、日历、富文本和搜索等 Manager/Helper 流程；Activity 级 UI 测试仍在路线图中。前端后端契约测试位于 `server/test/demo-api.test.js`（17 项，逐接口断言页面用到的字段都在）。前端另有 `scripts/webui-render.test.js`：它用最小 DOM 打桩加假桥接，把 18 个页面路由各渲染一次，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销、用户公开页管理视角，以及「点日期与切月份不再取数」「缓存命中时同步出内容」「过期缓存仍可先画一屏」「并发请求去重」「标签页预加载」等取数体验。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，用例涉及预加载时先 `await settle()` 排空空闲队列再开始计数，不依赖固定的 sleep 猜测时序。
 
 可用模拟器时，可安装并逐屏回归：
 
@@ -351,9 +390,19 @@ pwsh -File scripts\emu.ps1 install
 pwsh -File scripts\emu.ps1 shot .omo\evidence\02-home
 pwsh -File scripts\emu.ps1 tap-text "以访客身份浏览"
 pwsh -File scripts\emu.ps1 logs
+
+# 动效回归前先确认设备的动画开关（详见下面「动效看起来全没了」）
+pwsh -File scripts\emu.ps1 motion
 ```
 
 `emu.ps1` 的 `tap-text` 依赖系统的无障碍节点树，WebView 里的文字不会出现在 UI dump 中，因此界面回归要用 `tap <x>,<y>` 按坐标点击：截图是 1080×2400，而在对话里预览时会被缩到一半，换算坐标时注意 ×2。
+
+**动效看起来「全没了」时先查设备开关，不要先改代码。** WebView 把系统的 `animator_duration_scale = 0` 映射成 `prefers-reduced-motion: reduce`，而 `tokens.css` 会据此把所有动画压成 `0.01ms`——现象就是页面切换、列表淡入、日历滑动一律静止。模拟器上这个开关常被前一次压测/截图任务关掉：
+
+```powershell
+pwsh -File scripts\emu.ps1 motion check   # 三个 scale 都应为 1
+pwsh -File scripts\emu.ps1 motion         # 置 1；之后重新进入页面生效
+```
 
 报名二维码可以用设备截图做端到端校验：先在报名详情里截屏，再用内置解码库识别屏幕上的真实像素。
 
@@ -439,6 +488,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 ## 变更记录
 
+- 2026-09-17：前端取数改为「先画缓存、再后台刷新」（新增 `core/loadable.js` 与 `core/preload.js`，`api.js` 的只读接口提供 `peek()` / `warm()` 并按参数排序做缓存键、并发去重），切页面与切月份不再先闪骨架屏；首页日历的选中日期改为纯本地状态，点日期与切换月份都不再重新取数；`exhibitions.month` 改为原样返回请求的月份，日历落点由 `bootstrap.calendar.landing` 下发；收敛原生三处结构（`ExhibitionConfiguration` 改 `Patch` 写入、`RegistrationReviewStore` 统一报名 id 并把示例数据显式标注、字符数上限收敛到 `AppSettings.TextLimit` 单表）；补 3 个原生单测与 6 个前端渲染用例。
 - 2026-09-17：按动作域拆分 `WebAppActions`（2,156 行 → 8 个域类 + 196 行分发入口，行为不变）；个人页新增「在公开页展示我的报名记录」隐私开关并打通持久化与公开页过滤；演示后端同步支持该字段。
 - 2026-09-17：删除旧原生页面与旧架构层（legacy 16 个 Activity、BaseActivity、MainTabState、17 个布局、Room/Retrofit/Repository/ViewModel，以及只服务它们的 drawable/anim/values 资源），依赖收敛到 Gson + JUnit；前端文案迁入 `strings_frontend.xml`（475 条，原生注入 + 三处一致性校验）；APK 内静态脚本样式改为可缓存、三个内置库改为按需加载；修复演示后端把用户选中的日期回落到有展会的日子，导致首页日历「点日期没反应」。
 - 2026-09-14：首页日历去掉选中日期的方框底色，改为「强调色加粗数字 + 数字下方一小段下划线」，保留键盘焦点环；次按钮的浅色底统一取页面底色，应用配色只改边框与文字；新增深色模式（跟随系统 / 浅色 / 深色，含原生状态栏与底色）；开关等按钮去掉点击时的系统蓝色高亮方框；首页日历「有展会」圆点改为与上方数字同轴居中；头像裁剪由滑块改为双指捏合缩放；展商卡片只保留查看报名与编辑展会，报名方式 / 编辑简介 / 删除展会移入编辑展会二级界面；修复管理后台从展会二级页面返回后跳回用户分区；管理员查看报名始终可切换报名人状态、查看用户公开页不受隐私设置影响；新增报名二维码与展商扫码核销。

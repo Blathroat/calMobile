@@ -109,6 +109,25 @@ switch ($Action) {
     'logs' {
         & $adb logcat -d -s WebShellActivity:* AndroidRuntime:E chromium:E | Select-Object -Last 40
     }
+    'motion' {
+        # WebView 把系统的 animator_duration_scale=0 映射成 prefers-reduced-motion: reduce，
+        # 于是 tokens.css 会把所有动画压成 0.01ms——现象就是「前端动效全没了」。
+        # 那是设备开关而不是应用代码的问题，回归动效前先跑一次本动作。
+        #   pwsh -File scripts\emu.ps1 motion          # 打开动画
+        #   pwsh -File scripts\emu.ps1 motion check    # 只看当前状态
+        $keys = 'animator_duration_scale', 'transition_animation_scale', 'window_animation_scale'
+        $checkOnly = $Argument -eq 'check'
+        foreach ($key in $keys) {
+            if (-not $checkOnly) { & $adb shell settings put global $key 1 | Out-Null }
+            $value = (& $adb shell settings get global $key).Trim()
+            Write-Output "$key = $value"
+        }
+        if ($checkOnly) {
+            Write-Output '（check 模式只读；去掉 check 即可全部置 1）'
+        } else {
+            Write-Output '已打开动画；应用需要重新进入页面才会重新读取该设置。'
+        }
+    }
     default {
         throw "未知操作：$Action"
     }

@@ -34,6 +34,16 @@ adb reverse tcp:4000 tcp:4000
 
 接口路径就是 `js/core/api.js` 里的动作名：`POST /ping`、`POST /bootstrap`、`POST /auth.login`、`POST /exhibitions.month` …… 请求体 JSON，响应直接是页面渲染用的结构。
 
+改了 `src/*.js` 之后**必须重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答（典型现象是改了 `exhibitions.month` 却仍然返回老月份）。
+
+### 月视图与日历落点
+
+前端把 `exhibitions.month` 的请求形状固定成 `{ year, month }`（`day` 可选，用于深链），因为**同一个形状才能命中同一份缓存**——预加载按这个形状热身，页面按这个形状取数。相应地：
+
+- 请求哪个月就返回哪个月，空月份正常返回 `eventDays: []` 与 `day: 0`，不再悄悄换成有展会的月份（原先的 `explicit` 参数因此删除）；
+- 「首次打开看哪个月」由 `bootstrap` 的 `calendar.landing = { year, month }` 下发，指向第一个有展会的月份；
+- 选中日期由前端在本地决定，点日期不会再来一次请求。
+
 ### 契约测试
 
 `test/demo-api.test.js` 把每个接口调一遍，断言**页面真正用到的字段都在**（例如展会必须带 `qrEnabled`、报名必须带 `checkInCode`），并起一个真实 HTTP 实例校验 404 行为。前后端字段漂移会在这里失败，而不是在页面上静默渲染成空。
