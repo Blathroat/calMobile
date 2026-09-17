@@ -138,9 +138,15 @@ async function callRemote(action, payload) {
  * 日志显示同一份数据在一次浏览里会被反复取（切页面、切分区、切筛选都会重新拉），
  * 每次都是一次远端往返 + 一次整页重绘，这是“操作有点卡”的主要来源。这里对
  * 只读接口做几十秒的短缓存，写操作会清掉相关前缀，页面因此仍然看到最新数据。
+ *
+ * 缓存同时承担「先画旧数据」的职责：`peek()` 会连**过期**的条目一起返回，
+ * 页面据此在第一帧就把内容画出来，不再先闪一块骨架屏（见 core/loadable.js）。
  */
 const CACHE_TTL = 20000;
 const cache = new Map();
+
+/** 同一份数据正在请求时复用同一个 Promise，预加载与页面取数不会各发一次。 */
+const inflight = new Map();
 
 /** 哪些动作是只读的、可以缓存。 */
 const CACHEABLE = new Set([
@@ -168,8 +174,18 @@ const INVALIDATE = {
     'exhibitions.categories': [],
 };
 
+/**
+ * 缓存键：参数按键名排序后拼成一行，`{day, month}` 与 `{month, day}` 命中同一条；
+ * 空值（未指定）不参与，`{query: ''}` 与 `{}` 也命中同一条。
+ * 预加载与页面取数是两处独立代码，键不稳定会让预加载永远打不中。
+ */
 function cacheKey(action, payload) {
-    return `${action}|${JSON.stringify(payload || {})}`;
+    const source = payload || {};
+    const parts = Object.keys(source)
+        .sort()
+        .filter((key) => source[key] !== undefined && source[key] !== null && source[key] !== '')
+        .map((key) => `${key}=${JSON.stringify(source[key])}`);
+    return `${action}|${parts.join('&')}`;
 }
 
 function invalidate(action) {
@@ -190,9 +206,25 @@ function invalidate(action) {
     }
 }
 
+/** 缓存被清空时的通知：预加载据此重算「已经热身过哪些目标」。 */
+const clearListeners = [];
+
+export function onCacheClear(listener) {
+    if (typeof listener === 'function') {
+        clearListeners.push(listener);
+    }
+}
+
 /** 清空全部缓存；登录 / 退出登录后调用，避免看到上一个身份的数据。 */
 export function clearCache() {
     cache.clear();
+    for (const listener of clearListeners) {
+        try {
+            listener();
+        } catch (error) {
+            console.error(error);
+        }
+    }
 }
 
 /**
@@ -203,8 +235,10 @@ export function clearCache() {
  * 第一次成功的那条路会被记住，后续请求不再摇摆。
  *
  * 业务失败（`ok: false`）原样抛给页面，不降级、不重试。
+ *
+ * 只读接口在请求期间会去重：预加载与页面取数撞到同一个键时只发一次。
  */
-async function request(action, payload) {
+async function request(action, payload = {}) {
     const cacheable = CACHEABLE.has(action);
     const key = cacheable ? cacheKey(action, payload) : '';
     if (cacheable) {
@@ -212,8 +246,37 @@ async function request(action, payload) {
         if (hit && Date.now() - hit.at < CACHE_TTL) {
             return hit.value;
         }
+        const running = inflight.get(key);
+        if (running) {
+            return running;
+        }
     }
 
+    const task = send(action, payload).then(
+        (value) => {
+            if (cacheable && value !== undefined) {
+                cache.set(key, { at: Date.now(), value });
+            }
+            invalidate(action);
+            return value;
+        },
+        (error) => {
+            invalidate(action);
+            throw error;
+        },
+    );
+
+    if (cacheable) {
+        inflight.set(key, task);
+        // 成败都要摘掉，否则一次失败会被后续请求一直复用。
+        const done = () => inflight.delete(key);
+        task.then(done, done);
+    }
+    return task;
+}
+
+/** 实际发请求：先远端，传输层失败再退回原生桥接。 */
+async function send(action, payload) {
     let value;
     if (mode !== 'native' && typeof fetch === 'function') {
         try {
@@ -230,17 +293,58 @@ async function request(action, payload) {
     if (value === undefined) {
         value = await call(action, payload);
     }
-
-    if (cacheable && value !== undefined) {
-        cache.set(key, { at: Date.now(), value });
-    }
-    invalidate(action);
     return value;
 }
 
 /**
+ * **同步**读缓存。
+ *
+ * 命中时连过期的条目一起返回：页面拿它先画一屏，再让 `request()` 在后台刷新，
+ * 这样切页面不会先出现骨架屏。没有命中返回 `undefined`。
+ */
+export function peek(action, payload = {}) {
+    const hit = cache.get(cacheKey(action, payload));
+    return hit ? hit.value : undefined;
+}
+
+/**
+ * 后台预取：把结果灌进只读缓存，失败静默。
+ * 供 core/preload.js 按「用户下一步大概率要点哪里」提前热身。
+ */
+export function warm(action, payload = {}) {
+    if (!CACHEABLE.has(action)) {
+        return Promise.resolve(false);
+    }
+    return request(action, payload).then(() => true, () => false);
+}
+
+/**
+ * 只读接口的包装：同一个函数既能取数，也能同步读缓存、后台预取。
+ *
+ * - `exhibitions.list(params)` —— 取数，缓存新鲜时不再发请求；
+ * - `exhibitions.list.peek(params)` —— 同步返回缓存（可为过期数据）；
+ * - `exhibitions.list.warm(params)` —— 后台预取，失败静默。
+ *
+ * `toPayload` 把页面侧的调用参数（例如 `exhibitions.get(id)` 的 id）翻译成请求体，
+ * 这样加了 peek / warm 也不用改任何调用点。
+ */
+function reader(action, toPayload = (arg) => arg || {}) {
+    const fn = (arg) => request(action, toPayload(arg));
+    fn.action = action;
+    fn.peek = (arg) => peek(action, toPayload(arg));
+    fn.warm = (arg) => warm(action, toPayload(arg));
+    return fn;
+}
+
+/** 以 id 为唯一参数的接口：`exhibitions.get(id)` ↔ `{ id }`。 */
+const byId = (id) => ({ id });
+
+/**
  * 完整契约，便于测试与整体替换；页面通常按域具名导入。
  * 新增接口时同步补 README「前后端边界」的对应表。
+ *
+ * 只读接口一律用 `reader()` 包一层，因此都带 `peek()` / `warm()`；
+ * 写接口是普通函数，没有缓存语义。
  */
 export const api = {
     // ── 启动与认证 ─────────────────────────────────────────────────
@@ -266,39 +370,39 @@ export const api = {
 
     // ── 个人资料与偏好 ─────────────────────────────────────────────
     profile: {
-        get: () => request('profile.get'),
+        get: reader('profile.get'),
         save: (payload) => request('profile.save', payload),
         changePassword: (payload) => request('profile.password', payload),
-        notifications: () => request('notify.preferences'),
+        notifications: reader('notify.preferences'),
         saveNotifications: (patch) => request('notify.savePreferences', patch),
     },
 
     // ── 展会 ───────────────────────────────────────────────────────
     exhibitions: {
-        list: (params = {}) => request('exhibitions.list', params),
+        list: reader('exhibitions.list'),
         /** 月视图：year / month / day / explicit */
-        month: (params = {}) => request('exhibitions.month', params),
-        get: (id) => request('exhibitions.get', { id }),
+        month: reader('exhibitions.month'),
+        get: reader('exhibitions.get', byId),
         save: (payload) => request('exhibitions.save', payload),
         remove: (id) => request('exhibitions.delete', { id }),
         setStatus: (id, status) => request('exhibitions.status', { id, status }),
-        categories: () => request('exhibitions.categories'),
-        fields: (id) => request('exhibitions.fields', { id }),
+        categories: reader('exhibitions.categories'),
+        fields: reader('exhibitions.fields', byId),
         saveFields: (id, fields) => request('exhibitions.saveFields', { id, fields }),
     },
 
     // ── 报名 ───────────────────────────────────────────────────────
     registrations: {
-        list: () => request('registrations.list'),
-        get: (id) => request('registrations.get', { id }),
+        list: reader('registrations.list'),
+        get: reader('registrations.get', byId),
         submit: (payload) => request('registrations.submit', payload),
         cancel: (id) => request('registrations.cancel', { id }),
     },
 
     // ── 报名审核与现场核销 ─────────────────────────────────────────
     review: {
-        list: (params) => request('review.list', params),
-        get: (id) => request('review.get', { id }),
+        list: reader('review.list'),
+        get: reader('review.get', byId),
         updateStatus: (id, status) => request('review.updateStatus', { id, status }),
     },
     /** 展商扫码核销：把报名从「已通过」推进到「已参加」。 */
@@ -306,16 +410,16 @@ export const api = {
 
     // ── 用户与搜索 ─────────────────────────────────────────────────
     users: {
-        list: (params = {}) => request('users.list', params),
-        get: (id) => request('users.get', { id }),
+        list: reader('users.list'),
+        get: reader('users.get', byId),
         setStatus: (id, status) => request('users.status', { id, status }),
-        publicProfile: (params) => request('users.public', params),
+        publicProfile: reader('users.public'),
     },
-    search: (query) => request('search.query', { query }),
+    search: reader('search.query', (query) => ({ query })),
 
     // ── 设置（服务器级配置 + 个人外观） ────────────────────────────
     settings: {
-        get: () => request('settings.get'),
+        get: reader('settings.get'),
         save: (payload) => request('settings.save', payload),
         /** 外观模式属于个人偏好，单独一个轻量接口。 */
         saveUiMode: (mode2) => request('settings.uiMode', { mode: mode2 }),

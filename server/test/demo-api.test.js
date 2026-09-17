@@ -86,9 +86,32 @@ test('选中没有展会的日期时原样返回该日期，不回落到有展�
     assert.strictEqual(fallback.day, 8, '进入页面时应落到第一个有展会的日期');
 });
 
-test('月视图在请求空月份时回落到有数据的月份', () => {
-    const data = invoke('exhibitions.month', { year: 2026, month: 1 });
-    assert.notStrictEqual(data.month, 1, '空月份应回落到有展会的月份');
+/**
+ * 月视图不再替调用方改月份。
+ *
+ * 以前「请求的月份没有展会」会被悄悄换成第一个有展会的月份，于是返回值和入参对不上、
+ * 缓存键也不稳定（预加载按请求的月份热身，页面却拿到别的月份）。现在：
+ * 请求哪个月就返回哪个月，「打开应用先看哪个月」由 bootstrap 的 calendar.landing 决定。
+ */
+test('月视图原样返回请求的月份，空月份不回落到有数据的月份', () => {
+    const empty = invoke('exhibitions.month', { year: 2026, month: 1 });
+    assert.strictEqual(empty.month, 1, '空月份必须原样返回');
+    assert.strictEqual(empty.year, 2026);
+    assert.strictEqual(empty.eventDays.length, 0, '空月份不应有展会日期');
+    assert.strictEqual(empty.day, 0, '没有展会时选中日期为 0');
+
+    const filled = invoke('exhibitions.month', { year: 2026, month: 6 });
+    assert.strictEqual(filled.month, 6);
+    assert.ok(filled.eventDays.length > 0, '示例数据应当落在 6 月');
+});
+
+test('bootstrap 下发日历落点月份，供前端决定首次打开哪个月', () => {
+    const landing = invoke('bootstrap').calendar.landing;
+    assert.ok(landing && landing.year && landing.month, '必须下发 calendar.landing');
+
+    // 落点必须是真的有展会的月份，否则首页一进来就是空日历。
+    const data = invoke('exhibitions.month', { year: landing.year, month: landing.month });
+    assert.ok(data.eventDays.length > 0, 'calendar.landing 指向的月份没有展会');
 });
 
 test('登录成功返回令牌与用户态，失败给出业务错误', () => {

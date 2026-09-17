@@ -3,12 +3,16 @@ import { t } from '../core/strings.js';
  * 屏幕 03 · 展会详情
  * 线框：newUI/index.html #screen-detail、newUI/remaining-ui.html #screen-detail
  * 业务：展会信息 + 报名收集项 + 系统日历 + 分享。
+ *
+ * 取数走 core/loadable.js：预热或缓存命中时同步出内容，因此点进卡片不会先闪骨架屏。
  */
 
 import { call, state } from '../core/bridge.js';
-import { exhibitions } from '../core/api.js';
+import { exhibitions, users } from '../core/api.js';
+import { loadInto } from '../core/loadable.js';
+import { warmOnPress } from '../core/preload.js';
 import { scaffold, topAction } from '../core/router.js';
-import { loadErrorBlock, loadingBlock, notFoundBlock, openSheet, pageFoot, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
+import { loadingBlock, notFoundBlock, openSheet, pageFoot, statusTag, statusTone, toast } from '../ui/components.js';
 import { sanitizeHtml, plainText } from '../core/sanitize.js';
 import { renderMarkdown } from '../core/markdown.js';
 import { el, append, replace, formatDateWithWeekday } from '../core/dom.js';
@@ -27,11 +31,26 @@ export async function detailPage(context) {
     let exhibition = null;
     let fields = [];
     let calendarState = { inCalendar: false, granted: false };
+    /** 日历状态只读一次：先画缓存、再画刷新结果会调用两次 apply，但不该重复请求。 */
+    let calendarRequested = false;
 
-    replace(host, loadingBlock(3));
-    try {
-        const data = await exhibitions.get(context.params.id);
+    await loadInto(host, {
+        read: exhibitions.get,
+        params: context.params.id,
+        rows: 3,
+        errorTitle: t('s_kvpltc'),
+        render: apply,
+    });
+
+    /**
+     * 展会数据到位后画正文与页脚。
+     * 缓存命中时 loadInto 会同步调用一次，页面因此先出内容、再等远端刷新。
+     */
+    function apply(data) {
         if (!data?.found) {
+            // 展会可能刚被删除：清掉旧数据，页脚也不再留报名 / 日历入口。
+            exhibition = null;
+            fields = [];
             replace(host, notFoundBlock({
                 title: t('s_1vim1qp'),
                 description: data?.error || t('s_ifhjtv'),
@@ -43,18 +62,14 @@ export async function detailPage(context) {
         }
         exhibition = data.exhibition;
         fields = data.fields || [];
-    } catch (error) {
-        replace(host, loadErrorBlock({
-            title: t('s_kvpltc'),
-            description: error.message,
-            onRetry: () => context.refresh(),
-        }));
-        return;
+        render();
+        // 日历状态与展会数据无关，先按「未加入」画一版页脚，等它回来再补一次。
+        renderFooter();
+        if (!calendarRequested) {
+            calendarRequested = true;
+            loadCalendarState();
+        }
     }
-
-    await loadCalendarState();
-    render();
-    renderFooter();
 
     async function loadCalendarState() {
         try {
@@ -64,6 +79,10 @@ export async function detailPage(context) {
             });
         } catch (ignored) {
             calendarState = { inCalendar: false, granted: false };
+        }
+        // 状态回来时展会数据可能已被刷新清空，只在仍有数据时补画页脚。
+        if (exhibition) {
+            renderFooter();
         }
     }
 
@@ -88,6 +107,7 @@ export async function detailPage(context) {
                 type: 'button',
                 dataset: { pressable: 'true' },
                 'aria-label': `查看 ${exhibition.exhibitor} 的公开主页`,
+                ...warmOnPress(users.publicProfile, { nickname: exhibition.exhibitor }),
                 onclick: () => context.navigate('user-public', { nickname: exhibition.exhibitor }),
             }, [
                 el('span', { class: 'avatar', text: (exhibition.exhibitor || t('s_1lsc240')).slice(0, 1), 'aria-hidden': 'true' }),

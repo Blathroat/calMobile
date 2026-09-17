@@ -305,6 +305,9 @@ const sharedWindow = {
     matchMedia: () => ({ matches: false, addEventListener() {}, addListener() {} }),
     requestAnimationFrame: () => 0,
     cancelAnimationFrame() {},
+    /** core/preload.js 用空闲回调排队预加载；打桩成立即执行，测试不必等真实空闲。 */
+    requestIdleCallback: (callback) => setTimeout(callback, 0),
+    cancelIdleCallback() {},
     addEventListener() {},
     removeEventListener() {},
     getComputedStyle: () => ({ getPropertyValue: () => '' }),
@@ -337,6 +340,8 @@ function installGlobals() {
     setGlobal('localStorage', sharedWindow.localStorage);
     setGlobal('requestAnimationFrame', sharedWindow.requestAnimationFrame);
     setGlobal('cancelAnimationFrame', sharedWindow.cancelAnimationFrame);
+    setGlobal('requestIdleCallback', sharedWindow.requestIdleCallback);
+    setGlobal('cancelIdleCallback', sharedWindow.cancelIdleCallback);
     setGlobal('getComputedStyle', sharedWindow.getComputedStyle);
     // api.js 的连通性探测要求 window 上也有 fetch；打桩成“不可达”即走原生桥接。
     setGlobal('fetch', sharedWindow.fetch);
@@ -610,15 +615,13 @@ test('页面渲染时调用的动作都在假桥接里有约定返回值', async
 });
 
 test('管理后台把当前分区写进哈希，返回后仍停在展会分区', async () => {
-    const { calls } = await renderRoute('admin', { tab: '展会' });
+    const { dom } = await renderRoute('admin', { tab: '展会' });
     const hash = decodeURIComponent(sharedWindow.location.hash);
     assert.ok(hash.includes('tab='), `哈希里没有分区参数：${hash}`);
     assert.ok(hash.includes('展会'), `哈希没有记录展会分区：${hash}`);
-    // 展会分区渲染时应当请求展会列表，而不是用户列表。
-    assert.ok(calls.some((item) => item.action === 'exhibitions.list'),
-        '展会分区没有拉取展会列表');
-    assert.ok(!calls.some((item) => item.action === 'users.list'),
-        '展会分区不应该去拉用户列表');
+    // 断言渲染出来的分区内容，而不是「请求了哪个接口」：预加载会让接口调用次数不可预期。
+    assert.ok(dom.app.querySelector('#admin-exhibition-search'), '展会分区没有渲染展会搜索框');
+    assert.ok(!dom.app.querySelector('#admin-user-search'), '展会分区不应该渲染用户搜索框');
 });
 
 test('个人页深色模式切换会调用 settings.uiMode', async () => {
@@ -755,4 +758,140 @@ test('报名码用内置库绘制后能被 jsQR 解出原文', async () => {
     const decoded = jsQR(new Uint8ClampedArray(pixels), size, size);
     assert.ok(decoded, 'jsQR 没有识别出绘制好的二维码');
     assert.strictEqual(decoded.data, text, '解码结果与报名码不一致');
+});
+
+// ── 取数体验：先画缓存、预加载、日历本地选中 ─────────────────────
+
+/** 取前端模块（与页面解析到同一实例，因此能拿到同一份缓存）。 */
+function webModule(relative) {
+    return import(pathToFileURL(path.join(webRoot, relative)).href);
+}
+
+function countAction(calls, action) {
+    return calls.filter((call) => call.action === action).length;
+}
+
+const settle = (ms = 40) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * 首页日历一次返回整月数据，因此「选中哪一天」必须完全在本地完成：
+ * 点日期只改选中态与下面的列表，不能再发一次月数据请求。
+ * 以前每点一天都重新请求整月、把日历换成骨架屏，那一下空档就是卡片闪白的来源。
+ */
+test('首页点日期不再请求月数据，列表按当月数据本地切换', async () => {
+    const { dom, calls } = await renderRoute('home', {});
+    // 先等预加载把相邻月份取回来，之后的计数才不会被后台预热打乱。
+    await settle(150);
+    const before = countAction(calls, 'exhibitions.month');
+    const days = dom.app.querySelectorAll((node) => node.classList.contains('cal-day') && !node.disabled);
+    const day12 = days.find((node) => node.dataset.day === '12');
+    const day18 = days.find((node) => node.dataset.day === '18');
+    assert.ok(day12 && day18, `没有渲染出 12 / 18 日的按钮：${days.map((n) => n.dataset.day).join(',')}`);
+
+    day18.dispatch('click');
+    await settle();
+    assert.strictEqual(countAction(calls, 'exhibitions.month'), before, '点日期不应该再请求月数据');
+    assert.strictEqual(day18.getAttribute('aria-pressed'), 'true', '被点的日期应当变成选中态');
+    assert.strictEqual(day12.getAttribute('aria-pressed'), 'false', '原选中日期应当取消选中');
+    assert.ok(!collectText(dom.app).includes(EXHIBITION.title), '18 日没有展会，列表应当换成空态');
+
+    day12.dispatch('click');
+    await settle();
+    assert.strictEqual(countAction(calls, 'exhibitions.month'), before, '切回已有展会的日期同样不发请求');
+    assert.ok(collectText(dom.app).includes(EXHIBITION.title), '12 日的展会应当回到列表里');
+});
+
+/** 相邻月份由预加载提前取回，切月份因此当场换页而不是先闪骨架屏。 */
+test('日历切月份命中预加载缓存时不再发请求', async () => {
+    const { dom, calls } = await renderRoute('home', {});
+    const api = await webModule('js/core/api.js');
+    // 启动后的预加载排在空闲回调里，等它把相邻月份取回来。
+    await settle(150);
+    assert.ok(api.exhibitions.month.peek({ year: 2026, month: 5 }), '上个月没有预热');
+    assert.ok(api.exhibitions.month.peek({ year: 2026, month: 7 }), '下个月没有预热');
+
+    const before = countAction(calls, 'exhibitions.month');
+    const next = dom.app.querySelectorAll((node) =>
+        node.getAttribute('aria-label') === frontendStrings.s_y6u3g && node.classList.contains('icon-button'))[0];
+    assert.ok(next, '没有找到「下个月」按钮');
+    next.dispatch('click');
+    // shiftMonth 先播 140ms 的滑出动画，再载入目标月份。
+    await settle(220);
+    assert.strictEqual(countAction(calls, 'exhibitions.month'), before,
+        '目标月份已在缓存里，切月份不应该再发请求');
+});
+
+/** 命中缓存时 loadInto 必须在 await 之前就把内容画出来，否则仍会先闪一帧骨架屏。 */
+test('loadInto 命中缓存时同步出内容，且不清空容器里已有的内容', async () => {
+    await renderRoute('home', {});
+    const api = await webModule('js/core/api.js');
+    const { loadInto } = await webModule('js/core/loadable.js');
+    const { el: makeEl, append } = await webModule('js/core/dom.js');
+
+    assert.ok(api.exhibitions.month.peek({ year: 2026, month: 6 }),
+        '前置条件：首页渲染后 2026 年 6 月应当在缓存里');
+
+    const host = new StubNode('div');
+    append(host, makeEl('span', { text: '刷新前的内容' }));
+    let painted = 0;
+    const pending = loadInto(host, {
+        read: api.exhibitions.month,
+        params: { year: 2026, month: 6 },
+        render: () => { painted += 1; },
+    });
+    assert.strictEqual(painted, 1, '命中缓存时应当在第一个 await 之前就渲染一次');
+    assert.ok(collectText(host).includes('刷新前的内容'), '容器里已有的内容不能被清空');
+    await pending;
+    assert.strictEqual(painted, 1, '取回来的数据与缓存一致时不应该再重绘一次');
+});
+
+/** 过期数据仍然可以被 peek 到：页面先画旧的一屏，再让取数去刷新。 */
+test('只读缓存过期后仍能 peek，取数会重新请求', async () => {
+    const { calls } = await renderRoute('home', {});
+    const api = await webModule('js/core/api.js');
+    // 等预加载排空后再清一次缓存，计数从真正的空缓存开始。
+    await settle(150);
+    api.clearCache();
+    const before = countAction(calls, 'exhibitions.list');
+
+    await api.exhibitions.list();
+    assert.strictEqual(countAction(calls, 'exhibitions.list'), before + 1, '首次取数应当请求一次');
+    await api.exhibitions.list();
+    assert.strictEqual(countAction(calls, 'exhibitions.list'), before + 1, '缓存新鲜时不应重复请求');
+
+    const realNow = Date.now;
+    Date.now = () => realNow() + 60000;
+    try {
+        assert.ok(api.exhibitions.list.peek(), '过期的数据也要能被 peek 到（页面靠它先画一屏）');
+        await api.exhibitions.list();
+        assert.strictEqual(countAction(calls, 'exhibitions.list'), before + 2, '过期后应当重新取数');
+    } finally {
+        Date.now = realNow;
+    }
+});
+
+/** 同一份数据的并发请求只发一次：预加载与页面取数经常撞在一起。 */
+test('同一份只读数据的并发请求会去重', async () => {
+    const { calls } = await renderRoute('home', {});
+    const api = await webModule('js/core/api.js');
+    await settle(150);
+    api.clearCache();
+    const before = countAction(calls, 'registrations.list');
+
+    const [first, second] = await Promise.all([api.registrations.list(), api.registrations.list()]);
+    assert.strictEqual(countAction(calls, 'registrations.list'), before + 1, '并发请求只应该发一次');
+    assert.strictEqual(first, second, '并发请求应当复用同一个结果对象');
+});
+
+/** 启动后预热底部导航各页，切标签时数据已经在缓存里。 */
+test('启动后会预加载其它标签页的数据', async () => {
+    await renderRoute('home', {});
+    // 预加载排在空闲回调里，等它把标签页数据取回来。
+    await settle(150);
+    const api = await webModule('js/core/api.js');
+    // 只访问了首页，但底部导航能直达的页面数据都应当在缓存里。
+    assert.ok(api.exhibitions.month.peek({ year: 2026, month: 6 }), '首页月份没有预热');
+    assert.ok(api.registrations.list.peek(), '「我的报名」没有预热');
+    assert.ok(api.profile.get.peek(), '个人页没有预热');
+    assert.ok(api.exhibitions.list.peek(), '展商后台没有预热');
 });

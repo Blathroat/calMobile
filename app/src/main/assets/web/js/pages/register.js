@@ -8,7 +8,7 @@ import { t } from '../core/strings.js';
  * 前端即时提示，原生侧保存前再校验一次，避免绕过页面直接调用桥接。
  */
 
-import { call, state } from '../core/bridge.js';
+import { state } from '../core/bridge.js';
 import { auth } from '../core/api.js';
 import { scaffold } from '../core/router.js';
 import { toast } from '../ui/components.js';

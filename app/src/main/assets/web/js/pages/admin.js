@@ -11,8 +11,9 @@ import { t } from '../core/strings.js';
 
 import { call, state, applySettings } from '../core/bridge.js';
 import { exhibitions, settingsApi, usersApi } from '../core/api.js';
+import { loadInto } from '../core/loadable.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
-import { confirmSheet, loadErrorBlock, loadingBlock, mediaBox, openSheet, segmented, smallCta, stateBlock, statusTag, statusTone, switchRow, toast } from '../ui/components.js';
+import { confirmSheet, mediaBox, openSheet, segmented, smallCta, stateBlock, statusTag, statusTone, switchRow, toast } from '../ui/components.js';
 import { el, replace, truncate, formatDateWithWeekday } from '../core/dom.js';
 import { EXHIBITION_STATUS } from '../core/status.js';
 import { fieldValidator, validateAll } from '../core/validate.js';
@@ -24,6 +25,33 @@ const TABS = [
     { value: t('s_11cd4ta'), label: t('s_11cd4ta') },
     { value: t('s_1vmubx9'), label: t('s_1vmubx9') },
 ];
+
+/**
+ * 字符数上限的唯一清单。
+ *
+ * 控件的 id、提交时的字段名、以及原生侧 {@code AppSettings.TextLimit} 的键名
+ * 都从 `key` 派生（`exhibitionTitle` ↔ `limit-exhibition-title`），新增一项只加一行。
+ * 取值范围由原生收敛，前端只管收集。
+ */
+const TEXT_LIMITS = [
+    { key: 'exhibitionTitle', label: t('s_1co82cb'), hint: t('s_1mcmbiu') },
+    { key: 'exhibitionVenue', label: t('s_1tlfy5l'), hint: t('s_1mcmbiu') },
+    { key: 'category', label: t('s_9xu72h'), hint: t('s_1mcmbiu') },
+    { key: 'fieldTitle', label: t('s_1yqwetn'), hint: t('s_1mcmbiu') },
+    { key: 'usernameMin', label: t('s_dtadu0'), hint: t('s_1mcmbiu') },
+    { key: 'usernameMax', label: t('s_196bpby'), hint: t('s_1mcmbiu') },
+    { key: 'passwordMin', label: t('s_e6tqxb'), hint: t('s_1jlgtug') },
+    { key: 'passwordMax', label: t('s_19rf1tx'), hint: t('s_1jlgtug') },
+    { key: 'nickname', label: t('s_jxewei'), hint: t('s_1mcmbiu') },
+    { key: 'bio', label: t('s_euttee'), hint: t('s_1mcmbiu') },
+    { key: 'region', label: t('s_16txual'), hint: t('s_1mcmbiu') },
+    { key: 'answer', label: t('s_1j77by5'), hint: t('s_1mcmbiu') },
+];
+
+/** 数值上限控件的元素 id：camelCase 键名 → kebab-case。 */
+function limitControlId(key) {
+    return `limit-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+}
 
 /**
  * 记住上一次停留的管理分区。
@@ -83,29 +111,39 @@ export async function adminPage(context) {
     keepTabInUrl(tab);
     loadPanel();
 
+    /**
+     * 载入当前分区。
+     *
+     * 走 core/loadable.js：命中缓存就立刻画出来（切换分区、改搜索词都不会先闪骨架屏），
+     * 容器里已有上一个分区的内容时只标记 data-busy，不清空。
+     */
     async function loadPanel() {
-        replace(panel, loadingBlock(3));
-        try {
-            if (tab === t('s_1in002o')) {
-                await renderUsers(panel);
-            } else if (tab === t('s_11cd4ta')) {
-                await renderExhibitions(panel);
-            } else {
-                await renderSettings(panel);
-            }
-        } catch (error) {
-            replace(panel, loadErrorBlock({
-                title: t('s_kvpltc'),
-                description: error.message,
-                onRetry: () => loadPanel(),
-            }));
+        if (tab === t('s_1in002o')) {
+            await loadInto(panel, {
+                read: usersApi.list,
+                params: { query },
+                render: (users) => renderUsers(users),
+            });
+        } else if (tab === t('s_11cd4ta')) {
+            await loadInto(panel, {
+                read: exhibitions.list,
+                params: { query },
+                render: (items) => renderExhibitions(items),
+            });
+        } else {
+            await loadInto(panel, {
+                read: settingsApi.get,
+                render: (data) => {
+                    settings = data;
+                    renderSettings(data);
+                },
+            });
         }
     }
 
     // ── 用户管理 ───────────────────────────────────────────────────
 
-    async function renderUsers(target) {
-        const users = await usersApi.list({ query });
+    function renderUsers(users) {
         const cards = el('div', { class: 'list', 'data-gap': 'sm' }, users.map((user) => el('div', { class: 'card' }, [
             el('div', { class: 'row', 'data-gap': 'md' }, [
                 el('span', { class: 'avatar', text: (user.nickname || t('s_cmla8n')).slice(0, 1), 'aria-hidden': 'true' }),
@@ -122,7 +160,7 @@ export async function adminPage(context) {
             ]),
         ])));
 
-        replace(target, [
+        replace(panel, [
             el('div', { class: 'row', 'data-between': 'true' }, [
                 el('span', { class: 'section-label', text: t('s_1oim33') }),
                 el('span', { class: 'pill', text: `${users.length} 位用户` }),
@@ -195,9 +233,8 @@ export async function adminPage(context) {
 
     // ── 展会管理 ───────────────────────────────────────────────────
 
-    async function renderExhibitions(target) {
-        const items = await exhibitions.list({ query });
-        replace(target, [
+    function renderExhibitions(items) {
+        replace(panel, [
             el('div', { class: 'field' }, [
                 el('label', { for: 'admin-exhibition-search', text: t('s_50ih74') }),
                 searchInput('admin-exhibition-search', t('s_1ttdxgu'), (value) => {
@@ -299,8 +336,7 @@ export async function adminPage(context) {
 
     // ── 服务器设置 ─────────────────────────────────────────────────
 
-    async function renderSettings(target) {
-        const data = settings || await settingsApi.get();
+    function renderSettings(data) {
         settings = data;
 
         const announcement = textarea('settings-announcement', data?.announcement?.text || '', 3);
@@ -317,18 +353,25 @@ export async function adminPage(context) {
             (data?.upload?.videoFormats || state.server.videoFormats || []).join(','), 'mp4,mov,webm');
         const limits = data?.limits || state.limits;
 
-        const titleLimit = numberInput('limit-exhibition-title', limits.exhibitionTitle);
-        const venueLimit = numberInput('limit-exhibition-venue', limits.exhibitionVenue);
-        const categoryLimit = numberInput('limit-category', limits.category);
-        const fieldLimit = numberInput('limit-field-title', limits.fieldTitle);
-        const usernameMin = numberInput('limit-username-min', limits.usernameMin);
-        const usernameMax = numberInput('limit-username-max', limits.usernameMax);
-        const passwordMin = numberInput('limit-password-min', limits.passwordMin);
-        const passwordMax = numberInput('limit-password-max', limits.passwordMax);
-        const nicknameLimit = numberInput('limit-nickname', limits.nickname);
-        const bioLimit = numberInput('limit-bio', limits.bio);
-        const regionLimit = numberInput('limit-region', limits.region);
-        const answerLimit = numberInput('limit-answer', limits.answer);
+        // 12 项上限由同一张表生成控件，再按同一张表收集提交内容。
+        const limitInputs = {};
+        for (const item of TEXT_LIMITS) {
+            limitInputs[item.key] = numberInput(limitControlId(item.key), limits[item.key]);
+        }
+        /** 前 10 项两两一行（与设计稿的分组一致），最后两项各占一行。 */
+        function limitRows() {
+            const rows = [];
+            for (let index = 0; index + 1 < TEXT_LIMITS.length - 1; index += 2) {
+                rows.push(el('div', { class: 'grid-cols-2' }, [
+                    numberField(TEXT_LIMITS[index].label, limitInputs[TEXT_LIMITS[index].key], TEXT_LIMITS[index].hint),
+                    numberField(TEXT_LIMITS[index + 1].label, limitInputs[TEXT_LIMITS[index + 1].key], TEXT_LIMITS[index + 1].hint),
+                ]));
+            }
+            for (const item of TEXT_LIMITS.slice(-2)) {
+                rows.push(numberField(item.label, limitInputs[item.key], item.hint));
+            }
+            return rows;
+        }
 
         let announcementEnabled = Boolean(data?.announcement?.enabled);
         let canRevise = Boolean(data?.review?.canRevise);
@@ -360,7 +403,7 @@ export async function adminPage(context) {
         ];
         const errorBox = el('p', { class: 'field-error', role: 'alert', hidden: true });
 
-        replace(target, [
+        replace(panel, [
             el('div', { class: 'notice', dataset: { tone: 'accent' } }, [
                 el('strong', { text: t('s_1l8hptt') }),
                 el('span', { text: t('s_3fdon3') }),
@@ -431,28 +474,7 @@ export async function adminPage(context) {
             el('div', { class: 'card' }, [
                 el('span', { class: 'section-label', text: t('s_rlbden') }),
                 el('p', { class: 'field-hint', text: t('s_dpoory') }),
-                el('div', { class: 'grid-cols-2' }, [
-                    numberField(t('s_1co82cb'), titleLimit, t('s_1mcmbiu')),
-                    numberField(t('s_1tlfy5l'), venueLimit, t('s_1mcmbiu')),
-                ]),
-                el('div', { class: 'grid-cols-2' }, [
-                    numberField(t('s_9xu72h'), categoryLimit, t('s_1mcmbiu')),
-                    numberField(t('s_1yqwetn'), fieldLimit, t('s_1mcmbiu')),
-                ]),
-                el('div', { class: 'grid-cols-2' }, [
-                    numberField(t('s_dtadu0'), usernameMin, t('s_1mcmbiu')),
-                    numberField(t('s_196bpby'), usernameMax, t('s_1mcmbiu')),
-                ]),
-                el('div', { class: 'grid-cols-2' }, [
-                    numberField(t('s_e6tqxb'), passwordMin, t('s_1jlgtug')),
-                    numberField(t('s_19rf1tx'), passwordMax, t('s_1jlgtug')),
-                ]),
-                el('div', { class: 'grid-cols-2' }, [
-                    numberField(t('s_jxewei'), nicknameLimit, t('s_1mcmbiu')),
-                    numberField(t('s_euttee'), bioLimit, t('s_1mcmbiu')),
-                ]),
-                numberField(t('s_16txual'), regionLimit, t('s_1mcmbiu')),
-                numberField(t('s_1j77by5'), answerLimit, t('s_1mcmbiu')),
+                ...limitRows(),
             ]),
             errorBox,
             el('button', {
@@ -490,18 +512,8 @@ export async function adminPage(context) {
                     avatarSizeMb: Number(avatarSize.value) || 0,
                     imageFormats: imageFormats.value.trim(),
                     videoFormats: videoFormats.value.trim(),
-                    exhibitionTitle: Number(titleLimit.value) || 0,
-                    exhibitionVenue: Number(venueLimit.value) || 0,
-                    category: Number(categoryLimit.value) || 0,
-                    fieldTitle: Number(fieldLimit.value) || 0,
-                    usernameMin: Number(usernameMin.value) || 0,
-                    usernameMax: Number(usernameMax.value) || 0,
-                    passwordMin: Number(passwordMin.value) || 0,
-                    passwordMax: Number(passwordMax.value) || 0,
-                    nickname: Number(nicknameLimit.value) || 0,
-                    bio: Number(bioLimit.value) || 0,
-                    region: Number(regionLimit.value) || 0,
-                    answer: Number(answerLimit.value) || 0,
+                    ...Object.fromEntries(TEXT_LIMITS.map(
+                        (item) => [item.key, Number(limitInputs[item.key].value) || 0])),
                 });
                 if (!saved?.ok) {
                     errorBox.textContent = t('s_jibr3q');

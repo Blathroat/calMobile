@@ -4,12 +4,15 @@ import { t } from '../core/strings.js';
  * 线框：newUI/remaining-ui.html #screen-registration-management
  * 业务：RegistrationReviewStore，状态为待审核 / 已通过 / 已拒绝 / 已参加；
  * 展商能否重新审核由管理员设置决定，管理员自己不受该开关限制。
+ *
+ * 取数走 core/loadable.js：切筛选时上一份结果留在屏幕上变灰，不会先闪空白。
  */
 
-import { call, state } from '../core/bridge.js';
+import { state } from '../core/bridge.js';
 import { exhibitions, review } from '../core/api.js';
+import { loadInto } from '../core/loadable.js';
 import { scaffold } from '../core/router.js';
-import { loadErrorBlock, loadingBlock, openSheet, segmented, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
+import { openSheet, segmented, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, replace, answerLines, truncate } from '../core/dom.js';
 import { REGISTRATION_STATUS, REVIEW_FILTERS } from '../core/status.js';
 
@@ -23,7 +26,6 @@ export async function reviewPage(context) {
     let filter = REGISTRATION_STATUS.PENDING;
     let filterSeg = null;
     let title = t('s_7xrrf0');
-    let records = [];
 
     scaffold({
         title: t('s_7xrrf0'),
@@ -48,37 +50,34 @@ export async function reviewPage(context) {
 
     if (!exhibitionId) {
         // 未指定展会时，先让展商选择要审核的展会
-        replace(listHost, loadingBlock(2));
-        try {
-            const items = await exhibitions.list();
-            replace(filterHost, []);
-            replace(listHost, [
-                el('span', { class: 'section-label', text: t('s_1yn5q3y') }),
-                el('div', { class: 'list', 'data-gap': 'sm' }, items.map((item) => el('button', {
-                    class: 'row-card',
-                    type: 'button',
-                    dataset: { pressable: 'true' },
-                    onclick: () => context.navigate('review', { exhibitionId: item.id }),
-                }, [
-                    el('span', { class: 'row-copy' }, [
-                        el('strong', { class: 'row-title truncate', text: item.title }),
-                        el('span', { class: 'row-meta', text: `${item.dateLabel} · ${item.registrationCount} 条报名` }),
-                    ]),
-                    statusTag(item.status, statusTone(item.status)),
-                ]))),
-            ]);
-            countPill.textContent = `${items.length} 个展会`;
-        } catch (error) {
-            replace(listHost, loadErrorBlock({
-                title: t('s_kvpltc'),
-                description: error.message,
-                onRetry: () => context.refresh(),
-            }));
-        }
+        await loadInto(listHost, {
+            read: exhibitions.list,
+            rows: 2,
+            errorTitle: t('s_kvpltc'),
+            // 展会条数与列表同源，缓存命中时一并恢复。
+            render: (items) => {
+                replace(filterHost, []);
+                replace(listHost, [
+                    el('span', { class: 'section-label', text: t('s_1yn5q3y') }),
+                    el('div', { class: 'list', 'data-gap': 'sm' }, items.map((item) => el('button', {
+                        class: 'row-card',
+                        type: 'button',
+                        dataset: { pressable: 'true' },
+                        onclick: () => context.navigate('review', { exhibitionId: item.id }),
+                    }, [
+                        el('span', { class: 'row-copy' }, [
+                            el('strong', { class: 'row-title truncate', text: item.title }),
+                            el('span', { class: 'row-meta', text: `${item.dateLabel} · ${item.registrationCount} 条报名` }),
+                        ]),
+                        statusTag(item.status, statusTone(item.status)),
+                    ]))),
+                ]);
+                countPill.textContent = `${items.length} 个展会`;
+            },
+        });
         return;
     }
 
-    replace(listHost, loadingBlock(3));
     await load();
 
     function renderFilter(counts) {
@@ -105,31 +104,37 @@ export async function reviewPage(context) {
         filterSeg.setValue(filter, true);
     }
 
+    /**
+     * 载入当前筛选下的报名列表。
+     *
+     * 缓存命中时同步出内容：筛选条上的数量、顶部统计与列表一起恢复；未命中才出
+     * 骨架屏。切筛选时旧结果留在屏幕上变灰（loadable 会标记 data-busy），不整块清空。
+     */
     async function load() {
-        try {
-            const data = await review.list({ exhibitionId, status: filter });
-            records = data.records || [];
-            renderFilter(data.counts || {});
-            countPill.textContent = `待审核 ${data.counts?.[REGISTRATION_STATUS.PENDING] ?? 0}`;
-            if (title !== t('s_7xrrf0') && data.records?.length) {
-                title = data.records[0].exhibitionTitle || title;
-            }
-            if (records.length === 0) {
-                replace(listHost, stateBlock({
-                    iconName: 'ticket',
-                    title: `没有${filter === '全部' ? '' : filter}的报名`,
-                    description: t('s_z599mr'),
-                }));
-                return;
-            }
-            replace(listHost, el('div', { class: 'list', 'data-gap': 'sm' }, records.map(row)));
-        } catch (error) {
-            replace(listHost, loadErrorBlock({
-                title: t('s_1f0wrbh'),
-                description: error.message,
-                onRetry: () => load(),
-            }));
-        }
+        await loadInto(listHost, {
+            read: review.list,
+            params: { exhibitionId, status: filter },
+            rows: 3,
+            errorTitle: t('s_1f0wrbh'),
+            render: (data) => {
+                const records = data.records || [];
+                // 数量要跟列表同一帧画出来，否则缓存命中时筛选条会短暂显示旧数字。
+                renderFilter(data.counts || {});
+                countPill.textContent = `待审核 ${data.counts?.[REGISTRATION_STATUS.PENDING] ?? 0}`;
+                if (title !== t('s_7xrrf0') && data.records?.length) {
+                    title = data.records[0].exhibitionTitle || title;
+                }
+                if (records.length === 0) {
+                    replace(listHost, stateBlock({
+                        iconName: 'ticket',
+                        title: `没有${filter === '全部' ? '' : filter}的报名`,
+                        description: t('s_z599mr'),
+                    }));
+                    return;
+                }
+                replace(listHost, el('div', { class: 'list', 'data-gap': 'sm' }, records.map(row)));
+            },
+        });
     }
 
     function row(record) {

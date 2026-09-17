@@ -35,26 +35,52 @@ export async function profilePage(context) {
         return;
     }
 
-    replace(host, loadingBlock(3));
+    const isAdmin = state.user.can?.admin === true;
 
     // 通知偏好与个人配色并行拉取，任一失败都保留可用默认值。
-    const [notifyResult, settingsResult] = await Promise.allSettled([
-        profileApi.notifications(),
-        settingsApi.get(),
-    ]);
+    // 命中缓存就先出一屏（切页面因此不闪骨架屏），数据回来再按差异决定是否重绘。
+    const warmNotify = profileApi.notifications.peek();
+    const warmSettings = settingsApi.get.peek();
+    const warmReady = warmNotify !== undefined || warmSettings !== undefined;
 
-    const notify = notifyResult.status === 'fulfilled' && notifyResult.value
-        ? notifyResult.value
-        : { exhibitionReminder: true, registrationUpdates: true, granted: true };
-    let settings = settingsResult.status === 'fulfilled' ? settingsResult.value : null;
+    const DEFAULT_NOTIFY = { exhibitionReminder: true, registrationUpdates: true, granted: true };
+    let notify = warmNotify || DEFAULT_NOTIFY;
+    let settings = warmSettings || null;
     if (settings) {
         applySettings(settings);
     }
     let themeIndex = settings?.theme?.index ?? state.theme.index ?? 0;
 
-    const isAdmin = state.user.can?.admin === true;
+    if (warmReady) {
+        render();
+    } else {
+        replace(host, loadingBlock(3));
+    }
 
-    render();
+    const [notifyResult, settingsResult] = await Promise.allSettled([
+        profileApi.notifications(),
+        settingsApi.get(),
+    ]);
+
+    const freshNotify = notifyResult.status === 'fulfilled' && notifyResult.value
+        ? notifyResult.value
+        : DEFAULT_NOTIFY;
+    const freshSettings = settingsResult.status === 'fulfilled' ? settingsResult.value : null;
+    // 缓存里那一份和拉回来的一样时不必重绘：重绘会重建开关与色板，让刚播的入场动画重放。
+    const changed = !warmReady
+        || JSON.stringify(freshNotify) !== JSON.stringify(notify)
+        || JSON.stringify(freshSettings) !== JSON.stringify(settings);
+
+    notify = freshNotify;
+    settings = freshSettings;
+    if (settings) {
+        applySettings(settings);
+    }
+    themeIndex = settings?.theme?.index ?? state.theme.index ?? 0;
+
+    if (changed) {
+        render();
+    }
 
     function render() {
         const user = state.user;

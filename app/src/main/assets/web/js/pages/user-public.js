@@ -6,12 +6,15 @@ import { t } from '../core/strings.js';
  *
  * 普通访问者按用户的“展示我的报名”策略过滤；管理员从管理后台进入时不受该策略影响，
  * 始终能查看用户已参加的展会（页面会说明当前是管理视角）。
+ *
+ * 取数走 core/loadable.js：缓存命中时同步出内容，从列表点进来不会先闪骨架屏。
  */
 
-import { call, state } from '../core/bridge.js';
+import { state } from '../core/bridge.js';
 import { users } from '../core/api.js';
+import { loadInto } from '../core/loadable.js';
 import { scaffold } from '../core/router.js';
-import { avatarNode, loadErrorBlock, loadingBlock, pageFoot, stateBlock, statusTag, statusTone } from '../ui/components.js';
+import { avatarNode, pageFoot, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace, formatDateWithWeekday } from '../core/dom.js';
 
 export async function userPublicPage(context) {
@@ -28,14 +31,24 @@ export async function userPublicPage(context) {
         children: [host],
     });
 
-    replace(host, loadingBlock(3));
     let profile = null;
-    try {
-        const data = await users.publicProfile({
+
+    await loadInto(host, {
+        read: users.publicProfile,
+        params: {
             nickname: context.params.nickname || '',
             userId: context.params.userId || '',
-        });
+        },
+        rows: 3,
+        errorTitle: t('s_kvpltc'),
+        render: apply,
+    });
+
+    /** 公开资料到位后开画；缓存命中时 loadInto 会同步调用一次，因此没有空档。 */
+    function apply(data) {
         if (!data?.found) {
+            // 用户可能已被停用或删除：清掉旧资料与页脚入口，避免留下可点的操作。
+            profile = null;
             replace(host, stateBlock({
                 iconName: 'user',
                 title: t('s_8wvztz'),
@@ -46,16 +59,8 @@ export async function userPublicPage(context) {
             return;
         }
         profile = data;
-    } catch (error) {
-        replace(host, loadErrorBlock({
-            title: t('s_kvpltc'),
-            description: error.message,
-            onRetry: () => context.refresh(),
-        }));
-        return;
+        render();
     }
-
-    render();
 
     function render() {
         const registrations = profile.registrations || [];

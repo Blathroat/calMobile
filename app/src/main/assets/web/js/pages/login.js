@@ -5,7 +5,7 @@ import { t } from '../core/strings.js';
  * 业务：AuthManager.login / enterAsGuest，登录后进入首页。
  */
 
-import { call, state, whenReady } from '../core/bridge.js';
+import { state, whenReady } from '../core/bridge.js';
 import { auth } from '../core/api.js';
 import { scaffold } from '../core/router.js';
 import { toast } from '../ui/components.js';

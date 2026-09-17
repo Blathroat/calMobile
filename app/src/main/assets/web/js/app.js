@@ -6,6 +6,7 @@ import { t } from './core/strings.js';
 
 import { state, whenReady, bootReady, hasNative, mark, reportTimings } from './core/bridge.js';
 import { defineRoute, start, render, navigate, onRouteChange } from './core/router.js';
+import { preloadTabs, preloadFollowUps } from './core/preload.js';
 import { toast } from './ui/components.js';
 import { qs, el, append } from './core/dom.js';
 
@@ -46,11 +47,22 @@ defineRoute('checkin', { title: t('s_zqzoiq'), render: checkinPage, roles: ['exh
 defineRoute('user-public', { title: t('s_1g1m28r'), render: userPublicPage });
 defineRoute('admin', { title: t('s_cit5ds'), render: adminPage, roles: ['admin'] });
 
-// 启动后进入的默认页面：登录态决定入口
+/**
+ * 每次页面渲染完成后：
+ *
+ * - 预加载当前页面的下一步（相邻月份、列表首项详情），下一次点击直接命中缓存；
+ * - 顺带确认底部导航各页的数据已经热过（`preloadTabs` 内部按目标去重，
+ *   已经预热过的不会重复请求；登录 / 退出后缓存清空，这里会重新预热）；
+ * - 权限被拒时说明原因。
+ *
+ * 预加载本身排进空闲回调，不占用当前这一帧。
+ */
 onRouteChange(async (route) => {
     if (route?.denied) {
         toast(`当前角色无权访问「${route.denied}」`);
     }
+    preloadTabs();
+    preloadFollowUps(route?.id, route?.params);
 });
 
 /**
@@ -81,6 +93,8 @@ async function main() {
         if (target !== entry) {
             navigate(target, {}, { replace: true });
         }
+        // 身份确定后再热身：底部导航能直达的页面，切过去时数据已经在缓存里。
+        preloadTabs();
         mark('entered');
         reportTimings();
     });

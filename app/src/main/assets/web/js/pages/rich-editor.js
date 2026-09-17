@@ -6,12 +6,15 @@ import { t } from '../core/strings.js';
  * 编辑器使用成熟的 EasyMDE（已随包内置在 assets/web/vendor/easymde，MIT），
  * 不自行实现富文本；支持直接粘贴 Markdown 文本、实时预览与插图。
  * 保存的是 Markdown 源码，详情页按 Markdown 渲染。
+ *
+ * 取数走 core/loadable.js：展会详情命中缓存时直接继续挂载编辑器，不先闪骨架屏。
  */
 
 import { call, state } from '../core/bridge.js';
 import { exhibitions } from '../core/api.js';
+import { loadInto } from '../core/loadable.js';
 import { scaffold, topAction } from '../core/router.js';
-import { icon, loadErrorBlock, loadingBlock, notFoundBlock, openSheet, pageFoot, stateBlock, toast } from '../ui/components.js';
+import { icon, loadErrorBlock, loadingBlock, notFoundBlock, openSheet, pageFoot, toast } from '../ui/components.js';
 import { htmlToMarkdown, markdownSummary, ensureMarked } from '../core/markdown.js';
 import { allowedFormats } from '../core/validate.js';
 import { el, append, replace } from '../core/dom.js';
@@ -31,24 +34,35 @@ export async function richEditorPage(context) {
     });
 
     let exhibition = null;
-    replace(host, loadingBlock(3));
-    try {
-        const data = await exhibitions.get(context.params.id);
-        if (!data?.found) {
-            replace(host, notFoundBlock({
-                title: t('s_1vim1qp'),
-                description: data?.error || t('s_1q6xpub'),
-                backLabel: t('s_dn4ida'),
-                onBack: () => context.navigate('exhibitor'),
+    // 展会详情通常已经在缓存里（刚在编辑页取过）：命中时同步返回，不再先闪骨架屏。
+    const data = await loadInto(host, {
+        read: exhibitions.get,
+        params: context.params.id,
+        rows: 3,
+        errorTitle: t('s_kvpltc'),
+        // 编辑器要等内置库加载完才挂载，这一步只把数据记下来，绘制统一交给 renderChrome。
+        render: (value) => {
+            exhibition = value?.exhibition || null;
+        },
+        // 取不到详情就没法继续编辑：重试要重跑整个页面，而不是只重跑这一次取数。
+        onError: (error) => {
+            replace(host, loadErrorBlock({
+                title: t('s_kvpltc'),
+                description: error.message,
+                onRetry: () => context.refresh(),
             }));
-            return;
-        }
-        exhibition = data.exhibition;
-    } catch (error) {
-        replace(host, loadErrorBlock({
-            title: t('s_kvpltc'),
-            description: error.message,
-            onRetry: () => context.refresh(),
+        },
+    });
+    // loadInto 不抛异常：失败时返回 undefined，此时错误块已经就位，页面必须停下。
+    if (data === undefined) {
+        return;
+    }
+    if (!data?.found) {
+        replace(host, notFoundBlock({
+            title: t('s_1vim1qp'),
+            description: data?.error || t('s_1q6xpub'),
+            backLabel: t('s_dn4ida'),
+            onBack: () => context.navigate('exhibitor'),
         }));
         return;
     }

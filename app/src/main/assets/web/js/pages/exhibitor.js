@@ -7,12 +7,15 @@ import { t } from '../core/strings.js';
  * 卡片上只保留“查看报名”和“编辑展会”两个入口：报名方式、编辑简介与删除展会
  * 都属于展会的配置，统一放进“编辑展会”对应的二级界面，卡片保持清爽。
  * 顶部提供“核销报名码”，展商在现场扫描用户报名详情里的二维码即可完成核销。
+ *
+ * 取数走 core/loadable.js：命中缓存时同步出内容，切回本页不会先闪骨架屏。
  */
 
-import { call } from '../core/bridge.js';
 import { exhibitions } from '../core/api.js';
+import { loadInto } from '../core/loadable.js';
+import { warmOnPress } from '../core/preload.js';
 import { scaffold, tabbar, navItems, topAction } from '../core/router.js';
-import { loadErrorBlock, loadingBlock, mediaBox, smallCta, stateBlock, statusTag, statusTone } from '../ui/components.js';
+import { mediaBox, smallCta, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace } from '../core/dom.js';
 
 export async function exhibitorPage(context) {
@@ -29,48 +32,46 @@ export async function exhibitorPage(context) {
         children: [listHost],
     });
 
-    replace(listHost, loadingBlock(3));
-    try {
-        const items = await exhibitions.list();
-        if (items.length === 0) {
-            replace(listHost, stateBlock({
-                iconName: 'briefcase',
-                title: t('s_f4agbb'),
-                description: t('s_1t8d6e3'),
-                action: { label: t('s_p9fllo'), onClick: () => context.navigate('exhibition-form', { mode: 'create' }) },
-            }));
-            return;
-        }
-        const total = items.reduce((sum, item) => sum + (item.registrationCount || 0), 0);
-        replace(listHost, [
-            el('div', { class: 'row', 'data-between': 'true' }, [
-                el('span', { class: 'section-label', text: t('s_15vddzv') }),
-                el('span', { class: 'pill', text: `${items.length} 个 · ${total} 条报名` }),
-            ]),
-            el('button', {
-                class: 'cta ghost',
-                type: 'button',
-                onclick: () => context.navigate('checkin'),
-            }, [t('s_zqzoiq')]),
-            el('p', {
-                class: 'field-hint',
-                style: { textAlign: 'center' },
-                text: t('s_1w3gehu'),
-            }),
-            el('div', { class: 'list', 'data-gap': 'sm' }, items.map((item) => card(item))),
-            el('button', {
-                class: 'cta',
-                type: 'button',
-                onclick: () => context.navigate('exhibition-form', { mode: 'create' }),
-            }, [t('s_p9fllo')]),
-        ]);
-    } catch (error) {
-        replace(listHost, loadErrorBlock({
-            title: t('s_4e7do4'),
-            description: error.message,
-            onRetry: () => context.refresh(),
-        }));
-    }
+    // 列表整体交给 loadInto：先画缓存，远端结果到了才重绘，容器始终不清空。
+    await loadInto(listHost, {
+        read: exhibitions.list,
+        rows: 3,
+        errorTitle: t('s_4e7do4'),
+        render: (items) => {
+            if (items.length === 0) {
+                replace(listHost, stateBlock({
+                    iconName: 'briefcase',
+                    title: t('s_f4agbb'),
+                    description: t('s_1t8d6e3'),
+                    action: { label: t('s_p9fllo'), onClick: () => context.navigate('exhibition-form', { mode: 'create' }) },
+                }));
+                return;
+            }
+            const total = items.reduce((sum, item) => sum + (item.registrationCount || 0), 0);
+            replace(listHost, [
+                el('div', { class: 'row', 'data-between': 'true' }, [
+                    el('span', { class: 'section-label', text: t('s_15vddzv') }),
+                    el('span', { class: 'pill', text: `${items.length} 个 · ${total} 条报名` }),
+                ]),
+                el('button', {
+                    class: 'cta ghost',
+                    type: 'button',
+                    onclick: () => context.navigate('checkin'),
+                }, [t('s_zqzoiq')]),
+                el('p', {
+                    class: 'field-hint',
+                    style: { textAlign: 'center' },
+                    text: t('s_1w3gehu'),
+                }),
+                el('div', { class: 'list', 'data-gap': 'sm' }, items.map((item) => card(item))),
+                el('button', {
+                    class: 'cta',
+                    type: 'button',
+                    onclick: () => context.navigate('exhibition-form', { mode: 'create' }),
+                }, [t('s_p9fllo')]),
+            ]);
+        },
+    });
 
     /**
      * 展会卡片：信息 + 查看报名 / 编辑展会。
@@ -83,6 +84,8 @@ export async function exhibitorPage(context) {
                 type: 'button',
                 dataset: { pressable: 'true' },
                 style: { border: '0', padding: '0', background: 'transparent' },
+                // 手指按下就先取展会详情，点进详情页时数据通常已经到了。
+                ...warmOnPress(exhibitions.get, { id: item.id }),
                 onclick: () => context.navigate('detail', { id: item.id }),
             }, [
                 mediaBox({ src: item.imageUri, className: 'thumb thumb-cover' }),

@@ -3,12 +3,17 @@ import { t } from '../core/strings.js';
  * 屏幕 06 · 搜索
  * 线框：newUI/remaining-ui.html #screen-search
  * 业务：ExhibitionManager.search + AdminUserManager.search。
+ *
+ * 取数走 core/loadable.js：同一个关键词的结果会进缓存，改回上次的词直接出内容。
  */
 
-import { call } from '../core/bridge.js';
-import { api } from '../core/api.js';
+// render() 里的局部变量占用了 exhibitions / users 这两个名字（搜索结果数组），
+// 这里用别名导入取数接口，避免被局部变量遮蔽。
+import { api, exhibitions as exhibitionsApi, users as usersApi } from '../core/api.js';
+import { loadInto } from '../core/loadable.js';
+import { warmOnPress } from '../core/preload.js';
 import { scaffold } from '../core/router.js';
-import { loadErrorBlock, loadingBlock, mediaBox, stateBlock, statusTag, statusTone } from '../ui/components.js';
+import { mediaBox, stateBlock, statusTag, statusTone } from '../ui/components.js';
 import { el, replace, truncate } from '../core/dom.js';
 
 export async function searchPage(context) {
@@ -68,18 +73,17 @@ export async function searchPage(context) {
             }));
             return;
         }
-        replace(resultsHost, loadingBlock(2));
-        try {
-            const data = await api.search(query);
-            countText.textContent = `${data.count} 条结果`;
-            render(data, query);
-        } catch (error) {
-            replace(resultsHost, loadErrorBlock({
-                title: t('s_2be1oh'),
-                description: error.message,
-                onRetry: () => run(query),
-            }));
-        }
+        // 搜索同样先画缓存：改回同一个关键词时不再先闪骨架屏。
+        await loadInto(resultsHost, {
+            read: api.search,
+            params: query,
+            rows: 2,
+            errorTitle: t('s_2be1oh'),
+            render: (data) => {
+                countText.textContent = `${data.count} 条结果`;
+                render(data, query);
+            },
+        });
     }
 
     function render(data, query) {
@@ -103,6 +107,8 @@ export async function searchPage(context) {
                     class: 'row-card',
                     type: 'button',
                     dataset: { pressable: 'true' },
+                    // 手指按下就先取展会详情，点进详情页时数据通常已经到了。
+                    ...warmOnPress(exhibitionsApi.get, { id: item.id }),
                     onclick: () => context.navigate('detail', { id: item.id }),
                 }, [
                     mediaBox({ src: item.imageUri, className: 'thumb thumb-sm thumb-cover' }),
@@ -123,6 +129,8 @@ export async function searchPage(context) {
                     class: 'row-card',
                     type: 'button',
                     dataset: { pressable: 'true' },
+                    // 用户公开页读的是 users.public，按同一个 userId 预热。
+                    ...warmOnPress(usersApi.publicProfile, { userId: user.id }),
                     onclick: () => context.navigate('user-public', { userId: user.id }),
                 }, [
                     el('span', { class: 'avatar', text: (user.nickname || t('s_cmla8n')).slice(0, 1), 'aria-hidden': 'true' }),

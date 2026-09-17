@@ -6,12 +6,15 @@ import { t } from '../core/strings.js';
  *
  * 展商后台卡片上的“报名方式”“编辑简介”“删除展会”都收进本页的「报名与简介设置」栏，
  * 展商从这里统一维护展会配置，卡片只需要两个入口。
+ *
+ * 取数走 core/loadable.js：命中缓存时同步出内容，因此从展商后台点进来不会先闪骨架屏。
  */
 
 import { call } from '../core/bridge.js';
 import { exhibitions } from '../core/api.js';
+import { loadInto } from '../core/loadable.js';
 import { scaffold, topAction } from '../core/router.js';
-import { confirmSheet, icon, loadErrorBlock, loadingBlock, notFoundBlock, openSheet, pageFoot, stateBlock, switchRow, toast } from '../ui/components.js';
+import { confirmSheet, icon, notFoundBlock, openSheet, pageFoot, switchRow, toast } from '../ui/components.js';
 import { el, append, replace } from '../core/dom.js';
 import { EXHIBITION_STATUS, REGISTRATION_MODES, modeHint as hintFor, statusTone } from '../core/status.js';
 import { markdownSummary } from '../core/markdown.js';
@@ -50,10 +53,27 @@ export async function exhibitionFormPage(context) {
     };
     let fields = [];
 
-    replace(host, loadingBlock(4));
-    try {
-        if (!isCreate) {
-            const data = await exhibitions.get(context.params.id);
+    // 表单只建一次：loadInto 可能先画缓存、再画远端数据，第二帧直接跳过，
+    // 否则重建会把用户已经输入的内容冲掉。
+    let built = false;
+    // 控件与校验器都在 buildForm() 里创建，所以先声明、后赋值。
+    let titleInput, venueInput, dateInput, timeInput, startInput, endInput, categoryInput;
+    let errorBox, fieldsHost, descriptionPreview, descriptionButton, modeTag, modeSummary;
+    let coverPreview, coverHint;
+    let validators = [];
+
+    if (isCreate) {
+        // 新建展会没有要取的数据，直接出空表单。
+        buildForm();
+        return;
+    }
+
+    await loadInto(host, {
+        read: exhibitions.get,
+        params: context.params.id,
+        rows: 4,
+        errorTitle: t('s_kvpltc'),
+        render: (data) => {
             if (!data?.found) {
                 replace(host, notFoundBlock({
                     title: t('s_1vim1qp'),
@@ -63,6 +83,10 @@ export async function exhibitionFormPage(context) {
                 }));
                 return;
             }
+            if (built) {
+                return;
+            }
+            built = true;
             const item = data.exhibition;
             Object.assign(model, {
                 id: item.id,
@@ -85,50 +109,11 @@ export async function exhibitionFormPage(context) {
                 // 选项在模型里统一为数组，界面上按条目增删。
                 options: normalizeOptions(field.options),
             }));
-        }
-    } catch (error) {
-        replace(host, loadErrorBlock({
-            title: t('s_kvpltc'),
-            description: error.message,
-            onRetry: () => context.refresh(),
-        }));
-        return;
-    }
-
-    // ── 表单控件 ───────────────────────────────────────────────────
-
-    const titleInput = textInput('form-title', 'text', model.title, t('s_giboid'));
-    const venueInput = textInput('form-venue', 'text', model.venue, t('s_vih0tf'));
-    const dateInput = textInput('form-date', 'date', model.date);
-    const timeInput = textInput('form-time', 'text', model.time, '09:00-17:00');
-    const startInput = textInput('form-reg-start', 'date', model.registrationStart);
-    const endInput = textInput('form-reg-end', 'date', model.registrationEnd);
-    const categoryInput = textInput('form-category', 'text', model.category, '例如：智能制造 / 工业自动化');
-    const errorBox = el('p', { class: 'field-error', role: 'alert', hidden: true });
-    const fieldsHost = el('div', { class: 'stack', 'data-gap': 'sm' });
-
-    const descriptionPreview = el('p', { class: 'row-meta' });
-    const descriptionButton = el('button', {
-        class: 'cta ghost',
-        type: 'button',
-        style: { minHeight: '44px', fontSize: 'var(--fs-label)' },
-        disabled: isCreate ? true : null,
-        onclick: () => context.navigate('rich-editor', { id: model.id }),
-    }, [isCreate ? t('s_1wz04v2') : t('s_21ce2x')]);
-
-    // 「报名方式」一行的两个可变节点：就地更新，避免重建页面丢掉未保存的输入。
-    const modeTag = el('span', [statusTagFor(model.status)]);
-    const modeSummary = el('span', { class: 'fill' }, [
-        el('span', { class: 'row-meta', text: hintFor(model.status) }),
-    ]);
-
-    const coverPreview = el('div', { class: 'cover-preview' });
-    const coverHint = el('p', {
-        class: 'field-hint',
-        text: `建议使用 1080×1920（9:16）的竖版图片，当前允许 ${formatsHint()}。`,
+            buildForm();
+        },
     });
 
-    render();
+    // ── 封面与「报名方式」的渲染辅助 ───────────────────────────────
 
     function formatsHint() {
         const list = allowedFormats('image');
@@ -189,65 +174,108 @@ export async function exhibitionFormPage(context) {
         }
     }
 
-    // ── 前端校验：上限来自「管理-设置」的服务器设置 ────────────────
+    /**
+     * 首次绘制时才建表单：控件、校验器与整页内容都只创建一次。
+     *
+     * 之所以不放在页面加载时直接建，是因为 loadInto 可能画两帧（先缓存、后远端数据），
+     * 有了 built 这道闸，第二帧不会再走这里，输入框里的内容因此只被写过一次。
+     */
+    function buildForm() {
+        // ── 表单控件 ───────────────────────────────────────────────
 
-    const validators = [
-        fieldValidator({
-            control: titleInput,
-            label: t('s_1co82cb'),
-            required: true,
-            max: limit('exhibitionTitle', 60),
-        }),
-        fieldValidator({
-            control: venueInput,
-            label: t('s_1tlfy5l'),
-            required: true,
-            max: limit('exhibitionVenue', 60),
-        }),
-        fieldValidator({
-            control: dateInput,
-            label: t('s_s2nfay'),
-            required: true,
-            pattern: PATTERNS.date,
-            patternMessage: t('s_1appv4n'),
-        }),
-        fieldValidator({
-            control: timeInput,
-            label: t('s_kgtsw4'),
-            max: 20,
-            pattern: PATTERNS.timeRange,
-            patternMessage: t('s_1q49p4s'),
-        }),
-        fieldValidator({
-            control: endInput,
-            label: t('s_cbxrmr'),
-            custom: () => {
-                const start = startInput.value;
-                const end = endInput.value;
-                if (start && end && end < start) {
-                    return t('s_1gcmqh3');
-                }
-                return '';
-            },
-        }),
-        fieldValidator({
-            control: categoryInput,
-            label: t('s_9xu72h'),
-            max: limit('category', 20),
-            pattern: PATTERNS.category,
-            patternMessage: t('s_ariomv'),
-        }),
-        fieldValidator({
-            control: startInput,
-            label: t('s_k1e25y'),
-            custom: () => {
-                if (startInput.value && dateInput.value && startInput.value > dateInput.value) {
-                    return t('s_h8z5hw');
-                }
-                return '';
-            },
-        }),
-    ];
+        titleInput = textInput('form-title', 'text', model.title, t('s_giboid'));
+        venueInput = textInput('form-venue', 'text', model.venue, t('s_vih0tf'));
+        dateInput = textInput('form-date', 'date', model.date);
+        timeInput = textInput('form-time', 'text', model.time, '09:00-17:00');
+        startInput = textInput('form-reg-start', 'date', model.registrationStart);
+        endInput = textInput('form-reg-end', 'date', model.registrationEnd);
+        categoryInput = textInput('form-category', 'text', model.category, '例如：智能制造 / 工业自动化');
+        errorBox = el('p', { class: 'field-error', role: 'alert', hidden: true });
+        fieldsHost = el('div', { class: 'stack', 'data-gap': 'sm' });
+
+        descriptionPreview = el('p', { class: 'row-meta' });
+        descriptionButton = el('button', {
+            class: 'cta ghost',
+            type: 'button',
+            style: { minHeight: '44px', fontSize: 'var(--fs-label)' },
+            disabled: isCreate ? true : null,
+            onclick: () => context.navigate('rich-editor', { id: model.id }),
+        }, [isCreate ? t('s_1wz04v2') : t('s_21ce2x')]);
+
+        // 「报名方式」一行的两个可变节点：就地更新，避免重建页面丢掉未保存的输入。
+        modeTag = el('span', [statusTagFor(model.status)]);
+        modeSummary = el('span', { class: 'fill' }, [
+            el('span', { class: 'row-meta', text: hintFor(model.status) }),
+        ]);
+
+        coverPreview = el('div', { class: 'cover-preview' });
+        coverHint = el('p', {
+            class: 'field-hint',
+            text: `建议使用 1080×1920（9:16）的竖版图片，当前允许 ${formatsHint()}。`,
+        });
+
+        // ── 前端校验：上限来自「管理-设置」的服务器设置 ────────────
+
+        validators = [
+            fieldValidator({
+                control: titleInput,
+                label: t('s_1co82cb'),
+                required: true,
+                max: limit('exhibitionTitle', 60),
+            }),
+            fieldValidator({
+                control: venueInput,
+                label: t('s_1tlfy5l'),
+                required: true,
+                max: limit('exhibitionVenue', 60),
+            }),
+            fieldValidator({
+                control: dateInput,
+                label: t('s_s2nfay'),
+                required: true,
+                pattern: PATTERNS.date,
+                patternMessage: t('s_1appv4n'),
+            }),
+            fieldValidator({
+                control: timeInput,
+                label: t('s_kgtsw4'),
+                max: 20,
+                pattern: PATTERNS.timeRange,
+                patternMessage: t('s_1q49p4s'),
+            }),
+            fieldValidator({
+                control: endInput,
+                label: t('s_cbxrmr'),
+                custom: () => {
+                    const start = startInput.value;
+                    const end = endInput.value;
+                    if (start && end && end < start) {
+                        return t('s_1gcmqh3');
+                    }
+                    return '';
+                },
+            }),
+            fieldValidator({
+                control: categoryInput,
+                label: t('s_9xu72h'),
+                max: limit('category', 20),
+                pattern: PATTERNS.category,
+                patternMessage: t('s_ariomv'),
+            }),
+            fieldValidator({
+                control: startInput,
+                label: t('s_k1e25y'),
+                custom: () => {
+                    if (startInput.value && dateInput.value && startInput.value > dateInput.value) {
+                        return t('s_h8z5hw');
+                    }
+                    return '';
+                },
+            }),
+        ];
+
+        render();
+    }
 
     function validateFieldTitles() {
         const max = limit('fieldTitle', 30);

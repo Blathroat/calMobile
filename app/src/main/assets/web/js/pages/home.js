@@ -6,10 +6,19 @@ import { t } from '../core/strings.js';
  *
  * 日历卡片支持左右滑动切换月份：拖动时卡片跟手位移，松手超过阈值则滑出并载入相邻月份；
  * 需要六行才能排满的月份会额外多出一行，同时压缩行高，保证整张卡片仍然可见。
+ *
+ * ## 为什么点日期不发请求
+ *
+ * `exhibitions.month` 一次就返回**整个月**的展会（`exhibitions` 字段带 day），
+ * 所以「选中哪一天」纯属本地状态：点日期只改 `aria-pressed` 与下方列表，
+ * 既不重新取数，也不重建日历 DOM（重建会让整块卡片闪一下、圆点动画重放）。
+ * 以前每点一天都重新请求整月数据、把日历换成骨架屏，那一下空档就是它造成的。
  */
 
-import { call, state } from '../core/bridge.js';
+import { state } from '../core/bridge.js';
 import { exhibitions } from '../core/api.js';
+import { loadInto } from '../core/loadable.js';
+import { homeParams, preloadFollowUps, warmOnPress } from '../core/preload.js';
 import { scaffold, tabbar, navItems, topAction } from '../core/router.js';
 import { icon, loadErrorBlock, loadingBlock, mediaBox, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, append, replace, daysInMonth, firstWeekdayOffset, addMonths, monthLabel } from '../core/dom.js';
@@ -18,12 +27,16 @@ const WEEK_LABELS = [t('s_1hqqsf'), t('s_12482qz'), t('s_3fnyn8'), t('s_q67h2y')
 const SWIPE_THRESHOLD = 46;
 
 export async function homePage(context) {
-    // 演示数据集中在 2026 年 6–8 月，默认落到第一个有展会的月份（2026 年 6 月）。
+    // 落点月份由后端下发（示例数据集中在 2026 年 6–8 月），URL 参数优先。
+    const landing = state.calendar.landing || {};
     const view = {
-        year: Number(context.params.year) || 2026,
-        month: Number(context.params.month) || 6,
+        year: Number(context.params.year) || Number(landing.year) || 2026,
+        month: Number(context.params.month) || Number(landing.month) || 6,
+        // 0 表示「未指定」：落到当月第一个有展会的日期。
         day: Number(context.params.day) || 0,
     };
+    /** 当前月份的完整数据；切换选中日期只用它，不再请求。 */
+    let monthData = null;
 
     const listHost = el('div', { class: 'list', 'data-gap': 'sm' });
     const calendarHost = el('div', { class: 'calendar' });
@@ -64,6 +77,7 @@ export async function homePage(context) {
     enableSwipe();
     announce();
     await load();
+    preloadFollowUps('home', view);
 
     function monthButton(iconName, label, onClick) {
         return el('button', {
@@ -165,44 +179,64 @@ export async function homePage(context) {
             && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     }
 
-    async function load(explicit = false) {
-        replace(calendarHost, loadingBlock(1));
-        replace(listHost, loadingBlock(2));
-        try {
-            const data = await exhibitions.month({ ...view, explicit });
-            view.month = data.month;
-            view.year = data.year;
-            // 选中日期以服务端结果为准，首次进入与翻月后都能正确高亮。
-            view.day = Number(data.day) || 0;
-            monthTitle.textContent = data.monthLabel;
-            renderCalendar(data);
-            renderList(data);
-        } catch (error) {
-            replace(calendarHost, loadErrorBlock({
-                title: t('s_1tbhtoh'),
-                description: error.message,
-                onRetry: () => load(),
-            }));
-            replace(listHost, []);
+    /**
+     * 载入当前 `view` 对应的月份。
+     *
+     * 缓存命中时同步出内容（切月份因此没有空档），未命中才显示骨架屏；
+     * 容器里已有上个月的内容时不会清空，只标记 data-busy。
+     */
+    async function load() {
+        // 首屏同时要给列表留占位；缓存命中时它会在同一帧里被替换掉，不会露面。
+        if (listHost.childElementCount === 0) {
+            replace(listHost, loadingBlock(2));
         }
+        await loadInto(calendarHost, {
+            read: exhibitions.month,
+            params: homeParams(view),
+            rows: 1,
+            errorTitle: t('s_1tbhtoh'),
+            render: applyMonth,
+            onError: (error) => {
+                replace(calendarHost, loadErrorBlock({
+                    title: t('s_1tbhtoh'),
+                    description: error.message,
+                    onRetry: () => load(),
+                }));
+                replace(listHost, []);
+            },
+        });
     }
 
-    function renderCalendar(data) {
-        const grid = el('div', { class: 'calendar-grid' });
-        const eventDays = new Set(data.eventDays || []);
+    /** 把一份月数据落到日历与列表上。缓存与远端结果都走这里。 */
+    function applyMonth(data) {
+        monthData = data;
+        view.year = data.year;
+        view.month = data.month;
+        // 只有还没选中日期时才采用后端给的落点，避免刷新的结果覆盖用户的选择。
+        if (!view.day) {
+            view.day = Number(data.day) || 0;
+        }
+        monthTitle.textContent = data.monthLabel || monthLabel(view.year, view.month);
+        renderCalendar();
+        renderList();
+    }
+
+    function renderCalendar() {
+        const eventDays = new Set(monthData.eventDays || []);
         const total = daysInMonth(view.year, view.month);
         const offset = firstWeekdayOffset(view.year, view.month);
         const previous = addMonths(view.year, view.month, -1);
         const previousTotal = daysInMonth(previous.year, previous.month);
         // 六行月份（例如 2026 年 8 月）需要额外一行才能排下全部日期。
         const rows = Math.ceil((offset + total) / 7);
+        const grid = el('div', { class: 'calendar-grid' });
 
         for (let index = 0; index < offset; index += 1) {
             const day = previousTotal - offset + index + 1;
             append(grid, dayButton(day, { muted: true, disabled: true }));
         }
         for (let day = 1; day <= total; day += 1) {
-            append(grid, dayButton(day, { hasEvent: eventDays.has(day), selected: day === view.day }));
+            append(grid, dayButton(day, { hasEvent: eventDays.has(day) }));
         }
         const trailing = (rows * 7) - offset - total;
         for (let day = 1; day <= trailing; day += 1) {
@@ -218,33 +252,48 @@ export async function homePage(context) {
         ]);
     }
 
-    function dayButton(day, { muted, hasEvent, selected, disabled }) {
+    function dayButton(day, { muted, hasEvent, disabled }) {
         return el('button', {
             class: 'cal-day',
             type: 'button',
             dataset: {
+                day: String(day),
                 muted: muted ? 'true' : 'false',
                 hasEvent: hasEvent ? 'true' : 'false',
             },
-            'aria-pressed': selected ? 'true' : 'false',
-            'aria-label': `${view.month}月${day}日${hasEvent ? t('s_1hzbri3') : ''}${selected ? t('s_19g8l4d') : ''}`,
+            'aria-pressed': day === view.day ? 'true' : 'false',
+            'aria-label': `${view.month}月${day}日${hasEvent ? t('s_1hzbri3') : ''}${day === view.day ? t('s_19g8l4d') : ''}`,
             disabled: disabled ? true : null,
-            onclick: () => {
-                if (view.day === day) {
-                    return;
-                }
-                view.day = day;
-                load();
-            },
+            onclick: () => selectDay(day),
         }, [
             // 数字单独一层：选中态只在数字下方画一小段下划线，不给整格加方框。
             el('span', { class: 'cal-day-num', text: String(day) }),
         ]);
     }
 
-    function renderList(data) {
-        const items = data.selected || [];
-        selectedTitle.textContent = `${data.month} 月 ${data.day} 日的展会`;
+    /**
+     * 选中某一天：只改选中态与下面的列表。
+     * 不重新取数、不重建日历，因此没有任何空档，圆点弹入动画也只在新选中的那天播放。
+     */
+    function selectDay(day) {
+        if (view.day === day) {
+            return;
+        }
+        view.day = day;
+        for (const button of calendarHost.querySelectorAll('.cal-day')) {
+            button.setAttribute('aria-pressed', button.dataset.day === String(day) ? 'true' : 'false');
+        }
+        renderList();
+    }
+
+    function renderList() {
+        const day = view.day;
+        const items = day > 0
+            ? (monthData?.exhibitions || []).filter((item) => item.day === day)
+            : [];
+        selectedTitle.textContent = day > 0
+            ? `${view.month} 月 ${day} 日的展会`
+            : t('s_1e4opb2');
         selectedMeta.textContent = items.length > 0 ? `共 ${items.length} 场` : t('s_xwhfsg');
 
         if (items.length === 0) {
@@ -261,6 +310,7 @@ export async function homePage(context) {
             type: 'button',
             dataset: { pressable: 'true' },
             'aria-label': `查看 ${item.title} 详情`,
+            ...warmOnPress(exhibitions.get, { id: item.id }),
             onclick: () => context.navigate('detail', { id: item.id }),
         }, [
             mediaBox({ src: item.imageUri, className: 'thumb thumb-cover' }),
@@ -278,20 +328,24 @@ export async function homePage(context) {
     /**
      * 切换月份：有动画时先让当前卡片滑出，再载入新月份并滑入，
      * 让“月份变了”这件事在视觉上连续。
+     *
+     * 相邻月份已由 core/preload.js 预热，因此这里通常直接命中缓存、当场换页。
      */
     function shiftMonth(delta) {
         const next = addMonths(view.year, view.month, delta);
         const apply = () => {
             view.year = next.year;
             view.month = next.month;
-            view.day = 1;
+            // 交给新月份自己挑第一个有展会的日期。
+            view.day = 0;
             calendarHost.dataset.enter = delta > 0 ? 'right' : 'left';
-            load(true).then(() => {
+            load().then(() => {
                 if (typeof requestAnimationFrame === 'function') {
                     requestAnimationFrame(() => {
                         calendarHost.dataset.enter = '';
                     });
                 }
+                preloadFollowUps('home', view);
             });
         };
         if (prefersReducedMotion()) {

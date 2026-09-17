@@ -102,7 +102,8 @@ export const state = {
     announcement: { enabled: false, text: '' },
     /** 软件中英文标题，由管理-设置维护，显示在首页上方与其它展示应用名称的位置。 */
     brand: { zh: '发现展会', en: 'calMobile' },
-    calendar: { available: false },
+    /** 系统日历能力，以及日历卡片的落点月份（由 bootstrap 下发）。 */
+    calendar: { available: false, landing: { year: 2026, month: 6 } },
 };
 
 export function hasNative() {

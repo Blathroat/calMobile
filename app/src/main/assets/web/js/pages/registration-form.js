@@ -3,12 +3,15 @@ import { t } from '../core/strings.js';
  * 屏幕 04 · 报名信息
  * 线框：newUI/index.html #screen-register
  * 业务：按展商配置的报名收集项渲染表单，提交后写入报名记录并进入我的报名。
+ *
+ * 取数走 core/loadable.js：展会与已有报名都命中缓存时同步出内容，从详情页切进来不闪骨架屏。
  */
 
-import { call, state } from '../core/bridge.js';
+import { state } from '../core/bridge.js';
 import { exhibitions, registrations } from '../core/api.js';
+import { loadInto } from '../core/loadable.js';
 import { scaffold } from '../core/router.js';
-import { loadErrorBlock, loadingBlock, notFoundBlock, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
+import { notFoundBlock, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, append, replace, formatDateWithWeekday } from '../core/dom.js';
 import { EXHIBITION_STATUS } from '../core/status.js';
 import { check, limit } from '../core/validate.js';
@@ -26,34 +29,64 @@ export async function registrationFormPage(context) {
     let fields = [];
     let existing = null;
 
-    replace(host, loadingBlock(3));
-    try {
-        const data = await exhibitions.get(context.params.id);
-        if (!data?.found) {
-            replace(host, notFoundBlock({
-                title: t('s_1vim1qp'),
-                description: data?.error || t('s_1px91rj'),
-                backLabel: t('s_17zyr1e'),
-                onBack: () => context.navigate('home'),
-            }));
-            return;
-        }
-        exhibition = data.exhibition;
-        fields = data.fields || [];
-        if (context.params.registrationId) {
-            const record = await registrations.get(context.params.registrationId);
-            existing = record?.found ? record.registration : null;
-        }
-    } catch (error) {
-        replace(host, loadErrorBlock({
-            title: t('s_kvpltc'),
-            description: error.message,
-            onRetry: () => context.refresh(),
-        }));
-        return;
-    }
+    const registrationId = context.params.registrationId;
 
-    render();
+    /**
+     * 本页要的两份数据合成一次取数：展会（含收集项）与已有报名。
+     * 两条都走 core/api.js 的只读缓存，因此不会为同一份数据发两次请求。
+     */
+    const readForm = async (params) => {
+        const data = await exhibitions.get(params.id);
+        // 展会不存在时不再去取报名，保持原来的请求顺序与「找不到展会」的提示。
+        if (!data?.found || !registrationId) {
+            return { data, existing: null };
+        }
+        const record = await registrations.get(registrationId);
+        return { data, existing: record?.found ? record.registration : null };
+    };
+
+    /**
+     * 首帧的同步取数：两份数据都在缓存里才算命中。
+     * 只画一半会出现「表单先空着、随后才补上答案」的跳动，宁可让 loadInto 先出骨架屏。
+     */
+    readForm.peek = (params) => {
+        const data = exhibitions.get.peek(params.id);
+        const record = registrationId ? registrations.get.peek(registrationId) : null;
+        if (data === undefined || (registrationId && record === undefined)) {
+            return undefined;
+        }
+        return { data, existing: record?.found ? record.registration : null };
+    };
+
+    // 表单只建一次：loadInto 可能先画缓存、再画远端数据，
+    // 第二帧直接跳过，否则会把用户已经填好的答案冲掉。
+    let built = false;
+
+    await loadInto(host, {
+        read: readForm,
+        params: { id: context.params.id },
+        rows: 3,
+        errorTitle: t('s_kvpltc'),
+        render: (payload) => {
+            if (!payload.data?.found) {
+                replace(host, notFoundBlock({
+                    title: t('s_1vim1qp'),
+                    description: payload.data?.error || t('s_1px91rj'),
+                    backLabel: t('s_17zyr1e'),
+                    onBack: () => context.navigate('home'),
+                }));
+                return;
+            }
+            if (built) {
+                return;
+            }
+            built = true;
+            exhibition = payload.data.exhibition;
+            fields = payload.data.fields || [];
+            existing = payload.existing;
+            render();
+        },
+    });
 
     function render() {
         const inputs = new Map();

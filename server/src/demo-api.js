@@ -72,6 +72,19 @@ function countByExhibition(exhibitionId) {
     return REGISTRATIONS.filter((item) => item.exhibitionId === exhibitionId).length;
 }
 
+/**
+ * 首页日历的落点月份：最早一个有展会的月份。
+ *
+ * 由 bootstrap 下发给前端，替代原来「请求的月份没有展会就悄悄改成六月」的隐式回落——
+ * 那既让 `exhibitions.month` 的返回值和入参对不上，也让缓存键不稳定（预加载打不中）。
+ */
+function landingMonth() {
+    const months = EXHIBITIONS
+        .map((item) => ({ year: yearOf(item.date, 2026), month: monthOf(item.date, 6) }))
+        .sort((a, b) => (a.year - b.year) || (a.month - b.month));
+    return months[0] || { year: 2026, month: 6 };
+}
+
 function exhibitionPayload(item) {
     return {
         id: item.id,
@@ -184,7 +197,7 @@ const handlers = {
             nickname: 20, bio: 200, region: 40, answer: 200,
         },
         server: { avatarSizeMb: 2, imageFormats: ['jpg', 'png'], videoFormats: ['mp4'] },
-        calendar: { available: false },
+        calendar: { available: false, landing: landingMonth() },
     }),
 
     'auth.login': (body) => {
@@ -290,29 +303,23 @@ const handlers = {
         return { found: true, exhibition: exhibitionPayload(item), fields: defaultFields() };
     },
 
-    /** 月视图：返回当月全部展会、有展会的日期，以及选中日期的展会。 */
+    /**
+     * 月视图：返回当月全部展会、有展会的日期，以及选中日期的展会。
+     *
+     * 只带 year / month 两个参数（前端与预加载用同一形状，缓存键才稳定）；
+     * `day` 可选，用于深链定位初始选中日期，缺省落到当月第一个有展会的日期。
+     * 请求的月份一律照原样返回——「打开应用先看哪个月」由 bootstrap 的
+     * `calendar.landing` 决定，不再由这个接口替调用方改月份。
+     */
     'exhibitions.month': (body) => {
-        const explicit = Boolean(body.explicit);
-        let year = Number(body.year) || 2026;
-        let month = Number(body.month) || 6;
+        const year = Number(body.year) || landingMonth().year;
+        const month = Number(body.month) || landingMonth().month;
         const payloads = EXHIBITIONS.map(exhibitionPayload);
-
-        const known = [];
-        for (const item of payloads) {
-            if (!known.some((entry) => entry.year === item.year && entry.month === item.month)) {
-                known.push({ year: item.year, month: item.month });
-            }
-        }
-        const matched = payloads.some((item) => item.year === year && item.month === month);
-        if (!matched && known.length > 0 && !explicit) {
-            year = known[0].year;
-            month = known[0].month;
-        }
 
         const days = payloads.filter((item) => item.year === year && item.month === month);
         const eventDays = [...new Set(days.map((item) => item.day))].sort((a, b) => a - b);
         // 选中日期以调用方为准：用户点的可能是没有展会的那一天，页面会显示空状态。
-        // 只有在调用方没指定日期（进入页面 / 翻月）时才回落到第一个有展会的日期。
+        // 只有在调用方没指定日期时才回落到第一个有展会的日期。
         let day = Number(body.day) || 0;
         if (day <= 0) {
             day = eventDays[0] || 0;

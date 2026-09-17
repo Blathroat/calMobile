@@ -6,12 +6,15 @@ import { t } from '../core/strings.js';
  *
  * 展商在展会设置里开启“启用报名二维码”后，审核通过的报名会在这里展示报名码：
  * 用户现场出示，展商用展商后台的「核销报名码」扫描后状态变为“已参加”。
+ *
+ * 取数走 core/loadable.js：从「我的报名」点进来时数据已预热，页面同步出内容、不闪骨架屏。
  */
 
-import { call, state } from '../core/bridge.js';
+import { state } from '../core/bridge.js';
 import { registrations } from '../core/api.js';
+import { loadInto } from '../core/loadable.js';
 import { scaffold } from '../core/router.js';
-import { confirmSheet, loadErrorBlock, loadingBlock, notFoundBlock, pageFoot, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
+import { confirmSheet, notFoundBlock, pageFoot, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, replace, answerLines, formatDateWithWeekday } from '../core/dom.js';
 import { REGISTRATION_STATUS } from '../core/status.js';
 import { loadQrEncoder } from '../core/vendor.js';
@@ -27,30 +30,33 @@ export async function registrationDetailPage(context) {
         children: [host],
     });
 
-    replace(host, loadingBlock(3));
     let record = null;
-    try {
-        const data = await registrations.get(context.params.id);
+
+    await loadInto(host, {
+        read: registrations.get,
+        params: context.params.id,
+        rows: 3,
+        errorTitle: t('s_kvpltc'),
+        render: apply,
+    });
+
+    /** 报名数据到位后开画；缓存命中时 loadInto 会同步调用一次，因此没有空档。 */
+    function apply(data) {
         if (!data?.found) {
+            // 报名可能刚被撤销或删除：清掉旧记录与页脚按钮，避免留下可点的操作。
+            record = null;
             replace(host, notFoundBlock({
                 title: t('s_18st7j'),
                 description: data?.error || t('s_11prq8e'),
                 backLabel: t('s_qr7208'),
                 onBack: () => context.navigate('my-registrations'),
             }));
+            replace(foot, []);
             return;
         }
         record = data.registration;
-    } catch (error) {
-        replace(host, loadErrorBlock({
-            title: t('s_kvpltc'),
-            description: error.message,
-            onRetry: () => context.refresh(),
-        }));
-        return;
+        render();
     }
-
-    render();
 
     function render() {
         const answers = answerLines(record.answers);
