@@ -203,6 +203,69 @@ Android 依赖集中在 `app/build.gradle`：AndroidX、Material、`richeditor-a
 
 代价与边界：离线资源由 APK 内置，媒体文件仍保存在设备本地；JavaScript 与 Android 返回栈通过 `history` 与 `WebView.canGoBack()` 同步；文件选择、日历写入、通知权限、CSV 导出和分享通过桥接调用系统界面；简介编辑器改为内置 EasyMDE，旧页面的 `RichEditor` 仍保留在 `legacy/`。
 
+## 前后端边界（重构后端时看这一节）
+
+前端不直接访问网络，**所有数据都经过 `js/core/bridge.js` 的 `call(action, payload)`**，由 `WebAppBridge` 分发到 `WebAppActions`。因此做前后端分离时，改造面收敛在 `WebAppActions` 一个文件里：把「读写本地 SQLite / SharedPreferences / 会话内存储」的分支换成对 `server/` 的 HTTP 调用，页面与 CSS 不需要改动。
+
+### 47 个桥接动作的分类
+
+`WebAppActions.handle()` 的分发 switch 共 47 个动作（另有 3 个 `case "display|closed|ended"` 属于 `modeLabel()` 内部的字符串分支，不是桥接动作）。
+
+| 类别 | 动作 | 后端重构时的处理 |
+| --- | --- | --- |
+| **当前由本机数据提供（需换成 API）** | `bootstrap`、`auth.login`、`auth.register`、`auth.logout`、`auth.guest`、`profile.get`、`profile.save`、`profile.password`、`exhibitions.list`、`exhibitions.month`、`exhibitions.get`、`exhibitions.save`、`exhibitions.delete`、`exhibitions.status`、`exhibitions.categories`、`exhibitions.fields`、`exhibitions.saveFields`、`registrations.list`、`registrations.get`、`registrations.submit`、`registrations.cancel`、`review.list`、`review.get`、`review.updateStatus`、`checkin.scan`、`users.list`、`users.get`、`users.status`、`users.public`、`search.query`、`settings.get`、`settings.save` | 逐个对应到 `server/` 的路由；本机实现整体删除 |
+| **服务器级配置（现在是 SharedPreferences 模拟）** | `settings.get` / `settings.save` | 现在按“保存后对所有用户生效”呈现，实际只写本机。重构后应改为服务端下发 |
+| **系统能力（保留原生，不进 API）** | `calendar.status`、`calendar.toggle`、`notify.requestPermission`、`media.pickImage`、`media.pickVideo`、`media.import`、`media.store`、`media.imageData`、`share.text`、`export.csv`、`toast`、`camera.ensurePermission` | 依赖 Android 系统界面与硬件，继续留在 `WebAppActions` |
+| **个人偏好（保留本机）** | `notify.preferences`、`notify.savePreferences`、`settings.uiMode` | 属于设备级偏好，不必上云；换新机不必同步，如需多端同步再随用户资料下发 |
+
+### 现在只存在于客户端的业务数据（后端需要补的表/字段）
+
+`server/src/config/migrate.js` 已有 `users` / `exhibitions` / `registrations` / `notifications` / `calendar_events` 五张表，但下列字段与数据目前**只在客户端**，重构时要补上：
+
+| 数据 | 当前存放位置 | 缺什么 |
+| --- | --- | --- |
+| 展会扩展配置 | `ExhibitionConfiguration`（`static Map`，进程内） | 开展日期、报名起止、封面 URL、简介格式、报名二维码开关；`exhibitions` 表只有 `day/month/year` |
+| 报名收集项 | `ExhibitionConfiguration.fields`（选项以英文逗号拼接） | 独立的收集项表（标题 / 类型 / 选项 / 必填） |
+| 报名审核记录 | `RegistrationReviewStore`（`static List`，进程内） | 审核状态、报名码、核销时间；`registrations` 表没有这些列 |
+| 通知与提醒偏好 | `NotificationHelper` + SharedPreferences | 用户维度的通知开关 |
+| 个人资料扩展 | `UserProfileStore`（SharedPreferences） | 昵称、简介、地区、社交账号、头像 URL、`showRegistrations` 隐私开关 |
+| 应用配色 / 外观模式 / 服务器设置 | `AppSettings`（SharedPreferences） | 需要服务端配置表 + 下发接口 |
+| 上传的媒体 | 应用私有目录 `files/media` | 需要对象存储与上传接口（现在用 `appassets.androidplatform.net/media/<文件名>` 短 URL 引用） |
+
+### `server/` 已有端点与桥接动作的对应
+
+| 已有路由 | 对应桥接动作 |
+| --- | --- |
+| `POST /api/auth/login\|register\|refresh\|logout` | `auth.login`、`auth.register`、`auth.logout` |
+| `GET /api/exhibitions`、`GET /api/exhibitions/search`、`GET /api/exhibitions/:id` | `exhibitions.list`、`search.query`、`exhibitions.get`、`exhibitions.month`（月份筛选已支持 query 参数） |
+| `POST\|PUT\|DELETE /api/exhibitions`、`PUT /api/exhibitions/:id/status` | `exhibitions.save`、`exhibitions.delete`、`exhibitions.status` |
+| `GET\|POST\|PUT\|DELETE /api/registrations` | `registrations.list`、`registrations.get`、`registrations.submit`、`registrations.cancel` |
+| `GET\|PUT\|DELETE /api/users`、`PUT /api/users/:id/status` | `users.list`、`users.get`、`users.status`、`users.public` |
+
+**尚无对应端点的动作**（重构时需要新增）：`review.list`、`review.get`、`review.updateStatus`、`checkin.scan`（核销）、`exhibitions.categories`、`exhibitions.fields`、`exhibitions.saveFields`、`settings.get`、`settings.save`、`bootstrap`（一次拉取用户态 + 全部配置的聚合接口）。
+
+## 待优化的结构（前后端分离前可先做的部分）
+
+以下是纯客户端、与后端无关的清理项，按收益排序。带 ★ 的会直接影响后续接 API 的成本。
+
+| # | 位置 | 问题 | 建议 |
+| --- | --- | --- | --- |
+| 1 ★ | `WebAppActions.java` 2,100 行 | 桥接分发、业务规则、文件 IO、权限申请混在一个类；接 API 时所有改动都挤在这里 | 按动作域拆成 `AuthActions` / `ExhibitionActions` / `RegistrationActions` / `ReviewActions` / `MediaActions` / `SettingsActions`，`handle()` 只做路由表分发 |
+| 2 ★ | `ExhibitionConfiguration`（`static Map`） | 用进程内静态表当存储，重启即丢；`save()` 是位置参数，调用方必须先把现值读回来再原样传进去 | 改为有序的 setter 集合或 builder；后端化时这层整体被 API 取代 |
+| 3 ★ | `RegistrationReviewStore` | 「示例数据播种」与「真实记录」混在一个列表，主键 `registration-N` 会与 SQLite 报名记录撞号（ADB 回归时看到管理员报名出现在普通用户列表里，根因在此） | 把 demo 播种拆到独立 `DemoData`，或播种时用不冲突的前缀 |
+| 4 | 5 处复制页脚 | `detail.js:16`、`registration-detail.js:17`、`exhibition-form.js:34`、`rich-editor.js:19`、`user-public.js:19` 各写一遍内联页脚容器样式 | 提为组件（如 `components.js` 的 `pageFoot()`）或 `.page-foot` 类 |
+| 5 | 3 处复制按钮工厂 | `admin.js:532 smallButton`、`profile.js:259 smallButton`、`exhibitor.js:106 actionButton` 三份几乎相同 | 合并到 `components.js`，用 `size`/`variant` 参数区分 |
+| 6 | 43 处 `catch (error) { toast(...) }` | 同样的错误提示模板重复 43 次 | 收成 `guard(promise, fallbackMessage)` 辅助函数 |
+| 7 | 状态字符串散落 | `'待审核' / '已通过' / '已拒绝' / '已参加' / '已撤销' / '需审核' / '无需审核' / '仅展示'` 在 7 个前端文件里共出现 40 次，且与原生常量各写一份 | 抽 `js/core/status.js` 集中声明并导出 `statusTone()`，与原生 `RegistrationReviewStore` / `ExhibitorExhibition` 的常量一一对应 |
+| 8 | 原生侧双份表单上限 | `AppSettings.saveTextLimits` 用两个 `int[]`（12 个位置魔数），而 `textLimits()` 用命名 key，同一份数据两套真相；中文标签在 `admin.js` 又抄一遍 | 改为 `Map<String,Integer>` 或直接把 limits 存成 JSON，前后端共用同一份键名 |
+| 9 | 19 个从未被调用的前端导出 | `app.js:syncUser`、`bridge.js:isReady`、`dom.js:delegate\|formatDate\|orDash\|today`、`markdown.js:looksLikeMarkdown`、`router.js:currentRoute`、`sanitize.js:isBlankHtml`、`validate.js:formatsText\|isEmpty\|isEmail\|dateOrderRule\|extensionAllowed`、`components.js:syncSegments\|rowCard\|textField\|textAreaField\|selectField` | 直接删除；`rowCard`/`textField` 等若打算在重构里用，就补上使用点或标注为公共组件 |
+| 10 | `--accent-soft` | `bridge.js:258` 每帧写入，CSS 里零消费 | 删除该变量的计算 |
+| 11 | `media.imageData` 动作 | 唯一调用点 `detail.js:131` 只在 `imageUri` 非 `http(s):/data:` 时触发，而落地后的 `imageUri` 一定是 `https://appassets.../media/...`，是死分支 | 删掉该分支与对应原生动作（可与媒体上云一起做） |
+| 12 | 过期的向后兼容 shim | `UserProfileStore.java:67` 的 `contact` → `region` 键回退（旧 `ProfileActivity` 写的键）；`AppSettings.java:130` 的分类换行分隔兼容；`ExhibitionCatalog.java:9`、`ExhibitorExhibition.java:5` 引用了已归档的 `MainActivity` | 随 `legacy/` 一起删除 |
+| 13 | `legacy/` 整包 + 16 个布局 + `res/values` 四件套 | 5,448 行 Java + 1,199 行布局 + `strings/colors/dimens/styles`（303 次 `R.string`、308 次 `R.color/dimen` 引用全部来自 legacy），已零引用：唯一渲染入口是 `WebShellActivity.setContentView(container)`；仅 `MainTabStateTest`（24 行）依赖 | 删包、删布局、删 `MainTabStateTest`，`res/values` 只留 `AppTheme` 与 `app_name`；同步改 `smoke-check.js` 的 4 处断言与本文档「原生界面与 WebView 的取舍」 |
+| 14 | `database/` + `models/` + `network/` + `repository/` + `viewmodel/` | 2,043 行，只在内部互相引用（`AppDatabase` 从未实例化，`viewmodel/` 无人调用）；`models/Exhibition`、`models/Registration` 与根包 `ExhibitorExhibition`、`Registration` 是同名不同类的两份模型 | **前后端分离后这层会被真正的 API 客户端取代**，可按新 API 的形状重写而不是维持；重写前建议连同 `app/build.gradle` 里的 Room/Retrofit 依赖一起清掉，避免两套数据模型并存 |
+| 15 | `showRegistrations` 隐私开关 | 用户**无法打开**：资料编辑表单里没有这个控件，`profile.js` 两处保存都传 `state.user.showRegistrations === true`（恒为 false），于是 `user-public.js` 的「公开」分支与「还没有可展示的报名记录」文案都是死路径 | 补一个开关控件，或把该字段从表单链路里去掉 |
+
 ## 构建、测试与运行
 
 环境要求：Android Studio、JDK 17、Android SDK 34、Gradle Wrapper 8.5；Windows 命令如下，Linux/macOS 将 `gradlew.bat` 换为 `./gradlew`。
