@@ -15,7 +15,7 @@ import { users } from '../core/api.js';
 import { loadInto } from '../core/loadable.js';
 import { scaffold } from '../core/router.js';
 import { avatarNode, pageFoot, stateBlock, statusTag, statusTone } from '../ui/components.js';
-import { el, replace, formatDateWithWeekday } from '../core/dom.js';
+import { el, replace, formatRecordDate } from '../core/dom.js';
 
 export async function userPublicPage(context) {
     const host = el('div', { class: 'stack' });
@@ -100,7 +100,7 @@ export async function userPublicPage(context) {
                         el('span', { class: 'thumb thumb-cover ph-img thumb-sm', 'aria-hidden': 'true' }),
                         el('span', { class: 'row-copy' }, [
                             el('strong', { class: 'row-title truncate', text: record.exhibitionTitle }),
-                            el('span', { class: 'row-meta', text: `${formatDateWithWeekday(`2026-06-${String(record.exhibitionDay).padStart(2, '0')}`)} · ${record.statusLabel}` }),
+                            el('span', { class: 'row-meta', text: `${formatRecordDate(record)} · ${record.statusLabel}` }),
                         ]),
                         statusTag(record.statusLabel, statusTone(record.statusLabel)),
                     ])))

@@ -15,7 +15,7 @@ import { registrations } from '../core/api.js';
 import { loadInto } from '../core/loadable.js';
 import { scaffold } from '../core/router.js';
 import { confirmSheet, notFoundBlock, pageFoot, statusTag, statusTone, toast } from '../ui/components.js';
-import { el, replace, answerLines, formatDateWithWeekday } from '../core/dom.js';
+import { el, replace, answerLines, formatRecordDate } from '../core/dom.js';
 import { REGISTRATION_STATUS } from '../core/status.js';
 import { loadQrEncoder } from '../core/vendor.js';
 
@@ -63,7 +63,7 @@ export async function registrationDetailPage(context) {
         replace(host, [
             el('div', { class: 'card', 'data-tone': 'fill' }, [
                 el('strong', { text: record.exhibitionTitle }),
-                el('span', { class: 'row-meta', text: `${formatDateWithWeekday(`2026-06-${String(record.exhibitionDay).padStart(2, '0')}`)} ${record.exhibitionTime}` }),
+                el('span', { class: 'row-meta', text: `${formatRecordDate(record)} ${record.exhibitionTime}` }),
                 el('span', { class: 'row-meta', text: record.exhibitionVenue }),
             ]),
             el('div', { class: 'card' }, [

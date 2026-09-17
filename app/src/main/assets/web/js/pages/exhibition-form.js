@@ -496,8 +496,10 @@ export async function exhibitionFormPage(context) {
             tone: 'danger',
             onConfirm: async () => {
                 try {
-                    const ok = await exhibitions.remove(model.id);
-                    toast(ok ? t('s_1jj834o') : t('s_1ijrr73'), ok ? 'success' : 'error');
+                    // 写接口统一返回 { ok, error }，只判断响应本身会把失败当成成功。
+                    const result = await exhibitions.remove(model.id);
+                    const ok = result?.ok === true;
+                    toast(ok ? t('s_1jj834o') : (result?.error || t('s_1ijrr73')), ok ? 'success' : 'error');
                     if (ok) {
                         context.navigate('exhibitor', {}, { replace: true });
                     }

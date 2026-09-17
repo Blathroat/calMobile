@@ -221,8 +221,11 @@ export async function adminPage(context) {
 
     async function updateUserStatus(user, status) {
         try {
-            const ok = await usersApi.setStatus(user.id, status);
-            toast(ok ? `已将 ${user.nickname} 设为${status}` : t('s_10lkv9z'), ok ? 'success' : 'error');
+            // 写接口统一返回 { ok, error }：只判断整个响应是否为真会把失败也当成成功。
+            const result = await usersApi.setStatus(user.id, status);
+            const ok = result?.ok === true;
+            toast(ok ? `已将 ${user.nickname} 设为${status}` : (result?.error || t('s_10lkv9z')),
+                ok ? 'success' : 'error');
             if (ok) {
                 loadPanel();
             }
@@ -306,8 +309,9 @@ export async function adminPage(context) {
             confirmLabel: title,
             onConfirm: async () => {
                 try {
-                    const ok = await exhibitions.setStatus(item.id, nextStatus);
-                    toast(ok ? `已${title}` : t('s_ydow7a'), ok ? 'success' : 'error');
+                    const result = await exhibitions.setStatus(item.id, nextStatus);
+                    const ok = result?.ok === true;
+                    toast(ok ? `已${title}` : (result?.error || t('s_ydow7a')), ok ? 'success' : 'error');
                     if (ok) {
                         loadPanel();
                     }

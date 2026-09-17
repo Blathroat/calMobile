@@ -895,3 +895,129 @@ test('启动后会预加载其它标签页的数据', async () => {
     assert.ok(api.profile.get.peek(), '个人页没有预热');
     assert.ok(api.exhibitions.list.peek(), '展商后台没有预热');
 });
+
+// ── 与后端的 REST 契约 ───────────────────────────────────────────
+
+/**
+ * `api.js` 的 ENDPOINTS 是前后端之间唯一的口头约定：动作名翻成哪个方法 + 路径。
+ * 这里用打桩的 fetch 把请求录下来逐条核对，避免「后端加了接口、前端映射写错」
+ * 这类只在真机上才暴露的问题（例如同名的函数把整个模块弄成语法错误）。
+ */
+test('动作按 ENDPOINTS 映射成后端请求，401 会自动续期一次', async () => {
+    await renderRoute('home', {});
+    const api = await webModule('js/core/api.js');
+
+    const originalFetch = sharedWindow.fetch;
+    const seen = [];
+    let respond = { status: 200, body: {} };
+    sharedWindow.fetch = async (url, options = {}) => {
+        seen.push({
+            url: String(url),
+            method: options.method || 'GET',
+            body: options.body ? JSON.parse(options.body) : null,
+            authorized: Boolean(options.headers && options.headers.Authorization),
+        });
+        return {
+            ok: respond.status < 400,
+            status: respond.status,
+            json: async () => respond.body,
+        };
+    };
+    installGlobals();
+
+    try {
+        api.clearCache();
+        api.setToken('');
+        api.setRefreshToken('');
+        await api.probe(true);
+        assert.strictEqual(api.transport(), 'remote', '打桩 fetch 可用时应当走 HTTP 传输层');
+
+        // 读取类：查询串带上参数
+        respond = { status: 200, body: [] };
+        await api.exhibitions.list({ query: '智能' });
+        assert.strictEqual(seen.at(-1).method, 'GET');
+        assert.ok(seen.at(-1).url.endsWith('/api/v1/exhibitions?query=%E6%99%BA%E8%83%BD'),
+            `列表路径不对：${seen.at(-1).url}`);
+
+        // 路径参数：id 直接拼在路径里，不做查询串
+        respond = { status: 200, body: { found: true } };
+        await api.exhibitions.get('exh-1');
+        assert.ok(seen.at(-1).url.endsWith('/api/v1/exhibitions/exh-1'), seen.at(-1).url);
+
+        // 同一动作按有没有 id 分成新建 / 更新
+        await api.exhibitions.save({ title: '新展会' });
+        assert.strictEqual(seen.at(-1).method, 'POST');
+        assert.ok(seen.at(-1).url.endsWith('/api/v1/exhibitions'), seen.at(-1).url);
+        await api.exhibitions.save({ id: 'exh-1', title: '改名' });
+        assert.strictEqual(seen.at(-1).method, 'PUT');
+        assert.ok(seen.at(-1).url.endsWith('/api/v1/exhibitions/exh-1'), seen.at(-1).url);
+
+        // 带子路径的写操作：请求体保留参数
+        await api.review.updateStatus('reg-9', '已通过');
+        assert.strictEqual(seen.at(-1).method, 'PUT');
+        assert.ok(seen.at(-1).url.endsWith('/api/v1/review/reg-9/status'), seen.at(-1).url);
+        assert.deepStrictEqual(seen.at(-1).body, { id: 'reg-9', status: '已通过' });
+
+        // 用户公开页走查询串（后端同时支持 /users/public 与 /users/:id/public）
+        await api.users.publicProfile({ nickname: 'demo' });
+        assert.ok(seen.at(-1).url.endsWith('/api/v1/users/public?nickname=demo'), seen.at(-1).url);
+
+        // 退出登录要把刷新令牌交给后端撤销
+        respond = { status: 200, body: { ok: true } };
+        api.setRefreshToken('refresh-token-1');
+        await api.auth.logout();
+        assert.ok(seen.at(-1).url.endsWith('/api/v1/auth/logout'), seen.at(-1).url);
+        assert.deepStrictEqual(seen.at(-1).body, { refreshToken: 'refresh-token-1' });
+        assert.strictEqual(api.hasRefreshToken(), false, '退出后本地不应留着刷新令牌');
+
+        // 401 → 用刷新令牌换一次 → 重试原请求
+        api.clearCache();
+        api.setToken('expired-token');
+        api.setRefreshToken('refresh-token-2');
+        let firstAttempt = true;
+        sharedWindow.fetch = async (url, options = {}) => {
+            const target = String(url);
+            const auth = (options.headers && options.headers.Authorization) || '';
+            seen.push({
+                url: target,
+                method: options.method || 'GET',
+                body: null,
+                // 记下令牌本身，「续期后重试带的是新令牌」才验得出来
+                token: auth.replace(/^Bearer /, ''),
+            });
+            if (target.endsWith('/auth/refresh')) {
+                return { ok: true, status: 200, json: async () => ({ ok: true, token: 'fresh-token', refreshToken: 'refresh-token-3' }) };
+            }
+            if (firstAttempt && target.endsWith('/exhibitions')) {
+                firstAttempt = false;
+                return { ok: false, status: 401, json: async () => ({ error: '登录状态已失效，请重新登录' }) };
+            }
+            return { ok: true, status: 200, json: async () => [] };
+        };
+        installGlobals();
+        await api.exhibitions.list();
+        const renewed = seen.slice(-3);
+        assert.strictEqual(renewed.length, 3, `续期应当正好三次请求：${JSON.stringify(renewed)}`);
+        assert.ok(renewed[0].url.endsWith('/api/v1/exhibitions'), renewed[0].url);
+        assert.strictEqual(renewed[0].token, 'expired-token', '第一次应当带原来的访问令牌');
+        assert.ok(renewed[1].url.endsWith('/api/v1/auth/refresh'), '第二次应当是刷新令牌');
+        assert.ok(renewed[2].url.endsWith('/api/v1/exhibitions'), '第三次应当重试原请求');
+        assert.strictEqual(renewed[2].token, 'fresh-token', '重试必须带续期后的新令牌');
+
+        // 4xx 业务失败：抛成错误，不退回原生（否则同一个操作会在另一套实现上重放）
+        api.clearCache();
+        sharedWindow.fetch = async () => ({ ok: false, status: 403, json: async () => ({ error: '无权执行此操作' }) });
+        installGlobals();
+        await assert.rejects(() => api.exhibitions.list(), /无权执行此操作/);
+
+        // 5xx：属于传输层失败，退回原生桥接
+        sharedWindow.fetch = async () => ({ ok: false, status: 502, json: async () => ({ error: '网关错误' }) });
+        installGlobals();
+        api.clearCache();
+        const items = await api.exhibitions.list();
+        assert.ok(Array.isArray(items) && items.length > 0, '远端 5xx 时应当退回原生桥接并拿到数据');
+    } finally {
+        sharedWindow.fetch = originalFetch;
+        installGlobals();
+    }
+});

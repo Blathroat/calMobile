@@ -8,18 +8,17 @@
  *
  * ## 传输层
  *
- * 数据请求优先走 HTTP（`server/`），失败时自动退回原生桥接，因此：
+ * 数据请求走 `server/` 的 Express + PostgreSQL 后端（`npm run dev`，默认 3000 端口），
+ * 连不上时退回原生桥接，因此应用在没有后端时仍能完整演示：
  *
- * - **后端可用**：页面数据来自 `callRemote`，前后端已经分离；
- * - **后端不可用**：退回 `callNative`，应用仍然可用（离线 / 未启动服务时）。
+ * - **后端可用**：`callRemote` 按 `ENDPOINTS` 把动作翻成 REST 请求；
+ * - **后端不可用**：退回 `call(action, payload)`，走 `WebAppActions` 的本机实现。
  *
- * 分离完成后删掉 `callNative` 分支与本文件里的降级逻辑即可，页面不用改。
- * 连通性在启动时探测一次（`ping`），结果缓存在 `mode`。
+ * 页面只认动作名，HTTP 形状只存在于本文件，因此换后端不用动页面。
  *
  * ## 约定
  *
- * - 方法名与后端资源路径同构（`exhibitions.list` ↔ `GET /exhibitions.list`）；
- * - 返回值字段与状态文案与桥接层完全一致，页面按同一套字段渲染；
+ * - 后端返回的字段与状态文案与桥接层完全一致，页面按同一套字段渲染；
  * - 失败统一抛出 `Error`，由页面就地展示；
  * - 只放「数据」相关的方法；摄像头、日历、分享这类系统能力仍走 `bridge.js`。
  */
@@ -32,11 +31,11 @@ import { call } from './bridge.js';
  * 页面本身运行在 `https://appassets.androidplatform.net` 这个 HTTPS 上下文里，
  * 请求 http:// 会被 WebView 判定为混合内容并拦截。因此：
  *
- * - **真机与模拟器统一用 `adb reverse tcp:4000 tcp:4000`**，然后访问 127.0.0.1；
+ * - **真机与模拟器统一用 `adb reverse tcp:3000 tcp:3000`**，然后访问 127.0.0.1；
  * - `WebShellActivity` 已开启 `MIXED_CONTENT_ALWAYS_ALLOW` 允许这次明文请求
  *   （正式后端改 HTTPS 后应当去掉该设置）。
  */
-const BASE_URL = 'http://127.0.0.1:4000';
+const BASE_URL = 'http://127.0.0.1:3000/api/v1';
 
 /** 探测超时：超过这个时间就认为后端不可用，避免启动被拖住。 */
 const PROBE_TIMEOUT = 1200;
@@ -47,6 +46,8 @@ const REQUEST_TIMEOUT = 3000;
 /** 'unknown' | 'remote' | 'native' */
 let mode = 'unknown';
 let currentToken = '';
+/** 刷新令牌：访问令牌过期时用它换一套新的，见 callRemote。 */
+let refreshToken = '';
 
 /**
  * 显式探一次后端。
@@ -86,6 +87,15 @@ export function setToken(token) {
     currentToken = token || '';
 }
 
+/** 登录 / 刷新后保存刷新令牌。 */
+export function setRefreshToken(token) {
+    refreshToken = token || '';
+}
+
+export function hasRefreshToken() {
+    return Boolean(refreshToken);
+}
+
 /** 传输层错误：只有这类错误才值得退回原生桥接。 */
 class TransportError extends Error {
     constructor(message) {
@@ -94,29 +104,101 @@ class TransportError extends Error {
     }
 }
 
+/**
+ * 动作 → REST 端点。
+ *
+ * 页面只认 `api.exhibitions.list()` 这样的**动作名**，HTTP 长什么样只在这个文件里：
+ * 后端从演示服务换成 Express + PostgreSQL 时，页面一行都没改。
+ * 每一项接收动作参数，返回 `{ method, path, body }`；`path` 以 `BASE_URL` 为前缀。
+ */
+const ENDPOINTS = {
+    bootstrap: () => ({ method: 'GET', path: '/bootstrap' }),
+
+    'auth.login': () => ({ method: 'POST', path: '/auth/login' }),
+    'auth.register': () => ({ method: 'POST', path: '/auth/register' }),
+    'auth.guest': () => ({ method: 'POST', path: '/auth/guest' }),
+    'auth.logout': (payload) => ({ method: 'POST', path: '/auth/logout', body: payload }),
+
+    'profile.get': () => ({ method: 'GET', path: '/profile' }),
+    'profile.save': () => ({ method: 'PUT', path: '/profile' }),
+    'profile.password': () => ({ method: 'POST', path: '/profile/password' }),
+    'notify.preferences': () => ({ method: 'GET', path: '/profile/notifications' }),
+    'notify.savePreferences': () => ({ method: 'PUT', path: '/profile/notifications' }),
+
+    'exhibitions.list': (payload) => ({ method: 'GET', path: '/exhibitions', query: payload }),
+    'exhibitions.month': (payload) => ({ method: 'GET', path: '/exhibitions/month', query: payload }),
+    'exhibitions.categories': () => ({ method: 'GET', path: '/exhibitions/categories' }),
+    'exhibitions.get': (payload) => ({ method: 'GET', path: `/exhibitions/${encodeURIComponent(payload.id)}` }),
+    'exhibitions.save': (payload) => (payload.id
+        ? { method: 'PUT', path: `/exhibitions/${encodeURIComponent(payload.id)}` }
+        : { method: 'POST', path: '/exhibitions' }),
+    'exhibitions.delete': (payload) => ({ method: 'DELETE', path: `/exhibitions/${encodeURIComponent(payload.id)}` }),
+    'exhibitions.status': (payload) => ({ method: 'PUT', path: `/exhibitions/${encodeURIComponent(payload.id)}/status` }),
+    'exhibitions.fields': (payload) => ({ method: 'GET', path: `/exhibitions/${encodeURIComponent(payload.id)}/fields` }),
+    'exhibitions.saveFields': (payload) => ({ method: 'PUT', path: `/exhibitions/${encodeURIComponent(payload.id)}/fields` }),
+
+    'registrations.list': () => ({ method: 'GET', path: '/registrations' }),
+    'registrations.get': (payload) => ({ method: 'GET', path: `/registrations/${encodeURIComponent(payload.id)}` }),
+    'registrations.submit': () => ({ method: 'POST', path: '/registrations' }),
+    'registrations.cancel': (payload) => ({ method: 'DELETE', path: `/registrations/${encodeURIComponent(payload.id)}` }),
+
+    'review.list': (payload) => ({ method: 'GET', path: '/review', query: payload }),
+    'review.get': (payload) => ({ method: 'GET', path: `/review/${encodeURIComponent(payload.id)}` }),
+    'review.updateStatus': (payload) => ({ method: 'PUT', path: `/review/${encodeURIComponent(payload.id)}/status` }),
+
+    'checkin.scan': () => ({ method: 'POST', path: '/checkin' }),
+
+    'users.list': (payload) => ({ method: 'GET', path: '/users', query: payload }),
+    'users.get': (payload) => ({ method: 'GET', path: `/users/${encodeURIComponent(payload.id)}` }),
+    'users.status': (payload) => ({ method: 'PUT', path: `/users/${encodeURIComponent(payload.id)}/status` }),
+    'users.public': (payload) => ({ method: 'GET', path: '/users/public', query: payload }),
+
+    'search.query': (payload) => ({ method: 'GET', path: '/search', query: payload }),
+
+    'settings.get': () => ({ method: 'GET', path: '/settings' }),
+    'settings.save': () => ({ method: 'PUT', path: '/settings' }),
+    'settings.uiMode': () => ({ method: 'PUT', path: '/settings/ui-mode' }),
+};
+
+/** GET 查询串：丢掉空值，值统一编码。 */
+function queryString(query) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query || {})) {
+        if (value === undefined || value === null || value === '') {
+            continue;
+        }
+        params.set(key, String(value));
+    }
+    const text = params.toString();
+    return text ? `?${text}` : '';
+}
+
+/**
+ * 发一次请求。
+ *
+ * 状态码的用法（与 server/README.md 的「响应约定」一致）：
+ * - 2xx：正常。写接口的 `{ ok:false, error }` 也走这条路，抛成业务错误由页面就地提示；
+ * - 401：访问令牌过期 → 用刷新令牌换一次再重试；换不到就当业务错误抛出；
+ * - 403 / 404 等 4xx：业务错误，**不退回原生**（退回只会把同一个操作在另一套实现上重放）；
+ * - 5xx / 连不上 / 超时：传输层问题，可以退回原生桥接（离线演示）。
+ */
 async function callRemote(action, payload) {
-    const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT) : null;
-    let response;
-    try {
-        response = await fetch(`${BASE_URL}/${action}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
-            },
-            body: JSON.stringify(payload || {}),
-            signal: controller?.signal,
-        });
-    } catch (error) {
-        // 连不上、被中断、超时：都属于传输层问题，可以退回原生。
-        throw new TransportError(error.message);
-    } finally {
-        if (timer) {
-            clearTimeout(timer);
+    const spec = ENDPOINTS[action];
+    if (!spec) {
+        throw new TransportError(`未映射到后端接口的动作：${action}`);
+    }
+    const request = spec(payload || {});
+    const url = `${BASE_URL}${request.path}${queryString(request.query)}`;
+    const body = request.method === 'GET' ? undefined : JSON.stringify(request.body === undefined ? payload || {} : request.body);
+
+    let response = await httpFetch(url, request.method, body);
+    if (response.status === 401 && refreshToken && !request.retried) {
+        const renewed = await renewSession();
+        if (renewed) {
+            response = await httpFetch(url, request.method, body);
         }
     }
-    if (!response.ok) {
+    if (response.status >= 500) {
         throw new TransportError(`后端返回 ${response.status}`);
     }
     let data;
@@ -125,11 +207,72 @@ async function callRemote(action, payload) {
     } catch (error) {
         throw new TransportError(`响应不是合法 JSON：${error.message}`);
     }
-    // 业务失败：后端返回 { ok: false, error }，与桥接层一致，交给页面判断。
+    if (!response.ok) {
+        // 4xx：把后端的错误文案交给页面，属于业务失败。
+        throw new Error(data?.error || `请求失败（${response.status}）`);
+    }
     if (data && data.ok === false && data.error) {
         throw new Error(data.error);
     }
     return data;
+}
+
+/** 底层 fetch：网络异常与超时统一转成 TransportError。 */
+async function httpFetch(url, method, body) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT) : null;
+    try {
+        return await fetch(url, {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
+            },
+            body,
+            signal: controller?.signal,
+        });
+    } catch (error) {
+        throw new TransportError(error.message);
+    } finally {
+        if (timer) {
+            clearTimeout(timer);
+        }
+    }
+}
+
+/**
+ * 用刷新令牌换一套新令牌。
+ *
+ * 访问令牌只有 15 分钟，没有这一步用户会在用着用着突然被登出。
+ * 刷新失败（令牌被撤销或过期）返回 false，由调用方按业务错误抛出。
+ */
+let renewing = null;
+
+function renewSession() {
+    if (renewing) {
+        return renewing;
+    }
+    renewing = (async () => {
+        try {
+            const response = await httpFetch(`${BASE_URL}/auth/refresh`, 'POST',
+                JSON.stringify({ refreshToken }));
+            if (!response.ok) {
+                return false;
+            }
+            const data = await response.json();
+            if (!data?.token) {
+                return false;
+            }
+            setToken(data.token);
+            setRefreshToken(data.refreshToken);
+            return true;
+        } catch (ignored) {
+            return false;
+        } finally {
+            renewing = null;
+        }
+    })();
+    return renewing;
 }
 
 /**
@@ -354,17 +497,30 @@ export const api = {
             const result = await request('auth.login', { username, password });
             if (result?.token) {
                 setToken(result.token);
+                setRefreshToken(result.refreshToken);
             }
             // 换了身份，上一份缓存不再适用。
             clearCache();
             return result;
         },
-        register: (payload) => request('auth.register', payload),
+        register: async (payload) => {
+            const result = await request('auth.register', payload);
+            if (result?.token) {
+                setToken(result.token);
+                setRefreshToken(result.refreshToken);
+            }
+            clearCache();
+            return result;
+        },
         guest: () => request('auth.guest'),
         logout: async () => {
+            // 先把刷新令牌交给后端撤销，再清本地状态：否则退出后令牌仍然有效。
+            const result = await request('auth.logout', { refreshToken })
+                .catch(() => ({ ok: false, error: '' }));
             setToken('');
+            setRefreshToken('');
             clearCache();
-            return request('auth.logout');
+            return result;
         },
     },
 

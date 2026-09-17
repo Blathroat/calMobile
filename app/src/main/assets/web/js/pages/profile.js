@@ -404,8 +404,9 @@ export async function profilePage(context) {
 
     async function savePreferences(patch) {
         try {
-            const updated = await profileApi.saveNotifications(patch);
-            Object.assign(notify, updated || {});
+            // 写接口统一返回 { ok, error, ... }，通知偏好放在 notify 里。
+            const result = await profileApi.saveNotifications(patch);
+            Object.assign(notify, result?.notify || {});
             toast(t('s_15wm4xy'), 'success');
         } catch (error) {
             toast(error.message, 'error');

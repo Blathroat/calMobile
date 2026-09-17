@@ -85,6 +85,30 @@ export function formatDateWithWeekday(iso) {
     return `${date.month}月${date.day}日（${weekday}）`;
 }
 
+/**
+ * 报名 / 参展记录里的展会日期。
+ *
+ * 优先用接口给的 ISO 日期（`exhibitionDate`），没有才用年 / 月 / 日三个字段拼。
+ * 以前页面直接写死「2026-06-」加日号，换了真实数据（9 月的展会）就会显示成 6 月。
+ */
+export function formatRecordDate(record) {
+    const item = record || {};
+    if (item.exhibitionDate) {
+        return formatDateWithWeekday(item.exhibitionDate);
+    }
+    const day = Number(item.exhibitionDay) || 0;
+    if (!day) {
+        return '';
+    }
+    const month = Number(item.exhibitionMonth) || 0;
+    const year = Number(item.exhibitionYear) || 0;
+    if (year && month) {
+        const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        return formatDateWithWeekday(iso);
+    }
+    return month ? `${month}月${day}日` : `${day}日`;
+}
+
 /** 把答案文本按行渲染为键值对，找不到分隔符时返回原文。 */
 export function answerLines(answers) {
     const text = String(answers || '').trim();

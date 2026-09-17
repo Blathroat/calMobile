@@ -13,7 +13,7 @@ import { loadInto } from '../core/loadable.js';
 import { warmOnPress } from '../core/preload.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
 import { stateBlock, statusTag, statusTone } from '../ui/components.js';
-import { el, replace, truncate, formatDateWithWeekday } from '../core/dom.js';
+import { el, replace, truncate, formatRecordDate } from '../core/dom.js';
 
 export async function myRegistrationsPage(context) {
     const listHost = el('div', { class: 'list', 'data-gap': 'sm' });
@@ -73,7 +73,7 @@ export async function myRegistrationsPage(context) {
                 el('span', { class: 'thumb ph-img', 'aria-hidden': 'true' }),
                 el('span', { class: 'row-copy' }, [
                     el('strong', { class: 'row-title truncate', text: record.exhibitionTitle }),
-                    el('span', { class: 'row-meta', text: `${formatDateWithWeekday(`2026-06-${String(record.exhibitionDay).padStart(2, '0')}`)} ${record.exhibitionTime}` }),
+                    el('span', { class: 'row-meta', text: `${formatRecordDate(record)} ${record.exhibitionTime}` }),
                     el('span', { class: 'row-meta truncate', text: record.exhibitionVenue }),
                     el('span', { class: 'row-meta truncate', text: `报名信息：${truncate(record.answers || t('s_v8pba2'), 34)}` }),
                 ]),
