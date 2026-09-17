@@ -1,3 +1,4 @@
+import { t } from './strings.js';
 /**
  * 哈希路由。
  *
@@ -5,7 +6,7 @@
  * 路由只负责页面切换、URL 同步与浏览器/系统返回键。
  */
 
-import { state } from './bridge.js';
+import { state, mark } from './bridge.js';
 import { renderShell, topbar, icon } from '../ui/components.js';
 import { el, append, qs } from './dom.js';
 
@@ -159,22 +160,23 @@ export async function render() {
     } catch (error) {
         console.error(error);
         renderShell(qs('#app'), {
-            topbar: topbar({ title: definition.title || '出错了', showBack: false }),
+            topbar: topbar({ title: definition.title || t('s_8peqwe'), showBack: false }),
             body: [
                 el('div', { class: 'state', dataset: { tone: 'error' } }, [
-                    el('strong', { text: '页面加载失败' }),
+                    el('strong', { text: t('s_dte5kz') }),
                     el('p', { class: 'muted', text: error instanceof Error ? error.message : String(error) }),
                     el('button', {
                         class: 'cta ghost',
                         type: 'button',
                         onclick: () => render(),
-                    }, ['重试']),
+                    }, [t('s_lswd2v')]),
                 ]),
             ],
         });
     }
 
     document.title = `${definition.title || state.brand.zh} · ${state.brand.zh}`;
+    mark(`page:${route.id}`);
     onNavigate?.(current);
 }
 
@@ -234,7 +236,7 @@ export function topAction(name, label, onClick) {
 
 /** 角色化底部导航；与 newUI 的 tab 文案一致，选中指示条在切换时滑动过去。 */
 export function tabbar({ items, active }) {
-    const bar = el('nav', { class: 'tabbar', 'aria-label': '底部导航' });
+    const bar = el('nav', { class: 'tabbar', 'aria-label': t('s_1fe4wn6') });
     const indicator = el('span', { class: 'tabbar-indicator', 'aria-hidden': 'true' });
     append(bar, indicator);
 
@@ -272,16 +274,16 @@ export function tabbar({ items, active }) {
 /** 导航项按角色过滤，与旧版 MainActivity 的四标签可见性规则一致。 */
 export function navItems() {
     const items = [
-        { id: 'home', label: '首页', icon: 'home' },
-        { id: 'my-registrations', label: '我的报名', icon: 'ticket' },
+        { id: 'home', label: t('s_1ow5v10'), icon: 'home' },
+        { id: 'my-registrations', label: t('s_1m2dh8u'), icon: 'ticket' },
     ];
     const can = state.user.can || {};
     if (can.exhibitor) {
-        items.push({ id: 'exhibitor', label: '展商', icon: 'briefcase' });
+        items.push({ id: 'exhibitor', label: t('s_1mdxfsy'), icon: 'briefcase' });
     }
     if (can.admin) {
-        items.push({ id: 'admin', label: '管理', icon: 'shield' });
+        items.push({ id: 'admin', label: t('s_pzy8ri'), icon: 'shield' });
     }
-    items.push({ id: 'profile', label: '个人', icon: 'user' });
+    items.push({ id: 'profile', label: t('s_8ddpxh'), icon: 'user' });
     return items;
 }

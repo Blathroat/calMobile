@@ -10,6 +10,36 @@
  * 模块顶层的 window 访问都做了存在性判断，便于静态检查工具直接导入本文件。
  */
 
+/**
+ * 启动耗时打点。
+ *
+ * 首帧慢是 WebView 承载的常见问题，靠猜不如量。每个节点都记一次
+ * `performance.now()`，`mark()` 会把结果写进 `window.__CALMOBILE_TIMING__`，
+ * 原生侧通过 `report` 记到 logcat（`adb logcat -s WebShellActivity`）就能看到：
+ *
+ *   D/WebShellActivity: web timing: module-start=12ms native-ready=48ms first-paint=210ms ...
+ */
+const timings = {};
+const t0 = typeof performance !== 'undefined' && performance.now ? performance.now() : 0;
+
+export function mark(label) {
+    if (!t0) {
+        return;
+    }
+    timings[label] = Math.round(performance.now() - t0);
+}
+
+export function reportTimings() {
+    if (hasWindow) {
+        window.__CALMOBILE_TIMING__ = { ...timings };
+    }
+    const summary = Object.entries(timings).map(([key, value]) => `${key}=${value}ms`).join(' ');
+    if (summary) {
+        console.log(`web timing: ${summary}`);
+    }
+    return summary;
+}
+
 const hasWindow = typeof window !== 'undefined';
 
 const pending = new Map();
@@ -125,19 +155,39 @@ if (hasWindow) {
     };
 }
 
+/**
+ * 原生就绪后触发 bootstrap。
+ *
+ * **不能等 bootstrap 完成才 resolve `readyPromise`**：bootstrap 走的是远端 HTTP，
+ * 未启动后端时它可能超时甚至永久挂起，而 `call()` 本身又依赖页面脚本先加载完，
+ * 等下去就是首帧白屏（曾经的死锁：boot → call → 等 ready；ready → 等 boot）。
+ *
+ * 因此这里立刻放行「原生已就绪」，让应用按已知状态渲染首屏；bootstrap 结果到了
+ * 由 app.js 决定是否纠正入口页。
+ */
 function start() {
-    return boot()
-        .then(() => readyResolve())
-        .catch((error) => {
-            // bootstrap 失败也要放行：调用方据此走访客/登录流程，避免整页卡住。
-            reportError(error);
-            readyResolve();
-        });
+    mark('native-ready');
+    readyResolve();
+    return boot();
 }
 
-/** 等待原生就绪并完成 bootstrap。 */
+/**
+ * 等待原生桥接就绪（不代表 bootstrap 已完成）。
+ * 页面要按最新登录态渲染，请用 {@link bootReady}。
+ */
 export function whenReady() {
     return readyPromise;
+}
+
+/**
+ * 等待 bootstrap 数据落定。
+ * 与 `whenReady()` 分开：首帧只需要前者，后者可能因为后端不可达而较慢。
+ */
+export function bootReady() {
+    return boot().catch((error) => {
+        reportError(error);
+        return state;
+    });
 }
 
 export function boot() {
@@ -145,13 +195,16 @@ export function boot() {
         return bootPromise;
     }
     bootPromise = (async () => {
+        mark('boot-start');
         if (!hasNative() && typeof fetch !== 'function') {
             return state;
         }
         // 动态导入避免与 api.js 形成循环依赖：api.js 依赖本模块的 call()，
         // 而 bootstrap 又要走 api 的统一入口。
-        const { bootstrap: fetchBootstrap } = await import('./api.js');
-        applyBootstrap(await fetchBootstrap());
+        const api = await import('./api.js');
+        mark('api-loaded');
+        applyBootstrap(await api.bootstrap());
+        mark('bootstrap-done');
         return state;
     })();
     return bootPromise;

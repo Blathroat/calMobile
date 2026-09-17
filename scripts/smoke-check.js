@@ -15,6 +15,34 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const WEB_ROOT = 'app/src/main/assets/web';
 
+/**
+ * 前端文案资源。
+ * 源码里的中文字面量已改为 t('key')，断言时按资源还原成文案，
+ * 这样“这一屏有没有某个文案”的结构检查仍然读得懂。
+ */
+const FRONTEND_STRINGS = (() => {
+  const file = path.join(root, 'app/src/main/res/values/strings_frontend.xml');
+  const map = new Map();
+  if (!fs.existsSync(file)) {
+    return map;
+  }
+  const xml = fs.readFileSync(file, 'utf8');
+  for (const match of xml.matchAll(/<string name="(s_[a-z0-9]+)">([\s\S]*?)<\/string>/g)) {
+    map.set(match[1], match[2]
+      .replace(/\\'/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&'));
+  }
+  return map;
+})();
+
+/** 把 t('s_xxx') 还原为文案本体，便于对文件内容做文案断言。 */
+function resolveStrings(content) {
+  return content.replace(/\bt\('(s_[a-z0-9]+)'\)/g,
+    (match, key) => (FRONTEND_STRINGS.has(key) ? FRONTEND_STRINGS.get(key) : match));
+}
+
 function parseAttributes(source) {
   const attributes = {};
   const attributePattern = /([:\w-]+)\s*=\s*(['"])(.*?)\2/g;
@@ -495,7 +523,34 @@ const checks = [
   {
     id: 'web-vendor-scripts-in-entry',
     file: `${WEB_ROOT}/index.html`,
-    contains: ['vendor/qrcode-generator/qrcode.js', 'vendor/jsqr/jsQR.js']
+    // 内置脚本改为按需加载，入口只引 core/vendor.js 加载器。
+    contains: ['js/app.js'],
+    notContains: ['vendor/jsqr/jsQR.js', 'vendor/qrcode-generator/qrcode.js']
+  },
+  {
+    id: 'web-strings-pipeline',
+    file: `${WEB_ROOT}/js/core/strings.js`,
+    contains: ['export function t', 'applyStrings', 'CalMobileStrings']
+  },
+  {
+    id: 'web-strings-resources',
+    file: 'app/src/main/res/values/strings_frontend.xml',
+    minBytes: 20000
+  },
+  {
+    id: 'web-strings-native-injection',
+    file: 'app/src/main/java/com/example/calmobile/InjectStrings.java',
+    contains: ['getIdentifier', 'FrontendStrings.NAMES', 'CalMobileStrings']
+  },
+  {
+    id: 'web-strings-injected-early',
+    file: 'app/src/main/java/com/example/calmobile/WebShellActivity.java',
+    contains: ['onPageStarted', 'InjectStrings.load', 'InjectStrings.script']
+  },
+  {
+    id: 'web-asset-cache',
+    file: 'app/src/main/java/com/example/calmobile/WebShellActivity.java',
+    contains: ['max-age=86400', 'assetHeaders']
   },
   {
     id: 'web-dark-mode-tokens',
@@ -522,7 +577,24 @@ const checks = [
   {
     id: 'frontend-api-transport',
     file: `${WEB_ROOT}/js/core/api.js`,
-    contains: ['BASE_URL', 'export async function probe', 'TransportError', 'callRemote', 'request(']
+    contains: ['BASE_URL', 'export async function probe', 'TransportError', 'callRemote', 'request(',
+      'CACHE_TTL', 'clearCache']
+  },
+  {
+    id: 'frontend-lazy-vendors',
+    file: `${WEB_ROOT}/index.html`,
+    contains: ['js/core/vendor.js'],
+    notContains: ['vendor/jsqr/jsQR.js', 'vendor/qrcode-generator/qrcode.js', 'vendor/easymde']
+  },
+  {
+    id: 'frontend-vendor-loader',
+    file: `${WEB_ROOT}/js/core/vendor.js`,
+    contains: ['export function loadScript', 'loadQrEncoder', 'loadQrDecoder', 'loadStyle']
+  },
+  {
+    id: 'frontend-startup-timing',
+    file: `${WEB_ROOT}/js/core/bridge.js`,
+    contains: ['export function mark', 'export function reportTimings', '__CALMOBILE_TIMING__']
   },
   {
     id: 'demo-backend',
@@ -583,7 +655,7 @@ const checks = [
   {
     id: 'web-exhibition-form-secondary-actions',
     file: `${WEB_ROOT}/js/pages/exhibition-form.js`,
-    contains: ['删除展会', '编辑简介', '启用报名二维码', '报名与简介设置']
+    contains: ['删除展会', '报名与简介设置', 'qrEnabled', 'descriptionButton']
   },
   {
     id: 'web-admin-tab-persisted',
@@ -666,7 +738,8 @@ function runChecks() {
       console.error(`FAIL ${check.id}: ${check.file} is ${stat.size} bytes, expected at least ${check.minBytes}`);
       failed = true;
     }
-    const content = fs.readFileSync(fullPath, 'utf8');
+    // 断言前把 t('key') 还原成文案，前端文案迁移到资源后依然可读。
+    const content = resolveStrings(fs.readFileSync(fullPath, 'utf8'));
     if (check.validate) {
       const result = check.validate(content);
       if (result !== true) {

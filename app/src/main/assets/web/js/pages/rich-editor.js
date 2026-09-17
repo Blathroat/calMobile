@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 12 · 展会简介（Markdown 编辑）
  * 线框：newUI/remaining-ui.html #screen-rich-editor
@@ -18,10 +19,10 @@ import { el, append, replace } from '../core/dom.js';
 export async function richEditorPage(context) {
     const host = el('div', { class: 'stack' });
     const foot = pageFoot();
-    const saveButton = topAction('save', '保存简介', () => save());
+    const saveButton = topAction('save', t('s_1kqdxz5'), () => save());
 
     scaffold({
-        title: '编辑展会简介',
+        title: t('s_28v8q'),
         backTo: 'exhibition-form',
         bodyProps: { 'data-gap': 'tight' },
         actions: [saveButton],
@@ -35,9 +36,9 @@ export async function richEditorPage(context) {
         const data = await exhibitions.get(context.params.id);
         if (!data?.found) {
             replace(host, notFoundBlock({
-                title: '展会不存在',
-                description: data?.error || '无法加载展会简介。',
-                backLabel: '返回展商后台',
+                title: t('s_1vim1qp'),
+                description: data?.error || t('s_1q6xpub'),
+                backLabel: t('s_dn4ida'),
                 onBack: () => context.navigate('exhibitor'),
             }));
             return;
@@ -45,7 +46,7 @@ export async function richEditorPage(context) {
         exhibition = data.exhibition;
     } catch (error) {
         replace(host, loadErrorBlock({
-            title: '加载失败',
+            title: t('s_kvpltc'),
             description: error.message,
             onRetry: () => context.refresh(),
         }));
@@ -74,7 +75,7 @@ export async function richEditorPage(context) {
         // 详情页可能已经按需加载过同一个文件，这里复用 core/markdown 的加载器。
         await ensureMarked();
         if (!window.EasyMDE) {
-            throw new Error('EasyMDE 未注册到全局');
+            throw new Error(t('s_1jyec01'));
         }
     }
 
@@ -100,7 +101,7 @@ export async function richEditorPage(context) {
             spellChecker: false,
             status: ['lines', 'words'],
             minHeight: '260px',
-            placeholder: '输入展会简介，可直接粘贴 Markdown 文本',
+            placeholder: t('s_1jvhwb1'),
             // 使用项目内的细线 SVG，避免依赖外部图标字体。
             toolbar: toolbarButtons(),
         });
@@ -111,7 +112,7 @@ export async function richEditorPage(context) {
             const text = event.clipboardData?.getData('text/plain') || '';
             if (text && /(^|\n)\s*(#{1,6}\s|[-*+]\s|>\s|```)/.test(text)) {
                 instance.value(text);
-                toast('已按 Markdown 写入粘贴内容', 'success');
+                toast(t('s_1n2azlj'), 'success');
             }
         });
         container.__instance = instance;
@@ -126,8 +127,8 @@ export async function richEditorPage(context) {
         area.value = initialMarkdown();
         const wrapper = el('div', { class: 'stack' }, [
             el('div', { class: 'notice', 'data-tone': 'accent' }, [
-                el('strong', { text: '已切换到纯文本模式' }),
-                el('span', { text: `${error?.message || '编辑器加载失败'}；内容仍以 Markdown 保存。` }),
+                el('strong', { text: t('s_bmmuuy') }),
+                el('span', { text: `${error?.message || t('s_1pt94qt')}；内容仍以 Markdown 保存。` }),
             ]),
             area,
         ]);
@@ -159,42 +160,42 @@ export async function richEditorPage(context) {
                 name: 'heading',
                 action: () => surround('## ', ''),
                 className: 'mde-heading',
-                title: '标题',
+                title: t('s_4okt0a'),
                 icon: svg('heading'),
             },
             {
                 name: 'bold',
                 action: builtin('toggleBold', '**', '**'),
                 className: 'mde-bold',
-                title: '加粗',
+                title: t('s_1e57pa0'),
                 icon: svg('bold'),
             },
             {
                 name: 'italic',
                 action: builtin('toggleItalic', '*', '*'),
                 className: 'mde-italic',
-                title: '斜体',
+                title: t('s_69k40o'),
                 icon: svg('italic'),
             },
             {
                 name: 'quote',
                 action: builtin('toggleBlockquote', '> ', ''),
                 className: 'mde-quote',
-                title: '引用',
+                title: t('s_1wogqko'),
                 icon: svg('quote'),
             },
             {
                 name: 'unordered-list',
                 action: builtin('toggleUnorderedList', '- ', ''),
                 className: 'mde-list',
-                title: '无序清单',
+                title: t('s_z3ic32'),
                 icon: svg('list'),
             },
             {
                 name: 'ordered-list',
                 action: builtin('toggleOrderedList', '1. ', ''),
                 className: 'mde-ordered',
-                title: '有序清单',
+                title: t('s_1l65wvf'),
                 icon: svg('ordered'),
             },
             '|',
@@ -208,10 +209,10 @@ export async function richEditorPage(context) {
                     surround('[', '](https://)');
                 },
                 className: 'mde-link',
-                title: '插入链接',
+                title: t('s_1gqx0u5'),
                 icon: svg('link'),
             },
-            { name: 'image', action: () => insertImage(), className: 'mde-image', title: '插入图片', icon: svg('image') },
+            { name: 'image', action: () => insertImage(), className: 'mde-image', title: t('s_1w5fs53'), icon: svg('image') },
             {
                 name: 'table',
                 action: () => {
@@ -219,10 +220,10 @@ export async function richEditorPage(context) {
                         window.EasyMDE.drawTable(editor);
                         return;
                     }
-                    appendText('\n\n| 列 1 | 列 2 |\n| --- | --- |\n| 内容 | 内容 |\n\n');
+                    appendText(t('s_spr4u2'));
                 },
                 className: 'mde-table',
-                title: '插入表格',
+                title: t('s_1kll7do'),
                 icon: svg('table'),
             },
             '|',
@@ -233,14 +234,14 @@ export async function richEditorPage(context) {
                         window.EasyMDE.togglePreview(editor);
                         return;
                     }
-                    toast('当前编辑器为纯文本模式，无实时预览');
+                    toast(t('s_24nfoo'));
                 },
                 className: 'mde-preview',
-                title: '预览',
+                title: t('s_k2jp4x'),
                 icon: svg('eye'),
             },
-            { name: 'paste', action: () => openPasteSheet(), className: 'mde-paste', title: '粘贴 Markdown', icon: svg('paste') },
-            { name: 'clear', action: () => clearAll(), className: 'mde-clear', title: '清空内容', icon: svg('trash') },
+            { name: 'paste', action: () => openPasteSheet(), className: 'mde-paste', title: t('s_7zi2sm'), icon: svg('paste') },
+            { name: 'clear', action: () => clearAll(), className: 'mde-clear', title: t('s_14ggq2g'), icon: svg('trash') },
         ];
     }
 
@@ -261,19 +262,19 @@ export async function richEditorPage(context) {
         replace(host, [
             el('div', { class: 'card', 'data-tone': 'fill' }, [
                 el('strong', { text: exhibition.title }),
-                el('span', { class: 'row-meta', text: '简介以 Markdown 保存，详情页自动渲染标题、列表、链接与图片。' }),
+                el('span', { class: 'row-meta', text: t('s_9dpkko') }),
             ]),
             editorNode,
             el('div', { class: 'row', 'data-gap': 'md' }, [
-                ghostButton('粘贴 Markdown', () => openPasteSheet(), 'paste'),
-                ghostButton('插入图片', () => insertImage(), 'image'),
+                ghostButton(t('s_7zi2sm'), () => openPasteSheet(), 'paste'),
+                ghostButton(t('s_1w5fs53'), () => insertImage(), 'image'),
             ]),
             el('p', { class: 'field-hint', text: `媒体数量与大小受服务器设置限制：图片 ${media.imageCount || 8} 张 / 单张 ${media.imageSizeMb || 10} MB，视频 ${media.videoCount || 2} 个；图片插入后以短 URL 引用，简介正文不会因此变长。` }),
         ]);
 
         replace(foot, el('div', { class: 'stack', 'data-gap': 'sm' }, [
-            el('button', { class: 'cta', type: 'button', onclick: () => save() }, ['保存简介']),
-            el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: '保存后详情页会按 Markdown 渲染。' }),
+            el('button', { class: 'cta', type: 'button', onclick: () => save() }, [t('s_1kqdxz5')]),
+            el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: t('s_4l0yq7') }),
         ]));
     }
 
@@ -290,25 +291,25 @@ export async function richEditorPage(context) {
 
     /** 直接粘贴 Markdown：整段替换或追加到末尾。 */
     function openPasteSheet() {
-        const area = el('textarea', { class: 'textarea', id: 'paste-markdown', rows: 8, placeholder: '在这里粘贴 Markdown 文本' });
+        const area = el('textarea', { class: 'textarea', id: 'paste-markdown', rows: 8, placeholder: t('s_3ppp7q') });
         openSheet({
-            title: '粘贴 Markdown',
+            title: t('s_7zi2sm'),
             size: 'full',
             content: [
-                el('p', { class: 'row-meta', text: '粘贴后可直接替换当前内容，或在末尾追加。' }),
+                el('p', { class: 'row-meta', text: t('s_wo4aqm') }),
                 area,
             ],
             actions: [
-                { label: '取消', onClick: (close) => close() },
+                { label: t('s_1589w37'), onClick: (close) => close() },
                 {
-                    label: '追加',
+                    label: t('s_booftk'),
                     onClick: (close) => {
                         applyPaste(area.value, false);
                         close();
                     },
                 },
                 {
-                    label: '替换',
+                    label: t('s_ekbz2c'),
                     variant: 'primary',
                     onClick: (close) => {
                         applyPaste(area.value, true);
@@ -322,12 +323,12 @@ export async function richEditorPage(context) {
     function applyPaste(text, replaceAll) {
         const value = String(text || '').trim();
         if (!value) {
-            toast('粘贴内容为空', 'error');
+            toast(t('s_ijdxmv'), 'error');
             return;
         }
         const current = editor.value();
         editor.value(replaceAll || !current.trim() ? value : `${current.trimEnd()}\n\n${value}`);
-        toast(replaceAll ? '已替换为粘贴内容' : '已追加粘贴内容', 'success');
+        toast(replaceAll ? t('s_17pstxc') : t('s_1oas91y'), 'success');
     }
 
     /**
@@ -349,7 +350,7 @@ export async function richEditorPage(context) {
         try {
             const result = await call('media.import', { kind: 'image' });
             if (!result?.url) {
-                toast('未能读取所选图片', 'error');
+                toast(t('s_1dc9o49'), 'error');
                 return;
             }
             const markdown = `\n\n![展会图片](${result.url})\n\n`;
@@ -357,7 +358,7 @@ export async function richEditorPage(context) {
             const size = formatBytes(result.bytes);
             toast(result.compressed ? `图片已压缩为 ${size} 并插入` : `图片已插入（${size}）`, 'success');
         } catch (error) {
-            if (String(error.message).includes('取消')) {
+            if (String(error.message).includes(t('s_1589w37'))) {
                 return;
             }
             toast(error.message || `请选择 ${formatsHint(formats)} 格式的图片`, 'error');
@@ -365,7 +366,7 @@ export async function richEditorPage(context) {
     }
 
     function formatsHint(formats) {
-        return formats.length > 0 ? formats.map((item) => `.${item}`).join('/') : '常见';
+        return formats.length > 0 ? formats.map((item) => `.${item}`).join('/') : t('s_1ylglbm');
     }
 
     function formatBytes(bytes) {
@@ -384,16 +385,16 @@ export async function richEditorPage(context) {
             return;
         }
         openSheet({
-            title: '清空简介',
-            content: [el('p', { class: 'muted', text: '清空后需要重新编写，保存前不会影响已发布内容。' })],
+            title: t('s_kjpxv'),
+            content: [el('p', { class: 'muted', text: t('s_1kokqyk') })],
             actions: [
-                { label: '取消', onClick: (close) => close() },
+                { label: t('s_1589w37'), onClick: (close) => close() },
                 {
-                    label: '清空',
+                    label: t('s_9mbwb2'),
                     onClick: (close) => {
                         editor.value('');
                         close();
-                        toast('已清空编辑器内容');
+                        toast(t('s_lp789j'));
                     },
                 },
             ],
@@ -418,11 +419,11 @@ export async function richEditorPage(context) {
                 registrationEnd: exhibition.registrationEnd,
             });
             if (!result?.ok) {
-                toast(result?.error || '保存失败', 'error');
+                toast(result?.error || t('s_1q9u8le'), 'error');
                 return;
             }
             exhibition = result.exhibition;
-            toast(markdown ? `简介已保存（${markdownSummary(markdown, 20)}）` : '简介已清空', 'success');
+            toast(markdown ? `简介已保存（${markdownSummary(markdown, 20)}）` : t('s_1lylgf9'), 'success');
             context.navigate('exhibition-form', { id: exhibition.id }, { replace: true });
         } catch (error) {
             toast(error.message, 'error');

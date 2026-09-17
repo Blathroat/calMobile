@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 10 · 展商后台
  * 线框：newUI/remaining-ui.html #screen-exhibitor-backend
@@ -17,12 +18,12 @@ import { el, replace } from '../core/dom.js';
 export async function exhibitorPage(context) {
     const listHost = el('div', { class: 'stack' });
     scaffold({
-        title: '展商后台',
+        title: t('s_1omalh8'),
         showBack: false,
         bodyProps: { 'data-gap': 'tight' },
         actions: [
-            topAction('scan', '核销报名码', () => context.navigate('checkin')),
-            topAction('plus', '新建展会', () => context.navigate('exhibition-form', { mode: 'create' })),
+            topAction('scan', t('s_zqzoiq'), () => context.navigate('checkin')),
+            topAction('plus', t('s_p9fllo'), () => context.navigate('exhibition-form', { mode: 'create' })),
         ],
         foot: tabbar({ items: navItems(), active: 'exhibitor' }),
         children: [listHost],
@@ -34,38 +35,38 @@ export async function exhibitorPage(context) {
         if (items.length === 0) {
             replace(listHost, stateBlock({
                 iconName: 'briefcase',
-                title: '还没有举办中的展会',
-                description: '创建第一个展会，配置日期、地点与报名收集项。',
-                action: { label: '新建展会', onClick: () => context.navigate('exhibition-form', { mode: 'create' }) },
+                title: t('s_f4agbb'),
+                description: t('s_1t8d6e3'),
+                action: { label: t('s_p9fllo'), onClick: () => context.navigate('exhibition-form', { mode: 'create' }) },
             }));
             return;
         }
         const total = items.reduce((sum, item) => sum + (item.registrationCount || 0), 0);
         replace(listHost, [
             el('div', { class: 'row', 'data-between': 'true' }, [
-                el('span', { class: 'section-label', text: '我举办的展会' }),
+                el('span', { class: 'section-label', text: t('s_15vddzv') }),
                 el('span', { class: 'pill', text: `${items.length} 个 · ${total} 条报名` }),
             ]),
             el('button', {
                 class: 'cta ghost',
                 type: 'button',
                 onclick: () => context.navigate('checkin'),
-            }, ['核销报名码']),
+            }, [t('s_zqzoiq')]),
             el('p', {
                 class: 'field-hint',
                 style: { textAlign: 'center' },
-                text: '报名审核通过后，用户可在报名详情里出示报名码，现场扫码即完成核销。',
+                text: t('s_1w3gehu'),
             }),
             el('div', { class: 'list', 'data-gap': 'sm' }, items.map((item) => card(item))),
             el('button', {
                 class: 'cta',
                 type: 'button',
                 onclick: () => context.navigate('exhibition-form', { mode: 'create' }),
-            }, ['新建展会']),
+            }, [t('s_p9fllo')]),
         ]);
     } catch (error) {
         replace(listHost, loadErrorBlock({
-            title: '展会列表加载失败',
+            title: t('s_4e7do4'),
             description: error.message,
             onRetry: () => context.refresh(),
         }));
@@ -91,14 +92,14 @@ export async function exhibitorPage(context) {
                     el('span', { class: 'row-meta truncate', text: item.venue }),
                     el('span', { class: 'row-meta', text: `${item.status} · ${item.registrationCount} 条报名` }),
                     item.qrEnabled
-                        ? el('span', { class: 'row-meta', text: '已启用报名二维码' })
+                        ? el('span', { class: 'row-meta', text: t('s_1ibqlvv') })
                         : null,
                 ]),
                 statusTag(item.modeLabel, statusTone(item.status)),
             ]),
             el('div', { class: 'grid-cols-2' }, [
-                smallCta('查看报名', () => context.navigate('review', { exhibitionId: item.id }), { grow: false }),
-                smallCta('编辑展会', () => context.navigate('exhibition-form', { id: item.id }), { grow: false }),
+                smallCta(t('s_j8kyoz'), () => context.navigate('review', { exhibitionId: item.id }), { grow: false }),
+                smallCta(t('s_eutzzb'), () => context.navigate('exhibition-form', { id: item.id }), { grow: false }),
             ]),
         ]);
     }

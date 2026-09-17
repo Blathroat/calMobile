@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 03 · 展会详情
  * 线框：newUI/index.html #screen-detail、newUI/remaining-ui.html #screen-detail
@@ -16,9 +17,9 @@ export async function detailPage(context) {
     const host = el('div', { class: 'stack' });
     const foot = pageFoot();
     scaffold({
-        title: '展会详情',
+        title: t('s_1ve1f4n'),
         bodyProps: { 'data-gap': 'tight' },
-        actions: [topAction('share', '分享展会', () => share())],
+        actions: [topAction('share', t('s_e1wq8p'), () => share())],
         foot,
         children: [host],
     });
@@ -32,9 +33,9 @@ export async function detailPage(context) {
         const data = await exhibitions.get(context.params.id);
         if (!data?.found) {
             replace(host, notFoundBlock({
-                title: '展会不存在',
-                description: data?.error || '该展会可能已被展商删除。',
-                backLabel: '返回首页',
+                title: t('s_1vim1qp'),
+                description: data?.error || t('s_ifhjtv'),
+                backLabel: t('s_17zyr1e'),
                 onBack: () => context.navigate('home'),
             }));
             replace(foot, []);
@@ -44,7 +45,7 @@ export async function detailPage(context) {
         fields = data.fields || [];
     } catch (error) {
         replace(host, loadErrorBlock({
-            title: '加载失败',
+            title: t('s_kvpltc'),
             description: error.message,
             onRetry: () => context.refresh(),
         }));
@@ -79,7 +80,7 @@ export async function detailPage(context) {
                 metaRow('home', exhibition.venue),
                 el('div', { class: 'row', 'data-gap': 'md' }, [
                     statusTag(exhibition.modeLabel || exhibition.status, statusTone(exhibition.status)),
-                    el('span', { class: 'row-meta', text: exhibition.openForRegistration ? '需提交报名信息' : '当前不可报名' }),
+                    el('span', { class: 'row-meta', text: exhibition.openForRegistration ? t('s_1gnart') : t('s_105o66n') }),
                 ]),
             ]),
             el('button', {
@@ -89,29 +90,29 @@ export async function detailPage(context) {
                 'aria-label': `查看 ${exhibition.exhibitor} 的公开主页`,
                 onclick: () => context.navigate('user-public', { nickname: exhibition.exhibitor }),
             }, [
-                el('span', { class: 'avatar', text: (exhibition.exhibitor || '展').slice(0, 1), 'aria-hidden': 'true' }),
+                el('span', { class: 'avatar', text: (exhibition.exhibitor || t('s_1lsc240')).slice(0, 1), 'aria-hidden': 'true' }),
                 el('span', { class: 'row-copy' }, [
                     el('strong', { class: 'row-title', text: exhibition.exhibitor }),
-                    el('span', { class: 'row-meta', text: '查看展商公开主页 →' }),
+                    el('span', { class: 'row-meta', text: t('s_1a44i78') }),
                 ]),
             ]),
             el('div', { class: 'stack', 'data-gap': 'sm' }, [
-                el('span', { class: 'section-label', text: '展会介绍' }),
+                el('span', { class: 'section-label', text: t('s_15gixpi') }),
                 descriptionBlock(),
             ]),
             highlights.length > 0
                 ? el('div', { class: 'stack', 'data-gap': 'sm' }, [
-                    el('span', { class: 'section-label', text: '现场亮点' }),
+                    el('span', { class: 'section-label', text: t('s_4xp7ge') }),
                     el('div', { class: 'cluster' }, highlights.map((item) => statusTag(item, 'muted'))),
                 ])
                 : null,
             el('div', { class: 'stack', 'data-gap': 'sm' }, [
-                el('span', { class: 'section-label', text: '报名信息' }),
+                el('span', { class: 'section-label', text: t('s_vrp4t3') }),
                 el('p', {
                     class: 'row-meta',
                     text: fields.length > 0
                         ? `展商配置了 ${fields.length} 项信息：${fields.map((field) => field.title).join('、')}`
-                        : '该展会未设置额外报名信息，确认后即可提交。',
+                        : t('s_hadtmi'),
                 }),
             ]),
         ]);
@@ -140,22 +141,22 @@ export async function detailPage(context) {
             const text = plainText(raw, 4000);
             return text
                 ? el('p', { class: 'row-meta', style: { fontSize: 'var(--fs-body)', color: 'var(--ink)' }, text })
-                : el('p', { class: 'muted', text: '展商还没有补充展会介绍。' });
+                : el('p', { class: 'muted', text: t('s_s61azp') });
         }
 
         // 默认按 Markdown 渲染（编辑器保存的格式）；marked 需要按需加载，因此先占位再填充。
         if (raw.trim() === '') {
-            return el('p', { class: 'muted', text: '展商还没有补充展会介绍。' });
+            return el('p', { class: 'muted', text: t('s_s61azp') });
         }
         const box = el('div', { class: 'rich-content' }, [loadingBlock(2)]);
         renderMarkdown(raw)
             .then((html) => {
                 replace(box, html
                     ? [el('div', { class: 'rich-content', html })]
-                    : [el('p', { class: 'muted', text: '展商还没有补充展会介绍。' })]);
+                    : [el('p', { class: 'muted', text: t('s_s61azp') })]);
             })
             .catch(() => {
-                replace(box, [el('p', { class: 'muted', text: '简介渲染失败，请稍后重试。' })]);
+                replace(box, [el('p', { class: 'muted', text: t('s_1t9glrp') })]);
             });
         return box;
     }
@@ -176,7 +177,7 @@ export async function detailPage(context) {
             class: 'cta ghost',
             type: 'button',
             onclick: () => toggleCalendar(calendarButton),
-        }, [calendarState.inCalendar ? '移出日历' : '加入日历']);
+        }, [calendarState.inCalendar ? t('s_dvh8t7') : t('s_1prtpth')]);
 
         const registerButton = el('button', {
             class: 'cta',
@@ -184,8 +185,8 @@ export async function detailPage(context) {
             disabled: exhibition.openForRegistration ? null : true,
             onclick: () => startRegistration(),
         }, [exhibition.openForRegistration
-            ? (canRegister() ? '立即报名' : '登录后报名')
-            : '报名已关闭']);
+            ? (canRegister() ? t('s_nynzo5') : t('s_68p8ln'))
+            : t('s_1lfeb57')]);
 
         replace(foot, el('div', { class: 'stack', 'data-gap': 'sm' }, [
             el('div', { class: 'grid-cols-2' }, [calendarButton, registerButton]),
@@ -198,14 +199,14 @@ export async function detailPage(context) {
             return `${exhibition.modeLabel || exhibition.status}：该展会当前不接受报名。`;
         }
         if (!canRegister()) {
-            return '访客可以浏览详情，报名前需要先登录。';
+            return t('s_nrshpm');
         }
-        return '提交后可在“我的报名”查看审核状态。';
+        return t('s_rss9j6');
     }
 
     function startRegistration() {
         if (!canRegister()) {
-            toast('请先登录后再报名');
+            toast(t('s_1f0kfjp'));
             context.navigate('login', { redirect: 'detail', redirectParams: `id=${encodeURIComponent(exhibition.id)}` });
             return;
         }
@@ -223,7 +224,7 @@ export async function detailPage(context) {
                 description: plainText(exhibition.description, 200),
             });
             calendarState = { inCalendar: result.inCalendar, granted: result.granted };
-            toast(result.message || '已更新系统日历', 'success');
+            toast(result.message || t('s_1qf1f04'), 'success');
             renderFooter();
         } catch (error) {
             toast(error.message, 'error');
@@ -235,12 +236,12 @@ export async function detailPage(context) {
     function share() {
         const text = `${exhibition.title}\n${formatDateWithWeekday(exhibition.date)} ${exhibition.time}\n${exhibition.venue}`;
         openSheet({
-            title: '分享展会',
+            title: t('s_e1wq8p'),
             content: [el('p', { class: 'muted', text: text.replace(/\n/g, ' · ') })],
             actions: [
-                { label: '取消', onClick: (close) => close() },
+                { label: t('s_1589w37'), onClick: (close) => close() },
                 {
-                    label: '分享',
+                    label: t('s_16wt7o6'),
                     variant: 'primary',
                     onClick: async (close) => {
                         close();

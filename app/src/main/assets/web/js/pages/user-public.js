@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 14 · 用户公开页
  * 线框：newUI/remaining-ui.html #screen-user-public
@@ -20,7 +21,7 @@ export async function userPublicPage(context) {
     const foot = pageFoot();
 
     scaffold({
-        title: '用户公开页',
+        title: t('s_1g1m28r'),
         backTo: 'home',
         bodyProps: { 'data-gap': 'tight' },
         foot,
@@ -37,9 +38,9 @@ export async function userPublicPage(context) {
         if (!data?.found) {
             replace(host, stateBlock({
                 iconName: 'user',
-                title: '没有可公开的资料',
-                description: data?.error || '该用户未公开资料，或账号已停用。',
-                action: { label: '返回首页', onClick: () => context.navigate('home') },
+                title: t('s_8wvztz'),
+                description: data?.error || t('s_jvqxyf'),
+                action: { label: t('s_17zyr1e'), onClick: () => context.navigate('home') },
             }));
             replace(foot, []);
             return;
@@ -47,7 +48,7 @@ export async function userPublicPage(context) {
         profile = data;
     } catch (error) {
         replace(host, loadErrorBlock({
-            title: '加载失败',
+            title: t('s_kvpltc'),
             description: error.message,
             onRetry: () => context.refresh(),
         }));
@@ -63,8 +64,8 @@ export async function userPublicPage(context) {
         replace(host, [
             adminView
                 ? el('div', { class: 'notice', dataset: { tone: 'accent' } }, [
-                    el('strong', { text: '管理视角' }),
-                    el('span', { text: '管理员查看公开页不受用户隐私设置限制，下方已参加展会为该用户的完整记录。' }),
+                    el('strong', { text: t('s_1tdesxa') }),
+                    el('span', { text: t('s_10tql41') }),
                 ])
                 : null,
             el('div', { class: 'card' }, [
@@ -72,21 +73,21 @@ export async function userPublicPage(context) {
                     avatarNode({ src: profile.avatar, name: profile.nickname, className: 'avatar' }),
                     el('span', { class: 'row-copy' }, [
                         el('strong', { class: 'row-title', text: profile.nickname }),
-                        el('span', { class: 'row-meta', text: `${profile.role}${isOwn ? ' · 这是你的公开页' : ''}` }),
-                        el('span', { class: 'row-meta', text: profile.bio || '该用户还没有填写简介' }),
+                        el('span', { class: 'row-meta', text: `${profile.role}${isOwn ? t('s_1dev7g3') : ''}` }),
+                        el('span', { class: 'row-meta', text: profile.bio || t('s_1aifth0') }),
                     ]),
-                    statusTag(adminView ? '管理可见' : (profile.showRegistrations ? '公开' : '部分公开'),
+                    statusTag(adminView ? t('s_iq65l2') : (profile.showRegistrations ? t('s_q3pv0x') : t('s_ex547b')),
                         adminView || profile.showRegistrations ? 'ok' : 'muted'),
                 ]),
             ]),
             el('div', { class: 'card' }, [
-                el('span', { class: 'section-label', text: '公开资料' }),
-                row('地区', profile.region || '未公开'),
-                row('社交账号', profile.socialMedia || '已隐藏'),
+                el('span', { class: 'section-label', text: t('s_wkyvc2') }),
+                row(t('s_11ftk7j'), profile.region || t('s_c907jt')),
+                row(t('s_1hnvqec'), profile.socialMedia || t('s_lltmb4')),
             ]),
             el('div', { class: 'card' }, [
                 el('div', { class: 'row', 'data-between': 'true' }, [
-                    el('span', { class: 'section-label', text: '已参加展会' }),
+                    el('span', { class: 'section-label', text: t('s_6osh3w') }),
                     el('span', { class: 'pill', text: `${registrations.length} 条` }),
                 ]),
                 registrations.length > 0
@@ -101,8 +102,8 @@ export async function userPublicPage(context) {
                     : el('p', {
                         class: 'row-meta',
                         text: profile.showRegistrations
-                            ? '还没有可展示的报名记录。'
-                            : '该用户选择不展示报名记录。',
+                            ? t('s_8kqs1o')
+                            : t('s_g4uu62'),
                     }),
             ]),
         ]);
@@ -112,7 +113,7 @@ export async function userPublicPage(context) {
                 class: 'cta ghost',
                 type: 'button',
                 onclick: () => context.navigate(isOwn ? 'profile' : (adminView ? 'admin' : 'home')),
-            }, [isOwn ? '进入个人主页' : (adminView ? '返回管理后台' : '返回首页')]),
+            }, [isOwn ? t('s_1u66l1') : (adminView ? t('s_1m9kuky') : t('s_17zyr1e'))]),
         ]);
     }
 

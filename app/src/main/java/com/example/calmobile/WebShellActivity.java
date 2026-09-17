@@ -121,6 +121,20 @@ public class WebShellActivity extends Activity {
             }
 
             @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                // 文案要在页面脚本执行前就位，否则首帧渲染时 t() 只能回退成 key。
+                // onPageStarted 比 onPageFinished 早得多（后者要等全部资源加载完）。
+                try {
+                    Map<String, String> strings = InjectStrings.load(WebShellActivity.this);
+                    Log.d(TAG, "注入前端文案 " + strings.size() + " 条（清单 "
+                            + FrontendStrings.NAMES.length + " 条）");
+                    view.evaluateJavascript(InjectStrings.script(strings), null);
+                } catch (Exception error) {
+                    Log.w(TAG, "文案注入失败", error);
+                }
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 // 页面脚本加载完成后通知前端，前端据此拉取 bootstrap 数据。
                 view.evaluateJavascript("window.CalMobileWeb&&window.CalMobileWeb.ready&&"
@@ -280,12 +294,34 @@ public class WebShellActivity extends Activity {
                     ? assetPath.substring(assetPath.lastIndexOf('.') + 1).toLowerCase()
                     : "html";
             String mime = MIME_TYPES.containsKey(extension) ? MIME_TYPES.get(extension) : "application/octet-stream";
-            return new WebResourceResponse(mime, "utf-8", 200, "OK", securityHeaders(), input);
+            return new WebResourceResponse(mime, "utf-8", 200, "OK",
+                    assetHeaders(assetPath, extension), input);
         } catch (IOException missing) {
             Log.w(TAG, "资源不存在: " + assetPath);
             return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found",
                     securityHeaders(), null);
         }
+    }
+
+    /**
+     * APK 内的静态资源响应头。
+     * <p>
+     * HTML 必须每次校验，否则改版后可能对着旧外壳加载新模块；脚本与样式可以长时间缓存：
+     * 它们是随 APK 一起发布的不可变资源，缓存后 WebView 不必每次导航都重新下载并解析
+     * （之前统一 no-store，切换页面因此明显偏卡）。安装新版本会换掉应用数据目录，
+     * 缓存自然失效，不需要额外做版本失效。
+     */
+    private Map<String, String> assetHeaders(String assetPath, String extension) {
+        Map<String, String> headers = new HashMap<>();
+        boolean cacheable = "js".equals(extension) || "mjs".equals(extension)
+                || "css".equals(extension) || "woff2".equals(extension);
+        if (cacheable) {
+            headers.put("Cache-Control", "max-age=86400");
+        } else {
+            headers.put("Cache-Control", "no-store");
+        }
+        headers.put("X-Content-Type-Options", "nosniff");
+        return headers;
     }
 
     private Map<String, String> securityHeaders() {

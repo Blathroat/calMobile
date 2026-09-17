@@ -1,10 +1,11 @@
+import { t } from './core/strings.js';
 /**
  * 应用入口：注册路由、启动导航。
  * 页面模块与 newUI 的屏幕编号一一对应，便于对照线框逐屏回归。
  */
 
-import { state, whenReady, hasNative } from './core/bridge.js';
-import { defineRoute, start, render, onRouteChange } from './core/router.js';
+import { state, whenReady, bootReady, hasNative, mark, reportTimings } from './core/bridge.js';
+import { defineRoute, start, render, navigate, onRouteChange } from './core/router.js';
 import { toast } from './ui/components.js';
 import { qs, el, append } from './core/dom.js';
 
@@ -27,23 +28,23 @@ import { checkinPage } from './pages/checkin.js';
 
 // 屏幕 01–17 与 newUI 线框的对应关系写在每个模块头部。
 // 管理-展会与管理-设置已内联到管理后台与个人页，不再保留二级页面。
-defineRoute('login', { title: '登录', render: loginPage });
-defineRoute('register', { title: '注册', render: registerPage });
-defineRoute('home', { title: '首页', render: homePage });
-defineRoute('detail', { title: '展会详情', render: detailPage });
-defineRoute('registration-form', { title: '报名信息', render: registrationFormPage, requires: 'auth' });
-defineRoute('search', { title: '搜索', render: searchPage });
-defineRoute('my-registrations', { title: '我的报名', render: myRegistrationsPage });
-defineRoute('registration-detail', { title: '报名详情', render: registrationDetailPage, requires: 'auth' });
-defineRoute('profile', { title: '个人主页', render: profilePage });
-defineRoute('exhibitor', { title: '展商后台', render: exhibitorPage, roles: ['exhibitor', 'admin'] });
-defineRoute('exhibition-form', { title: '编辑展会', render: exhibitionFormPage, roles: ['exhibitor', 'admin'] });
-defineRoute('rich-editor', { title: '编辑展会简介', render: richEditorPage, roles: ['exhibitor', 'admin'] });
-defineRoute('review', { title: '报名管理', render: reviewPage, roles: ['exhibitor', 'admin'] });
+defineRoute('login', { title: t('s_1yggxgd'), render: loginPage });
+defineRoute('register', { title: t('s_1n008jl'), render: registerPage });
+defineRoute('home', { title: t('s_1ow5v10'), render: homePage });
+defineRoute('detail', { title: t('s_1ve1f4n'), render: detailPage });
+defineRoute('registration-form', { title: t('s_vrp4t3'), render: registrationFormPage, requires: 'auth' });
+defineRoute('search', { title: t('s_367f3v'), render: searchPage });
+defineRoute('my-registrations', { title: t('s_1m2dh8u'), render: myRegistrationsPage });
+defineRoute('registration-detail', { title: t('s_1e7myaa'), render: registrationDetailPage, requires: 'auth' });
+defineRoute('profile', { title: t('s_1kzh3gd'), render: profilePage });
+defineRoute('exhibitor', { title: t('s_1omalh8'), render: exhibitorPage, roles: ['exhibitor', 'admin'] });
+defineRoute('exhibition-form', { title: t('s_eutzzb'), render: exhibitionFormPage, roles: ['exhibitor', 'admin'] });
+defineRoute('rich-editor', { title: t('s_28v8q'), render: richEditorPage, roles: ['exhibitor', 'admin'] });
+defineRoute('review', { title: t('s_7xrrf0'), render: reviewPage, roles: ['exhibitor', 'admin'] });
 // 核销报名码属于展商后台的现场工具，不单独占一屏设计稿。
-defineRoute('checkin', { title: '核销报名码', render: checkinPage, roles: ['exhibitor', 'admin'] });
-defineRoute('user-public', { title: '用户公开页', render: userPublicPage });
-defineRoute('admin', { title: '管理后台', render: adminPage, roles: ['admin'] });
+defineRoute('checkin', { title: t('s_zqzoiq'), render: checkinPage, roles: ['exhibitor', 'admin'] });
+defineRoute('user-public', { title: t('s_1g1m28r'), render: userPublicPage });
+defineRoute('admin', { title: t('s_cit5ds'), render: adminPage, roles: ['admin'] });
 
 // 启动后进入的默认页面：登录态决定入口
 onRouteChange(async (route) => {
@@ -52,16 +53,39 @@ onRouteChange(async (route) => {
     }
 });
 
+/**
+ * 启动流程。
+ *
+ * 首帧**不等** bootstrap：bootstrap 可能是一次远端请求，等它会把启动拖成白屏
+ * （`WebAppActions` 挂起时甚至永远不返回）。这里的顺序是：
+ *
+ * 1. 立即按已知状态渲染入口页（通常是登录页）；
+ * 2. bootstrap 落定后，如果登录态与当前页面不符，再纠正到正确入口。
+ */
 async function main() {
-    // 无论走原生还是远端，都要等 bootstrap 落定再决定入口：
-    // 否则登录态尚未写入 state，router 的 guard 会把已登录用户送去登录页。
+    mark('main-start');
+    // 先等原生桥接就绪（不等 bootstrap），再按已知状态渲染首帧。
     await whenReady();
+    mark('ready');
+    const entry = state.user.loggedIn || !state.user.guest ? 'home' : 'login';
+    const first = start(entry);
+
     if (!hasNative()) {
         append(qs('#app'), el('div', { class: 'bridge-warning' },
-            ['当前在浏览器中预览，原生数据不可用；请在 Android 应用中打开以加载真实业务数据。']));
+            [t('s_p44duo')]));
     }
-    const entry = state.user.loggedIn || !state.user.guest ? 'home' : 'login';
-    await start(entry);
+
+    // bootstrap 数据落定后再纠正入口页（替换历史，不新增返回栈）。
+    bootReady().then(() => {
+        const target = state.user.loggedIn || !state.user.guest ? 'home' : 'login';
+        if (target !== entry) {
+            navigate(target, {}, { replace: true });
+        }
+        mark('entered');
+        reportTimings();
+    });
+
+    return first;
 }
 
 main().catch((error) => {

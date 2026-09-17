@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 06 · 搜索
  * 线框：newUI/remaining-ui.html #screen-search
@@ -12,7 +13,7 @@ import { el, replace, truncate } from '../core/dom.js';
 
 export async function searchPage(context) {
     const resultsHost = el('div', { class: 'stack' });
-    const countText = el('span', { class: 'pill', text: '0 条结果' });
+    const countText = el('span', { class: 'pill', text: t('s_1s57su3') });
     const input = el('input', {
         class: 'input',
         id: 'search-input',
@@ -23,11 +24,11 @@ export async function searchPage(context) {
     });
 
     scaffold({
-        title: '搜索',
+        title: t('s_367f3v'),
         bodyProps: { 'data-gap': 'tight' },
-        children: [            el('div', { class: 'field' }, [el('label', { for: 'search-input', text: '关键词' }), input]),
+        children: [            el('div', { class: 'field' }, [el('label', { for: 'search-input', text: t('s_1sd7orv') }), input]),
             el('div', { class: 'row', 'data-between': 'true' }, [
-                el('span', { class: 'section-label', text: '搜索结果' }),
+                el('span', { class: 'section-label', text: t('s_i8d8h8') }),
                 countText,
             ]),
             resultsHost,
@@ -36,8 +37,8 @@ export async function searchPage(context) {
 
     replace(resultsHost, stateBlock({
         iconName: 'search',
-        title: '输入关键词开始搜索',
-        description: '支持展会名称、地点、分类，以及用户昵称与邮箱。',
+        title: t('s_3fklp8'),
+        description: t('s_1m0n2yt'),
     }));
 
     let timer = null;
@@ -59,11 +60,11 @@ export async function searchPage(context) {
 
     async function run(query) {
         if (!query) {
-            countText.textContent = '0 条结果';
+            countText.textContent = t('s_1s57su3');
             replace(resultsHost, stateBlock({
                 iconName: 'search',
-                title: '输入关键词开始搜索',
-                description: '支持展会名称、地点、分类，以及用户昵称与邮箱。',
+                title: t('s_3fklp8'),
+                description: t('s_1m0n2yt'),
             }));
             return;
         }
@@ -74,7 +75,7 @@ export async function searchPage(context) {
             render(data, query);
         } catch (error) {
             replace(resultsHost, loadErrorBlock({
-                title: '搜索失败',
+                title: t('s_2be1oh'),
                 description: error.message,
                 onRetry: () => run(query),
             }));
@@ -88,8 +89,8 @@ export async function searchPage(context) {
             replace(resultsHost, stateBlock({
                 iconName: 'search',
                 title: `没有找到与“${query}”相关的结果`,
-                description: '可以换一个关键词，或回到首页按日期浏览展会。',
-                action: { label: '返回首页', onClick: () => context.navigate('home') },
+                description: t('s_s4kamn'),
+                action: { label: t('s_17zyr1e'), onClick: () => context.navigate('home') },
             }));
             return;
         }
@@ -124,7 +125,7 @@ export async function searchPage(context) {
                     dataset: { pressable: 'true' },
                     onclick: () => context.navigate('user-public', { userId: user.id }),
                 }, [
-                    el('span', { class: 'avatar', text: (user.nickname || '用').slice(0, 1), 'aria-hidden': 'true' }),
+                    el('span', { class: 'avatar', text: (user.nickname || t('s_cmla8n')).slice(0, 1), 'aria-hidden': 'true' }),
                     el('span', { class: 'row-copy' }, [
                         el('strong', { class: 'row-title', text: `${user.nickname} · ${user.role}` }),
                         el('span', { class: 'row-meta truncate', text: truncate(user.email, 40) }),

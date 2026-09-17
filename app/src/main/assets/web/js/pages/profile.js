@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 09 · 个人主页
  * 线框：newUI/remaining-ui.html #screen-profile
@@ -17,7 +18,7 @@ import { fieldValidator, validateAll, limit, passwordRule, matchRule } from '../
 export async function profilePage(context) {
     const host = el('div', { class: 'stack' });
     scaffold({
-        title: '个人主页',
+        title: t('s_1kzh3gd'),
         showBack: false,
         bodyProps: { 'data-gap': 'tight' },
         foot: tabbar({ items: navItems(), active: 'profile' }),
@@ -27,9 +28,9 @@ export async function profilePage(context) {
     if (!state.user.loggedIn) {
         replace(host, stateBlock({
             iconName: 'user',
-            title: '当前以访客身份浏览',
-            description: '登录后可以维护资料、查看报名记录并接收审核通知。',
-            action: { label: '去登录', onClick: () => context.navigate('login', { redirect: 'profile' }) },
+            title: t('s_1h1rste'),
+            description: t('s_1b7h1x'),
+            action: { label: t('s_533bde'), onClick: () => context.navigate('login', { redirect: 'profile' }) },
         }));
         return;
     }
@@ -60,30 +61,30 @@ export async function profilePage(context) {
         const blocks = [
             identityCard(user),
             el('div', { class: 'card' }, [
-                el('span', { class: 'section-label', text: '个人简介' }),
-                el('p', { class: 'row-meta', text: user.bio || '还没有填写简介，点击“编辑”补充你的关注方向。' }),
+                el('span', { class: 'section-label', text: t('s_ml9unw') }),
+                el('p', { class: 'row-meta', text: user.bio || t('s_17mtsm3') }),
                 el('div', { class: 'stack', 'data-gap': 'sm' }, [
-                    infoRow('地区', user.region || '未填写'),
-                    infoRow('社交账号', user.socialMedia || '未填写'),
+                    infoRow(t('s_11ftk7j'), user.region || t('s_15h5nhd')),
+                    infoRow(t('s_1hnvqec'), user.socialMedia || t('s_15h5nhd')),
                 ]),
             ]),
             el('div', { class: 'list', 'data-gap': 'sm' }, [
-                menuRow('账号设置', '昵称、邮箱与所在地区', () => openEditor()),
-                menuRow('修改密码', `至少 ${passwordRule().min} 个字符`, () => openPasswordSheet()),
+                menuRow(t('s_1y0imfq'), t('s_16sgm5m'), () => openEditor()),
+                menuRow(t('s_1pt7oo1'), `至少 ${passwordRule().min} 个字符`, () => openPasswordSheet()),
             ]),
             el('div', { class: 'card' }, [
-                el('span', { class: 'section-label', text: '设置' }),
+                el('span', { class: 'section-label', text: t('s_1vmubx9') }),
                 switchRow({
                     id: 'notify-reminder',
-                    label: '展会开始前一天提醒',
-                    description: '在展会开展前一天发送通知',
+                    label: t('s_1f8zcmv'),
+                    description: t('s_kiu9q'),
                     checked: notify.exhibitionReminder,
                     onChange: (value) => savePreferences({ exhibitionReminder: value }),
                 }),
                 switchRow({
                     id: 'notify-status',
-                    label: '报名状态变化提醒',
-                    description: '审核通过或拒绝时通知我',
+                    label: t('s_fz8qsa'),
+                    description: t('s_1xohyb0'),
                     checked: notify.registrationUpdates,
                     onChange: (value) => savePreferences({ registrationUpdates: value }),
                 }),
@@ -93,7 +94,7 @@ export async function profilePage(context) {
                         class: 'cta ghost',
                         type: 'button',
                         onclick: () => requestNotification(),
-                    }, ['开启系统通知权限']),
+                    }, [t('s_1splm64')]),
                 isAdmin ? themeBlock() : null,
             ]),
             appearanceCard(),
@@ -105,11 +106,11 @@ export async function profilePage(context) {
                     class: 'cta',
                     type: 'button',
                     onclick: () => saveTheme(),
-                }, ['保存配色']),
+                }, [t('s_apw50v')]),
                 el('p', {
                     class: 'field-hint',
                     style: { textAlign: 'center' },
-                    text: '配色保存后立即生效，并作用于导航、分段控件与选中态。',
+                    text: t('s_fp6vpq'),
                 }),
             ]));
         }
@@ -118,7 +119,7 @@ export async function profilePage(context) {
             class: 'cta ghost',
             type: 'button',
             onclick: () => logout(),
-        }, ['退出登录']));
+        }, [t('s_12hokt7')]));
 
         replace(host, blocks);
     }
@@ -130,20 +131,20 @@ export async function profilePage(context) {
                 avatar,
                 el('span', { class: 'row-copy' }, [
                     el('strong', { class: 'row-title', text: user.nickname || user.username }),
-                    el('span', { class: 'row-meta', text: `${user.roleLabel} · ${user.status || '正常'}` }),
-                    el('span', { class: 'row-meta truncate', text: user.email || '未填写邮箱' }),
+                    el('span', { class: 'row-meta', text: `${user.roleLabel} · ${user.status || t('s_tt5vxa')}` }),
+                    el('span', { class: 'row-meta truncate', text: user.email || t('s_1hhb6bo') }),
                 ]),
                 el('button', {
                     class: 'pill',
                     type: 'button',
-                    text: '编辑',
+                    text: t('s_qreyeg'),
                     onclick: () => openEditor(),
                 }),
             ]),
             el('div', { class: 'row', 'data-gap': 'md' }, [
-                smallCta('上传头像', () => pickAvatar()),
+                smallCta(t('s_onix0y'), () => pickAvatar()),
                 user.avatar
-                    ? smallCta('移除头像', () => saveAvatar(''))
+                    ? smallCta(t('s_1no1khr'), () => saveAvatar(''))
                     : null,
             ]),
         ]);
@@ -174,9 +175,9 @@ export async function profilePage(context) {
 
         return el('div', { class: 'stack' }, [
             el('hr', { class: 'divider' }),
-            el('span', { class: 'section-label', text: '应用配色' }),
+            el('span', { class: 'section-label', text: t('s_4odn3m') }),
             palette,
-            el('p', { class: 'field-hint', text: '配色作用于强调色、选中态与系统栏，保存后立即生效。' }),
+            el('p', { class: 'field-hint', text: t('s_aky3i4') }),
         ]);
     }
 
@@ -188,17 +189,17 @@ export async function profilePage(context) {
         const card = el('div', { class: 'card' });
         const hint = el('p', { class: 'field-hint', text: modeHint() });
         const seg = segmented({
-            label: '深色模式',
+            label: t('s_1ghvdtm'),
             value: state.ui.mode,
             items: [
-                { value: 'auto', label: '跟随系统' },
-                { value: 'light', label: '浅色' },
-                { value: 'dark', label: '深色' },
+                { value: 'auto', label: t('s_1e3rp8l') },
+                { value: 'light', label: t('s_4wwqgm') },
+                { value: 'dark', label: t('s_bsz4ru') },
             ],
             onChange: (value) => changeMode(value),
         });
         replace(card, [
-            el('span', { class: 'section-label', text: '深色模式' }),
+            el('span', { class: 'section-label', text: t('s_1ghvdtm') }),
             seg,
             hint,
         ]);
@@ -207,9 +208,9 @@ export async function profilePage(context) {
 
     function modeHint() {
         if (state.ui.mode === 'auto') {
-            return '当前跟随系统的深浅色设置，系统切换时应用同步变化。';
+            return t('s_1mlidnr');
         }
-        return state.ui.mode === 'dark' ? '当前始终使用深色外观。' : '当前始终使用浅色外观。';
+        return state.ui.mode === 'dark' ? t('s_1ylfcsc') : t('s_141p70w');
     }
 
     async function changeMode(value) {
@@ -255,7 +256,7 @@ export async function profilePage(context) {
             const picked = await call('media.pickImage');
             const source = picked?.dataUrl;
             if (!source) {
-                toast('未能读取所选图片', 'error');
+                toast(t('s_1dc9o49'), 'error');
                 return;
             }
             openAvatarCropper({
@@ -266,7 +267,7 @@ export async function profilePage(context) {
                 onError: (error) => toast(error.message, 'error'),
             });
         } catch (error) {
-            if (String(error.message).includes('取消')) {
+            if (String(error.message).includes(t('s_1589w37'))) {
                 return;
             }
             toast(error.message, 'error');
@@ -276,7 +277,7 @@ export async function profilePage(context) {
     async function storeAvatar(dataUrl) {
         const stored = await call('media.store', { dataUrl, kind: 'avatar' });
         if (!stored?.ok || !stored.url) {
-            toast(stored?.error || '头像保存失败', 'error');
+            toast(stored?.error || t('s_5iff2f'), 'error');
             return;
         }
         await saveAvatar(stored.url);
@@ -294,11 +295,11 @@ export async function profilePage(context) {
                 showRegistrations: state.user.showRegistrations === true,
             });
             if (!result?.ok) {
-                toast(result?.error || '头像保存失败', 'error');
+                toast(result?.error || t('s_5iff2f'), 'error');
                 return;
             }
             Object.assign(state.user, result.user || {});
-            toast(url ? '头像已更新' : '头像已移除', 'success');
+            toast(url ? t('s_3rxr06') : t('s_14ol5jh'), 'success');
             render();
         } catch (error) {
             toast(error.message, 'error');
@@ -309,13 +310,13 @@ export async function profilePage(context) {
         try {
             const result = await settingsApi.save({ themeIndex });
             if (!result?.ok) {
-                toast('保存失败', 'error');
+                toast(t('s_1q9u8le'), 'error');
                 return;
             }
             settings = result.settings;
             applySettings(settings);
             themeIndex = settings?.theme?.index ?? themeIndex;
-            toast('配色已保存', 'success');
+            toast(t('s_145fdbt'), 'success');
             render();
         } catch (error) {
             toast(error.message, 'error');
@@ -326,7 +327,7 @@ export async function profilePage(context) {
         try {
             const updated = await profileApi.saveNotifications(patch);
             Object.assign(notify, updated || {});
-            toast('通知设置已更新', 'success');
+            toast(t('s_15wm4xy'), 'success');
         } catch (error) {
             toast(error.message, 'error');
         }
@@ -336,7 +337,7 @@ export async function profilePage(context) {
         try {
             const granted = await call('notify.requestPermission');
             notify.granted = granted === true;
-            toast(granted ? '已开启通知权限' : '未获得通知权限', granted ? 'success' : 'error');
+            toast(granted ? t('s_j5c9oy') : t('s_1ya7561'), granted ? 'success' : 'error');
             render();
         } catch (error) {
             toast(error.message, 'error');
@@ -355,7 +356,7 @@ export async function profilePage(context) {
             class: 'input',
             id: 'profile-region',
             value: user.region || '',
-            placeholder: '例如：上海 · 浦东新区',
+            placeholder: t('s_132uhjs'),
         });
         const social = el('input', {
             class: 'input',
@@ -365,37 +366,37 @@ export async function profilePage(context) {
         });
 
         const validators = [
-            fieldValidator({ control: nickname, label: '昵称', required: true, max: limit('nickname', 20) }),
+            fieldValidator({ control: nickname, label: t('s_1c2rfxc'), required: true, max: limit('nickname', 20) }),
             fieldValidator({
                 control: email,
-                label: '邮箱',
+                label: t('s_185tvls'),
                 max: 60,
                 pattern: /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/,
-                patternMessage: '邮箱格式不正确',
+                patternMessage: t('s_1u3yg0h'),
             }),
-            fieldValidator({ control: bio, label: '个人简介', max: limit('bio', 200) }),
-            fieldValidator({ control: region, label: '地区', max: limit('region', 40) }),
-            fieldValidator({ control: social, label: '社交账号', max: 40 }),
+            fieldValidator({ control: bio, label: t('s_ml9unw'), max: limit('bio', 200) }),
+            fieldValidator({ control: region, label: t('s_11ftk7j'), max: limit('region', 40) }),
+            fieldValidator({ control: social, label: t('s_1hnvqec'), max: 40 }),
         ];
         const errorBox = el('p', { class: 'field-error', role: 'alert', hidden: true });
 
         openSheet({
-            title: '编辑资料',
+            title: t('s_1sq2bvr'),
             size: 'full',
             content: [
                 el('div', { class: 'form' }, [
-                    field('昵称', nickname),
-                    field('邮箱', email),
-                    field('个人简介', bio),
-                    field('地区', region),
-                    field('社交账号', social),
+                    field(t('s_1c2rfxc'), nickname),
+                    field(t('s_185tvls'), email),
+                    field(t('s_ml9unw'), bio),
+                    field(t('s_11ftk7j'), region),
+                    field(t('s_1hnvqec'), social),
                     errorBox,
                 ]),
             ],
             actions: [
-                { label: '取消', onClick: (close) => close() },
+                { label: t('s_1589w37'), onClick: (close) => close() },
                 {
-                    label: '保存',
+                    label: t('s_1c3mapc'),
                     variant: 'primary',
                     onClick: async (close) => {
                         const result = validateAll(validators);
@@ -416,13 +417,13 @@ export async function profilePage(context) {
                                 showRegistrations: user.showRegistrations === true,
                             });
                             if (!saved?.ok) {
-                                errorBox.textContent = saved?.error || '保存失败';
+                                errorBox.textContent = saved?.error || t('s_1q9u8le');
                                 errorBox.hidden = false;
                                 return;
                             }
                             Object.assign(state.user, saved.user || {});
                             close();
-                            toast('资料已保存', 'success');
+                            toast(t('s_i86pw9'), 'success');
                             render();
                         } catch (error) {
                             errorBox.textContent = error.message;
@@ -442,34 +443,34 @@ export async function profilePage(context) {
         const errorBox = el('p', { class: 'field-error', role: 'alert', hidden: true });
 
         const validators = [
-            fieldValidator({ control: current, label: '当前密码', required: true, max: rule.max }),
+            fieldValidator({ control: current, label: t('s_1q7kb1c'), required: true, max: rule.max }),
             fieldValidator({
                 control: next,
-                label: '新密码',
+                label: t('s_9sfqbi'),
                 required: true,
                 min: rule.min,
                 max: rule.max,
                 custom: matchRule(next, confirm),
             }),
-            fieldValidator({ control: confirm, label: '确认新密码', required: true, max: rule.max }),
+            fieldValidator({ control: confirm, label: t('s_1b253gw'), required: true, max: rule.max }),
         ];
 
         openSheet({
-            title: '修改密码',
+            title: t('s_1pt7oo1'),
             size: 'full',
             content: [
                 el('div', { class: 'form' }, [
-                    field('当前密码', current),
+                    field(t('s_1q7kb1c'), current),
                     field(`新密码（${rule.min}–${rule.max} 个字符）`, next),
-                    field('确认新密码', confirm),
+                    field(t('s_1b253gw'), confirm),
                     errorBox,
                 ]),
-                el('p', { class: 'field-hint', text: '演示环境只校验输入格式，不会真的修改密码。' }),
+                el('p', { class: 'field-hint', text: t('s_faylcn') }),
             ],
             actions: [
-                { label: '取消', onClick: (close) => close() },
+                { label: t('s_1589w37'), onClick: (close) => close() },
                 {
-                    label: '确认修改',
+                    label: t('s_13ekny6'),
                     variant: 'primary',
                     onClick: async (close) => {
                         const result = validateAll(validators);
@@ -486,12 +487,12 @@ export async function profilePage(context) {
                                 confirmPassword: confirm.value,
                             });
                             if (!saved?.ok) {
-                                errorBox.textContent = saved?.error || '修改失败';
+                                errorBox.textContent = saved?.error || t('s_a7qley');
                                 errorBox.hidden = false;
                                 return;
                             }
                             close();
-                            toast(saved.note || '密码已更新', 'success');
+                            toast(saved.note || t('s_4hjltm'), 'success');
                         } catch (error) {
                             errorBox.textContent = error.message;
                             errorBox.hidden = false;
@@ -508,13 +509,13 @@ export async function profilePage(context) {
                 loggedIn: false,
                 guest: true,
                 role: 'guest',
-                roleLabel: '访客',
+                roleLabel: t('s_h6o1xg'),
                 username: '',
                 nickname: '',
                 avatar: '',
                 can: {},
             });
-            toast('已退出登录');
+            toast(t('s_pdyp8r'));
             context.navigate('login', {}, { replace: true });
         }).catch((error) => toast(error.message, 'error'));
     }

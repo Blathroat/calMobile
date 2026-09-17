@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 07 · 我的报名（列表）
  * 线框：newUI/remaining-ui.html #screen-my-registrations
@@ -15,7 +16,7 @@ export async function myRegistrationsPage(context) {
     const countPill = el('span', { class: 'pill', text: '—' });
 
     scaffold({
-        title: '我的报名',
+        title: t('s_1m2dh8u'),
         showBack: false,
         bodyProps: { 'data-gap': 'tight' },
         foot: tabbar({ items: navItems(), active: 'my-registrations' }),
@@ -23,7 +24,7 @@ export async function myRegistrationsPage(context) {
             el('div', { class: 'row', 'data-between': 'true' }, [
                 el('div', { class: 'stack', 'data-gap': 'sm' }, [
                     el('span', { class: 'eyebrow', text: state.brand.en }),
-                    el('h2', { text: '我的报名' }),
+                    el('h2', { text: t('s_1m2dh8u') }),
                 ]),
                 countPill,
             ]),
@@ -34,11 +35,11 @@ export async function myRegistrationsPage(context) {
     if (!state.user.loggedIn) {
         replace(listHost, stateBlock({
             iconName: 'user',
-            title: '登录后查看报名记录',
-            description: '访客可以浏览展会详情，报名需要先登录。',
-            action: { label: '去登录', onClick: () => context.navigate('login', { redirect: 'my-registrations' }) },
+            title: t('s_1eiqw54'),
+            description: t('s_mf99no'),
+            action: { label: t('s_533bde'), onClick: () => context.navigate('login', { redirect: 'my-registrations' }) },
         }));
-        countPill.textContent = '未登录';
+        countPill.textContent = t('s_1ydrtwl');
         return;
     }
 
@@ -49,9 +50,9 @@ export async function myRegistrationsPage(context) {
         if (records.length === 0) {
             replace(listHost, stateBlock({
                 iconName: 'ticket',
-                title: '暂无报名记录',
-                description: '在首页选择日期并打开展会，即可提交报名。',
-                action: { label: '去首页看看', onClick: () => context.navigate('home') },
+                title: t('s_a8pyd6'),
+                description: t('s_yfjo64'),
+                action: { label: t('s_11ps4x5'), onClick: () => context.navigate('home') },
             }));
             return;
         }
@@ -67,13 +68,13 @@ export async function myRegistrationsPage(context) {
                 el('strong', { class: 'row-title truncate', text: record.exhibitionTitle }),
                 el('span', { class: 'row-meta', text: `${formatDateWithWeekday(`2026-06-${String(record.exhibitionDay).padStart(2, '0')}`)} ${record.exhibitionTime}` }),
                 el('span', { class: 'row-meta truncate', text: record.exhibitionVenue }),
-                el('span', { class: 'row-meta truncate', text: `报名信息：${truncate(record.answers || '未收集额外信息', 34)}` }),
+                el('span', { class: 'row-meta truncate', text: `报名信息：${truncate(record.answers || t('s_v8pba2'), 34)}` }),
             ]),
             statusTag(record.statusLabel, statusTone(record.statusLabel)),
         ])));
     } catch (error) {
         replace(listHost, loadErrorBlock({
-            title: '报名记录加载失败',
+            title: t('s_1wh1onp'),
             description: error.message,
             onRetry: () => context.refresh(),
         }));

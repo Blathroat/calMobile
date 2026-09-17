@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 共享界面组件：图标、顶部栏、卡片、分段控件、反馈状态与弹层。
  * 组件结构对应 newUI 线框中的 .topbar / .card / .row-card / .seg / .success-state / .note。
@@ -68,7 +69,7 @@ export function topbar({ title, onBack, actions = [], showBack = true }) {
         append(bar, el('button', {
             class: 'icon-button',
             type: 'button',
-            'aria-label': '返回',
+            'aria-label': t('s_omytgn'),
             onclick: onBack,
         }, [icon('back')]));
     } else {
@@ -88,7 +89,7 @@ export function topbar({ title, onBack, actions = [], showBack = true }) {
  * 滑动动画因此不会因为重新渲染而中断（管理后台的 用户/展会/设置 就依赖这一点）。
  */
 export function segmented({ items, value, onChange, label }) {
-    const group = el('div', { class: 'seg', role: 'group', 'aria-label': label || '筛选' });
+    const group = el('div', { class: 'seg', role: 'group', 'aria-label': label || t('s_1w7zwsp') });
     const indicator = el('span', { class: 'seg-indicator', 'aria-hidden': 'true' });
     append(group, indicator);
 
@@ -192,12 +193,12 @@ export function pageFoot(children = []) {
  * 数据加载失败：原位给出说明与「重试」按钮，不使用全局错误页。
  * 页面只要把自己那块容器和一个重新加载的回调传进来即可。
  */
-export function loadErrorBlock({ title = '加载失败', description, onRetry } = {}) {
+export function loadErrorBlock({ title = t('s_kvpltc'), description, onRetry } = {}) {
     return stateBlock({
         tone: 'error',
         title,
         description,
-        action: onRetry ? { label: '重试', onClick: onRetry } : null,
+        action: onRetry ? { label: t('s_lswd2v'), onClick: onRetry } : null,
     });
 }
 
@@ -211,7 +212,7 @@ export function notFoundBlock({ iconName = 'info', title, description, backLabel
         iconName,
         title,
         description,
-        action: onBack ? { label: backLabel || '返回', onClick: onBack } : null,
+        action: onBack ? { label: backLabel || t('s_omytgn'), onClick: onBack } : null,
     });
 }
 
@@ -315,7 +316,7 @@ function prefersReducedMotion() {
 }
 
 /** 二次确认，用于删除与撤销等不可逆操作。 */
-export function confirmSheet({ title, message, confirmLabel = '确认', cancelLabel = '取消', tone = 'primary', onConfirm }) {
+export function confirmSheet({ title, message, confirmLabel = t('s_kre8wf'), cancelLabel = t('s_1589w37'), tone = 'primary', onConfirm }) {
     const sheet = openSheet({
         title,
         content: [el('p', { class: 'muted', text: message })],
@@ -379,12 +380,12 @@ export function mediaBox({ src, className = 'thumb', alt = '', fallbackText = ''
 export function avatarNode({ src, name = '', className = 'avatar', label }) {
     const box = el('span', {
         class: `${className}${src ? ' has-image' : ''}`,
-        'aria-label': label || `${name || '用户'}的头像`,
+        'aria-label': label || `${name || t('s_1in002o')}的头像`,
     });
     if (src) {
         append(box, el('img', { src, alt: '' }));
     } else {
-        append(box, el('span', { text: (name || '用').slice(0, 1), 'aria-hidden': 'true' }));
+        append(box, el('span', { text: (name || t('s_cmla8n')).slice(0, 1), 'aria-hidden': 'true' }));
     }
     return box;
 }
@@ -408,7 +409,7 @@ export function openAvatarCropper({ source, onDone, onError }) {
     const scaleLabel = el('span', { class: 'crop-scale', text: '1.0×' });
     const hint = el('p', {
         class: 'field-hint',
-        text: '拖动图片调整位置，双指捏合缩放；松开手指后即完成调整。',
+        text: t('s_1ty4r7s'),
     });
 
     function clamp() {
@@ -441,7 +442,7 @@ export function openAvatarCropper({ source, onDone, onError }) {
     });
     image.addEventListener('error', () => {
         if (hint) {
-            hint.textContent = '图片加载失败，请重新选择。';
+            hint.textContent = t('s_gnybt');
             hint.dataset.tone = 'error';
         }
     });
@@ -569,23 +570,23 @@ export function openAvatarCropper({ source, onDone, onError }) {
     }, { passive: false });
 
     return openSheet({
-        title: '裁剪头像',
+        title: t('s_1dbfyef'),
         content: [
             el('div', { class: 'crop-wrap' }, [stage]),
             el('div', { class: 'row', 'data-between': 'true' }, [
-                el('span', { class: 'field-hint', text: '双指捏合缩放' }),
+                el('span', { class: 'field-hint', text: t('s_vk66u0') }),
                 scaleLabel,
             ]),
             hint,
         ],
         actions: [
-            { label: '取消', onClick: (close) => close() },
+            { label: t('s_1589w37'), onClick: (close) => close() },
             {
-                label: '使用这张',
+                label: t('s_1bykzhf'),
                 variant: 'primary',
                 onClick: async (close) => {
                     if (!state.ready) {
-                        toast('图片还在加载，请稍候', 'error');
+                        toast(t('s_94aane'), 'error');
                         return;
                     }
                     try {

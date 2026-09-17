@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 04 · 报名信息
  * 线框：newUI/index.html #screen-register
@@ -15,7 +16,7 @@ import { check, limit } from '../core/validate.js';
 export async function registrationFormPage(context) {
     const host = el('div', { class: 'stack' });
     scaffold({
-        title: '报名信息',
+        title: t('s_vrp4t3'),
         backTo: 'home',
         bodyProps: { 'data-gap': 'tight' },
         children: [host],
@@ -30,9 +31,9 @@ export async function registrationFormPage(context) {
         const data = await exhibitions.get(context.params.id);
         if (!data?.found) {
             replace(host, notFoundBlock({
-                title: '展会不存在',
-                description: data?.error || '无法加载报名信息。',
-                backLabel: '返回首页',
+                title: t('s_1vim1qp'),
+                description: data?.error || t('s_1px91rj'),
+                backLabel: t('s_17zyr1e'),
                 onBack: () => context.navigate('home'),
             }));
             return;
@@ -45,7 +46,7 @@ export async function registrationFormPage(context) {
         }
     } catch (error) {
         replace(host, loadErrorBlock({
-            title: '加载失败',
+            title: t('s_kvpltc'),
             description: error.message,
             onRetry: () => context.refresh(),
         }));
@@ -61,11 +62,11 @@ export async function registrationFormPage(context) {
         const success = stateBlock({
             tone: 'success',
             iconName: 'check',
-            title: '报名已提交',
-            description: '需要审核的报名会在“我的报名”中显示状态。',
+            title: t('s_gs61uj'),
+            description: t('s_1qd14sn'),
         });
         success.hidden = true;
-        const submit = el('button', { class: 'cta', type: 'submit' }, ['提交报名']);
+        const submit = el('button', { class: 'cta', type: 'submit' }, [t('s_1umrk9v')]);
 
         for (const field of fields) {
             const control = buildControl(field, inputs);
@@ -80,7 +81,7 @@ export async function registrationFormPage(context) {
                 statusTag(exhibition.modeLabel || exhibition.status, statusTone(exhibition.status)),
             ]),
             form,
-            el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: '提交前确认展会名称与报名方式。' }),
+            el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: t('s_n6zeza') }),
         ]);
 
         form.addEventListener('submit', async (event) => {
@@ -101,16 +102,16 @@ export async function registrationFormPage(context) {
                     focusField(field, inputs);
                     return;
                 }
-                answers.push(`${field.title}：${value || '未填写'}`);
+                answers.push(`${field.title}：${value || t('s_15h5nhd')}`);
             }
             if (!exhibition.openForRegistration) {
-                errorBox.textContent = '该展会当前不接受报名';
+                errorBox.textContent = t('s_1b45hrg');
                 errorBox.hidden = false;
                 return;
             }
 
             const profile = state.user || {};
-            const visitorName = profile.nickname || profile.username || '报名用户';
+            const visitorName = profile.nickname || profile.username || t('s_jt5fam');
             const autoApprove = exhibition.status === EXHIBITION_STATUS.REVIEW_OPTIONAL;
             submit.dataset.loading = 'true';
             submit.disabled = true;
@@ -122,23 +123,23 @@ export async function registrationFormPage(context) {
                     time: exhibition.time,
                     day: exhibition.day,
                     visitorName,
-                    visitorType: `${profile.roleLabel || '普通用户'}`,
+                    visitorType: `${profile.roleLabel || t('s_1cfg610')}`,
                     answers: answers.join('\n'),
                 });
                 if (!result?.ok) {
-                    errorBox.textContent = result?.error || '提交失败';
+                    errorBox.textContent = result?.error || t('s_f66edb');
                     errorBox.hidden = false;
                     return;
                 }
                 const approved = result.autoApproved === true || autoApprove;
-                success.querySelector('strong').textContent = approved ? '报名已通过' : '报名已提交';
+                success.querySelector('strong').textContent = approved ? t('s_hiwq5k') : t('s_gs61uj');
                 success.querySelector('p').textContent = approved
-                    ? '该展会无需审核，已直接为你通过，可在“我的报名”查看。'
-                    : '需要审核的报名会在“我的报名”中显示状态。';
+                    ? t('s_1d9en33')
+                    : t('s_1qd14sn');
                 success.hidden = false;
-                submit.textContent = approved ? '已提交 · 已通过' : '已提交 · 待审核';
+                submit.textContent = approved ? t('s_f02bjx') : t('s_1vse82y');
                 submit.disabled = true;
-                toast(approved ? '报名已提交并通过' : '报名已提交', 'success');
+                toast(approved ? t('s_17txntc') : t('s_gs61uj'), 'success');
                 setTimeout(() => context.navigate('my-registrations', {}, { replace: true }), 900);
             } catch (error) {
                 errorBox.textContent = error.message;
@@ -245,7 +246,7 @@ export async function registrationFormPage(context) {
 
     function splitOptions(options) {
         const list = String(options || '').split(',').map((item) => item.trim()).filter(Boolean);
-        return list.length > 0 ? list : ['未设置选项'];
+        return list.length > 0 ? list : [t('s_q88a0n')];
     }
 
     function escapeRegExp(value) {

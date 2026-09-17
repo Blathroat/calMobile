@@ -1,3 +1,4 @@
+import { t } from './strings.js';
 /**
  * 表单校验。
  *
@@ -44,7 +45,7 @@ export function allowedFormats(kind = 'image') {
 /** 逐条执行规则，返回第一条错误；通过时返回空串。 */
 export function check(value, options = {}) {
     const {
-        label = '该字段',
+        label = t('s_1qafeqo'),
         required = false,
         min = 0,
         max = 0,
@@ -180,19 +181,19 @@ export function validateAll(validators) {
 
 // ── 常用组合规则 ──────────────────────────────────────────────────
 
-export function usernameRule(label = '用户名') {
+export function usernameRule(label = t('s_u9jq8n')) {
     return {
         label,
         min: limit('usernameMin', 3),
         max: limit('usernameMax', 20),
         pattern: PATTERNS.username,
-        patternMessage: '只能使用中英文、数字与下划线',
+        patternMessage: t('s_2i4r18'),
     };
 }
 
 export function passwordRule() {
     return {
-        label: '密码',
+        label: t('s_1aph6eg'),
         min: limit('passwordMin', 6),
         max: limit('passwordMax', 32),
     };
@@ -202,7 +203,7 @@ export function passwordRule() {
 export function passwordStrength(value) {
     const text = String(value || '');
     if (text.length === 0) {
-        return { level: 0, label: '未填写' };
+        return { level: 0, label: t('s_15h5nhd') };
     }
     let score = text.length >= limit('passwordMin', 6) ? 1 : 0;
     if (/[A-Za-z]/.test(text) && /\d/.test(text)) {
@@ -211,11 +212,11 @@ export function passwordStrength(value) {
     if (/[^A-Za-z0-9]/.test(text) || text.length >= 12) {
         score += 1;
     }
-    return { level: score, label: ['弱', '弱', '中', '强'][score] };
+    return { level: score, label: [t('s_ei6h3w'), t('s_ei6h3w'), t('s_b7cu2g'), t('s_hk23ql')][score] };
 }
 
 /** 两个密码框一致性校验。 */
-export function matchRule(control, otherControl, message = '两次输入的密码不一致') {
+export function matchRule(control, otherControl, message = t('s_10ai5t2')) {
     return () => {
         const value = String(control?.value || '');
         const other = String(otherControl?.value || '');

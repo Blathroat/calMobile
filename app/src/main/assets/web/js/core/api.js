@@ -39,13 +39,21 @@ import { call } from './bridge.js';
 const BASE_URL = 'http://127.0.0.1:4000';
 
 /** 探测超时：超过这个时间就认为后端不可用，避免启动被拖住。 */
-const PROBE_TIMEOUT = 1500;
+const PROBE_TIMEOUT = 1200;
+
+/** 单次请求超时：挂起的请求不能把启动流程一起卡死。 */
+const REQUEST_TIMEOUT = 3000;
 
 /** 'unknown' | 'remote' | 'native' */
 let mode = 'unknown';
 let currentToken = '';
 
-/** 探一次后端；结果缓存，`force` 可强制重探。 */
+/**
+ * 显式探一次后端。
+ *
+ * 取数路径**不用**它（那样会多一次往返，超时还要连试几轮）；它只服务于
+ * “设置里显示当前连的是哪个后端”这类需要明确答案的场景。
+ */
 export async function probe(force = false) {
     if (mode !== 'unknown' && !force) {
         return mode;
@@ -87,6 +95,8 @@ class TransportError extends Error {
 }
 
 async function callRemote(action, payload) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT) : null;
     let response;
     try {
         response = await fetch(`${BASE_URL}/${action}`, {
@@ -96,10 +106,15 @@ async function callRemote(action, payload) {
                 ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
             },
             body: JSON.stringify(payload || {}),
+            signal: controller?.signal,
         });
     } catch (error) {
         // 连不上、被中断、超时：都属于传输层问题，可以退回原生。
         throw new TransportError(error.message);
+    } finally {
+        if (timer) {
+            clearTimeout(timer);
+        }
     }
     if (!response.ok) {
         throw new TransportError(`后端返回 ${response.status}`);
@@ -118,14 +133,92 @@ async function callRemote(action, payload) {
 }
 
 /**
- * 统一的取数方法：先按探测结果选传输层，传输层失败时退回原生。
- * 业务失败（`ok: false`）原样抛给页面，不做降级。
+ * 只读接口的短缓存。
+ *
+ * 日志显示同一份数据在一次浏览里会被反复取（切页面、切分区、切筛选都会重新拉），
+ * 每次都是一次远端往返 + 一次整页重绘，这是“操作有点卡”的主要来源。这里对
+ * 只读接口做几十秒的短缓存，写操作会清掉相关前缀，页面因此仍然看到最新数据。
+ */
+const CACHE_TTL = 20000;
+const cache = new Map();
+
+/** 哪些动作是只读的、可以缓存。 */
+const CACHEABLE = new Set([
+    'exhibitions.list', 'exhibitions.month', 'exhibitions.get', 'exhibitions.categories',
+    'exhibitions.fields', 'registrations.list', 'registrations.get', 'review.list',
+    'review.get', 'users.list', 'users.get', 'users.public', 'search.query',
+    'settings.get', 'notify.preferences', 'profile.get',
+]);
+
+/** 写操作成功后要清掉的缓存前缀。 */
+const INVALIDATE = {
+    'exhibitions.save': ['exhibitions.', 'search.'],
+    'exhibitions.delete': ['exhibitions.', 'registrations.', 'review.', 'search.'],
+    'exhibitions.status': ['exhibitions.', 'registrations.', 'review.', 'search.'],
+    'exhibitions.saveFields': ['exhibitions.'],
+    'registrations.submit': ['registrations.', 'review.', 'exhibitions.'],
+    'registrations.cancel': ['registrations.', 'review.', 'exhibitions.'],
+    'review.updateStatus': ['review.', 'registrations.', 'users.public'],
+    'checkin.scan': ['review.', 'registrations.', 'users.public'],
+    'users.status': ['users.'],
+    'settings.save': ['settings.', 'notify.'],
+    'settings.uiMode': ['settings.'],
+    'notify.savePreferences': ['notify.'],
+    'profile.save': ['profile.', 'users.public'],
+    'exhibitions.categories': [],
+};
+
+function cacheKey(action, payload) {
+    return `${action}|${JSON.stringify(payload || {})}`;
+}
+
+function invalidate(action) {
+    const prefixes = INVALIDATE[action];
+    if (!prefixes) {
+        return;
+    }
+    if (prefixes.length === 0) {
+        return;
+    }
+    for (const key of [...cache.keys()]) {
+        const cachedAction = key.slice(0, key.indexOf('|'));
+        if (prefixes.some((prefix) => prefix.endsWith('.')
+            ? cachedAction.startsWith(prefix)
+            : cachedAction === prefix)) {
+            cache.delete(key);
+        }
+    }
+}
+
+/** 清空全部缓存；登录 / 退出登录后调用，避免看到上一个身份的数据。 */
+export function clearCache() {
+    cache.clear();
+}
+
+/**
+ * 统一的取数方法。
+ *
+ * 传输层**不做单独的连通性预探测**：那会平白多一次往返，超时时还会连试几轮
+ * （实测 `bootstrap-done` 因此达到 5.6s）。这里直接发真实请求，失败再退回原生，
+ * 第一次成功的那条路会被记住，后续请求不再摇摆。
+ *
+ * 业务失败（`ok: false`）原样抛给页面，不降级、不重试。
  */
 async function request(action, payload) {
-    const selected = await probe();
-    if (selected === 'remote') {
+    const cacheable = CACHEABLE.has(action);
+    const key = cacheable ? cacheKey(action, payload) : '';
+    if (cacheable) {
+        const hit = cache.get(key);
+        if (hit && Date.now() - hit.at < CACHE_TTL) {
+            return hit.value;
+        }
+    }
+
+    let value;
+    if (mode !== 'native' && typeof fetch === 'function') {
         try {
-            return await callRemote(action, payload);
+            value = await callRemote(action, payload);
+            mode = 'remote';
         } catch (error) {
             if (!(error instanceof TransportError)) {
                 throw error;
@@ -134,7 +227,15 @@ async function request(action, payload) {
             mode = 'native';
         }
     }
-    return call(action, payload);
+    if (value === undefined) {
+        value = await call(action, payload);
+    }
+
+    if (cacheable && value !== undefined) {
+        cache.set(key, { at: Date.now(), value });
+    }
+    invalidate(action);
+    return value;
 }
 
 /**
@@ -150,12 +251,15 @@ export const api = {
             if (result?.token) {
                 setToken(result.token);
             }
+            // 换了身份，上一份缓存不再适用。
+            clearCache();
             return result;
         },
         register: (payload) => request('auth.register', payload),
         guest: () => request('auth.guest'),
         logout: async () => {
             setToken('');
+            clearCache();
             return request('auth.logout');
         },
     },

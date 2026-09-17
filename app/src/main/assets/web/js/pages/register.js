@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 05 · 注册（创建账号）
  * 线框：newUI/remaining-ui.html #screen-register-account
@@ -23,22 +24,22 @@ import {
 } from '../core/validate.js';
 
 export async function registerPage(context) {
-    const body = scaffold({ title: '注册', backTo: 'login', children: [] });
+    const body = scaffold({ title: t('s_1n008jl'), backTo: 'login', children: [] });
 
     append(body, el('div', { class: 'stack', 'data-gap': 'sm' }, [
-        el('h2', { text: '创建你的展会档案' }),
-        el('p', { class: 'muted', text: '几步完成，马上开始安排你的展会之旅' }),
+        el('h2', { text: t('s_1dixw2w') }),
+        el('p', { class: 'muted', text: t('s_m8zmid') }),
     ]));
 
     const form = el('form', { class: 'form', novalidate: true });
     const errorBox = el('p', { class: 'field-error', role: 'alert', hidden: true });
-    const submit = el('button', { class: 'cta', type: 'submit' }, ['创建账号']);
+    const submit = el('button', { class: 'cta', type: 'submit' }, [t('s_n6lkn3')]);
 
-    const username = input('register-username', 'text', '设置用户名', 'username');
-    const email = input('register-email', 'email', '输入常用邮箱', 'email');
-    const password = input('register-password', 'password', '设置登录密码', 'new-password');
-    const confirm = input('register-confirm', 'password', '再次输入密码', 'new-password');
-    const strength = el('span', { class: 'password-meter', dataset: { level: '0' }, text: '未填写' });
+    const username = input('register-username', 'text', t('s_doztlr'), 'username');
+    const email = input('register-email', 'email', t('s_1i2pkg8'), 'email');
+    const password = input('register-password', 'password', t('s_8eggh4'), 'new-password');
+    const confirm = input('register-confirm', 'password', t('s_1ceimwm'), 'new-password');
+    const strength = el('span', { class: 'password-meter', dataset: { level: '0' }, text: t('s_15h5nhd') });
 
     const account = usernameRule();
     const secret = passwordRule();
@@ -47,11 +48,11 @@ export async function registerPage(context) {
         fieldValidator({ control: username, required: true, ...account }),
         fieldValidator({
             control: email,
-            label: '邮箱',
+            label: t('s_185tvls'),
             required: true,
             max: 60,
             pattern: PATTERNS.email,
-            patternMessage: '邮箱格式不正确',
+            patternMessage: t('s_1u3yg0h'),
         }),
         fieldValidator({
             control: password,
@@ -60,7 +61,7 @@ export async function registerPage(context) {
             max: secret.max,
             custom: matchRule(password, confirm),
         }),
-        fieldValidator({ control: confirm, label: '确认密码', required: true, max: secret.max }),
+        fieldValidator({ control: confirm, label: t('s_ocmice'), required: true, max: secret.max }),
     ];
 
     // 密码强度只做提示，不参与拦截。
@@ -71,12 +72,12 @@ export async function registerPage(context) {
     });
 
     append(form, [
-        field(`用户名（${account.min}–${account.max} 个字符）`, username, '可用中英文、数字与下划线'),
-        field('邮箱', email),
+        field(`用户名（${account.min}–${account.max} 个字符）`, username, t('s_7tkrpl')),
+        field(t('s_185tvls'), email),
         field(`密码（${secret.min}–${secret.max} 个字符）`, password, `至少 ${secret.min} 个字符`),
-        field('确认密码', confirm),
+        field(t('s_ocmice'), confirm),
         el('div', { class: 'row', 'data-between': 'true' }, [
-            el('span', { class: 'row-meta', text: '密码强度' }),
+            el('span', { class: 'row-meta', text: t('s_1lj253k') }),
             strength,
         ]),
         errorBox,
@@ -88,7 +89,7 @@ export async function registerPage(context) {
         class: 'cta ghost',
         type: 'button',
         onclick: () => context.navigate('login', {}, { replace: true }),
-    }, ['已有账号？返回登录']));
+    }, [t('s_1smt94y')]));
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -107,10 +108,10 @@ export async function registerPage(context) {
                 confirmPassword: confirm.value,
             });
             if (!saved?.ok) {
-                return showError(saved?.error || '注册失败');
+                return showError(saved?.error || t('s_osck6n'));
             }
             Object.assign(state.user, saved.user || {});
-            toast('账号已创建，已为你登录', 'success');
+            toast(t('s_6e6nd9'), 'success');
             context.navigate('home', {}, { replace: true });
         } catch (error) {
             showError(error.message);

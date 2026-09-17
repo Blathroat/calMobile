@@ -10,11 +10,51 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
 const root = path.resolve(__dirname, '..');
 const webRoot = path.join(root, 'app', 'src', 'main', 'assets', 'web');
+
+// ── 内置库的打桩 ─────────────────────────────────────────────────
+// 打桩环境不执行 <script>，因此按路径把真实的内置库挂到 window 上，
+// 让 core/vendor.js 的按需加载在测试里也能成功。
+
+const { createRequire } = require('node:module');
+const requireFromHere = createRequire(__filename);
+
+/** 脚本路径 → 该脚本注册的全局名。 */
+const VENDOR_GLOBALS = {
+    'vendor/qrcode-generator/qrcode.js': 'qrcode',
+    'vendor/jsqr/jsQR.js': 'jsQR',
+    'vendor/easymde/easymde.min.js': 'EasyMDE',
+};
+
+/** 全局名 → 真实实现（只加载能安全在 Node 里 require 的两个二维码库）。 */
+const VENDOR_EXPORTS = {
+    qrcode: requireFromHere(path.join(webRoot, 'vendor', 'qrcode-generator', 'qrcode.js')),
+    jsQR: requireFromHere(path.join(webRoot, 'vendor', 'jsqr', 'jsQR.js')),
+    EasyMDE: function EasyMDEFake() {},
+};
+
+/**
+ * 前端文案：真实实现由原生从 res/values/strings_frontend.xml 注入，
+ * 测试直接读同一份资源文件，保证断言用的是真实文案而不是 key。
+ */
+const frontendStrings = (() => {
+    const file = path.join(root, 'app', 'src', 'main', 'res', 'values', 'strings_frontend.xml');
+    const xml = fs.readFileSync(file, 'utf8');
+    const map = {};
+    for (const match of xml.matchAll(/<string name="(s_[a-z0-9]+)">([\s\S]*?)<\/string>/g)) {
+        map[match[1]] = match[2]
+            .replace(/\\'/g, "'")
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&');
+    }
+    return map;
+})();
 
 // ── 最小 DOM 打桩 ────────────────────────────────────────────────
 
@@ -79,6 +119,17 @@ class StubNode {
     appendChild(child) {
         child.parentNode = this;
         this.children.push(child);
+        // 打桩环境不会真的执行 <script>：按 src 把内置库挂到 window 上再触发 onload，
+        // 这样按需加载（core/vendor.js）在测试里也能走完整流程。
+        if (child.tagName === 'SCRIPT' && child.src) {
+            const name = VENDOR_GLOBALS[child.src];
+            if (name) {
+                sharedWindow[name] = VENDOR_EXPORTS[name];
+                setTimeout(() => child.onload?.(), 0);
+            } else {
+                setTimeout(() => child.onerror?.(new Error(`未打桩的脚本：${child.src}`)), 0);
+            }
+        }
         return child;
     }
 
@@ -472,6 +523,8 @@ async function renderRoute(routeId, params = {}) {
     const dom = resetDom(sharedDocument);
     const calls = [];
     installBridge(sharedWindow, calls);
+    // 原生会注入文案；测试用同一份资源文件，断言才能用真实文案。
+    sharedWindow.CalMobileStrings = frontendStrings;
     sharedWindow.location.hash = '#/home';
 
     const appUrl = pathToFileURL(path.join(webRoot, 'js', 'app.js')).href;
@@ -479,6 +532,10 @@ async function renderRoute(routeId, params = {}) {
 
     // 必须与 app.js 解析到同一个模块实例，否则拿不到已注册的路由。
     const router = await import(pathToFileURL(path.join(webRoot, 'js', 'core', 'router.js')).href);
+    // 每次渲染当作一次全新的会话：清掉 api.js 的只读缓存，
+    // 否则上一个用例取过的数据会命中缓存，看不到新的请求。
+    const apiModule = await import(pathToFileURL(path.join(webRoot, 'js', 'core', 'api.js')).href);
+    apiModule.clearCache();
     // 首次渲染要等 bootstrap（可能是异步的远端请求）落定，不能自己猜时序。
     await router.whenStarted();
 

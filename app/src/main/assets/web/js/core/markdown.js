@@ -8,9 +8,13 @@
  */
 
 import { sanitizeHtml } from './sanitize.js';
+import { loadScript, loadStyle } from './vendor.js';
 
 /** 内置的 Markdown 引擎：EasyMDE 打包了 marked，这里按需加载同一个文件。 */
 export const MARKED_SCRIPT = 'vendor/easymde/easymde.min.js';
+
+/** 编辑器样式：与脚本一起按需注入，避免它在启动时阻塞首帧。 */
+const MARKED_STYLE = 'vendor/easymde/easymde.min.css';
 
 /** 调用 EasyMDE.prototype.markdown 时的最小上下文，避免它访问 options 报错。 */
 const MARKDOWN_CONTEXT = { options: {} };
@@ -44,29 +48,26 @@ let markedPromise = null;
  * <p>
  * 只有编辑简介的页面会主动加载 EasyMDE，而展会详情同样需要渲染 Markdown，
  * 因此在展示前按需加载同一个内置文件，避免详情页把 Markdown 当成空内容。
+ * 编辑器样式随脚本一起注入：它只服务简介编辑器，没必要在启动时参与首帧渲染。
  */
 export function ensureMarked() {
     const render = resolveMarked();
     if (render) {
+        loadStyle(MARKED_STYLE);
         return Promise.resolve(render);
     }
     if (typeof document === 'undefined') {
         return Promise.reject(new Error('当前环境不支持 Markdown 渲染'));
     }
     if (!markedPromise) {
-        markedPromise = new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = MARKED_SCRIPT;
-            script.onload = () => {
-                const loaded = resolveMarked();
-                if (loaded) {
-                    resolve(loaded);
-                } else {
-                    reject(new Error('Markdown 引擎未注册到全局'));
-                }
-            };
-            script.onerror = () => reject(new Error('无法加载 Markdown 引擎'));
-            document.head.appendChild(script);
+        markedPromise = loadScript(MARKED_SCRIPT, 'EasyMDE').then(() => {
+            loadStyle(MARKED_STYLE);
+            const loaded = resolveMarked();
+            if (!loaded) {
+                markedPromise = null;
+                throw new Error('Markdown 引擎未注册到全局');
+            }
+            return loaded;
         });
     }
     return markedPromise;

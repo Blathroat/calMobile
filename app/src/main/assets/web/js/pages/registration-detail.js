@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 08 · 报名详情
  * 线框：newUI/remaining-ui.html #screen-registration-detail
@@ -13,12 +14,13 @@ import { scaffold } from '../core/router.js';
 import { confirmSheet, loadErrorBlock, loadingBlock, notFoundBlock, pageFoot, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, replace, answerLines, formatDateWithWeekday } from '../core/dom.js';
 import { REGISTRATION_STATUS } from '../core/status.js';
+import { loadQrEncoder } from '../core/vendor.js';
 
 export async function registrationDetailPage(context) {
     const host = el('div', { class: 'stack' });
     const foot = pageFoot();
     scaffold({
-        title: '报名详情',
+        title: t('s_1e7myaa'),
         backTo: 'my-registrations',
         bodyProps: { 'data-gap': 'tight' },
         foot,
@@ -31,9 +33,9 @@ export async function registrationDetailPage(context) {
         const data = await registrations.get(context.params.id);
         if (!data?.found) {
             replace(host, notFoundBlock({
-                title: '报名记录不存在',
-                description: data?.error || '该记录可能已被撤销。',
-                backLabel: '返回列表',
+                title: t('s_18st7j'),
+                description: data?.error || t('s_11prq8e'),
+                backLabel: t('s_qr7208'),
                 onBack: () => context.navigate('my-registrations'),
             }));
             return;
@@ -41,7 +43,7 @@ export async function registrationDetailPage(context) {
         record = data.registration;
     } catch (error) {
         replace(host, loadErrorBlock({
-            title: '加载失败',
+            title: t('s_kvpltc'),
             description: error.message,
             onRetry: () => context.refresh(),
         }));
@@ -59,17 +61,17 @@ export async function registrationDetailPage(context) {
                 el('span', { class: 'row-meta', text: record.exhibitionVenue }),
             ]),
             el('div', { class: 'card' }, [
-                el('span', { class: 'section-label', text: '报名信息' }),
+                el('span', { class: 'section-label', text: t('s_vrp4t3') }),
                 el('div', { class: 'stack', 'data-gap': 'sm' }, [
-                    detailRow('报名人', record.visitorName),
-                    detailRow('身份', record.visitorType),
+                    detailRow(t('s_33njx3'), record.visitorName),
+                    detailRow(t('s_yz0sc5'), record.visitorType),
                     ...(answers.length > 0
-                        ? answers.map((line) => detailRow(line.label || '补充信息', line.value))
-                        : [detailRow('补充信息', '未收集额外信息')]),
+                        ? answers.map((line) => detailRow(line.label || t('s_otl7kf'), line.value))
+                        : [detailRow(t('s_otl7kf'), t('s_v8pba2'))]),
                 ]),
             ]),
             el('div', { class: 'card' }, [
-                el('span', { class: 'section-label', text: '当前状态' }),
+                el('span', { class: 'section-label', text: t('s_c6rjk') }),
                 el('div', { class: 'row', 'data-gap': 'md' }, [
                     statusTag(record.statusLabel, statusTone(record.statusLabel)),
                     el('span', { class: 'row-meta', text: statusHint(record.statusLabel) }),
@@ -82,7 +84,8 @@ export async function registrationDetailPage(context) {
 
     /**
      * 报名码：仅在展商启用二维码、且报名已通过（或已核销）时展示。
-     * 二维码由内置的 qrcode-generator 画到 canvas 上，内容与报名码文本完全一致。
+     * 二维码由内置的 qrcode-generator 画到 canvas 上，内容与报名码文本完全一致；
+     * 该库按需加载，进入本页时才拉取，避免拖慢启动。
      */
     function registrationCodeCard() {
         if (!record.checkInCode) {
@@ -94,41 +97,40 @@ export async function registrationDetailPage(context) {
             width: 480,
             height: 480,
             role: 'img',
-            'aria-label': '报名二维码',
+            'aria-label': t('s_16uw4a2'),
+        });
+        const hint = el('p', {
+            class: 'field-hint',
+            style: { textAlign: 'center' },
+            text: t('s_1wlb9mw'),
         });
         const card = el('div', { class: 'card' }, [
             el('div', { class: 'row', 'data-between': 'true' }, [
-                el('span', { class: 'section-label', text: '报名码' }),
-                statusTag(attended ? '已核销' : '待核销', attended ? 'ok' : 'pending'),
+                el('span', { class: 'section-label', text: t('s_w5wyci') }),
+                statusTag(attended ? t('s_107xpf9') : t('s_1qk0zaw'), attended ? 'ok' : 'pending'),
             ]),
             el('div', { class: 'qr-wrap' }, [canvas]),
             el('code', { class: 'qr-code-text', text: record.checkInCode }),
-            el('p', {
-                class: 'field-hint',
-                style: { textAlign: 'center' },
-                text: attended
-                    ? '该报名码已核销，无需再次出示。'
-                    : '现场向展商出示此码，扫码后报名状态会变为“已参加”。',
-            }),
+            hint,
         ]);
-        // 下一帧再画：画布挂到文档后才有真实的 CSS 尺寸。
-        // 逐模块绘制与内置库的解码往返由 scripts/webui-render.test.js 覆盖。
-        const paint = () => drawQr(canvas, record.checkInCode);
-        if (typeof requestAnimationFrame === 'function') {
-            requestAnimationFrame(paint);
-        } else {
-            paint();
-        }
+
+        loadQrEncoder()
+            .then(() => {
+                drawQr(canvas, record.checkInCode);
+                hint.textContent = attended
+                    ? t('s_132avex')
+                    : t('s_aoirc6');
+            })
+            .catch((error) => {
+                hint.textContent = `二维码组件加载失败（${error.message}），可让展商手动输入上方报名码。`;
+            });
         return card;
     }
 
-    /** 用内置的 qrcode-generator 把报名码画成二维码；库缺失时降级为纯文本提示。 */
+    /** 用内置的 qrcode-generator 把报名码画成二维码。 */
     function drawQr(canvas, text) {
         const generator = typeof window !== 'undefined' ? window.qrcode : null;
         if (typeof generator !== 'function') {
-            replace(canvas.parentNode, [
-                el('p', { class: 'field-hint', text: '二维码组件未加载，可让展商手动输入下方报名码。' }),
-            ]);
             return;
         }
         let model;
@@ -171,18 +173,18 @@ export async function registrationDetailPage(context) {
 
     function statusHint(status) {
         if (status === REGISTRATION_STATUS.PENDING) {
-            return '展商审核后会更新状态';
+            return t('s_1te6cde');
         }
         if (status === REGISTRATION_STATUS.APPROVED) {
-            return state.review.canRevise ? '展商仍可修改审核结果' : '展商已完成审核';
+            return state.review.canRevise ? t('s_i68x11') : t('s_1k42kcd');
         }
         if (status === REGISTRATION_STATUS.ATTENDED) {
-            return '展商已扫码核销，祝参展顺利';
+            return t('s_1cjrrf7');
         }
         if (status === REGISTRATION_STATUS.CANCELLED) {
-            return '该报名已由你撤销';
+            return t('s_h2sz0p');
         }
-        return '如需修改请联系展商';
+        return t('s_1bzdeux');
     }
 
     function detailRow(label, value) {
@@ -201,21 +203,21 @@ export async function registrationDetailPage(context) {
             type: 'button',
             disabled: cancelled || !revise ? true : null,
             onclick: () => modifyRegistration(),
-        }, ['修改报名']);
+        }, [t('s_ebndq6')]);
 
         const cancel = el('button', {
             class: 'cta danger',
             type: 'button',
             disabled: cancelled ? true : null,
             onclick: () => askCancel(),
-        }, [cancelled ? REGISTRATION_STATUS.CANCELLED : '撤销报名']);
+        }, [cancelled ? REGISTRATION_STATUS.CANCELLED : t('s_1u8rnsb')]);
 
         replace(foot, el('div', { class: 'stack', 'data-gap': 'sm' }, [
             el('div', { class: 'grid-cols-2' }, [modify, cancel]),
             el('p', {
                 class: 'field-hint',
                 style: { textAlign: 'center' },
-                text: cancelled ? '撤销后的报名不会出现在展商审核列表。' : '撤销后如需参加请重新提交报名。',
+                text: cancelled ? t('s_ex1lrt') : t('s_131vhix'),
             }),
         ]));
     }
@@ -229,18 +231,18 @@ export async function registrationDetailPage(context) {
 
     function askCancel() {
         confirmSheet({
-            title: '撤销报名',
+            title: t('s_1u8rnsb'),
             message: `确定撤销「${record.exhibitionTitle}」的报名吗？撤销后展商将不再审核该记录。`,
-            confirmLabel: '确认撤销',
+            confirmLabel: t('s_zfeh7n'),
             tone: 'danger',
             onConfirm: async () => {
                 try {
                     const result = await registrations.cancel(record.id);
                     if (!result?.ok) {
-                        toast(result?.error || '撤销失败', 'error');
+                        toast(result?.error || t('s_qqaurb'), 'error');
                         return;
                     }
-                    toast('报名已撤销', 'success');
+                    toast(t('s_xf7p1v'), 'success');
                     context.refresh();
                 } catch (error) {
                     toast(error.message, 'error');

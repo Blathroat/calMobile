@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 13 · 报名管理 / 审核
  * 线框：newUI/remaining-ui.html #screen-registration-management
@@ -21,24 +22,24 @@ export async function reviewPage(context) {
     const filterHost = el('div');
     let filter = REGISTRATION_STATUS.PENDING;
     let filterSeg = null;
-    let title = '报名管理';
+    let title = t('s_7xrrf0');
     let records = [];
 
     scaffold({
-        title: '报名管理',
+        title: t('s_7xrrf0'),
         backTo: isAdmin ? 'admin' : 'exhibitor',
         bodyProps: { 'data-gap': 'tight' },
         children: [
             el('div', { class: 'row', 'data-between': 'true' }, [
                 el('div', { class: 'stack', 'data-gap': 'sm' }, [
                     el('span', { class: 'eyebrow', text: state.brand.en }),
-                    el('h2', { text: '报名管理' }),
+                    el('h2', { text: t('s_7xrrf0') }),
                 ]),
                 countPill,
             ]),
-            el('p', { class: 'row-meta', text: '审核结果会同步到用户的“我的报名”，并触发状态通知。' }),
+            el('p', { class: 'row-meta', text: t('s_1dkg6y4') }),
             isAdmin
-                ? el('p', { class: 'field-hint', text: '管理员可以随时切换报名人状态，不受“允许修改已通过或已拒绝的报名”开关影响。' })
+                ? el('p', { class: 'field-hint', text: t('s_17zufsn') })
                 : null,
             filterHost,
             listHost,
@@ -52,7 +53,7 @@ export async function reviewPage(context) {
             const items = await exhibitions.list();
             replace(filterHost, []);
             replace(listHost, [
-                el('span', { class: 'section-label', text: '选择要审核的展会' }),
+                el('span', { class: 'section-label', text: t('s_1yn5q3y') }),
                 el('div', { class: 'list', 'data-gap': 'sm' }, items.map((item) => el('button', {
                     class: 'row-card',
                     type: 'button',
@@ -69,7 +70,7 @@ export async function reviewPage(context) {
             countPill.textContent = `${items.length} 个展会`;
         } catch (error) {
             replace(listHost, loadErrorBlock({
-                title: '加载失败',
+                title: t('s_kvpltc'),
                 description: error.message,
                 onRetry: () => context.refresh(),
             }));
@@ -87,7 +88,7 @@ export async function reviewPage(context) {
         });
         if (!filterSeg) {
             filterSeg = segmented({
-                label: '审核状态',
+                label: t('s_1r4txyl'),
                 value: filter,
                 items: REVIEW_FILTERS.map((value) => ({ value, label: value })),
                 onChange: (value) => {
@@ -110,21 +111,21 @@ export async function reviewPage(context) {
             records = data.records || [];
             renderFilter(data.counts || {});
             countPill.textContent = `待审核 ${data.counts?.[REGISTRATION_STATUS.PENDING] ?? 0}`;
-            if (title !== '报名管理' && data.records?.length) {
+            if (title !== t('s_7xrrf0') && data.records?.length) {
                 title = data.records[0].exhibitionTitle || title;
             }
             if (records.length === 0) {
                 replace(listHost, stateBlock({
                     iconName: 'ticket',
                     title: `没有${filter === '全部' ? '' : filter}的报名`,
-                    description: '用户提交报名后会出现在这里，点击记录可查看完整回答。',
+                    description: t('s_z599mr'),
                 }));
                 return;
             }
             replace(listHost, el('div', { class: 'list', 'data-gap': 'sm' }, records.map(row)));
         } catch (error) {
             replace(listHost, loadErrorBlock({
-                title: '报名列表加载失败',
+                title: t('s_1f0wrbh'),
                 description: error.message,
                 onRetry: () => load(),
             }));
@@ -139,7 +140,7 @@ export async function reviewPage(context) {
             'aria-label': `查看 ${record.visitorName} 的报名详情`,
             onclick: () => openDetail(record),
         }, [
-            el('span', { class: 'avatar', text: (record.visitorName || '报').slice(0, 1), 'aria-hidden': 'true' }),
+            el('span', { class: 'avatar', text: (record.visitorName || t('s_18ko8bk')).slice(0, 1), 'aria-hidden': 'true' }),
             el('span', { class: 'row-copy' }, [
                 el('strong', { class: 'row-title', text: record.visitorName }),
                 el('span', { class: 'row-meta', text: `报名于 ${record.registrationTime}` }),
@@ -164,10 +165,10 @@ export async function reviewPage(context) {
                     ]),
                     el('div', { class: 'card', 'data-tone': 'fill' }, answers.length > 0
                         ? answers.map((line) => el('div', { class: 'row' }, [
-                            el('span', { class: 'row-meta', style: { minWidth: '96px' }, text: line.label || '补充信息' }),
+                            el('span', { class: 'row-meta', style: { minWidth: '96px' }, text: line.label || t('s_otl7kf') }),
                             el('strong', { class: 'fill', text: line.value || '—' }),
                         ]))
-                        : [el('span', { class: 'row-meta', text: '未收集额外信息' })]),
+                        : [el('span', { class: 'row-meta', text: t('s_v8pba2') })]),
                     revisable
                         ? el('div', { class: 'stack', 'data-gap': 'sm' }, [
                             el('div', { class: 'grid-cols-2' }, [
@@ -178,7 +179,7 @@ export async function reviewPage(context) {
                                         sheet.close();
                                         await changeStatus(record, REGISTRATION_STATUS.REJECTED);
                                     },
-                                }, ['拒绝']),
+                                }, [t('s_1qrntx4')]),
                                 el('button', {
                                     class: 'cta',
                                     type: 'button',
@@ -186,7 +187,7 @@ export async function reviewPage(context) {
                                         sheet.close();
                                         await changeStatus(record, REGISTRATION_STATUS.APPROVED);
                                     },
-                                }, ['通过']),
+                                }, [t('s_j666m6')]),
                             ]),
                             el('button', {
                                 class: 'cta ghost',
@@ -196,12 +197,12 @@ export async function reviewPage(context) {
                                     sheet.close();
                                     await changeStatus(record, REGISTRATION_STATUS.ATTENDED);
                                 },
-                            }, [attended ? '已核销为已参加' : '标记为已参加']),
+                            }, [attended ? t('s_dnmrxz') : t('s_crec0c')]),
                         ])
-                        : el('p', { class: 'field-hint', text: '该报名已完成审核，管理员未开启“允许重新审核”。' }),
+                        : el('p', { class: 'field-hint', text: t('s_1e05tqn') }),
                 ]),
             ],
-            actions: [{ label: '关闭', onClick: (close) => close() }],
+            actions: [{ label: t('s_g0fanx'), onClick: (close) => close() }],
         });
         return sheet;
     }
@@ -210,7 +211,7 @@ export async function reviewPage(context) {
         try {
             const result = await review.updateStatus(record.id, status);
             if (!result?.ok) {
-                toast(result?.error || '更新失败', 'error');
+                toast(result?.error || t('s_10lkv9z'), 'error');
                 return;
             }
             toast(statusMessage(status), 'success');
@@ -222,10 +223,10 @@ export async function reviewPage(context) {
 
     function statusMessage(status) {
         if (status === REGISTRATION_STATUS.APPROVED) {
-            return '已通过该报名';
+            return t('s_1j0wkqr');
         }
         if (status === REGISTRATION_STATUS.REJECTED) {
-            return '已拒绝该报名';
+            return t('s_yxll7l');
         }
         return `已将报名标记为${status}`;
     }

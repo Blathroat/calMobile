@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 11 · 展会编辑（新建 / 编辑）
  * 线框：newUI/remaining-ui.html #screen-exhibition-form
@@ -22,10 +23,10 @@ export async function exhibitionFormPage(context) {
     const isCreate = !context.params.id;
     const host = el('div', { class: 'stack' });
     const foot = pageFoot();
-    const saveButton = topAction('save', isCreate ? '创建展会' : '保存展会', () => submit());
+    const saveButton = topAction('save', isCreate ? t('s_gya40f') : t('s_10q6dxb'), () => submit());
 
     scaffold({
-        title: isCreate ? '新建展会' : '编辑展会',
+        title: isCreate ? t('s_p9fllo') : t('s_eutzzb'),
         backTo: 'exhibitor',
         bodyProps: { 'data-gap': 'tight' },
         actions: [saveButton],
@@ -55,9 +56,9 @@ export async function exhibitionFormPage(context) {
             const data = await exhibitions.get(context.params.id);
             if (!data?.found) {
                 replace(host, notFoundBlock({
-                    title: '展会不存在',
-                    description: data?.error || '无法加载展会信息。',
-                    backLabel: '返回展商后台',
+                    title: t('s_1vim1qp'),
+                    description: data?.error || t('s_1qfu0ss'),
+                    backLabel: t('s_dn4ida'),
                     onBack: () => context.navigate('exhibitor'),
                 }));
                 return;
@@ -87,7 +88,7 @@ export async function exhibitionFormPage(context) {
         }
     } catch (error) {
         replace(host, loadErrorBlock({
-            title: '加载失败',
+            title: t('s_kvpltc'),
             description: error.message,
             onRetry: () => context.refresh(),
         }));
@@ -96,8 +97,8 @@ export async function exhibitionFormPage(context) {
 
     // ── 表单控件 ───────────────────────────────────────────────────
 
-    const titleInput = textInput('form-title', 'text', model.title, '例如：智能制造与工业自动化展');
-    const venueInput = textInput('form-venue', 'text', model.venue, '例如：上海新国际博览中心 · N3 馆');
+    const titleInput = textInput('form-title', 'text', model.title, t('s_giboid'));
+    const venueInput = textInput('form-venue', 'text', model.venue, t('s_vih0tf'));
     const dateInput = textInput('form-date', 'date', model.date);
     const timeInput = textInput('form-time', 'text', model.time, '09:00-17:00');
     const startInput = textInput('form-reg-start', 'date', model.registrationStart);
@@ -113,7 +114,7 @@ export async function exhibitionFormPage(context) {
         style: { minHeight: '44px', fontSize: 'var(--fs-label)' },
         disabled: isCreate ? true : null,
         onclick: () => context.navigate('rich-editor', { id: model.id }),
-    }, [isCreate ? '保存后可编辑' : '编辑简介']);
+    }, [isCreate ? t('s_1wz04v2') : t('s_21ce2x')]);
 
     // 「报名方式」一行的两个可变节点：就地更新，避免重建页面丢掉未保存的输入。
     const modeTag = el('span', [statusTagFor(model.status)]);
@@ -131,13 +132,13 @@ export async function exhibitionFormPage(context) {
 
     function formatsHint() {
         const list = allowedFormats('image');
-        return list.length > 0 ? list.map((item) => `.${item}`).join('/') : '常见图片格式';
+        return list.length > 0 ? list.map((item) => `.${item}`).join('/') : t('s_1qnyx3k');
     }
 
     function renderCover() {
         replace(coverPreview, [
             model.imageUri
-                ? el('div', { class: 'hero ph-img hero-compact' }, [el('img', { src: model.imageUri, alt: '展会封面' })])
+                ? el('div', { class: 'hero ph-img hero-compact' }, [el('img', { src: model.imageUri, alt: t('s_63jsvx') })])
                 : el('div', { class: 'hero ph-img hero-compact', 'aria-hidden': 'true' }),
             el('div', { class: 'row', 'data-gap': 'md' }, [
                 coverButton(),
@@ -150,7 +151,7 @@ export async function exhibitionFormPage(context) {
                             model.imageUri = '';
                             renderCover();
                         },
-                    }, ['移除封面'])
+                    }, [t('s_eab5ax')])
                     : null,
             ]),
         ]);
@@ -162,7 +163,7 @@ export async function exhibitionFormPage(context) {
             type: 'button',
             style: { minHeight: '44px', fontSize: 'var(--fs-label)', flex: '1 1 0' },
             onclick: () => pickCover(button),
-        }, [model.imageUri ? '更换封面' : '上传封面']);
+        }, [model.imageUri ? t('s_xocxb0') : t('s_6piprk')]);
         return button;
     }
 
@@ -172,14 +173,14 @@ export async function exhibitionFormPage(context) {
         try {
             const stored = await call('media.import', { kind: 'image' });
             if (!stored?.url) {
-                toast('未能读取所选图片', 'error');
+                toast(t('s_1dc9o49'), 'error');
                 return;
             }
             model.imageUri = stored.url;
             renderCover();
-            toast(stored.compressed ? '封面已压缩并上传' : '封面已上传', 'success');
+            toast(stored.compressed ? t('s_1bbs6qg') : t('s_1ckoagi'), 'success');
         } catch (error) {
-            if (String(error.message).includes('取消')) {
+            if (String(error.message).includes(t('s_1589w37'))) {
                 return;
             }
             toast(error.message, 'error');
@@ -193,55 +194,55 @@ export async function exhibitionFormPage(context) {
     const validators = [
         fieldValidator({
             control: titleInput,
-            label: '展会名称',
+            label: t('s_1co82cb'),
             required: true,
             max: limit('exhibitionTitle', 60),
         }),
         fieldValidator({
             control: venueInput,
-            label: '展会地点',
+            label: t('s_1tlfy5l'),
             required: true,
             max: limit('exhibitionVenue', 60),
         }),
         fieldValidator({
             control: dateInput,
-            label: '开展日期',
+            label: t('s_s2nfay'),
             required: true,
             pattern: PATTERNS.date,
-            patternMessage: '请选择开展日期',
+            patternMessage: t('s_1appv4n'),
         }),
         fieldValidator({
             control: timeInput,
-            label: '开展时间',
+            label: t('s_kgtsw4'),
             max: 20,
             pattern: PATTERNS.timeRange,
-            patternMessage: '请按 09:00-17:00 的格式填写',
+            patternMessage: t('s_1q49p4s'),
         }),
         fieldValidator({
             control: endInput,
-            label: '报名截止日期',
+            label: t('s_cbxrmr'),
             custom: () => {
                 const start = startInput.value;
                 const end = endInput.value;
                 if (start && end && end < start) {
-                    return '报名截止日期不能早于开始日期';
+                    return t('s_1gcmqh3');
                 }
                 return '';
             },
         }),
         fieldValidator({
             control: categoryInput,
-            label: '展会分类',
+            label: t('s_9xu72h'),
             max: limit('category', 20),
             pattern: PATTERNS.category,
-            patternMessage: '分类只能包含中英文、数字与常见分隔符',
+            patternMessage: t('s_ariomv'),
         }),
         fieldValidator({
             control: startInput,
-            label: '报名开始日期',
+            label: t('s_k1e25y'),
             custom: () => {
                 if (startInput.value && dateInput.value && startInput.value > dateInput.value) {
-                    return '报名开始日期不能晚于展会开展日期';
+                    return t('s_h8z5hw');
                 }
                 return '';
             },
@@ -268,22 +269,22 @@ export async function exhibitionFormPage(context) {
         renderCover();
         replace(host, [
             el('div', { class: 'form' }, [
-                field('展会名称', titleInput, true),
-                field('地点', venueInput, true),
+                field(t('s_1co82cb'), titleInput, true),
+                field(t('s_25fwki'), venueInput, true),
                 el('div', { class: 'grid-cols-2' }, [
-                    field('开展日期', dateInput, true),
-                    field('开展时间', timeInput),
+                    field(t('s_s2nfay'), dateInput, true),
+                    field(t('s_kgtsw4'), timeInput),
                 ]),
                 el('div', { class: 'grid-cols-2' }, [
-                    field('报名开始', startInput),
-                    field('报名截止', endInput, false, '截止后用户不可再提交报名'),
+                    field(t('s_4o8ie2'), startInput),
+                    field(t('s_60i0xr'), endInput, false, t('s_165tsl5')),
                 ]),
-                field('展会分类', categoryInput, false, '分类用于首页与搜索筛选'),
+                field(t('s_9xu72h'), categoryInput, false, t('s_1bem6b7')),
                 errorBox,
             ]),
             el('div', { class: 'card' }, [
                 el('div', { class: 'row', 'data-between': 'true' }, [
-                    el('span', { class: 'section-label', text: '展会封面' }),
+                    el('span', { class: 'section-label', text: t('s_63jsvx') }),
                     el('span', { class: 'pill', text: '1080 × 1920' }),
                 ]),
                 coverPreview,
@@ -292,10 +293,10 @@ export async function exhibitionFormPage(context) {
             settingsCard(),
             el('div', { class: 'card' }, [
                 el('div', { class: 'row', 'data-between': 'true' }, [
-                    el('span', { class: 'section-label', text: '报名收集项' }),
+                    el('span', { class: 'section-label', text: t('s_s8p5nm') }),
                     el('span', { class: 'pill', text: `${fields.length} 项` }),
                 ]),
-                el('p', { class: 'field-hint', text: '收集项决定报名页展示的字段；单选与多选可逐条增删选项，删除全部后使用默认三项。' }),
+                el('p', { class: 'field-hint', text: t('s_3q8q3k') }),
                 fieldsHost,
                 el('button', {
                     class: 'cta ghost',
@@ -304,7 +305,7 @@ export async function exhibitionFormPage(context) {
                         fields.push({ title: '', type: '文本', required: false, options: [] });
                         renderFields();
                     },
-                }, ['新增收集项']),
+                }, [t('s_1t5x3h2')]),
             ]),
         ]);
 
@@ -313,15 +314,15 @@ export async function exhibitionFormPage(context) {
                 class: 'cta',
                 type: 'button',
                 onclick: () => submit(),
-            }, [isCreate ? '创建展会' : '保存展会']),
-            el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: '保存后可在展会详情页确认展示效果。' }),
+            }, [isCreate ? t('s_gya40f') : t('s_10q6dxb')]),
+            el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: t('s_167n8sn') }),
         ]));
     }
 
     function updateDescriptionPreview() {
         descriptionPreview.textContent = model.description
-            ? (markdownSummary(model.description, 70) || '已配置 Markdown 简介')
-            : '还没有填写简介，可用 Markdown 编辑并插入图片。';
+            ? (markdownSummary(model.description, 70) || t('s_1fpy22o'))
+            : t('s_12ibypn');
     }
 
     /**
@@ -331,8 +332,8 @@ export async function exhibitionFormPage(context) {
     function settingsCard() {
         const qrSwitch = switchRow({
             id: 'form-qr-enabled',
-            label: '启用报名二维码',
-            description: '开启后，报名审核通过的用户会在报名详情里看到报名码，展商可在现场扫码核销。',
+            label: t('s_1birmm3'),
+            description: t('s_2ccwmm'),
             checked: model.qrEnabled,
             onChange: (value) => {
                 model.qrEnabled = value;
@@ -345,14 +346,14 @@ export async function exhibitionFormPage(context) {
         const qrHint = el('div', [el('p', { class: 'field-hint', text: qrHintText() })]);
 
         return el('div', { class: 'card' }, [
-            el('span', { class: 'section-label', text: '报名与简介设置' }),
+            el('span', { class: 'section-label', text: t('s_1ylv0q2') }),
             el('div', { class: 'stack', 'data-gap': 'sm' }, [
                 el('div', { class: 'row', 'data-between': 'true' }, [
-                    el('strong', { text: '报名方式' }),
+                    el('strong', { text: t('s_1vv5l4v') }),
                     el('button', {
                         class: 'pill',
                         type: 'button',
-                        text: '修改',
+                        text: t('s_13fr7ko'),
                         onclick: () => openModeSheet(),
                     }),
                 ]),
@@ -364,7 +365,7 @@ export async function exhibitionFormPage(context) {
             el('hr', { class: 'divider' }),
             el('div', { class: 'stack', 'data-gap': 'sm' }, [
                 el('div', { class: 'row', 'data-between': 'true' }, [
-                    el('strong', { text: '展会简介' }),
+                    el('strong', { text: t('s_2x5dgj') }),
                     descriptionButton,
                 ]),
                 descriptionPreview,
@@ -374,18 +375,18 @@ export async function exhibitionFormPage(context) {
             qrHint,
             el('hr', { class: 'divider' }),
             el('div', { class: 'stack', 'data-gap': 'sm' }, [
-                el('span', { class: 'section-label', text: '危险操作' }),
+                el('span', { class: 'section-label', text: t('s_qtyy0e') }),
                 el('button', {
                     class: 'cta danger',
                     type: 'button',
                     disabled: isCreate ? true : null,
                     onclick: () => askDelete(),
-                }, [isCreate ? '保存后可删除展会' : '删除展会']),
+                }, [isCreate ? t('s_mj5xsg') : t('s_1u7mlaq')]),
                 el('p', {
                     class: 'field-hint',
                     text: isCreate
-                        ? '展会创建后才会写入记录，届时可以在这里删除。'
-                        : '删除后展会信息、报名收集项与二维码开关都会移除，且无法恢复。',
+                        ? t('s_utjuhy')
+                        : t('s_175wm9u'),
                 }),
             ]),
         ]);
@@ -393,8 +394,8 @@ export async function exhibitionFormPage(context) {
 
     function qrHintText() {
         return model.qrEnabled
-            ? '已启用：报名通过后展示报名码，核销后状态变为“已参加”。'
-            : '未启用：报名详情不展示报名码，展商仍可在报名管理中手动调整状态。';
+            ? t('s_mu5yl5')
+            : t('s_3xcdlm');
     }
 
     /** 就地刷新「报名方式」一行，避免重建页面丢掉未保存的表单内容。 */
@@ -411,7 +412,7 @@ export async function exhibitionFormPage(context) {
     /** 报名方式面板：与展商后台原来的底部面板一致，只是入口搬到了本页的设置栏。 */
     function openModeSheet() {
         const sheet = openSheet({
-            title: '设置报名方式',
+            title: t('s_1tv04uf'),
             content: [
                 el('p', { class: 'row-meta', text: `当前：${model.status}` }),
                 el('div', { class: 'list', 'data-gap': 'sm' }, MODES.map((mode) => el('button', {
@@ -437,11 +438,11 @@ export async function exhibitionFormPage(context) {
                         el('span', { class: 'row-meta', text: hintFor(mode.value) }),
                     ]),
                     mode.value === model.status
-                        ? el('span', { class: 'status-tag', dataset: { tone: 'pending' }, text: '当前' })
+                        ? el('span', { class: 'status-tag', dataset: { tone: 'pending' }, text: t('s_1h1tn0d') })
                         : null,
                 ]))),
             ],
-            actions: [{ label: '取消', onClick: (close) => close() }],
+            actions: [{ label: t('s_1589w37'), onClick: (close) => close() }],
         });
     }
 
@@ -450,10 +451,10 @@ export async function exhibitionFormPage(context) {
         try {
             const saved = await exhibitions.save(buildPayload());
             if (!saved?.ok) {
-                toast(saved?.error || '报名方式保存失败', 'error');
+                toast(saved?.error || t('s_1n4563g'), 'error');
                 return;
             }
-            toast('报名方式已更新', 'success');
+            toast(t('s_i0as17'), 'success');
         } catch (error) {
             toast(error.message, 'error');
         }
@@ -461,14 +462,14 @@ export async function exhibitionFormPage(context) {
 
     async function askDelete() {
         confirmSheet({
-            title: '删除展会',
-            message: `删除「${model.title || '该展会'}」后，展会信息与报名收集项都会移除，且无法恢复。`,
-            confirmLabel: '删除',
+            title: t('s_1u7mlaq'),
+            message: `删除「${model.title || t('s_1yjopwv')}」后，展会信息与报名收集项都会移除，且无法恢复。`,
+            confirmLabel: t('s_1t2vi4h'),
             tone: 'danger',
             onConfirm: async () => {
                 try {
                     const ok = await exhibitions.remove(model.id);
-                    toast(ok ? '展会已删除' : '删除失败', ok ? 'success' : 'error');
+                    toast(ok ? t('s_1jj834o') : t('s_1ijrr73'), ok ? 'success' : 'error');
                     if (ok) {
                         context.navigate('exhibitor', {}, { replace: true });
                     }
@@ -486,7 +487,7 @@ export async function exhibitionFormPage(context) {
 
             const renderOptions = () => {
                 replace(optionsHost, [
-                    el('span', { class: 'field-hint', text: item.type === '单选' ? '单选选项' : '多选选项' }),
+                    el('span', { class: 'field-hint', text: item.type === '单选' ? t('s_1y8221p') : t('s_dpy0pe') }),
                     ...item.options.map((option, optionIndex) => el('div', { class: 'option-row' }, [
                         textInput(`field-${index}-option-${optionIndex}`, 'text', option,
                             `选项 ${optionIndex + 1}`, (value) => {
@@ -510,7 +511,7 @@ export async function exhibitionFormPage(context) {
                             item.options.push('');
                             renderOptions();
                         },
-                    }, ['添加选项']),
+                    }, [t('s_1nl5fxw')]),
                 ]);
             };
             if (isChoice) {
@@ -523,14 +524,14 @@ export async function exhibitionFormPage(context) {
                     el('button', {
                         class: 'icon-button',
                         type: 'button',
-                        'aria-label': '删除该收集项',
+                        'aria-label': t('s_qa4u6r'),
                         onclick: () => {
                             fields.splice(index, 1);
                             renderFields();
                         },
                     }, [icon('trash', 'icon icon-sm')]),
                 ]),
-                textInput(`field-title-${index}`, 'text', item.title, '字段标题', (value) => {
+                textInput(`field-title-${index}`, 'text', item.title, t('s_1u3w62u'), (value) => {
                     item.title = value;
                 }, limit('fieldTitle', 30)),
                 el('div', { class: 'grid-cols-2' }, [
@@ -596,12 +597,12 @@ export async function exhibitionFormPage(context) {
             const saved = await exhibitions.save(buildPayload());
             if (!saved?.ok) {
                 saveButton.disabled = false;
-                return fail(saved?.error || '保存失败');
+                return fail(saved?.error || t('s_1q9u8le'));
             }
             model.id = saved.exhibition.id;
             model.description = saved.exhibition.description || model.description;
             model.imageUri = saved.exhibition.imageUri || model.imageUri;
-            toast(isCreate ? '展会已创建' : '展会已保存', 'success');
+            toast(isCreate ? t('s_opaqad') : t('s_1sfkhdl'), 'success');
             if (isCreate) {
                 context.navigate('exhibition-form', { id: model.id }, { replace: true });
             } else {

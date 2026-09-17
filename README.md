@@ -355,6 +355,18 @@ node scripts/decode-shot.js .omo\evidence\qr.png "254,1145,572,572"
 
 `decode-shot.js` 自带一个不依赖第三方包的 PNG 解码器（Node 内置 zlib 即可），把截图还原成 RGBA 后交给 `assets/web/vendor/jsqr` 里的同一个解码库，因此“识别成功”等价于展商扫码时也会成功。
 
+### 启动耗时打点
+
+首帧慢是 WebView 应用的常见问题，因此 `core/bridge.js` 内置了打点：`mark()` 在关键节点记录 `performance.now()`，`reportTimings()` 把结果写进 `window.__CALMOBILE_TIMING__` 并打印一次，原生 `onConsoleMessage` 会转进 logcat。
+
+```powershell
+adb logcat -s WebShellActivity | Select-String "web timing"
+# web timing: main-start=2ms native-ready=432ms boot-start=134ms ready=140ms
+#             page:login=210ms api-loaded=241ms bootstrap-done=1295ms entered=1296ms
+```
+
+2026-09-17 实测：去掉「先探测再请求」的预探测、改为直接发请求失败即降级之后，`bootstrap-done` 从 **5604ms 降到 1295ms**，登录页首帧从 **989ms 降到 210ms**（模拟器；预探测每次超时 1.5s、还要连试三轮）。
+
 预置演示账号：`demo/password`（管理员）、`exhibitor/password`（展商）、`user/password`（普通用户）；未登录用户只能浏览公开展会详情。
 
 ### 仓库内容边界

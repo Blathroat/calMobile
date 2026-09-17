@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 01 · 入口（登录 / 访客）
  * 线框：newUI/index.html #screen-login、newUI/remaining-ui.html #screen-login
@@ -13,7 +14,7 @@ import { fieldValidator, validateAll, limit } from '../core/validate.js';
 
 export async function loginPage(context) {
     const body = scaffold({
-        title: '登录',
+        title: t('s_1yggxgd'),
         showBack: false,
         bodyProps: { 'data-gap': 'tight' },
         children: [],
@@ -21,8 +22,8 @@ export async function loginPage(context) {
 
     const form = el('form', { class: 'form', novalidate: true });
     const errorBox = el('p', { class: 'field-error', role: 'alert', hidden: true });
-    const submit = el('button', { class: 'cta', type: 'submit' }, ['登录']);
-    const guest = el('button', { class: 'cta ghost', type: 'button' }, ['以访客身份浏览']);
+    const submit = el('button', { class: 'cta', type: 'submit' }, [t('s_1yggxgd')]);
+    const guest = el('button', { class: 'cta ghost', type: 'button' }, [t('s_1jfbdwq')]);
 
     const account = el('input', {
         class: 'input',
@@ -35,13 +36,13 @@ export async function loginPage(context) {
         class: 'input',
         id: 'login-password',
         type: 'password',
-        placeholder: '请输入密码',
+        placeholder: t('s_f478sb'),
         autocomplete: 'current-password',
     });
 
     append(form, [
-        el('div', { class: 'field' }, [el('label', { for: 'login-account', text: '账号' }), account]),
-        el('div', { class: 'field' }, [el('label', { for: 'login-password', text: '密码' }), password]),
+        el('div', { class: 'field' }, [el('label', { for: 'login-account', text: t('s_yuxvje') }), account]),
+        el('div', { class: 'field' }, [el('label', { for: 'login-password', text: t('s_1aph6eg') }), password]),
         errorBox,
         submit,
         guest,
@@ -49,8 +50,8 @@ export async function loginPage(context) {
 
     // 登录只校验必填与长度上限，不套用注册时的最短长度，避免老账号无法登录。
     const validators = [
-        fieldValidator({ control: account, label: '账号', required: true, max: limit('usernameMax', 20) }),
-        fieldValidator({ control: password, label: '密码', required: true, max: limit('passwordMax', 32) }),
+        fieldValidator({ control: account, label: t('s_yuxvje'), required: true, max: limit('usernameMax', 20) }),
+        fieldValidator({ control: password, label: t('s_1aph6eg'), required: true, max: limit('passwordMax', 32) }),
     ];
 
     const intro = el('div', { class: 'stack', style: { textAlign: 'center', justifyItems: 'center' } }, [
@@ -67,18 +68,18 @@ export async function loginPage(context) {
                 color: 'var(--frame)',
                 background: 'var(--f2)',
             },
-            text: '展',
+            text: t('s_1lsc240'),
             'aria-hidden': 'true',
         }),
         el('h2', { text: state.brand.zh }),
-        el('p', { class: 'muted', text: '找到值得参加的展会，保存日程并完成报名' }),
+        el('p', { class: 'muted', text: t('s_3zbkfg') }),
     ]);
 
     append(body, [intro]);
 
     if (state.announcement.enabled && state.announcement.text) {
         append(body, el('div', { class: 'notice', dataset: { tone: 'accent' } }, [
-            el('strong', { text: '公告' }),
+            el('strong', { text: t('s_153oaxf') }),
             el('span', { text: state.announcement.text }),
         ]));
     }
@@ -94,18 +95,18 @@ export async function loginPage(context) {
         class: 'row',
         style: { justifyContent: 'center', padding: 'var(--s3)' },
     }, [
-        el('span', { class: 'dim', text: '还没有账号？' }),
+        el('span', { class: 'dim', text: t('s_und5qj') }),
         el('button', {
             class: 'text-action',
             type: 'button',
             onclick: () => context.navigate('register'),
-        }, ['注册新账号']),
+        }, [t('s_1fwr1ko')]),
     ]);
     append(body, footer);
 
     guest.addEventListener('click', async () => {
         await auth.guest();
-        Object.assign(state.user, { loggedIn: false, guest: true, role: 'guest', roleLabel: '访客' });
+        Object.assign(state.user, { loggedIn: false, guest: true, role: 'guest', roleLabel: t('s_h6o1xg') });
         await whenReady();
         context.navigate(context.params.redirect || 'home', redirectParams(), { replace: true });
     });
@@ -135,7 +136,7 @@ export async function loginPage(context) {
         try {
             const result = await auth.login(account.value.trim(), password.value);
             if (!result?.ok) {
-                showError(result?.error || '登录失败');
+                showError(result?.error || t('s_rn5blf'));
                 return;
             }
             Object.assign(state.user, result.user || {});

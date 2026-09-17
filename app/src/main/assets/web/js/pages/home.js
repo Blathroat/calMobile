@@ -1,3 +1,4 @@
+import { t } from '../core/strings.js';
 /**
  * 屏幕 02 · 首页（月视图 + 当天展会列表）
  * 线框：newUI/index.html #screen-home、newUI/remaining-ui.html #screen-home
@@ -13,7 +14,7 @@ import { scaffold, tabbar, navItems, topAction } from '../core/router.js';
 import { icon, loadErrorBlock, loadingBlock, mediaBox, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, append, replace, daysInMonth, firstWeekdayOffset, addMonths, monthLabel } from '../core/dom.js';
 
-const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
+const WEEK_LABELS = [t('s_1hqqsf'), t('s_12482qz'), t('s_3fnyn8'), t('s_q67h2y'), t('s_14c4war'), t('s_1sgquew'), t('s_qsy6ow')];
 const SWIPE_THRESHOLD = 46;
 
 export async function homePage(context) {
@@ -28,15 +29,15 @@ export async function homePage(context) {
     const calendarHost = el('div', { class: 'calendar' });
     const swipeHost = el('div', { class: 'calendar-swipe' }, [calendarHost]);
     const monthTitle = el('strong', { text: monthLabel(view.year, view.month) });
-    const selectedTitle = el('strong', { text: '当日展会' });
+    const selectedTitle = el('strong', { text: t('s_1e4opb2') });
     const selectedMeta = el('span', { class: 'dim' });
     const noticeHost = el('div');
 
     scaffold({
-        title: '首页',
+        title: t('s_1ow5v10'),
         showBack: false,
         bodyProps: { 'data-gap': 'tight' },
-        actions: [topAction('search', '搜索展会', () => context.navigate('search'))],
+        actions: [topAction('search', t('s_50ih74'), () => context.navigate('search'))],
         foot: tabbar({ items: navItems(), active: 'home' }),
         children: [
             el('header', { class: 'row', 'data-between': 'true' }, [
@@ -49,12 +50,12 @@ export async function homePage(context) {
             el('div', { class: 'row', 'data-between': 'true' }, [
                 monthTitle,
                 el('div', { class: 'row' }, [
-                    monthButton('chevronLeft', '上一个月', () => shiftMonth(-1)),
-                    monthButton('chevronRight', '下一个月', () => shiftMonth(1)),
+                    monthButton('chevronLeft', t('s_e4jezx'), () => shiftMonth(-1)),
+                    monthButton('chevronRight', t('s_y6u3g'), () => shiftMonth(1)),
                 ]),
             ]),
             swipeHost,
-            el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: '左右滑动日历卡片可以切换月份。' }),
+            el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: t('s_15hmwa0') }),
             el('div', { class: 'row', 'data-between': 'true' }, [selectedTitle, selectedMeta]),
             listHost,
         ],
@@ -178,7 +179,7 @@ export async function homePage(context) {
             renderList(data);
         } catch (error) {
             replace(calendarHost, loadErrorBlock({
-                title: '展会数据加载失败',
+                title: t('s_1tbhtoh'),
                 description: error.message,
                 onRetry: () => load(),
             }));
@@ -226,7 +227,7 @@ export async function homePage(context) {
                 hasEvent: hasEvent ? 'true' : 'false',
             },
             'aria-pressed': selected ? 'true' : 'false',
-            'aria-label': `${view.month}月${day}日${hasEvent ? '有展会' : ''}${selected ? '，已选择' : ''}`,
+            'aria-label': `${view.month}月${day}日${hasEvent ? t('s_1hzbri3') : ''}${selected ? t('s_19g8l4d') : ''}`,
             disabled: disabled ? true : null,
             onclick: () => {
                 if (view.day === day) {
@@ -244,13 +245,13 @@ export async function homePage(context) {
     function renderList(data) {
         const items = data.selected || [];
         selectedTitle.textContent = `${data.month} 月 ${data.day} 日的展会`;
-        selectedMeta.textContent = items.length > 0 ? `共 ${items.length} 场` : '暂无安排';
+        selectedMeta.textContent = items.length > 0 ? `共 ${items.length} 场` : t('s_xwhfsg');
 
         if (items.length === 0) {
             replace(listHost, stateBlock({
-                title: '这一天还没有展会',
-                description: '可以切换到相邻日期，或搜索其它城市与分类的展会。',
-                action: { label: '搜索展会', onClick: () => context.navigate('search') },
+                title: t('s_1vtk64c'),
+                description: t('s_1jbzuzw'),
+                action: { label: t('s_50ih74'), onClick: () => context.navigate('search') },
             }));
             return;
         }
@@ -319,7 +320,7 @@ export async function homePage(context) {
             // 隐私模式下忽略存储失败，仍然提示一次
         }
         replace(noticeHost, el('div', { class: 'notice', dataset: { tone: 'accent' } }, [
-            el('strong', { text: '公告' }),
+            el('strong', { text: t('s_153oaxf') }),
             el('span', { text: state.announcement.text }),
         ]));
         toast(state.announcement.text);

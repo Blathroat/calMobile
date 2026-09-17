@@ -17,7 +17,8 @@
             // 隐私模式下忽略存储读取失败，保持跟随系统
         }
     </script>
-    <link rel="stylesheet" href="vendor/easymde/easymde.min.css" />
+    <!-- EasyMDE 的样式只在简介编辑器用到，由 core/vendor.js 在进入该页时注入，
+         不放在这里阻塞首帧。 -->
     <link rel="stylesheet" href="styles/tokens.css" />
     <link rel="stylesheet" href="styles/motion.css" />
 </head>
@@ -26,9 +27,9 @@
     <div id="app" class="app"></div>
     <div id="toast-host" class="toast-host" role="status" aria-live="polite"></div>
     <div id="overlay-host"></div>
-    <!-- 内置二维码库：生成报名码与识别核销码，均为本地文件，不依赖 CDN -->
-    <script src="vendor/qrcode-generator/qrcode.js"></script>
-    <script src="vendor/jsqr/jsQR.js"></script>
+    <!-- 内置第三方脚本（EasyMDE / qrcode-generator / jsQR）全部按需加载：
+         它们随 APK 打包不依赖 CDN，但解析要花时间，启动时全加载会拖慢首帧。
+         见 js/core/vendor.js。 -->
     <script type="module" src="js/app.js"></script>
 </body>
 
