@@ -63,16 +63,6 @@ export function qs(selector, root = document) {
     return root.querySelector(selector);
 }
 
-/** 事件委托：命中最近的匹配祖先时触发。 */
-export function delegate(root, selector, type, handler) {
-    root.addEventListener(type, (event) => {
-        const target = event.target instanceof Element ? event.target.closest(selector) : null;
-        if (target && root.contains(target)) {
-            handler(event, target);
-        }
-    });
-}
-
 // ── 格式化 ────────────────────────────────────────────────────────
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -86,11 +76,6 @@ export function parseDate(iso) {
     return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
 }
 
-export function formatDate(iso) {
-    const date = parseDate(iso);
-    return date ? `${date.month}月${date.day}日` : '';
-}
-
 export function formatDateWithWeekday(iso) {
     const date = parseDate(iso);
     if (!date) {
@@ -98,12 +83,6 @@ export function formatDateWithWeekday(iso) {
     }
     const weekday = WEEKDAYS[new Date(date.year, date.month - 1, date.day).getDay()];
     return `${date.month}月${date.day}日（${weekday}）`;
-}
-
-/** 报名时间等短时间戳原样透传，缺省时给出可读占位。 */
-export function orDash(value) {
-    const text = String(value || '').trim();
-    return text === '' ? '—' : text;
 }
 
 /** 把答案文本按行渲染为键值对，找不到分隔符时返回原文。 */
@@ -125,12 +104,6 @@ export function answerLines(answers) {
 export function truncate(value, max = 42) {
     const text = String(value || '').replace(/\s+/g, ' ').trim();
     return text.length > max ? `${text.slice(0, max)}…` : text;
-}
-
-/** 当前月份（演示数据基线为 2026 年 6 月）。 */
-export function today() {
-    const now = new Date();
-    return { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() };
 }
 
 export function monthLabel(year, month) {

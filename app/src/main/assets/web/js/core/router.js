@@ -62,10 +62,6 @@ export function routeOf(hash = location.hash) {
     return { id: id || 'login', params };
 }
 
-export function currentRoute() {
-    return current;
-}
-
 export function navigate(id, params = {}, options = {}) {
     const query = Object.entries(params)
         .filter(([, value]) => value !== undefined && value !== null && value !== '')

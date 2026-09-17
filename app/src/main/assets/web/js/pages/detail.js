@@ -117,24 +117,17 @@ export async function detailPage(context) {
         ]);
     }
 
-    /** 展会封面：设计比例为 1080×1920 的竖版海报。 */
+    /**
+     * 展会封面：设计比例为 1080×1920 的竖版海报。
+     * 封面在上传时就已落盘成 `https://appassets.androidplatform.net/media/<文件名>` 短 URL，
+     * 因此这里直接交给 <img> 加载，不需要再回读原始 content:// Uri。
+     */
     function heroBlock() {
         const box = el('div', { class: 'hero ph-img' });
         const uri = String(exhibition.imageUri || '');
-        if (!uri) {
-            return box;
-        }
-        if (/^(https?:|data:)/.test(uri)) {
+        if (uri) {
             append(box, el('img', { src: uri, alt: `${exhibition.title} 展会图片` }));
-            return box;
         }
-        call('media.imageData', { uri })
-            .then((dataUrl) => {
-                if (dataUrl) {
-                    append(box, el('img', { src: dataUrl, alt: `${exhibition.title} 展会图片` }));
-                }
-            })
-            .catch(() => undefined);
         return box;
     }
 

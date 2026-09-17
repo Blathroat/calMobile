@@ -134,10 +134,6 @@ export function whenReady() {
     return readyPromise;
 }
 
-export function isReady() {
-    return state.booted;
-}
-
 export function boot() {
     if (bootPromise) {
         return bootPromise;
@@ -255,7 +251,6 @@ export function applyTheme() {
     root.style.setProperty('--accent-edge', mode === 'dark'
         ? mix(accent, screen, 0.62)
         : mix(accent, screen, 0.6));
-    root.style.setProperty('--accent-soft', mix(accent, screen, 0.72));
     root.style.setProperty('--accent-glow', rgba(accent, mode === 'dark' ? 0.26 : 0.14));
     root.style.setProperty('--accent-shadow', rgba(accent, mode === 'dark' ? 0.34 : 0.2));
     root.dataset.accent = String(index);

@@ -39,20 +39,7 @@ export function allowedFormats(kind = 'image') {
     return Array.isArray(list) ? list.filter(Boolean) : [];
 }
 
-export function formatsText(kind = 'image') {
-    const list = allowedFormats(kind);
-    return list.length > 0 ? list.map((item) => `.${item}`).join('、') : '常见图片格式';
-}
-
 // ── 基础判断 ──────────────────────────────────────────────────────
-
-export function isEmpty(value) {
-    return String(value ?? '').trim() === '';
-}
-
-export function isEmail(value) {
-    return PATTERNS.email.test(String(value || '').trim());
-}
 
 /** 逐条执行规则，返回第一条错误；通过时返回空串。 */
 export function check(value, options = {}) {
@@ -227,18 +214,6 @@ export function passwordStrength(value) {
     return { level: score, label: ['弱', '弱', '中', '强'][score] };
 }
 
-/** 日期先后顺序校验，两个控件都可能为空。 */
-export function dateOrderRule(startControl, endControl, message = '结束日期不能早于开始日期') {
-    return () => {
-        const start = String(startControl?.value || '');
-        const end = String(endControl?.value || '');
-        if (!start || !end || !PATTERNS.date.test(start) || !PATTERNS.date.test(end)) {
-            return '';
-        }
-        return end < start ? message : '';
-    };
-}
-
 /** 两个密码框一致性校验。 */
 export function matchRule(control, otherControl, message = '两次输入的密码不一致') {
     return () => {
@@ -249,18 +224,4 @@ export function matchRule(control, otherControl, message = '两次输入的密�
         }
         return value === other ? '' : message;
     };
-}
-
-/** 上传文件后缀是否被服务器设置允许。 */
-export function extensionAllowed(fileName, kind = 'image') {
-    const formats = allowedFormats(kind);
-    if (formats.length === 0) {
-        return true;
-    }
-    const name = String(fileName || '');
-    const index = name.lastIndexOf('.');
-    if (index < 0) {
-        return false;
-    }
-    return formats.includes(name.slice(index + 1).toLowerCase());
 }

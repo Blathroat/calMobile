@@ -70,8 +70,3 @@ export function plainText(html, max = 120) {
     const text = (template.content.textContent || '').replace(/\s+/g, ' ').trim();
     return text.length > max ? `${text.slice(0, max)}…` : text;
 }
-
-/** 编辑器内容规范化：空标签视为空内容。 */
-export function isBlankHtml(html) {
-    return plainText(html, 1) === '' && !/<img|<hr/i.test(String(html || ''));
-}

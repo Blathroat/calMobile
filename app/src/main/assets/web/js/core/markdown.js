@@ -95,12 +95,6 @@ export async function renderMarkdown(markdown) {
     return markdownToHtml(markdown);
 }
 
-/** 判断文本是否包含 Markdown 结构，用于旧数据的格式推断。 */
-export function looksLikeMarkdown(text) {
-    return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```|\|)/.test(String(text || ''))
-        || /(\*\*|__|\[[^\]]+\]\([^)]+\))/.test(String(text || ''));
-}
-
 const VOID_TAGS = new Set(['br', 'hr', 'img']);
 const BLOCK_TAGS = new Set(['p', 'div', 'section', 'article', 'li', 'ul', 'ol', 'blockquote',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'tr', 'table']);

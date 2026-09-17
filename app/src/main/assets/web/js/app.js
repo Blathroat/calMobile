@@ -3,7 +3,7 @@
  * 页面模块与 newUI 的屏幕编号一一对应，便于对照线框逐屏回归。
  */
 
-import { state, whenReady, hasNative, refreshUser } from './core/bridge.js';
+import { state, whenReady, hasNative } from './core/bridge.js';
 import { defineRoute, start, render, onRouteChange } from './core/router.js';
 import { toast } from './ui/components.js';
 import { qs, el, append } from './core/dom.js';
@@ -67,11 +67,3 @@ main().catch((error) => {
     console.error(error);
     qs('#app').textContent = `启动失败：${error.message}`;
 });
-
-// 退出登录等操作后重新拉取用户态
-export async function syncUser() {
-    if (hasNative()) {
-        await refreshUser();
-    }
-    return render();
-}

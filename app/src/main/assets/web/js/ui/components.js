@@ -144,11 +144,6 @@ export function segmented({ items, value, onChange, label }) {
     return group;
 }
 
-/** 让已挂载的分段控件在尺寸变化后重新对齐滑块（例如旋转屏幕）。 */
-export function syncSegments(root = document) {
-    root.querySelectorAll?.('.seg').forEach((group) => group.syncIndicator?.());
-}
-
 /** 空 / 加载 / 错误 / 成功状态，均给出下一步说明。 */
 export function stateBlock({ tone = 'neutral', title, description, action, iconName }) {
     const block = el('div', { class: 'state', dataset: { tone } });
@@ -182,27 +177,6 @@ export function card(children, props = {}) {
     return el('div', { class: 'card', ...props }, children);
 }
 
-/** 行卡片：缩略图 + 文案 + 右侧标签。 */
-export function rowCard({ leading, title, meta = [], trailing, onClick, pressable = true, ariaLabel }) {
-    const copy = el('span', { class: 'row-copy' });
-    if (title) {
-        append(copy, el('strong', { class: 'row-title truncate', text: title }));
-    }
-    for (const line of meta) {
-        if (line) {
-            append(copy, el('span', { class: 'row-meta', text: line }));
-        }
-    }
-    const node = el(onClick ? 'button' : 'div', {
-        class: 'row-card',
-        type: onClick ? 'button' : null,
-        dataset: { pressable: pressable && onClick ? 'true' : 'false' },
-        'aria-label': ariaLabel || null,
-        onclick: onClick,
-    }, [leading || null, copy, trailing || null]);
-    return node;
-}
-
 export function statusTag(text, tone = 'pending') {
     return el('span', { class: 'status-tag', dataset: { tone }, text: text || '' });
 }
@@ -228,59 +202,6 @@ export function statusTone(status) {
         default:
             return 'muted';
     }
-}
-
-export function fieldShell({ label, control, hint, error, required }) {
-    const wrapper = el('div', { class: 'field' });
-    if (label) {
-        const id = control?.id;
-        append(wrapper, el('label', { for: id || null }, [
-            label,
-            required ? el('span', { class: 'required', 'aria-hidden': 'true', text: ' *' }) : null,
-        ]));
-    }
-    append(wrapper, control);
-    if (hint) {
-        append(wrapper, el('p', { class: 'field-hint', text: hint }));
-    }
-    if (error) {
-        wrapper.dataset.invalid = 'true';
-        append(wrapper, el('p', { class: 'field-error', role: 'alert', text: error }));
-    }
-    return wrapper;
-}
-
-export function textField({ id, label, value = '', placeholder = '', type = 'text', required = false, hint, autocomplete, min, inputmode }) {
-    const input = el('input', {
-        class: 'input',
-        id,
-        type,
-        value,
-        placeholder,
-        autocomplete,
-        min,
-        inputmode,
-        required: required ? true : null,
-    });
-    return { wrapper: fieldShell({ label, control: input, hint, required }), input };
-}
-
-export function textAreaField({ id, label, value = '', placeholder = '', required = false, hint, rows = 4 }) {
-    const area = el('textarea', { class: 'textarea', id, placeholder, rows, required: required ? true : null });
-    area.value = value;
-    return { wrapper: fieldShell({ label, control: area, hint, required }), input: area };
-}
-
-export function selectField({ id, label, value, options, hint }) {
-    const select = el('select', { class: 'select', id });
-    for (const option of options) {
-        const node = el('option', { value: option.value, text: option.label });
-        if (String(option.value) === String(value)) {
-            node.selected = true;
-        }
-        append(select, node);
-    }
-    return { wrapper: fieldShell({ label, control: select, hint }), input: select };
 }
 
 export function switchRow({ id, label, description, checked, onChange }) {
