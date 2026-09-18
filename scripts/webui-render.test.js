@@ -2,8 +2,13 @@
  * 前端页面渲染冒烟测试。
  *
  * `webui-check` 只能校验模块能否解析；本脚本补上“真正渲染一遍”的验证：
- * 用最小 DOM 打桩 + 假的 `CalMobileNative` 桥接，按角色把每个页面渲染一次，
- * 捕获未定义变量、错误的桥接参数、缺失的动作名这类只在运行时才暴露的问题。
+ * 用最小 DOM 打桩 + 假后端（打桩 `fetch`）+ 只保留系统能力的假桥接，
+ * 按角色把每个页面渲染一次，捕获未定义变量、错误的桥接参数、缺失的动作名
+ * 这类只在运行时才暴露的问题。
+ *
+ * 数据只有**一条**路径：`js/core/api.js` 的 `ENDPOINTS` → `server/` 的 REST 接口。
+ * 因此这里的 `fetch` 扮演后端（按「方法 + 路径」返回夹具），假桥接只实现
+ * `ui.sync` 等 10 个系统动作；页面一旦把数据动作交给原生，桥接会当场报错。
  *
  * 用法：node --test scripts/webui-render.test.js
  */
@@ -312,8 +317,8 @@ const sharedWindow = {
     removeEventListener() {},
     getComputedStyle: () => ({ getPropertyValue: () => '' }),
     navigator: { userAgent: 'node' },
-    /** 探测后端必然失败，测试固定走原生桥接这条路径。 */
-    fetch: () => Promise.reject(new Error('测试环境不访问网络')),
+    /** 每次渲染都会换成「假后端」，见 createBackend()。 */
+    fetch: () => Promise.reject(new Error('测试还没有装假后端')),
     console,
 };
 sharedWindow.window = sharedWindow;
@@ -343,14 +348,14 @@ function installGlobals() {
     setGlobal('requestIdleCallback', sharedWindow.requestIdleCallback);
     setGlobal('cancelIdleCallback', sharedWindow.cancelIdleCallback);
     setGlobal('getComputedStyle', sharedWindow.getComputedStyle);
-    // api.js 的连通性探测要求 window 上也有 fetch；打桩成“不可达”即走原生桥接。
+    // api.js 走 HTTP 取数：把假后端挂到 window 上，模块读到的是同一个函数。
     setGlobal('fetch', sharedWindow.fetch);
     setGlobal('Node', StubNode);
     setGlobal('Element', StubNode);
     setGlobal('CustomEvent', class {});
 }
 
-// ── 假的桥接层：覆盖前端会用到的全部动作 ─────────────────────────
+// ── 夹具数据：与后端返回的字段一致 ───────────────────────────────
 
 const EXHIBITION = {
     id: 'exhibition-1',
@@ -380,6 +385,8 @@ const EXHIBITION = {
     qrEnabled: true,
 };
 
+const FIELDS = [{ title: '姓名', type: '文本', required: true, options: [] }];
+
 const REGISTRATION = {
     id: 'registration-3',
     exhibitionId: 'exhibition-1',
@@ -406,6 +413,11 @@ const REVIEW_RECORD = {
     status: '待审核',
 };
 
+const USER_ROW = {
+    id: 'user-1', nickname: 'user', email: 'user@example.com', status: '正常',
+    registrationTime: '2026-06-01', lastLoginTime: '2026-06-10', role: '普通用户',
+};
+
 const USER_PUBLIC = {
     found: true,
     nickname: 'user',
@@ -419,98 +431,267 @@ const USER_PUBLIC = {
     registrations: [REGISTRATION],
 };
 
-/** 动作名 → 返回值。缺省返回 `true`，用于只关心“调用成功”的动作。 */
-const RESPONSES = {
-    bootstrap: {
-        user: {
-            loggedIn: true,
-            guest: false,
-            role: 'admin',
-            roleLabel: '管理员',
-            username: 'demo',
-            nickname: 'demo',
-            avatar: '',
-            bio: '',
-            region: '',
-            socialMedia: '',
-            showRegistrations: false,
-            email: 'demo@example.com',
-            status: '正常',
-            can: { register: true, profile: true, exhibitor: true, admin: true },
-        },
-        theme: { index: 0, colors: ['#C05621', '#48515D'] },
-        ui: { mode: 'light' },
-        capabilities: {},
-        categories: ['智能制造'],
-        review: { canRevise: false, statuses: ['待审核', '已通过', '已拒绝'] },
-        media: { imageCount: 8, imageSizeMb: 10, videoCount: 2 },
-        announcement: { enabled: false, text: '' },
-        brand: { zh: '发现展会', en: 'calMobile' },
-        limits: {},
-        server: {},
-        calendar: { available: false },
+const BOOTSTRAP = {
+    user: {
+        loggedIn: true,
+        guest: false,
+        role: 'admin',
+        roleLabel: '管理员',
+        username: 'demo',
+        nickname: 'demo',
+        avatar: '',
+        bio: '',
+        region: '',
+        socialMedia: '',
+        showRegistrations: false,
+        email: 'demo@example.com',
+        status: '正常',
+        can: { register: true, profile: true, exhibitor: true, admin: true },
     },
-    'profile.get': { loggedIn: true, role: 'admin', nickname: 'demo', can: { admin: true, exhibitor: true } },
-    'notify.preferences': { exhibitionReminder: true, registrationUpdates: true, granted: true },
-    'settings.get': {
-        theme: { index: 0, colors: ['#C05621'] },
-        ui: { mode: 'light' },
-        announcement: { enabled: false, text: '' },
-        brand: { zh: '发现展会', en: 'calMobile' },
-        categories: ['智能制造'],
-        review: { canRevise: false },
-        media: { imageCount: 8, imageSizeMb: 10, videoCount: 2 },
-        upload: { avatarSizeMb: 2, imageFormats: ['jpg'], videoFormats: ['mp4'] },
-        limits: {
-            exhibitionTitle: 60, exhibitionVenue: 60, category: 20, fieldTitle: 30,
-            usernameMin: 3, usernameMax: 20, passwordMin: 6, passwordMax: 32,
-            nickname: 20, bio: 200, region: 40, answer: 200,
-        },
+    theme: { index: 0, colors: ['#C05621', '#48515D'] },
+    ui: { mode: 'light' },
+    capabilities: {},
+    categories: ['智能制造'],
+    review: { canRevise: false, statuses: ['待审核', '已通过', '已拒绝'] },
+    media: { imageCount: 8, imageSizeMb: 10, videoCount: 2 },
+    announcement: { enabled: false, text: '' },
+    brand: { zh: '发现展会', en: 'calMobile' },
+    limits: {},
+    server: {},
+    calendar: { available: false },
+};
+
+const PROFILE = {
+    loggedIn: true, role: 'admin', nickname: 'demo', can: { admin: true, exhibitor: true },
+};
+
+const SETTINGS = {
+    theme: { index: 0, colors: ['#C05621'] },
+    ui: { mode: 'light' },
+    announcement: { enabled: false, text: '' },
+    brand: { zh: '发现展会', en: 'calMobile' },
+    categories: ['智能制造'],
+    review: { canRevise: false },
+    media: { imageCount: 8, imageSizeMb: 10, videoCount: 2 },
+    upload: { avatarSizeMb: 2, imageFormats: ['jpg'], videoFormats: ['mp4'] },
+    limits: {
+        exhibitionTitle: 60, exhibitionVenue: 60, category: 20, fieldTitle: 30,
+        usernameMin: 3, usernameMax: 20, passwordMin: 6, passwordMax: 32,
+        nickname: 20, bio: 200, region: 40, answer: 200,
     },
-    'exhibitions.list': [EXHIBITION],
-    'exhibitions.month': {
-        year: 2026, month: 6, day: 12, monthLabel: '2026 年 6 月',
-        eventDays: [12, 18], exhibitions: [EXHIBITION], selected: [EXHIBITION],
+};
+
+const MONTH = {
+    year: 2026, month: 6, day: 12, monthLabel: '2026 年 6 月',
+    eventDays: [12, 18], exhibitions: [EXHIBITION], selected: [EXHIBITION],
+};
+
+const REVIEW = {
+    exhibitionId: 'exhibition-1',
+    status: '待审核',
+    records: [REVIEW_RECORD],
+    counts: { total: 3, 待审核: 1, 已通过: 1, 已拒绝: 0, 已参加: 1 },
+};
+
+const CHECKIN = {
+    ok: true, duplicated: false, status: '已参加', message: '已核销 张三 的报名',
+    record: {
+        recordId: 'registration-3', visitorName: '张三', exhibitionId: 'exhibition-1',
+        exhibitionTitle: '智能制造与工业自动化展', registrationTime: '06-08 09:15', answers: '姓名：张三',
     },
-    'exhibitions.get': { found: true, exhibition: EXHIBITION, fields: [{ title: '姓名', type: '文本', required: true, options: [] }] },
-    'exhibitions.categories': ['智能制造'],
-    'exhibitions.fields': [{ title: '姓名', type: '文本', required: true, options: [] }],
-    'registrations.list': [REGISTRATION],
-    'registrations.get': { found: true, registration: REGISTRATION },
-    'review.list': {
-        exhibitionId: 'exhibition-1',
-        status: '待审核',
-        records: [REVIEW_RECORD],
-        counts: { total: 3, 待审核: 1, 已通过: 1, 已拒绝: 0, 已参加: 1 },
-    },
-    'users.list': [{
-        id: 'user-1', nickname: 'user', email: 'user@example.com', status: '正常',
-        registrationTime: '2026-06-01', lastLoginTime: '2026-06-10', role: '普通用户',
-    }],
-    'users.public': USER_PUBLIC,
-    'search.query': { query: '', exhibitions: [EXHIBITION], users: [], count: 1 },
-    'checkin.scan': {
-        ok: true, duplicated: false, status: '已参加', message: '已核销 张三 的报名',
-        record: {
-            recordId: 'registration-3', visitorName: '张三', exhibitionId: 'exhibition-1',
-            exhibitionTitle: '智能制造与工业自动化展', registrationTime: '06-08 09:15', answers: '姓名：张三',
-        },
-    },
+};
+
+/** 只读接口：`GET /exhibitions/month` 只对夹具里的那个月有展会，其余月份返回空月。 */
+function monthFixture({ query }) {
+    const year = Number(query.year) || MONTH.year;
+    const month = Number(query.month) || MONTH.month;
+    if (year !== MONTH.year || month !== MONTH.month) {
+        return {
+            year, month, day: 1, monthLabel: `${year} 年 ${month} 月`,
+            eventDays: [], exhibitions: [], selected: [],
+        };
+    }
+    return { ...MONTH, day: Number(query.day) || MONTH.day };
+}
+
+/**
+ * 假后端。
+ *
+ * 键是「方法 + 路径」，路径与 `server/README.md` 的接口清单一致（去掉 `/api/v1`）。
+ * 响应遵循 server/README.md 的约定：
+ * - 读取 → 200 + 数据本身（数组或对象）；
+ * - 写入 → 200 + `{ ok:true, error:'', ... }`；
+ * - 业务失败 → 200 + `{ ok:false, error }`（夹具里没有需要故意失败的用例）；
+ * - 401 → `{ error }`（只有第 17 个用例自己造 401，见文末）。
+ */
+const BACKEND = {
+    // 启动与认证
+    'GET /bootstrap': BOOTSTRAP,
+    'POST /auth/login': { ok: true, error: '', token: 'token-1', refreshToken: 'refresh-token-1' },
+    'POST /auth/register': { ok: true, error: '', token: 'token-2', refreshToken: 'refresh-token-2' },
+    'POST /auth/guest': { ok: true, error: '' },
+    'POST /auth/logout': { ok: true, error: '' },
+
+    // 资料与偏好
+    'GET /profile': PROFILE,
+    'PUT /profile': { ok: true, error: '' },
+    'POST /profile/password': { ok: true, error: '' },
+    'GET /profile/notifications': { exhibitionReminder: true, registrationUpdates: true, granted: true },
+    'PUT /profile/notifications': { ok: true, error: '' },
+
+    // 展会
+    'GET /exhibitions': [EXHIBITION],
+    'GET /exhibitions/month': monthFixture,
+    'GET /exhibitions/categories': ['智能制造'],
+    'GET /exhibitions/:id': { found: true, exhibition: EXHIBITION, fields: FIELDS },
+    'GET /exhibitions/:id/fields': FIELDS,
+    'POST /exhibitions': { ok: true, error: '', id: 'exhibition-1' },
+    'PUT /exhibitions/:id': { ok: true, error: '' },
+    'DELETE /exhibitions/:id': { ok: true, error: '' },
+    'PUT /exhibitions/:id/status': { ok: true, error: '' },
+    'PUT /exhibitions/:id/fields': { ok: true, error: '' },
+
+    // 报名、审核与核销
+    'GET /registrations': [REGISTRATION],
+    'GET /registrations/:id': { found: true, registration: REGISTRATION },
+    'POST /registrations': { ok: true, error: '', status: 'PENDING' },
+    'DELETE /registrations/:id': { ok: true, error: '' },
+    'GET /review': REVIEW,
+    'GET /review/:id': REVIEW_RECORD,
+    'PUT /review/:id/status': { ok: true, error: '' },
+    'POST /checkin': CHECKIN,
+
+    // 用户、搜索与设置
+    'GET /users': [USER_ROW],
+    'GET /users/public': USER_PUBLIC,
+    'GET /users/:id': USER_ROW,
+    'PUT /users/:id/status': { ok: true, error: '' },
+    'GET /search': ({ query }) => ({
+        query: query.query || '', exhibitions: [EXHIBITION], users: [], count: 1,
+    }),
+    'GET /settings': SETTINGS,
+    'PUT /settings': { ok: true, error: '' },
+    'PUT /settings/ui-mode': { ok: true, mode: 'dark' },
+};
+
+const API_PREFIX = '/api/v1';
+
+function splitPath(value) {
+    return String(value).split('/').filter(Boolean);
+}
+
+/** 按「方法 + 路径」找夹具；先精确匹配，再退回到 `:参数` 模板。 */
+function matchEndpoint(method, path) {
+    const parts = splitPath(path);
+    const candidates = Object.entries(BACKEND)
+        .map(([key, fixture]) => {
+            const [entryMethod, ...rest] = key.split(' ');
+            return { method: entryMethod, pattern: rest.join(' '), fixture };
+        })
+        .filter((entry) => entry.method === method);
+
+    // 两轮匹配：`/users/public` 不能被 `/users/:id` 抢走。
+    for (const pass of ['exact', 'pattern']) {
+        for (const entry of candidates) {
+            const pattern = splitPath(entry.pattern);
+            if (pattern.length !== parts.length) {
+                continue;
+            }
+            const params = {};
+            let matched = true;
+            for (let index = 0; index < pattern.length; index += 1) {
+                if (pattern[index].startsWith(':')) {
+                    if (pass === 'exact') {
+                        matched = false;
+                        break;
+                    }
+                    params[pattern[index].slice(1)] = decodeURIComponent(parts[index]);
+                } else if (pattern[index] !== parts[index]) {
+                    matched = false;
+                    break;
+                }
+            }
+            if (matched) {
+                return { fixture: entry.fixture, params };
+            }
+        }
+    }
+    return null;
+}
+
+function reply(status, body) {
+    return { ok: status < 400, status, json: async () => body };
+}
+
+/**
+ * 假后端：把每次请求录进 `requests`，按夹具应答。
+ * 没有夹具的路径会被记进 `unmatched` 并返回 404，用例会断言它是空的
+ * ——那说明 `api.js` 新增了接口而测试夹具没跟上。
+ */
+function createBackend() {
+    const requests = [];
+    const unmatched = [];
+    const fetchStub = async (url, options = {}) => {
+        const method = String(options.method || 'GET').toUpperCase();
+        const target = new URL(String(url));
+        const path = target.pathname.startsWith(API_PREFIX)
+            ? target.pathname.slice(API_PREFIX.length)
+            : target.pathname;
+        const request = {
+            method,
+            path,
+            url: String(url),
+            query: Object.fromEntries(target.searchParams.entries()),
+            body: options.body ? JSON.parse(options.body) : null,
+            authorized: Boolean(options.headers && options.headers.Authorization),
+        };
+        requests.push(request);
+        const match = matchEndpoint(method, path);
+        if (!match) {
+            unmatched.push(`${method} ${path}`);
+            return reply(404, { error: `测试夹具没有覆盖 ${method} ${path}` });
+        }
+        const value = typeof match.fixture === 'function'
+            ? match.fixture({ query: request.query, body: request.body, params: match.params })
+            : match.fixture;
+        return reply(200, value);
+    };
+    return { fetchStub, requests, unmatched };
+}
+
+// ── 假的桥接层：只实现保留下来的系统动作 ─────────────────────────
+
+/**
+ * 原生侧保留的动作 → 返回值。
+ *
+ * 这份清单就是 `WebAppActions` 的全部 `case`（见 README「前后端边界」）。
+ * 数据动作已经删除：任何不在清单里的动作都会被 {@link installBridge} 当场拒绝，
+ * 因为那意味着页面绕过了 `core/api.js`。
+ */
+const SYSTEM_RESPONSES = {
+    'ui.sync': true,
     'camera.ensurePermission': true,
     'calendar.status': { granted: false, inCalendar: false },
     'calendar.toggle': { inCalendar: true, granted: true, message: '已加入系统日历' },
-    'settings.uiMode': { ok: true, mode: 'dark' },
-    'media.pickImage': { dataUrl: 'data:image/jpeg;base64,AAAA' },
     'notify.requestPermission': true,
+    'media.pickImage': { dataUrl: 'data:image/jpeg;base64,AAAA' },
+    'media.import': true,
+    'media.store': true,
+    'share.text': true,
+    'export.csv': true,
 };
+
+const SYSTEM_ACTION_NAMES = Object.keys(SYSTEM_RESPONSES);
 
 function installBridge(window, calls) {
     window.CalMobileNative = {
         invoke(action, payloadJson, callbackId) {
             calls.push({ action, payload: JSON.parse(payloadJson || '{}') });
-            const value = Object.prototype.hasOwnProperty.call(RESPONSES, action)
-                ? RESPONSES[action]
-                : true;
+            if (!Object.prototype.hasOwnProperty.call(SYSTEM_RESPONSES, action)) {
+                // 数据动作不再经过原生：这里必须炸，而不是悄悄返回一份本机数据。
+                throw new Error(`动作 ${action} 不在系统能力白名单里，数据必须走 core/api.js`);
+            }
+            const value = SYSTEM_RESPONSES[action];
             setTimeout(() => {
                 window.CalMobileBridge.onResult(callbackId, true, value, null);
             }, 0);
@@ -522,8 +703,10 @@ function installBridge(window, calls) {
 
 // ── 测试主体 ─────────────────────────────────────────────────────
 
-/** 每次渲染都重置 DOM 树与假桥接，模块本身保持在同一个实例里。 */
+/** 每次渲染都重置 DOM 树、假后端与假桥接，模块本身保持在同一个实例里。 */
 async function renderRoute(routeId, params = {}) {
+    const backend = createBackend();
+    sharedWindow.fetch = backend.fetchStub;
     installGlobals();
     const dom = resetDom(sharedDocument);
     const calls = [];
@@ -541,7 +724,7 @@ async function renderRoute(routeId, params = {}) {
     // 否则上一个用例取过的数据会命中缓存，看不到新的请求。
     const apiModule = await import(pathToFileURL(path.join(webRoot, 'js', 'core', 'api.js')).href);
     apiModule.clearCache();
-    // 首次渲染要等 bootstrap（可能是异步的远端请求）落定，不能自己猜时序。
+    // 首次渲染要等 bootstrap（走 HTTP 夹具）落定，不能自己猜时序。
     await router.whenStarted();
 
     const query = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
@@ -549,7 +732,14 @@ async function renderRoute(routeId, params = {}) {
     await router.render();
     // 让桥接回调（setTimeout 0）与页面里的 await 全部落定。
     await new Promise((resolve) => setTimeout(resolve, 40));
-    return { dom, calls, router, app: dom.app };
+    return {
+        dom,
+        calls,
+        requests: backend.requests,
+        unmatched: backend.unmatched,
+        router,
+        app: dom.app,
+    };
 }
 
 /** 页面必须至少渲染出一个可见节点，并且不能出现“启动失败”占位。 */
@@ -595,23 +785,49 @@ const ROUTES = [
 test('所有页面在管理员身份下都能完成一次渲染', async () => {
     for (const [routeId, params] of ROUTES) {
         const label = `#/${routeId}${Object.keys(params).length ? ` (${JSON.stringify(params)})` : ''}`;
-        const { app } = await renderRoute(routeId, params);
+        const { app, unmatched } = await renderRoute(routeId, params);
         assertRendered(app, label);
+        assert.deepStrictEqual(unmatched, [],
+            `${label} 请求了假后端没有覆盖的接口：${unmatched.join(', ')}`);
     }
 });
 
-test('页面渲染时调用的动作都在假桥接里有约定返回值', async () => {
+test('页面渲染时调用的桥接动作都在系统能力清单里', async () => {
     const unknown = new Set();
     for (const [routeId, params] of ROUTES) {
         const { calls } = await renderRoute(routeId, params);
         for (const { action } of calls) {
-            if (!Object.prototype.hasOwnProperty.call(RESPONSES, action)) {
+            if (!SYSTEM_ACTION_NAMES.includes(action)) {
                 unknown.add(action);
             }
         }
     }
     assert.deepStrictEqual([...unknown], [],
-        `以下动作缺少约定的返回值，说明新增了动作却没有在测试里覆盖：${[...unknown].join(', ')}`);
+        `以下动作不是系统能力，说明有页面绕过了 core/api.js：${[...unknown].join(', ')}`);
+});
+
+/**
+ * 数据只有一条路径：`core/api.js` 的 `ENDPOINTS` → 后端 HTTP。
+ * 原生数据层删除后，桥接只剩系统能力；这条用例同时守住两个方向。
+ */
+test('数据动作不再经过原生桥接', async () => {
+    const { calls, requests, unmatched } = await renderRoute('home', {});
+    // 等预加载把相邻月份取回来，否则只能看到首屏那几次请求。
+    await settle(150);
+
+    for (const { action } of calls) {
+        assert.ok(SYSTEM_ACTION_NAMES.includes(action),
+            `首页把动作 ${action} 交给了原生桥接，数据必须走 core/api.js`);
+    }
+    const paths = requests.map((item) => item.path);
+    // bootstrap 只在 app.js 第一次 import 时发一次，因此这里断言首页自己的数据接口。
+    for (const expected of ['/exhibitions/month', '/exhibitions']) {
+        assert.ok(paths.includes(expected),
+            `首页没有请求 ${expected}，实际请求：${paths.join(', ')}`);
+    }
+    assert.ok(requests.every((item) => item.url.startsWith(`http://127.0.0.1:3000${API_PREFIX}/`)),
+        `请求没有走 /api/v1 前缀：${requests.map((item) => item.url).join(', ')}`);
+    assert.deepStrictEqual(unmatched, [], `假后端没有覆盖：${unmatched.join(', ')}`);
 });
 
 test('管理后台把当前分区写进哈希，返回后仍停在展会分区', async () => {
@@ -625,15 +841,16 @@ test('管理后台把当前分区写进哈希，返回后仍停在展会分区',
 });
 
 test('个人页深色模式切换会调用 settings.uiMode', async () => {
-    const { dom, calls } = await renderRoute('profile', {});
+    const { dom, requests } = await renderRoute('profile', {});
     const buttons = dom.app.querySelectorAll((node) => node.classList.contains('seg'))
         .flatMap((group) => group.querySelectorAll((node) => node.tagName === 'BUTTON'));
     const dark = buttons.find((button) => collectText(button).includes('深色'));
     assert.ok(dark, '个人页没有渲染出「深色」选项');
     dark.dispatch('click');
     await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.ok(calls.some((item) => item.action === 'settings.uiMode'),
-        '切换深色模式没有调用 settings.uiMode');
+    const saved = requests.find((item) => item.method === 'PUT' && item.path === '/settings/ui-mode');
+    assert.ok(saved, '切换深色模式没有请求 PUT /settings/ui-mode');
+    assert.strictEqual(saved.body.mode, 'dark', '外观模式没有提交给后端');
 });
 
 test('报名详情展示报名码并调用二维码库', async () => {
@@ -655,8 +872,8 @@ test('展商后台卡片只有查看报名与编辑展会两个入口', async ()
     }
 });
 
-test('核销页能够用假桥接完成一次扫码核销', async () => {
-    const { dom, calls, app } = await renderRoute('checkin', {});
+test('核销页能够用假后端完成一次扫码核销', async () => {
+    const { dom, requests, app } = await renderRoute('checkin', {});
     assert.ok(collectText(app).includes('核销报名码') || collectText(app).includes('扫码核销'),
         '核销页没有渲染出来');
     // 弹层挂在 #overlay-host 下，因此从 document 根节点查找。
@@ -675,14 +892,14 @@ test('核销页能够用假桥接完成一次扫码核销', async () => {
     assert.ok(confirm, '手动输入面板缺少核销按钮');
     confirm.dispatch('click');
     await new Promise((resolve) => setTimeout(resolve, 40));
-    const submitted = calls.find((item) => item.action === 'checkin.scan');
-    assert.ok(submitted, '没有调用 checkin.scan');
-    assert.strictEqual(submitted.payload.code, 'CALMOBILE-CHECKIN|exhibition-1|registration-3');
+    const submitted = requests.find((item) => item.method === 'POST' && item.path === '/checkin');
+    assert.ok(submitted, '没有请求 POST /checkin');
+    assert.strictEqual(submitted.body.code, 'CALMOBILE-CHECKIN|exhibition-1|registration-3');
     assert.ok(collectText(dom.app).includes('核销成功'), '核销结果没有渲染出来');
 });
 
 test('个人页提供「在公开页展示我的报名记录」开关并能保存', async () => {
-    const { dom, calls } = await renderRoute('profile', {});
+    const { dom, requests } = await renderRoute('profile', {});
     const root = sharedDocument.documentElement;
     const label = root.querySelectorAll((node) => node.tagName === 'LABEL')
         .find((node) => collectText(node.parentNode).includes('在公开页展示我的报名记录'));
@@ -697,9 +914,9 @@ test('个人页提供「在公开页展示我的报名记录」开关并能保�
     input.dispatch('change', { target: input });
     await new Promise((resolve) => setTimeout(resolve, 40));
 
-    const saved = calls.filter((item) => item.action === 'profile.save').pop();
-    assert.ok(saved, '切换隐私开关没有调用 profile.save');
-    assert.strictEqual(saved.payload.showRegistrations, true,
+    const saved = requests.filter((item) => item.method === 'PUT' && item.path === '/profile').pop();
+    assert.ok(saved, '切换隐私开关没有请求 PUT /profile');
+    assert.strictEqual(saved.body.showRegistrations, true,
         '隐私开关没有把 true 提交给后端');
 });
 
@@ -767,8 +984,34 @@ function webModule(relative) {
     return import(pathToFileURL(path.join(webRoot, relative)).href);
 }
 
-function countAction(calls, action) {
-    return calls.filter((call) => call.action === action).length;
+/** 记下来的请求里，某个「方法 + 路径」被请求了几次。 */
+function countRequest(requests, method, endpoint) {
+    return requests.filter((item) => item.method === method && item.path === endpoint).length;
+}
+
+/**
+ * 记下来的请求里，某个月的月视图被请求了几次。
+ *
+ * 预加载会取相邻月份、切月份后还会预热新的相邻月份，因此只按「整月接口的次数」
+ * 断言会随空闲回调的时序抖动；这里锁定具体月份。
+ */
+function countMonth(requests, month) {
+    return requests.filter((item) => item.path === '/exhibitions/month'
+        && Number(item.query.month) === month).length;
+}
+
+/** 轮询等待条件成立：预加载排在空闲回调里，落点时序不固定。 */
+async function waitFor(predicate, timeout = 1000) {
+    const deadline = Date.now() + timeout;
+    for (;;) {
+        if (predicate()) {
+            return true;
+        }
+        if (Date.now() >= deadline) {
+            return false;
+        }
+        await settle(20);
+    }
 }
 
 const settle = (ms = 40) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -779,10 +1022,10 @@ const settle = (ms = 40) => new Promise((resolve) => setTimeout(resolve, ms));
  * 以前每点一天都重新请求整月、把日历换成骨架屏，那一下空档就是卡片闪白的来源。
  */
 test('首页点日期不再请求月数据，列表按当月数据本地切换', async () => {
-    const { dom, calls } = await renderRoute('home', {});
+    const { dom, requests } = await renderRoute('home', {});
     // 先等预加载把相邻月份取回来，之后的计数才不会被后台预热打乱。
     await settle(150);
-    const before = countAction(calls, 'exhibitions.month');
+    const before = countMonth(requests, 6);
     const days = dom.app.querySelectorAll((node) => node.classList.contains('cal-day') && !node.disabled);
     const day12 = days.find((node) => node.dataset.day === '12');
     const day18 = days.find((node) => node.dataset.day === '18');
@@ -790,35 +1033,38 @@ test('首页点日期不再请求月数据，列表按当月数据本地切换',
 
     day18.dispatch('click');
     await settle();
-    assert.strictEqual(countAction(calls, 'exhibitions.month'), before, '点日期不应该再请求月数据');
+    assert.strictEqual(countMonth(requests, 6), before, '点日期不应该再请求月数据');
     assert.strictEqual(day18.getAttribute('aria-pressed'), 'true', '被点的日期应当变成选中态');
     assert.strictEqual(day12.getAttribute('aria-pressed'), 'false', '原选中日期应当取消选中');
     assert.ok(!collectText(dom.app).includes(EXHIBITION.title), '18 日没有展会，列表应当换成空态');
 
     day12.dispatch('click');
     await settle();
-    assert.strictEqual(countAction(calls, 'exhibitions.month'), before, '切回已有展会的日期同样不发请求');
+    assert.strictEqual(countMonth(requests, 6), before, '切回已有展会的日期同样不发请求');
     assert.ok(collectText(dom.app).includes(EXHIBITION.title), '12 日的展会应当回到列表里');
 });
 
 /** 相邻月份由预加载提前取回，切月份因此当场换页而不是先闪骨架屏。 */
 test('日历切月份命中预加载缓存时不再发请求', async () => {
-    const { dom, calls } = await renderRoute('home', {});
+    const { dom, requests } = await renderRoute('home', {});
     const api = await webModule('js/core/api.js');
     // 启动后的预加载排在空闲回调里，等它把相邻月份取回来。
     await settle(150);
     assert.ok(api.exhibitions.month.peek({ year: 2026, month: 5 }), '上个月没有预热');
     assert.ok(api.exhibitions.month.peek({ year: 2026, month: 7 }), '下个月没有预热');
+    const before = countMonth(requests, 7);
 
-    const before = countAction(calls, 'exhibitions.month');
     const next = dom.app.querySelectorAll((node) =>
         node.getAttribute('aria-label') === frontendStrings.s_y6u3g && node.classList.contains('icon-button'))[0];
     assert.ok(next, '没有找到「下个月」按钮');
     next.dispatch('click');
     // shiftMonth 先播 140ms 的滑出动画，再载入目标月份。
     await settle(220);
-    assert.strictEqual(countAction(calls, 'exhibitions.month'), before,
-        '目标月份已在缓存里，切月份不应该再发请求');
+    assert.strictEqual(countMonth(requests, 7), before,
+        '目标月份（7 月）已在缓存里，切月份不应该再请求它');
+    // 换到 7 月后会照常预热新的相邻月份（8 月）：这是预加载的既定行为。
+    assert.ok(await waitFor(() => countMonth(requests, 8) > 0),
+        '切到 7 月后没有预热 8 月，说明 preloadFollowUps 没有跟上');
 });
 
 /** 命中缓存时 loadInto 必须在 await 之前就把内容画出来，否则仍会先闪一帧骨架屏。 */
@@ -847,24 +1093,24 @@ test('loadInto 命中缓存时同步出内容，且不清空容器里已有的�
 
 /** 过期数据仍然可以被 peek 到：页面先画旧的一屏，再让取数去刷新。 */
 test('只读缓存过期后仍能 peek，取数会重新请求', async () => {
-    const { calls } = await renderRoute('home', {});
+    const { requests } = await renderRoute('home', {});
     const api = await webModule('js/core/api.js');
     // 等预加载排空后再清一次缓存，计数从真正的空缓存开始。
     await settle(150);
     api.clearCache();
-    const before = countAction(calls, 'exhibitions.list');
+    const before = countRequest(requests, 'GET', '/exhibitions');
 
     await api.exhibitions.list();
-    assert.strictEqual(countAction(calls, 'exhibitions.list'), before + 1, '首次取数应当请求一次');
+    assert.strictEqual(countRequest(requests, 'GET', '/exhibitions'), before + 1, '首次取数应当请求一次');
     await api.exhibitions.list();
-    assert.strictEqual(countAction(calls, 'exhibitions.list'), before + 1, '缓存新鲜时不应重复请求');
+    assert.strictEqual(countRequest(requests, 'GET', '/exhibitions'), before + 1, '缓存新鲜时不应重复请求');
 
     const realNow = Date.now;
     Date.now = () => realNow() + 60000;
     try {
         assert.ok(api.exhibitions.list.peek(), '过期的数据也要能被 peek 到（页面靠它先画一屏）');
         await api.exhibitions.list();
-        assert.strictEqual(countAction(calls, 'exhibitions.list'), before + 2, '过期后应当重新取数');
+        assert.strictEqual(countRequest(requests, 'GET', '/exhibitions'), before + 2, '过期后应当重新取数');
     } finally {
         Date.now = realNow;
     }
@@ -872,14 +1118,14 @@ test('只读缓存过期后仍能 peek，取数会重新请求', async () => {
 
 /** 同一份数据的并发请求只发一次：预加载与页面取数经常撞在一起。 */
 test('同一份只读数据的并发请求会去重', async () => {
-    const { calls } = await renderRoute('home', {});
+    const { requests } = await renderRoute('home', {});
     const api = await webModule('js/core/api.js');
     await settle(150);
     api.clearCache();
-    const before = countAction(calls, 'registrations.list');
+    const before = countRequest(requests, 'GET', '/registrations');
 
     const [first, second] = await Promise.all([api.registrations.list(), api.registrations.list()]);
-    assert.strictEqual(countAction(calls, 'registrations.list'), before + 1, '并发请求只应该发一次');
+    assert.strictEqual(countRequest(requests, 'GET', '/registrations'), before + 1, '并发请求只应该发一次');
     assert.strictEqual(first, second, '并发请求应当复用同一个结果对象');
 });
 
@@ -929,8 +1175,6 @@ test('动作按 ENDPOINTS 映射成后端请求，401 会自动续期一次', as
         api.clearCache();
         api.setToken('');
         api.setRefreshToken('');
-        await api.probe(true);
-        assert.strictEqual(api.transport(), 'remote', '打桩 fetch 可用时应当走 HTTP 传输层');
 
         // 读取类：查询串带上参数
         respond = { status: 200, body: [] };
@@ -958,7 +1202,7 @@ test('动作按 ENDPOINTS 映射成后端请求，401 会自动续期一次', as
         assert.ok(seen.at(-1).url.endsWith('/api/v1/review/reg-9/status'), seen.at(-1).url);
         assert.deepStrictEqual(seen.at(-1).body, { id: 'reg-9', status: '已通过' });
 
-        // 用户公开页走查询串（后端同时支持 /users/public 与 /users/:id/public）
+        // 用户公开页走查询串
         await api.users.publicProfile({ nickname: 'demo' });
         assert.ok(seen.at(-1).url.endsWith('/api/v1/users/public?nickname=demo'), seen.at(-1).url);
 
@@ -1004,18 +1248,19 @@ test('动作按 ENDPOINTS 映射成后端请求，401 会自动续期一次', as
         assert.ok(renewed[2].url.endsWith('/api/v1/exhibitions'), '第三次应当重试原请求');
         assert.strictEqual(renewed[2].token, 'fresh-token', '重试必须带续期后的新令牌');
 
-        // 4xx 业务失败：抛成错误，不退回原生（否则同一个操作会在另一套实现上重放）
+        // 4xx 业务失败：抛成错误交给页面，不会退回桥接。
         api.clearCache();
         sharedWindow.fetch = async () => ({ ok: false, status: 403, json: async () => ({ error: '无权执行此操作' }) });
         installGlobals();
         await assert.rejects(() => api.exhibitions.list(), /无权执行此操作/);
 
-        // 5xx：属于传输层失败，退回原生桥接
+        // 5xx：属于传输层失败，原生数据层已删除，没有第二套实现可以退。
         sharedWindow.fetch = async () => ({ ok: false, status: 502, json: async () => ({ error: '网关错误' }) });
         installGlobals();
         api.clearCache();
-        const items = await api.exhibitions.list();
-        assert.ok(Array.isArray(items) && items.length > 0, '远端 5xx 时应当退回原生桥接并拿到数据');
+        await assert.rejects(() => api.exhibitions.list(),
+            /后端返回 502/,
+            '5xx 时应当如实报传输层失败：数据动作已经不在原生实现里');
     } finally {
         sharedWindow.fetch = originalFetch;
         installGlobals();

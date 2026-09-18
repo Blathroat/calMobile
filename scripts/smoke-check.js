@@ -2,8 +2,10 @@
  * 项目结构静态检查。
  *
  * 当前版本前端由 WebView 承载：
- *   - Android 侧：WebShellActivity + WebAppBridge + WebAppActions 提供界面外壳与业务桥接；
- *   - Web 侧：app/src/main/assets/web 下的页面模块按 newUI 的 17 屏拆分。
+ *   - Android 侧：WebShellActivity + WebAppBridge + WebAppActions 提供界面外壳与
+ *     系统能力桥接（权限、日历、媒体、分享、导出），不再持有任何业务数据；
+ *   - Web 侧：app/src/main/assets/web 下的页面模块按 newUI 的 17 屏拆分；
+ *   - 数据侧：展会、报名、用户、设置与认证全部来自 server/ 的 Express + PostgreSQL 后端。
  *
  * 检查覆盖入口清单、桥接契约、页面文件、设计令牌与文档关键内容。
  * 用法：node scripts/smoke-check.js
@@ -215,6 +217,41 @@ function validateScreenFiles() {
   return missing.length === 0 ? true : `缺少页面模块：${missing.join(', ')}`;
 }
 
+/**
+ * 已删除的原生数据层文件。
+ *
+ * 展会、报名、用户、设置与认证现在只由 `server/` 提供，原生侧不再持有本机实现；
+ * 这些文件重新出现，就说明「后端不可用时退回本机数据」那套又回来了。
+ */
+const REMOVED_NATIVE_DATA_FILES = [
+  'ActionSupport.java',
+  'AdminActions.java',
+  'AdminUser.java',
+  'AdminUserManager.java',
+  'AuthManager.java',
+  'DatabaseHelper.java',
+  'ExhibitionActions.java',
+  'ExhibitionCatalog.java',
+  'ExhibitionConfiguration.java',
+  'ExhibitionManager.java',
+  'ExhibitorExhibition.java',
+  'ProfileActions.java',
+  'Registration.java',
+  'RegistrationActions.java',
+  'RegistrationField.java',
+  'RegistrationManager.java',
+  'RegistrationReviewStore.java',
+  'SessionActions.java',
+  'UserProfileStore.java'
+];
+
+/** 原生数据层必须已经删除干净。 */
+function findNativeDataLayer() {
+  const directory = path.join(root, 'app/src/main/java/com/example/calmobile');
+  const found = REMOVED_NATIVE_DATA_FILES.filter((file) => fs.existsSync(path.join(directory, file)));
+  return found.length === 0 ? true : `原生数据层文件又出现了：${found.join(', ')}`;
+}
+
 const checks = [
   // ── 文档 ────────────────────────────────────────────────────────
   {
@@ -284,16 +321,17 @@ const checks = [
   },
   {
     id: 'web-app-actions',
-    // 业务动作按域拆分后，Manager 调用分散在各动作类；分发入口只保留动作清单。
+    // 原生数据层已删除：分发入口只剩 10 个系统能力动作，数据全部走 server/ 的 HTTP 接口。
     file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
-    contains: ['case "bootstrap":', 'case "exhibitions.save":', 'case "registrations.submit":',
-      'case "review.updateStatus":', 'case "users.list":']
+    contains: ['case "ui.sync":', 'case "camera.ensurePermission":', 'case "calendar.status":',
+      'case "calendar.toggle":', 'case "notify.requestPermission":', 'case "media.pickImage":',
+      'case "media.import":', 'case "media.store":', 'case "share.text":', 'case "export.csv":']
   },
   {
-    id: 'native-managers-wired',
-    // 各域类仍然复用既有 Manager / 配置，没有另起一套业务规则
-    file: 'app/src/main/java/com/example/calmobile/ExhibitionActions.java',
-    contains: ['ExhibitionManager', 'ExhibitionConfiguration', 'RegistrationField']
+    id: 'native-device-mirror',
+    // AppSettings 从「数据权威来源」降级成设备侧镜像：外观模式、系统栏配色与媒体上限
+    file: 'app/src/main/java/com/example/calmobile/AppSettings.java',
+    contains: ['normalizeMode', 'setUiMode', 'applyWindowColors', 'saveMediaLimits', 'saveUploadLimits']
   },
   {
     id: 'bridge-contract',
@@ -302,24 +340,26 @@ const checks = [
   },
   {
     id: 'review-store-shared',
-    file: 'app/src/main/java/com/example/calmobile/RegistrationReviewStore.java',
-    contains: ['public final class RegistrationReviewStore', 'STATUS_PENDING', 'STATUS_APPROVED', 'STATUS_REJECTED']
+    // 审核状态词汇现在只由服务端维护；状态存英文代码、中文标签在 labels.js 映射一次
+    file: 'server/src/domain/labels.js',
+    contains: ['REGISTRATION_STATUS', 'pending', 'approved', 'rejected', 'cancelled', 'attended']
   },
   {
     id: 'profile-store',
-    file: 'app/src/main/java/com/example/calmobile/UserProfileStore.java',
-    contains: ['public final class UserProfileStore', 'showRegistrations']
+    file: 'server/src/routes/profile.js',
+    contains: ['showRegistrations', 'show_registrations']
   },
   {
     id: 'exhibition-status-modes',
-    file: 'app/src/main/java/com/example/calmobile/ExhibitorExhibition.java',
-    contains: ['STATUS_REVIEW_REQUIRED', 'STATUS_REVIEW_OPTIONAL', 'STATUS_DISPLAY_ONLY']
+    file: 'server/src/domain/labels.js',
+    contains: ['EXHIBITION_STATUS', 'review', 'optional', 'display', 'closed', 'ended']
   },
   {
     id: 'media-limits-persisted',
+    // 表单字符数上限已随服务器设置移到后端，设备侧只镜像媒体与上传上限
     file: 'app/src/main/java/com/example/calmobile/AppSettings.java',
     contains: ['getMediaImageLimit', 'getMediaImageSizeMb', 'getMediaVideoLimit', 'saveMediaLimits',
-      'saveUploadLimits', 'saveTextLimits', 'getAnswerLimit']
+      'saveUploadLimits']
   },
   {
     id: 'media-uploaded-as-url',
@@ -334,30 +374,30 @@ const checks = [
   },
   {
     id: 'review-optional-auto-approve',
-    file: 'app/src/main/java/com/example/calmobile/RegistrationActions.java',
-    contains: ['autoApprove', 'STATUS_REVIEW_OPTIONAL', 'autoApproved']
+    // 「无需审核」提交即通过的规则现在在服务端兜住
+    file: 'server/src/routes/registrations.js',
+    contains: ['autoApproved', "=== 'optional'", "'approved' : 'pending'"]
   },
   {
     id: 'avatar-and-region-profile',
-    file: 'app/src/main/java/com/example/calmobile/UserProfileStore.java',
-    contains: ['public String region', 'public String avatar', 'showRegistrations']
+    file: 'server/src/domain/payloads.js',
+    contains: ['region', 'avatar', 'showRegistrations']
   },
   {
     id: 'description-format-persisted',
-    file: 'app/src/main/java/com/example/calmobile/ExhibitionConfiguration.java',
-    contains: ['descriptionFormat', 'registrationQrEnabled', 'isRegistrationQrEnabled',
-      'saveRegistrationQr']
+    file: 'server/src/routes/exhibitions.js',
+    contains: ['descriptionFormat', 'qrEnabled']
   },
   {
     id: 'registration-code-and-checkin',
-    file: 'app/src/main/java/com/example/calmobile/RegistrationActions.java',
-    contains: ['REGISTRATION_CODE_PREFIX', 'registrationCode', 'parseCheckInCode',
-      'STATUS_ATTENDED', 'canCheckInExhibition']
+    // 报名码前缀与解析与前端 core/status.js 约定同一批字符串，只由服务端实现一次
+    file: 'server/src/domain/labels.js',
+    contains: ['CODE_PREFIX', 'checkInCode', 'parseCheckInCode', 'acceptsRegistration']
   },
   {
     id: 'attended-status-defined',
-    file: 'app/src/main/java/com/example/calmobile/RegistrationReviewStore.java',
-    contains: ['STATUS_ATTENDED']
+    file: 'server/src/routes/checkin.js',
+    contains: ['parseCheckInCode', "'attended'", 'duplicated']
   },
   {
     id: 'camera-permission-declared',
@@ -371,13 +411,14 @@ const checks = [
   },
   {
     id: 'admin-can-always-review',
-    file: 'app/src/main/java/com/example/calmobile/RegistrationActions.java',
-    contains: ['AuthManager.getInstance().isAdmin()']
+    // 展商与管理员都能审核；展商只能碰自己举办的展会
+    file: 'server/src/routes/review.js',
+    contains: ['requireExhibitor', 'canManageExhibition']
   },
   {
     id: 'admin-public-profile-unrestricted',
-    file: 'app/src/main/java/com/example/calmobile/AdminActions.java',
-    contains: ['viewedAsAdmin', 'asAdmin']
+    file: 'server/src/routes/users.js',
+    contains: ['viewedAsAdmin', 'showRegistrations']
   },
   {
     id: 'ui-mode-persisted',
@@ -487,8 +528,9 @@ const checks = [
   },
   {
     id: 'app-title-setting',
-    file: 'app/src/main/java/com/example/calmobile/AppSettings.java',
-    contains: ['getAppTitleZh', 'getAppTitleEn', 'saveAppTitle', 'DEFAULT_APP_TITLE_ZH']
+    // 软件中英文标题属于服务器级配置，默认值与补丁规则都在服务端
+    file: 'server/src/domain/settings.js',
+    contains: ['appTitleZh', 'appTitleEn', 'DEFAULT_SETTINGS']
   },
   {
     id: 'app-title-bridge-and-pages',
@@ -586,9 +628,11 @@ const checks = [
   },
   {
     id: 'frontend-api-transport',
+    // 数据只在后端：api.js 只保留 HTTP 一条路，不该再出现原生降级入口
     file: `${WEB_ROOT}/js/core/api.js`,
-    contains: ['BASE_URL', 'export async function probe', 'TransportError', 'callRemote', 'request(',
-      'CACHE_TTL', 'clearCache']
+    contains: ['BASE_URL', 'TransportError', 'callRemote', 'request(',
+      'CACHE_TTL', 'clearCache'],
+    notContains: ['export async function probe', 'export function transport', 'from \'./bridge.js\'']
   },
   {
     id: 'frontend-lazy-vendors',
@@ -607,24 +651,22 @@ const checks = [
     contains: ['export function mark', 'export function reportTimings', '__CALMOBILE_TIMING__']
   },
   {
-    id: 'demo-backend',
-    file: 'server/src/demo-server.js',
-    contains: ['createServer', 'Access-Control-Allow-Origin', 'demo-api', 'DEMO_PORT']
+    id: 'backend-contract-test',
+    // 契约测试断言的是真实 REST 路径与字段，以及前后端路由交叉校验
+    file: 'server/test/api.test.js',
+    contains: ['/api/v1/exhibitions', 'checkInCode', 'qrEnabled', 'viewedAsAdmin',
+      '前端每个数据动作都对应后端已注册的路由'],
   },
   {
-    id: 'demo-backend-api-surface',
-    file: 'server/src/demo-api.js',
-    contains: ["'exhibitions.month'", "'checkin.scan'", "'settings.uiMode'", 'parseCheckInCode']
-  },
-  {
-    id: 'frontend-backend-contract-test',
-    file: 'server/test/demo-api.test.js',
-    contains: ['exhibitions.list', 'checkInCode', 'qrEnabled', 'viewedAsAdmin']
+    id: 'backend-status-page',
+    // 健康状态页：服务与数据库都能一眼看到
+    file: 'server/src/routes/status.js',
+    contains: ['migrations', 'pool', 'endpoints'],
   },
   {
     id: 'docs-frontend-backend-boundary',
     file: 'README.md',
-    contains: ['前后端边界', 'core/api.js', 'adb reverse', 'server/test/demo-api.test.js']
+    contains: ['前后端边界', 'core/api.js', 'adb reverse', 'server/test/api.test.js']
   },
   {
     id: 'web-accent-light-background',
@@ -708,29 +750,32 @@ const checks = [
   // ── 复用中的原生能力 ────────────────────────────────────────────
   {
     id: 'native-actions-dispatcher',
-    // 分发入口只做路由：不出现任何业务实现细节
+    // 分发入口只做路由：不出现任何业务实现细节，只剩系统能力
     file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
-    contains: ['static void handle(', 'SessionActions.bootstrap', 'RegistrationActions.checkIn',
+    contains: ['static void handle(', 'SystemActions.calendarStatus', 'SystemActions.ensureCameraPermission',
       'MediaActions.exportCsv'],
     notContains: ['ExhibitionManager.findById', 'DatabaseHelper.getInstance()']
   },
   {
-    id: 'native-actions-split',
-    file: 'scripts/split-webapp-actions.js',
-    // 拆分脚本自身：按方法边界切分 + 归属覆盖校验
-    contains: ['function scanMethods', 'OWNERS', 'FAIL 以下方法没有分配归属',
-      'git', 'WebAppActions.java']
-  },
-  {
     id: 'native-actions-checklist',
+    // 保留的系统动作；数据动作与 toast / pickVideo / imageData 已随数据层删除
     file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
-    contains: ['case "checkin.scan":', 'case "camera.ensurePermission":', 'case "settings.uiMode":',
-      'case "export.csv":']
+    contains: ['case "camera.ensurePermission":', 'case "calendar.toggle":', 'case "export.csv":'],
+    notContains: ['case "toast":', 'case "media.pickVideo":', 'case "media.imageData":',
+      'case "bootstrap":', 'case "checkin.scan":', 'case "settings.uiMode":']
   },
   {
     id: 'native-actions-domains',
-    file: 'app/src/main/java/com/example/calmobile/SessionActions.java',
-    contains: ['static Map<String, Object> bootstrap(', 'static Map<String, Object> userPayload(']
+    // 系统能力只按「日历 / 权限 / 设备镜像」一个域收口
+    file: 'app/src/main/java/com/example/calmobile/SystemActions.java',
+    contains: ['static Map<String, Object> syncDeviceMirror(', 'static Map<String, Object> calendarStatus(']
+  },
+  {
+    id: 'native-data-layer-removed',
+    // 原生数据层（SQLite、内存示例数据与各数据域动作类）已删除：数据只由 server/ 提供。
+    // 这些文件再出现，说明又加回了一套本机实现，前后端立即会分叉。
+    file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
+    validate: () => findNativeDataLayer()
   },
   {
     id: 'legacy-removed',

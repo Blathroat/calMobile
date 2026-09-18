@@ -8,15 +8,24 @@ import java.util.Map;
 
 /**
  * 桥接动作分发入口。
- * <p>
- * 这里只做「动作名 → 处理类」的路由，实现按域拆到：
- * {@link SessionActions}（启动数据）、{@link ProfileActions}（认证与资料）、
- * {@link ExhibitionActions}（展会）、{@link RegistrationActions}（报名与核销）、
- * {@link AdminActions}（用户与搜索）、{@link MediaActions}（媒体与导出）、
- * {@link SystemActions}（设置与系统能力），共享工具在 {@link ActionSupport}。
- * <p>
- * 前端只认动作名，因此拆分不影响 {@code js/core/api.js} 的接口形状；
- * 接后端时按域替换对应处理类即可，不必再读一个两千行的文件。
+ *
+ * **只保留系统能力**：数据（展会、报名、用户、设置、认证）全部由 `server/` 的
+ * Express + PostgreSQL 后端提供，前端通过 `js/core/api.js` 的 `ENDPOINTS` 走 HTTP，
+ * 原生不再持有任何业务数据的实现。
+ *
+ * 留在原生的是「只有设备能做」的事：
+ *
+ * | 动作 | 为什么必须在原生 |
+ * | --- | --- |
+ * | `ui.sync` | 状态栏配色、图片压缩上限只能在设备上生效 |
+ * | `camera.ensurePermission` | 运行时权限 |
+ * | `calendar.status` / `calendar.toggle` | 写系统日历（CalendarContract） |
+ * | `notify.requestPermission` | 通知运行时权限 |
+ * | `media.pickImage` / `media.import` / `media.store` | 系统选择器与私有目录落盘 |
+ * | `share.text` | 系统分享面板 |
+ * | `export.csv` | 系统「另存为」面板 |
+ *
+ * 数据行由前端传进来（它已经从后端拿到数据），原生只负责落盘与格式。
  */
 final class WebAppActions {
 
@@ -26,118 +35,13 @@ final class WebAppActions {
     static void handle(WebAppBridge bridge, String action, Map<String, Object> payload,
             WebAppBridge.ResultCallback callback) {
         Activity activity = bridge.activity();
-        DatabaseHelper.init(activity);
-        ExhibitionManager.ensureInitialized();
-        AdminUserManager.ensureInitialized();
 
         switch (action) {
-            case "bootstrap":
-                callback.success(SessionActions.bootstrap(activity));
-                return;
-            case "auth.login":
-                callback.success(ProfileActions.login(activity, payload));
-                return;
-            case "auth.register":
-                callback.success(ProfileActions.register(activity, payload));
-                return;
-            case "auth.guest":
-                callback.success(ProfileActions.enterAsGuest(activity));
-                return;
-            case "auth.logout":
-                callback.success(ProfileActions.logout());
-                return;
-            case "profile.get":
-                callback.success(SessionActions.userPayload(activity));
-                return;
-            case "profile.save":
-                callback.success(ProfileActions.saveProfile(activity, payload));
-                return;
-            case "profile.password":
-                callback.success(ProfileActions.changePassword(activity, payload));
-                return;
-            case "notify.preferences":
-                callback.success(ProfileActions.notificationPreferences(activity));
-                return;
-            case "notify.savePreferences":
-                ProfileActions.saveNotificationPreferences(activity, payload);
-                return;
-            case "exhibitions.list":
-                callback.success(ExhibitionActions.exhibitions(activity, payload));
-                return;
-            case "exhibitions.month":
-                callback.success(ExhibitionActions.monthPayload(activity, payload));
-                return;
-            case "exhibitions.get":
-                callback.success(ExhibitionActions.findExhibition(activity, WebAppBridge.text(payload, "id", "")));
-                return;
-            case "exhibitions.save":
-                callback.success(ExhibitionActions.saveExhibition(activity, payload));
-                return;
-            case "exhibitions.delete":
-                callback.success(ExhibitionActions.remove(payload));
-                return;
-            case "exhibitions.status":
-                callback.success(ExhibitionActions.updateStatus(payload));
-                return;
-            case "exhibitions.categories":
-                callback.success(ExhibitionActions.categories(activity));
-                return;
-            case "exhibitions.fields":
-                callback.success(ExhibitionActions.fieldsPayload(WebAppBridge.text(payload, "id", "")));
-                return;
-            case "exhibitions.saveFields":
-                callback.success(ExhibitionActions.saveFields(WebAppBridge.text(payload, "id", ""), payload));
-                return;
-            case "registrations.list":
-                callback.success(RegistrationActions.myRegistrations(activity));
-                return;
-            case "registrations.get":
-                callback.success(RegistrationActions.findRegistration(activity, WebAppBridge.text(payload, "id", "")));
-                return;
-            case "registrations.submit":
-                callback.success(RegistrationActions.submitRegistration(activity, payload));
-                return;
-            case "registrations.cancel":
-                callback.success(RegistrationActions.cancelRegistration(activity, WebAppBridge.text(payload, "id", "")));
-                return;
-            case "review.list":
-                callback.success(RegistrationActions.reviewList(payload));
-                return;
-            case "review.get":
-                callback.success(RegistrationActions.reviewDetail(WebAppBridge.text(payload, "id", "")));
-                return;
-            case "review.updateStatus":
-                callback.success(RegistrationActions.updateReviewStatus(activity, payload));
-                return;
-            case "checkin.scan":
-                callback.success(RegistrationActions.checkIn(activity, payload));
+            case "ui.sync":
+                callback.success(SystemActions.syncDeviceMirror(activity, payload));
                 return;
             case "camera.ensurePermission":
                 SystemActions.ensureCameraPermission(bridge, callback);
-                return;
-            case "users.list":
-                callback.success(AdminActions.users(payload));
-                return;
-            case "users.get":
-                callback.success(AdminActions.findUser(WebAppBridge.text(payload, "id", "")));
-                return;
-            case "users.status":
-                callback.success(AdminActions.updateStatus(payload));
-                return;
-            case "users.public":
-                callback.success(AdminActions.publicProfile(activity, payload));
-                return;
-            case "search.query":
-                callback.success(AdminActions.search(activity, WebAppBridge.text(payload, "query", "")));
-                return;
-            case "settings.get":
-                callback.success(SystemActions.settings(activity));
-                return;
-            case "settings.save":
-                callback.success(SystemActions.saveSettings(activity, payload));
-                return;
-            case "settings.uiMode":
-                callback.success(SystemActions.saveUiMode(activity, payload));
                 return;
             case "calendar.status":
                 callback.success(SystemActions.calendarStatus(activity, payload));
@@ -148,14 +52,8 @@ final class WebAppActions {
             case "notify.requestPermission":
                 SystemActions.requestNotificationPermission(bridge, callback);
                 return;
-            case "media.imageData":
-                callback.success(MediaActions.imageData(activity, WebAppBridge.text(payload, "uri", "")));
-                return;
             case "media.pickImage":
                 MediaActions.pickImage(bridge, callback);
-                return;
-            case "media.pickVideo":
-                MediaActions.pickVideo(bridge, callback);
                 return;
             case "media.import":
                 MediaActions.importMedia(bridge, payload, callback);
@@ -168,9 +66,6 @@ final class WebAppActions {
                 return;
             case "export.csv":
                 MediaActions.exportCsv(bridge, payload, callback);
-                return;
-            case "toast":
-                callback.success(MediaActions.toast(activity, payload));
                 return;
             default:
                 callback.failure("未实现的动作：" + action);
@@ -194,15 +89,5 @@ final class WebAppActions {
     /** 把简介里的内联 base64 图片改写成落盘后的短 URL。 */
     static String inlineDataUrlsToFiles(Context context, String description) {
         return MediaActions.inlineDataUrlsToFiles(context, description);
-    }
-
-    /** 报名码：报名详情页展示、展商扫码核销共用同一份内容。 */
-    static String registrationCode(String exhibitionId, String recordId) {
-        return RegistrationActions.registrationCode(exhibitionId, recordId);
-    }
-
-    /** 展会结构：{@link ExhibitionActions} 输出给前端，测试也直接调用。 */
-    static Map<String, Object> exhibitionPayload(Activity activity, ExhibitorExhibition exhibition) {
-        return ExhibitionActions.exhibitionPayload(activity, exhibition);
     }
 }

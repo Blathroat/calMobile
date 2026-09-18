@@ -39,6 +39,9 @@ export async function profilePage(context) {
 
     // 通知偏好与个人配色并行拉取，任一失败都保留可用默认值。
     // 命中缓存就先出一屏（切页面因此不闪骨架屏），数据回来再按差异决定是否重绘。
+    //
+    // 注意 `granted`：后端只保存用户开关，系统通知权限只有设备知道，
+    // 因此按钮的显隐看 `state.capabilities.notifications`（bootstrap 时由 `ui.sync` 带回）。
     const warmNotify = profileApi.notifications.peek();
     const warmSettings = settingsApi.get.peek();
     const warmReady = warmNotify !== undefined || warmSettings !== undefined;
@@ -115,7 +118,9 @@ export async function profilePage(context) {
                     checked: notify.registrationUpdates,
                     onChange: (value) => savePreferences({ registrationUpdates: value }),
                 }),
-                notify.granted
+                // 系统通知权限只有设备知道：后端返回的 granted 只表示服务器侧开关可用，
+                // 真正的授权状态由原生在 bootstrap 时通过 ui.sync 带回。
+                notificationGranted()
                     ? null
                     : el('button', {
                         class: 'cta ghost',
@@ -417,11 +422,20 @@ export async function profilePage(context) {
         try {
             const granted = await call('notify.requestPermission');
             notify.granted = granted === true;
+            // 拿到结果后同步到设备能力，按钮的显隐以它为准（见 notificationGranted）。
+            state.capabilities.notifications = granted === true;
             toast(granted ? t('s_j5c9oy') : t('s_1ya7561'), granted ? 'success' : 'error');
             render();
         } catch (error) {
             toast(error.message, 'error');
         }
+    }
+
+    /** 设备是否已拿到系统通知权限；没有桥接（浏览器预览）时退回后端的值。 */
+    function notificationGranted() {
+        return typeof state.capabilities.notifications === 'boolean'
+            ? state.capabilities.notifications
+            : notify.granted;
     }
 
     // ── 编辑资料 ───────────────────────────────────────────────────

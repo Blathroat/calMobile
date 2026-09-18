@@ -263,7 +263,7 @@ export async function adminPage(context) {
             el('button', {
                 class: 'cta ghost',
                 type: 'button',
-                onclick: (event) => exportCsv(event.currentTarget),
+                onclick: (event) => exportCsv(event.currentTarget, items),
             }, [t('s_1ogoh03')]),
             el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: t('s_nsnwn6') }),
         ]);
@@ -322,10 +322,24 @@ export async function adminPage(context) {
         });
     }
 
-    async function exportCsv(button) {
+    async function exportCsv(button, items) {
         button.dataset.loading = 'true';
         try {
-            const result = await call('export.csv', { type: 'exhibitions' });
+            // 数据现在只在后端：导出把当前面板里的展会行交给原生，
+            // 原生负责拼 CSV、加 BOM 与弹系统保存框（这些是设备侧的事）。
+            const result = await call('export.csv', {
+                type: 'exhibitions',
+                rows: items.map((item) => ({
+                    id: item.id,
+                    title: item.title,
+                    venue: item.venue,
+                    date: item.date || item.dateLabel || '',
+                    time: item.time,
+                    status: item.modeLabel || item.status,
+                    category: item.category,
+                    description: item.description,
+                })),
+            });
             toast(`已导出 ${result.rows} 行到 ${result.fileName}`, 'success');
         } catch (error) {
             if (String(error.message).includes(t('s_1589w37'))) {

@@ -51,7 +51,8 @@ final class MediaActions {
                 new WebAppBridge.PendingResult("media.pick", callback));
     }
 
-    static String imageData(Context context, String uri) {
+    /** 读取图片的 data URL：头像裁剪等场景由前端直接拿到可显示的内联图。 */
+    private static String imageData(Context context, String uri) {
         if (uri == null || uri.isEmpty() || context == null) {
             return "";
         }
@@ -394,28 +395,34 @@ final class MediaActions {
         return "";
     }
 
-    static void shareText(Activity activity, Map<String, Object> payload) {        Intent share = new Intent(Intent.ACTION_SEND);
+    static void shareText(Activity activity, Map<String, Object> payload) {
+        Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("text/plain");
         share.putExtra(Intent.EXTRA_SUBJECT, WebAppBridge.text(payload, "title", ""));
         share.putExtra(Intent.EXTRA_TEXT, WebAppBridge.text(payload, "text", ""));
         activity.startActivity(Intent.createChooser(share, "分享展会"));
     }
 
+    /**
+     * 导出 CSV：数据行由前端传进来（它已经用后端的数据渲染过列表），
+     * 原生只拼 CSV 并弹系统「另存为」面板。
+     */
     static void exportCsv(WebAppBridge bridge, Map<String, Object> payload,
             WebAppBridge.ResultCallback callback) {
-        String type = WebAppBridge.text(payload, "type", "exhibitions");
-        String csv;
-        String fileName;
-        if ("registrations".equals(type)) {
-            csv = ExportManager.exportRegistrations(bridge.activity());
-            fileName = "calmobile-registrations.csv";
-        } else if ("users".equals(type)) {
-            csv = ExportManager.exportUsers(bridge.activity());
-            fileName = "calmobile-users.csv";
-        } else {
-            csv = ExportManager.exportExhibitions(bridge.activity());
-            fileName = "calmobile-exhibitions.csv";
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Object raw : WebAppBridge.list(payload, "rows")) {
+            if (raw instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> row = (Map<String, Object>) raw;
+                rows.add(row);
+            }
         }
+        String csv = ExportManager.exhibitionsCsv(rows);
+        if (csv == null) {
+            callback.failure("没有可导出的数据");
+            return;
+        }
+        String fileName = ExportManager.fileName("calmobile-exhibitions");
 
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -487,19 +494,5 @@ final class MediaActions {
     /** 选择图片：把结果交回前端做裁剪等后续处理。 */
     static void pickImage(WebAppBridge bridge, WebAppBridge.ResultCallback callback) {
         pickFile(bridge, "image/*", "选择图片", callback);
-    }
-
-    /** 选择视频：当前只做选择器占位，不做上传与转码。 */
-    static void pickVideo(WebAppBridge bridge, WebAppBridge.ResultCallback callback) {
-        pickFile(bridge, "video/*", "选择视频", callback);
-    }
-
-    /** 原生 Toast：少数不便于走 Web 提示的场景使用。 */
-    static boolean toast(Activity activity, Map<String, Object> payload) {
-        String message = WebAppBridge.text(payload, "message", "");
-        if (message != null && !message.isEmpty()) {
-            android.widget.Toast.makeText(activity, message, android.widget.Toast.LENGTH_SHORT).show();
-        }
-        return true;
     }
 }

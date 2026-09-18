@@ -205,6 +205,9 @@ export function boot() {
         const api = await import('./api.js');
         mark('api-loaded');
         applyBootstrap(await api.bootstrap());
+        // 设备侧镜像（系统栏配色、媒体上限、通知权限）要在首帧前就位，
+        // 否则个人页会因为「不知道有没有通知权限」而少画一个按钮。
+        await syncDevice();
         mark('bootstrap-done');
         return state;
     })();
@@ -229,6 +232,7 @@ export function applyBootstrap(data) {
     Object.assign(state.calendar, data.calendar || {});
     state.categories = Array.isArray(data.categories) ? data.categories : [];
     applyTheme();
+    syncDevice();
 }
 
 /** 服务器设置保存后同步一次，界面无需重新 bootstrap。 */
@@ -248,6 +252,40 @@ export function applySettings(settings) {
         state.categories = settings.categories;
     }
     applyTheme();
+    syncDevice();
+}
+
+/**
+ * 把「只有设备侧才用得上」的那部分状态镜像给原生。
+ *
+ * 服务器设置与个人偏好现在由**后端**持有（`app_settings` / `users.ui_mode`），
+ * 但状态栏配色、图片压缩与格式上限这些只能在设备上生效，原生因此保留一份只读镜像：
+ * `AppSettings` 从「数据的权威来源」降级成「设备外观与媒体限制的镜像」。
+ *
+ * 返回值里带回了**系统通知权限**——那是设备事实，后端无从得知，页面据此决定
+ * 要不要显示「开启通知」按钮。
+ *
+ * bootstrap 会 await 它（首帧之前就要有正确的权限状态），设置保存与外观切换则
+ * 调用后不管（fire-and-forget）。
+ */
+function syncDevice() {
+    if (!hasNative()) {
+        return Promise.resolve(null);
+    }
+    return call('ui.sync', {
+        mode: state.ui.mode,
+        themeIndex: state.theme.index,
+        media: state.media,
+        upload: state.server,
+    }).then((result) => {
+        if (result && typeof result.notificationsGranted === 'boolean') {
+            state.capabilities.notifications = result.notificationsGranted;
+        }
+        return result;
+    }).catch(() => {
+        // 镜像同步失败只影响原生外观与压缩上限，页面继续用后端下发的值。
+        return null;
+    });
 }
 
 /**
@@ -272,6 +310,7 @@ export function applyMode(mode) {
     }
     // 浅底/描边由页面底色混出，底色变了要重新算一遍强调色衍生值。
     applyTheme();
+    syncDevice();
     return next;
 }
 
@@ -340,13 +379,6 @@ if (hasWindow && typeof window.matchMedia === 'function') {
     } else if (typeof query.addListener === 'function') {
         query.addListener(onChange);
     }
-}
-
-/** 刷新用户态，用于登录、注册、退出后同步导航与权限。 */
-export async function refreshUser() {
-    const user = await call('profile.get');
-    Object.assign(state.user, user || {});
-    return state.user;
 }
 
 export function reportError(error) {

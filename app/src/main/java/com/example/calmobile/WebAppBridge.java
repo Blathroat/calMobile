@@ -180,6 +180,16 @@ public class WebAppBridge {
         return new java.util.ArrayList<>();
     }
 
+    /** 取一个嵌套对象（例如 ui.sync 里的 media / upload），不是对象时给空表。 */
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> map(Map<String, Object> payload, String key) {
+        Object value = payload == null ? null : payload.get(key);
+        if (value instanceof Map) {
+            return (Map<String, Object>) value;
+        }
+        return new java.util.LinkedHashMap<>();
+    }
+
     // ── 系统界面结果回调 ───────────────────────────────────────
 
     Activity activity() {

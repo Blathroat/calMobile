@@ -3,9 +3,13 @@
  *
  * 校验四件事：
  * 1. assets/web 下的页面与脚本能作为 ES 模块解析（语法与导入路径）；
- * 2. 前端调用的动作名都在 WebAppActions 中实现；
- * 3. 页面文件与设计的屏幕编号一一对应，避免新增页面后漏登记路由；
- * 4. 页面只通过 `core/api.js` 取数据，不绕过它直接调用桥接的数据类动作。
+ * 2. 数据动作：`js/core/api.js` 的 `ENDPOINTS` 就是前端数据动作的全集，
+ *    每一项都要能解析出 `method` + `path`，且 path 以 `/` 开头
+ *    （后端是否真有这条路由由 server/test/api.test.js 的交叉校验负责）；
+ * 3. 系统动作：前端 `call('…')` 用到的动作必须在 `WebAppActions` 的 switch 里有 case，
+ *    并且属于 10 个系统能力白名单；白名单之外的原生动作（例如又加回数据实现）报错；
+ *    `WebAppActions` 里有、前端却从来不 `call` 的动作（死动作）同样报错；
+ * 4. 页面文件与设计的屏幕编号一一对应，且页面只通过 `core/api.js` 取数据。
  *
  * 用法：node scripts/webui-check.js
  */
@@ -21,23 +25,22 @@ const appFile = path.join(webRoot, 'js', 'app.js');
 const apiFile = path.join(webRoot, 'js', 'core', 'api.js');
 
 /**
- * 数据类动作：只允许 core/api.js 调用，页面必须走 api 的方法。
- * 系统能力（摄像头、日历、分享、媒体、导出）仍可直接调用。
+ * 原生保留的系统能力白名单。
+ *
+ * 数据（展会 / 报名 / 用户 / 设置 / 认证）全部由 `server/` 提供，前端经 `core/api.js`
+ * 走 HTTP；原生只剩「只有设备能做」的这 10 个动作，多一个都算把数据实现加回了原生。
  */
-const DATA_ACTIONS = [
-    'bootstrap',
-    'auth.login', 'auth.register', 'auth.guest', 'auth.logout',
-    'profile.get', 'profile.save', 'profile.password',
-    'notify.preferences', 'notify.savePreferences',
-    'exhibitions.list', 'exhibitions.month', 'exhibitions.get', 'exhibitions.save',
-    'exhibitions.delete', 'exhibitions.status', 'exhibitions.categories',
-    'exhibitions.fields', 'exhibitions.saveFields',
-    'registrations.list', 'registrations.get', 'registrations.submit', 'registrations.cancel',
-    'review.list', 'review.get', 'review.updateStatus',
-    'checkin.scan',
-    'users.list', 'users.get', 'users.status', 'users.public',
-    'search.query',
-    'settings.get', 'settings.save', 'settings.uiMode',
+const SYSTEM_ACTIONS = [
+    'ui.sync',
+    'camera.ensurePermission',
+    'calendar.status',
+    'calendar.toggle',
+    'notify.requestPermission',
+    'media.pickImage',
+    'media.import',
+    'media.store',
+    'share.text',
+    'export.csv',
 ];
 
 /** 设计稿中的 17 屏与页面模块的对应关系（管理-展会、管理-设置已内联，共 15 个模块）。 */
@@ -91,6 +94,11 @@ function walk(directory, extension) {
     return result;
 }
 
+/** 前端模块：vendor 下是第三方 UMD 包，不参与动作名的静态扫描。 */
+function frontendModules() {
+    return walk(webRoot, '.js').filter((file) => !file.includes(`${path.sep}vendor${path.sep}`));
+}
+
 function checkFileLayout() {
     const pagesDir = path.join(webRoot, 'js', 'pages');
     for (const [file, label] of EXPECTED_PAGES) {
@@ -113,19 +121,81 @@ function checkFileLayout() {
     return walk(webRoot, '.js').length + 1;
 }
 
-function collectCalledActions() {
-    const actions = new Set();
-    for (const file of walk(webRoot, '.js')) {
-        const source = fs.readFileSync(file, 'utf8');
-        // 数据类动作写在 core/api.js 里：可缓存的是 reader('动作名', ...)，
-        // 写操作是 request('动作名', ...)；系统能力仍由页面直接 call('动作名', ...)。
-        const pattern = /\b(?:call|request|reader)\(\s*'([a-zA-Z.]+)'/g;
-        let match;
-        while ((match = pattern.exec(source)) !== null) {
-            actions.add(match[1]);
+/** 取出 `const ENDPOINTS = { … }` 的对象字面量正文（按大括号配平）。 */
+function endpointBlock(source) {
+    const start = source.indexOf('const ENDPOINTS = {');
+    if (start < 0) {
+        return '';
+    }
+    const open = source.indexOf('{', start);
+    let depth = 0;
+    for (let index = open; index < source.length; index += 1) {
+        const char = source[index];
+        if (char === '{') {
+            depth += 1;
+        } else if (char === '}') {
+            depth -= 1;
+            if (depth === 0) {
+                return source.slice(open + 1, index);
+            }
         }
     }
-    return actions;
+    return '';
+}
+
+/**
+ * 解析 `core/api.js` 的 ENDPOINTS。
+ *
+ * 返回 Map：动作名 → `[{ method, path }]`（一个动作可能按条件映射到多个端点，
+ * 例如 `exhibitions.save` 的 POST / PUT）。动作名的键集合就是前端数据动作的全集。
+ */
+function collectEndpoints(source = fs.readFileSync(apiFile, 'utf8')) {
+    const body = endpointBlock(source);
+    const endpoints = new Map();
+    if (!body) {
+        return endpoints;
+    }
+    // 每一项都在对象里缩进四个空格，形如 `bootstrap: () => ({ … }),`
+    const entryPattern = /(?:^|\n)[ \t]{4}(?:'([a-zA-Z.]+)'|([a-zA-Z.]+)):[ \t]*/g;
+    const entries = [];
+    let match;
+    while ((match = entryPattern.exec(body)) !== null) {
+        entries.push({ action: match[1] || match[2], at: match.index, length: match[0].length });
+    }
+    entries.forEach((entry, index) => {
+        const from = entry.at + entry.length;
+        const to = index + 1 < entries.length ? entries[index + 1].at : body.length;
+        const slice = body.slice(from, to);
+        const methods = [...slice.matchAll(/method:[ \t]*'([A-Z]+)'/g)].map((item) => item[1]);
+        const paths = [...slice.matchAll(/path:[ \t]*(?:`([^`]*)`|'([^']*)')/g)]
+            .map((item) => item[1] ?? item[2] ?? '');
+        endpoints.set(entry.action, methods.map((method, position) => ({
+            method,
+            path: paths[position] ?? '',
+        })));
+    });
+    return endpoints;
+}
+
+/**
+ * 前端直接调用原生桥接的地方：动作名 → 调用它的文件集合。
+ * `core/api.js` 里的 `call(action, payload)` 传的是变量，匹配不到字面量，因此不会混进来。
+ */
+function collectCallSites() {
+    const sites = new Map();
+    for (const file of frontendModules()) {
+        const source = fs.readFileSync(file, 'utf8');
+        const pattern = /\bcall\(\s*'([a-zA-Z.]+)'/g;
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+            const action = match[1];
+            if (!sites.has(action)) {
+                sites.set(action, new Set());
+            }
+            sites.get(action).add(path.relative(root, file));
+        }
+    }
+    return sites;
 }
 
 function collectImplementedActions() {
@@ -139,35 +209,77 @@ function collectImplementedActions() {
     return actions;
 }
 
-function checkActions() {
-    const called = collectCalledActions();
-    const implemented = collectImplementedActions();
-    if (implemented.size === 0) {
-        fail('未能从 WebAppActions.java 解析出任何动作，请检查文件结构');
-        return 0;
+function isPage(file) {
+    return file.includes(`${path.sep}pages${path.sep}`);
+}
+
+/**
+ * 数据动作：ENDPOINTS 的键集合就是全集，每一项都要能翻出 method + path，
+ * 且 path 以 `/` 开头（拼在 `BASE_URL` 后面）。
+ */
+function checkDataActions(endpoints) {
+    if (endpoints.size === 0) {
+        fail('未能从 core/api.js 的 ENDPOINTS 解析出任何数据动作，请检查文件结构');
+        return;
     }
-    for (const action of called) {
-        if (!implemented.has(action)) {
-            fail(`前端调用了未实现的动作 ${action}`);
+    for (const [action, routes] of endpoints) {
+        if (routes.length === 0) {
+            fail(`数据动作 ${action} 没有解析出 method + path`);
+            continue;
+        }
+        for (const route of routes) {
+            if (!route.method || !route.path) {
+                fail(`数据动作 ${action} 没有解析出 method + path`);
+            } else if (!route.path.startsWith('/')) {
+                fail(`数据动作 ${action} 的 path 必须以 / 开头：${route.path}`);
+            }
         }
     }
-    return called.size;
+}
+
+/**
+ * 系统动作：前端 `call('…')` 用到的动作必须在白名单里，且在 `WebAppActions` 有 case。
+ * 白名单之外的动作说明有人又往原生加了数据实现。
+ */
+function checkSystemActions(endpoints, callSites, implemented) {
+    for (const [action, files] of callSites) {
+        const where = [...files].join('、');
+        // 页面绕过 api.js 直接调数据动作：由 checkApiBoundary 报更准确的原因。
+        const bypass = endpoints.has(action) && [...files].every(isPage);
+        if (bypass) {
+            continue;
+        }
+        if (!SYSTEM_ACTIONS.includes(action)) {
+            fail(`${where} 调用了白名单之外的原生动作 ${action}；数据动作只能走 core/api.js 的 ENDPOINTS`);
+            continue;
+        }
+        if (!implemented.has(action)) {
+            fail(`${where} 调用了未实现的动作 ${action}`);
+        }
+    }
+}
+
+/** 死动作：`WebAppActions` 里有、前端却从来不 `call` 的动作。 */
+function checkDeadActions(callSites, implemented) {
+    const dead = [...implemented].filter((action) => !callSites.has(action)).sort();
+    if (dead.length > 0) {
+        fail(`WebAppActions 里存在前端从来不调用的动作，请删除：${dead.join(', ')}`);
+    }
 }
 
 /**
  * 页面不得绕过 core/api.js 直接调用数据类动作。
- * 这样前后端分离时只要替换 api.js 的实现，页面就不需要改动。
+ * 数据动作的全集就是 ENDPOINTS 的键，这样后端加接口时不用改本文件。
  */
-function checkApiBoundary() {
+function checkApiBoundary(endpoints) {
     const pagesDir = path.join(webRoot, 'js', 'pages');
-    const allowed = new Set(DATA_ACTIONS);
     let violations = 0;
     for (const file of walk(pagesDir, '.js')) {
         const source = fs.readFileSync(file, 'utf8');
         const pattern = /\bcall\(\s*'([a-zA-Z.]+)'/g;
         let match;
         while ((match = pattern.exec(source)) !== null) {
-            if (allowed.has(match[1])) {
+            if (endpoints.has(match[1])) {
                 fail(`${path.relative(root, file)} 直接调用了数据类动作 ${match[1]}，请改走 core/api.js`);
                 violations += 1;
             }
@@ -197,8 +309,18 @@ async function checkModules() {
 
 async function main() {
     const fileCount = checkFileLayout();
-    const actionCount = checkActions();
-    checkApiBoundary();
+    const endpoints = collectEndpoints();
+    const callSites = collectCallSites();
+    const implemented = collectImplementedActions();
+
+    checkDataActions(endpoints);
+    if (implemented.size === 0) {
+        fail('未能从 WebAppActions.java 解析出任何动作，请检查文件结构');
+    } else {
+        checkSystemActions(endpoints, callSites, implemented);
+        checkDeadActions(callSites, implemented);
+    }
+    checkApiBoundary(endpoints);
     const moduleCount = await checkModules();
 
     if (failures.length > 0) {
@@ -206,7 +328,9 @@ async function main() {
         process.exitCode = 1;
         return;
     }
-    console.log(`PASS webui-check: ${fileCount} 个前端文件、${moduleCount} 个模块与 ${actionCount} 个桥接动作校验通过；页面均通过 core/api.js 取数据`);
+    console.log(`PASS webui-check: ${fileCount} 个前端文件、${moduleCount} 个 ES 模块解析通过；`
+        + `core/api.js 的 ${endpoints.size} 个数据动作都有 method + path；`
+        + `原生 ${implemented.size} 个系统动作都有调用且都在白名单内；页面均通过 core/api.js 取数据`);
 }
 
 if (require.main === module) {
@@ -215,7 +339,8 @@ if (require.main === module) {
 
 module.exports = {
     EXPECTED_PAGES,
-    DATA_ACTIONS,
-    collectCalledActions,
+    SYSTEM_ACTIONS,
+    collectEndpoints,
+    collectCallSites,
     collectImplementedActions,
 };

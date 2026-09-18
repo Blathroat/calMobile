@@ -8,22 +8,16 @@
  *
  * ## 传输层
  *
- * 数据请求走 `server/` 的 Express + PostgreSQL 后端（`npm run dev`，默认 3000 端口），
- * 连不上时退回原生桥接，因此应用在没有后端时仍能完整演示：
- *
- * - **后端可用**：`callRemote` 按 `ENDPOINTS` 把动作翻成 REST 请求；
- * - **后端不可用**：退回 `call(action, payload)`，走 `WebAppActions` 的本机实现。
- *
- * 页面只认动作名，HTTP 形状只存在于本文件，因此换后端不用动页面。
+ * 数据只有一个来源：`server/` 的 Express + PostgreSQL 后端（`npm run dev`，默认 3000）。
+ * 页面只认动作名，HTTP 形状由下面的 `ENDPOINTS` 表翻译，因此后端换实现不影响页面；
+ * 后端连不上就直接抛错由页面提示——没有第二个数据源可以退回。
  *
  * ## 约定
  *
- * - 后端返回的字段与状态文案与桥接层完全一致，页面按同一套字段渲染；
+ * - 后端返回的字段与状态文案与页面一一对应；
  * - 失败统一抛出 `Error`，由页面就地展示；
  * - 只放「数据」相关的方法；摄像头、日历、分享这类系统能力仍走 `bridge.js`。
  */
-
-import { call } from './bridge.js';
 
 /**
  * 后端基地址。
@@ -37,50 +31,12 @@ import { call } from './bridge.js';
  */
 const BASE_URL = 'http://127.0.0.1:3000/api/v1';
 
-/** 探测超时：超过这个时间就认为后端不可用，避免启动被拖住。 */
-const PROBE_TIMEOUT = 1200;
-
-/** 单次请求超时：挂起的请求不能把启动流程一起卡死。 */
+/** 单次请求超时：挂起的请求不能把页面一起卡死。 */
 const REQUEST_TIMEOUT = 3000;
 
-/** 'unknown' | 'remote' | 'native' */
-let mode = 'unknown';
 let currentToken = '';
 /** 刷新令牌：访问令牌过期时用它换一套新的，见 callRemote。 */
 let refreshToken = '';
-
-/**
- * 显式探一次后端。
- *
- * 取数路径**不用**它（那样会多一次往返，超时还要连试几轮）；它只服务于
- * “设置里显示当前连的是哪个后端”这类需要明确答案的场景。
- */
-export async function probe(force = false) {
-    if (mode !== 'unknown' && !force) {
-        return mode;
-    }
-    if (typeof fetch !== 'function') {
-        mode = 'native';
-        return mode;
-    }
-    try {
-        const controller = typeof AbortController === 'function' ? new AbortController() : null;
-        const timer = controller ? setTimeout(() => controller.abort(), PROBE_TIMEOUT) : null;
-        const response = await fetch(`${BASE_URL}/ping`, { signal: controller?.signal });
-        if (timer) {
-            clearTimeout(timer);
-        }
-        mode = response.ok ? 'remote' : 'native';
-    } catch (ignored) {
-        mode = 'native';
-    }
-    return mode;
-}
-
-/** 当前传输方式，供设置页或调试显示。 */
-export function transport() {
-    return mode;
-}
 
 /** 退出登录等场景清掉本地令牌。 */
 export function setToken(token) {
@@ -96,7 +52,7 @@ export function hasRefreshToken() {
     return Boolean(refreshToken);
 }
 
-/** 传输层错误：只有这类错误才值得退回原生桥接。 */
+/** 传输层错误：连不上后端、超时、响应不是 JSON 这类问题。 */
 class TransportError extends Error {
     constructor(message) {
         super(message);
@@ -179,8 +135,8 @@ function queryString(query) {
  * 状态码的用法（与 server/README.md 的「响应约定」一致）：
  * - 2xx：正常。写接口的 `{ ok:false, error }` 也走这条路，抛成业务错误由页面就地提示；
  * - 401：访问令牌过期 → 用刷新令牌换一次再重试；换不到就当业务错误抛出；
- * - 403 / 404 等 4xx：业务错误，**不退回原生**（退回只会把同一个操作在另一套实现上重放）；
- * - 5xx / 连不上 / 超时：传输层问题，可以退回原生桥接（离线演示）。
+ * - 403 / 404 等 4xx：业务错误，抛出后由页面提示；
+ * - 5xx / 连不上 / 超时：传输层失败，抛 `TransportError` 并带上排查提示（数据只在后端，没有第二个数据源）。
  */
 async function callRemote(action, payload) {
     const spec = ENDPOINTS[action];
@@ -217,7 +173,12 @@ async function callRemote(action, payload) {
     return data;
 }
 
-/** 底层 fetch：网络异常与超时统一转成 TransportError。 */
+/**
+ * 底层 fetch：连不上、超时、被中断都转成带排查提示的 TransportError。
+ *
+ * 数据只在后端，连不上时页面能做的只有把原因说清楚，所以这里把「后端没起」
+ * 和「端口没转发」这两个最常见的原因直接写进错误文案。
+ */
 async function httpFetch(url, method, body) {
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT) : null;
@@ -232,7 +193,10 @@ async function httpFetch(url, method, body) {
             signal: controller?.signal,
         });
     } catch (error) {
-        throw new TransportError(error.message);
+        throw new TransportError(
+            `连不上后端服务（${BASE_URL}）：${error.message}。`
+            + '请确认 server/ 已启动（npm run dev），真机/模拟器还需要 adb reverse tcp:3000 tcp:3000。',
+        );
     } finally {
         if (timer) {
             clearTimeout(timer);
@@ -374,10 +338,10 @@ export function clearCache() {
  * 统一的取数方法。
  *
  * 传输层**不做单独的连通性预探测**：那会平白多一次往返，超时时还会连试几轮
- * （实测 `bootstrap-done` 因此达到 5.6s）。这里直接发真实请求，失败再退回原生，
- * 第一次成功的那条路会被记住，后续请求不再摇摆。
+ * （实测 `bootstrap-done` 因此达到 5.6s）。这里直接发真实请求，连不上就把
+ * 明确的错误抛给页面（数据只在后端，没有第二个数据源可以退回）。
  *
- * 业务失败（`ok: false`）原样抛给页面，不降级、不重试。
+ * 业务失败（`ok: false`）同样原样抛给页面，不重试。
  *
  * 只读接口在请求期间会去重：预加载与页面取数撞到同一个键时只发一次。
  */
@@ -395,7 +359,7 @@ async function request(action, payload = {}) {
         }
     }
 
-    const task = send(action, payload).then(
+    const task = callRemote(action, payload).then(
         (value) => {
             if (cacheable && value !== undefined) {
                 cache.set(key, { at: Date.now(), value });
@@ -416,27 +380,6 @@ async function request(action, payload = {}) {
         task.then(done, done);
     }
     return task;
-}
-
-/** 实际发请求：先远端，传输层失败再退回原生桥接。 */
-async function send(action, payload) {
-    let value;
-    if (mode !== 'native' && typeof fetch === 'function') {
-        try {
-            value = await callRemote(action, payload);
-            mode = 'remote';
-        } catch (error) {
-            if (!(error instanceof TransportError)) {
-                throw error;
-            }
-            console.warn(`[api] ${action} 远端不可用，退回原生桥接：${error.message}`);
-            mode = 'native';
-        }
-    }
-    if (value === undefined) {
-        value = await call(action, payload);
-    }
-    return value;
 }
 
 /**

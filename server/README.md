@@ -9,7 +9,7 @@
 | `src/domain/` | 业务层：状态词汇、SQL 片段、响应映射、权限、校验、设置、会话 |
 | `src/config/` | 连接池、迁移与示例数据、JWT 配置 |
 | `src/middleware/auth.js` | JWT 认证中间件 |
-| `src/demo-server.js` + `src/demo-api.js` + `src/demo-data.js` | 旧的零依赖内存后端，已被上面这套取代；保留作为「不装数据库也能跑通前端」的备用演示（`npm run demo`，端口 4000） |
+| `src/routes/status.js` + `src/status-page.js` | 健康状态页：JSON 报告 + 单文件中文 HTML |
 
 ## 快速开始
 
@@ -34,14 +34,19 @@ npm run dev                   # nodemon，默认 http://127.0.0.1:3000
 
 示例账号：`demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`。
 
-### 数据库：Docker 为主，WSL 为备选
+起好之后浏览器打开 **http://127.0.0.1:3000/status** 就是后端与数据库的状态页：徽章一眼看出「正常 / 异常」，下面按卡片列出服务信息、数据库（连通、延迟、版本、连接池）、迁移、各表数据量、自检项与接口清单，默认每 5 秒自动刷新一次。**后端在数据库不可用时也照常启动**（日志里给警告，不再直接退出），因此库挂了页面照样打得开，并把失败原因与修复命令写在页面上。探活脚本读同一份数据的 JSON 版：`GET /api/v1/status`（正常 200，异常 503）。
 
-| 方式 | 命令 | 说明 |
-| --- | --- | --- |
-| Docker（默认） | `pwsh -File scripts\db.ps1 start` | 容器 `calmobile-pg`，数据在命名卷 `calmobile-pgdata` 里，`--restart unless-stopped` 开机自起；`postgres:16-alpine` 固定版本 |
-| WSL | `pwsh -File scripts\db.ps1 start -Provider wsl` | 发行版里 `apt install postgresql` 装的那份；没有 Docker 时用 |
+### 数据库：Docker
 
-两条路都监听 `127.0.0.1:5432`，所以 `server/.env` 不用改，**同一时间只跑一个**（换路之前先 `db.ps1 stop`）。`status` / `stop` / `psql` 同样支持 `-Provider`。
+```bash
+pwsh -File scripts\db.ps1 start      # 容器 calmobile-pg，数据在命名卷 calmobile-pgdata
+pwsh -File scripts\db.ps1 status     # 容器与连接状态
+pwsh -File scripts\db.ps1 stop       # 停容器（数据保留）
+pwsh -File scripts\db.ps1 reset      # 删容器与卷，从零重来
+pwsh -File scripts\db.ps1 psql       # 直接进 psql
+```
+
+容器固定 `postgres:16-alpine`、`--restart unless-stopped`，监听 `127.0.0.1:5432`，所以 `server/.env` 不用改。
 
 **容器必须设时区**：镜像默认 UTC，而数据库的 `CURRENT_DATE` 决定报名窗口与日历落点。不设 `TZ`/`-c timezone=` 的话，本机 00:00–08:00 这段时间里数据库的「今天」还停在昨天，演示会出现莫名差一天。脚本里已经带上了 `Asia/Shanghai`。
 
@@ -141,6 +146,21 @@ adb reverse tcp:3000 tcp:3000
 | `PUT /settings` | `settings.save` | 管理员。扁平字段补丁，只改出现过的项 |
 | `PUT /settings/ui-mode` | `settings.uiMode` | 可匿名。只接受 `auto / light / dark` |
 
+### 服务状态（无前端动作）
+
+| 方法与路径 | 动作 | 权限与说明 |
+| --- | --- | --- |
+| `GET /api/v1/status` | — | 可匿名。JSON 健康报告：`ok` / `service` / `database` / `migrations` / `data` / `endpoints` / `checks`。服务活着**且**数据库答得上时 200，否则 503 + `ok:false`，探活脚本按状态码判断 |
+| `GET /status` | — | 可匿名。同一份报告的中文状态页（单文件 HTML，样式与脚本内联，不用构建、不引 CDN）；数据库挂掉时仍返回 200 并把失败原因显示出来 |
+
+两个路径由同一个路由器提供（`src/routes/status.js` + `src/status-page.js`），因此页面与 JSON 永远不会说两套话。几条约定：
+
+- **`ok` 只表达「服务活着 + 数据库答得上」**，迁移没跑完、自检项失败都只体现在 `checks` 与 `migrations` 里，不混进状态码 —— 否则探活脚本分不清「数据库没了」和「只是有一步迁移没跑」。
+- **每一项都是真测出来的**：`database.latencyMs` 是 `select version()` + `select 1` 的往返时间，`data` 是逐表 `count(*)`，`checks` 里失败的那条一定指得到出处；数据库连不上时 `data` 是 `null`（不是 0）、迁移按「全部未应用」处理、并带上错误原文，绝不抛 500。
+- **`endpoints` 就是真实路由表**：它遍历 `src/index.js` 导出的 `routes`（与 `test/api.test.js` 的 `backendRoutes()` 同一套走法），新增路由不会漏登记。这两个状态接口本身不进 `routes` 动作表 —— 那张表是「前端动作 ↔ 后端路由」的对照，它们没有对应的前端动作。
+- 两个路径都带 `Cache-Control: no-store`，不会拿到缓存的旧结果。
+- 服务**先起、数据库后挂**与**数据库先挂、服务后起**都能看到状态页：`start()` 在连不上库时只记一条警告，不再让进程退出。
+
 ## 业务规则（服务端兜住的部分）
 
 这些规则以前只在页面里，改接口就能绕过；现在服务端也校验一遍：
@@ -157,11 +177,11 @@ adb reverse tcp:3000 tcp:3000
 
 ## 数据模型
 
-- **状态存英文代码**（`pending/approved/rejected/cancelled/attended`、`review/optional/display/closed/ended`、`active/limited/banned`），中文标签只在 `src/domain/labels.js` 映射一次 —— 那里是与前端 `core/status.js`、原生 `RegistrationReviewStore` 约定的同一批字符串，改动要三处同时改。
+- **状态存英文代码**（`pending/approved/rejected/cancelled/attended`、`review/optional/display/closed/ended`、`active/limited/banned`），中文标签只在 `src/domain/labels.js` 映射一次 —— 那里是与前端 `core/status.js` 约定的同一批字符串，改动要两处同时改。
 - **展会日期只存 `exhibition_date`**，年 / 月 / 日由 SQL 派生（`src/domain/queries.js` 的 `EXHIBITION_COLUMNS`），不会出现三者互相漂移；日期一律用 `to_char` 取成字符串，避免时区把日期挪一天。
 - **报名记录不冗余展会标题 / 时间 / 地点**，读取时 JOIN 展会表，展会改期后不会两边不一致。
 - 迁移按编号记录在 `schema_migrations`，只跑没跑过的步骤；新增字段请追加新步骤，不要改已发布的那一步。
-- 表：`users`、`exhibitions`、`exhibition_fields`、`registrations`、`app_settings`、`notification_preferences`、`refresh_tokens`、`notifications`。
+- 表：`users`、`exhibitions`、`exhibition_fields`、`registrations`、`app_settings`、`notification_preferences`、`refresh_tokens`、`notifications`、`schema_migrations`。
 
 ## 环境变量
 
@@ -175,7 +195,6 @@ adb reverse tcp:3000 tcp:3000
 | `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | 令牌有效期 | `15m` / `7d` |
 | `CORS_ORIGIN` | 允许的来源 | WebView 场景用 `*` |
 | `LOG_LEVEL` | `quiet` 可关掉请求日志 | `info` |
-| `DEMO_PORT` | 旧的零依赖演示后端端口 | `4000` |
 
 真实 `.env` 不得提交；`.env.example` 里放占位值。
 
@@ -187,11 +206,13 @@ npm test                  # jest：不依赖数据库的纯函数单测
 npm run lint
 ```
 
-`test/api.test.js` 会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
+`test/api.test.js`（39 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
 
 - 页面真正用到的字段都在（展会 25 个字段、报名、审核统计、启动数据的 12 个配置块）；
 - 权限确实拦得住（访客 / 普通用户 / 展商越权访问）；
-- 业务规则确实生效（报名窗口、重复报名、自动通过、核销状态流转、隐私开关）。
+- 业务规则确实生效（报名窗口、重复报名、自动通过、核销状态流转、隐私开关）；
+- **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
+- 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、带上错误原文，不抛 500）。
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 
@@ -200,4 +221,4 @@ npm run lint
 - 更换两个 JWT 密钥、限制 `CORS_ORIGIN`、启用 TLS，并去掉客户端侧的明文放行（`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`）；
 - 上传的媒体目前仍在客户端私有目录（`files/media`），需要补对象存储与上传接口；
 - 通知只有数据库落点，还没有推送通道；
-- 系统日历、分享、摄像头属于设备能力，永远留在客户端（`calendar.status` / `calendar.toggle` 等动作不进 API）。
+- 系统日历、分享、摄像头属于设备能力，永远留在客户端（`ui.sync`、`calendar.status` / `calendar.toggle` 等 10 个动作不进 API）。

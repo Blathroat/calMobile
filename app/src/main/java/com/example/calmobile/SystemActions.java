@@ -2,131 +2,56 @@ package com.example.calmobile;
 
 import android.Manifest;
 import android.app.Activity;
-import android.content.Context;
-import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.net.Uri;
 import android.os.Build;
-import android.util.Base64;
-import android.util.Log;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
- * 服务器设置与外观模式、系统日历、通知权限。
- * <p>
- * 由 {@link WebAppActions} 分发调用；方法体与拆分前一致，仅调整了所在类与可见性。
+ * 系统能力：系统日历、通知权限、摄像头权限，以及设备侧外观镜像。
+ *
+ * 数据类动作（展会、报名、用户、设置…）已经全部由后端提供，这里只剩**只有设备能做**的事：
+ * 写系统日历、申请运行时权限、把后端下发的配色与媒体上限镜像到 {@link AppSettings}
+ * （状态栏颜色与图片压缩只能在设备上生效）。
  */
 final class SystemActions {
 
     private SystemActions() {
     }
 
-    static Map<String, Object> settings(Activity activity) {
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("theme", SessionActions.themePayload(activity));
-        data.put("ui", SessionActions.uiPayload(activity));
-        data.put("announcement", SessionActions.announcement(activity));
-        data.put("brand", SessionActions.brand(activity));
-        data.put("categories", AppSettings.getCategories(activity));
-        data.put("review", SessionActions.reviewPolicy(activity));
-        data.put("media", SessionActions.mediaLimits(activity));
-        data.put("upload", SessionActions.serverSettings(activity));
-        data.put("limits", SessionActions.textLimits(activity));
-        data.put("notify", ProfileActions.notificationPreferences(activity));
-        return data;
-    }
+    /**
+     * `ui.sync`：把后端下发的配色、外观模式与媒体上限同步到设备侧。
+     *
+     * 前端在 bootstrap、设置保存、外观切换三处调用（见 `js/core/bridge.js` 的 `syncDevice`）。
+     * 同步后立刻刷新系统栏颜色，避免出现「网页已经变深色、状态栏还是浅色」。
+     */
+    static Map<String, Object> syncDeviceMirror(Activity activity, Map<String, Object> payload) {
+        String mode = AppSettings.normalizeMode(WebAppBridge.text(payload, "mode", AppSettings.MODE_AUTO));
+        AppSettings.setUiMode(activity, mode);
+        AppSettings.setThemeIndex(activity, WebAppBridge.number(payload, "themeIndex", 0));
 
-    static Map<String, Object> saveSettings(Activity activity, Map<String, Object> payload) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        // 服务器设置与应用配色都只允许管理员修改，避免绕过页面直接调用桥接。
-        if (!AuthManager.getInstance().isAdmin()) {
-            result.put("ok", false);
-            result.put("error", "只有管理员可以修改服务器设置");
-            result.put("settings", settings(activity));
-            return result;
-        }
-        if (payload.containsKey("themeIndex")) {
-            AppSettings.setThemeIndex(activity, WebAppBridge.number(payload, "themeIndex", 0));
-        }
-        if (payload.containsKey("announcement") || payload.containsKey("announcementEnabled")) {
-            AppSettings.saveAnnouncement(activity, WebAppBridge.text(payload, "announcement", ""),
-                    WebAppBridge.flag(payload, "announcementEnabled", false));
-        }
-        if (payload.containsKey("appTitleZh") || payload.containsKey("appTitleEn")) {
-            AppSettings.saveAppTitle(activity, WebAppBridge.text(payload, "appTitleZh", ""),
-                    WebAppBridge.text(payload, "appTitleEn", ""));
-        }
-
-        List<Object> rawCategories = WebAppBridge.list(payload, "categories");
-        if (!rawCategories.isEmpty()) {
-            List<String> categories = new ArrayList<>();
-            for (Object raw : rawCategories) {
-                String value = String.valueOf(raw).trim();
-                if (!value.isEmpty()) {
-                    categories.add(value);
-                }
-            }
-            if (!categories.isEmpty()) {
-                AppSettings.saveCategories(activity, categories);
-            }
-        }
-        if (payload.containsKey("canRevise")) {
-            AppSettings.setCanReviseReviewedRegistration(activity,
-                    WebAppBridge.flag(payload, "canRevise", false));
-        }
-        // 只写入本次真正提交的字段：个人页保存配色时不会顺带把服务器设置改回默认值。
-        if (payload.containsKey("imageCount") || payload.containsKey("imageSizeMb")
-                || payload.containsKey("videoCount")) {
+        Map<String, Object> media = WebAppBridge.map(payload, "media");
+        if (!media.isEmpty()) {
             AppSettings.saveMediaLimits(activity,
-                    WebAppBridge.number(payload, "imageCount", AppSettings.getMediaImageLimit(activity)),
-                    WebAppBridge.number(payload, "imageSizeMb", AppSettings.getMediaImageSizeMb(activity)),
-                    WebAppBridge.number(payload, "videoCount", AppSettings.getMediaVideoLimit(activity)));
+                    WebAppBridge.number(media, "imageCount", AppSettings.getMediaImageLimit(activity)),
+                    WebAppBridge.number(media, "imageSizeMb", AppSettings.getMediaImageSizeMb(activity)),
+                    WebAppBridge.number(media, "videoCount", AppSettings.getMediaVideoLimit(activity)));
         }
-        if (payload.containsKey("avatarSizeMb") || payload.containsKey("imageFormats")
-                || payload.containsKey("videoFormats")) {
+        Map<String, Object> upload = WebAppBridge.map(payload, "upload");
+        if (!upload.isEmpty()) {
             AppSettings.saveUploadLimits(activity,
-                    WebAppBridge.number(payload, "avatarSizeMb", AppSettings.getMediaAvatarSizeMb(activity)),
-                    WebAppBridge.text(payload, "imageFormats", ""),
-                    WebAppBridge.text(payload, "videoFormats", ""));
-        }
-        if (payload.containsKey(AppSettings.TextLimit.EXHIBITION_TITLE.wireName)) {
-            // 上限清单只有一份（AppSettings.TextLimit），这里按键名逐个取值，不再按下标对齐。
-            Map<String, Integer> limits = new LinkedHashMap<>();
-            for (AppSettings.TextLimit limit : AppSettings.TextLimit.values()) {
-                limits.put(limit.wireName, WebAppBridge.number(payload, limit.wireName, 0));
-            }
-            AppSettings.saveTextLimits(activity, limits);
-        }
-        if (payload.containsKey("notify")) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> notify = payload.get("notify") instanceof Map
-                    ? (Map<String, Object>) payload.get("notify")
-                    : new LinkedHashMap<String, Object>();
-            ProfileActions.saveNotificationPreferences(activity, notify);
+                    WebAppBridge.number(upload, "avatarSizeMb", AppSettings.getMediaAvatarSizeMb(activity)),
+                    WebAppBridge.text(upload, "imageFormats", ""),
+                    WebAppBridge.text(upload, "videoFormats", ""));
         }
         AppSettings.applyWindowColors(activity);
 
-        result.put("ok", true);
-        result.put("error", "");
-        result.put("settings", settings(activity));
-        return result;
-    }
-
-    static Map<String, Object> saveUiMode(Activity activity, Map<String, Object> payload) {
-        String mode = AppSettings.normalizeMode(WebAppBridge.text(payload, "mode", AppSettings.MODE_AUTO));
-        AppSettings.setUiMode(activity, mode);
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("ok", true);
-        result.put("error", "");
         result.put("mode", mode);
+        result.put("themeIndex", AppSettings.getThemeIndex(activity));
+        // 系统通知权限只有设备知道：前端据此决定是否显示「开启通知」按钮。
+        result.put("notificationsGranted",
+                NotificationHelper.getInstance(activity).hasNotificationPermission());
         return result;
     }
 
@@ -218,4 +143,5 @@ final class SystemActions {
             return;
         }
         pending.callback.success(granted);
-    }}
+    }
+}
