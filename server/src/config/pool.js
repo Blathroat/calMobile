@@ -16,7 +16,10 @@ const pool = new Pool({
   ssl: config.ssl,
   max: 20, // 最大连接数
   idleTimeoutMillis: 30000, // 空闲连接超时时间
-  connectionTimeoutMillis: 2000 // 连接超时时间
+  connectionTimeoutMillis: 2000, // 建连（含握手）超时时间
+  // 单条 SQL 的服务端上限：慢查询、锁等待不能长期占着连接（pg 通过启动参数下发）。
+  // 注意它管不了「服务端整个卡住」——那种情况由 routes/status.js 的探测超时销毁连接兜底。
+  statement_timeout: 10000
 });
 
 // 连接池事件监听

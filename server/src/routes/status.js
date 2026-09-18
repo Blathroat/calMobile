@@ -14,7 +14,7 @@
  */
 
 const express = require('express');
-const { query, pool } = require('../config/pool');
+const { pool } = require('../config/pool');
 const { STEPS } = require('../config/migrate');
 const databaseConfig = require('../config/database');
 const { renderStatusPage } = require('../status-page');
@@ -66,17 +66,44 @@ function serviceTimeZone() {
 }
 
 /**
- * 给任意 Promise 加超时。
+ * 探测专用查询：超时**销毁这条连接**，而不是只放弃 promise。
  *
- * 连接池自己的 `connectionTimeoutMillis` 是 2 秒，正常情况下够用；
- * 这里再兜一层，避免数据库半死不活（能握手但不回结果）时把状态页卡住。
+ * `pool.query()` 只在查询 settle 时才把连接还给池；数据库「能握手但不回结果」时，
+ * 单靠 `Promise.race` 会让卡住的连接一直占着池（20 条之后连业务接口都拿不到连接，
+ * 状态页就成了故障放大器）。因此这里显式 `connect()`，超时用 `release(true)` 销毁连接。
  */
-function withTimeout(promise, label) {
-  let timer = null;
-  const timeout = new Promise((resolve, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label}超时（${PROBE_TIMEOUT_MS} ms 没有响应）`)), PROBE_TIMEOUT_MS);
+function probeQuery(label, text, params) {
+  return new Promise((resolve, reject) => {
+    // 拿不到连接（池满 / 建连超时）由 pool 自己的 connectionTimeoutMillis 兜底。
+    pool.connect().then((client) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        client.release(true); // 销毁：这条连接已经不可信，不能还给池
+        reject(new Error(`${label}超时（${PROBE_TIMEOUT_MS} ms 没有响应）`));
+      }, PROBE_TIMEOUT_MS);
+      client.query(text, params).then((result) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        client.release();
+        resolve(result);
+      }, (error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        client.release();
+        reject(error);
+      });
+    }, reject);
   });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 /** 各表行数；数据库不可用时直接给 null，而不是逐表各等一次超时。 */
@@ -108,14 +135,14 @@ async function probeDatabase() {
     pool: poolStats(),
   };
   try {
-    const result = await withTimeout(query(`
+    const result = await probeQuery('数据库查询', `
             SELECT version() AS version,
                    current_database() AS database,
                    coalesce(host(inet_server_addr()), 'local') AS host,
                    coalesce(inet_server_port(), 0) AS port
-        `), '数据库查询');
+        `);
     // 第二条查询确认连接真的能来回，而不是只握了个手。
-    await withTimeout(query('SELECT 1 AS ping'), '数据库查询');
+    await probeQuery('数据库查询', 'SELECT 1 AS ping');
     const row = result.rows[0];
     info.connected = true;
     info.latencyMs = elapsedMs(startedAt);
@@ -145,9 +172,9 @@ async function probeMigrations(database) {
   }
   const startedAt = process.hrtime.bigint();
   try {
-    const result = await withTimeout(
-      query('SELECT id, applied_at FROM schema_migrations ORDER BY applied_at, id'),
+    const result = await probeQuery(
       '迁移查询',
+      'SELECT id, applied_at FROM schema_migrations ORDER BY applied_at, id',
     );
     const appliedIds = new Set(result.rows.map((row) => row.id));
     return {
@@ -178,7 +205,7 @@ async function probeCounts(database) {
   const startedAt = process.hrtime.bigint();
   for (const table of COUNT_TABLES) {
     try {
-      const result = await withTimeout(query(`SELECT count(*)::int AS total FROM ${table}`), '行数统计');
+      const result = await probeQuery('行数统计', `SELECT count(*)::int AS total FROM ${table}`);
       counts[table] = Number(result.rows[0].total);
     } catch (error) {
       counts[table] = null;
@@ -272,9 +299,9 @@ async function runChecks({ database, databaseMs, migrations, migrationsMs, count
     if (!database.connected) {
       throw new Error(`数据库不可用，统计不了账号：${database.error || '未连接'}`);
     }
-    const result = await withTimeout(
-      query("SELECT count(*)::int AS total FROM users WHERE status = 'active'"),
+    const result = await probeQuery(
       '账号统计',
+      "SELECT count(*)::int AS total FROM users WHERE status = 'active'",
     );
     const total = Number(result.rows[0].total);
     if (total < 1) {
@@ -348,6 +375,23 @@ async function buildReport() {
   };
 }
 
+/**
+ * 同一时刻只跑一次探测：多个标签页、探活脚本与 HTML 页面并发时共用同一份结果。
+ *
+ * 这里**不做 TTL 缓存**（每个请求拿到的都是刚测出来的数据），只是把「同时发生的
+ * 多次探测」合并成一次，避免并发请求把库和连接池一起打满。
+ */
+let inFlightReport = null;
+
+function reportOnce() {
+  if (!inFlightReport) {
+    inFlightReport = buildReport().finally(() => {
+      inFlightReport = null;
+    });
+  }
+  return inFlightReport;
+}
+
 /** 最后的兜底：连探测本身都炸了，也要给出一份结构完整的报告，页面才渲染得出来。 */
 function fallbackReport(error) {
   const message = safeMessage(error);
@@ -382,7 +426,7 @@ function fallbackHtml(error) {
     + '<p><a href="/api/v1/status">查看 JSON 报告</a></p></body></html>';
 }
 
-// 状态数据永远要新鲜：探活脚本和页面都不能拿到缓存的旧结果。
+// 状态数据永远要新鲜：探活脚本和页面都不能拿到缓存的旧结果（并发合并见 reportOnce）。
 router.use((req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
@@ -395,7 +439,7 @@ router.use((req, res, next) => {
 router.get('/', async (req, res) => {
   let report;
   try {
-    report = await buildReport();
+    report = await reportOnce();
   } catch (error) {
     console.error('健康报告生成失败：', error);
     report = fallbackReport(error);

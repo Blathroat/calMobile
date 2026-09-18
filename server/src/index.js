@@ -4,7 +4,9 @@
  * 与客户端的约定见 server/README.md：
  * - 读取类接口直接返回数据本身（数组或对象）；
  * - 写入类接口返回应用层信封 `{ ok, error, ... }`，业务失败也是 200，页面按 `.ok` 判断；
- * - 认证 / 授权 / 服务器错误用 4xx / 5xx + `{ error }`，前端会当作异常处理。
+ * - 认证 / 授权 / 服务器错误用 4xx / 5xx + `{ error }`，前端会当作异常处理；
+ * - **数据库连不上/用不了**统一 503（`domain/errors.js` 的 `isDatabaseUnavailable()`），
+ *   不是 500 —— 这是「暂时不可用、可以重试」，也能避免把 pg 的错误原文回给调用方。
  */
 
 require('dotenv').config();
@@ -12,7 +14,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { pool } = require('./config/pool');
-const { ApiError } = require('./domain/errors');
+const { ApiError, isDatabaseUnavailable } = require('./domain/errors');
+const { version: SERVICE_VERSION } = require('../package.json');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -62,11 +65,15 @@ const statusRoutes = require('./routes/status');
 app.use('/api/v1/status', statusRoutes);
 app.use('/status', statusRoutes);
 
-/** 连通性检查：前端启动时探一次，失败就退回原生桥接。 */
+/**
+ * 进程存活探针（**不代表数据库可用**）：只回答「HTTP 服务还在不在」。
+ * 想连库一起看用 `/api/v1/status`（库挂时 503）。
+ */
 app.get(['/ping', '/api/v1/ping'], (req, res) => {
-  res.json({ ok: true, service: 'calmobile-server', version: '1.0.0' });
+  res.json({ ok: true, service: 'calmobile-server', version: SERVICE_VERSION });
 });
 
+/** 与 /ping 同义的存活探针；数据库连通性看 /api/v1/status。 */
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime() });
 });
@@ -76,16 +83,51 @@ app.use((req, res) => {
   res.status(404).json({ error: `路径 ${req.originalUrl} 不存在` });
 });
 
-// 统一错误处理：ApiError 用自带状态码，其余按 500，且不把堆栈发给客户端。
-app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
-  const status = err instanceof ApiError ? err.status : 500;
-  if (status >= 500) {
-    console.error('服务器错误：', err);
+/** body-parser 之类中间件的错误自带 4xx 状态码；这里给出对外文案，不回显原文。 */
+const MIDDLEWARE_MESSAGES = {
+  'entity.parse.failed': '请求体不是合法的 JSON',
+  'entity.too.large': '请求体超过大小上限',
+  'encoding.unsupported': '不支持的请求体编码',
+  'request.aborted': '请求被中断',
+};
+
+/** 错误 → HTTP 状态码：ApiError 自带 > 中间件自带的 4xx > 数据库不可用 503 > 500。 */
+function statusFor(err) {
+  if (err instanceof ApiError) {
+    return err.status;
   }
-  res.status(status).json({
-    error: err.message || '服务器内部错误',
-    ...(process.env.NODE_ENV === 'development' && status >= 500 ? { stack: err.stack } : {}),
-  });
+  const declared = Number(err.status || err.statusCode);
+  if (Number.isInteger(declared) && declared >= 400 && declared < 500) {
+    return declared;
+  }
+  return isDatabaseUnavailable(err) ? 503 : 500;
+}
+
+/**
+ * 错误 → 给客户端的文案。
+ *
+ * 只有 ApiError 的文案是写给用户看的；其余一律换成固定文案：
+ * pg 的连接错误里有内网 host:port、解析错误里有请求体片段，都不该回给调用方
+ * （排查用的原文与堆栈只进服务端日志）。
+ */
+function clientMessage(err, status) {
+  if (err instanceof ApiError) {
+    return err.message || '请求失败';
+  }
+  if (MIDDLEWARE_MESSAGES[err.type]) {
+    return MIDDLEWARE_MESSAGES[err.type];
+  }
+  if (status === 503) {
+    return '数据库暂时不可用，请稍后重试';
+  }
+  return status < 500 ? '请求不合法' : '服务器内部错误';
+}
+
+// 统一错误处理：状态码按上面的优先级，正文只有 `{ error }`，堆栈始终只进日志。
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  const status = statusFor(err);
+  console.error(`请求失败（${status}）：`, err);
+  res.status(status).json({ error: clientMessage(err, status) });
 });
 
 /**
