@@ -1,6 +1,6 @@
 # CalMobile
 
-CalMobile 是面向展会排期、详情展示、报名和审核的应用。当前版本以本地演示数据为主，已经具备普通用户、展商和管理员的核心操作链路；前端由 WebView 承载 `newUI/` 的 17 屏设计，Android 侧保留业务与系统能力。
+CalMobile 是面向展会排期、详情展示、报名和审核的应用。前端由 WebView 承载 `newUI/` 的 17 屏设计，业务数据全部来自 `server/` 的 Express + PostgreSQL 后端，Android 侧只保留「只有设备能做」的系统能力（日历、通知与摄像头权限、媒体选择与落盘、分享、导出、系统栏配色）。
 
 ## 文档入口
 
@@ -41,11 +41,15 @@ app/src/main/
 ├── java/com/example/calmobile/
 │   ├── WebShellActivity.java   WebView 容器：资源与上传文件拦截、返回栈、结果与权限转发
 │   ├── WebAppBridge.java       JavaScript 接口与回调分发
-│   ├── WebAppActions.java      动作分发入口（按域转给下面 8 个类）
-│   ├── SessionActions.java / ProfileActions.java / ExhibitionActions.java / RegistrationActions.java
-│   │                           AdminActions.java / MediaActions.java / SystemActions.java / ActionSupport.java
-│   ├── RegistrationReviewStore.java  报名审核记录（示例数据与真实报名共用一个 id 空间）
-│   ├── UserProfileStore.java   个人资料（含地区、头像）与公开策略持久化
+│   ├── WebAppActions.java      动作分发入口，固定 10 个系统动作
+│   ├── SystemActions.java      系统日历、通知权限、摄像头权限、设备镜像（`ui.sync`）
+│   ├── MediaActions.java       图片选择与落盘、媒体导入、CSV 导出、系统分享
+│   ├── CalendarHelper.java     系统日历读写
+│   ├── NotificationHelper.java 通知渠道与通知权限查询
+│   ├── ExportManager.java      CSV 生成（展会、报名）
+│   ├── AppSettings.java        设备侧镜像（外观模式、配色下标、媒体上限、系统栏颜色）
+│   ├── FrontendStrings.java / InjectStrings.java  前端文案注入
+│   └── CalMobileApp.java       应用入口（通知渠道）
 ```
 
 上传文件保存在应用私有目录 `files/media`，通过 `https://appassets.androidplatform.net/media/<文件名>` 引用；`WebShellActivity` 只放行该目录下的单层文件名，路径穿越一律拒绝。
@@ -87,7 +91,7 @@ app/src/main/
 
 ### 深色模式
 
-个人页「设置」栏提供「跟随系统 / 浅色 / 深色」三选一（`settings.uiMode`，保存在本机 SharedPreferences），`js/core/bridge.js` 的 `applyMode` 把结果写进 `<html data-mode>`，`styles/tokens.css` 用同一组令牌的深色取值接管全部颜色，因此页面与组件无需逐页适配。`index.html` 的内联脚本会在样式表生效前先落到 localStorage 里缓存的模式，避免首帧闪白；选择「跟随系统」时由 `prefers-color-scheme` 与 `matchMedia` 的 `change` 事件驱动。强调色的衍生值（`--accent-ink`、`--accent-tint`、`--accent-edge`）在深色下改为与深色页面底混色，保证对比度。原生侧同步把状态栏、导航栏与 WebView 底色切到深色取值（`AppSettings.isDarkMode` / `getScreenColor`）。
+个人页「设置」栏提供「跟随系统 / 浅色 / 深色」三选一（`settings.uiMode`，权威值存在后端 `users.ui_mode`，本机只留镜像），`js/core/bridge.js` 的 `applyMode` 把结果写进 `<html data-mode>`，`styles/tokens.css` 用同一组令牌的深色取值接管全部颜色，因此页面与组件无需逐页适配。`index.html` 的内联脚本会在样式表生效前先落到 localStorage 里缓存的模式，避免首帧闪白；选择「跟随系统」时由 `prefers-color-scheme` 与 `matchMedia` 的 `change` 事件驱动。强调色的衍生值（`--accent-ink`、`--accent-tint`、`--accent-edge`）在深色下改为与深色页面底混色，保证对比度。原生侧同步把状态栏、导航栏与 WebView 底色切到深色取值（`AppSettings.isDarkMode` / `getScreenColor`）。
 
 ### 配色作用范围
 
@@ -146,35 +150,34 @@ app/src/main/
 
 ### 报名二维码与现场核销
 
-展会在「编辑展会 → 报名与简介设置」里通过「启用报名二维码」开关控制是否发放报名码（`ExhibitionConfiguration.registrationQrEnabled`）。启用后：
+展会在「编辑展会 → 报名与简介设置」里通过「启用报名二维码」开关控制是否发放报名码（后端 `exhibitions.qr_enabled`）。启用后：
 
 1. 用户的报名审核通过（或“无需审核”自动通过）时，报名详情页出现「报名码」卡片，用内置的 qrcode-generator 把 `CALMOBILE-CHECKIN|<展会>|<报名记录>` 画成二维码，并在下方给出同一段文本，便于手动输入；
 2. 展商在展商后台点顶部「核销报名码」，进入 `pages/checkin.js`：请求摄像头权限后用 `getUserMedia` 取景，内置的 jsQR 按约 120ms 一帧解码画面中央区域，识别成功后调用 `checkin.scan`；
-3. 原生侧校验报名码格式、展会与角色后把审核记录状态改为「已参加」，同步写入数据库并给报名人发送状态通知；重复扫描会提示“已经核销过了”，未通过的报名会说明当前状态。
+3. 后端校验报名码格式、展会与角色后把报名记录状态改为「已参加」，写回 `registrations` 并给报名人落一条通知；重复扫描会提示“已经核销过了”，未通过的报名会说明当前状态。
 
 页面离开时通过 `core/router.js` 的 `onPageStop` 关闭摄像头。摄像头不可用（未授权、无摄像头、内核不支持）时保留「手动输入报名码」入口。未启用报名二维码的展会不展示报名码，展商仍可在报名管理里手动把报名标记为「已参加」。
 
 ### 表单校验
 
-`js/core/validate.js` 统一实现必填、长度、格式与跨字段校验，长度上限来自服务器设置（`state.limits`），并在字段下方给出字数计数与内联错误。覆盖登录、注册、修改密码、编辑资料、展会编辑、报名填写等表单；原生侧保存前会再校验一次，避免绕过页面直接调用桥接。
+`js/core/validate.js` 统一实现必填、长度、格式与跨字段校验，长度上限来自服务器设置（`state.limits`），并在字段下方给出字数计数与内联错误。覆盖登录、注册、修改密码、编辑资料、展会编辑、报名填写等表单；后端保存前会再校验一次，避免绕过页面直接调接口。
 
 ## 架构与数据边界
 
-业务层继续使用现有 Java 组件，WebView 前端通过 `WebAppActions` 调用，不复制业务规则：
+业务规则只存在一处——`server/src/domain/`。前端不复制规则，原生不复刻数据：
 
 | 组件 | 职责 |
 | --- | --- |
-| `ExhibitionManager` + `DatabaseHelper` | 展会增删改查、状态变更、示例数据播种 |
-| `RegistrationManager` | 报名提交、列表与撤销 |
-| `RegistrationReviewStore` | 审核状态与报名人记录（会话内，旧页面与新前端共用） |
-| `AdminUserManager` | 用户列表、搜索与账号状态 |
-| `AuthManager` | 登录、注册、访客与角色权限 |
-| `WebAppActions` 分发 + `SessionActions` / `ProfileActions` / `ExhibitionActions` / `RegistrationActions` / `AdminActions` / `MediaActions` / `SystemActions` / `ActionSupport` | 桥接动作按域拆分后的实现类 |
-| `AppSettings` + `UserProfileStore` | 服务器设置（公告、分类、审核策略、媒体与上传限制、字符数上限）、应用配色与外观模式、个人资料（含地区、头像） |
-| `ExhibitionConfiguration` | 展会扩展配置：开展/报名日期、封面、简介格式、报名收集项、报名二维码开关 |
-| `CalendarHelper` / `NotificationHelper` / `ExportManager` | 系统日历、通知与 CSV 导出 |
+| `server/src/routes/*.js` | REST 路由：`bootstrap`、`auth`、`profile`、`exhibitions`、`registrations`、`review`、`checkin`、`users`、`search`、`settings`、`status` |
+| `server/src/domain/` | 业务层：状态词汇表（`labels.js`）、SQL 片段（`queries.js`）、响应映射（`payloads.js`）、权限（`permissions.js`）、校验（`validation.js`）、设置（`settings.js`）、会话与令牌（`session.js`）、错误与信封（`errors.js` / `respond.js`） |
+| `server/src/config/migrate.js` | 表结构与示例数据，按编号记录迁移、可反复执行 |
+| `js/core/api.js` | 前端唯一取数入口：动作名 → REST 路径的映射表 + 401 自动续期 |
+| `js/core/bridge.js` | 只负责启动、文案注入、外观应用与 `ui.sync` 设备镜像 |
+| `WebAppActions` + `SystemActions` / `MediaActions` | 10 个系统动作的原生实现：日历、通知与摄像头权限、媒体选择与落盘、分享、CSV 导出、设备镜像 |
+| `CalendarHelper` / `NotificationHelper` / `ExportManager` | 系统日历读写、通知渠道与权限、CSV 生成 |
+| `AppSettings` | 设备侧镜像（外观模式、配色下标、媒体上限、系统栏颜色），权威值在后端 |
 
-数据库不可用时各 Manager 回退到内存示例数据；`ExhibitionCatalog` 保存首页示例展会的月份、展商与亮点信息。Room、Retrofit、Repository、ViewModel 与 `server/` 已有骨架，但尚未替换本地演示数据源。
+数据只有一处来源：后端 PostgreSQL（表结构见 `server/src/config/migrate.js`）。原生不再持有任何业务数据实现，后端连不上时应用直接报错并给出排查提示，不做本地降级。
 
 逻辑对象包括：
 
@@ -210,7 +213,7 @@ Android 依赖只有 `app/build.gradle` 里的 Gson（桥接层 JSON）与 JUnit
 
 ### 界面文案
 
-用户可见文案统一维护在 `app/src/main/res/values/strings_frontend.xml`（475 条），由 `scripts/extract-strings.js` 从 `assets/web/js` 生成，原生在 `onPageStarted` 注入 `window.CalMobileStrings`，前端用 `core/strings.js` 的 `t('key')` 取用。改文案请改前端源码后重跑脚本，再用 `node scripts/check-strings.js` 校验三处（源码、资源、`FrontendStrings.NAMES`）一致——任何一边漏了都会在合入前失败，而不是在界面上静默显示成 key。
+用户可见文案统一维护在 `app/src/main/res/values/strings_frontend.xml`（482 条），由 `scripts/extract-strings.js` 从 `assets/web/js` 生成，原生在 `onPageStarted` 注入 `window.CalMobileStrings`，前端用 `core/strings.js` 的 `t('key')` 取用。改文案请改前端源码后重跑脚本，再用 `node scripts/check-strings.js` 校验三处（源码、资源、`FrontendStrings.NAMES`）一致——任何一边漏了都会在合入前失败，而不是在界面上静默显示成 key。
 
 ### 静态资源缓存与按需加载
 
@@ -218,9 +221,9 @@ APK 内的 `.js` / `.css` 由 `WebShellActivity` 以 `Cache-Control: max-age=864
 
 EasyMDE、qrcode-generator、jsQR 三个内置库全部改为按需加载（`core/vendor.js`）：它们随 APK 打包不依赖 CDN，但合计约 660KB，启动时全量解析会明显拖慢首帧。
 
-## 前后端边界（重构后端时看这一节）
+## 前后端边界
 
-前端不直接访问网络，**页面也不直接调用桥接**。数据统一走 `js/core/api.js` 这个唯一入口：
+页面不直接 `fetch`，**也不直接调用桥接取数据**。数据统一走 `js/core/api.js` 这个唯一入口：
 
 ```js
 import { exhibitions, registrations } from '../core/api.js';
@@ -230,20 +233,13 @@ const one = await exhibitions.get(id);
 await registrations.submit(payload);
 ```
 
-`api.js` 内部有两层：一层是**动作名 → REST 请求**的映射表（`ENDPOINTS`），另一层是传输选择。
+`api.js` 内部是一张**动作名 → REST 请求**的映射表（`ENDPOINTS`）：按表把动作翻成 `GET/POST/PUT/DELETE /api/v1/...`，带 `Authorization: Bearer`；访问令牌过期（401）时自动用刷新令牌换一次再重试。**没有第二条路径**，原生不再有数据实现，5xx 与连不上都会如实抛出 `TransportError`，由页面把原因（后端地址、`npm run dev`、`adb reverse` 提示）显示出来。`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法。
 
-| 传输层 | 条件 | 说明 |
-| --- | --- | --- |
-| `remote` | 能连上 `server/` | 按 `ENDPOINTS` 把动作翻成 `GET/POST/PUT/DELETE /api/v1/...`，带 `Authorization: Bearer`；访问令牌过期（401）时自动用刷新令牌换一次再重试 |
-| `native` | 连不上 / 5xx | 退回 `bridge.js` 的 `call(动作名, 参数)`，走 `WebAppActions` 的本机实现 |
-
-因此**应用在没有后端时仍然完整可用**（离线演示，已实测：停掉后端后仍能登录、看日历、看报名），后端起来后同一个页面就自动改读 HTTP 数据。两条路径的响应字段与状态文案完全一致，所以页面不需要知道数据来自哪一边；`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法。
-
-注意状态码的用法：**4xx 是业务/权限问题**（抛出错误由页面提示，不降级），**只有 5xx 与连不上才退回原生**——否则一次「无权访问」会在另一套实现上被重放一遍。
+响应约定：**读取类直接返回数据**（列表、对象）；**写入类返回 `{ ok, error, ... }` 信封**，页面按 `.ok` 判断。状态码只有三种含义：**4xx 是业务/权限问题**（抛出错误由页面提示），**400/409 这类可预期的规则失败**由后端包成 HTTP 200 + `{ ok:false, error }`，**5xx 与连不上**是传输层失败。
 
 `users` / `profile` / `settings` 三个域额外提供 `usersApi` / `profileApi` / `settingsApi` 别名，避免被页面里的同名局部变量遮蔽。
 
-系统能力（摄像头、日历、分享、媒体选择、CSV 导出、通知权限）不属于数据接口，仍由页面直接调 `bridge.js`，不随后端化改变。
+系统能力（摄像头权限、系统日历、分享、媒体选择与落盘、CSV 导出、通知权限、设备镜像）不属于数据接口，仍由页面直接调 `bridge.js`，动作表固定为 10 个。
 
 ### 取数体验：先画缓存、再后台刷新
 
@@ -271,7 +267,7 @@ await registrations.submit(payload);
 后端是 `server/` 里的 Express + PostgreSQL 服务，接口按 REST 组织，路径与前端 `api.js` 的动作一一对应（映射表在 `js/core/api.js` 的 `ENDPOINTS`）。
 
 ```bash
-# 1. 起数据库（默认 Docker 容器；没有 Docker 时加 -Provider wsl 用 WSL 里那份）
+# 1. 起数据库（Docker 容器 calmobile-pg）
 pwsh -File scripts\db.ps1 start
 
 # 2. 建表 + 示例数据（可反复执行）
@@ -286,42 +282,45 @@ adb reverse tcp:3000 tcp:3000
 
 示例账号 `demo` / `exhibitor` / `user`，密码都是 `password`（角色分别是管理员、展商、普通用户）。
 
-数据库两条路都监听 `127.0.0.1:5432`，`server/.env` 不用改，同一时间只跑一个（`db.ps1 status` 看当前用的哪个，`stop` 停掉再换）。Docker 容器**必须带时区参数**（脚本已带 `Asia/Shanghai`）：镜像默认 UTC，而数据库的 `CURRENT_DATE` 决定报名窗口与日历落点，不设的话本机凌晨那段时间会莫名差一天。
+后端**启动时不要求数据库可用**：连不上库时会在日志里给出警告并照常监听端口，`/status` 健康页会把这些检查项标红，方便先排查连接再处理业务。数据库跑在 Docker 里（容器 `calmobile-pg` + 命名卷 `calmobile-pgdata`），`server/.env` 不用改；容器**必须带时区参数**（脚本已带 `Asia/Shanghai`）：镜像默认 UTC，而数据库的 `CURRENT_DATE` 决定报名窗口与日历落点，不设的话本机凌晨那段时间会莫名差一天。
 
 **改了 `server/src/*.js` 要重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
 
 细节见 `server/README.md`；`server/test/api.test.js` 是前后端契约与接口测试，逐接口断言页面真正用到的字段都在、权限与业务规则都拦得住，字段漂移会在这里失败而不是静默渲染成空。
 
-### 44 个桥接动作的分类
+### 原生只剩 10 个系统动作
 
-`WebAppActions.handle()` 的分发 switch 共 47 个动作（其中 3 个 `case "display|closed|ended"` 属于 `modeLabel()` 内部的字符串分支，不是桥接动作），前端实际使用 44 个。
+`WebAppActions.handle()` 的 switch 就是权威清单，数据动作一律不在其中（`scripts/smoke-check.js` 的 `native-actions-whitelist` 与 `scripts/webui-check.js` 双重看守）：
 
-| 类别 | 动作 | 现状 |
-| --- | --- | --- |
-| **已由后端提供（HTTP 主路径）** | `bootstrap`、`auth.login`、`auth.register`、`auth.logout`、`auth.guest`、`profile.get`、`profile.save`、`profile.password`、`exhibitions.list`、`exhibitions.month`、`exhibitions.get`、`exhibitions.save`、`exhibitions.delete`、`exhibitions.status`、`exhibitions.categories`、`exhibitions.fields`、`exhibitions.saveFields`、`registrations.list`、`registrations.get`、`registrations.submit`、`registrations.cancel`、`review.list`、`review.get`、`review.updateStatus`、`checkin.scan`、`users.list`、`users.get`、`users.status`、`users.public`、`search.query`、`settings.get`、`settings.save` | 已全部落到 `server/` 的 REST 路由（接口清单见 `server/README.md`）；本机实现保留为离线降级，连不上后端时才会走到 |
-| **服务器级配置** | `settings.get` / `settings.save` | 存在后端 `app_settings` 表，管理员保存后对所有用户生效 |
-| **系统能力（保留原生，不进 API）** | `calendar.status`、`calendar.toggle`、`notify.requestPermission`、`media.pickImage`、`media.pickVideo`、`media.import`、`media.store`、`media.imageData`、`share.text`、`export.csv`、`toast`、`camera.ensurePermission` | 依赖 Android 系统界面与硬件，永远留在 `WebAppActions` |
-| **个人偏好** | `notify.preferences`、`notify.savePreferences`、`settings.uiMode` | 存在后端（`notification_preferences` 表与 `users.ui_mode`），因此换设备也能同步 |
+| 动作 | 用途 |
+| --- | --- |
+| `ui.sync` | 把外观模式、配色下标推给原生，并取回设备事实（通知授权状态） |
+| `camera.ensurePermission` | 扫码前申请摄像头权限 |
+| `calendar.status` / `calendar.toggle` | 系统日历里是否已存在该展会、加入或移除 |
+| `notify.requestPermission` | 申请通知权限（通知本身由后端落库，不做本地推送） |
+| `media.pickImage` | 系统图片选择器 |
+| `media.import` / `media.store` | 压缩后写入 `files/media` 并返回短 URL |
+| `share.text` | 系统分享面板 |
+| `export.csv` | 写 CSV 到下载目录（展会、报名两组数据） |
 
-离线降级那份本机实现（SQLite + SharedPreferences）目前仍在，作为没有后端时的兜底；要不要删掉它取决于「应用是否允许必须连后端」，见「冲突与待裁决清单」。
+其余全部是 HTTP：`bootstrap`、认证、资料、展会、报名、审核、核销、用户、搜索、设置、通知偏好共 35 个数据动作，由 `api.js` 的 `ENDPOINTS` 映射到 `server/` 的 REST 路由。
 
-### 数据落在哪：后端表 vs 客户端（离线降级）
+### 数据落在哪
 
-后端的表结构在 `server/src/config/migrate.js`（迁移按编号记录，可反复执行）：`users` / `exhibitions` / `exhibition_fields` / `registrations` / `app_settings` / `notification_preferences` / `refresh_tokens` / `notifications`。展会扩展字段、收集项、审核状态与核销时间都已经有了正式的列，不再是「进程内的示例存储」。
+业务数据只有一处来源：后端 PostgreSQL，表结构在 `server/src/config/migrate.js`（迁移按编号记录，可反复执行）——`users` / `exhibitions` / `exhibition_fields` / `registrations` / `app_settings` / `notification_preferences` / `refresh_tokens` / `notifications` / `schema_migrations`。展会扩展字段、收集项、审核状态与核销时间都有正式的列。
 
 **仍然只在客户端**的只有两类：
 
 | 数据 | 存放位置 | 说明 |
 | --- | --- | --- |
-| 离线降级的那份业务数据 | SQLite（`DatabaseHelper`）+ `ExhibitionConfiguration` / `RegistrationReviewStore`（进程内） | 只在连不上后端时使用；后端可用时页面读的是 HTTP 数据 |
 | 上传的媒体 | 应用私有目录 `files/media` | 需要对象存储与上传接口；现在用 `appassets.androidplatform.net/media/<文件名>` 短 URL 引用 |
-| 设备能力状态 | `AppSettings`（SharedPreferences） | 外观模式的本地镜像、日历权限等；服务器级配置的权威副本在后端 |
+| 设备事实 | `AppSettings`（SharedPreferences） | 外观模式与配色的本地镜像、日历与通知权限；权威值在后端（`users.ui_mode`、`app_settings`） |
 
-### `server/` 端点与桥接动作的对应
+### `server/` 端点与前端动作的对应
 
-健康检查与连通性：`GET /ping`、`GET /health`；其余都在 `/api/v1` 下。完整清单（含请求参数、权限与响应形状）见 `server/README.md` 的「接口清单」，这里只列骨架：
+健康与状态页：`GET /ping`、`GET /health`、`GET /api/v1/status`，以及给人看的 `GET /status`（HTML）；其余都在 `/api/v1` 下。完整清单（含请求参数、权限与响应形状）见 `server/README.md` 的「接口清单」，这里只列骨架：
 
-| 已有路由 | 对应桥接动作 |
+| 已有路由 | 对应前端动作 |
 | --- | --- |
 | `GET /api/v1/bootstrap` | `bootstrap`（一次拉取用户态 + 全部配置） |
 | `POST /api/v1/auth/login\|register\|guest\|logout\|refresh` | `auth.login`、`auth.register`、`auth.guest`、`auth.logout`（刷新令牌轮换） |
@@ -335,7 +334,7 @@ adb reverse tcp:3000 tcp:3000
 | `GET /api/v1/search` | `search.query` |
 | `GET\|PUT /api/v1/settings`、`PUT /settings/ui-mode` | `settings.get`、`settings.save`、`settings.uiMode` |
 
-前端动作名与这些路径的映射写在 `js/core/api.js` 的 `ENDPOINTS` 表里，新增接口要同时改那张表、后端路由与 `server/test/api.test.js`。
+前端动作名与这些路径的映射写在 `js/core/api.js` 的 `ENDPOINTS` 表里，新增接口要同时改那张表、后端路由与 `server/test/api.test.js`（那里有前后端路由交叉校验，多一条少一条都会失败）。
 
 ### 月视图与日历落点（已固定的两处契约）
 
@@ -346,31 +345,7 @@ adb reverse tcp:3000 tcp:3000
 | 首次打开看哪个月由 `bootstrap` 的 `calendar.landing = { year, month }` 决定 | 落点规则属于「界面先给用户看什么」，不属于月视图接口；`exhibitions.month` 因此不需要 `explicit` 参数 |
 | 选中日期由前端本地决定 | 月视图一次返回整月数据，点日期不再往返一次 |
 
-后端的示例展会日期是**相对今天**生成的（`db:seed` 用 `CURRENT_DATE + N days`），因此日历落点、报名窗口这些与「今天」有关的规则永远有可演示的数据。离线降级那份本机数据仍用固定月份。
-
-## 待优化的结构（前后端分离前可先做的部分）
-
-纯客户端、与后端无关的清理项，清单已全部完成，保留记录便于回看。
-
-| # | 位置 | 状态 |
-| --- | --- | --- |
-| 1 ★ | `WebAppActions.java` 2,100 行 | **已完成**：按方法边界拆成 8 个域类（分发入口 196 行），归属由 `scripts/split-webapp-actions.js` 保证覆盖 |
-| 2 ★ | `ExhibitionConfiguration` 用进程内 `static Map` 当存储，`save()` 是位置参数 | **已完成**：五个位置参数（其中三个都是日期字符串）改成具名 `Patch` 链式写入，`get()` 不再「读一次就插入一条」，收集项写入改为复制（原先传回自己的列表会把收集项清空）。存储仍是进程内的示例数据，后端化时整层由 API 取代 |
-| 3 ★ | `RegistrationReviewStore` 把示例数据与真实记录混在一个列表，主键 `registration-N` 会与 SQLite 报名撞号 | **已完成**：真实记录改用报名表自己的 id（核销与撤销因此能更新到同一行），示例记录加 `demo-` 前缀与 `demo` 标记，写回报名行时跳过 |
-| 4 | 5 处复制页脚 | 已完成：`.page-foot` + `pageFoot()` |
-| 5 | 3 处复制按钮工厂 | 已完成：`components.js` 的 `smallCta()` |
-| 6 | 43 处 `catch → toast` | 部分完成：错误态收敛为 `loadErrorBlock()` / `notFoundBlock()`（18 处）；其余 catch 各自带上下文，保留 |
-| 7 | 状态字符串散落 40 处 | 已完成：`core/status.js` 统一声明，字面量清零 |
-| 8 | 原生侧双份表单上限（`int[]` 位置魔数 vs 命名 key） | **已完成**：`AppSettings.TextLimit` 一张表声明键名 / 默认值 / 上下限，读、写、与前端交换全部由它派生；前端 `admin.js` 的 `TEXT_LIMITS` 一张表同时生成控件与提交内容 |
-| 9 | 19 个从未被调用的前端导出 | 已完成：删除 |
-| 10 | `--accent-soft` 写入但无消费 | 已完成：删除 |
-| 11 | `media.imageData` 死分支 | 已完成：删除前端分支与原生动作 |
-| 12 | 过期兼容 shim（`contact`→`region` 键回退、分类换行分隔、引用已删类的注释） | 已完成：随旧页面一起删除 |
-| 13 | 旧原生页面（16 Activity + `BaseActivity` + `MainTabState`）+ 17 个布局 + 专属资源 | 已完成：全部删除，`res` 只剩 `themes.xml` + 两个 `strings` + `colors.xml` |
-| 14 | `database/`+`models/`+`network/`+`repository/`+`viewmodel/` | 已完成：删除，连带清掉 Room/Retrofit/Glide/AndroidX/Material/richeditor 依赖 |
-| 15 | `showRegistrations` 隐私开关用户无法开启 | **已完成**：个人页新增「隐私设置」开关，`profile.save` 持久化，公开页按它过滤（管理员不受限） |
-
-清单已全部完成。后续新增的结构问题继续往下加，不要另建文档。
+后端的示例展会日期是**相对今天**生成的（`db:seed` 用 `CURRENT_DATE + N days`），因此日历落点、报名窗口这些与「今天」有关的规则永远有可演示的数据。
 
 ## 构建、测试与运行
 
@@ -389,11 +364,11 @@ node --test scripts/smoke-check.test.js
 # 前端页面渲染冒烟测试（最小 DOM 打桩 + 假桥接，逐页渲染并校验关键交互与 REST 映射）
 node --test scripts/webui-render.test.js
 
+# 前端文案一致性（源码 / strings_frontend.xml / FrontendStrings.NAMES）
+node scripts/check-strings.js
+
 # 后端契约与规则测试（真实 PostgreSQL，自动建/重建 calmobile_test 库）
 node --test server/test/api.test.js
-
-# 旧的零依赖演示后端契约测试（`npm run demo` 那套，与上面互不影响）
-node --test server/test/demo-api.test.js
 
 # Android 单元测试与调试 APK
 gradlew.bat :app:testDebugUnitTest
@@ -405,11 +380,11 @@ gradlew.bat :app:testDebugUnitTest --tests 'com.example.calmobile.CalendarHelper
 
 后端开发请进入 `server/`，按 `server/README.md` 起好 PostgreSQL 并复制 `.env.example`；常用命令为 `npm install`、`npm run db:migrate`、`npm run db:seed`、`npm run dev`、`npm test`（jest 单测）、`npm run test:contract`（接口契约）和 `npm run lint`。
 
-客户端测试位于 `app/src/test/java/com/example/calmobile/`，覆盖认证、数据库、展会、报名、用户管理、导出、通知、日历、富文本和搜索等 Manager/Helper 流程；Activity 级 UI 测试仍在路线图中。
+客户端测试位于 `app/src/test/java/com/example/calmobile/`（37 项），覆盖系统日历、设备镜像、CSV 导出和桥接分发（`CalendarHelperTest`、`AppSettingsTest`、`ExportManagerTest`、`WebAppBridgeTest`）；Activity 级 UI 测试仍在路线图中。
 
-后端测试分三层：`server/test/api.test.js`（33 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、以及报名窗口 / 重复报名 / 自动通过 / 核销流转 / 隐私开关这些业务规则；`server/src/**/*.test.js`（jest，15 项）是不依赖数据库的纯函数与中间件单测；`server/test/demo-api.test.js`（17 项）守着旧的零依赖演示后端。库结构变更后跑 `npm run db:migrate` 即可，迁移是幂等的。
+后端测试分两层：`server/test/api.test.js`（39 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 核销流转 / 隐私开关这些业务规则、数据库不可用时的状态页降级，以及**前后端路由交叉校验**（前端每个数据动作都有对应路由、后端没有前端用不到的路由）；`server/src/**/*.test.js`（jest，15 项）是不依赖数据库的纯函数与单测。库结构变更后跑 `npm run db:migrate` 即可，迁移是幂等的。
 
-前端另有 `scripts/webui-render.test.js`（17 项）：它用最小 DOM 打桩加假桥接，把 18 个页面路由各渲染一次，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销、用户公开页管理视角、「点日期与切月份不再取数」「缓存命中时同步出内容」「过期缓存仍可先画一屏」「并发请求去重」「标签页预加载」等取数体验，以及 `api.js` 的动作到 REST 路径映射与 401 自动续期。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，用例涉及预加载时先 `await settle()` 排空空闲队列再开始计数，不依赖固定的 sleep 猜测时序。
+前端另有 `scripts/webui-render.test.js`（18 项）：它用最小 DOM 打桩加假后端 `fetch`，把 18 个页面路由各渲染一次，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销、用户公开页管理视角、「数据动作不再经过原生桥接」「点日期与切月份不再取数」「缓存命中时同步出内容」「过期缓存仍可先画一屏」「并发请求去重」「标签页预加载」等取数体验，以及 `api.js` 的动作到 REST 路径映射与 401 自动续期。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，用例涉及预加载时先 `await settle()` 排空空闲队列再开始计数，不依赖固定的 sleep 猜测时序。
 
 可用模拟器时，可安装并逐屏回归：
 
@@ -458,7 +433,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 #             page:login=210ms api-loaded=241ms bootstrap-done=1295ms entered=1296ms
 ```
 
-2026-09-17 实测：去掉「先探测再请求」的预探测、改为直接发请求失败即降级之后，`bootstrap-done` 从 **5604ms 降到 1295ms**，登录页首帧从 **989ms 降到 210ms**（模拟器；预探测每次超时 1.5s、还要连试三轮）。
+2026-09-17 实测：去掉「先探测再请求」的预探测、改为直接发请求之后，`bootstrap-done` 从 **5604ms 降到 1295ms**，登录页首帧从 **989ms 降到 210ms**（模拟器；预探测每次超时 1.5s、还要连试三轮）。后端不可用时不再有第二套实现接管，首屏会直接给出连接失败的原因。
 
 预置演示账号：`demo/password`（管理员）、`exhibitor/password`（展商）、`user/password`（普通用户）；未登录用户只能浏览公开展会详情。
 
@@ -490,12 +465,11 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 ## 路线图与已知限制
 
-- 后端 API 未接入：展会、报名、审核与资料仍以本地 SQLite、会话内存储和 SharedPreferences 为准，重启应用后审核记录与登录态不会保留。
-- 「服务器设置」目前保存在本机 SharedPreferences，界面按“保存后对所有用户生效”的语义呈现；接入服务端后应改为下发配置。
+- **应用必须连后端**：数据只在 PostgreSQL 里，没起后端（或没做 `adb reverse`）时页面会显示连接失败与排查提示，不做离线降级。开发时可用 `pwsh -File scripts\db.ps1 start` + `npm run dev`，并打开 `http://127.0.0.1:3000/status` 确认各检查项。
 - 视频上传待服务端接口：Markdown 编辑器可调用系统选择器，但不做真实上传与转码。
-- 媒体文件保存到应用私有目录 `files/media` 并通过短 URL 引用，仍属于设备本地存储；卸载应用会一并清除。
-- 认证仍是明文比对的内置账号，缺少密码哈希与安全持久化。
-- 报名码的二维码开关与核销状态保存在会话内（`ExhibitionConfiguration` 与 `RegistrationReviewStore`），重启应用后需要重新开启；接入服务端后应随展会与报名记录落库。
+- 媒体文件保存到应用私有目录 `files/media` 并通过短 URL 引用，属于设备本地存储；卸载应用会一并清除，换设备不同步。
+- 通知只有落库与权限申请：事件发生在服务端，应用不在前台时不会收到本地推送（需要 FCM 或轮询）。
+- 后端没有对外开放部署（无 HTTPS、无签名校验），示例密钥与 `postgres/postgres` 只适合本机开发。
 - 继续补齐前端页面的无障碍检查，并把剩余硬编码文案迁移到 `strings.xml`。
 
 ## 冲突与待裁决清单
@@ -504,26 +478,25 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 | 条目 | 现状处理 | 需要确认 |
 | --- | --- | --- |
-| 报名方式“需审核 / 无需审核 / 仅展示” | 新增状态常量并入库；`报名中` 在界面上按“需审核”展示 | 是否需要数据迁移，把历史 `报名中` 记录改写为具体方式 |
+| 报名方式“需审核 / 无需审核 / 仅展示” | 状态在库里存英文代码，中文标签在 `server/src/domain/labels.js` 映射一次 | 是否需要数据迁移，把历史 `报名中` 记录改写为具体方式 |
 | “无需审核”的自动通过 | 提交后直接置为已通过，展商仍可在报名管理中调整 | 已按确认实现；如需改为“提交后仍待展商确认”请说明 |
-| 报名收集项持久化 | **已落库**：后端 `exhibition_fields` 表（标题 / 类型 / 选项 / 必填 / 顺序）；离线降级仍用进程内配置 | 无 |
+| 报名收集项持久化 | **已落库**：后端 `exhibition_fields` 表（标题 / 类型 / 选项 / 必填 / 顺序） | 无 |
 | 报名审核记录 | **已落库**：后端 `registrations.status` + `check_in_time`，与报名同一行 | 无 |
 | 简介存储格式 | 统一以 Markdown 保存并记录 `descriptionFormat`，历史 HTML 打开编辑器时自动转换，内联图片保存时改写为短 URL | 是否需要一次性把所有历史简介转换并回写 |
 | 服务器设置生效范围 | **已落库**：后端 `app_settings` 表，管理员保存后对所有用户生效；个人外观模式在 `users.ui_mode` | 无 |
-| 首页示例展会 | 首页展示 SQLite 中的 4 条展会，`ExhibitionCatalog` 提供月份/展商/亮点补充 | 是否把首页 7 条样例一并写入数据库 |
+| 首页示例展会 | 后端示例数据是 4 场**相对今天**生成的展会，`db:seed` 可反复执行 | 是否需要更多示例展会或按分类铺开 |
 | “修改报名” | 打开报名页并回填已提交的回答，保存时受“已提交过该展会”限制 | 是否需要真正的报名更新接口 |
 | 视频上传 | 仅有系统选择器占位，格式与数量按服务器设置校验 | 是否接入服务端媒体接口 |
 | 管理员角色 | 继续用 `admin` 覆盖超级管理员 | 是否需要独立超级管理员 |
 | 设计稿 16/17 屏 | 内容内联到管理后台与个人页，不再保留二级页面 | 是否需要保留独立入口 |
 | 报名二维码的启用开关 | **已落库**：后端 `exhibitions.qr_enabled`，核销状态在 `registrations` 上 | 无 |
 | 核销权限 | **已收紧**：后端按 `exhibitions.exhibitor_id` 校验，展商只能核销自己举办的展会（管理员不限） | 无 |
-| 离线降级是否保留 | 后端是主路径，连不上时退回本机 SQLite / SharedPreferences 实现（已实测可用） | 是否删掉本机数据实现、让应用必须连后端（删掉后没起后端就用不了） |
-| 旧的零依赖演示后端 | `src/demo-server.js` + `demo-api.js` + `demo-data.js` 已被 Express + PostgreSQL 取代，暂时保留作为「不装数据库也能跑通前端」的备用 | 是否删除（删掉后 `npm run demo` 与 `test:demo` 一并移除） |
-| 首页示例展会 | 后端示例数据是 4 场**相对今天**生成的展会；离线降级那份用 SQLite 里的固定数据 | 是否需要更多示例展会或按分类铺开 |
+| 后端必须可用 | **已定**：删掉本机数据实现与零依赖演示后端，应用只走 HTTP；连不上时如实报错 | 无 |
 
 ## 变更记录
 
-- 2026-09-18：数据库改用 Docker 部署（容器 `calmobile-pg` + 命名卷 `calmobile-pgdata`，固定 `postgres:16-alpine`，`--restart unless-stopped`），`scripts/db.ps1` 同时支持 Docker 与 WSL 两条路（默认 Docker，`-Provider wsl` 切备选）；容器显式设 `Asia/Shanghai` 时区，避免镜像默认 UTC 让数据库的「今天」在凌晨差一天。
+- 2026-09-18：删除两条历史包袱——原生侧的本机数据实现（19 个类 + 15 个测试：`AuthManager`、`DatabaseHelper`、`ExhibitionManager`、`RegistrationManager`、`RegistrationReviewStore`、`UserProfileStore`、`ExhibitionConfiguration`、8 个域动作类等）与旧的零依赖演示后端（`demo-server.js` / `demo-api.js` / `demo-data.js` + 拆分脚本），`WebAppActions` 收敛到 10 个系统动作（`ui.sync`、摄像头与通知权限、系统日历、媒体选择与落盘、分享、CSV 导出），`AppSettings` 降级为设备镜像；`api.js` 删除传输层降级分支；WSL 里的 PostgreSQL 与 `db.ps1` 的 `-Provider wsl` 一并移除，数据库只剩 Docker 一条路。新增后端健康状态页：给人看的 `GET /status`（自检数据库、迁移版本、示例数据、端口配置，失败项标红并给出修复命令）与给机器看的 `GET /api/v1/status`，后端在数据库不可用时也照常启动以便先看到状态页。清理已完成的结构优化清单与文档中的离线降级描述。
+- 2026-09-18：数据库改用 Docker 部署（容器 `calmobile-pg` + 命名卷 `calmobile-pgdata`，固定 `postgres:16-alpine`，`--restart unless-stopped`），`scripts/db.ps1` 改为只认 Docker；容器显式设 `Asia/Shanghai` 时区，避免镜像默认 UTC 让数据库的「今天」在凌晨差一天。
 - 2026-09-17：**后端补齐为真实服务**（Express + PostgreSQL）：重写迁移脚本（按编号记录、可反复执行，8 张表把展会扩展字段、报名收集项、审核状态与核销时间、服务器设置、通知偏好、刷新令牌全部落库）；新增 `src/domain/` 业务层（状态词汇表、SQL 片段、响应映射、权限、校验、设置、会话）；实现前端全部 35 个数据动作的 REST 路由，服务端兜住角色权限、报名窗口、重复报名、自动通过、核销流转与隐私开关；密码改 bcrypt、令牌改 JWT + 可撤销的刷新令牌轮换；示例数据改为相对今天生成，演示不会过期。前端 `api.js` 增加「动作 → REST 路径」映射表与 401 自动续期，页面不需要知道数据来自哪一边，也不会因为换后端而改动。新增后端契约测试 33 项、前端 REST 映射用例 1 项，`npm run lint` 全绿（后续又补了「前后端路由交叉校验」2 项，并据此删掉重复的用户公开页入口）。
 - 2026-09-17：前端取数改为「先画缓存、再后台刷新」（新增 `core/loadable.js` 与 `core/preload.js`，`api.js` 的只读接口提供 `peek()` / `warm()` 并按参数排序做缓存键、并发去重），切页面与切月份不再先闪骨架屏；首页日历的选中日期改为纯本地状态，点日期与切换月份都不再重新取数；`exhibitions.month` 改为原样返回请求的月份，日历落点由 `bootstrap.calendar.landing` 下发；收敛原生三处结构（`ExhibitionConfiguration` 改 `Patch` 写入、`RegistrationReviewStore` 统一报名 id 并把示例数据显式标注、字符数上限收敛到 `AppSettings.TextLimit` 单表）；补 3 个原生单测与 6 个前端渲染用例。
 - 2026-09-17：按动作域拆分 `WebAppActions`（2,156 行 → 8 个域类 + 196 行分发入口，行为不变）；个人页新增「在公开页展示我的报名记录」隐私开关并打通持久化与公开页过滤；演示后端同步支持该字段。

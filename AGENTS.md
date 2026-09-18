@@ -2,7 +2,7 @@
 
 ## 项目结构
 
-Android 客户端位于 `app/`，使用 Java 17。启动页是 `WebShellActivity`，它是承载 `newUI/` 设计的 WebView 容器；前端页面、样式与脚本位于 `app/src/main/assets/web/`，Android 侧业务与系统能力位于 `app/src/main/java/com/example/calmobile/`。旧 Java/XML 页面已随 WebView 迁移删除，界面只有 `WebShellActivity` 一个入口；`res/` 只保留 `AppTheme` 与应用名/日历提示等原生必需资源，前端文案在 `res/values/strings_frontend.xml`（由 `scripts/extract-strings.js` 生成）。单元测试在 `app/src/test/`。`server/` 是独立的 Node.js、Express 与 PostgreSQL 服务，不属于 Gradle 模块。项目说明、架构、需求、设计令牌和路线图统一维护在根目录 `README.md`，后端运行细节维护在 `server/README.md`。
+Android 客户端位于 `app/`，使用 Java 17。启动页是 `WebShellActivity`，它是承载 `newUI/` 设计的 WebView 容器；前端页面、样式与脚本位于 `app/src/main/assets/web/`，原生侧**只剩系统能力**（`app/src/main/java/com/example/calmobile/`：系统日历、通知与摄像头权限、媒体选择与落盘、分享、导出、系统栏配色）。业务数据（展会、报名、用户、认证、设置）全部由 `server/` 的 Express + PostgreSQL 后端提供，原生不再持有任何数据实现。旧 Java/XML 页面已随 WebView 迁移删除，界面只有 `WebShellActivity` 一个入口；`res/` 只保留 `AppTheme` 与应用名/日历提示等原生必需资源，前端文案在 `res/values/strings_frontend.xml`（由 `scripts/extract-strings.js` 生成）。单元测试在 `app/src/test/`。`server/` 是独立的 Node.js、Express 与 PostgreSQL 服务，不属于 Gradle 模块。项目说明、架构、需求、设计令牌和路线图统一维护在根目录 `README.md`，后端运行细节维护在 `server/README.md`。
 
 ## 构建、测试与开发
 
@@ -14,12 +14,12 @@ node scripts/webui-check.js
 node --test scripts/smoke-check.test.js
 node --test scripts/webui-render.test.js
 node scripts/check-strings.js
-node --test server/test/demo-api.test.js
+node --test server/test/api.test.js
 gradlew.bat :app:testDebugUnitTest
 gradlew.bat :app:assembleDebug
 ```
 
-`smoke-check` 校验清单入口、桥接契约、页面模块、设计令牌、动效层、内置依赖与文档关键内容；`webui-check` 校验前端 ES 模块能否解析、动作名是否都有原生实现；`webui-render.test.js` 用最小 DOM 打桩与假桥接把每个页面真正渲染一次，捕获只在运行时才暴露的接线错误（新增页面或桥接动作后要同步补上约定返回值与用例）；`check-strings.js` 校验前端文案在源码、`strings_frontend.xml` 与 `FrontendStrings.NAMES` 三处一致；`server/test/demo-api.test.js` 是前后端契约测试，逐接口断言页面用到的字段都在；`smoke-check.test.js` 是检查脚本自身的单元测试。POSIX 环境使用 `./gradlew`。后端进入 `server/` 后运行 `npm install`、`npm run db:migrate`、`npm run dev`；测试使用 `npm test -- --runInBand`，风格检查使用 `npm run lint`。本地 PostgreSQL 配置参考 `server/.env.example`，禁止提交 `.env`、密钥或真实用户数据。
+`smoke-check` 校验清单入口、桥接契约、页面模块、设计令牌、动效层、内置依赖与文档关键内容；`webui-check` 校验前端 ES 模块能否解析、动作名与原生系统动作白名单；`webui-render.test.js` 用最小 DOM 打桩与假后端 `fetch` 把每个页面真正渲染一次，捕获只在运行时才暴露的接线错误（新增页面或接口后要同步补上约定返回值与用例）；`check-strings.js` 校验前端文案在源码、`strings_frontend.xml` 与 `FrontendStrings.NAMES` 三处一致；`server/test/api.test.js` 是前后端契约测试，逐接口断言页面用到的字段都在，并交叉校验前后端路由一致；`smoke-check.test.js` 是检查脚本自身的单元测试。POSIX 环境使用 `./gradlew`。后端进入 `server/` 后运行 `npm install`、`npm run db:migrate`、`npm run db:seed`、`npm run dev`；测试使用 `npm test -- --runInBand` 与 `npm run test:contract`，风格检查使用 `npm run lint`；数据库跑在 Docker 里（`pwsh -File scripts\db.ps1 start`），配置参考 `server/.env.example`，禁止提交 `.env`、密钥或真实用户数据。后端起来后先看 `http://127.0.0.1:3000/status` 确认各检查项。
 
 ## 编码与界面规范
 
@@ -31,7 +31,7 @@ Android 改动按 smoke-check、webui-check、单元测试、调试构建的顺�
 
 ## 架构与工作区
 
-前端为 WebView 页面（HTML/CSS/ES 模块），通过 `WebAppBridge`/`WebAppActions` 调用原生业务；展会、报名和用户数据使用 SQLite，并在数据库不可用时回退到内存示例数据；应用设置、个人资料与上传的媒体文件使用 SharedPreferences 与应用私有目录 `files/media`（通过 `https://appassets.androidplatform.net/media/<文件名>` 引用，由 `WebShellActivity` 拦截放行）。新增页面时同时更新 `assets/web/js/app.js` 的路由注册、`README.md` 的屏幕对照表和 `scripts/smoke-check.js`、`scripts/webui-check.js` 的页面清单；管理类功能优先内联到现有页面，不新增二级页面。管理员在「管理-设置」中维护的是服务器级配置（软件中英文标题、公告、分类、审核策略、媒体与上传限制、表单字符数上限），保存后对所有用户生效；应用配色属于个人偏好，放在个人页的「设置」栏。表单校验统一走 `js/core/validate.js`，长度上限取自 `state.limits`，原生侧保存前再校验一次；用户可见文案统一走 `core/strings.js` 的 `t('key')`，文案本体在 `res/values/strings_frontend.xml`。桥接动作按域拆分：`WebAppActions`（分发入口）→ `SessionActions` / `ProfileActions` / `ExhibitionActions` / `RegistrationActions` / `AdminActions` / `MediaActions` / `SystemActions`，共享工具在 `ActionSupport`；改动某一域的实现只碰对应文件，新增动作要同时改分发 switch（`scripts/split-webapp-actions.js` 是拆分脚本，含归属覆盖校验）。前端取数只走 `js/core/api.js`：它按 `ENDPOINTS` 表把动作翻成 `server/` 的 REST 请求（Express + PostgreSQL，`npm run dev`，默认 3000 端口，配合 `adb reverse tcp:3000 tcp:3000`），连不上时退回原生桥接，因此离线也能完整演示；只读接口都带 `peek()`（同步读缓存，可为过期数据）与 `warm()`（后台预取）。页面渲染数据统一用 `js/core/loadable.js` 的 `loadInto()`——命中缓存同步出内容、容器非空时不清空只标 `data-busy`、数据没变不重绘；不要在页面里写「先 `loadingBlock()` 再 await」的老写法，也不要在页面里自己 `catch` 后画错误块。预加载集中在 `js/core/preload.js`（标签页、相邻月份、列表首项详情、`warmOnPress()`），由 `app.js` 在路由变化后触发。后端改动：状态一律在库里存英文代码、中文标签只在 `server/src/domain/labels.js` 映射一次；写入类接口返回 `{ ok, error, ... }` 信封（页面按 `.ok` 判断），读取类直接返回数据；新增接口要同时补 `api.js` 的 `ENDPOINTS` 与 `server/test/api.test.js`。改了 `server/src/*.js` 要重启后端进程，Node 会继续用旧模块应答。旧架构层（Room/Retrofit/Repository/ViewModel/legacy 页面）已删除，不要重新引入。修改认证、持久化、导航、包名、签名或引入新框架前先确认。工作区可能包含其他任务的改动，只检查并提交本次涉及路径，不回退无关文件；`build/`、`.gradle-local/`、`.idea/`、`.omo/`、`.opencode/`、日志与 APK 已在 `.gitignore` 中，不要把它们加入提交，也不要为了“干净”删除本机缓存目录。
+前端为 WebView 页面（HTML/CSS/ES 模块），数据一律通过 `js/core/api.js` 走后端 HTTP（`server/`，Express + PostgreSQL）；原生只剩下「只有设备能做」的系统能力，动作表固定为 `ui.sync`、`camera.ensurePermission`、`calendar.status`、`calendar.toggle`、`notify.requestPermission`、`media.pickImage`、`media.import`、`media.store`、`share.text`、`export.csv` 十个（`WebAppActions.handle()` 的 switch 就是权威清单），**不要往原生加数据实现**。`AppSettings` 只是设备侧的镜像（外观模式、配色下标、媒体上限、系统栏颜色），权威值在后端，由 `ui.sync` 推过来。新增页面时同时更新 `assets/web/js/app.js` 的路由注册、`README.md` 的屏幕对照表和 `scripts/smoke-check.js`、`scripts/webui-check.js` 的页面清单；管理类功能优先内联到现有页面，不新增二级页面。管理员在「管理-设置」中维护的是服务器级配置（软件中英文标题、公告、分类、审核策略、媒体与上传限制、表单字符数上限），保存在后端 `app_settings` 表里、对所有用户生效；应用配色与外观模式属于个人偏好（`users.ui_mode`）。表单校验统一走 `js/core/validate.js`，长度上限取自 `state.limits`，后端保存前再校验一次；用户可见文案统一走 `core/strings.js` 的 `t('key')`，文案本体在 `res/values/strings_frontend.xml`。前端取数按 `js/core/api.js` 的 `ENDPOINTS` 表把动作翻成 REST 请求，没有原生降级路径：后端连不上就直接报错（数据只在后端）。页面渲染数据统一用 `js/core/loadable.js` 的 `loadInto()`——命中缓存同步出内容、容器非空时不清空只标 `data-busy`、数据没变不重绘；不要在页面里写「先 `loadingBlock()` 再 await」的老写法，也不要在页面里自己 `catch` 后画错误块。预加载集中在 `js/core/preload.js`（标签页、相邻月份、列表首项详情、`warmOnPress()`），由 `app.js` 在路由变化后触发。后端改动：状态一律在库里存英文代码、中文标签只在 `server/src/domain/labels.js` 映射一次；写入类接口返回 `{ ok, error, ... }` 信封（页面按 `.ok` 判断），读取类直接返回数据；新增接口要同时补 `api.js` 的 `ENDPOINTS`、后端路由与 `server/test/api.test.js`（那里有前后端路由交叉校验）。数据库跑在 Docker 里（`pwsh -File scripts\db.ps1 start`，容器 `calmobile-pg`），改了 `server/src/*.js` 要重启后端进程，Node 会继续用旧模块应答。旧架构层（Room/Retrofit/Repository/ViewModel/legacy 页面、本机 SQLite 数据层、零依赖演示后端）已删除，不要重新引入。修改认证、持久化、导航、包名、签名或引入新框架前先确认。工作区可能包含其他任务的改动，只检查并提交本次涉及路径，不回退无关文件；`build/`、`.gradle-local/`、`.idea/`、`.omo/`、`.opencode/`、`node_modules/`、`.env`、日志与 APK 已在 `.gitignore` 中，不要把它们加入提交，也不要为了“干净”删除本机缓存目录。
 
 ## 文档维护
 
