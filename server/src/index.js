@@ -55,6 +55,13 @@ for (const [prefix, router] of Object.entries(routes)) {
   app.use(`/api/v1${prefix ? `/${prefix}` : ''}`, router);
 }
 
+// 状态页：人读的 HTML（/status）与机器读的 JSON（/api/v1/status）共用一份探测逻辑。
+// 它**不进上面的 `routes` 动作表** —— 那张表是「前端动作 ↔ 后端路由」的对照，
+// 状态接口没有对应的前端动作，登记进去会让覆盖断言失真。
+const statusRoutes = require('./routes/status');
+app.use('/api/v1/status', statusRoutes);
+app.use('/status', statusRoutes);
+
 /** 连通性检查：前端启动时探一次，失败就退回原生桥接。 */
 app.get(['/ping', '/api/v1/ping'], (req, res) => {
   res.json({ ok: true, service: 'calmobile-server', version: '1.0.0' });
@@ -81,20 +88,27 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   });
 });
 
+/**
+ * 启动服务。
+ *
+ * **数据库连不上也要把 HTTP 服务起起来**：这样 `/status` 能告诉你「是数据库挂了」，
+ * 而不是只看到进程退出、什么线索都没有。真正的失败由 `/api/v1/status` 返回 503 表达，
+ * 业务接口在数据库恢复后自动可用（连接池会重建连接）。
+ */
 async function start() {
   try {
     const client = await pool.connect();
     client.release();
     console.log('数据库连接成功');
-    return app.listen(PORT, () => {
-      console.log(`服务器运行在 http://localhost:${PORT}`);
-      console.log(`连通性检查：http://localhost:${PORT}/ping`);
-      console.log(`健康检查：http://localhost:${PORT}/health`);
-    });
   } catch (error) {
-    console.error('服务器启动失败：', error.message);
-    process.exit(1);
+    console.error('数据库暂时不可用，服务仍会启动；打开 /status 查看原因：', error.message);
   }
+  return app.listen(PORT, () => {
+    console.log(`服务器运行在 http://localhost:${PORT}`);
+    console.log(`状态页：http://localhost:${PORT}/status`);
+    console.log(`连通性检查：http://localhost:${PORT}/ping`);
+    console.log(`健康检查：http://localhost:${PORT}/health`);
+  });
 }
 
 async function shutdown(signal) {

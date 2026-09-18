@@ -1,0 +1,416 @@
+/**
+ * status：后端与数据库的健康报告。
+ *
+ * 同一个路由器挂两次，共用这份探测逻辑：
+ * - `GET /api/v1/status` → 机器读的 JSON：`ok` 为真给 200，否则 503（探活脚本按状态码判断）；
+ * - `GET /status`        → 人读的 HTML（见 `src/status-page.js`）：永远 200，
+ *   数据库挂了也必须打得开并把失败原因写在页面上。
+ *
+ * 三条自我约束：
+ * 1. **不抛异常**：数据库挂了要给 `ok:false` + 错误原文，而不是 500 —— 探针自己炸了就没法排查；
+ * 2. **不编数据**：每一项都来自真实测量（SQL、进程信息、环境变量），自检项失败必须指得到出处；
+ * 3. **不固化清单**：`endpoints` 直接遍历 `index.js` 导出的 `routes`（与 `test/api.test.js`
+ *    的 `backendRoutes()` 同一套走法），新增路由不会漏登记。
+ */
+
+const express = require('express');
+const { query, pool } = require('../config/pool');
+const { STEPS } = require('../config/migrate');
+const databaseConfig = require('../config/database');
+const { renderStatusPage } = require('../status-page');
+const { version: SERVICE_VERSION } = require('../../package.json');
+
+const router = express.Router();
+
+/** 服务标识与 `/ping` 保持一致。 */
+const SERVICE_NAME = 'calmobile-server';
+
+/** `config/auth.js` 的门槛：密钥不少于 32 个字符，且不能是模板里的占位值。 */
+const MIN_SECRET_LENGTH = 32;
+const PLACEHOLDER_SECRET = /^(your_|replace-with|change-me)/i;
+
+/** 数据量卡片统计的表，固定白名单（表名直接拼进 SQL，不接受外部输入）。 */
+const COUNT_TABLES = ['users', 'exhibitions', 'registrations', 'exhibition_fields', 'app_settings'];
+
+/** 自检项的通用超时（毫秒）：探测不能把状态页拖住。 */
+const PROBE_TIMEOUT_MS = 4000;
+
+function safeMessage(error) {
+  if (!error) {
+    return '未知错误';
+  }
+  return String(error.message || error);
+}
+
+/** 高精度计时，结果保留两位小数。 */
+function elapsedMs(startedAt) {
+  return Math.round(Number(process.hrtime.bigint() - startedAt) / 1e4) / 100;
+}
+
+/** 连接池现状（`pg` 的 Pool 自带 totalCount / idleCount / waitingCount）。 */
+function poolStats() {
+  return {
+    total: Number(pool.totalCount) || 0,
+    idle: Number(pool.idleCount) || 0,
+    waiting: Number(pool.waitingCount) || 0,
+  };
+}
+
+/** 服务时区：`Intl` 拿不到时退回 UTC，保证 `now` 永远能格式化。 */
+function serviceTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch (error) {
+    return 'UTC';
+  }
+}
+
+/**
+ * 给任意 Promise 加超时。
+ *
+ * 连接池自己的 `connectionTimeoutMillis` 是 2 秒，正常情况下够用；
+ * 这里再兜一层，避免数据库半死不活（能握手但不回结果）时把状态页卡住。
+ */
+function withTimeout(promise, label) {
+  let timer = null;
+  const timeout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label}超时（${PROBE_TIMEOUT_MS} ms 没有响应）`)), PROBE_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/** 各表行数；数据库不可用时直接给 null，而不是逐表各等一次超时。 */
+function emptyCounts() {
+  const counts = {};
+  for (const table of COUNT_TABLES) {
+    counts[table] = null;
+  }
+  return counts;
+}
+
+/**
+ * 数据库探测：两条真查询（`select version()` + `select 1`），失败时把错误原文带出去。
+ *
+ * 返回 `{ info, ms }`：`info.latencyMs` 只在连通时才有（真实往返时间），
+ * `ms` 是这次探测本身花掉的时间（失败时也算，自检项要显示「等了多久才失败」）。
+ *
+ * 连接地址连上时用服务端自报的（`inet_server_addr()`），连不上时用配置里的目标地址 ——
+ * 排查时要知道刚才连的是哪儿。
+ */
+async function probeDatabase() {
+  const startedAt = process.hrtime.bigint();
+  const info = {
+    connected: false,
+    latencyMs: null,
+    version: '',
+    database: '',
+    host: '',
+    pool: poolStats(),
+  };
+  try {
+    const result = await withTimeout(query(`
+            SELECT version() AS version,
+                   current_database() AS database,
+                   coalesce(host(inet_server_addr()), 'local') AS host,
+                   coalesce(inet_server_port(), 0) AS port
+        `), '数据库查询');
+    // 第二条查询确认连接真的能来回，而不是只握了个手。
+    await withTimeout(query('SELECT 1 AS ping'), '数据库查询');
+    const row = result.rows[0];
+    info.connected = true;
+    info.latencyMs = elapsedMs(startedAt);
+    info.version = String(row.version || '');
+    info.database = String(row.database || '');
+    info.host = row.port ? `${row.host}:${row.port}` : String(row.host || '');
+  } catch (error) {
+    info.error = safeMessage(error);
+    info.host = `${databaseConfig.host}:${databaseConfig.port}`;
+  }
+  // 连接池计数放在探测之后读：正好反映这次探测留下的连接状况。
+  info.pool = poolStats();
+  return { info, ms: elapsedMs(startedAt) };
+}
+
+/**
+ * 迁移探测：拿 `schema_migrations` 与 `STEPS` 对比。
+ * 表不存在（数据库刚建、还没跑过迁移）时视为「全部未应用」，而不是抛错。
+ */
+async function probeMigrations(database) {
+  const all = STEPS.map((step) => step.id);
+  if (!database.connected) {
+    return {
+      report: { applied: [], pending: all, error: `数据库不可用：${database.error || '未连接'}` },
+      ms: 0,
+    };
+  }
+  const startedAt = process.hrtime.bigint();
+  try {
+    const result = await withTimeout(
+      query('SELECT id, applied_at FROM schema_migrations ORDER BY applied_at, id'),
+      '迁移查询',
+    );
+    const appliedIds = new Set(result.rows.map((row) => row.id));
+    return {
+      report: {
+        applied: result.rows.map((row) => ({
+          id: row.id,
+          appliedAt: row.applied_at instanceof Date ? row.applied_at.toISOString() : String(row.applied_at),
+        })),
+        pending: all.filter((id) => !appliedIds.has(id)),
+      },
+      ms: elapsedMs(startedAt),
+    };
+  } catch (error) {
+    // 表还不存在时错误是 `relation "schema_migrations" does not exist`，正好说明一步都没跑。
+    return {
+      report: { applied: [], pending: all, error: safeMessage(error) },
+      ms: elapsedMs(startedAt),
+    };
+  }
+}
+
+/** 逐表取行数；某张表读不到时那一项给 null，不影响其它表。 */
+async function probeCounts(database) {
+  const counts = emptyCounts();
+  if (!database.connected) {
+    return { counts, ms: 0 };
+  }
+  const startedAt = process.hrtime.bigint();
+  for (const table of COUNT_TABLES) {
+    try {
+      const result = await withTimeout(query(`SELECT count(*)::int AS total FROM ${table}`), '行数统计');
+      counts[table] = Number(result.rows[0].total);
+    } catch (error) {
+      counts[table] = null;
+    }
+  }
+  return { counts, ms: elapsedMs(startedAt) };
+}
+
+/**
+ * 接口清单：遍历 `index.js` 导出的 `routes`，把每个 router 的 `stack` 拼上挂载前缀，
+ * 与 `test/api.test.js` 的 `backendRoutes()` 完全同源，因此清单不会和真实路由漂移。
+ *
+ * 这里**延迟 require**：`index.js` 加载时会 require 本模块，顶层 require 会拿到半成品 exports；
+ * 请求到来时 index.js 早已加载完毕，拿到的就是完整的 `routes`。
+ */
+function routeInventory() {
+  const { routes } = require('../index');
+  const endpoints = [];
+  for (const [prefix, mountedRouter] of Object.entries(routes)) {
+    const base = `/api/v1${prefix ? `/${prefix}` : ''}`;
+    for (const layer of mountedRouter.stack) {
+      if (!layer.route) {
+        continue;
+      }
+      const full = `${base}${layer.route.path === '/' ? '' : layer.route.path}`;
+      for (const method of Object.keys(layer.route.methods)) {
+        endpoints.push({ method: method.toUpperCase(), path: full });
+      }
+    }
+  }
+  return endpoints.sort((a, b) => (a.path === b.path
+    ? a.method.localeCompare(b.method)
+    : a.path.localeCompare(b.path)));
+}
+
+/**
+ * 自检项：每一条都必须来自真实测量。
+ *
+ * `probe` 返回一句说明文字，抛错即算失败；`ms` 显式传入时复用前面那次真实探测的耗时
+ * （例如「数据库连通」用整次探测的时间），这样页面上的耗时不是凭空写的。
+ */
+async function runChecks({ database, databaseMs, migrations, migrationsMs, counts, countsMs }) {
+  const checks = [];
+
+  const run = async (name, probe, ms) => {
+    const startedAt = process.hrtime.bigint();
+    // 探测已经量过一次的，用那次结果；没有量到的（null / undefined / NaN）就用本段自己的耗时。
+    const measured = ms === null || ms === undefined || !Number.isFinite(Number(ms)) ? null : Number(ms);
+    try {
+      const detail = await probe();
+      checks.push({ name, status: 'ok', detail, ms: measured === null ? elapsedMs(startedAt) : measured });
+    } catch (error) {
+      checks.push({ name, status: 'fail', detail: safeMessage(error), ms: measured === null ? elapsedMs(startedAt) : measured });
+    }
+  };
+
+  await run('认证密钥', () => {
+    // config/auth.js 在加载时就会校验：两个密钥都要存在、够长、且不是占位值。
+    const auth = require('../config/auth');
+    return `JWT_SECRET / JWT_REFRESH_SECRET 均已配置（≥ ${MIN_SECRET_LENGTH} 字符，access ${auth.accessExpiresIn} / refresh ${auth.refreshExpiresIn}）`;
+  });
+
+  await run('JWT 密钥不是占位值', () => {
+    const placeholders = ['JWT_SECRET', 'JWT_REFRESH_SECRET']
+      .filter((key) => PLACEHOLDER_SECRET.test(String(process.env[key] || '')));
+    if (placeholders.length > 0) {
+      throw new Error(`${placeholders.join(' / ')} 还是 your_ / replace-with / change-me 之类的占位值`);
+    }
+    return '两个密钥都不是模板里的占位值';
+  });
+
+  await run('数据库连通', () => {
+    if (!database.connected) {
+      throw new Error(database.error || '数据库没有应答');
+    }
+    const version = String(database.version || '').split(' on ')[0].trim();
+    return `${version || 'PostgreSQL'} 应答正常，往返 ${database.latencyMs} ms`;
+  }, databaseMs);
+
+  await run('迁移无遗漏', () => {
+    if (migrations.error) {
+      throw new Error(migrations.error);
+    }
+    if (migrations.pending.length > 0) {
+      throw new Error(`还有 ${migrations.pending.length} 项未应用：${migrations.pending.join('、')}`);
+    }
+    return `${migrations.applied.length} 项迁移全部已应用`;
+  }, migrationsMs);
+
+  await run('至少一个可登录账号', async () => {
+    if (!database.connected) {
+      throw new Error(`数据库不可用，统计不了账号：${database.error || '未连接'}`);
+    }
+    const result = await withTimeout(
+      query("SELECT count(*)::int AS total FROM users WHERE status = 'active'"),
+      '账号统计',
+    );
+    const total = Number(result.rows[0].total);
+    if (total < 1) {
+      throw new Error("没有 status='active' 的账号，谁都登录不了");
+    }
+    return `status='active' 的账号 ${total} 个`;
+  });
+
+  await run('至少一场展会', () => {
+    const total = counts.exhibitions;
+    if (total === null || total === undefined) {
+      throw new Error(`数据库不可用，统计不了展会：${database.error || '未连接'}`);
+    }
+    if (total < 1) {
+      throw new Error('一场展会都没有，前端列表会是空的');
+    }
+    return `展会 ${total} 场`;
+  }, countsMs);
+
+  return checks;
+}
+
+function serviceBlock() {
+  const now = new Date();
+  const uptimeSec = Math.round(process.uptime());
+  return {
+    name: SERVICE_NAME,
+    version: SERVICE_VERSION,
+    node: process.version,
+    uptimeSec,
+    startedAt: new Date(now.getTime() - uptimeSec * 1000).toISOString(),
+    timeZone: serviceTimeZone(),
+    now: now.toISOString(),
+  };
+}
+
+/**
+ * 组装报告。`ok` 只表达「服务活着 + 数据库答得上」——迁移与自检的问题在 `checks` 里逐项说明，
+ * 不混进状态码，否则探活脚本分不清「数据库没了」和「只是有一步迁移没跑」。
+ */
+async function buildReport() {
+  const service = serviceBlock();
+  const { info: database, ms: databaseMs } = await probeDatabase();
+  const { counts, ms: countsMs } = await probeCounts(database);
+  const migrations = await probeMigrations(database);
+  const checks = await runChecks({
+    database,
+    databaseMs,
+    migrations: migrations.report,
+    migrationsMs: migrations.ms,
+    counts,
+    countsMs,
+  });
+
+  let endpoints = [];
+  try {
+    endpoints = routeInventory();
+  } catch (error) {
+    // 清单读不到不该让整份报告失败，但要在日志里留下痕迹。
+    console.error('接口清单读取失败：', error);
+  }
+
+  return {
+    ok: database.connected,
+    service,
+    database,
+    migrations: migrations.report,
+    data: counts,
+    endpoints,
+    checks,
+  };
+}
+
+/** 最后的兜底：连探测本身都炸了，也要给出一份结构完整的报告，页面才渲染得出来。 */
+function fallbackReport(error) {
+  const message = safeMessage(error);
+  return {
+    ok: false,
+    service: serviceBlock(),
+    database: {
+      connected: false,
+      latencyMs: null,
+      version: '',
+      database: '',
+      host: '',
+      pool: poolStats(),
+      error: message,
+    },
+    migrations: { applied: [], pending: STEPS.map((step) => step.id), error: message },
+    data: emptyCounts(),
+    endpoints: [],
+    checks: [{ name: '健康报告', status: 'fail', detail: message, ms: 0 }],
+  };
+}
+
+/**
+ * 状态页渲染失败的兜底：宁可给一页纯文本，也不要让唯一的排查入口变成 500。
+ */
+function fallbackHtml(error) {
+  return '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
+    + '<title>状态页渲染失败</title></head>'
+    + '<body style="font:16px/1.6 system-ui,sans-serif;padding:24px">'
+    + '<h1>状态页渲染失败</h1><p>后端进程还活着，但状态页自身的模板出错了。</p>'
+    + `<pre style="white-space:pre-wrap">${String(safeMessage(error)).replace(/[<>&]/g, '')}</pre>`
+    + '<p><a href="/api/v1/status">查看 JSON 报告</a></p></body></html>';
+}
+
+// 状态数据永远要新鲜：探活脚本和页面都不能拿到缓存的旧结果。
+router.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
+/**
+ * `GET /api/v1/status` → JSON（200 / 503）；`GET /status` → HTML（200）。
+ * 用 `req.baseUrl` 区分两个挂载点，避免把探测逻辑写两遍。
+ */
+router.get('/', async (req, res) => {
+  let report;
+  try {
+    report = await buildReport();
+  } catch (error) {
+    console.error('健康报告生成失败：', error);
+    report = fallbackReport(error);
+  }
+
+  if (req.baseUrl === '/status') {
+    try {
+      res.type('html').send(renderStatusPage(report));
+    } catch (error) {
+      console.error('状态页渲染失败：', error);
+      res.type('html').send(fallbackHtml(error));
+    }
+    return;
+  }
+  res.status(report.ok ? 200 : 503).json(report);
+});
+
+module.exports = router;
