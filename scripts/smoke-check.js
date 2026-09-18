@@ -723,7 +723,7 @@ const checks = [
     id: 'web-checkin-page',
     // 核销走 core/api.js 的 checkIn（REST），只有摄像头权限是原生动作
     file: `${WEB_ROOT}/js/pages/checkin.js`,
-    contains: ["import { checkIn }", 'await checkIn(', 'camera.ensurePermission', 'jsQR', 'onPageStop']
+    contains: ["import { checkIn }", 'await checkIn(', 'camera.ensurePermission', 'loadQrDecoder(', 'onPageStop']
   },
   {
     id: 'device-qr-verification-script',
