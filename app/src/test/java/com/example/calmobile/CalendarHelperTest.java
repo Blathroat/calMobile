@@ -5,95 +5,123 @@ import org.junit.Test;
 import java.util.Calendar;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
- * Unit tests for {@link CalendarHelper}.
- * Tests the time-parsing logic (package-private {@code parseTimeRange} method).
- * <p>
- * Note: Calendar event operations ({@code addToCalendar}, {@code removeFromCalendar},
- * {@code isInCalendar}) require Android Context, ContentResolver, and runtime permissions,
- * so they cannot be tested with plain JUnit. Only the pure-Java time parsing is tested here.
+ * Unit tests for {@link CalendarHelper}。
+ *
+ * 覆盖的是纯 Java 部分：ISO 日期校验与「日期 + 时间 → 时间戳」的解析。
+ * 写/删日历（{@code addToCalendar} / {@code removeFromCalendar} / {@code isInCalendar}）
+ * 需要 Android Context、ContentResolver、CalendarProvider 与运行时权限，普通 JUnit 测不了。
+ *
+ * 这里**不复制实现里的常量**当期望值：日期全部由用例显式给出，
+ * 因此「写死年月」这类缺陷不可能再被测试掩盖（旧用例正是把写死的 2026-06 抄成了期望值）。
  */
 public class CalendarHelperTest {
 
-    private static final int EXHIBITION_YEAR = 2026;
-    private static final int EXHIBITION_MONTH = Calendar.JUNE; // 5 (0-indexed)
+    private static final String SEPTEMBER = "2026-09-25";
+    private static final String OCTOBER = "2026-10-02";
 
-    // ── parseTimeRange: normal cases ─────────────────────────────
+    // ── isValidDate ──────────────────────────────────────────────
 
     @Test
-    public void parseTimeRangeNormalInput() {
-        long[] result = CalendarHelper.parseTimeRange(15, "09:00-17:30");
+    public void validDateAccepted() {
+        assertTrue(CalendarHelper.isValidDate("2026-09-25"));
+        assertTrue(CalendarHelper.isValidDate("2026-01-01"));
+        assertTrue(CalendarHelper.isValidDate("2026-12-31"));
+        assertTrue(CalendarHelper.isValidDate("2024-02-29")); // 闰年
+    }
+
+    @Test
+    public void invalidDateRejected() {
+        assertFalse(CalendarHelper.isValidDate(null));
+        assertFalse(CalendarHelper.isValidDate(""));
+        assertFalse(CalendarHelper.isValidDate("2026-9-25"));   // 必须是两位月份
+        assertFalse(CalendarHelper.isValidDate("26-09-25"));    // 必须是四位年份
+        assertFalse(CalendarHelper.isValidDate("2026/09/25"));  // 只认短横线
+        assertFalse(CalendarHelper.isValidDate("2026-13-01"));  // 没有 13 月
+        assertFalse(CalendarHelper.isValidDate("2026-02-30"));  // 那天不存在
+        assertFalse(CalendarHelper.isValidDate("2026-09-25T10:00"));
+        assertFalse(CalendarHelper.isValidDate("abc"));
+    }
+
+    // ── parseTimeRange：日期来自入参，而不是写死的年月 ──────────────
+
+    @Test
+    public void parseTimeRangeUsesGivenDate() {
+        long[] result = CalendarHelper.parseTimeRange(SEPTEMBER, "09:00-17:30");
 
         Calendar start = Calendar.getInstance();
         start.setTimeInMillis(result[0]);
-        assertEquals(EXHIBITION_YEAR, start.get(Calendar.YEAR));
-        assertEquals(EXHIBITION_MONTH, start.get(Calendar.MONTH));
-        assertEquals(15, start.get(Calendar.DAY_OF_MONTH));
+        assertEquals(2026, start.get(Calendar.YEAR));
+        assertEquals(Calendar.SEPTEMBER, start.get(Calendar.MONTH));
+        assertEquals(25, start.get(Calendar.DAY_OF_MONTH));
         assertEquals(9, start.get(Calendar.HOUR_OF_DAY));
         assertEquals(0, start.get(Calendar.MINUTE));
 
         Calendar end = Calendar.getInstance();
         end.setTimeInMillis(result[1]);
-        assertEquals(EXHIBITION_YEAR, end.get(Calendar.YEAR));
-        assertEquals(EXHIBITION_MONTH, end.get(Calendar.MONTH));
-        assertEquals(15, end.get(Calendar.DAY_OF_MONTH));
+        assertEquals(Calendar.SEPTEMBER, end.get(Calendar.MONTH));
+        assertEquals(25, end.get(Calendar.DAY_OF_MONTH));
         assertEquals(17, end.get(Calendar.HOUR_OF_DAY));
         assertEquals(30, end.get(Calendar.MINUTE));
     }
 
     @Test
-    public void parseTimeRangeEndAfterStart() {
-        long[] result = CalendarHelper.parseTimeRange(10, "10:00-18:00");
+    public void differentMonthsProduceDifferentTimestamps() {
+        long[] september = CalendarHelper.parseTimeRange(SEPTEMBER, "09:00-17:00");
+        long[] october = CalendarHelper.parseTimeRange(OCTOBER, "09:00-17:00");
+
+        Calendar start = Calendar.getInstance();
+        start.setTimeInMillis(october[0]);
+        assertEquals(Calendar.OCTOBER, start.get(Calendar.MONTH));
+        assertEquals(2, start.get(Calendar.DAY_OF_MONTH));
+        assertTrue("10 月 2 日应当晚于 9 月 25 日", october[0] > september[0]);
+    }
+
+    @Test
+    public void invalidDateThrowsInsteadOfGuessing() {
+        try {
+            CalendarHelper.parseTimeRange("", "09:00-17:00");
+            fail("缺日期时应当抛异常，而不是回落到某个月的一号");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("YYYY-MM-DD"));
+        }
+    }
+
+    // ── parseTimeRange：时间区间 ───────────────────────────────────
+
+    @Test
+    public void endAfterStart() {
+        long[] result = CalendarHelper.parseTimeRange(OCTOBER, "10:00-18:00");
         assertTrue("End should be after start", result[1] > result[0]);
     }
 
     @Test
-    public void parseTimeRangeDurationInHours() {
-        long[] result = CalendarHelper.parseTimeRange(10, "09:00-17:00");
-        long durationMillis = result[1] - result[0];
-        long durationHours = durationMillis / (1000 * 60 * 60);
-        assertEquals(8, durationHours);
+    public void durationInHours() {
+        long[] result = CalendarHelper.parseTimeRange(OCTOBER, "09:00-17:00");
+        assertEquals(8, (result[1] - result[0]) / (1000 * 60 * 60));
     }
 
     @Test
-    public void parseTimeRangeWithDifferentDays() {
-        long[] day1 = CalendarHelper.parseTimeRange(1, "09:00-17:00");
-        long[] day30 = CalendarHelper.parseTimeRange(30, "09:00-17:00");
-
-        // Different days should produce different timestamps
-        assertTrue("Day 30 should be after day 1", day30[0] > day1[0]);
-    }
-
-    @Test
-    public void parseTimeRangeWithMidnightCrossing() {
-        // When end time is before start time (e.g. 22:00-02:00), 
-        // the method adds default 2-hour duration
-        long[] result = CalendarHelper.parseTimeRange(15, "22:00-02:00");
+    public void midnightCrossingFallsBackToDefaultDuration() {
+        long[] result = CalendarHelper.parseTimeRange(SEPTEMBER, "22:00-02:00");
         assertTrue("End should be after start", result[1] > result[0]);
-
-        long durationMillis = result[1] - result[0];
-        long durationHours = durationMillis / (1000 * 60 * 60);
-        assertEquals(2, durationHours);
+        assertEquals(2, (result[1] - result[0]) / (1000 * 60 * 60));
     }
 
     @Test
-    public void parseTimeRangeWithSameStartAndEnd() {
-        // When start equals end, adds 2-hour default
-        long[] result = CalendarHelper.parseTimeRange(15, "09:00-09:00");
+    public void sameStartAndEndFallsBackToDefaultDuration() {
+        long[] result = CalendarHelper.parseTimeRange(SEPTEMBER, "09:00-09:00");
         assertTrue("End should be after start", result[1] > result[0]);
-
-        long durationMillis = result[1] - result[0];
-        long durationHours = durationMillis / (1000 * 60 * 60);
-        assertEquals(2, durationHours);
+        assertEquals(2, (result[1] - result[0]) / (1000 * 60 * 60));
     }
 
-    // ── parseTimeRange: null and invalid inputs ──────────────────
-
     @Test
-    public void parseTimeRangeNullTimeUsesDefaults() {
-        long[] result = CalendarHelper.parseTimeRange(15, null);
+    public void nullTimeUsesDefaults() {
+        long[] result = CalendarHelper.parseTimeRange(SEPTEMBER, null);
 
         Calendar start = Calendar.getInstance();
         start.setTimeInMillis(result[0]);
@@ -107,136 +135,50 @@ public class CalendarHelperTest {
     }
 
     @Test
-    public void parseTimeRangeEmptyTimeUsesDefaults() {
-        long[] result = CalendarHelper.parseTimeRange(15, "");
+    public void malformedTimesUseDefaults() {
+        for (String time : new String[]{"", "09001700", "abc-def", "09:00-xyz", "09:00"}) {
+            long[] result = CalendarHelper.parseTimeRange(SEPTEMBER, time);
+            Calendar start = Calendar.getInstance();
+            start.setTimeInMillis(result[0]);
+            assertEquals("时间「" + time + "」应当退回 9:00", 9, start.get(Calendar.HOUR_OF_DAY));
+            Calendar end = Calendar.getInstance();
+            end.setTimeInMillis(result[1]);
+            assertEquals("时间「" + time + "」应当退回 17:00", 17, end.get(Calendar.HOUR_OF_DAY));
+        }
+    }
 
+    @Test
+    public void extraSpacesAndSingleDigitHoursAccepted() {
+        long[] spaced = CalendarHelper.parseTimeRange(SEPTEMBER, " 09:00 - 17:30 ");
         Calendar start = Calendar.getInstance();
-        start.setTimeInMillis(result[0]);
+        start.setTimeInMillis(spaced[0]);
         assertEquals(9, start.get(Calendar.HOUR_OF_DAY));
+        assertEquals(0, start.get(Calendar.MINUTE));
 
+        long[] singleDigit = CalendarHelper.parseTimeRange(SEPTEMBER, "9:00-17:30");
         Calendar end = Calendar.getInstance();
-        end.setTimeInMillis(result[1]);
+        end.setTimeInMillis(singleDigit[1]);
         assertEquals(17, end.get(Calendar.HOUR_OF_DAY));
+        assertEquals(30, end.get(Calendar.MINUTE));
     }
 
     @Test
-    public void parseTimeRangeNoHyphenUsesDefaults() {
-        long[] result = CalendarHelper.parseTimeRange(15, "09001700");
-
-        Calendar start = Calendar.getInstance();
-        start.setTimeInMillis(result[0]);
-        assertEquals(9, start.get(Calendar.HOUR_OF_DAY));
-    }
-
-    @Test
-    public void parseTimeRangeMalformedTimeUsesDefaults() {
-        long[] result = CalendarHelper.parseTimeRange(15, "abc-def");
-
-        Calendar start = Calendar.getInstance();
-        start.setTimeInMillis(result[0]);
-        assertEquals(9, start.get(Calendar.HOUR_OF_DAY));
-    }
-
-    @Test
-    public void parseTimeRangePartialMalformedTimeUsesDefaults() {
-        long[] result = CalendarHelper.parseTimeRange(15, "09:00-xyz");
-
-        // Falls back to defaults entirely
-        Calendar start = Calendar.getInstance();
-        start.setTimeInMillis(result[0]);
-        assertEquals(9, start.get(Calendar.HOUR_OF_DAY));
-
-        Calendar end = Calendar.getInstance();
-        end.setTimeInMillis(result[1]);
-        assertEquals(17, end.get(Calendar.HOUR_OF_DAY));
-    }
-
-    // ── parseTimeRange: edge cases ────────────────────────────────
-
-    @Test
-    public void parseTimeRangeFirstDayOfMonth() {
-        long[] result = CalendarHelper.parseTimeRange(1, "10:00-12:00");
-
-        Calendar start = Calendar.getInstance();
-        start.setTimeInMillis(result[0]);
-        assertEquals(1, start.get(Calendar.DAY_OF_MONTH));
-    }
-
-    @Test
-    public void parseTimeRangeLastDayOfMonth() {
-        long[] result = CalendarHelper.parseTimeRange(30, "10:00-12:00");
-
-        Calendar start = Calendar.getInstance();
-        start.setTimeInMillis(result[0]);
-        assertEquals(30, start.get(Calendar.DAY_OF_MONTH));
-    }
-
-    @Test
-    public void parseTimeRangeMillisecondsAreZero() {
-        long[] result = CalendarHelper.parseTimeRange(15, "09:00-17:00");
-
-        Calendar start = Calendar.getInstance();
-        start.setTimeInMillis(result[0]);
-        assertEquals(0, start.get(Calendar.MILLISECOND));
-
-        Calendar end = Calendar.getInstance();
-        end.setTimeInMillis(result[1]);
-        assertEquals(0, end.get(Calendar.MILLISECOND));
-    }
-
-    @Test
-    public void parseTimeRangeSecondsAreZero() {
-        long[] result = CalendarHelper.parseTimeRange(15, "09:00-17:00");
+    public void secondsAndMillisecondsAreZero() {
+        long[] result = CalendarHelper.parseTimeRange(SEPTEMBER, "09:00-17:00");
 
         Calendar start = Calendar.getInstance();
         start.setTimeInMillis(result[0]);
         assertEquals(0, start.get(Calendar.SECOND));
+        assertEquals(0, start.get(Calendar.MILLISECOND));
 
         Calendar end = Calendar.getInstance();
         end.setTimeInMillis(result[1]);
         assertEquals(0, end.get(Calendar.SECOND));
+        assertEquals(0, end.get(Calendar.MILLISECOND));
     }
 
     @Test
-    public void parseTimeRangeReturnsArrayLengthTwo() {
-        long[] result = CalendarHelper.parseTimeRange(15, "09:00-17:00");
-        assertEquals(2, result.length);
-    }
-
-    @Test
-    public void parseTimeRangeWithExtraSpaces() {
-        long[] result = CalendarHelper.parseTimeRange(15, " 09:00 - 17:30 ");
-
-        Calendar start = Calendar.getInstance();
-        start.setTimeInMillis(result[0]);
-        assertEquals(9, start.get(Calendar.HOUR_OF_DAY));
-        assertEquals(0, start.get(Calendar.MINUTE));
-
-        Calendar end = Calendar.getInstance();
-        end.setTimeInMillis(result[1]);
-        assertEquals(17, end.get(Calendar.HOUR_OF_DAY));
-        assertEquals(30, end.get(Calendar.MINUTE));
-    }
-
-    @Test
-    public void parseTimeRangeSingleDigitHours() {
-        long[] result = CalendarHelper.parseTimeRange(15, "9:00-17:30");
-
-        Calendar start = Calendar.getInstance();
-        start.setTimeInMillis(result[0]);
-        assertEquals(9, start.get(Calendar.HOUR_OF_DAY));
-        assertEquals(0, start.get(Calendar.MINUTE));
-
-        Calendar end = Calendar.getInstance();
-        end.setTimeInMillis(result[1]);
-        assertEquals(17, end.get(Calendar.HOUR_OF_DAY));
-        assertEquals(30, end.get(Calendar.MINUTE));
-    }
-
-    // ── REQUEST_CODE_CALENDAR_PERMISSION constant ────────────────
-
-    @Test
-    public void requestCodeCalendarPermissionIsPositive() {
-        assertTrue(CalendarHelper.REQUEST_CODE_CALENDAR_PERMISSION > 0);
+    public void returnsTwoTimestamps() {
+        assertEquals(2, CalendarHelper.parseTimeRange(SEPTEMBER, "09:00-17:00").length);
     }
 }

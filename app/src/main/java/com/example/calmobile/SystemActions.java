@@ -57,22 +57,30 @@ final class SystemActions {
 
     static Map<String, Object> calendarStatus(Activity activity, Map<String, Object> payload) {
         String title = WebAppBridge.text(payload, "title", "");
-        int day = WebAppBridge.number(payload, "day", 1);
+        // 日期用后端下发的 ISO 日期原样传入；没有日期就当作「未加入」，不要猜月份。
+        String date = WebAppBridge.text(payload, "date", "");
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("granted", CalendarHelper.hasCalendarPermissions(activity));
-        data.put("inCalendar", !title.isEmpty() && CalendarHelper.isInCalendar(activity, title, day));
+        data.put("inCalendar", !title.isEmpty()
+                && CalendarHelper.isInCalendar(activity, title, date));
         return data;
     }
 
     static void toggleCalendar(WebAppBridge bridge, Map<String, Object> payload,
             WebAppBridge.ResultCallback callback) {
         Activity activity = bridge.activity();
+        String date = WebAppBridge.text(payload, "date", "");
+        if (!CalendarHelper.isValidDate(date)) {
+            // 没有合法日期就不写：旧实现缺日期时按 1 号处理，会把事件写到错误的月份。
+            callback.failure(activity.getString(R.string.calendar_invalid_date));
+            return;
+        }
+
         String title = WebAppBridge.text(payload, "title", "");
-        int day = WebAppBridge.number(payload, "day", 1);
-        boolean inCalendar = CalendarHelper.isInCalendar(activity, title, day);
+        boolean inCalendar = CalendarHelper.isInCalendar(activity, title, date);
 
         if (CalendarHelper.hasCalendarPermissions(activity)) {
-            callback.success(applyCalendarChange(activity, payload, inCalendar));
+            finishCalendarChange(callback, activity, payload, inCalendar);
             return;
         }
         int requestCode = bridge.nextRequestCode();
@@ -86,21 +94,36 @@ final class SystemActions {
                 requestCode);
     }
 
-    static Map<String, Object> applyCalendarChange(Activity activity, Map<String, Object> payload,
-            boolean inCalendar) {
-        String title = WebAppBridge.text(payload, "title", "");
-        int day = WebAppBridge.number(payload, "day", 1);
-        if (inCalendar) {
-            CalendarHelper.removeFromCalendar(activity, title, day);
-        } else {
-            CalendarHelper.addToCalendar(activity, title, WebAppBridge.text(payload, "venue", ""), day,
-                    WebAppBridge.text(payload, "time", ""), WebAppBridge.text(payload, "description", ""));
+    /**
+     * 真正写/删日历，并把结果如实回报。
+     *
+     * **失败必须走 `failure`**：旧实现丢弃了 `CalendarHelper` 的返回值、无条件回
+     * 「已加入系统日历」，于是没有日历账号时按钮会翻成「移出日历」但什么都没写进去。
+     */
+    static void finishCalendarChange(WebAppBridge.ResultCallback callback, Activity activity,
+            Map<String, Object> payload, boolean inCalendar) {
+        CalendarHelper.CalendarResult result = applyCalendarChange(activity, payload, inCalendar);
+        if (!result.ok) {
+            callback.failure(result.message);
+            return;
         }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("inCalendar", !inCalendar);
-        result.put("granted", CalendarHelper.hasCalendarPermissions(activity));
-        result.put("message", inCalendar ? "已从系统日历移除" : "已加入系统日历");
-        return result;
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("inCalendar", !inCalendar);
+        data.put("granted", CalendarHelper.hasCalendarPermissions(activity));
+        data.put("message", result.message);
+        callback.success(data);
+    }
+
+    static CalendarHelper.CalendarResult applyCalendarChange(Activity activity,
+            Map<String, Object> payload, boolean inCalendar) {
+        String title = WebAppBridge.text(payload, "title", "");
+        String date = WebAppBridge.text(payload, "date", "");
+        if (inCalendar) {
+            return CalendarHelper.removeFromCalendar(activity, title, date);
+        }
+        return CalendarHelper.addToCalendar(activity, title, WebAppBridge.text(payload, "venue", ""),
+                date, WebAppBridge.text(payload, "time", ""),
+                WebAppBridge.text(payload, "description", ""));
     }
 
     static void requestNotificationPermission(WebAppBridge bridge,
@@ -138,8 +161,8 @@ final class SystemActions {
                 pending.callback.failure("未获得日历权限，无法写入系统日历");
                 return;
             }
-            pending.callback.success(applyCalendarChange(activity, pending.context,
-                    Boolean.TRUE.equals(pending.context.get("inCalendar"))));
+            finishCalendarChange(pending.callback, activity, pending.context,
+                    Boolean.TRUE.equals(pending.context.get("inCalendar")));
             return;
         }
         pending.callback.success(granted);

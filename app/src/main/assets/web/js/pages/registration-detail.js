@@ -202,6 +202,8 @@ export async function registrationDetailPage(context) {
 
     function renderFooter() {
         const cancelled = record.statusLabel === REGISTRATION_STATUS.CANCELLED;
+        // 已参加是终态：后端不允许再撤销，按钮就不要画成可点的。
+        const attended = record.statusLabel === REGISTRATION_STATUS.ATTENDED;
         const revise = state.review.canRevise || record.statusLabel === REGISTRATION_STATUS.PENDING;
 
         const modify = el('button', {
@@ -214,16 +216,17 @@ export async function registrationDetailPage(context) {
         const cancel = el('button', {
             class: 'cta danger',
             type: 'button',
-            disabled: cancelled ? true : null,
+            disabled: cancelled || attended ? true : null,
             onclick: () => askCancel(),
-        }, [cancelled ? REGISTRATION_STATUS.CANCELLED : t('s_1u8rnsb')]);
+        }, [cancelled ? REGISTRATION_STATUS.CANCELLED
+            : (attended ? REGISTRATION_STATUS.ATTENDED : t('s_1u8rnsb'))]);
 
         replace(foot, el('div', { class: 'stack', 'data-gap': 'sm' }, [
             el('div', { class: 'grid-cols-2' }, [modify, cancel]),
             el('p', {
                 class: 'field-hint',
                 style: { textAlign: 'center' },
-                text: cancelled ? t('s_ex1lrt') : t('s_131vhix'),
+                text: cancelled ? t('s_ex1lrt') : (attended ? t('s_2vsxvu') : t('s_131vhix')),
             }),
         ]));
     }

@@ -306,20 +306,17 @@ public class WebShellActivity extends Activity {
     /**
      * APK 内的静态资源响应头。
      * <p>
-     * HTML 必须每次校验，否则改版后可能对着旧外壳加载新模块；脚本与样式可以长时间缓存：
-     * 它们是随 APK 一起发布的不可变资源，缓存后 WebView 不必每次导航都重新下载并解析
-     * （之前统一 no-store，切换页面因此明显偏卡）。安装新版本会换掉应用数据目录，
-     * 缓存自然失效，不需要额外做版本失效。
+     * 脚本与样式用 `no-cache`（**可以缓存，但每次都要回来校验**），而不是 `max-age`：
+     * 覆盖安装 APK 并不会清掉 `/data/data/<包名>/cache`，WebView 的 HTTP 缓存键又只有 URL，
+     * 因此 `max-age=86400` 会出现「新的 index.html 配旧的 js 模块」这种只在升级当天复现的错乱。
+     * 这些文件就在 APK 里，回源（重新读 assets）本身很便宜，没必要为省一次读取冒版本不一致的风险。
+     * HTML 仍为 `no-store`，每次导航都取最新的外壳。
      */
     private Map<String, String> assetHeaders(String assetPath, String extension) {
         Map<String, String> headers = new HashMap<>();
-        boolean cacheable = "js".equals(extension) || "mjs".equals(extension)
+        boolean revalidated = "js".equals(extension) || "mjs".equals(extension)
                 || "css".equals(extension) || "woff2".equals(extension);
-        if (cacheable) {
-            headers.put("Cache-Control", "max-age=86400");
-        } else {
-            headers.put("Cache-Control", "no-store");
-        }
+        headers.put("Cache-Control", revalidated ? "no-cache" : "no-store");
         headers.put("X-Content-Type-Options", "nosniff");
         return headers;
     }

@@ -75,7 +75,7 @@ export async function detailPage(context) {
         try {
             calendarState = await call('calendar.status', {
                 title: exhibition.title,
-                day: exhibition.day,
+                date: exhibition.date,
             });
         } catch (ignored) {
             calendarState = { inCalendar: false, granted: false };
@@ -240,7 +240,8 @@ export async function detailPage(context) {
                 title: exhibition.title,
                 venue: exhibition.venue,
                 time: exhibition.time,
-                day: exhibition.day,
+                // 日期用后端下发的 ISO 日期：原生按它写入，不再猜月份。
+                date: exhibition.date,
                 description: plainText(exhibition.description, 200),
             });
             calendarState = { inCalendar: result.inCalendar, granted: result.granted };

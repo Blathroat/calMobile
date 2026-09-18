@@ -4,6 +4,10 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.os.Build;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowInsetsController;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -122,17 +126,60 @@ public final class AppSettings {
 
     // ── 系统栏颜色 ─────────────────────────────────────────────────
 
-    /** 将当前配色应用到系统栏；进入页面与外观变化后都要调一次。 */
+    /**
+     * 将当前配色应用到系统栏；进入页面与外观变化后都要调一次。
+     *
+     * 状态栏图标的明暗必须跟着底色走：深色底配深色图标等于看不见，
+     * 因此这里同时设置 `setSystemBarsAppearance`（API 30+）或
+     * `SYSTEM_UI_FLAG_LIGHT_STATUS_BAR`（更低版本）。
+     */
     public static void applyWindowColors(Activity activity) {
-        if (isDarkMode(activity)) {
+        boolean dark = isDarkMode(activity);
+        if (dark) {
             // 深色模式下状态栏跟随页面底色，避免顶部出现一条亮色。
             activity.getWindow().setStatusBarColor(DARK_SURFACE);
             activity.getWindow().setNavigationBarColor(DARK_SURFACE);
-            return;
+        } else {
+            int accent = getAccentColor(activity);
+            activity.getWindow().setStatusBarColor(lighten(accent, 0.88f));
+            activity.getWindow().setNavigationBarColor(Color.WHITE);
         }
-        int accent = getAccentColor(activity);
-        activity.getWindow().setStatusBarColor(lighten(accent, 0.88f));
-        activity.getWindow().setNavigationBarColor(Color.WHITE);
+        applyLightSystemBars(activity, !dark);
+    }
+
+    /**
+     * 系统栏图标是否用深色（浅底用深色图标，深底用浅色图标）。
+     *
+     * API 30 起用 {@code WindowInsetsController}，更低版本退回已废弃的
+     * {@code SYSTEM_UI_FLAG_LIGHT_STATUS_BAR} / `..._NAVIGATION_BAR`——两者都保留，
+     * 因为模拟器与老设备上仍可能跑 API 24–29。
+     *
+     * 注意**必须从 `getDecorView()` 拿 controller**：`Window.getInsetsController()`
+     * 会直接读 DecorView，而在 `onCreate` 里 `setContentView` 之前它还是 null，
+     * 那条路径会抛 NPE 让应用起不来。
+     */
+    @SuppressWarnings("deprecation")
+    private static void applyLightSystemBars(Activity activity, boolean lightIcons) {
+        Window window = activity.getWindow();
+        View decor = window.getDecorView();
+        int appearance = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && decor != null) {
+            WindowInsetsController controller = decor.getWindowInsetsController();
+            if (controller != null) {
+                controller.setSystemBarsAppearance(lightIcons ? appearance : 0, appearance);
+                return;
+            }
+        }
+        int flags = decor == null ? 0 : decor.getSystemUiVisibility();
+        if (lightIcons) {
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        } else {
+            flags &= ~(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        }
+        if (decor != null) {
+            decor.setSystemUiVisibility(flags);
+        }
     }
 
     /** 页面底色：深色模式下的容器与 WebView 底色，避免首帧闪白。 */

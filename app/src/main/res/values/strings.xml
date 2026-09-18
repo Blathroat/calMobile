@@ -2,7 +2,7 @@
 <!-- 应用名与原生系统能力（日历）用到的提示文案。
      WebView 外壳只保留真正需要的条目；旧原生页面的资源已随 legacy 一并删除。
      前端文案在 strings_frontend.xml（由 scripts/extract-strings.js 生成）。
--->
+     日历这些文案由 CalendarHelper 随「写日历的结果」回到页面，前端统一提示，原生不再弹 Toast。 -->
 <resources>
 <string name="app_name">展会排期助手</string>
 <string name="calendar_added">已添加到日历</string>
@@ -12,5 +12,6 @@
 <string name="calendar_add_failed">添加到日历失败</string>
 <string name="calendar_remove_failed">从日历移除失败</string>
 <string name="calendar_permission_denied">日历权限未授予，无法操作</string>
-<string name="calendar_no_account">未找到可用的日历账号</string>
+<string name="calendar_no_account">设备上没有可写入的日历账号</string>
+<string name="calendar_invalid_date">展会日期无效，无法写入日历</string>
 </resources>
