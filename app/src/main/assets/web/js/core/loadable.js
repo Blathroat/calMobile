@@ -13,10 +13,24 @@ import { t } from './strings.js';
  *
  * 数据的「新鲜」由 core/api.js 负责：`peek()` 会返回过期数据，`read()` 在缓存
  * 过期时重新拉取。本模块只决定什么时候画、画哪一份。
+ *
+ * **谁的结果算数**由下面的 `loadIds` 决定：同一块容器上后发起的加载一旦开始，
+ * 先发起的那次结果就是过期的，回来也不许再画（见 `loadInto`）。
  */
 
 import { loadErrorBlock, loadingBlock } from '../ui/components.js';
 import { replace } from './dom.js';
+
+/**
+ * 每块容器当前最新一次加载的代号。
+ *
+ * 同一块容器上会前后发起多次加载：切月份、切筛选、防抖搜索都会连着来几次。
+ * 先发的请求如果比后发的慢（后端抖动、命中不同的缓存状态都可能），回来的顺序
+ * 就会反过来，把屏幕上的新内容覆盖成旧数据——用户看到的是「切了月份又跳回去，
+ * 而且日期对不上视图」。所以每次加载都领一个自增代号，回写前比对：
+ * 只有代号仍然是容器上最新那一次的加载，才允许改这块容器。
+ */
+const loadIds = new WeakMap();
 
 /**
  * @param {HTMLElement} host 承载内容（以及骨架屏 / 错误块）的容器
@@ -27,7 +41,7 @@ import { replace } from './dom.js';
  * @param {number}   [options.rows]   骨架屏行数，默认 3
  * @param {string}   [options.errorTitle] 加载失败时的标题
  * @param {Function} [options.onError]    自定义错误处理，默认画错误块
- * @returns {Promise<*>} 最终数据；失败时返回 undefined（错误已就地展示）
+ * @returns {Promise<*>} 最终数据；失败、或这次加载已被更新的加载取代时返回 undefined
  */
 export async function loadInto(host, options) {
     const { read, params, render, rows = 3, errorTitle, onError } = options;
@@ -39,15 +53,28 @@ export async function loadInto(host, options) {
         replace(host, loadingBlock(rows));
     }
 
+    // 本次加载的代号：比它更新的加载一旦发起，这次的结果就作废。
+    const loadId = (loadIds.get(host) || 0) + 1;
+    loadIds.set(host, loadId);
+    const expired = () => loadIds.get(host) !== loadId;
+
     // 旧数据留在屏幕上时给一个「正在刷新」的弱提示，不再整块清空。
     host.dataset.busy = 'true';
     try {
         const data = await read(params);
+        if (expired()) {
+            // 过期结果整块丢弃：不画内容，也不碰 data-busy——那个标记属于更新的那次加载。
+            return undefined;
+        }
         if (cached === undefined || !same(cached, data)) {
             render(data, host);
         }
         return data;
     } catch (error) {
+        // 过期请求的失败同样不作数：不能让它把新一次加载的成果换成错误块。
+        if (expired()) {
+            return undefined;
+        }
         if (onError) {
             onError(error);
         } else {
@@ -59,7 +86,9 @@ export async function loadInto(host, options) {
         }
         return undefined;
     } finally {
-        delete host.dataset.busy;
+        if (!expired()) {
+            delete host.dataset.busy;
+        }
     }
 }
 

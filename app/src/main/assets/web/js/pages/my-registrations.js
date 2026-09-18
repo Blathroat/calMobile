@@ -2,7 +2,7 @@ import { t } from '../core/strings.js';
 /**
  * 屏幕 07 · 我的报名（列表）
  * 线框：newUI/remaining-ui.html #screen-my-registrations
- * 业务：RegistrationManager.list，状态文字保留“待审核 / 已通过 / 已撤销”。
+ * 业务：GET /registrations（server/ 的 REST），状态文字保留“待审核 / 已通过 / 已撤销”。
  *
  * 取数走 core/loadable.js：命中缓存时同步出内容，因此从底部导航切过来不会先闪骨架屏。
  */

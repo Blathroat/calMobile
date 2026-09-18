@@ -15,6 +15,7 @@ const {
   REGISTRATION_COLUMNS, REGISTRATION_FROM, EXHIBITION_COLUMNS, EXHIBITION_FROM,
 } = require('../domain/queries');
 const { registrationPayload } = require('../domain/payloads');
+const { loadFields } = require('./exhibitions');
 const { authenticate } = require('../middleware/auth');
 const { requireUser } = require('../domain/permissions');
 const { badRequest, forbidden } = require('../domain/errors');
@@ -27,7 +28,7 @@ const router = express.Router();
 /** 重复报名的提示：预检查与数据库唯一冲突（23505）用同一句，页面提示才稳定。 */
 const DUPLICATE_MESSAGE = '已提交过该展会的报名';
 
-/** 报名方式不支持报名时的提示：与 demo 的「该展会当前不可报名」口径一致。 */
+/** 报名方式不支持报名时的提示：分别说明是仅展示、已截止还是已结束。 */
 function closedMessage(statusCode) {
   if (statusCode === 'display') {
     return '该展会仅展示，不开放报名';
@@ -65,6 +66,68 @@ async function loadRegistration(id) {
     [id],
   );
   return result.rows[0] || null;
+}
+
+// ── 报名内容的服务端校验 ────────────────────────────────────────
+
+/** 页面对没填的收集项写「未填写」占位（见 `pages/registration-form.js`），校验时按空处理。 */
+const EMPTY_ANSWER = '未填写';
+
+/**
+ * 取某个收集项在 `answers` 里的填写值。
+ *
+ * `answers` 是各收集项拼成的多行文本（每行 `标题：值`，见 `pages/registration-form.js`
+ * 的提交逻辑），落库后是一整段 TEXT。这里按「行首是标题 + 冒号」匹配，
+ * 而不是按第一个冒号硬拆：收集项标题本身可能带冒号，硬拆会把标题切坏。
+ * 同一个标题出现多次时以第一行为准。
+ */
+function answerValue(answers, title) {
+  for (const line of String(answers === undefined || answers === null ? '' : answers).split('\n')) {
+    for (const separator of ['：', ':']) {
+      const prefix = `${title}${separator}`;
+      if (line.startsWith(prefix)) {
+        const value = line.slice(prefix.length).trim();
+        return value === EMPTY_ANSWER ? '' : value;
+      }
+    }
+  }
+  return '';
+}
+
+/** 多选值拆成单个选项：页面用「、」拼接，这里同时容忍半角 / 全角逗号。 */
+function splitChoices(value) {
+  return String(value || '')
+    .split(/[、,，]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 按这场展会配置的收集项校验 `answers`（没有配置收集项时用默认三项，见 `loadFields`）。
+ *
+ * 页面的 `core/validate.js` 会被绕过，所以服务端也校验一遍：
+ * - 必填项不能为空 → `请填写「XX」`；
+ * - 单选 / 多选的值必须落在选项里 → 列出可选值；
+ * 失败抛 400，由 `mutate()` 转成 HTTP 200 + `{ ok:false, error }` 的可读文案。
+ */
+function validateAnswers(fields, answers) {
+  for (const field of fields) {
+    const value = answerValue(answers, field.title);
+    if (!value) {
+      if (field.required) {
+        throw badRequest(`请填写「${field.title}」`);
+      }
+      continue;
+    }
+    if (field.type !== '单选' && field.type !== '多选') {
+      continue;
+    }
+    const options = Array.isArray(field.options) ? field.options : [];
+    const chosen = field.type === '多选' ? splitChoices(value) : [value];
+    if (options.length > 0 && chosen.some((item) => !options.includes(item))) {
+      throw badRequest(`「${field.title}」只能选择：${options.join(' / ')}`);
+    }
+  }
 }
 
 /**
@@ -155,6 +218,9 @@ router.post('/', authenticate, async (req, res, next) => {
     if (maxAnswer > 0 && answers.length > maxAnswer) {
       throw badRequest(`报名填写内容最多 ${maxAnswer} 个字符`);
     }
+    // 字段合法：按这场展会的收集项（没配置过就回退默认三项）校验必填与选项，
+    // 页面的校验被绕过后同样拦得住。
+    validateAnswers(await loadFields(exhibitionId), answers);
 
     // 无需审核的展会提交后直接通过，需审核的留在待审核。
     const autoApproved = exhibition.status === 'optional';
@@ -203,6 +269,11 @@ router.delete('/:id', authenticate, async (req, res, next) => {
     }
     if (row.status === 'cancelled') {
       throw badRequest('该报名已撤销，无需重复操作');
+    }
+    // 已参加是终态（与审核状态机口径一致）：现场核销过的记录不能由用户自己撤销，
+    // 否则出勤记录可以事后抹掉。
+    if (row.status === 'attended') {
+      throw badRequest('已参加的报名不能再撤销');
     }
     await query(`
             UPDATE registrations

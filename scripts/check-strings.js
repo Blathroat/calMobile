@@ -22,6 +22,16 @@ const javaFile = path.join(root, 'app', 'src', 'main', 'java', 'com', 'example',
 
 const failures = [];
 
+/**
+ * 源码里的一次 `t('s_xxx')` 调用。
+ *
+ * 单/双引号与括号内的多余空格都要认：只认 `t('s_xxx')` 这一种写法时，
+ * `t("s_xxx")` 与 `t( 's_xxx' )` 在三处校验里全部不可见，
+ * key 一旦不存在，运行时会把这个 key 原样显示给用户。
+ * `scripts/extract-strings.js` 与 `scripts/smoke-check.js` 用的是同一条正则。
+ */
+const T_CALL = /\bt\(\s*(['"])(s_[a-z0-9]+)\1\s*\)/g;
+
 function walk(dir) {
     return fs.readdirSync(dir, { withFileTypes: true })
         .flatMap((entry) => (entry.isDirectory()
@@ -43,9 +53,9 @@ for (const match of xml.matchAll(/<string name="(s_[a-z0-9]+)"/g)) {
 const usedKeys = new Map();
 for (const file of walk(jsRoot)) {
     const source = fs.readFileSync(file, 'utf8');
-    for (const match of source.matchAll(/\bt\('(s_[a-z0-9]+)'\)/g)) {
-        if (!usedKeys.has(match[1])) {
-            usedKeys.set(match[1], path.relative(root, file));
+    for (const match of source.matchAll(T_CALL)) {
+        if (!usedKeys.has(match[2])) {
+            usedKeys.set(match[2], path.relative(root, file));
         }
     }
 }

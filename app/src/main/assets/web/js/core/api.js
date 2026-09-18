@@ -15,7 +15,8 @@
  * ## 约定
  *
  * - 后端返回的字段与状态文案与页面一一对应；
- * - 失败统一抛出 `Error`，由页面就地展示；
+ * - 失败统一抛出 `Error`，由页面就地展示；传输层失败（连不上 / 超时 / 5xx /
+ *   响应不是 JSON）抛的是导出的 `TransportError`，需要区分时用 `instanceof` 判断；
  * - 只放「数据」相关的方法；摄像头、日历、分享这类系统能力仍走 `bridge.js`。
  */
 
@@ -52,8 +53,13 @@ export function hasRefreshToken() {
     return Boolean(refreshToken);
 }
 
-/** 传输层错误：连不上后端、超时、响应不是 JSON 这类问题。 */
-class TransportError extends Error {
+/**
+ * 传输层错误：连不上后端、超时、响应不是 JSON、5xx 这类问题。
+ *
+ * 导出是给页面与测试分辨「传输失败」和「业务失败（`Error`）」用的：
+ * 只比对 message 里的字符串太脆，`error instanceof TransportError` 才是契约。
+ */
+export class TransportError extends Error {
     constructor(message) {
         super(message);
         this.name = 'TransportError';
@@ -130,6 +136,15 @@ function queryString(query) {
 }
 
 /**
+ * 请求的定位信息，用于传输层错误的文案：`exhibitions.list GET /exhibitions`。
+ * 只说「后端返回 502」时，日志里根本看不出是哪个动作、哪条路径挂了。
+ */
+function requestLabel(action, method, url) {
+    const path = url.startsWith(BASE_URL) ? url.slice(BASE_URL.length) : url;
+    return `${action} ${method} ${path}`;
+}
+
+/**
  * 发一次请求。
  *
  * 状态码的用法（与 server/README.md 的「响应约定」一致）：
@@ -147,15 +162,16 @@ async function callRemote(action, payload) {
     const url = `${BASE_URL}${request.path}${queryString(request.query)}`;
     const body = request.method === 'GET' ? undefined : JSON.stringify(request.body === undefined ? payload || {} : request.body);
 
-    let response = await httpFetch(url, request.method, body);
-    if (response.status === 401 && refreshToken && !request.retried) {
+    let response = await httpFetch(url, request.method, body, action);
+    // 只续期一次：重试不再回判断，因此不会出现「401 → 续期 → 401 → 续期」的循环。
+    if (response.status === 401 && refreshToken) {
         const renewed = await renewSession();
         if (renewed) {
-            response = await httpFetch(url, request.method, body);
+            response = await httpFetch(url, request.method, body, action);
         }
     }
     if (response.status >= 500) {
-        throw new TransportError(`后端返回 ${response.status}`);
+        throw new TransportError(`后端返回 ${response.status}（${requestLabel(action, request.method, request.path)}）`);
     }
     let data;
     try {
@@ -178,8 +194,11 @@ async function callRemote(action, payload) {
  *
  * 数据只在后端，连不上时页面能做的只有把原因说清楚，所以这里把「后端没起」
  * 和「端口没转发」这两个最常见的原因直接写进错误文案。
+ *
+ * 「超时」必须与「连不上」分开报：`AbortController` 到点中断走的也是异常，
+ * 混在一起会把**应答慢**的后端说成「后端没起、请 adb reverse」，把排查方向带偏。
  */
-async function httpFetch(url, method, body) {
+async function httpFetch(url, method, body, action = '') {
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT) : null;
     try {
@@ -193,6 +212,13 @@ async function httpFetch(url, method, body) {
             signal: controller?.signal,
         });
     } catch (error) {
+        if (error && error.name === 'AbortError') {
+            throw new TransportError(
+                `后端响应超时（超过 ${REQUEST_TIMEOUT / 1000} 秒）：${action ? `${action} ` : ''}${method} ${url}。`
+                + '后端可能正在处理一次较慢的查询，请稍后重试；'
+                + '若每次都超时，请确认 server/ 已启动（npm run dev），真机/模拟器还需要 adb reverse tcp:3000 tcp:3000。',
+            );
+        }
         throw new TransportError(
             `连不上后端服务（${BASE_URL}）：${error.message}。`
             + '请确认 server/ 已启动（npm run dev），真机/模拟器还需要 adb reverse tcp:3000 tcp:3000。',
@@ -219,7 +245,7 @@ function renewSession() {
     renewing = (async () => {
         try {
             const response = await httpFetch(`${BASE_URL}/auth/refresh`, 'POST',
-                JSON.stringify({ refreshToken }));
+                JSON.stringify({ refreshToken }), 'auth.refresh');
             if (!response.ok) {
                 return false;
             }
@@ -263,7 +289,15 @@ const CACHEABLE = new Set([
     'settings.get', 'notify.preferences', 'profile.get',
 ]);
 
-/** 写操作成功后要清掉的缓存前缀。 */
+/**
+ * **写操作**成功后要清掉的缓存前缀。
+ *
+ * 只列写动作：`request()` 在读取类接口返回后同样会调一次 `invalidate(action)`，
+ * 给读动作填键等于「读一次就把别人的缓存干掉」，只会让缓存失去意义。
+ * 这里曾经有一条 `'exhibitions.categories': []`：它是读动作，空数组又让
+ * `invalidate()` 直接返回，两条加起来就是一行永远不生效的死配置，已删除。
+ * （分类确实变了要失效时，应该挂在改分类的写动作上，例如 `settings.save`。）
+ */
 const INVALIDATE = {
     'exhibitions.save': ['exhibitions.', 'search.'],
     'exhibitions.delete': ['exhibitions.', 'registrations.', 'review.', 'search.'],
@@ -274,11 +308,11 @@ const INVALIDATE = {
     'review.updateStatus': ['review.', 'registrations.', 'users.public'],
     'checkin.scan': ['review.', 'registrations.', 'users.public'],
     'users.status': ['users.'],
-    'settings.save': ['settings.', 'notify.'],
+    // 分类由「管理-设置」维护，保存后展会分类缓存要一起作废。
+    'settings.save': ['settings.', 'notify.', 'exhibitions.categories'],
     'settings.uiMode': ['settings.'],
     'notify.savePreferences': ['notify.'],
     'profile.save': ['profile.', 'users.public'],
-    'exhibitions.categories': [],
 };
 
 /**
@@ -316,6 +350,16 @@ function invalidate(action) {
 /** 缓存被清空时的通知：预加载据此重算「已经热身过哪些目标」。 */
 const clearListeners = [];
 
+/**
+ * 缓存代号：`clearCache()` 每次自增。
+ *
+ * `cache.clear()` 只清掉已经写进去的条目，**清不掉还在飞的请求**：登出瞬间
+ * 预加载的 `profile.get` / `users.list` 往往已经发出去了，回来时若无条件
+ * `cache.set()`，就把上一个身份的数据写进了新会话，TTL 的 20 秒里新用户
+ * 还能读到它。请求发出时记下代号，回写前比对，代号变了就整条丢弃。
+ */
+let cacheGeneration = 0;
+
 export function onCacheClear(listener) {
     if (typeof listener === 'function') {
         clearListeners.push(listener);
@@ -324,7 +368,11 @@ export function onCacheClear(listener) {
 
 /** 清空全部缓存；登录 / 退出登录后调用，避免看到上一个身份的数据。 */
 export function clearCache() {
+    cacheGeneration += 1;
     cache.clear();
+    // 在途请求也要一起作废：留着的话，新会话里同键的取数会直接复用上一个
+    // 身份的 Promise（去重表按缓存键存），拿到的是旧数据。
+    inflight.clear();
     for (const listener of clearListeners) {
         try {
             listener();
@@ -359,9 +407,11 @@ async function request(action, payload = {}) {
         }
     }
 
+    // 发起这次请求时的缓存代号：中途 clearCache() 过，结果就不许再写回缓存。
+    const generation = cacheGeneration;
     const task = callRemote(action, payload).then(
         (value) => {
-            if (cacheable && value !== undefined) {
+            if (cacheable && value !== undefined && generation === cacheGeneration) {
                 cache.set(key, { at: Date.now(), value });
             }
             invalidate(action);
@@ -376,7 +426,12 @@ async function request(action, payload = {}) {
     if (cacheable) {
         inflight.set(key, task);
         // 成败都要摘掉，否则一次失败会被后续请求一直复用。
-        const done = () => inflight.delete(key);
+        const done = () => {
+            // 只摘掉自己这一条：clearCache() 之后同键可能已经排上了新一代的请求。
+            if (inflight.get(key) === task) {
+                inflight.delete(key);
+            }
+        };
         task.then(done, done);
     }
     return task;

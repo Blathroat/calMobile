@@ -2,7 +2,8 @@ import { t } from '../core/strings.js';
 /**
  * 屏幕 11 · 展会编辑（新建 / 编辑）
  * 线框：newUI/remaining-ui.html #screen-exhibition-form
- * 业务：ExhibitionManager.add/update + ExhibitionConfiguration（日期、报名起止、收集项）。
+ * 业务：POST / PUT /exhibitions 与 /exhibitions/:id/fields（server/ 的 REST），
+ * 维护日期、报名起止与报名收集项；字段长度与取值上限由后端校验。
  *
  * 展商后台卡片上的“报名方式”“编辑简介”“删除展会”都收进本页的「报名与简介设置」栏，
  * 展商从这里统一维护展会配置，卡片只需要两个入口。

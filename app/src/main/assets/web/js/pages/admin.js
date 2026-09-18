@@ -2,7 +2,8 @@ import { t } from '../core/strings.js';
 /**
  * 屏幕 15 · 管理后台（用户 / 展会 / 设置）
  * 线框：newUI/remaining-ui.html #screen-admin-backend、#screen-admin-settings
- * 业务：AdminUserManager 用户状态管理、ExhibitionManager 展会管理、AppSettings 服务器设置。
+ * 业务：server/ 的 REST —— 用户列表与状态（/users）、展会状态（/exhibitions/:id/status）、
+ * 服务器设置（/settings，读写 app_settings）。
  *
  * 展会卡片与展商后台保持一致；搜索、暂停与导出直接内联在本页。
  * 启动公告、展会分类、审核策略、媒体与上传限制、字符数上限都属于服务器设置，
@@ -29,9 +30,10 @@ const TABS = [
 /**
  * 字符数上限的唯一清单。
  *
- * 控件的 id、提交时的字段名、以及原生侧 {@code AppSettings.TextLimit} 的键名
- * 都从 `key` 派生（`exhibitionTitle` ↔ `limit-exhibition-title`），新增一项只加一行。
- * 取值范围由原生收敛，前端只管收集。
+ * 控件的 id、提交时的字段名、以及后端 `app_settings.limits` 的键名都从 `key` 派生
+ * （`exhibitionTitle` ↔ `limit-exhibition-title`），新增一项只加一行。
+ * 取值范围由后端收敛（见 server/src/domain/settings.js 的边界表：超出会被夹到合法区间，
+ * 成对的上限还会保证不小于下限），前端只管收集，表单长度校验读 `state.limits`。
  */
 const TEXT_LIMITS = [
     { key: 'exhibitionTitle', label: t('s_1co82cb'), hint: t('s_1mcmbiu') },

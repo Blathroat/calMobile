@@ -2,10 +2,11 @@ import { t } from '../core/strings.js';
 /**
  * 屏幕 05 · 注册（创建账号）
  * 线框：newUI/remaining-ui.html #screen-register-account
- * 业务：AuthManager.register（用户名、密码、邮箱校验）。
+ * 业务：POST /auth/register（server/ 的 REST；用户名、密码、邮箱校验）。
  *
- * 校验规则来自「管理-设置」里的服务器设置：用户名长度区间、密码长度区间与邮箱格式，
- * 前端即时提示，原生侧保存前再校验一次，避免绕过页面直接调用桥接。
+ * 校验规则来自「管理-设置」里的服务器设置（bootstrap 下发的 `state.limits`）：用户名与
+ * 密码的长度区间由 `usernameRule()` / `passwordRule()` 读取，前端即时提示；
+ * 保存前后端会再校验一次（server/src/routes/auth.js），绕过页面直接调接口同样被拦。
  */
 
 import { state } from '../core/bridge.js';

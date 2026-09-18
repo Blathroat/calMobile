@@ -39,10 +39,18 @@ const FRONTEND_STRINGS = (() => {
   return map;
 })();
 
-/** 把 t('s_xxx') 还原为文案本体，便于对文件内容做文案断言。 */
+/**
+ * 把 t('s_xxx') 还原为文案本体，便于对文件内容做文案断言。
+ *
+ * 单/双引号与括号内的多余空格都要认：只认 `t('s_xxx')` 时，`t("s_xxx")` 会原样留在
+ * 文本里，下面那些「这一屏有没有某段文案」的断言就悄悄失效了。
+ * 与 `scripts/check-strings.js`、`scripts/extract-strings.js` 保持同一条正则。
+ */
+const T_CALL = /\bt\(\s*(['"])(s_[a-z0-9]+)\1\s*\)/g;
+
 function resolveStrings(content) {
-  return content.replace(/\bt\('(s_[a-z0-9]+)'\)/g,
-    (match, key) => (FRONTEND_STRINGS.has(key) ? FRONTEND_STRINGS.get(key) : match));
+  return content.replace(T_CALL,
+    (match, quote, key) => (FRONTEND_STRINGS.has(key) ? FRONTEND_STRINGS.get(key) : match));
 }
 
 function parseAttributes(source) {
@@ -602,7 +610,11 @@ const checks = [
   {
     id: 'web-asset-cache',
     file: 'app/src/main/java/com/example/calmobile/WebShellActivity.java',
-    contains: ['max-age=86400', 'assetHeaders']
+    // 脚本与样式用 `no-cache`（可以缓存，但每次都要回源校验），而不是 `max-age`：
+    // 覆盖安装 APK 不会清掉 WebView 的 HTTP 缓存，而缓存键只有 URL，
+    // `max-age` 会出现「新外壳配旧 JS 模块」这种只在升级当天复现的错乱；
+    // 资源本来就在 APK 里，回源的代价只是重读一次 assets。
+    contains: ['no-cache', 'assetHeaders']
   },
   {
     id: 'web-dark-mode-tokens',
@@ -613,8 +625,10 @@ const checks = [
   {
     id: 'web-bridge-dark-mode',
     file: `${WEB_ROOT}/js/core/bridge.js`,
+    // 断言真实实现：深色模式写在 <html> 的 dataset.mode 上（即 data-mode 属性），
+    // 字符串 "data-mode" 只出现在注释里，断言它等于什么都没校验。
     contains: ['export function applyMode', 'export function effectiveMode', 'calmobile.mode',
-      'data-mode']
+      'documentElement.dataset.mode']
   },
   {
     id: 'web-dark-mode-toggle',
@@ -699,10 +713,12 @@ const checks = [
   {
     id: 'web-exhibitor-card-trimmed',
     file: `${WEB_ROOT}/js/pages/exhibitor.js`,
-    contains: ['编辑展会', '查看报名', '核销报名码'],
-    // 卡片上只留“查看报名 / 编辑展会”，其余动作都搬进编辑展会的二级界面
+    // “查看报名 / 编辑展会”是卡片上仅有的两个入口（`smallCta`）；核销报名码在页首。
+    contains: ['smallCta(', "context.navigate('review'", "context.navigate('exhibition-form'", '核销报名码'],
+    // 卡片上不能再出现这些入口：报名方式、编辑简介与删除展会都搬进“编辑展会”的二级界面。
+    // 断言带上调用语法，避免命中文件头的说明性注释（注释里确实会写到这些名字）。
     notContains: ["actionButton('报名方式'", "actionButton('编辑简介'", "actionButton('删除展会'",
-      'askDelete', 'changeStatus(']
+      'askDelete(', 'changeStatus(']
   },
   {
     id: 'web-exhibition-form-secondary-actions',
@@ -787,8 +803,10 @@ const checks = [
   {
     id: 'strings-kept',
     file: 'app/src/main/res/values/strings.xml',
-    // 只保留应用名与 CalendarHelper 用到的提示；前端文案在 strings_frontend.xml
-    contains: ['app_name', 'calendar_added', 'calendar_permission_denied', 'calendar_removed']
+    // 只保留应用名与 CalendarHelper / SystemActions 用到的日历提示；
+    // 前端文案在 strings_frontend.xml（主按钮文案随功能增删，不做断言）
+    contains: ['app_name', 'calendar_added', 'calendar_permission_denied', 'calendar_removed',
+      'calendar_invalid_date']
   },
   {
     id: 'resources-trimmed',

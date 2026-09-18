@@ -11,7 +11,7 @@ import { t } from '../core/strings.js';
 import { call, state, applyTheme, applySettings, applyMode } from '../core/bridge.js';
 import { authApi, profileApi, settingsApi } from '../core/api.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
-import { avatarNode, loadingBlock, openAvatarCropper, openSheet, segmented, smallCta, stateBlock, switchRow, toast } from '../ui/components.js';
+import { avatarNode, loadErrorBlock, loadingBlock, openAvatarCropper, openSheet, segmented, smallCta, stateBlock, switchRow, toast } from '../ui/components.js';
 import { el, append, replace } from '../core/dom.js';
 import { fieldValidator, validateAll, limit, passwordRule, matchRule } from '../core/validate.js';
 
@@ -37,8 +37,8 @@ export async function profilePage(context) {
 
     const isAdmin = state.user.can?.admin === true;
 
-    // 通知偏好与个人配色并行拉取，任一失败都保留可用默认值。
-    // 命中缓存就先出一屏（切页面因此不闪骨架屏），数据回来再按差异决定是否重绘。
+    // 通知偏好与个人配色并行拉取，命中缓存就先出一屏（切页面因此不闪骨架屏），
+    // 数据回来再按差异决定是否重绘；两份都失败时按加载失败处理（见 load）。
     //
     // 注意 `granted`：后端只保存用户开关，系统通知权限只有设备知道，
     // 因此按钮的显隐看 `state.capabilities.notifications`（bootstrap 时由 `ui.sync` 带回）。
@@ -46,7 +46,9 @@ export async function profilePage(context) {
     const warmSettings = settingsApi.get.peek();
     const warmReady = warmNotify !== undefined || warmSettings !== undefined;
 
-    const DEFAULT_NOTIFY = { exhibitionReminder: true, registrationUpdates: true, granted: true };
+    // 取数失败时宁可什么都不画：`granted: true` 只是「还不知道」的占位，
+    // 一旦当成已授权画出去，「开启通知」按钮就再也不会出现（见 notificationGranted）。
+    const DEFAULT_NOTIFY = { exhibitionReminder: true, registrationUpdates: true, granted: false };
     let notify = warmNotify || DEFAULT_NOTIFY;
     let settings = warmSettings || null;
     if (settings) {
@@ -60,29 +62,66 @@ export async function profilePage(context) {
         replace(host, loadingBlock(3));
     }
 
-    const [notifyResult, settingsResult] = await Promise.allSettled([
-        profileApi.notifications(),
-        settingsApi.get(),
-    ]);
+    await load();
 
-    const freshNotify = notifyResult.status === 'fulfilled' && notifyResult.value
-        ? notifyResult.value
-        : DEFAULT_NOTIFY;
-    const freshSettings = settingsResult.status === 'fulfilled' ? settingsResult.value : null;
-    // 缓存里那一份和拉回来的一样时不必重绘：重绘会重建开关与色板，让刚播的入场动画重放。
-    const changed = !warmReady
-        || JSON.stringify(freshNotify) !== JSON.stringify(notify)
-        || JSON.stringify(freshSettings) !== JSON.stringify(settings);
+    /**
+     * 通知偏好与个人配色并行拉取。
+     *
+     * 两份都失败按加载失败处理（画错误块 + 重试）：后端没起时页面照常画出来、
+     * 开关显示全开，是最容易让人误判「加载成功」的一种假象。
+     * 只失败一份时保留另一份，缺失的那份用后端返回不出来的默认值，
+     * 并在界面上说明哪一部分没取到。
+     */
+    async function load() {
+        const [notifyResult, settingsResult] = await Promise.allSettled([
+            profileApi.notifications(),
+            settingsApi.get(),
+        ]);
 
-    notify = freshNotify;
-    settings = freshSettings;
-    if (settings) {
-        applySettings(settings);
+        const notifyError = notifyResult.status === 'rejected' ? notifyResult.reason : null;
+        const settingsError = settingsResult.status === 'rejected' ? settingsResult.reason : null;
+
+        if (notifyError && settingsError) {
+            replace(host, loadErrorBlock({
+                title: t('s_1sz2kuw'),
+                description: errorMessage(notifyError, settingsError),
+                onRetry: () => load(),
+            }));
+            return;
+        }
+
+        // 失败的那一份保持「未取到」：不写回任何缓存，重试时还会再拉一次。
+        const freshNotify = notifyResult.status === 'fulfilled' && notifyResult.value
+            ? notifyResult.value
+            : DEFAULT_NOTIFY;
+        const freshSettings = settingsResult.status === 'fulfilled' ? settingsResult.value : null;
+        // 缓存里那一份和拉回来的一样时不必重绘：重绘会重建开关与色板，让刚播的入场动画重放。
+        const changed = !warmReady
+            || JSON.stringify(freshNotify) !== JSON.stringify(notify)
+            || JSON.stringify(freshSettings) !== JSON.stringify(settings);
+
+        notify = freshNotify;
+        settings = freshSettings;
+        if (settings) {
+            applySettings(settings);
+        }
+        themeIndex = settings?.theme?.index ?? state.theme.index ?? 0;
+
+        if (changed) {
+            render();
+        }
+
+        // 只失败一份：页面照常可用，但要说清楚少的是哪一块，别让默认值冒充已保存的偏好。
+        if (notifyError) {
+            toast(t('s_121kyl5'), 'error');
+        } else if (settingsError) {
+            toast(t('s_19ih5ay'), 'error');
+        }
     }
-    themeIndex = settings?.theme?.index ?? state.theme.index ?? 0;
 
-    if (changed) {
-        render();
+    /** 取数失败优先用后端/传输层自带的原因，没有就回落到通用文案。 */
+    function errorMessage(primary, fallback) {
+        return primary?.message || fallback?.message || t('s_1q9u8le');
     }
 
     function render() {
@@ -100,7 +139,7 @@ export async function profilePage(context) {
             privacyCard(user),
             el('div', { class: 'list', 'data-gap': 'sm' }, [
                 menuRow(t('s_1y0imfq'), t('s_16sgm5m'), () => openEditor()),
-                menuRow(t('s_1pt7oo1'), `至少 ${passwordRule().min} 个字符`, () => openPasswordSheet()),
+                menuRow(t('s_1pt7oo1'), `${t('s_1pt7oo1')}（至少 ${passwordRule().min} 个字符）`, () => openPasswordSheet()),
             ]),
             el('div', { class: 'card' }, [
                 el('span', { class: 'section-label', text: t('s_1vmubx9') }),
@@ -411,7 +450,13 @@ export async function profilePage(context) {
         try {
             // 写接口统一返回 { ok, error, ... }，通知偏好放在 notify 里。
             const result = await profileApi.saveNotifications(patch);
-            Object.assign(notify, result?.notify || {});
+            // 只看有没有抛异常会把 `{ ok:false, error:'' }` 当成保存成功
+            // （core/api.js 只在 error 非空时才抛）。
+            if (result?.ok !== true) {
+                toast(result?.error || t('s_1q9u8le'), 'error');
+                return;
+            }
+            Object.assign(notify, result.notify || {});
             toast(t('s_15wm4xy'), 'success');
         } catch (error) {
             toast(error.message, 'error');
@@ -433,9 +478,10 @@ export async function profilePage(context) {
 
     /** 设备是否已拿到系统通知权限；没有桥接（浏览器预览）时退回后端的值。 */
     function notificationGranted() {
+        // 没有桥接时只能看后端：取数失败会走错误块，这里不会把「未知」当成已授权。
         return typeof state.capabilities.notifications === 'boolean'
             ? state.capabilities.notifications
-            : notify.granted;
+            : notify.granted === true;
     }
 
     // ── 编辑资料 ───────────────────────────────────────────────────

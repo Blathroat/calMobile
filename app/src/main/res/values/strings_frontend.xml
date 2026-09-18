@@ -18,6 +18,7 @@
     <string name="s_11iu5s7">允许修改已通过或已拒绝的报名</string>
     <string name="s_11prq8e">该记录可能已被撤销。</string>
     <string name="s_11ps4x5">去首页看看</string>
+    <string name="s_121kyl5">通知偏好加载失败，下面显示的是默认值</string>
     <string name="s_12482qz">二</string>
     <string name="s_12hokt7">退出登录</string>
     <string name="s_12ibypn">还没有填写简介，可用 Markdown 编辑并插入图片。</string>
@@ -34,6 +35,7 @@
     <string name="s_14ol5jh">头像已移除</string>
     <string name="s_153oaxf">公告</string>
     <string name="s_1589w37">取消</string>
+    <string name="s_159zzbg">该报名已经核销为已参加，状态不能再调整。</string>
     <string name="s_15f0vvs">上传格式限制</string>
     <string name="s_15gixpi">展会介绍</string>
     <string name="s_15h5nhd">未填写</string>
@@ -65,6 +67,7 @@
     <string name="s_19brgqa">每行一个分类，用于展商填写与搜索筛选。</string>
     <string name="s_19eb37e">管理员暂停报名</string>
     <string name="s_19g8l4d">，已选择</string>
+    <string name="s_19ih5ay">服务器设置加载失败，配色与主题未更新</string>
     <string name="s_19rf1tx">密码最长</string>
     <string name="s_1a44i78">查看展商公开主页 →</string>
     <string name="s_1aifth0">该用户还没有填写简介</string>
@@ -199,6 +202,7 @@
     <string name="s_1splm64">开启系统通知权限</string>
     <string name="s_1sq2bvr">编辑资料</string>
     <string name="s_1sx8n02">中文标题</string>
+    <string name="s_1sz2kuw">个人设置加载失败</string>
     <string name="s_1t2vi4h">删除</string>
     <string name="s_1t5x3h2">新增收集项</string>
     <string name="s_1t8d6e3">创建第一个展会，配置日期、地点与报名收集项。</string>
@@ -262,6 +266,7 @@
     <string name="s_2i4r18">只能使用中英文、数字与下划线</string>
     <string name="s_2olj7t">保存后立即下发到所有用户的表单校验与上传校验。</string>
     <string name="s_2scj6a">暂停后普通用户不可报名，展商不可自行恢复。</string>
+    <string name="s_2vsxvu">已参加的报名不能再撤销。</string>
     <string name="s_2x5dgj">展会简介</string>
     <string name="s_33a4b3">请输入报名码</string>
     <string name="s_33njx3">报名人</string>
@@ -335,7 +340,6 @@
     <string name="s_d5a1x9">个</string>
     <string name="s_dn42iy">已关闭公开展示</string>
     <string name="s_dn4ida">返回展商后台</string>
-    <string name="s_dnmrxz">已核销为已参加</string>
     <string name="s_doztlr">设置用户名</string>
     <string name="s_dpoory">作用于普通用户与展商可自由填写的字段，超长时前端即时提示。</string>
     <string name="s_dpy0pe">多选选项</string>

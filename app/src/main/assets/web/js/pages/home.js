@@ -2,7 +2,7 @@ import { t } from '../core/strings.js';
 /**
  * 屏幕 02 · 首页（月视图 + 当天展会列表）
  * 线框：newUI/index.html #screen-home、newUI/remaining-ui.html #screen-home
- * 业务：ExhibitionManager 展会数据 + RegistrationManager 报名状态。
+ * 业务：展会与报名数据来自 server/ 的 REST 接口（统一走 core/api.js）。
  *
  * 日历卡片支持左右滑动切换月份：拖动时卡片跟手位移，松手超过阈值则滑出并载入相邻月份；
  * 需要六行才能排满的月份会额外多出一行，同时压缩行高，保证整张卡片仍然可见。
@@ -210,13 +210,16 @@ export async function homePage(context) {
     /** 把一份月数据落到日历与列表上。缓存与远端结果都走这里。 */
     function applyMonth(data) {
         monthData = data;
-        view.year = data.year;
-        view.month = data.month;
+        // 年月一律以**发起这次加载时**的 view 为准：切月份时 view 在请求发出前就
+        // 已经改好了，若再用响应里的 year / month 反写，迟到的旧响应会把日历和
+        // 列表一起拽回上个月（loadInto 的过期守卫已经丢弃迟到结果，这里再兜一层）。
+        // 表头同理，用 view 拼而不是直接用响应里的 monthLabel，否则出现
+        // 「表头写 6 月、格子排 7 月」这种自相矛盾的画面。
         // 只有还没选中日期时才采用后端给的落点，避免刷新的结果覆盖用户的选择。
         if (!view.day) {
             view.day = Number(data.day) || 0;
         }
-        monthTitle.textContent = data.monthLabel || monthLabel(view.year, view.month);
+        monthTitle.textContent = monthLabel(view.year, view.month);
         renderCalendar();
         renderList();
     }

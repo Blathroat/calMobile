@@ -2,7 +2,8 @@ import { t } from '../core/strings.js';
 /**
  * 屏幕 13 · 报名管理 / 审核
  * 线框：newUI/remaining-ui.html #screen-registration-management
- * 业务：RegistrationReviewStore，状态为待审核 / 已通过 / 已拒绝 / 已参加；
+ * 业务：GET /review 与 PUT /review/:id/status（server/ 的 REST），
+ * 状态为待审核 / 已通过 / 已拒绝 / 已参加；
  * 展商能否重新审核由管理员设置决定，管理员自己不受该开关限制。
  *
  * 取数走 core/loadable.js：切筛选时上一份结果留在屏幕上变灰，不会先闪空白。
@@ -25,7 +26,6 @@ export async function reviewPage(context) {
     const filterHost = el('div');
     let filter = REGISTRATION_STATUS.PENDING;
     let filterSeg = null;
-    let title = t('s_7xrrf0');
 
     scaffold({
         title: t('s_7xrrf0'),
@@ -121,9 +121,6 @@ export async function reviewPage(context) {
                 // 数量要跟列表同一帧画出来，否则缓存命中时筛选条会短暂显示旧数字。
                 renderFilter(data.counts || {});
                 countPill.textContent = `待审核 ${data.counts?.[REGISTRATION_STATUS.PENDING] ?? 0}`;
-                if (title !== t('s_7xrrf0') && data.records?.length) {
-                    title = data.records[0].exhibitionTitle || title;
-                }
                 if (records.length === 0) {
                     replace(listHost, stateBlock({
                         iconName: 'ticket',
@@ -157,9 +154,30 @@ export async function reviewPage(context) {
 
     function openDetail(record) {
         const answers = answerLines(record.answers);
-        // 管理员始终可以切换状态；展商按“允许修改已通过或已拒绝的报名”开关决定。
-        const revisable = isAdmin || record.status === REGISTRATION_STATUS.PENDING || state.review.canRevise;
-        const attended = record.status === REGISTRATION_STATUS.ATTENDED;
+        // 可选动作必须与后端状态机一致（`server/src/routes/review.js` 的 REGISTRATION_TRANSITIONS）：
+        // 已参加是终态；展商在「允许修改已通过或已拒绝的报名」关闭时不能动已审核的记录，
+        // 管理员不受该策略限制，但仍受状态机限制。按钮画得比后端宽，用户点了只会拿到失败提示。
+        const transitions = {
+            [REGISTRATION_STATUS.PENDING]: [REGISTRATION_STATUS.APPROVED, REGISTRATION_STATUS.REJECTED],
+            [REGISTRATION_STATUS.APPROVED]: [REGISTRATION_STATUS.ATTENDED, REGISTRATION_STATUS.REJECTED],
+            [REGISTRATION_STATUS.REJECTED]: [REGISTRATION_STATUS.APPROVED],
+            [REGISTRATION_STATUS.CANCELLED]: [REGISTRATION_STATUS.APPROVED],
+        };
+        const reviewed = record.status !== REGISTRATION_STATUS.PENDING;
+        const mayRevise = isAdmin || !reviewed || state.review.canRevise;
+        const targets = mayRevise ? (transitions[record.status] || []) : [];
+        const targetLabel = (target) => {
+            if (target === REGISTRATION_STATUS.APPROVED) {
+                return t('s_j666m6');
+            }
+            if (target === REGISTRATION_STATUS.REJECTED) {
+                return t('s_1qrntx4');
+            }
+            return t('s_crec0c');
+        };
+        const hint = record.status === REGISTRATION_STATUS.ATTENDED
+            ? t('s_159zzbg')
+            : t('s_1e05tqn');
         const sheet = openSheet({
             title: record.visitorName,
             content: [
@@ -174,37 +192,19 @@ export async function reviewPage(context) {
                             el('strong', { class: 'fill', text: line.value || '—' }),
                         ]))
                         : [el('span', { class: 'row-meta', text: t('s_v8pba2') })]),
-                    revisable
-                        ? el('div', { class: 'stack', 'data-gap': 'sm' }, [
-                            el('div', { class: 'grid-cols-2' }, [
-                                el('button', {
-                                    class: 'cta ghost',
-                                    type: 'button',
-                                    onclick: async () => {
-                                        sheet.close();
-                                        await changeStatus(record, REGISTRATION_STATUS.REJECTED);
-                                    },
-                                }, [t('s_1qrntx4')]),
-                                el('button', {
-                                    class: 'cta',
-                                    type: 'button',
-                                    onclick: async () => {
-                                        sheet.close();
-                                        await changeStatus(record, REGISTRATION_STATUS.APPROVED);
-                                    },
-                                }, [t('s_j666m6')]),
-                            ]),
-                            el('button', {
-                                class: 'cta ghost',
-                                type: 'button',
-                                disabled: attended ? true : null,
-                                onclick: async () => {
-                                    sheet.close();
-                                    await changeStatus(record, REGISTRATION_STATUS.ATTENDED);
-                                },
-                            }, [attended ? t('s_dnmrxz') : t('s_crec0c')]),
-                        ])
-                        : el('p', { class: 'field-hint', text: t('s_1e05tqn') }),
+                    targets.length > 0
+                        ? el('div', {
+                            class: targets.length > 1 ? 'grid-cols-2' : 'stack',
+                            'data-gap': 'sm',
+                        }, targets.map((target) => el('button', {
+                            class: target === REGISTRATION_STATUS.APPROVED ? 'cta' : 'cta ghost',
+                            type: 'button',
+                            onclick: async () => {
+                                sheet.close();
+                                await changeStatus(record, target);
+                            },
+                        }, [targetLabel(target)])))
+                        : el('p', { class: 'field-hint', text: hint }),
                 ]),
             ],
             actions: [{ label: t('s_g0fanx'), onClick: (close) => close() }],

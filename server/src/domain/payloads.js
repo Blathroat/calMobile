@@ -1,8 +1,8 @@
 /**
  * 数据库行 → 接口响应。
  *
- * 前端页面直接消费这些结构（见根目录 README「前后端边界」），字段名与原生桥接层的
- * 输出保持一致，因此换后端不需要改页面。映射集中在这里，路由只负责取数与校验。
+ * 前端页面直接消费这些结构（见根目录 README「前后端边界」），字段名与页面读取的
+ * 保持一致，因此换实现不需要改页面。映射集中在这里，路由只负责取数与校验。
  */
 
 const labels = require('./labels');
@@ -54,8 +54,8 @@ function fieldPayload(row) {
  * 报名行 → 报名对象。
  *
  * `checkInCode` 只在「展会启用二维码」且「报名已通过 / 已参加」时下发，
- * 与原生侧 `RegistrationActions.registrationPayload` 的规则一致；
- * 其余状态给空串，页面据此不渲染二维码。
+ * 其余状态给空串，页面据此不渲染二维码。这是现场核销的唯一凭据，
+ * 因此只在本人 / 管理员可见的路径上下发（公开页用 publicRegistrationPayload）。
  */
 function registrationPayload(row) {
   const statusCode = row.status;
@@ -80,6 +80,19 @@ function registrationPayload(row) {
     checkInCode: codeAllowed ? labels.checkInCode(row.exhibition_id, row.id) : '',
     checkInTime: row.check_in_time ? new Date(row.check_in_time).toISOString() : '',
   };
+}
+
+/**
+ * 报名行 → **公开页**的报名对象（用户公开页对访客开放，见 routes/users.js）。
+ *
+ * 与 `registrationPayload` 唯一的差别是不下发 `checkInCode`：那是现场核销的唯一凭据，
+ * 谁拿到谁就能替别人核销，只有本人与管理员可以看到。这里保留其余字段（含 `visitorName`
+ * 与 `answers`），因为展示报名记录正是用户打开 `showRegistrations` 的本意；
+ * `checkInTime` 不是凭据，且「已参加」这一状态本身对访客可见，因此照常给出。
+ * 字段名与形状与 `registrationPayload` 一致，页面才能共用同一套渲染。
+ */
+function publicRegistrationPayload(row) {
+  return { ...registrationPayload(row), checkInCode: '' };
 }
 
 /**
@@ -151,6 +164,7 @@ module.exports = {
   exhibitionPayload,
   fieldPayload,
   registrationPayload,
+  publicRegistrationPayload,
   userPayload,
   guestPayload,
   adminUserPayload,

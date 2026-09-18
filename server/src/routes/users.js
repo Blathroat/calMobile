@@ -13,7 +13,7 @@ const { query } = require('../config/pool');
 const {
   USER_COLUMNS, USER_FROM, REGISTRATION_COLUMNS, REGISTRATION_FROM,
 } = require('../domain/queries');
-const { adminUserPayload, registrationPayload } = require('../domain/payloads');
+const { adminUserPayload, publicRegistrationPayload } = require('../domain/payloads');
 const labels = require('../domain/labels');
 const { requireAdmin } = require('../domain/permissions');
 const { normalizeUserStatus } = require('../domain/settings');
@@ -96,7 +96,7 @@ router.get('/public', optionalAuth, async (req, res, next) => {
 
 /**
  * GET /api/v1/users/:id
- * 单个用户（管理员）；页面只用到 id / 昵称 / 角色，形状与演示后端一致。
+ * 单个用户（管理员）；页面只用到 id / 昵称 / 角色。
  */
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
@@ -173,6 +173,7 @@ async function publicProfile(req, target) {
   const showRegistrations = target.show_registrations === true;
 
   // 只有已通过 / 已参加的报名对外展示，待审核与已拒绝属于内部流转状态。
+  // 公开页对访客开放，因此映射用 publicRegistrationPayload：去掉现场核销用的报名码。
   let registrations = [];
   if (viewedAsAdmin || isSelf || showRegistrations) {
     const result = await query(`
@@ -180,7 +181,7 @@ async function publicProfile(req, target) {
             WHERE r.visitor_id = $1 AND r.status IN ('approved', 'attended')
             ORDER BY e.exhibition_date DESC, r.created_at DESC
         `, [target.id]);
-    registrations = result.rows.map(registrationPayload);
+    registrations = result.rows.map(publicRegistrationPayload);
   }
 
   const profile = {
@@ -194,8 +195,8 @@ async function publicProfile(req, target) {
   };
   return {
     found: true,
-    // 页面（user-public.js）直接读顶层字段，与演示后端同形；
-    // 同时按接口约定给出 `profile` 分组，两种取法都能拿到。
+    // 页面（user-public.js）直接读顶层字段，因此资料同时铺在顶层；
+    // 另外按接口约定给出 `profile` 分组，两种取法都能拿到。
     ...profile,
     profile,
     viewedAsAdmin,

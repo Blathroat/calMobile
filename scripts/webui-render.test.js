@@ -742,12 +742,20 @@ async function renderRoute(routeId, params = {}) {
     };
 }
 
-/** 页面必须至少渲染出一个可见节点，并且不能出现“启动失败”占位。 */
+/**
+ * 页面必须真的画出内容，并且不能出现“启动失败”占位。
+ *
+ * `app.children.length > 0` 曾是这里的断言，但它恒真：`renderShell` 无论如何都会
+ * 挂上 topbar 与 main，哪怕页面模块一行都没画。因此改为断言**页面主体里**有内容
+ * ——那才是「渲染过一次」的证据。
+ */
 function assertRendered(app, label) {
     const text = collectText(app);
     assert.ok(!text.includes('启动失败'), `${label} 渲染失败：${text.slice(0, 200)}`);
     assert.ok(!text.includes('页面加载失败'), `${label} 渲染出错：${text.slice(0, 200)}`);
-    assert.ok(app.children.length > 0, `${label} 没有渲染任何内容`);
+    const main = app.querySelector('main');
+    assert.ok(main, `${label} 没有渲染出页面主体（main）`);
+    assert.ok(main.children.length > 0, `${label} 的页面主体是空的`);
 }
 
 function collectText(node, out = []) {
@@ -763,6 +771,7 @@ function collectText(node, out = []) {
 /** 每个页面都渲染一次，覆盖访客 / 普通用户 / 展商 / 管理员四种身份。 */
 const ROUTES = [
     ['login', {}],
+    ['register', {}],
     ['home', {}],
     ['detail', { id: 'exhibition-1' }],
     ['registration-form', { id: 'exhibition-1' }],
@@ -790,6 +799,25 @@ test('所有页面在管理员身份下都能完成一次渲染', async () => {
         assert.deepStrictEqual(unmatched, [],
             `${label} 请求了假后端没有覆盖的接口：${unmatched.join(', ')}`);
     }
+});
+
+/**
+ * `assertRendered` 自己不能是恒真的。
+ *
+ * 它原来断言 `app.children.length > 0`，而 `renderShell` 无论如何都会挂上 topbar
+ * 与 main，所以「页面模块一行都没画」也照样通过——上面那条用例因此少了半条命。
+ * 这里用一个只有外壳、主体为空的 app 把这一点钉住：旧式断言会通过，新断言必须报错。
+ */
+test('assertRendered 能认出「只有外壳、主体是空的」页面', async () => {
+    installGlobals();
+    const components = await webModule('js/ui/components.js');
+    const dom = resetDom(sharedDocument);
+    // renderShell 只挂外壳：topbar + 空的 main，页面内容一行都没有。
+    components.renderShell(dom.app, { topbar: null, body: [] });
+
+    assert.ok(dom.app.children.length > 0,
+        '前置条件：光有外壳就已经有节点了（这正是旧断言恒真的原因）');
+    assert.throws(() => assertRendered(dom.app, '空壳页面'), /页面主体是空的/);
 });
 
 test('页面渲染时调用的桥接动作都在系统能力清单里', async () => {
@@ -977,6 +1005,46 @@ test('报名码用内置库绘制后能被 jsQR 解出原文', async () => {
     assert.strictEqual(decoded.data, text, '解码结果与报名码不一致');
 });
 
+/**
+ * 注册页要能真的把账号提交给后端。
+ *
+ * 这是 `POST /auth/register` 夹具唯一的用武之地：只把 register 加进 ROUTES 渲染
+ * 一次，表单的提交路径（校验 → 请求 → 保存返回的令牌）一行都没被跑到。
+ */
+test('注册页提交后请求 POST /auth/register 并保存返回的令牌', async () => {
+    const { dom, requests } = await renderRoute('register', {});
+    const api = await webModule('js/core/api.js');
+    api.setRefreshToken('');
+
+    const control = (id) => dom.app.querySelectorAll((node) => node.id === id)[0];
+    const username = control('register-username');
+    const email = control('register-email');
+    const password = control('register-password');
+    const confirm = control('register-confirm');
+    assert.ok(username && email && password && confirm, '注册页没有渲染出四个输入框');
+
+    username.value = 'newuser';
+    email.value = 'newuser@example.com';
+    password.value = 'secret123';
+    confirm.value = 'secret123';
+
+    const form = dom.app.querySelectorAll((node) => node.tagName === 'FORM')[0];
+    assert.ok(form, '注册页没有渲染表单');
+    form.dispatch('submit', { preventDefault() {} });
+    await settle(60);
+
+    const submitted = requests.find((item) => item.method === 'POST' && item.path === '/auth/register');
+    assert.ok(submitted, `注册页没有请求 POST /auth/register，实际请求：${requests
+        .map((item) => `${item.method} ${item.path}`).join(', ')}`);
+    assert.deepStrictEqual(submitted.body, {
+        username: 'newuser',
+        email: 'newuser@example.com',
+        password: 'secret123',
+        confirmPassword: 'secret123',
+    }, '注册请求体与表单内容不一致');
+    assert.strictEqual(api.hasRefreshToken(), true, '后端返回的刷新令牌没有保存下来');
+});
+
 // ── 取数体验：先画缓存、预加载、日历本地选中 ─────────────────────
 
 /** 取前端模块（与页面解析到同一实例，因此能拿到同一份缓存）。 */
@@ -1062,6 +1130,11 @@ test('日历切月份命中预加载缓存时不再发请求', async () => {
     await settle(220);
     assert.strictEqual(countMonth(requests, 7), before,
         '目标月份（7 月）已在缓存里，切月份不应该再请求它');
+    // 表头由用户操作时的参数决定：切到 7 月后不能还写着 6 月。
+    const title = dom.app.querySelectorAll((node) => node.tagName === 'STRONG'
+        && /^\d{4} 年 \d{1,2} 月$/.test(String(node.textContent)))[0];
+    assert.ok(title, '日历卡片上没有找到月份标题');
+    assert.strictEqual(title.textContent, '2026 年 7 月', '切月份后日历表头没有跟着走');
     // 换到 7 月后会照常预热新的相邻月份（8 月）：这是预加载的既定行为。
     assert.ok(await waitFor(() => countMonth(requests, 8) > 0),
         '切到 7 月后没有预热 8 月，说明 preloadFollowUps 没有跟上');
@@ -1089,6 +1162,123 @@ test('loadInto 命中缓存时同步出内容，且不清空容器里已有的�
     assert.ok(collectText(host).includes('刷新前的内容'), '容器里已有的内容不能被清空');
     await pending;
     assert.strictEqual(painted, 1, '取回来的数据与缓存一致时不应该再重绘一次');
+});
+
+/** 受控的月视图响应：只声明「这是哪个月」，用来断言画进容器的是哪一次的结果。 */
+function emptyMonth(month) {
+    return {
+        year: 2026, month, day: 1, monthLabel: `2026 年 ${month} 月`,
+        eventDays: [], exhibitions: [], selected: [],
+    };
+}
+
+/**
+ * 过期响应不能覆盖新视图。
+ *
+ * 同一块容器上前后发起两次加载是常态（切月份、切筛选、220ms 防抖搜索都会这样）。
+ * 先发的请求如果比后发的慢，回来晚的那次若照画，屏幕上刚切到的月份会被上一次的
+ * 数据盖回去，日历表头与列表日期还会对不上。
+ */
+test('先发起但后返回的过期响应不会覆盖后发起的那次渲染', async () => {
+    await renderRoute('home', {});
+    const api = await webModule('js/core/api.js');
+    const { loadInto } = await webModule('js/core/loadable.js');
+    // 等启动时的预加载排空再清缓存：下面的请求全部由用例自己控制，时序才确定。
+    await settle(150);
+    api.clearCache();
+
+    const originalFetch = sharedWindow.fetch;
+    try {
+        // 受控的月视图后端：每个月的响应都先挂着，由用例决定谁先返回。
+        const waiting = new Map();
+        sharedWindow.fetch = (url) => new Promise((resolve) => {
+            const month = Number(new URL(String(url)).searchParams.get('month'));
+            waiting.set(month, (body) => resolve({ ok: true, status: 200, json: async () => body }));
+        });
+        installGlobals();
+
+        const host = new StubNode('div');
+        const painted = [];
+        const load = (month) => loadInto(host, {
+            read: api.exhibitions.month,
+            params: { year: 2026, month },
+            render: (data) => painted.push(data.month),
+        });
+
+        // 先发 6 月（慢），后发 7 月（快）。
+        const june = load(6);
+        await settle(0);
+        const july = load(7);
+        await settle(0);
+
+        waiting.get(7)(emptyMonth(7));
+        await settle(0);
+        assert.deepStrictEqual(painted, [7], '后发起的 7 月应当先画出来');
+        assert.strictEqual(host.dataset.busy, undefined, '最新的那次加载落定后要摘掉刷新标记');
+
+        // 6 月这时才回来：整块丢弃，不能把 7 月盖掉。
+        waiting.get(6)(emptyMonth(6));
+        await Promise.all([june, july]);
+        assert.deepStrictEqual(painted, [7], '先发起的过期响应不能覆盖后发起的那一次渲染');
+        assert.strictEqual(host.dataset.busy, undefined, '过期响应不能碰刷新标记');
+
+        // 再验一遍「不碰 data-busy」：旧请求返回时新请求还在飞，标记必须留着。
+        const august = load(8);
+        await settle(0);
+        const september = load(9);
+        await settle(0);
+        assert.strictEqual(host.dataset.busy, 'true', '有请求在飞时应当标着刷新中');
+        waiting.get(8)(emptyMonth(8));
+        await settle(0);
+        assert.strictEqual(host.dataset.busy, 'true',
+            '过期响应不能摘掉后发起那次加载的刷新标记');
+        assert.deepStrictEqual(painted, [7], '过期响应不能画进容器');
+        waiting.get(9)(emptyMonth(9));
+        await Promise.all([august, september]);
+        assert.deepStrictEqual(painted, [7, 9], '只有最新发起的加载会画');
+        assert.strictEqual(host.dataset.busy, undefined, '最后一次加载落定后摘掉刷新标记');
+    } finally {
+        sharedWindow.fetch = originalFetch;
+        installGlobals();
+    }
+});
+
+/**
+ * 登出会清缓存，但**清不掉已经发出去的请求**。
+ *
+ * 预加载在登出瞬间往往还有在途请求（`profile.get` / `users.list`），它们回来时
+ * 若无条件写回缓存，上一个身份的数据就会留在新会话里，TTL 的 20 秒内还能被读到。
+ */
+test('clearCache 之后，在途请求的结果不再写回缓存', async () => {
+    await renderRoute('home', {});
+    const api = await webModule('js/core/api.js');
+    await settle(150);
+    api.clearCache();
+
+    const originalFetch = sharedWindow.fetch;
+    try {
+        let release;
+        sharedWindow.fetch = () => new Promise((resolve) => {
+            release = () => resolve({
+                ok: true,
+                status: 200,
+                json: async () => ({ loggedIn: true, nickname: '上一个身份' }),
+            });
+        });
+        installGlobals();
+
+        const pending = api.profile.get();
+        // 请求已经在飞，此时用户退出登录：这一代缓存作废。
+        api.clearCache();
+        release();
+        const value = await pending;
+        assert.strictEqual(value.nickname, '上一个身份', '调用方仍然拿到自己那次请求的结果');
+        assert.strictEqual(api.profile.get.peek(), undefined,
+            '过期请求回来以后不能把上一个身份的数据写进新会话的缓存');
+    } finally {
+        sharedWindow.fetch = originalFetch;
+        installGlobals();
+    }
 });
 
 /** 过期数据仍然可以被 peek 到：页面先画旧的一屏，再让取数去刷新。 */
@@ -1140,6 +1330,37 @@ test('启动后会预加载其它标签页的数据', async () => {
     assert.ok(api.registrations.list.peek(), '「我的报名」没有预热');
     assert.ok(api.profile.get.peek(), '个人页没有预热');
     assert.ok(api.exhibitions.list.peek(), '展商后台没有预热');
+});
+
+/**
+ * 首页预热的目标月份要跟着 `bootstrap.calendar.landing` 走。
+ *
+ * 首帧的预加载发生在 bootstrap 落定之前，那时落点还是默认的 `2026-6`；如果
+ * 「首页已经预热过」这条记录不带参数，后端下发的真实落点月份就会被它永久挡住，
+ * 整个会话都不再预热，用户滑到真实落点月份还得等一次往返。
+ */
+test('首页预热的是 calendar.landing 指定的月份，而不是默认月份', async () => {
+    const { requests } = await renderRoute('home', {});
+    const api = await webModule('js/core/api.js');
+    const bridge = await webModule('js/core/bridge.js');
+    const { preloadTabs } = await webModule('js/core/preload.js');
+    // 先等首帧那轮预加载（默认落点 2026-6）排空。
+    await settle(150);
+    assert.ok(api.exhibitions.month.peek({ year: 2026, month: 6 }),
+        '前置条件：默认落点月份应当已经被预热过');
+
+    const landing = bridge.state.calendar.landing;
+    // bootstrap 下发真实落点：非默认月份，且与上面热过的那个不同。
+    bridge.state.calendar.landing = { year: 2026, month: 9 };
+    try {
+        preloadTabs();
+        assert.ok(await waitFor(() => countMonth(requests, 9) > 0),
+            'bootstrap 下发真实落点后没有预热 landing 指定的月份');
+        assert.ok(api.exhibitions.month.peek({ year: 2026, month: 9 }),
+            'landing 月份的月数据没有进缓存');
+    } finally {
+        bridge.state.calendar.landing = landing;
+    }
 });
 
 // ── 与后端的 REST 契约 ───────────────────────────────────────────
@@ -1261,6 +1482,49 @@ test('动作按 ENDPOINTS 映射成后端请求，401 会自动续期一次', as
         await assert.rejects(() => api.exhibitions.list(),
             /后端返回 502/,
             '5xx 时应当如实报传输层失败：数据动作已经不在原生实现里');
+    } finally {
+        sharedWindow.fetch = originalFetch;
+        installGlobals();
+    }
+});
+
+/**
+ * 传输层失败要能自证身份与出处。
+ *
+ * 页面的错误块只显示 `error.message`，排查时看得见的就是这段文案：5xx 必须带上
+ * 动作名与路径，否则「后端返回 502」根本看不出是谁挂了；超时必须与「连不上」
+ * 分开报，否则应答慢的后端会被说成「后端没起、请 adb reverse」，把方向带偏。
+ */
+test('传输层错误带上动作与路径，超时与连不上分开报', async () => {
+    await renderRoute('home', {});
+    const api = await webModule('js/core/api.js');
+    const originalFetch = sharedWindow.fetch;
+    try {
+        // 5xx：文案里要有动作名与路径。
+        sharedWindow.fetch = async () => ({ ok: false, status: 502, json: async () => ({ error: '网关错误' }) });
+        installGlobals();
+        api.clearCache();
+        const bad = await api.exhibitions.month({ year: 2026, month: 6 }).catch((error) => error);
+        assert.ok(bad instanceof api.TransportError,
+            `5xx 应当抛导出的 TransportError，实际是 ${bad && bad.name}`);
+        assert.match(bad.message, /后端返回 502/);
+        assert.match(bad.message, /exhibitions\.month GET \/exhibitions\/month/,
+            `5xx 文案没有带上动作与路径：${bad.message}`);
+
+        // 超时：AbortController 中断走的是同一个 catch，必须单独分支。
+        sharedWindow.fetch = async () => {
+            const aborted = new Error('This operation was aborted');
+            aborted.name = 'AbortError';
+            throw aborted;
+        };
+        installGlobals();
+        api.clearCache();
+        const slow = await api.exhibitions.list().catch((error) => error);
+        assert.ok(slow instanceof api.TransportError, '超时也应当是 TransportError');
+        assert.match(slow.message, /后端响应超时/, `超时文案不对：${slow.message}`);
+        assert.ok(!slow.message.includes('连不上后端服务'),
+            '超时不能报成「连不上」：那会把慢后端说成没启动');
+        assert.match(slow.message, /adb reverse/, '超时文案要保留排查提示');
     } finally {
         sharedWindow.fetch = originalFetch;
         installGlobals();

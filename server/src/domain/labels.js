@@ -1,9 +1,8 @@
 /**
  * 状态词汇表：数据库里存英文代码，对外只讲中文标签。
  *
- * 中文标签是与前端（`assets/web/js/core/status.js`）和原生侧
- * （`RegistrationReviewStore.STATUS_*`、`ExhibitorExhibition.STATUS_*`）约定的同一批字符串，
- * 前端按值比较，因此这里的映射是**接口契约**，改动必须三处同时改。
+ * 中文标签是与前端（`assets/web/js/core/status.js`）约定的同一批字符串，
+ * 前端按值比较，因此这里的映射是**接口契约**，改动必须两处同时改。
  *
  * 这样做的好处：数据库里筛选、统计、加约束都用稳定的英文代码，
  * 不会因为文案调整而牵动数据。
@@ -92,7 +91,7 @@ function toUserStatus(value) {
 }
 
 /**
- * 报名方式标签：列表卡片上显示的那一列，与原生 `WebAppActions.modeLabel` 一致。
+ * 报名方式标签：列表卡片上显示的那一列。
  * 「需审核 / 无需审核」要带上「报名中」前缀，「仅展示 / 截止报名 / 已结束」原样显示。
  */
 function modeLabel(statusCode) {

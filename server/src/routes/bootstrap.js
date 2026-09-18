@@ -1,9 +1,9 @@
 /**
  * 启动聚合接口：一次把页面首帧需要的全部配置发下去。
  *
- * 字段与前端 `bridge.js` 的 `applyBootstrap` 一一对应，缺一个页面就会渲染异常
+ * 字段与前端 `core/bridge.js` 的 `applyBootstrap` 一一对应，缺一个页面就会渲染异常
  * （契约测试逐项断言）。这里不返回通知偏好——它在「设置」接口里，
- * 与原生 `SystemActions.settings` 的分工保持一致。
+ * 与 `profile.js` 的通知偏好分工保持一致。
  */
 
 const express = require('express');
@@ -52,7 +52,7 @@ router.get('/bootstrap', optionalAuth, async (req, res, next) => {
       theme: settings.theme,
       ui: { mode },
       // 系统日历、通知权限属于设备能力：HTTP 后端只知道服务器侧的状态，
-      // 具体是否可用由前端通过桥接的 calendar.status / 通知接口确认。
+      // 具体是否可用由前端通过系统动作（`calendar.status` / 通知权限）确认。
       capabilities: { ...settings.capabilities },
       categories: settings.categories,
       review: settings.review,

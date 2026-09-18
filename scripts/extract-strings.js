@@ -29,6 +29,15 @@ const PROTOCOL_VALUES = new Set([
     '截止报名', '已结束', '报名中', '全部', '文本', '单选', '多选', '必填', '选填',
 ]);
 
+/**
+ * 源码里的一次 `t('s_xxx')` 调用。
+ *
+ * 单/双引号与括号内的多余空格都要认：只认 `t('s_xxx')` 这一种写法时，
+ * `t("s_xxx")` 与 `t( 's_xxx' )` 会被当成新文案再迁移一遍（或让既有资源变成死资源）。
+ * `scripts/check-strings.js` 与 `scripts/smoke-check.js` 用的是同一条正则。
+ */
+const T_CALL = /\bt\(\s*(['"])(s_[a-z0-9]+)\1\s*\)/g;
+
 function walk(dir) {
     return fs.readdirSync(dir, { withFileTypes: true })
         .flatMap((entry) => (entry.isDirectory()
@@ -125,8 +134,8 @@ for (const file of walk(jsRoot)) {
     let changed = false;
 
     // 先收集源码里已迁移的 key，保证幂等：再跑一次不会丢文案。
-    for (const match of source.matchAll(/\bt\('(s_[a-z0-9]+)'\)/g)) {
-        rememberExisting(match[1]);
+    for (const match of source.matchAll(T_CALL)) {
+        rememberExisting(match[2]);
     }
 
     // 只匹配单行、非模板、不含插值的字面量。

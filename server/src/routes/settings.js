@@ -1,12 +1,13 @@
 /**
  * settings：服务器设置读写与个人外观模式。
  *
- * - `GET /` 访客也能读（页面首帧要用），返回的键与原生 `SystemActions.settings()` 一致：
- *   `theme / ui / announcement / brand / categories / review / media / upload / limits / notify`；
+ * - `GET /` 访客也能读（页面首帧要用），返回的键与前端 `core/bridge.js` 的 `applySettings()`
+ *   消费的一致：`theme / ui / announcement / brand / categories / review / media / upload / limits / notify`；
  * - `PUT /` 只有管理员能改。请求体是**扁平**补丁（键与「管理-设置」表单一一对应），
  *   合并与收敛交给 `domain/settings.js` 的 `applyServerPatch()`，这里不重复实现；
- *   带 `notify` 时顺带保存当前用户的通知偏好（与原生 `saveSettings` 分工一致）；
- * - `PUT /ui-mode` 是个人偏好（存 `users.ui_mode`），访客调用则写服务器默认值。
+ *   带 `notify` 时顺带保存当前用户的通知偏好（与前端 `profile.js` 的分工一致）；
+ * - `PUT /ui-mode` 是个人偏好（存 `users.ui_mode`），必须登录，匿名请求一律 401：
+ *   服务器级默认外观只存在 `app_settings.ui` 里作为未登录时的读默认值，不对外提供写入口。
  */
 
 const express = require('express');
@@ -85,13 +86,16 @@ router.put('/', authenticate, async (req, res, next) => {
 
 /**
  * PUT /api/v1/settings/ui-mode
- * 个人外观模式：只认 auto / light / dark，其余一律当 auto（与演示后端一致）。
+ * 个人外观模式：只认 auto / light / dark，其余一律当 auto。
+ *
+ * 必须登录（前端 `pages/profile.js` 的外观切换只在登录态渲染）：无令牌时写不了任何东西，
+ * 更不会像以前那样把匿名请求的取值落成 `app_settings.ui` 里所有用户的默认外观。
  */
-router.put('/ui-mode', optionalAuth, async (req, res, next) => {
+router.put('/ui-mode', authenticate, async (req, res, next) => {
   try {
     await mutate(res, next, async () => {
       const body = req.body || {};
-      return { mode: await saveUiMode(req.user?.userId, String(body.mode === undefined ? '' : body.mode)) };
+      return { mode: await saveUiMode(req.user.userId, String(body.mode === undefined ? '' : body.mode)) };
     });
   } catch (error) {
     next(error);

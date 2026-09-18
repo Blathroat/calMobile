@@ -296,7 +296,8 @@ async function seed() {
     }
     console.log(`示例展会就绪（${exhibitions.length} 场，日期相对今天生成）`);
 
-    // 默认报名收集项：与原生侧的 defaultFields 一致。
+    // 默认报名收集项：与 routes/exhibitions.js 的 DEFAULT_FIELDS 同一份取值
+    // （那边是「展会没有配置收集项时页面与提交校验用的默认值」）。
     const fields = [
       ['姓名 / 公司名称', '文本', true, []],
       ['参观身份', '单选', true, ['专业观众', '采购负责人', '媒体']],

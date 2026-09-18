@@ -2,7 +2,7 @@ import { t } from '../core/strings.js';
 /**
  * 屏幕 01 · 入口（登录 / 访客）
  * 线框：newUI/index.html #screen-login、newUI/remaining-ui.html #screen-login
- * 业务：AuthManager.login / enterAsGuest，登录后进入首页。
+ * 业务：POST /auth/login 与 POST /auth/guest（server/ 的 REST），通过后进入首页。
  */
 
 import { state, whenReady } from '../core/bridge.js';
@@ -105,10 +105,26 @@ export async function loginPage(context) {
     append(body, footer);
 
     guest.addEventListener('click', async () => {
-        await auth.guest();
-        Object.assign(state.user, { loggedIn: false, guest: true, role: 'guest', roleLabel: t('s_h6o1xg') });
-        await whenReady();
-        context.navigate(context.params.redirect || 'home', redirectParams(), { replace: true });
+        // 访客身份也由后端签发（POST /auth/guest）：后端没起或端口没转发时必须说清楚，
+        // 否则按钮点了没有任何反应，看起来像坏的。
+        errorBox.hidden = true;
+        guest.dataset.loading = 'true';
+        guest.disabled = true;
+        try {
+            const result = await auth.guest();
+            if (!result?.ok) {
+                showError(result?.error || t('s_rn5blf'));
+                return;
+            }
+            Object.assign(state.user, { loggedIn: false, guest: true, role: 'guest', roleLabel: t('s_h6o1xg') }, result.user || {});
+            await whenReady();
+            context.navigate(context.params.redirect || 'home', redirectParams(), { replace: true });
+        } catch (error) {
+            showError(error.message);
+        } finally {
+            guest.dataset.loading = 'false';
+            guest.disabled = false;
+        }
     });
 
     /** 登录前所在页面携带的参数（例如展会 id），登录后原样带回。 */

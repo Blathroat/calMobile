@@ -10,7 +10,7 @@ import { t } from '../core/strings.js';
 import { state } from '../core/bridge.js';
 import { exhibitions, registrations } from '../core/api.js';
 import { loadInto } from '../core/loadable.js';
-import { scaffold } from '../core/router.js';
+import { scaffold, onPageStop } from '../core/router.js';
 import { notFoundBlock, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, append, replace, formatDateWithWeekday } from '../core/dom.js';
 import { EXHIBITION_STATUS } from '../core/status.js';
@@ -28,6 +28,16 @@ export async function registrationFormPage(context) {
     let exhibition = null;
     let fields = [];
     let existing = null;
+    /** 提交成功后的跳转定时器；用户在这之前离开本页就不再跳（见 onPageStop）。 */
+    let redirectTimer = null;
+
+    // 离开本页时取消尚未触发的跳转，避免把已经返回的用户再拽回「我的报名」。
+    onPageStop(() => {
+        if (redirectTimer) {
+            clearTimeout(redirectTimer);
+            redirectTimer = null;
+        }
+    });
 
     const registrationId = context.params.registrationId;
 
@@ -173,7 +183,12 @@ export async function registrationFormPage(context) {
                 submit.textContent = approved ? t('s_f02bjx') : t('s_1vse82y');
                 submit.disabled = true;
                 toast(approved ? t('s_17txntc') : t('s_gs61uj'), 'success');
-                setTimeout(() => context.navigate('my-registrations', {}, { replace: true }), 900);
+                // 提交成功后的 900ms 里用户可能已经按了返回：定时器要随页面一起停，
+                // 否则会把用户从他自己的目标页面拽到「我的报名」。
+                redirectTimer = setTimeout(() => {
+                    redirectTimer = null;
+                    context.navigate('my-registrations', {}, { replace: true });
+                }, 900);
             } catch (error) {
                 errorBox.textContent = error.message;
                 errorBox.hidden = false;

@@ -5,7 +5,7 @@
  * 把「已通过」推进到「已参加」并写入 `check_in_time`；重复扫码要能看出是重复，
  * 而不是报一个含糊的错误。
  *
- * 响应与 `demo-api.js` 的 `checkin.scan` 完全同形：
+ * 响应形状与前端扫码页（`pages/checkin.js`）消费的字段一致：
  * 业务失败也是 HTTP 200 + `{ ok:false, error }`，并带上 `duplicated` / `status` / `record`
  * 供页面渲染（因此这里不用 `mutate` 的统一信封，成功分支自己给 `{ ok:true, error:'' }`）。
  */
@@ -19,7 +19,7 @@ const labels = require('../domain/labels');
 
 const router = express.Router();
 
-/** 核销结果里给页面看的报名摘要，字段与 demo 的 `record` 一致。 */
+/** 核销结果里给页面看的报名摘要（字段与 `pages/checkin.js` 读取的一致）。 */
 const CHECKIN_COLUMNS = `
     ${REGISTRATION_COLUMNS},
     to_char(r.created_at, 'MM-DD HH24:MI')  AS registration_time

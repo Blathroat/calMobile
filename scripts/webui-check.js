@@ -9,7 +9,9 @@
  * 3. 系统动作：前端 `call('…')` 用到的动作必须在 `WebAppActions` 的 switch 里有 case，
  *    并且属于 10 个系统能力白名单；白名单之外的原生动作（例如又加回数据实现）报错；
  *    `WebAppActions` 里有、前端却从来不 `call` 的动作（死动作）同样报错；
- * 4. 页面文件与设计的屏幕编号一一对应，且页面只通过 `core/api.js` 取数据。
+ * 4. 页面文件与设计的屏幕编号一一对应，且页面只通过 `core/api.js` 取数据；
+ * 5. 路由注册一致：`js/app.js` 的 `defineRoute(...)`、`js/pages/*.js` 与
+ *    `webui-render.test.js` 的 `ROUTES` 三处 id 集合必须相同。
  *
  * 用法：node scripts/webui-check.js
  */
@@ -23,6 +25,7 @@ const webRoot = path.join(root, 'app', 'src', 'main', 'assets', 'web');
 const actionsFile = path.join(root, 'app', 'src', 'main', 'java', 'com', 'example', 'calmobile', 'WebAppActions.java');
 const appFile = path.join(webRoot, 'js', 'app.js');
 const apiFile = path.join(webRoot, 'js', 'core', 'api.js');
+const renderTestFile = path.join(root, 'scripts', 'webui-render.test.js');
 
 /**
  * 原生保留的系统能力白名单。
@@ -307,6 +310,76 @@ async function checkModules() {
     return checked;
 }
 
+/**
+ * 去掉注释，避免把被注释掉的 `defineRoute('x', …)` / `['x', {}]` 当成有效注册。
+ * 只处理行注释（整行与行尾）和块注释，够用且不需要引号感知。
+ */
+function stripComments(source) {
+    return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+/**
+ * 路由注册一致性。
+ *
+ * `core/router.js` 对未注册的 id 会**静默回落首页**（见 router.js 的 render），
+ * 所以漏注册一条 `defineRoute('review', …)` 不会报错，只会「点进去是首页」。
+ * 这里把三处 id 集合对齐，任何一处增删都要同步另外两处：
+ *
+ * 1. `js/app.js` 里 `defineRoute('id', …)` 的 id；
+ * 2. `js/pages/*.js` 的文件名（`exhibition-form.js` ↔ `exhibition-form`）；
+ * 3. `scripts/webui-render.test.js` 里 `ROUTES` 的 id（每个页面至少渲染一次）。
+ */
+function collectRouteIds() {
+    const app = stripComments(fs.readFileSync(appFile, 'utf8'));
+    const registered = new Set([...app.matchAll(/defineRoute\(\s*['"]([a-z-]+)['"]/g)].map((match) => match[1]));
+
+    const pagesDir = path.join(webRoot, 'js', 'pages');
+    const pages = new Set(fs.readdirSync(pagesDir)
+        .filter((name) => name.endsWith('.js'))
+        .map((name) => name.replace(/\.js$/, '')));
+
+    const test = stripComments(fs.readFileSync(renderTestFile, 'utf8'));
+    const block = /const ROUTES = \[([\s\S]*?)\n\];/.exec(test);
+    const rendered = new Set(block
+        ? [...block[1].matchAll(/\[\s*['"]([a-z-]+)['"]/g)].map((match) => match[1])
+        : []);
+
+    return { registered, pages, rendered };
+}
+
+/** 打印差集用的稳定顺序。 */
+function sorted(set) {
+    return [...set].sort();
+}
+
+function checkRouteRegistry() {
+    const { registered, pages, rendered } = collectRouteIds();
+    if (registered.size === 0) {
+        fail('未能从 js/app.js 解析出任何 defineRoute，请检查文件结构');
+        return;
+    }
+    if (rendered.size === 0) {
+        fail('未能从 scripts/webui-render.test.js 解析出 ROUTES，请检查文件结构');
+        return;
+    }
+
+    // 三处集合两两对齐；只报「少了什么 / 多了什么」，方便一眼看出该补哪边。
+    const pairs = [
+        ['js/app.js 的 defineRoute', registered, 'js/pages/*.js 的页面文件', pages],
+        ['js/app.js 的 defineRoute', registered, 'webui-render.test.js 的 ROUTES', rendered],
+    ];
+    for (const [leftLabel, left, rightLabel, right] of pairs) {
+        const missing = sorted(new Set([...left].filter((id) => !right.has(id))));
+        const extra = sorted(new Set([...right].filter((id) => !left.has(id))));
+        if (missing.length > 0) {
+            fail(`${rightLabel} 缺少 ${leftLabel} 里已注册的路由：${missing.join(', ')}`);
+        }
+        if (extra.length > 0) {
+            fail(`${leftLabel} 缺少 ${rightLabel} 里的路由：${extra.join(', ')}`);
+        }
+    }
+}
+
 async function main() {
     const fileCount = checkFileLayout();
     const endpoints = collectEndpoints();
@@ -321,6 +394,7 @@ async function main() {
         checkDeadActions(callSites, implemented);
     }
     checkApiBoundary(endpoints);
+    checkRouteRegistry();
     const moduleCount = await checkModules();
 
     if (failures.length > 0) {
@@ -328,9 +402,11 @@ async function main() {
         process.exitCode = 1;
         return;
     }
+    const { registered } = collectRouteIds();
     console.log(`PASS webui-check: ${fileCount} 个前端文件、${moduleCount} 个 ES 模块解析通过；`
         + `core/api.js 的 ${endpoints.size} 个数据动作都有 method + path；`
-        + `原生 ${implemented.size} 个系统动作都有调用且都在白名单内；页面均通过 core/api.js 取数据`);
+        + `原生 ${implemented.size} 个系统动作都有调用且都在白名单内；页面均通过 core/api.js 取数据；`
+        + `${registered.size} 条路由在 app.js、页面文件与渲染测试三处一致`);
 }
 
 if (require.main === module) {
@@ -343,4 +419,5 @@ module.exports = {
     collectEndpoints,
     collectCallSites,
     collectImplementedActions,
+    collectRouteIds,
 };

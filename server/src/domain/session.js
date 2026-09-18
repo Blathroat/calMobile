@@ -3,8 +3,8 @@
  *
  * - **访问令牌**是短时效 JWT（默认 15 分钟），放在 `Authorization: Bearer`；
  * - **刷新令牌**是随机串，只把 sha256 哈希落库，可撤销、可轮换；
- * - 登录、刷新、退出都会更新 `refresh_tokens`，因此「退出登录」是真的失效，
- *   而不是像演示后端那样只把令牌留在内存里。
+ * - 登录、刷新、退出都会更新 `refresh_tokens`，因此「退出登录」是真的失效
+ *   （令牌在数据库里被撤销），不只是客户端把本地缓存丢掉。
  */
 
 const crypto = require('node:crypto');
@@ -69,6 +69,12 @@ async function issueSession(user) {
 /**
  * 用刷新令牌换一套新令牌（轮换：旧的立即作废）。
  * 校验顺序：存在 → 未撤销 → 未过期，任何一步不通过都按「登录已失效」处理。
+ *
+ * **撤销必须是原子的**：`SELECT` 出来的 `revoked_at` 只是给人看的快速路径，
+ * 真正说了算的是 `UPDATE … WHERE revoked_at IS NULL` 的 `rowCount`。以前是
+ * 「先 SELECT 判断、再按 id UPDATE」，同一个刷新令牌并发用两次时两个请求都会通过
+ * 判断、各换一套新令牌（TOCTOU）；现在只有把这一行从「未撤销」改成「已撤销」的那个
+ * 请求能拿到新令牌，另一个按重放处理。
  */
 async function rotateRefreshToken(token) {
   const hash = hashToken(token);
@@ -89,7 +95,14 @@ async function rotateRefreshToken(token) {
   if (user.rows.length === 0 || user.rows[0].status === 'banned') {
     throw unauthorized('账号不可用，请重新登录');
   }
-  await query('UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1', [row.id]);
+  const revoked = await query(
+    'UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL',
+    [row.id],
+  );
+  if (revoked.rowCount !== 1) {
+    // 并发重放：这一行已经被另一个请求撤销掉了，这个令牌不能再换令牌。
+    throw unauthorized('登录状态已失效，请重新登录');
+  }
   const account = user.rows[0];
   return {
     user: account,

@@ -2,7 +2,7 @@ import { t } from '../core/strings.js';
 /**
  * 屏幕 06 · 搜索
  * 线框：newUI/remaining-ui.html #screen-search
- * 业务：ExhibitionManager.search + AdminUserManager.search。
+ * 业务：GET /search（server/ 的 REST）在展会与用户之间按关键词检索。
  *
  * 取数走 core/loadable.js：同一个关键词的结果会进缓存，改回上次的词直接出内容。
  */

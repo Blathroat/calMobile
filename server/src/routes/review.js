@@ -3,8 +3,9 @@
  *
  * 权限：`requireExhibitor`（展商或管理员）。展商只能看 / 改**自己举办的展会**的报名，
  * 管理员不限；别人的展会一律 403 或按不存在处理，不泄露报名人信息。
+ * 展商还要再受管理员配置的「允许修改已通过或已拒绝的报名」（`state.review.canRevise`）约束。
  *
- * 列表的字段与 `demo-api.js` 的 `review.list` 完全同形（页面直接消费）：
+ * 列表字段就是前端「报名管理」页消费的那一份（`pages/review.js`）：
  * `{ exhibitionId, status, records, counts }`，`records` 每条带
  * `id / exhibitionId / visitorName / registrationTime / answers / summary / status`。
  */
@@ -15,9 +16,37 @@ const { authenticate } = require('../middleware/auth');
 const { requireExhibitor, canManageExhibition } = require('../domain/permissions');
 const { badRequest, forbidden, notFound } = require('../domain/errors');
 const { mutate } = require('../domain/respond');
+const { readSection } = require('../domain/settings');
 const labels = require('../domain/labels');
 
 const router = express.Router();
+
+/**
+ * 报名状态机：当前状态 → 允许改成哪些状态。
+ *
+ * 规则来自审核业务本身，而不是页面按钮好不好点：
+ * - 待审核 → 已通过 / 已拒绝 / 已撤销（撤销由报名人自己发起，这里也允许展商改）；
+ * - 已通过 → 已参加 / 已拒绝 / 已撤销（现场到会、复核改判、作废）；
+ * - 已拒绝 → 已通过 / 已撤销（复核改判）；
+ * - 已参加 → 终态，任何改动都不允许（已核销的记录只读，避免把核销结果改没）；
+ * - 已撤销 → 待审核 / 已通过（重新激活；库里另有部分唯一索引兜住「同展会重复报名」）。
+ *
+ * 管理员与展商共用这张表；「展商能不能改已审核的记录」是另一条策略，
+ * 由下面的 `canReviseByExhibitor()` 读管理员配置后判定。
+ */
+const REGISTRATION_TRANSITIONS = {
+  pending: ['approved', 'rejected', 'cancelled'],
+  approved: ['attended', 'rejected', 'cancelled'],
+  rejected: ['approved', 'cancelled'],
+  attended: [],
+  cancelled: ['pending', 'approved'],
+};
+
+/** 管理员配置的审核策略：`canRevise` 为 true 才允许展商改动已审核的报名。 */
+async function canReviseByExhibitor() {
+  const review = await readSection('review');
+  return Boolean(review && review.canRevise === true);
+}
 
 /** 审核视图用到的列：只取页面要用的字段，`registrationTime` 由 SQL 直接格式化成 `MM-DD HH:mm`。 */
 const REVIEW_COLUMNS = `
@@ -31,7 +60,7 @@ const REVIEW_FROM = `
     JOIN exhibitions e ON e.id = r.exhibition_id
 `;
 
-/** 报名内容摘要：换行折成空格再截断，与 demo 的 summary 规则一致。 */
+/** 报名内容摘要：换行折成空格再截断（`answers` 是各收集项拼成的多行文本）。 */
 function summaryOf(answers) {
   return String(answers || '').replace(/\n/g, ' ').slice(0, 46);
 }
@@ -169,8 +198,12 @@ router.get('/:id', authenticate, async (req, res, next) => {
  * PUT /api/v1/review/:id/status
  * 改审核状态，请求体 `{ status }` 接受中文标签或英文代码。
  *
- * 权限（403）在进 `mutate` 之前判定：那是授权问题，要的是 403 而不是 200 的失败信封；
- * 状态取值、记录不存在这类业务失败仍走信封。
+ * 三层校验，失败形态各不相同：
+ * 1. **越权**（不是自己举办的展会、展商改已审核的报名而管理员没开放）→ 403，
+ *    在进 `mutate` 之前判定：这是权限问题，不该伪装成 200 的业务失败；
+ * 2. **状态流转非法**（例如已参加 → 已通过）→ 400，走 `mutate` 的信封
+ *    （HTTP 200 + `{ ok:false, error }`），因为它是业务规则失败；
+ * 3. 状态取值非法、记录不存在同样是业务失败，走信封。
  */
 router.put('/:id/status', authenticate, async (req, res, next) => {
   try {
@@ -192,6 +225,24 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
       if (!row) {
         throw badRequest('报名记录不存在');
       }
+
+      // 白名单之外的流转直接拒绝，别让「已参加」被改回「已通过」这类操作把核销结果抹掉。
+      const allowed = REGISTRATION_TRANSITIONS[row.status] || [];
+      if (!allowed.includes(status)) {
+        throw badRequest(`不能把「${labels.REGISTRATION_STATUS[row.status] || row.status}」`
+                    + `的报名改成「${labels.REGISTRATION_STATUS[status]}」`);
+      }
+      // 展商改动已审核（已通过 / 已拒绝）或重新激活已撤销的报名，要先由管理员开放；
+      // 管理员不受这条策略限制（「管理后台查看报名时始终可以切换状态」）。
+      if (user.role !== 'admin' && !await canReviseByExhibitor()) {
+        if (row.status === 'approved' || row.status === 'rejected') {
+          throw forbidden('管理员未开放修改已通过或已拒绝的报名');
+        }
+        if (row.status === 'cancelled') {
+          throw forbidden('管理员未开放重新审核已撤销的报名');
+        }
+      }
+
       try {
         await query(
           'UPDATE registrations SET status = $2, updated_at = now() WHERE id = $1',

@@ -179,7 +179,8 @@ router.post('/password', authenticate, async (req, res, next) => {
 
 /**
  * GET /api/v1/profile/notifications
- * 通知偏好（个人页的两个开关）。设备通知权限由原生侧确认，这里恒为已授权。
+ * 通知偏好（个人页的两个开关）。设备通知权限由客户端自己确认，
+ * 后端只保存用户的开关，因此 `granted` 恒为 true，不代表系统权限已授予。
  */
 router.get('/notifications', authenticate, async (req, res, next) => {
   try {

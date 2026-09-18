@@ -70,10 +70,17 @@ function fire(action, payload) {
  *
  * 顺序即优先级：首页最常用，其次是我的报名，个人页每次渲染都要读，
  * 展商后台与管理后台只在有权限时预热。
+ *
+ * 首页目标的键带上解析后的年月：`bootstrap` 落定前拿到的是默认落点
+ * （`2026-6`），真实落点是后端下发的 `state.calendar.landing`——键里不带参数
+ * 时，先热过的默认月份会把真实落点永久挡在 `done` 外面，整个会话都不再预热。
+ * 代价只是默认月份多一次无害的预热，换来的规则很直白：**参数变了就重新预热**，
+ * 以后新增带参数的首页目标不会再踩同一个坑。
  */
 export function preloadTabs() {
+    const [homeAction, homeQuery] = homeRead();
     const reads = [
-        ['home', ...homeRead()],
+        [`home-${homeQuery.year}-${homeQuery.month}`, homeAction, homeQuery],
         ['my-registrations', 'registrations.list', undefined],
     ];
     if (state.user.loggedIn) {

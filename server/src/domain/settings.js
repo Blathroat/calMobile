@@ -14,7 +14,7 @@ const { DEFAULT_SETTINGS } = require('../config/migrate');
 const { badRequest } = require('./errors');
 const { toUserStatus } = require('./labels');
 
-/** 表单字符数上限的取值范围：与原生 `AppSettings.TextLimit` 逐项一致。 */
+/** 表单字符数上限的取值范围：前端 `core/validate.js` 的 `limit()` 按同一批键取值。 */
 const LIMIT_BOUNDS = {
   exhibitionTitle: [4, 120], exhibitionVenue: [4, 120], category: [2, 60], fieldTitle: [2, 60],
   usernameMin: [2, 20], usernameMax: [4, 40], passwordMin: [4, 24], passwordMax: [8, 64],
@@ -179,17 +179,15 @@ async function readUiMode(userId, serverSettings) {
   return MODES.includes(mode) ? mode : 'auto';
 }
 
-/** 保存个人外观模式；未登录时写服务器默认值。 */
+/** 保存个人外观模式：只写调用者自己的 `users.ui_mode`。 */
 async function saveUiMode(userId, mode) {
-  const next = MODES.includes(mode) ? mode : 'auto';
-  if (userId) {
-    await query('UPDATE users SET ui_mode = $2, updated_at = now() WHERE id = $1', [userId, next]);
-  } else {
-    await query(`
-            INSERT INTO app_settings (key, value, updated_at) VALUES ('ui', $1, now())
-            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-        `, [JSON.stringify({ mode: next })]);
+  if (!userId) {
+    // 没有 userId 就写不了「个人」偏好；以前这里会退回写全局 app_settings.ui，
+    // 于是匿名请求能改掉所有用户的默认外观，现在直接拒绝。
+    throw badRequest('请先登录后再保存外观模式');
   }
+  const next = MODES.includes(mode) ? mode : 'auto';
+  await query('UPDATE users SET ui_mode = $2, updated_at = now() WHERE id = $1', [userId, next]);
   return next;
 }
 

@@ -1,7 +1,7 @@
 /**
  * exhibitions：列表 / 月视图 / 分类 / 详情 / 新建 / 更新 / 删除 / 报名方式 / 收集项。
  *
- * 与 `src/demo-api.js` 的同名处理函数同形（前端页面直接消费这些字段）：
+ * 响应形状与前端页面消费的字段一致（`pages/*.js` 直接读这些字段）：
  * - **读取类**（GET）直接返回数据本身；
  * - **写入类**（POST / PUT / DELETE）返回 `{ ok, error, ... }` 信封，校验失败也是
  *   HTTP 200 + `{ ok:false, error }`，页面按 `.ok` 判断；
@@ -31,8 +31,9 @@ const router = express.Router();
 /**
  * 报名收集项的默认三项：这场展会没有配置过（或被清空）收集项时返回它。
  *
- * 取值与 `db:seed` 写入的默认收集项一致；原生 `ExhibitionActions.defaultFields()`
- * 的选项文案略有出入（`媒体伙伴` / `开展前一天提醒`），需要时按同一份数据统一。
+ * 取值与 `db:seed` 写入的默认收集项一致；报名提交时的必填 / 选项校验
+ * （见 registrations.js 的 `validateAnswers()`）也走同一份默认值，
+ * 因此「没有配置收集项」不等于「什么都能提交」。
  */
 const DEFAULT_FIELDS = [
   { title: '姓名 / 公司名称', type: '文本', required: true, options: [] },
@@ -49,7 +50,7 @@ const MAX_FIELDS = 50;
 /** 报名方式取值非法时的统一提示。 */
 const STATUS_HINT = '报名方式只能是 需审核 / 无需审核 / 仅展示 / 截止报名 / 已结束';
 
-/** 展会不存在时的统一提示（与 demo-api 的 `exhibitions.get` 一致）。 */
+/** 展会不存在时的统一提示（与前端「找不到展会」的说明文案一致）。 */
 const NOT_FOUND_TEXT = '展会不存在或已删除';
 
 // ── 工具 ────────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ function given(body, key) {
   return Boolean(body) && Object.prototype.hasOwnProperty.call(body, key) && body[key] !== undefined;
 }
 
-/** 与原生 `ExhibitionActions.descriptionFormatOf` 相同的 HTML 嗅探规则。 */
+/** 简介正文是不是 HTML：按开头的块级标签嗅探，写入与读取用同一套规则。 */
 function looksLikeHtml(value) {
   return /^\s*<(p|div|h[1-6]|ul|ol|blockquote|br|strong|em)\b/.test(String(value || ''));
 }
@@ -132,7 +133,7 @@ async function landingMonth() {
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
-/** 月视图 / 列表共用的精简卡片：字段与 demo-api 的 `summary` 一一对应。 */
+/** 月视图 / 列表共用的精简卡片：只保留日历与卡片渲染要用的字段。 */
 function monthSummary(item) {
   return {
     id: item.id,
@@ -153,8 +154,8 @@ function monthSummary(item) {
 /**
  * 报名收集项：按 `position` 顺序取。
  *
- * 没有配置过（或被清空）时回退到默认三项，`id` 为空串——与原生 `fieldsPayload()`
- * 的「空则给默认值」一致，页面据此仍能渲染出一份可填的报名表。
+ * 没有配置过（或被清空）时回退到默认三项，`id` 为空串——页面据此仍能渲染出一份可填的
+ * 报名表，提交时 `registrations.js` 也用同一份默认值校验（导出给那边复用）。
  */
 async function loadFields(exhibitionId) {
   const result = await query(`
@@ -212,7 +213,7 @@ async function replaceFields(client, exhibitionId, fields) {
  *
  * 更新时只覆盖请求体里**出现过的**键，没出现的沿用原值：富文本编辑页只回传
  * title / venue / date / description 等少数字段，不能因为少发就把封面、二维码、
- * 收集项一起清掉（与原生 `payload.containsKey` 的判断方式一致）。
+ * 收集项一起清掉。
  *
  * `existing` 为空表示新建：这时日期、时间必填，状态默认「需审核」。
  */
@@ -261,7 +262,7 @@ async function exhibitionInput(body, existing) {
   const description = given(source, 'description')
     ? String(source.description === undefined || source.description === null ? '' : source.description)
     : (current.description || '');
-    // 存库的格式要和对外返回的一致：原生 `exhibitionPayload` 会按正文嗅探 HTML，
+    // 存库的格式要和对外返回的一致：读取时按正文嗅探 HTML（见 payloads.js），
     // 这里在写入时做同一件事，否则同一段富文本会被当成 Markdown 渲染。
   const requestedFormat = given(source, 'descriptionFormat')
     ? (source.descriptionFormat === 'html' ? 'html' : 'md')
@@ -499,7 +500,7 @@ router.put('/:id/status', authenticate, exhibitorOnly, async (req, res, next) =>
 
 /**
  * GET /api/v1/exhibitions/:id/fields
- * 报名收集项数组；没有配置过时返回默认三项（与原生 `fieldsPayload()` 一致）。
+ * 报名收集项数组；没有配置过时返回默认三项（页面据此渲染出一份可填的报名表）。
  */
 router.get('/:id/fields', optionalAuth, async (req, res, next) => {
   try {
@@ -527,3 +528,7 @@ router.put('/:id/fields', authenticate, exhibitorOnly, async (req, res, next) =>
 });
 
 module.exports = router;
+// 报名提交时的必填 / 选项校验要用同一份收集项（含「没配置就回退默认三项」的规则），
+// 因此把取数函数与默认值导出给 registrations.js 复用，避免两处各写一遍默认项。
+module.exports.loadFields = loadFields;
+module.exports.DEFAULT_FIELDS = DEFAULT_FIELDS;
