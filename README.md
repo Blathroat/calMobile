@@ -301,7 +301,7 @@ adb reverse tcp:3000 tcp:3000
 | `media.pickImage` | 系统图片选择器 |
 | `media.import` / `media.store` | 压缩后写入 `files/media` 并返回短 URL |
 | `share.text` | 系统分享面板 |
-| `export.csv` | 写 CSV 到下载目录（展会、报名两组数据） |
+| `export.csv` | 弹系统保存对话框写出 CSV（展会、报名两组数据，文件名带时间戳） |
 
 其余全部是 HTTP：`bootstrap`、认证、资料、展会、报名、审核、核销、用户、搜索、设置、通知偏好共 35 个数据动作，由 `api.js` 的 `ENDPOINTS` 映射到 `server/` 的 REST 路由。
 
