@@ -271,9 +271,8 @@ await registrations.submit(payload);
 后端是 `server/` 里的 Express + PostgreSQL 服务，接口按 REST 组织，路径与前端 `api.js` 的动作一一对应（映射表在 `js/core/api.js` 的 `ENDPOINTS`）。
 
 ```bash
-# 1. 起数据库（二选一）
-pwsh -File scripts\db.ps1 start     # 本机 WSL 里的 PostgreSQL 16
-docker run -d --name calmobile-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16-alpine
+# 1. 起数据库（默认 Docker 容器；没有 Docker 时加 -Provider wsl 用 WSL 里那份）
+pwsh -File scripts\db.ps1 start
 
 # 2. 建表 + 示例数据（可反复执行）
 cd server && npm install
@@ -286,6 +285,8 @@ adb reverse tcp:3000 tcp:3000
 ```
 
 示例账号 `demo` / `exhibitor` / `user`，密码都是 `password`（角色分别是管理员、展商、普通用户）。
+
+数据库两条路都监听 `127.0.0.1:5432`，`server/.env` 不用改，同一时间只跑一个（`db.ps1 status` 看当前用的哪个，`stop` 停掉再换）。Docker 容器**必须带时区参数**（脚本已带 `Asia/Shanghai`）：镜像默认 UTC，而数据库的 `CURRENT_DATE` 决定报名窗口与日历落点，不设的话本机凌晨那段时间会莫名差一天。
 
 **改了 `server/src/*.js` 要重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
 
@@ -522,7 +523,8 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 ## 变更记录
 
-- 2026-09-17：**后端补齐为真实服务**（Express + PostgreSQL）：重写迁移脚本（按编号记录、可反复执行，8 张表把展会扩展字段、报名收集项、审核状态与核销时间、服务器设置、通知偏好、刷新令牌全部落库）；新增 `src/domain/` 业务层（状态词汇表、SQL 片段、响应映射、权限、校验、设置、会话）；实现前端全部 35 个数据动作的 REST 路由，服务端兜住角色权限、报名窗口、重复报名、自动通过、核销流转与隐私开关；密码改 bcrypt、令牌改 JWT + 可撤销的刷新令牌轮换；示例数据改为相对今天生成，演示不会过期。前端 `api.js` 增加「动作 → REST 路径」映射表与 401 自动续期，页面不需要知道数据来自哪一边，也不会因为换后端而改动。新增后端契约测试 33 项、前端 REST 映射用例 1 项，`npm run lint` 全绿。
+- 2026-09-18：数据库改用 Docker 部署（容器 `calmobile-pg` + 命名卷 `calmobile-pgdata`，固定 `postgres:16-alpine`，`--restart unless-stopped`），`scripts/db.ps1` 同时支持 Docker 与 WSL 两条路（默认 Docker，`-Provider wsl` 切备选）；容器显式设 `Asia/Shanghai` 时区，避免镜像默认 UTC 让数据库的「今天」在凌晨差一天。
+- 2026-09-17：**后端补齐为真实服务**（Express + PostgreSQL）：重写迁移脚本（按编号记录、可反复执行，8 张表把展会扩展字段、报名收集项、审核状态与核销时间、服务器设置、通知偏好、刷新令牌全部落库）；新增 `src/domain/` 业务层（状态词汇表、SQL 片段、响应映射、权限、校验、设置、会话）；实现前端全部 35 个数据动作的 REST 路由，服务端兜住角色权限、报名窗口、重复报名、自动通过、核销流转与隐私开关；密码改 bcrypt、令牌改 JWT + 可撤销的刷新令牌轮换；示例数据改为相对今天生成，演示不会过期。前端 `api.js` 增加「动作 → REST 路径」映射表与 401 自动续期，页面不需要知道数据来自哪一边，也不会因为换后端而改动。新增后端契约测试 33 项、前端 REST 映射用例 1 项，`npm run lint` 全绿（后续又补了「前后端路由交叉校验」2 项，并据此删掉重复的用户公开页入口）。
 - 2026-09-17：前端取数改为「先画缓存、再后台刷新」（新增 `core/loadable.js` 与 `core/preload.js`，`api.js` 的只读接口提供 `peek()` / `warm()` 并按参数排序做缓存键、并发去重），切页面与切月份不再先闪骨架屏；首页日历的选中日期改为纯本地状态，点日期与切换月份都不再重新取数；`exhibitions.month` 改为原样返回请求的月份，日历落点由 `bootstrap.calendar.landing` 下发；收敛原生三处结构（`ExhibitionConfiguration` 改 `Patch` 写入、`RegistrationReviewStore` 统一报名 id 并把示例数据显式标注、字符数上限收敛到 `AppSettings.TextLimit` 单表）；补 3 个原生单测与 6 个前端渲染用例。
 - 2026-09-17：按动作域拆分 `WebAppActions`（2,156 行 → 8 个域类 + 196 行分发入口，行为不变）；个人页新增「在公开页展示我的报名记录」隐私开关并打通持久化与公开页过滤；演示后端同步支持该字段。
 - 2026-09-17：删除旧原生页面与旧架构层（legacy 16 个 Activity、BaseActivity、MainTabState、17 个布局、Room/Retrofit/Repository/ViewModel，以及只服务它们的 drawable/anim/values 资源），依赖收敛到 Gson + JUnit；前端文案迁入 `strings_frontend.xml`（475 条，原生注入 + 三处一致性校验）；APK 内静态脚本样式改为可缓存、三个内置库改为按需加载；修复演示后端把用户选中的日期回落到有展会的日子，导致首页日历「点日期没反应」。

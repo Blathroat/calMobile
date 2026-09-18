@@ -18,9 +18,14 @@ cd server
 npm install
 cp .env.example .env          # 本地数据库与两个 JWT 密钥
 
-# 数据库二选一
-pwsh -File ..\scripts\db.ps1 start                     # 本机 WSL 里的 PostgreSQL 16
-docker run -d --name calmobile-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16-alpine
+# 起数据库（默认 Docker；脚本幂等，已起过就直接返回状态）
+pwsh -File ..\scripts\db.ps1 start
+# 等价的手工命令：
+#   docker run -d --name calmobile-pg \
+#     -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=calmobile_dev \
+#     -e TZ=Asia/Shanghai -e PGTZ=Asia/Shanghai \
+#     -p 5432:5432 -v calmobile-pgdata:/var/lib/postgresql/data \
+#     --restart unless-stopped postgres:16-alpine -c timezone=Asia/Shanghai
 
 npm run db:migrate            # 可反复执行，只跑没跑过的迁移
 npm run db:seed               # 示例账号与展会（可反复执行）
@@ -28,6 +33,17 @@ npm run dev                   # nodemon，默认 http://127.0.0.1:3000
 ```
 
 示例账号：`demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`。
+
+### 数据库：Docker 为主，WSL 为备选
+
+| 方式 | 命令 | 说明 |
+| --- | --- | --- |
+| Docker（默认） | `pwsh -File scripts\db.ps1 start` | 容器 `calmobile-pg`，数据在命名卷 `calmobile-pgdata` 里，`--restart unless-stopped` 开机自起；`postgres:16-alpine` 固定版本 |
+| WSL | `pwsh -File scripts\db.ps1 start -Provider wsl` | 发行版里 `apt install postgresql` 装的那份；没有 Docker 时用 |
+
+两条路都监听 `127.0.0.1:5432`，所以 `server/.env` 不用改，**同一时间只跑一个**（换路之前先 `db.ps1 stop`）。`status` / `stop` / `psql` 同样支持 `-Provider`。
+
+**容器必须设时区**：镜像默认 UTC，而数据库的 `CURRENT_DATE` 决定报名窗口与日历落点。不设 `TZ`/`-c timezone=` 的话，本机 00:00–08:00 这段时间里数据库的「今天」还停在昨天，演示会出现莫名差一天。脚本里已经带上了 `Asia/Shanghai`。
 
 ### 让 Android 端连上
 
