@@ -28,6 +28,7 @@
     <string name="s_13ekny6">确认修改</string>
     <string name="s_13eo9zy">需要继续核销时再次开启摄像头，或手动输入报名码。</string>
     <string name="s_13fr7ko">修改</string>
+    <string name="s_13i47qi">通知偏好与修改密码不受影响。</string>
     <string name="s_141p70w">当前始终使用浅色外观。</string>
     <string name="s_145fdbt">配色已保存</string>
     <string name="s_14c4war">五</string>
@@ -58,7 +59,7 @@
     <string name="s_17yba4l">报名时间</string>
     <string name="s_17zufsn">管理员可以随时切换报名人状态，不受“允许修改已通过或已拒绝的报名”开关影响。</string>
     <string name="s_17zyr1e">返回首页</string>
-    <string name="s_183ltm8">保留登录，限制部分操作</string>
+    <string name="s_184s1di">保留登录，但不能报名、发布展会或编辑个人信息</string>
     <string name="s_185tvls">邮箱</string>
     <string name="s_189gp0e">可以让用户在报名详情页长按报名码复制，或直接输入二维码下方的文本。</string>
     <string name="s_18ko8bk">报</string>
@@ -69,8 +70,10 @@
     <string name="s_19g8l4d">，已选择</string>
     <string name="s_19ih5ay">服务器设置加载失败，配色与主题未更新</string>
     <string name="s_19rf1tx">密码最长</string>
+    <string name="s_19wazv8">账号已被限制，不能发布展会</string>
     <string name="s_1a44i78">查看展商公开主页 →</string>
     <string name="s_1aifth0">该用户还没有填写简介</string>
+    <string name="s_1aj4gvd">插入视频</string>
     <string name="s_1am6dte">受限</string>
     <string name="s_1aph6eg">密码</string>
     <string name="s_1appv4n">请选择开展日期</string>
@@ -141,6 +144,8 @@
     <string name="s_1jyec01">EasyMDE 未注册到全局</string>
     <string name="s_1k1usxy">未通过</string>
     <string name="s_1k42kcd">展商已完成审核</string>
+    <string name="s_1k84spe">图片</string>
+    <string name="s_1kliyri">账号已被限制，不能编辑个人信息</string>
     <string name="s_1kll7do">插入表格</string>
     <string name="s_1kmur0r">换个关键词，或清空搜索查看全部展会。</string>
     <string name="s_1kokqyk">清空后需要重新编写，保存前不会影响已发布内容。</string>
@@ -162,6 +167,7 @@
     <string name="s_1mcmbiu">字</string>
     <string name="s_1mdxfsy">展商</string>
     <string name="s_1mlidnr">当前跟随系统的深浅色设置，系统切换时应用同步变化。</string>
+    <string name="s_1moomrn">单个视频大小上限</string>
     <string name="s_1n008jl">注册</string>
     <string name="s_1n1wiu4">当前运行环境不支持摄像头扫码，请使用“手动输入报名码”。</string>
     <string name="s_1n2azlj">已按 Markdown 写入粘贴内容</string>
@@ -174,6 +180,7 @@
     <string name="s_1oim33">用户管理</string>
     <string name="s_1omalh8">展商后台</string>
     <string name="s_1ow5v10">首页</string>
+    <string name="s_1pdejtj">状态变更立即写入后端；受限账号保留登录，但不能报名、发布展会或编辑个人信息。</string>
     <string name="s_1prtpth">加入日历</string>
     <string name="s_1pt7oo1">修改密码</string>
     <string name="s_1pt94qt">编辑器加载失败</string>
@@ -207,6 +214,7 @@
     <string name="s_1t5x3h2">新增收集项</string>
     <string name="s_1t8d6e3">创建第一个展会，配置日期、地点与报名收集项。</string>
     <string name="s_1t9glrp">简介渲染失败，请稍后重试。</string>
+    <string name="s_1tanmo5">账号已被限制，不能报名</string>
     <string name="s_1tbhtoh">展会数据加载失败</string>
     <string name="s_1tdesxa">管理视角</string>
     <string name="s_1te6cde">展商审核后会更新状态</string>
@@ -255,6 +263,7 @@
     <string name="s_1ylv0q2">报名与简介设置</string>
     <string name="s_1yn5q3y">选择要审核的展会</string>
     <string name="s_1yqwetn">收集项标题</string>
+    <string name="s_1yv1vu0">仍可查看与审核已有展会与报名。</string>
     <string name="s_1yxjgeu">已提交报名码</string>
     <string name="s_21ce2x">编辑简介</string>
     <string name="s_24nfoo">当前编辑器为纯文本模式，无实时预览</string>
@@ -306,6 +315,7 @@
     <string name="s_7tkrpl">可用中英文、数字与下划线</string>
     <string name="s_7xrrf0">报名管理</string>
     <string name="s_7zi2sm">粘贴 Markdown</string>
+    <string name="s_8cnkwa">视频上限填 0 表示简介里不允许插入视频。</string>
     <string name="s_8ddpxh">个人</string>
     <string name="s_8eggh4">设置登录密码</string>
     <string name="s_8kqs1o">还没有可展示的报名记录。</string>
@@ -426,7 +436,6 @@
     <string name="s_nsh78a">禁止登录与报名</string>
     <string name="s_nsnwn6">导出内容为当前展会列表，文件通过系统保存对话框写入。</string>
     <string name="s_nynzo5">立即报名</string>
-    <string name="s_o3jfq3">状态变更会立即写入本地数据库，受限用户保留登录但限制报名。</string>
     <string name="s_o51o77">正在识别，请把报名码放进取景框。</string>
     <string name="s_o85tde">可正常浏览与报名</string>
     <string name="s_ocmice">确认密码</string>
@@ -442,6 +451,7 @@
     <string name="s_pzy8ri">管理</string>
     <string name="s_q3pv0x">公开</string>
     <string name="s_q67h2y">四</string>
+    <string name="s_q79se0">视频</string>
     <string name="s_q88a0n">未设置选项</string>
     <string name="s_qa4u6r">删除该收集项</string>
     <string name="s_qqaurb">撤销失败</string>
@@ -453,6 +463,7 @@
     <string name="s_rlbden">表单字符数上限</string>
     <string name="s_rn5blf">登录失败</string>
     <string name="s_rss9j6">提交后可在“我的报名”查看审核状态。</string>
+    <string name="s_s0oos7">未能读取所选视频</string>
     <string name="s_s2a1jr">每篇图片数量上限</string>
     <string name="s_s2nfay">开展日期</string>
     <string name="s_s4kamn">可以换一个关键词，或回到首页按日期浏览展会。</string>
@@ -470,6 +481,7 @@
     <string name="s_v8pba2">未收集额外信息</string>
     <string name="s_vih0tf">例如：上海新国际博览中心 · N3 馆</string>
     <string name="s_vk66u0">双指捏合缩放</string>
+    <string name="s_vkgi23">图片与视频插入后以短 URL 引用，简介正文不会因此变长。</string>
     <string name="s_vrp4t3">报名信息</string>
     <string name="s_vxwprj">软件标题</string>
     <string name="s_w5wyci">报名码</string>

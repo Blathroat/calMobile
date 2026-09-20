@@ -39,7 +39,8 @@ final class SystemActions {
             AppSettings.saveMediaLimits(activity,
                     WebAppBridge.number(media, "imageCount", AppSettings.getMediaImageLimit(activity)),
                     WebAppBridge.number(media, "imageSizeMb", AppSettings.getMediaImageSizeMb(activity)),
-                    WebAppBridge.number(media, "videoCount", AppSettings.getMediaVideoLimit(activity)));
+                    WebAppBridge.number(media, "videoCount", AppSettings.getMediaVideoLimit(activity)),
+                    WebAppBridge.number(media, "videoSizeMb", AppSettings.getMediaVideoSizeMb(activity)));
         }
         Map<String, Object> upload = WebAppBridge.map(payload, "upload");
         if (!upload.isEmpty()) {

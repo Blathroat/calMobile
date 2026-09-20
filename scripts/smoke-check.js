@@ -366,8 +366,8 @@ const checks = [
     id: 'media-limits-persisted',
     // 表单字符数上限已随服务器设置移到后端，设备侧只镜像媒体与上传上限
     file: 'app/src/main/java/com/example/calmobile/AppSettings.java',
-    contains: ['getMediaImageLimit', 'getMediaImageSizeMb', 'getMediaVideoLimit', 'saveMediaLimits',
-      'saveUploadLimits']
+    contains: ['getMediaImageLimit', 'getMediaImageSizeMb', 'getMediaVideoLimit',
+      'getMediaVideoSizeMb', 'saveMediaLimits', 'saveUploadLimits']
   },
   {
     id: 'media-uploaded-as-url',
@@ -483,7 +483,8 @@ const checks = [
   {
     id: 'web-media-url-reference',
     file: `${WEB_ROOT}/js/pages/rich-editor.js`,
-    contains: ["call('media.import'", 'allowedFormats'],
+    // 图片与视频两个入口并列在工具栏里，两者都只写短 URL（不再写内联 base64）。
+    contains: ["call('media.import'", 'allowedFormats', "name: 'image'", "name: 'video'"],
     notContains: ['data:image/jpeg;base64']
   },
   {

@@ -141,7 +141,24 @@ public class WebAppBridge {
         if (value == null) {
             return fallback;
         }
-        String text = String.valueOf(value);
+        // 列表按逗号拼，不要用 List 的 toString：那会带上 `[]`，而设备侧是按逗号切分的
+        // （格式白名单就是这么传的，写成 `[mp4,mov,webm]` 会让 mp4 也被判成非法）。
+        String text;
+        if (value instanceof List) {
+            StringBuilder joined = new StringBuilder();
+            for (Object item : (List<?>) value) {
+                if (item == null) {
+                    continue;
+                }
+                if (joined.length() > 0) {
+                    joined.append(',');
+                }
+                joined.append(String.valueOf(item).trim());
+            }
+            text = joined.toString();
+        } else {
+            text = String.valueOf(value);
+        }
         return text.isEmpty() ? fallback : text;
     }
 

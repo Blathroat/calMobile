@@ -6,10 +6,20 @@
 const ALLOWED_TAGS = new Set([
     'p', 'br', 'div', 'span', 'strong', 'b', 'em', 'i', 'u', 's', 'sub', 'sup',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote',
-    'a', 'img', 'hr', 'figure', 'figcaption', 'table', 'thead', 'tbody', 'tr', 'td', 'th',
+    'a', 'img', 'video', 'hr', 'figure', 'figcaption', 'table', 'thead', 'tbody', 'tr', 'td', 'th',
 ]);
 
 const ALLOWED_ATTRS = new Set(['href', 'src', 'alt', 'title', 'width', 'height', 'colspan', 'rowspan']);
+
+/**
+ * `<video>` 的专用属性白名单。
+ * <p>
+ * 简介里的视频由展商编辑器插入（`<video controls src="短 URL"></video>`），
+ * 只放播放所需的这几个：`autoplay` 会在详情页突然出声、`on*` 是脚本入口、
+ * `style` 能盖住整页，因此一律不放。其余标签的属性仍走 {@link ALLOWED_ATTRS}，
+ * 不因为放开视频而放宽别的标签。
+ */
+const VIDEO_ATTRS = new Set(['src', 'controls', 'poster', 'preload', 'class']);
 
 const SAFE_URL = /^(https?:|data:image\/|content:|file:)/i;
 
@@ -47,7 +57,8 @@ function clean(root) {
         }
         for (const attribute of Array.from(node.attributes)) {
             const name = attribute.name.toLowerCase();
-            if (!ALLOWED_ATTRS.has(name)) {
+            const allowed = tag === 'video' ? VIDEO_ATTRS : ALLOWED_ATTRS;
+            if (!allowed.has(name)) {
                 node.removeAttribute(attribute.name);
                 continue;
             }

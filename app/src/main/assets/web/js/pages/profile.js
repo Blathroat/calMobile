@@ -37,6 +37,20 @@ export async function profilePage(context) {
 
     const isAdmin = state.user.can?.admin === true;
 
+    /**
+     * 受限账号（`can.profile === false`）不能改个人信息：后端 `PUT /profile` 直接 403。
+     * 只认后端明确下发的 `false`，因此老后端（不下发 `profile`）行为不变。
+     * 通知偏好与改密码走另外两条路由，后端仍允许，页面上也不受影响。
+     */
+    function profileLimited() {
+        return state.user.can?.profile === false;
+    }
+
+    /** 受限时统一用这一句说明原因，避免每个入口各写一套说法。 */
+    function profileLimitHint() {
+        return t('s_1kliyri');
+    }
+
     // 通知偏好与个人配色并行拉取，命中缓存就先出一屏（切页面因此不闪骨架屏），
     // 数据回来再按差异决定是否重绘；两份都失败时按加载失败处理（见 load）。
     //
@@ -126,8 +140,15 @@ export async function profilePage(context) {
 
     function render() {
         const user = state.user;
+        const limited = profileLimited();
         const blocks = [
             identityCard(user),
+            limited
+                ? el('div', { class: 'notice', dataset: { tone: 'accent' } }, [
+                    el('strong', { text: profileLimitHint() }),
+                    el('span', { text: t('s_13i47qi') }),
+                ])
+                : null,
             el('div', { class: 'card' }, [
                 el('span', { class: 'section-label', text: t('s_ml9unw') }),
                 el('p', { class: 'row-meta', text: user.bio || t('s_17mtsm3') }),
@@ -138,7 +159,8 @@ export async function profilePage(context) {
             ]),
             privacyCard(user),
             el('div', { class: 'list', 'data-gap': 'sm' }, [
-                menuRow(t('s_1y0imfq'), t('s_16sgm5m'), () => openEditor()),
+                menuRow(t('s_1y0imfq'), t('s_16sgm5m'), () => openEditor(), limited),
+                // 改密码不受受限影响：它走 /profile/password，后端不拦截。
                 menuRow(t('s_1pt7oo1'), `${t('s_1pt7oo1')}（至少 ${passwordRule().min} 个字符）`, () => openPasswordSheet()),
             ]),
             el('div', { class: 'card' }, [
@@ -196,6 +218,7 @@ export async function profilePage(context) {
     }
 
     function identityCard(user) {
+        const limited = profileLimited();
         const avatar = avatarNode({ src: user.avatar, name: user.nickname || user.username, className: 'avatar avatar-lg' });
         return el('div', { class: 'card' }, [
             el('div', { class: 'row', 'data-gap': 'md' }, [
@@ -209,13 +232,16 @@ export async function profilePage(context) {
                     class: 'pill',
                     type: 'button',
                     text: t('s_qreyeg'),
+                    disabled: limited ? true : null,
+                    title: limited ? profileLimitHint() : null,
                     onclick: () => openEditor(),
                 }),
             ]),
             el('div', { class: 'row', 'data-gap': 'md' }, [
-                smallCta(t('s_onix0y'), () => pickAvatar()),
+                // 头像与资料同属 `PUT /profile`，受限账号一并置灰。
+                smallCta(t('s_onix0y'), () => pickAvatar(), { disabled: limited }),
                 user.avatar
-                    ? smallCta(t('s_1no1khr'), () => saveAvatar(''))
+                    ? smallCta(t('s_1no1khr'), () => saveAvatar(''), { disabled: limited })
                     : null,
             ]),
         ]);
@@ -306,6 +332,8 @@ export async function profilePage(context) {
      * 管理员查看公开页不受该设置影响（见 AdminActions.publicProfile）。
      */
     function privacyCard(user) {
+        // 隐私开关与资料编辑同属 `PUT /profile`：受限账号既然后端不让写，界面就不该让它点得动。
+        const limited = profileLimited();
         return el('div', { class: 'card' }, [
             el('span', { class: 'section-label', text: t('s_lh9gvq') }),
             switchRow({
@@ -313,17 +341,25 @@ export async function profilePage(context) {
                 label: t('s_1utpn11'),
                 description: t('s_1wgtu4f'),
                 checked: user.showRegistrations === true,
+                disabled: limited,
                 onChange: (value) => savePrivacy(value),
             }),
             el('p', {
                 class: 'field-hint',
-                text: user.showRegistrations === true ? t('s_1kyf8ic') : t('s_413sl5'),
+                text: limited
+                    ? profileLimitHint()
+                    : (user.showRegistrations === true ? t('s_1kyf8ic') : t('s_413sl5')),
             }),
         ]);
     }
 
     /** 隐私开关立即生效：失败时回滚界面状态，避免看起来已保存。 */
     async function savePrivacy(value) {
+        if (profileLimited()) {
+            toast(profileLimitHint(), 'error');
+            render();
+            return;
+        }
         const previous = state.user.showRegistrations === true;
         state.user.showRegistrations = value;
         try {
@@ -357,16 +393,29 @@ export async function profilePage(context) {
         ]);
     }
 
-    function menuRow(title, meta, onClick) {
+    /**
+     * 列表里的次级入口行。
+     * `limited` 为真时置灰并给出原因（受限账号不能改个人信息），
+     * 点击兜底也拦一次：置灰按钮在真机上不触发 click，但无障碍聚焦、旧缓存页面仍可能点到。
+     */
+    function menuRow(title, meta, onClick, limited = false) {
         return el('button', {
             class: 'row-card',
             type: 'button',
             dataset: { pressable: 'true' },
-            onclick: onClick,
+            disabled: limited ? true : null,
+            title: limited ? profileLimitHint() : null,
+            onclick: () => {
+                if (limited) {
+                    toast(profileLimitHint(), 'error');
+                    return;
+                }
+                onClick();
+            },
         }, [
             el('span', { class: 'row-copy' }, [
                 el('strong', { class: 'row-title', text: title }),
-                el('span', { class: 'row-meta', text: meta }),
+                el('span', { class: 'row-meta', text: limited ? profileLimitHint() : meta }),
             ]),
             el('span', { class: 'dim', 'aria-hidden': 'true', text: '›' }),
         ]);
@@ -375,6 +424,10 @@ export async function profilePage(context) {
     // ── 头像：选择 → 圆形裁剪 → 落盘换成短 URL ────────────────────
 
     async function pickAvatar() {
+        if (profileLimited()) {
+            toast(profileLimitHint(), 'error');
+            return;
+        }
         try {
             const picked = await call('media.pickImage');
             const source = picked?.dataUrl;
@@ -407,6 +460,10 @@ export async function profilePage(context) {
     }
 
     async function saveAvatar(url) {
+        if (profileLimited()) {
+            toast(profileLimitHint(), 'error');
+            return;
+        }
         try {
             const result = await profileApi.save({
                 nickname: state.user.nickname || state.user.username,
@@ -487,6 +544,10 @@ export async function profilePage(context) {
     // ── 编辑资料 ───────────────────────────────────────────────────
 
     function openEditor() {
+        if (profileLimited()) {
+            toast(profileLimitHint(), 'error');
+            return;
+        }
         const user = state.user;
         const nickname = el('input', { class: 'input', id: 'profile-nickname', value: user.nickname || user.username });
         const email = el('input', { class: 'input', id: 'profile-email', type: 'email', value: user.email || '' });

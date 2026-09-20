@@ -192,6 +192,17 @@ export async function detailPage(context) {
         return state.user.can?.register === true;
     }
 
+    /**
+     * 已登录但被限制报名（`can.register` 明确为 false）。
+     * <p>
+     * 必须与访客分开：访客的 `register` 也是 falsy，但游客的引导是「先去登录」，
+     * 受限用户已经登录了，再去登录页毫无意义——它需要的是「为什么不能报名」。
+     * 只认后端明确下发的 `false`：老后端不下发 `register` 时保持原有访客逻辑。
+     */
+    function registerLimited() {
+        return state.user.loggedIn === true && state.user.can?.register === false;
+    }
+
     function renderFooter() {
         const calendarButton = el('button', {
             class: 'cta ghost',
@@ -199,14 +210,21 @@ export async function detailPage(context) {
             onclick: () => toggleCalendar(calendarButton),
         }, [calendarState.inCalendar ? t('s_dvh8t7') : t('s_1prtpth')]);
 
+        const limited = registerLimited();
+        // 报名关闭与账号受限都要置灰，但说法不同：前者说展会，后者说账号。
+        const blocked = !exhibition.openForRegistration || limited;
+        // 受限账号已经登录了，按钮上不能再说「登录后报名」（那是访客的引导）。
+        const label = !exhibition.openForRegistration
+            ? t('s_1lfeb57')
+            : (limited || canRegister() ? t('s_nynzo5') : t('s_68p8ln'));
         const registerButton = el('button', {
             class: 'cta',
             type: 'button',
-            disabled: exhibition.openForRegistration ? null : true,
+            disabled: blocked ? true : null,
+            // 真机浏览器里 title 会以长按提示的形式显示，置灰的原因因此不只在页脚。
+            title: limited ? t('s_1tanmo5') : null,
             onclick: () => startRegistration(),
-        }, [exhibition.openForRegistration
-            ? (canRegister() ? t('s_nynzo5') : t('s_68p8ln'))
-            : t('s_1lfeb57')]);
+        }, [label]);
 
         replace(foot, el('div', { class: 'stack', 'data-gap': 'sm' }, [
             el('div', { class: 'grid-cols-2' }, [calendarButton, registerButton]),
@@ -218,6 +236,9 @@ export async function detailPage(context) {
         if (!exhibition.openForRegistration) {
             return `${exhibition.modeLabel || exhibition.status}：该展会当前不接受报名。`;
         }
+        if (registerLimited()) {
+            return t('s_1tanmo5');
+        }
         if (!canRegister()) {
             return t('s_nrshpm');
         }
@@ -225,6 +246,11 @@ export async function detailPage(context) {
     }
 
     function startRegistration() {
+        if (registerLimited()) {
+            // 按钮已置灰，这里兜住「键盘 / 无障碍聚焦后回车」与旧缓存页面的点击。
+            toast(t('s_1tanmo5'), 'error');
+            return;
+        }
         if (!canRegister()) {
             toast(t('s_1f0kfjp'));
             context.navigate('login', { redirect: 'detail', redirectParams: `id=${encodeURIComponent(exhibition.id)}` });

@@ -41,6 +41,9 @@ final class MediaActions {
     private static final java.util.concurrent.atomic.AtomicInteger FILE_SEQUENCE =
             new java.util.concurrent.atomic.AtomicInteger(1);
 
+    /** 复制到一半发现超过上限：已经删掉半成品，调用方按「超限」提示。 */
+    static final long CANCELLED_OVERSIZE = Long.MIN_VALUE;
+
     static void pickFile(WebAppBridge bridge, String mimeType, String chooserTitle,
             WebAppBridge.ResultCallback callback) {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -174,12 +177,26 @@ final class MediaActions {
                     + " 格式，允许：" + String.join("、", formats));
             return result;
         }
-        int limitMb = video ? 0 : (avatar ? AppSettings.getMediaAvatarSizeMb(context)
+        int limitMb = video ? AppSettings.getMediaVideoSizeMb(context)
+                : (avatar ? AppSettings.getMediaAvatarSizeMb(context)
                 : AppSettings.getMediaImageSizeMb(context));
         try {
             if (video) {
+                // 先按 ContentResolver 报的大小拦一道：视频是整份复制进应用目录的，
+                // 选了个几 GB 的文件会直接把应用数据分区写满（而且读进内存时先 OOM）。
+                long declaredBytes = declaredSize(context, uri);
+                if (declaredBytes > limitMb * 1024L * 1024L) {
+                    result.put("ok", false);
+                    result.put("error", "视频超过 " + limitMb + " MB 限制");
+                    return result;
+                }
                 String fileName = nextFileName(context, "video", extension);
-                long bytes = copyToFile(context, uri, fileName);
+                long bytes = copyToFile(context, uri, fileName, limitMb * 1024L * 1024L);
+                if (bytes == CANCELLED_OVERSIZE) {
+                    result.put("ok", false);
+                    result.put("error", "视频超过 " + limitMb + " MB 限制");
+                    return result;
+                }
                 if (bytes <= 0) {
                     result.put("ok", false);
                     result.put("error", "视频读取失败");
@@ -307,10 +324,18 @@ final class MediaActions {
         }
     }
 
-    static long copyToFile(Context context, Uri uri, String fileName) throws Exception {
+    /**
+     * 流式复制到应用目录，超过 {@code limitBytes} 就停下并删掉半个文件。
+     *
+     * 只按 ContentResolver 声明的大小拦不够：有些 Provider 不报大小（返回 0/未知），
+     * 所以复制过程里也要数着字节，别把一个几 GB 的文件真的写进数据分区。
+     *
+     * @return 实际字节数；失败返回负数；超限返回 {@link #CANCELLED_OVERSIZE}
+     */
+    static long copyToFile(Context context, Uri uri, String fileName, long limitBytes) throws Exception {
+        java.io.File target = new java.io.File(WebShellActivity.mediaDir(context), fileName);
         try (InputStream input = context.getContentResolver().openInputStream(uri);
-             java.io.FileOutputStream output =
-                     new java.io.FileOutputStream(new java.io.File(WebShellActivity.mediaDir(context), fileName))) {
+             java.io.FileOutputStream output = new java.io.FileOutputStream(target)) {
             if (input == null) {
                 return -1;
             }
@@ -318,12 +343,41 @@ final class MediaActions {
             long total = 0;
             int read;
             while ((read = input.read(buffer)) > 0) {
-                output.write(buffer, 0, read);
                 total += read;
+                if (limitBytes > 0 && total > limitBytes) {
+                    output.close();
+                    //noinspection ResultOfMethodCallIgnored
+                    target.delete();
+                    return CANCELLED_OVERSIZE;
+                }
+                output.write(buffer, 0, read);
             }
             output.flush();
             return total;
+        } catch (Exception error) {
+            //noinspection ResultOfMethodCallIgnored
+            target.delete();
+            throw error;
         }
+    }
+
+    /** Provider 声明的大小；不报大小或读不到时返回 -1（不知情，交给复制过程数）。 */
+    static long declaredSize(Context context, Uri uri) {
+        android.database.Cursor cursor = null;
+        try {
+            cursor = context.getContentResolver().query(uri,
+                    new String[] { android.provider.OpenableColumns.SIZE }, null, null, null);
+            if (cursor != null && cursor.moveToFirst() && !cursor.isNull(0)) {
+                return cursor.getLong(0);
+            }
+        } catch (Exception error) {
+            Log.w(TAG, "读取文件大小失败", error);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return -1;
     }
 
     static byte[] readBytes(Context context, Uri uri) {

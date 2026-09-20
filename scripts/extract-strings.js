@@ -160,10 +160,14 @@ for (const file of walk(jsRoot)) {
         continue;
     }
     // 补导入：放在第一个 import 之前，保持模块顶部整洁。
-    const importLine = "import { t } from '../core/strings.js';\n";
-    const withImport = replaced.includes("from '../core/strings.js'")
+    // 路径按模块所在目录算：`js/core/*.js` 用 './strings.js'，页面用 '../core/strings.js'。
+    // 只认后者会给 core 下的模块再加一行 import，同一模块里 t 被声明两次 → 整个模块语法错误。
+    const specifier = path.relative(path.dirname(file), path.join(jsRoot, 'core', 'strings.js'))
+        .split(path.sep).join('/');
+    const hasImport = replaced.includes(`from '${specifier}'`) || replaced.includes(`from "${specifier}"`);
+    const withImport = hasImport
         ? replaced
-        : replaced.replace(/^(?=(?:import|\/\*\*|\/\/))/m, importLine);
+        : replaced.replace(/^(?=(?:import|\/\*\*|\/\/))/m, `import { t } from '${specifier}';\n`);
     report.push({ file: path.relative(root, file), strings: counter });
     if (write) {
         fs.writeFileSync(file, withImport);

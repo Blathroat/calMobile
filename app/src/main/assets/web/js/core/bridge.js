@@ -74,6 +74,11 @@ function readStoredMode() {
 /** 应用级状态：原生在 bootstrap 时下发，页面只读。 */
 export const state = {
     booted: false,
+    /**
+     * 当前用户。`can` 由后端 `capabilities()` 下发：
+     * `register` / `profile` 在受限账号上为 false，`limited` 直接标出受限身份，
+     * 页面据此提前置灰入口（而不是等 403）。
+     */
     user: { loggedIn: false, guest: true, role: 'guest', roleLabel: '访客', nickname: '', avatar: '', can: {} },
     theme: { index: 0, colors: [] },
     /** 外观偏好：auto 跟随系统，light / dark 由用户显式选择。 */
@@ -81,7 +86,7 @@ export const state = {
     capabilities: {},
     categories: [],
     review: { canRevise: false, statuses: [] },
-    media: { imageCount: 8, imageSizeMb: 10, videoCount: 2 },
+    media: { imageCount: 8, imageSizeMb: 10, videoCount: 2, videoSizeMb: 50 },
     /** 服务器设置：上传格式与头像大小限制，管理员保存后对所有用户生效。 */
     server: { avatarSizeMb: 2, imageFormats: [], videoFormats: [] },
     /** 服务器设置：普通用户与展商可自由填写的表单字符数上限。 */

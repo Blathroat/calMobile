@@ -446,14 +446,17 @@ const BOOTSTRAP = {
         showRegistrations: false,
         email: 'demo@example.com',
         status: '正常',
-        can: { register: true, profile: true, exhibitor: true, admin: true },
+        statusCode: 'active',
+        // 与后端 `capabilities(role, status)` 的五个键一致：受限账号 register / profile 为 false，
+        // 且 `limited` 为 true（见 server/src/domain/permissions.js）。
+        can: { register: true, profile: true, exhibitor: true, admin: true, limited: false },
     },
     theme: { index: 0, colors: ['#C05621', '#48515D'] },
     ui: { mode: 'light' },
     capabilities: {},
     categories: ['智能制造'],
     review: { canRevise: false, statuses: ['待审核', '已通过', '已拒绝'] },
-    media: { imageCount: 8, imageSizeMb: 10, videoCount: 2 },
+    media: { imageCount: 8, imageSizeMb: 10, videoCount: 2, videoSizeMb: 50 },
     announcement: { enabled: false, text: '' },
     brand: { zh: '发现展会', en: 'calMobile' },
     limits: {},
@@ -462,7 +465,12 @@ const BOOTSTRAP = {
 };
 
 const PROFILE = {
-    loggedIn: true, role: 'admin', nickname: 'demo', can: { admin: true, exhibitor: true },
+    loggedIn: true,
+    role: 'admin',
+    nickname: 'demo',
+    status: '正常',
+    statusCode: 'active',
+    can: { register: true, profile: true, exhibitor: true, admin: true, limited: false },
 };
 
 const SETTINGS = {
@@ -472,7 +480,7 @@ const SETTINGS = {
     brand: { zh: '发现展会', en: 'calMobile' },
     categories: ['智能制造'],
     review: { canRevise: false },
-    media: { imageCount: 8, imageSizeMb: 10, videoCount: 2 },
+    media: { imageCount: 8, imageSizeMb: 10, videoCount: 2, videoSizeMb: 50 },
     upload: { avatarSizeMb: 2, imageFormats: ['jpg'], videoFormats: ['mp4'] },
     limits: {
         exhibitionTitle: 60, exhibitionVenue: 60, category: 20, fieldTitle: 30,
@@ -683,15 +691,22 @@ const SYSTEM_RESPONSES = {
 
 const SYSTEM_ACTION_NAMES = Object.keys(SYSTEM_RESPONSES);
 
-function installBridge(window, calls) {
+/**
+ * 装假桥接。
+ *
+ * `overrides` 用来替换某个系统动作的返回值（例如让 `media.import` 真的返回一个
+ * 视频短 URL），用例不必改这份清单就能验证「拿到结果之后页面做了什么」。
+ */
+function installBridge(window, calls, overrides = {}) {
+    const responses = { ...SYSTEM_RESPONSES, ...overrides };
     window.CalMobileNative = {
         invoke(action, payloadJson, callbackId) {
             calls.push({ action, payload: JSON.parse(payloadJson || '{}') });
-            if (!Object.prototype.hasOwnProperty.call(SYSTEM_RESPONSES, action)) {
+            if (!Object.prototype.hasOwnProperty.call(responses, action)) {
                 // 数据动作不再经过原生：这里必须炸，而不是悄悄返回一份本机数据。
                 throw new Error(`动作 ${action} 不在系统能力白名单里，数据必须走 core/api.js`);
             }
-            const value = SYSTEM_RESPONSES[action];
+            const value = responses[action];
             setTimeout(() => {
                 window.CalMobileBridge.onResult(callbackId, true, value, null);
             }, 0);
@@ -703,14 +718,26 @@ function installBridge(window, calls) {
 
 // ── 测试主体 ─────────────────────────────────────────────────────
 
-/** 每次渲染都重置 DOM 树、假后端与假桥接，模块本身保持在同一个实例里。 */
-async function renderRoute(routeId, params = {}) {
+/**
+ * 每次渲染都重置 DOM 树、假后端与假桥接，模块本身保持在同一个实例里。
+ *
+ * `options` 有两个钩子，都走页面真实使用的那条路：
+ * - `user`：覆盖 `state.user`（例如换成受限身份）。这里**走 `applyBootstrap`**，
+ *   而不是事后直接改 `state`：bootstrap 每个进程只跑一次（下面那行注释说明了原因），
+ *   改 HTTP 夹具对已经落定的状态没有用，而 `applyBootstrap` 与后端下发是同一个入口。
+ * - `bridge`：替换某个系统动作的返回值（例如让 `media.import` 返回视频 URL）。
+ *
+ * 关于身份残留：bootstrap 只跑一次 ⇒ `state.user` 会在用例之间留着上一个用例的值，
+ * 因此这里每次都先复位成夹具里的管理员身份，再套用 `options.user`；
+ * 「受限」用例因此不必自己记着还原（漏还原会悄悄污染后面的用例）。
+ */
+async function renderRoute(routeId, params = {}, options = {}) {
     const backend = createBackend();
     sharedWindow.fetch = backend.fetchStub;
     installGlobals();
     const dom = resetDom(sharedDocument);
     const calls = [];
-    installBridge(sharedWindow, calls);
+    installBridge(sharedWindow, calls, options.bridge);
     // 原生会注入文案；测试用同一份资源文件，断言才能用真实文案。
     sharedWindow.CalMobileStrings = frontendStrings;
     sharedWindow.location.hash = '#/home';
@@ -727,6 +754,12 @@ async function renderRoute(routeId, params = {}) {
     // 首次渲染要等 bootstrap（走 HTTP 夹具）落定，不能自己猜时序。
     await router.whenStarted();
 
+    // 身份复位 + 可选覆盖（走与后端下发同一个入口）。
+    const bridge = await webModule('js/core/bridge.js');
+    // 等 bootstrap 真的落定再套身份：它是一次远端请求，落定晚于覆盖就会把身份冲回去。
+    await bridge.bootReady();
+    bridge.applyBootstrap({ user: identityFixture(options.user) });
+
     const query = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
     sharedWindow.location.hash = `#/${routeId}${query ? `?${query}` : ''}`;
     await router.render();
@@ -740,6 +773,24 @@ async function renderRoute(routeId, params = {}) {
         router,
         app: dom.app,
     };
+}
+
+/** 夹具里的用户态；`override` 只覆盖传进来的字段（`can` 按单键合并）。 */
+function identityFixture(override) {
+    if (!override) {
+        return { ...BOOTSTRAP.user };
+    }
+    return {
+        ...BOOTSTRAP.user,
+        ...override,
+        can: { ...BOOTSTRAP.user.can, ...(override.can || {}) },
+    };
+}
+
+/** 按可见文案找一个按钮：入口的文案就是用户看到的那一句，断言不必依赖 class 名。 */
+function buttonByText(root, text) {
+    return root.querySelectorAll((node) => node.tagName === 'BUTTON')
+        .find((node) => collectText(node).trim() === text);
 }
 
 /**
@@ -1043,6 +1094,132 @@ test('注册页提交后请求 POST /auth/register 并保存返回的令牌', as
         confirmPassword: 'secret123',
     }, '注册请求体与表单内容不一致');
     assert.strictEqual(api.hasRefreshToken(), true, '后端返回的刷新令牌没有保存下来');
+});
+
+// ── 视频插入与受限账号 ───────────────────────────────────────────
+
+/** 后端 `capabilities()` 给受限账号的形状：register / profile 为 false，limited 为 true。 */
+const LIMITED_USER = {
+    role: 'exhibitor',
+    roleLabel: '展商',
+    status: '受限',
+    statusCode: 'limited',
+    can: { register: false, profile: false, exhibitor: true, admin: false, limited: true },
+};
+
+/**
+ * 「插入视频」入口。
+ *
+ * `media.import` 的 video 分支此前在前端没有任何调用点（只有 `{ kind: 'image' }`），
+ * 管理员配置的 videoCount / videoFormats 因此是纯装饰。这里验证完整的一条路：
+ * 点击 → 假原生返回视频短 URL → 正文写入 `<video controls src="…">`；
+ * 正文里已有 `state.media.videoCount`（夹具为 2）个视频时不再插入，并给出提示。
+ */
+test('简介编辑器能插入视频，达到数量上限后不再插入', async () => {
+    const videoUrl = 'https://appassets.androidplatform.net/media/clip-1.mp4';
+    const { dom, calls } = await renderRoute('rich-editor', { id: 'exhibition-1' }, {
+        bridge: {
+            'media.import': {
+                url: videoUrl,
+                fileName: 'clip-1.mp4',
+                bytes: 1024 * 1024,
+                mimeType: 'video/mp4',
+            },
+        },
+    });
+
+    const button = buttonByText(sharedDocument.documentElement, '插入视频');
+    assert.ok(button, '简介编辑器没有「插入视频」入口');
+    const area = dom.app.querySelectorAll((node) => node.id === 'rich-markdown')[0];
+    assert.ok(area, '简介编辑器没有渲染出正文编辑区');
+
+    const videoCount = () => (String(area.value).match(/<video\b/gi) || []).length;
+    const imports = () => calls.filter((item) => item.action === 'media.import');
+
+    button.dispatch('click');
+    await settle(40);
+
+    assert.strictEqual(videoCount(), 1, `正文里没有插入视频标签：${area.value.slice(-160)}`);
+    assert.ok(area.value.includes(`<video controls src="${videoUrl}"></video>`),
+        `插入的 video 标签没有引用原生返回的短 URL：${area.value.slice(-160)}`);
+    assert.deepStrictEqual(imports().map((item) => item.payload), [{ kind: 'video' }],
+        "插入视频没有按 { kind: 'video' } 调用 media.import");
+
+    // 再插一次：正文里就有 videoCount 个视频，正好达到上限。
+    button.dispatch('click');
+    await settle(40);
+    assert.strictEqual(videoCount(), 2, '第二次插入视频失败');
+    assert.strictEqual(imports().length, 2, '第二次插入没有调用 media.import');
+
+    button.dispatch('click');
+    await settle(40);
+    assert.strictEqual(videoCount(), 2, '达到数量上限后仍然插入了视频');
+    assert.strictEqual(imports().length, 2, '达到数量上限后不该再调用 media.import');
+    assert.ok(collectText(dom.toastHost).includes('已达上限'),
+        `达到数量上限时没有提示：${collectText(dom.toastHost)}`);
+});
+
+/**
+ * 受限账号的界面。
+ *
+ * 后端会拒绝报名、发布展会与改资料，界面必须提前把入口置灰并说明原因，
+ * 而不是让用户点完才吃 403。身份通过 `renderRoute` 的 `user` 覆盖注入
+ * （走 `applyBootstrap`，与后端下发同一条路；bootstrap 每个进程只跑一次，
+ * 改夹具改不动已经落定的状态，见 renderRoute 的注释）。
+ */
+test('受限账号的报名与新建展会入口被禁用，并说明原因', async () => {
+    const detail = await renderRoute('detail', { id: 'exhibition-1' }, { user: LIMITED_USER });
+    const register = buttonByText(detail.dom.app, '立即报名');
+    assert.ok(register, '详情页没有渲染出报名按钮');
+    assert.ok(register.hasAttribute('disabled'), '受限账号的报名按钮应当禁用');
+    assert.ok(!buttonByText(detail.dom.app, '登录后报名'),
+        '受限账号不是访客，按钮上不该出现访客的「登录后报名」引导');
+    assert.ok(collectText(detail.app).includes('账号已被限制，不能报名'),
+        '详情页没有说明报名按钮为什么不可点');
+    // 置灰之外再兜一层：点到（无障碍聚焦 / 回车）也不能进报名表单。
+    register.dispatch('click');
+    await settle(10);
+    assert.ok(!sharedWindow.location.hash.includes('registration-form'),
+        `受限账号不该进入报名表单：${sharedWindow.location.hash}`);
+
+    const exhibitor = await renderRoute('exhibitor', {}, { user: LIMITED_USER });
+    const create = exhibitor.dom.app.querySelectorAll((node) => node.tagName === 'BUTTON'
+        && String(node.getAttribute('aria-label') || '') === '新建展会')[0];
+    assert.ok(create, '展商后台顶部没有「新建展会」入口');
+    assert.ok(create.hasAttribute('disabled'), '受限展商的新建展会入口应当禁用');
+    create.dispatch('click');
+    await settle(10);
+    assert.ok(!sharedWindow.location.hash.includes('exhibition-form'),
+        `受限展商不该进入新建展会表单：${sharedWindow.location.hash}`);
+    assert.ok(collectText(exhibitor.app).includes('账号已被限制，不能发布展会'),
+        '展商后台没有说明新建展会为什么不可点');
+});
+
+/**
+ * 受限只收「报名 / 发布展会 / 改个人信息」这三件事：
+ * 通知偏好（`PUT /profile/notifications`）与改密码（`POST /profile/password`）
+ * 后端仍允许，页面上也不能被一起禁掉。
+ */
+test('受限账号的通知偏好与改密码入口仍然可用', async () => {
+    const profile = await renderRoute('profile', {}, { user: LIMITED_USER });
+
+    const rowText = (node) => collectText(node);
+    const row = (text) => profile.dom.app.querySelectorAll((node) => node.tagName === 'BUTTON')
+        .find((node) => rowText(node).includes(text));
+
+    const editRow = row('账号设置');
+    assert.ok(editRow, '个人页没有渲染出「账号设置」入口');
+    assert.ok(editRow.hasAttribute('disabled'), '受限账号的编辑资料入口应当禁用');
+    assert.ok(rowText(editRow).includes('账号已被限制，不能编辑个人信息'),
+        '编辑资料入口没有说明为什么不可点');
+    assert.ok(!row('修改密码').hasAttribute('disabled'), '改密码不该受受限影响');
+
+    // 通知偏好走另一条路由，后端不拦截；隐私开关与资料同属 `PUT /profile`，后端会拒。
+    const disabled = (id) => profile.dom.app.querySelectorAll((node) => node.id === id)[0].hasAttribute('disabled');
+    assert.strictEqual(disabled('notify-reminder'), false, '通知偏好开关不该被禁用');
+    assert.strictEqual(disabled('notify-status'), false, '通知偏好开关不该被禁用');
+    assert.strictEqual(disabled('privacy-registrations'), true,
+        '隐私开关与资料同属 PUT /profile，受限账号应当禁用');
 });
 
 // ── 取数体验：先画缓存、预加载、日历本地选中 ─────────────────────

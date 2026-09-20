@@ -40,6 +40,45 @@ export function allowedFormats(kind = 'image') {
     return Array.isArray(list) ? list.filter(Boolean) : [];
 }
 
+/** 数量上限的兜底值：与 core/bridge.js 的 state.media 默认值、后端默认值一致。 */
+const COUNT_FALLBACK = { image: 8, video: 2 };
+
+/** 大小上限（MB）的兜底值：与后端 `app_settings.media` 的默认值一致。 */
+const SIZE_FALLBACK = { image: 10, video: 50 };
+
+/**
+ * 单次上传的数量上限（图片按张、视频按个），来自服务器设置 `state.media`。
+ * <p>
+ * 注意 `videoCount` 为 **0 是合法配置**（管理员可以用它表示「不允许视频」），
+ * 因此这里只在取不到数字时兜底，不能写成 `state.media.videoCount || 2`——
+ * 那会把 0 悄悄换成 2，等于把禁用配置读反。
+ */
+export function uploadCountLimit(kind = 'image') {
+    const value = Number(kind === 'video' ? state.media?.videoCount : state.media?.imageCount);
+    return Number.isFinite(value) && value >= 0 ? value : COUNT_FALLBACK[kind] ?? COUNT_FALLBACK.image;
+}
+
+/** 单个文件的大小上限（MB）：图片与视频分别读 `state.media` 的两个字段。 */
+export function uploadSizeLimitMb(kind = 'image') {
+    const value = Number(kind === 'video' ? state.media?.videoSizeMb : state.media?.imageSizeMb);
+    return Number.isFinite(value) && value > 0 ? value : SIZE_FALLBACK[kind] ?? SIZE_FALLBACK.image;
+}
+
+/**
+ * 上传结果的大小校验：超过服务器设置的上限时返回可展示的错误，未超过返回空串。
+ * <p>
+ * `bytes` 缺省（原生没回报大小）时不判：宁可放过，也不要凭猜测拦下正常文件。
+ */
+export function uploadSizeError(kind, bytes) {
+    const limit = uploadSizeLimitMb(kind);
+    const size = Number(bytes) || 0;
+    if (size <= limit * 1024 * 1024) {
+        return '';
+    }
+    const label = kind === 'video' ? t('s_q79se0') : t('s_1k84spe');
+    return `${label}超过服务器设置的 ${limit} MB 上限`;
+}
+
 // ── 基础判断 ──────────────────────────────────────────────────────
 
 /** 逐条执行规则，返回第一条错误；通过时返回空串。 */

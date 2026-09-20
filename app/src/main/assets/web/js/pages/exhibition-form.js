@@ -11,11 +11,11 @@ import { t } from '../core/strings.js';
  * 取数走 core/loadable.js：命中缓存时同步出内容，因此从展商后台点进来不会先闪骨架屏。
  */
 
-import { call } from '../core/bridge.js';
+import { call, state } from '../core/bridge.js';
 import { exhibitions } from '../core/api.js';
 import { loadInto } from '../core/loadable.js';
 import { scaffold, topAction } from '../core/router.js';
-import { confirmSheet, icon, notFoundBlock, openSheet, pageFoot, switchRow, toast } from '../ui/components.js';
+import { confirmSheet, icon, notFoundBlock, openSheet, pageFoot, stateBlock, switchRow, toast } from '../ui/components.js';
 import { el, append, replace } from '../core/dom.js';
 import { EXHIBITION_STATUS, REGISTRATION_MODES, modeHint as hintFor, statusTone } from '../core/status.js';
 import { markdownSummary } from '../core/markdown.js';
@@ -64,6 +64,17 @@ export async function exhibitionFormPage(context) {
     let validators = [];
 
     if (isCreate) {
+        // 受限账号不能发布新展会（后端 POST /exhibitions 会 403）：
+        // 展商后台的入口已经置灰，这里再兜住直接进地址的情况，别让人白填一遍表单。
+        if (state.user.can?.limited === true) {
+            replace(host, stateBlock({
+                iconName: 'briefcase',
+                title: t('s_19wazv8'),
+                description: t('s_1yv1vu0'),
+                action: { label: t('s_dn4ida'), onClick: () => context.navigate('exhibitor') },
+            }));
+            return;
+        }
         // 新建展会没有要取的数据，直接出空表单。
         buildForm();
         return;

@@ -235,9 +235,18 @@ export function statusTag(text, tone = 'pending') {
     return el('span', { class: 'status-tag', dataset: { tone }, text: text || '' });
 }
 
-export function switchRow({ id, label, description, checked, onChange }) {
+/**
+ * 开关行。
+ * `disabled` 用于「当前账号不允许改这一项」的场景（例如受限账号的隐私开关）：
+ * 置灰开关本身，而不是让用户拨一下再被后端拒绝。
+ */
+export function switchRow({ id, label, description, checked, onChange, disabled = false }) {
     const input = el('input', { type: 'checkbox', id, onchange: (event) => onChange?.(event.target.checked) });
     input.checked = Boolean(checked);
+    if (disabled) {
+        input.disabled = true;
+        input.setAttribute('disabled', '');
+    }
     return el('div', { class: 'switch-row' }, [
         el('span', { class: 'switch-copy' }, [
             el('strong', { text: label }),

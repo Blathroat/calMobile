@@ -12,25 +12,47 @@ import { t } from '../core/strings.js';
  */
 
 import { exhibitions } from '../core/api.js';
+import { state } from '../core/bridge.js';
 import { loadInto } from '../core/loadable.js';
 import { warmOnPress } from '../core/preload.js';
 import { scaffold, tabbar, navItems, topAction } from '../core/router.js';
-import { mediaBox, smallCta, stateBlock, statusTag, statusTone } from '../ui/components.js';
+import { mediaBox, smallCta, stateBlock, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, replace } from '../core/dom.js';
 
 export async function exhibitorPage(context) {
     const listHost = el('div', { class: 'stack' });
+    /**
+     * 受限账号不能发布新展会（后端 `POST /exhibitions` 直接 403）。
+     * 入口提前置灰并说明原因，而不是让展商填完表单才吃 403；
+     * 受限的展商照样能进后台、查看与审核已有的报名，因此后台本身不封。
+     */
+    const limited = state.user.can?.limited === true;
+    const createAction = topAction('plus', t('s_p9fllo'), () => createExhibition());
+    if (limited) {
+        createAction.setAttribute('disabled', '');
+        createAction.setAttribute('aria-disabled', 'true');
+        createAction.setAttribute('title', t('s_19wazv8'));
+    }
     scaffold({
         title: t('s_1omalh8'),
         showBack: false,
         bodyProps: { 'data-gap': 'tight' },
         actions: [
             topAction('scan', t('s_zqzoiq'), () => context.navigate('checkin')),
-            topAction('plus', t('s_p9fllo'), () => context.navigate('exhibition-form', { mode: 'create' })),
+            createAction,
         ],
         foot: tabbar({ items: navItems(), active: 'exhibitor' }),
         children: [listHost],
     });
+
+    /** 新建展会：受限时用同一句提示兜住残留入口（空态按钮、底部主按钮、回车键）。 */
+    function createExhibition() {
+        if (limited) {
+            toast(t('s_19wazv8'), 'error');
+            return;
+        }
+        context.navigate('exhibition-form', { mode: 'create' });
+    }
 
     // 列表整体交给 loadInto：先画缓存，远端结果到了才重绘，容器始终不清空。
     await loadInto(listHost, {
@@ -42,8 +64,8 @@ export async function exhibitorPage(context) {
                 replace(listHost, stateBlock({
                     iconName: 'briefcase',
                     title: t('s_f4agbb'),
-                    description: t('s_1t8d6e3'),
-                    action: { label: t('s_p9fllo'), onClick: () => context.navigate('exhibition-form', { mode: 'create' }) },
+                    description: limited ? t('s_19wazv8') : t('s_1t8d6e3'),
+                    action: limited ? null : { label: t('s_p9fllo'), onClick: () => createExhibition() },
                 }));
                 return;
             }
@@ -53,6 +75,7 @@ export async function exhibitorPage(context) {
                     el('span', { class: 'section-label', text: t('s_15vddzv') }),
                     el('span', { class: 'pill', text: `${items.length} 个 · ${total} 条报名` }),
                 ]),
+                limitedNotice(),
                 el('button', {
                     class: 'cta ghost',
                     type: 'button',
@@ -67,11 +90,24 @@ export async function exhibitorPage(context) {
                 el('button', {
                     class: 'cta',
                     type: 'button',
-                    onclick: () => context.navigate('exhibition-form', { mode: 'create' }),
+                    disabled: limited ? true : null,
+                    title: limited ? t('s_19wazv8') : null,
+                    onclick: () => createExhibition(),
                 }, [t('s_p9fllo')]),
             ]);
         },
     });
+
+    /** 受限说明：让「新建展会为什么点不动」在页面上直接有答案。 */
+    function limitedNotice() {
+        if (!limited) {
+            return null;
+        }
+        return el('div', { class: 'notice', dataset: { tone: 'accent' } }, [
+            el('strong', { text: t('s_19wazv8') }),
+            el('span', { text: t('s_1yv1vu0') }),
+        ]);
+    }
 
     /**
      * 展会卡片：信息 + 查看报名 / 编辑展会。

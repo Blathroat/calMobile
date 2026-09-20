@@ -16,7 +16,7 @@ import { loadInto } from '../core/loadable.js';
 import { scaffold, topAction } from '../core/router.js';
 import { icon, loadErrorBlock, loadingBlock, notFoundBlock, openSheet, pageFoot, toast } from '../ui/components.js';
 import { htmlToMarkdown, markdownSummary, ensureMarked } from '../core/markdown.js';
-import { allowedFormats } from '../core/validate.js';
+import { allowedFormats, uploadCountLimit, uploadSizeLimitMb, uploadSizeError } from '../core/validate.js';
 import { el, append, replace } from '../core/dom.js';
 
 export async function richEditorPage(context) {
@@ -227,6 +227,7 @@ export async function richEditorPage(context) {
                 icon: svg('link'),
             },
             { name: 'image', action: () => insertImage(), className: 'mde-image', title: t('s_1w5fs53'), icon: svg('image') },
+            { name: 'video', action: () => insertVideo(), className: 'mde-video', title: t('s_1aj4gvd'), icon: svg('video') },
             {
                 name: 'table',
                 action: () => {
@@ -282,14 +283,32 @@ export async function richEditorPage(context) {
             el('div', { class: 'row', 'data-gap': 'md' }, [
                 ghostButton(t('s_7zi2sm'), () => openPasteSheet(), 'paste'),
                 ghostButton(t('s_1w5fs53'), () => insertImage(), 'image'),
+                ghostButton(t('s_1aj4gvd'), () => insertVideo(), 'video'),
             ]),
-            el('p', { class: 'field-hint', text: `媒体数量与大小受服务器设置限制：图片 ${media.imageCount || 8} 张 / 单张 ${media.imageSizeMb || 10} MB，视频 ${media.videoCount || 2} 个；图片插入后以短 URL 引用，简介正文不会因此变长。` }),
+            el('p', { class: 'field-hint', text: mediaLimitHint(media) }),
         ]);
 
         replace(foot, el('div', { class: 'stack', 'data-gap': 'sm' }, [
             el('button', { class: 'cta', type: 'button', onclick: () => save() }, [t('s_1kqdxz5')]),
             el('p', { class: 'field-hint', style: { textAlign: 'center' }, text: t('s_4l0yq7') }),
         ]));
+    }
+
+    /**
+     * 媒体限制说明：数量与大小上限都来自「管理-设置」，图片与视频各说一遍。
+     * <p>
+     * 视频除了个数还有大小上限（`state.media.videoSizeMb`），只说个数会让用户
+     * 以为视频可以无限大。`videoCount` 为 0 是合法配置（表示禁用），因此数量上限
+     * 统一走 {@link uploadCountLimit}，不能用 `|| 默认值` 把 0 换成默认值。
+     */
+    function mediaLimitHint(media) {
+        const imageCount = media.imageCount || 8;
+        const imageSize = media.imageSizeMb || 10;
+        const videoCount = uploadCountLimit('video');
+        const videoSize = uploadSizeLimitMb('video');
+        return `媒体数量与大小受服务器设置限制：图片 ${imageCount} 张 / 单张 ${imageSize} MB，`
+            + `视频 ${videoCount} 个 / 单个不超过 ${videoSize} MB；`
+            + t('s_vkgi23');
     }
 
     function ghostButton(label, onClick, iconName) {
@@ -383,6 +402,60 @@ export async function richEditorPage(context) {
         return formats.length > 0 ? formats.map((item) => `.${item}`).join('/') : t('s_1ylglbm');
     }
 
+    /**
+     * 插入视频：与图片同一条路（原生落盘 → 只写入短 URL），区别只在写进正文的形式。
+     * <p>
+     * Markdown 里直接写 HTML 的 video 标签（src 指向原生落盘后的短 URL）：
+     * `core/sanitize.js` 的白名单允许 `<video>` 与 `src` / `controls` 等属性，
+     * 详情页与编辑器预览因此都能保留并播放它。
+     *
+     * 取消（原生抛「取消」）与图片一致：静默返回，不弹红色错误。
+     */
+    async function insertVideo() {
+        const limit = uploadCountLimit('video');
+        const currentCount = (editor.value().match(/<video\b/gi) || []).length;
+        if (currentCount >= limit) {
+            toast(`视频数量已达上限（${limit} 个）`, 'error');
+            return;
+        }
+        const formats = allowedFormats('video');
+        try {
+            const result = await call('media.import', { kind: 'video' });
+            if (!result?.url) {
+                toast(t('s_s0oos7'), 'error');
+                return;
+            }
+            // 视频不像图片那样会被原生压缩：超过服务器设置的上限时不要插进正文。
+            const oversized = uploadSizeError('video', result.bytes);
+            if (oversized) {
+                toast(oversized, 'error');
+                return;
+            }
+            insertAtCursor(`\n\n<video controls src="${result.url}"></video>\n\n`);
+            toast(`视频已插入（${formatBytes(result.bytes)}）`, 'success');
+        } catch (error) {
+            if (String(error.message).includes(t('s_1589w37'))) {
+                return;
+            }
+            toast(error.message || `请选择 ${formatsHint(formats)} 格式的视频`, 'error');
+        }
+    }
+
+    /**
+     * 把一段 Markdown / HTML 插到当前光标处。
+     * <p>
+     * EasyMDE 挂着 CodeMirror 时用 `replaceSelection`（有选中内容就替换它）；
+     * 纯文本兜底编辑器没有 CodeMirror，退化为追加到末尾（与插图一致）。
+     */
+    function insertAtCursor(text) {
+        const codemirror = editor?.codemirror;
+        if (codemirror && typeof codemirror.replaceSelection === 'function') {
+            codemirror.replaceSelection(text);
+            return;
+        }
+        editor.value(`${editor.value().trimEnd()}${text}`);
+    }
+
     function formatBytes(bytes) {
         const value = Number(bytes) || 0;
         if (value >= 1024 * 1024) {
@@ -457,6 +530,7 @@ const PATHS = {
     ordered: '<path d="M9.5 6.5H20M9.5 12H20M9.5 17.5H20M4 5.5h1.6v3M4 11.4c0-.6 1.6-.8 1.6.2 0 .8-1.6 1.4-1.6 2.4h1.8M4 16.6h1.4c.6 0 .8 1.2-.3 1.3.9.1 1 1.4-.1 1.4H4"/>',
     link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7L11.6 6.7"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1.4-1.4"/>',
     image: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5"/>',
+    video: '<rect x="3.5" y="6" width="12" height="12" rx="2"/><path d="m15.5 12 5-3v6Z"/>',
     table: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 10h17M3.5 14.5h17M9.5 5v14M15 5v14"/>',
     eye: '<path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.5"/>',
     paste: '<rect x="6" y="4.5" width="12" height="15" rx="2"/><path d="M9.5 4.5V3.5h5v1M9 10h6M9 13.5h6"/>',

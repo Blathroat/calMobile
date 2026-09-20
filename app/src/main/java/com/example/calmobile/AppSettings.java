@@ -32,6 +32,7 @@ public final class AppSettings {
     private static final String KEY_MEDIA_IMAGE_COUNT = "media_image_count";
     private static final String KEY_MEDIA_IMAGE_SIZE = "media_image_size";
     private static final String KEY_MEDIA_VIDEO_COUNT = "media_video_count";
+    private static final String KEY_MEDIA_VIDEO_SIZE = "media_video_size";
     private static final String KEY_MEDIA_AVATAR_SIZE = "media_avatar_size";
     private static final String KEY_MEDIA_IMAGE_FORMATS = "media_image_formats";
     private static final String KEY_MEDIA_VIDEO_FORMATS = "media_video_formats";
@@ -197,23 +198,54 @@ public final class AppSettings {
     // ── 媒体限制（镜像自服务器设置） ───────────────────────────────
 
     public static int getMediaImageLimit(Context context) {
-        return Math.max(1, prefs(context).getInt(KEY_MEDIA_IMAGE_COUNT, 8));
+        return clampImageCount(prefs(context).getInt(KEY_MEDIA_IMAGE_COUNT, 8));
     }
 
     public static int getMediaImageSizeMb(Context context) {
-        return Math.max(1, prefs(context).getInt(KEY_MEDIA_IMAGE_SIZE, 10));
+        return clampImageSizeMb(prefs(context).getInt(KEY_MEDIA_IMAGE_SIZE, 10));
     }
 
     public static int getMediaVideoLimit(Context context) {
-        return Math.max(0, prefs(context).getInt(KEY_MEDIA_VIDEO_COUNT, 2));
+        return clampVideoCount(prefs(context).getInt(KEY_MEDIA_VIDEO_COUNT, 2));
     }
 
-    public static void saveMediaLimits(Context context, int imageCount, int imageSizeMb, int videoCount) {
+    /** 单个视频的大小上限（MB）：视频是整份复制进应用目录的，必须有上限。 */
+    public static int getMediaVideoSizeMb(Context context) {
+        return clampVideoSizeMb(prefs(context).getInt(KEY_MEDIA_VIDEO_SIZE, 50));
+    }
+
+    public static void saveMediaLimits(Context context, int imageCount, int imageSizeMb,
+            int videoCount, int videoSizeMb) {
         prefs(context).edit()
-                .putInt(KEY_MEDIA_IMAGE_COUNT, Math.max(1, imageCount))
-                .putInt(KEY_MEDIA_IMAGE_SIZE, Math.max(1, imageSizeMb))
-                .putInt(KEY_MEDIA_VIDEO_COUNT, Math.max(0, videoCount))
+                .putInt(KEY_MEDIA_IMAGE_COUNT, clampImageCount(imageCount))
+                .putInt(KEY_MEDIA_IMAGE_SIZE, clampImageSizeMb(imageSizeMb))
+                .putInt(KEY_MEDIA_VIDEO_COUNT, clampVideoCount(videoCount))
+                .putInt(KEY_MEDIA_VIDEO_SIZE, clampVideoSizeMb(videoSizeMb))
                 .apply();
+    }
+
+    // ── 取值范围 ───────────────────────────────────────────────────
+    // 这几个范围与后端 `server/src/domain/settings.js` 的 clamp 一一对应：
+    // 后端是权威，原生只是把越界值收敛到同一个区间，避免两边对「合法上限」的理解不一致。
+
+    /** 图片数量：1..30。 */
+    static int clampImageCount(int value) {
+        return Math.min(30, Math.max(1, value));
+    }
+
+    /** 单张图片大小（MB）：1..50。 */
+    static int clampImageSizeMb(int value) {
+        return Math.min(50, Math.max(1, value));
+    }
+
+    /** 视频数量：0..10（0 表示不允许上传视频）。 */
+    static int clampVideoCount(int value) {
+        return Math.min(10, Math.max(0, value));
+    }
+
+    /** 单个视频大小（MB）：1..500。 */
+    static int clampVideoSizeMb(int value) {
+        return Math.min(500, Math.max(1, value));
     }
 
     public static int getMediaAvatarSizeMb(Context context) {
@@ -248,8 +280,13 @@ public final class AppSettings {
         if (raw == null) {
             return result;
         }
-        for (String item : raw.split("[,\\s]+")) {
+        // 分隔符要比「逗号」宽：前端推过来的格式是数组，经桥接序列化后可能长成
+        // `[mp4,mov,webm]`（Java List 的 toString）；手输时也可能用顿号或空格分隔。
+        // 只按逗号切会把 `[mp4` / `webm]` 当成后缀名，于是「允许 mp4」却判定 mp4 非法。
+        for (String item : raw.split("[,\\s、，;；|]+")) {
             String value = item.trim().toLowerCase(Locale.US);
+            // 去掉数组/引号残留
+            value = value.replace("[", "").replace("]", "").replace("\"", "").replace("'", "");
             if (value.startsWith(".")) {
                 value = value.substring(1);
             }

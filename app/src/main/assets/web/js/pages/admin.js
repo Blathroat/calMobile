@@ -176,7 +176,7 @@ export async function adminPage(context) {
             ]),
             el('div', { class: 'notice' }, [
                 el('strong', { text: t('s_7tczm7') }),
-                el('span', { text: t('s_o3jfq3') }),
+                el('span', { text: t('s_1pdejtj') }),
             ]),
             users.length > 0
                 ? cards
@@ -216,7 +216,7 @@ export async function adminPage(context) {
             return t('s_o85tde');
         }
         if (status === t('s_1am6dte')) {
-            return t('s_183ltm8');
+            return t('s_184s1di');
         }
         return t('s_nsh78a');
     }
@@ -366,6 +366,7 @@ export async function adminPage(context) {
         const imageCount = numberInput('settings-image-count', data?.media?.imageCount ?? state.media.imageCount ?? 8);
         const imageSize = numberInput('settings-image-size', data?.media?.imageSizeMb ?? state.media.imageSizeMb ?? 10);
         const videoCount = numberInput('settings-video-count', data?.media?.videoCount ?? state.media.videoCount ?? 2);
+        const videoSize = numberInput('settings-video-size', data?.media?.videoSizeMb ?? state.media.videoSizeMb ?? 50);
         const avatarSize = numberInput('settings-avatar-size', data?.upload?.avatarSizeMb ?? state.server.avatarSizeMb ?? 2);
         const imageFormats = textInput('settings-image-formats',
             (data?.upload?.imageFormats || state.server.imageFormats || []).join(','), 'jpg,jpeg,png,webp');
@@ -476,6 +477,8 @@ export async function adminPage(context) {
                 numberField(t('s_s2a1jr'), imageCount, t('s_accfpb')),
                 numberField(t('s_ixjm5p'), imageSize, 'MB'),
                 numberField(t('s_1wlt01z'), videoCount, t('s_d5a1x9')),
+                numberField(t('s_1moomrn'), videoSize, 'MB'),
+                el('p', { class: 'field-hint', text: t('s_8cnkwa') }),
             ]),
             el('div', { class: 'card' }, [
                 el('span', { class: 'section-label', text: t('s_15f0vvs') }),
@@ -529,6 +532,7 @@ export async function adminPage(context) {
                     imageCount: Number(imageCount.value) || 0,
                     imageSizeMb: Number(imageSize.value) || 0,
                     videoCount: Number(videoCount.value) || 0,
+                    videoSizeMb: Number(videoSize.value) || 0,
                     avatarSizeMb: Number(avatarSize.value) || 0,
                     imageFormats: imageFormats.value.trim(),
                     videoFormats: videoFormats.value.trim(),
