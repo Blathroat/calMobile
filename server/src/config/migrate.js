@@ -2,7 +2,7 @@
  * 数据库迁移与示例数据。
  *
  * 迁移按步骤编号记录在 `schema_migrations` 表里，只跑没跑过的步骤，
- * 因此可以反复执行（`npm run db:migrate` 是幂等的），新增字段时往后追加一步即可，
+ * 因此可以反复执行（`pnpm db:migrate` 是幂等的），新增字段时往后追加一步即可，
  * 不要去改已经发布过的步骤。
  *
  * 约定：
@@ -12,7 +12,7 @@
  * - 报名记录不冗余展会标题、时间、地点，读取时 JOIN 展会表，避免展会改期后两边不一致。
  */
 
-// 运行环境要先定下来：迁移脚本也要能对着生产库跑（`npm run db:migrate:prod`），
+// 运行环境要先定下来：迁移脚本也要能对着生产库跑（`pnpm db:migrate:prod`），
 // 而 pool 在 require 的那一刻就按 NODE_ENV 选好库了（见 config/runtime.js）。
 const runtime = require('./runtime');
 const { pool } = require('./pool');

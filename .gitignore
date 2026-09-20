@@ -29,8 +29,13 @@ server/.env
 .omo/
 .opencode/
 .codegraph/
+.agents/
+.claude/
+.grok/
+skills-lock.json
 *.log
 npm-debug.log*
+pnpm-debug.log*
 
 # ── 系统文件 ─────────────────────────────────────────────────────
 .DS_Store

@@ -2,7 +2,7 @@
  * 邮件发送适配层的单元测试。
  *
  * 只测 `memory` 与 `console` 两条通道：真发 SMTP 需要 Mailpit 在跑，那属于手动/本地验证
- * （`pwsh -File scripts\mail.ps1 start` 后用契约用例或脚本打一发），不该让 `npm test`
+ * （`pwsh -File scripts\mail.ps1 start` 后用契约用例或脚本打一发），不该让 `pnpm test`
  * 依赖一个容器。这里要钉住的是「失败不抛异常、注入被清掉、生产不许用 memory」。
  */
 

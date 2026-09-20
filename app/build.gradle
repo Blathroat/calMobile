@@ -3,24 +3,27 @@ plugins {
 }
 
 android {
-    namespace 'com.example.calmobile'
-    compileSdk 34
-    buildToolsVersion "36.0.0"
+    namespace = 'com.example.calmobile'
+    compileSdk = 34
 
     defaultConfig {
-        applicationId 'com.example.calmobile'
-        minSdk 24
-        targetSdk 34
-        versionCode 1
-        versionName '0.1.0'
+        applicationId = 'com.example.calmobile'
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 1
+        versionName = '0.1.0'
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_25
+        targetCompatibility = JavaVersion.VERSION_25
     }
-    
+}
 
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
 }
 
 dependencies {

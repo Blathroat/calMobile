@@ -82,7 +82,6 @@ public class WebShellActivity extends Activity {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setSupportZoom(false);
@@ -95,9 +94,10 @@ public class WebShellActivity extends Activity {
         // （本机服务 http://127.0.0.1:3000）会被判定为混合内容。后端改用 HTTPS
         // 后应当把这一行改回 MIXED_CONTENT_NEVER_ALLOW。
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // 深色模式由前端令牌控制，这里始终关掉系统强制反色。
-            settings.setForceDark(WebSettings.FORCE_DARK_OFF);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // 深色模式由前端令牌控制。setForceDark 在 targetSdk ≥ 33 已是空操作，
+            // 这里关掉 WebView 的算法反色，避免系统把页面再涂一遍。
+            settings.setAlgorithmicDarkeningAllowed(false);
         }
 
         webView.setWebViewClient(new WebViewClient() {

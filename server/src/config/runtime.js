@@ -1,7 +1,7 @@
 /**
  * 运行环境判定。
  *
- * **`npm start` 自动进生产模式，`npm run dev` 留在开发模式**：
+ * **`pnpm start` 自动进生产模式，`pnpm dev` 留在开发模式**：
  * - `start` 脚本传 `--production`（跨平台，不依赖 shell 的 `VAR=x` 写法，也不用引入 cross-env）；
  * - `dev` 走 nodemon，不带参数，读 `.env` 里的 `NODE_ENV=development`；
  * - 真实环境变量优先于 `.env`（`dotenv` 默认不覆盖已存在的变量），所以
@@ -16,10 +16,10 @@
  *   （它们会暴露迁移清单、各表行数与接口清单，失败时还带 pg 的错误原文）；
  * - `trustProxy`：反代后面必须显式打开，否则 `req.ip` 会是代理地址，
  *   按 IP 的验证码限流会退化成「全体用户共用一个 1 小时 20 条」的额度；
- * - `startedBy`：给启动日志用，一眼看出这次是 `npm start` 还是 `npm run dev` 起的。
+ * - `startedBy`：给启动日志用，一眼看出这次是 `pnpm start` 还是 `pnpm dev` 起的。
  */
 
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 const TRUTHY = ['true', '1', 'yes', 'on'];
 const FALSY = ['false', '0', 'no', 'off'];
@@ -66,7 +66,7 @@ function resolveRuntime(argv = [], env = {}) {
     isProduction,
     statusPageEnabled,
     trustProxy,
-    // npm 会设置这个变量：`start` / `dev` / `test` 之一，用于启动日志与排查。
+    // pnpm / npm 都会设置这个变量：`start` / `dev` / `test` 之一，用于启动日志与排查。
     startedBy: String(env.npm_lifecycle_event || '').trim(),
   };
 }

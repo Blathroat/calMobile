@@ -350,7 +350,7 @@ const checks = [
   {
     id: 'agent-rules',
     file: 'AGENTS.md',
-    contains: ['# Repository Guidelines', 'Java 17', 'WebShellActivity', 'node scripts/smoke-check.js',
+    contains: ['# Repository Guidelines', 'Java 25', 'WebShellActivity', 'node scripts/smoke-check.js',
       'node --test scripts/webui-render.test.js']
   },
   {
@@ -363,7 +363,8 @@ const checks = [
   {
     id: 'android-gradle-files',
     file: 'app/build.gradle',
-    contains: ['compileSdk 34', 'targetSdk 34', "namespace 'com.example.calmobile'"]
+    contains: ['compileSdk = 34', 'targetSdk = 34', "namespace = 'com.example.calmobile'",
+      'JavaVersion.VERSION_25']
   },
   {
     id: 'android-manifest-main-activity',
@@ -381,7 +382,7 @@ const checks = [
   {
     id: 'gradle-wrapper-properties',
     file: 'gradle/wrapper/gradle-wrapper.properties',
-    contains: ['distributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-bin.zip']
+    contains: ['distributionUrl=https\\://services.gradle.org/distributions/gradle-9.7.1-bin.zip']
   },
   {
     id: 'gradle-wrapper-jar',
@@ -832,7 +833,7 @@ const checks = [
   },
   {
     id: 'backend-start-is-production',
-    // npm start 必须进生产模式：状态页会关、启动自检会跑
+    // pnpm start 必须进生产模式：状态页会关、启动自检会跑
     file: 'server/package.json',
     contains: ['"start": "node src/index.js --production"', '"dev": "nodemon src/index.js"',
       '"db:migrate:prod"'],

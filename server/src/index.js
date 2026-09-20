@@ -10,7 +10,7 @@
  */
 
 // 运行环境必须在**任何**读取 NODE_ENV 的模块之前定下来（见 config/runtime.js：
-// npm start 走生产、npm run dev 走开发，状态页与启动自检都按它决定）。
+// pnpm start 走生产、pnpm dev 走开发，状态页与启动自检都按它决定）。
 const runtime = require('./config/runtime');
 
 const express = require('express');
@@ -148,7 +148,7 @@ function clientMessage(err, status) {
 }
 
 // 统一错误处理：状态码按上面的优先级，正文只有 `{ error }`，堆栈始终只进日志。
-app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+app.use((err, req, res, _next) => {
   const status = statusFor(err);
   console.error(`请求失败（${status}）：`, err);
   res.status(status).json({ error: clientMessage(err, status) });
@@ -162,11 +162,11 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
  * 业务接口在数据库恢复后自动可用（连接池会重建连接）。
  */
 async function start() {
-  const startedBy = runtime.startedBy ? `（npm run ${runtime.startedBy}）` : '';
+  const startedBy = runtime.startedBy ? `（pnpm ${runtime.startedBy}）` : '';
   console.log(`运行模式：${runtime.nodeEnv}${startedBy}`);
 
   // 生产环境先做配置自检：致命项**拒绝启动**（配错了会静默地不安全或根本用不了），
-  // 可疑项只打警告。开发/测试不检查，保持 `npm run dev` 开箱即用。
+  // 可疑项只打警告。开发/测试不检查，保持 `pnpm dev` 开箱即用。
   if (runtime.isProduction) {
     const { fatal, warnings } = productionProblems(process.env);
     for (const item of warnings) {
@@ -177,7 +177,7 @@ async function start() {
       for (const item of fatal) {
         console.error(`  · ${item}`);
       }
-      console.error('本机开发请用 npm run dev（开发模式，不做这些检查）。');
+      console.error('本机开发请用 pnpm dev（开发模式，不做这些检查）。');
       process.exit(1);
     }
     console.log(runtime.statusPageEnabled

@@ -8,7 +8,7 @@
  *
  * ## 传输层
  *
- * 数据只有一个来源：`server/` 的 Express + PostgreSQL 后端（`npm run dev`，默认 3000）。
+ * 数据只有一个来源：`server/` 的 Express + PostgreSQL 后端（`pnpm dev`，默认 3000）。
  * 页面只认动作名，HTTP 形状由下面的 `ENDPOINTS` 表翻译，因此后端换实现不影响页面；
  * 后端连不上就直接抛错由页面提示——没有第二个数据源可以退回。
  *
@@ -235,12 +235,12 @@ async function httpFetch(url, method, body, action = '') {
             throw new TransportError(
                 `后端响应超时（超过 ${REQUEST_TIMEOUT / 1000} 秒）：${action ? `${action} ` : ''}${method} ${url}。`
                 + '后端可能正在处理一次较慢的查询，请稍后重试；'
-                + '若每次都超时，请确认 server/ 已启动（npm run dev），真机/模拟器还需要 adb reverse tcp:3000 tcp:3000。',
+                + '若每次都超时，请确认 server/ 已启动（pnpm dev），真机/模拟器还需要 adb reverse tcp:3000 tcp:3000。',
             );
         }
         throw new TransportError(
             `连不上后端服务（${BASE_URL}）：${error.message}。`
-            + '请确认 server/ 已启动（npm run dev），真机/模拟器还需要 adb reverse tcp:3000 tcp:3000。',
+            + '请确认 server/ 已启动（pnpm dev），真机/模拟器还需要 adb reverse tcp:3000 tcp:3000。',
         );
     } finally {
         if (timer) {

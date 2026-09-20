@@ -1,7 +1,7 @@
 /**
  * 限流中间件的单元测试：失败计数、窗口内放行、超限给 429、不同账号与 IP 互不牵连。
  *
- * 用 jest 全局的 test/beforeEach（与 src 下其它用例一致，由 `npm test` 驱动），
+ * 用 jest 全局的 test/beforeEach（与 src 下其它用例一致，由 `pnpm test` 驱动），
  * 断言用 node 的 assert/strict，不绑死 jest 的 expect API。
  */
 

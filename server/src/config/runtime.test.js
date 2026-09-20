@@ -1,7 +1,7 @@
 /**
  * 运行环境判定的单元测试。
  *
- * `resolveRuntime` 是纯函数（argv + env 进、结论出），所以「npm start 进生产」这件事
+ * `resolveRuntime` 是纯函数（argv + env 进、结论出），所以「pnpm start 进生产」这件事
  * 不必真的去启动一次服务：只要钉住优先级，`package.json` 的脚本传对参数就够了。
  */
 
@@ -12,13 +12,13 @@ const { resolveRuntime } = require('./runtime');
 /** 造一个 argv：第一个元素是 node，第二个是脚本路径，其余是脚本参数。 */
 const argv = (...args) => ['node', 'src/index.js', ...args];
 
-test('npm start 传 --production：自动进生产模式', () => {
+test('pnpm start 传 --production：自动进生产模式', () => {
   const runtime = resolveRuntime(argv('--production'), { NODE_ENV: 'development' });
   assert.equal(runtime.nodeEnv, 'production');
   assert.equal(runtime.isProduction, true, '--production 必须压过 .env 里的 development');
 });
 
-test('npm run dev 不带参数：留在开发模式', () => {
+test('pnpm dev 不带参数：留在开发模式', () => {
   const runtime = resolveRuntime(argv(), { NODE_ENV: 'development', npm_lifecycle_event: 'dev' });
   assert.equal(runtime.nodeEnv, 'development');
   assert.equal(runtime.isProduction, false);
