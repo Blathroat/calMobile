@@ -78,6 +78,7 @@ const ENDPOINTS = {
 
     'auth.login': () => ({ method: 'POST', path: '/auth/login' }),
     'auth.register': () => ({ method: 'POST', path: '/auth/register' }),
+    'auth.registerVerify': () => ({ method: 'POST', path: '/auth/register/verify' }),
     'auth.guest': () => ({ method: 'POST', path: '/auth/guest' }),
     'auth.logout': (payload) => ({ method: 'POST', path: '/auth/logout', body: payload }),
 
@@ -501,12 +502,19 @@ export const api = {
             clearCache();
             return result;
         },
-        register: async (payload) => {
-            const result = await request('auth.register', payload);
+        /**
+         * 注册第一步：只校验并请求发码，**后端此时不建账号、不发令牌**。
+         * 待建账号暂存在后端的验证码记录里，验证通过（registerVerify）才落库。
+         */
+        register: (payload) => request('auth.register', payload),
+        /** 注册第二步：验证码通过，后端建号并发令牌，这里才切到已登录状态。 */
+        registerVerify: async (payload) => {
+            const result = await request('auth.registerVerify', payload);
             if (result?.token) {
                 setToken(result.token);
                 setRefreshToken(result.refreshToken);
             }
+            // 换了身份，上一份缓存不再适用。
             clearCache();
             return result;
         },

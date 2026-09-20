@@ -93,6 +93,16 @@ if (!nameBlock) {
     }
 }
 
+// 4. 文案资源不得以空白开头或结尾
+//    Android 会裁掉 `<string>` 的首尾空白，而 JSON 里原样保留 —— 同一份文案在原生注入后
+//    就少了一个空格。真机上「验证码已发送到 」+ 邮箱因此渲染成「验证码已发送到xxx@…」。
+//    需要间隔就用标点，或把空白交给页面里的相邻文本 / 布局，不要留在文案资源里。
+for (const match of xml.matchAll(/<string name="(s_[a-z0-9]+)">([\s\S]*?)<\/string>/g)) {
+    if (/^\s|\s$/.test(match[2])) {
+        failures.push(`strings_frontend.xml 中的 ${match[1]} 首尾带空白（Android 会裁掉，页面与资源会不一致）`);
+    }
+}
+
 if (failures.length > 0) {
     console.error(`FAIL 文案资源有 ${failures.length} 处不一致：`);
     for (const item of failures.slice(0, 20)) {

@@ -66,6 +66,9 @@ export async function userPublicPage(context) {
         const registrations = profile.registrations || [];
         // 管理视角：管理员看得到全部已参加展会，页面明确说明，避免误解为公开范围。
         const adminView = profile.viewedAsAdmin === true;
+        // 本人视角多一句标注。分隔用的「 · 」留在代码里，**不放进文案资源**：
+        // Android 的 string 资源会裁掉首尾空白，靠资源里的前导空格做间隔在真机上会粘在一起。
+        const ownLabel = t('s_14nrrfg');
         replace(host, [
             adminView
                 ? el('div', { class: 'notice', dataset: { tone: 'accent' } }, [
@@ -78,7 +81,7 @@ export async function userPublicPage(context) {
                     avatarNode({ src: profile.avatar, name: profile.nickname, className: 'avatar' }),
                     el('span', { class: 'row-copy' }, [
                         el('strong', { class: 'row-title', text: profile.nickname }),
-                        el('span', { class: 'row-meta', text: `${profile.role}${isOwn ? t('s_1dev7g3') : ''}` }),
+                        el('span', { class: 'row-meta', text: isOwn ? `${profile.role} · ${ownLabel}` : profile.role }),
                         el('span', { class: 'row-meta', text: profile.bio || t('s_1aifth0') }),
                     ]),
                     statusTag(adminView ? t('s_iq65l2') : (profile.showRegistrations ? t('s_q3pv0x') : t('s_ex547b')),

@@ -130,7 +130,8 @@ pwsh -File scripts\mail.ps1 clear    # 跑回归前清空，免得看错邮件
 | --- | --- | --- |
 | `GET /bootstrap` | `bootstrap` | 可匿名。一次下发 `user / theme / ui / capabilities / categories / review / media / announcement / brand / limits / server / calendar`（含 `calendar.landing` 落点月份） |
 | `POST /auth/login` | `auth.login` | 账号密码换 `token` + `refreshToken`，并更新最近登录时间 |
-| `POST /auth/register` | `auth.register` | 自助注册固定为普通用户；用户名 / 密码长度取服务器设置 |
+| `POST /auth/register` | `auth.register` | 注册**第一步**：校验用户名 / 密码 / 邮箱与查重，把待建账号暂存进验证码记录并发码；**不建账号、不发令牌**。限流：同一邮箱 60 秒 1 条 / 1 小时 5 条 / 24 小时 15 条，同一 IP 1 小时 20 条（429） |
+| `POST /auth/register/verify` | `auth.registerVerify` | 注册**第二步**：验证码通过才建账号（`email_verified = true`）并发令牌；码不对 / 过期 / 次数用尽是 200 + `ok:false` |
 | `POST /auth/guest` | `auth.guest` | 只返回访客态，不发令牌 |
 | `POST /auth/logout` | `auth.logout` | 撤销该刷新令牌 |
 | `POST /auth/refresh` | — | 刷新令牌换新令牌（轮换：旧的立即作废） |
@@ -279,16 +280,17 @@ npm test                  # jest：不依赖数据库的纯函数单测
 npm run lint
 ```
 
-`test/api.test.js`（49 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
+`test/api.test.js`（53 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
 
 - 页面真正用到的字段都在（展会 25 个字段、报名、审核统计、启动数据的 12 个配置块）；
 - 权限确实拦得住（访客 / 普通用户 / 展商越权访问、受限账号在报名 / 发布 / 编辑 / 删除展会 / 改报名设置 / 核销 / 改资料上的 403 文案与仍然可用的操作、管理员即便被标成受限也不受限）；
 - 业务规则确实生效（报名窗口、收集项必填与选项、重复报名、自动通过、审核状态机与 `canRevise` 策略、核销状态流转、隐私开关、媒体上限收敛与缺键兜底）；
+- **注册两步流程与验证码规则**：第一步只发码、不建号、不发令牌，账号在验证通过前登不进去；错码不建号；同一枚码只能用一次；同一邮箱 60 秒内不能重复发码（429）；错够 5 次这枚码即作废（连正确的码也不再认）；发码与验证之间用户名被抢注时给「已被注册」而不是 500。验证码的明文只存在于邮件里，用例从内存收件箱的正文里把它读出来 —— 走的是用户实际收到的那条路径，后端没有、也不该有「读出明文码」的接口；
 - 刷新令牌并发重放只会换到一套新令牌（轮换的撤销是原子条件更新）；
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
 - 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、带上错误原文，不抛 500）。
 
-`src/**/*.test.js`（jest，59 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500），以及邮件层：通道选择与「生产禁用 `memory`」（`config/mail.test.js`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.js`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.js`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `npm test` 的前置条件——测试不该依赖一个容器。
+`src/**/*.test.js`（jest，65 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.js`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.js`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.js`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.js`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `npm test` 的前置条件——测试不该依赖一个容器。
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 

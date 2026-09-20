@@ -19,6 +19,8 @@ export const PATTERNS = {
     timeRange: /^\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}$/,
     /** 展会分类使用中文、英文、数字与常见分隔符。 */
     category: /^[A-Za-z0-9\u4e00-\u9fa5/\-·、\s]+$/,
+    /** 邮箱验证码：后端固定 6 位数字（见 server/src/domain/otp.js 的 CODE_LENGTH）。 */
+    verificationCode: /^\d{6}$/,
 };
 
 const MESSAGES = {

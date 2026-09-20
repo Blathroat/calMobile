@@ -12,9 +12,8 @@ const { USER_COLUMNS, USER_FROM } = require('../domain/queries');
 const { userPayload, guestPayload } = require('../domain/payloads');
 const { capabilities } = require('../domain/permissions');
 const { limits } = require('../domain/validation');
-const {
-  issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser,
-} = require('../domain/session');
+const { issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser } = require('../domain/session');
+const { issueCode, consumeCode, isCodeRejected } = require('../domain/otp');
 const { badRequest } = require('../domain/errors');
 const { authenticate } = require('../middleware/auth');
 const { rateLimit } = require('../middleware/rate-limit');
@@ -92,8 +91,40 @@ router.post('/login', authLimiter, async (req, res, next) => {
 });
 
 /**
+ * 注册冲突检查：用户名与邮箱都要唯一。
+ *
+ * 邮箱的唯一性最终由 `users_email_unique_idx`（大小写无关、空串除外）兜底；
+ * 这里先查一次，是为了在**发码之前**就能给出一句能看懂的话 —— 等用户收完码、输完码
+ * 才被告知「该用户名已被注册」太气人。
+ *
+ * @returns {string} 给用户看的文案；没有冲突就是空串。
+ */
+async function registrationConflict(username, email) {
+  if (!email) {
+    return '请输入有效的邮箱地址';
+  }
+  const existing = await query(`
+        SELECT lower(username) AS username, lower(email) AS email
+          FROM users
+         WHERE lower(username) = lower($1) OR lower(email) = lower($2)
+    `, [username, email]);
+  if (existing.rows.some((row) => row.username === username.toLowerCase())) {
+    return '该用户名已被注册';
+  }
+  if (existing.rows.some((row) => row.email === email.toLowerCase())) {
+    return '该邮箱已被注册';
+  }
+  return '';
+}
+
+/**
  * POST /api/v1/auth/register
- * 自助注册固定为普通用户；用户名 / 密码长度按管理员配置的上限校验。
+ * 注册第一步：校验输入、把待建账号暂存进验证码记录，并把验证码发到邮箱。
+ *
+ * **这一步不建账号、不发令牌**：邮箱验证通过（`POST /auth/register/verify`）才真的建号。
+ * 好处是库里不存在「注册了但邮箱没验证」的半成品账号，也就不需要为这种状态设计一整套
+ * 功能限制；待建账号（用户名 + 密码哈希 + 昵称）暂存在 `email_codes.payload` 里，
+ * 24 小时后随过期码一起清掉，没验证就等于没注册过。
  */
 router.post('/register', authLimiter, async (req, res, next) => {
   try {
@@ -118,24 +149,78 @@ router.post('/register', authLimiter, async (req, res, next) => {
       res.json(failure('请输入有效的邮箱地址'));
       return;
     }
-    const existing = await query(
-      'SELECT username, email FROM users WHERE lower(username) = lower($1) OR lower(email) = lower($2)',
-      [username, email],
-    );
-    if (existing.rows.some((row) => row.username.toLowerCase() === username.toLowerCase())) {
-      res.json(failure('该用户名已被注册'));
+
+    const conflict = await registrationConflict(username, email);
+    if (conflict) {
+      res.json(failure(conflict));
       return;
     }
-    if (existing.rows.some((row) => String(row.email).toLowerCase() === email.toLowerCase())) {
-      res.json(failure('该邮箱已被注册'));
-      return;
-    }
-    const id = `usr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+    // 密码在这一步就变成哈希：待建账号里不该有明文密码，哪怕它只活 10 分钟。
     const passwordHash = await bcrypt.hash(password, 10);
-    await query(`
-            INSERT INTO users (id, username, password_hash, email, nickname, role)
-            VALUES ($1, $2, $3, $4, $5, 'user')
-        `, [id, username, passwordHash, email, username]);
+    const ticket = await issueCode({
+      purpose: 'register',
+      email,
+      payload: { username, passwordHash, nickname: username },
+      ip: req.ip || '',
+    });
+    res.json({ ok: true, error: '', ...ticket });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/auth/register/verify
+ * 注册第二步：验证码通过 → 建账号 → 发会话。
+ *
+ * 新账号直接写 `email_verified = true`：这个邮箱刚刚被验证过，它就是被验证的那一个。
+ */
+router.post('/register/verify', authLimiter, async (req, res, next) => {
+  try {
+    const email = String(req.body.email || '').trim();
+    const code = String(req.body.code || '').trim();
+    let consumed;
+    try {
+      consumed = await consumeCode({ purpose: 'register', email, code });
+    } catch (error) {
+      // 码不对 / 过期 / 次数用尽都是**可预期的规则失败**：200 + ok:false，页面就地提示，
+      // 与「账号或密码不正确」同一套处理；限流（429）等另走 4xx。
+      if (isCodeRejected(error)) {
+        res.json(failure(error.message));
+        return;
+      }
+      throw error;
+    }
+    const pending = consumed.payload || {};
+    const username = String(pending.username || '').trim();
+    if (!username || !pending.passwordHash) {
+      res.json(failure('注册信息已失效，请重新填写'));
+      return;
+    }
+
+    // 发码到输码之间用户名/邮箱可能已被别人占用。唯一索引是最后一道防线，
+    // 这里再查一次，为的是给一句能看懂的话，而不是让 pg 的 23505 冒成 500。
+    const conflict = await registrationConflict(username, consumed.email);
+    if (conflict) {
+      res.json(failure(conflict));
+      return;
+    }
+
+    const id = `usr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    try {
+      await query(`
+                INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at)
+                VALUES ($1, $2, $3, $4, $5, 'user', true, now())
+            `, [id, username, pending.passwordHash, consumed.email, pending.nickname || username]);
+    } catch (error) {
+      // 唯一索引冲突：两个请求几乎同时验证同一个用户名或邮箱。
+      if (error && error.code === '23505') {
+        res.json(failure('该用户名或邮箱已被注册'));
+        return;
+      }
+      throw error;
+    }
     const session = await issueSession({ id, username, role: 'user' });
     res.json({ ok: true, error: '', ...session, user: await loadUser(id) });
   } catch (error) {

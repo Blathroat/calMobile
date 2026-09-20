@@ -536,7 +536,21 @@ const BACKEND = {
     // 启动与认证
     'GET /bootstrap': BOOTSTRAP,
     'POST /auth/login': { ok: true, error: '', token: 'token-1', refreshToken: 'refresh-token-1' },
-    'POST /auth/register': { ok: true, error: '', token: 'token-2', refreshToken: 'refresh-token-2' },
+    'POST /auth/register': {
+        // 注册第一步只回「码发到哪、多久过期、多久能重发」，**不给令牌**：这一步后端
+        // 还没建账号（待建账号暂存在验证码记录里），所以这里不该有 token / refreshToken。
+        ok: true, error: '', email: 'newuser@example.com', expiresInSec: 600, resendAfterSec: 60,
+    },
+    'POST /auth/register/verify': {
+        // 注册第二步：验证码通过才建号并发令牌。
+        ok: true,
+        error: '',
+        token: 'token-2',
+        refreshToken: 'refresh-token-2',
+        user: {
+            loggedIn: true, role: 'user', roleLabel: '普通用户', username: 'newuser', nickname: 'newuser',
+        },
+    },
     'POST /auth/guest': { ok: true, error: '' },
     'POST /auth/logout': { ok: true, error: '' },
 
@@ -1065,43 +1079,70 @@ test('报名码用内置库绘制后能被 jsQR 解出原文', async () => {
 });
 
 /**
- * 注册页要能真的把账号提交给后端。
+ * 注册页是**两步**的：第一步只把账号信息交给后端校验并发码，第二步验证码通过才建号、才拿到令牌。
  *
- * 这是 `POST /auth/register` 夹具唯一的用武之地：只把 register 加进 ROUTES 渲染
- * 一次，表单的提交路径（校验 → 请求 → 保存返回的令牌）一行都没被跑到。
+ * 这是 `POST /auth/register` 与 `POST /auth/register/verify` 两个夹具唯一的用武之地：
+ * 只把它们加进 ROUTES 渲染一次的话，提交路径（校验 → 请求 → 切步骤 → 保存令牌）一行都没被跑到。
  */
-test('注册页提交后请求 POST /auth/register 并保存返回的令牌', async () => {
-    const { dom, requests } = await renderRoute('register', {});
-    const api = await webModule('js/core/api.js');
-    api.setRefreshToken('');
+test('注册页第一步只发码不拿令牌，第二步验证码通过才保存令牌', async () => {
+    // 第二步的重发倒计时是 1 秒一跳的长链定时器：换成「立刻到点」的替身，既不影响断言，
+    // 也不会让测试进程干等它跑完 60 秒（只影响这一个用例）。
+    const realSetTimeout = global.setTimeout;
+    global.setTimeout = (fn) => realSetTimeout(fn, 0);
+    try {
+        const { dom, requests } = await renderRoute('register', {});
+        const api = await webModule('js/core/api.js');
+        api.setRefreshToken('');
 
-    const control = (id) => dom.app.querySelectorAll((node) => node.id === id)[0];
-    const username = control('register-username');
-    const email = control('register-email');
-    const password = control('register-password');
-    const confirm = control('register-confirm');
-    assert.ok(username && email && password && confirm, '注册页没有渲染出四个输入框');
+        const control = (id) => dom.app.querySelectorAll((node) => node.id === id)[0];
+        const username = control('register-username');
+        const email = control('register-email');
+        const password = control('register-password');
+        const confirm = control('register-confirm');
+        assert.ok(username && email && password && confirm, '注册页没有渲染出四个输入框');
 
-    username.value = 'newuser';
-    email.value = 'newuser@example.com';
-    password.value = 'secret123';
-    confirm.value = 'secret123';
+        username.value = 'newuser';
+        email.value = 'newuser@example.com';
+        password.value = 'secret123';
+        confirm.value = 'secret123';
 
-    const form = dom.app.querySelectorAll((node) => node.tagName === 'FORM')[0];
-    assert.ok(form, '注册页没有渲染表单');
-    form.dispatch('submit', { preventDefault() {} });
-    await settle(60);
+        const forms = dom.app.querySelectorAll((node) => node.tagName === 'FORM');
+        assert.strictEqual(forms.length, 2, '注册页应当有两个表单：账号信息与邮箱验证码');
 
-    const submitted = requests.find((item) => item.method === 'POST' && item.path === '/auth/register');
-    assert.ok(submitted, `注册页没有请求 POST /auth/register，实际请求：${requests
-        .map((item) => `${item.method} ${item.path}`).join(', ')}`);
-    assert.deepStrictEqual(submitted.body, {
-        username: 'newuser',
-        email: 'newuser@example.com',
-        password: 'secret123',
-        confirmPassword: 'secret123',
-    }, '注册请求体与表单内容不一致');
-    assert.strictEqual(api.hasRefreshToken(), true, '后端返回的刷新令牌没有保存下来');
+        forms[0].dispatch('submit', { preventDefault() {} });
+        await settle(60);
+
+        const sent = requests.find((item) => item.method === 'POST' && item.path === '/auth/register');
+        assert.ok(sent, `注册页没有请求 POST /auth/register，实际请求：${requests
+            .map((item) => `${item.method} ${item.path}`).join(', ')}`);
+        assert.deepStrictEqual(sent.body, {
+            username: 'newuser',
+            email: 'newuser@example.com',
+            password: 'secret123',
+            confirmPassword: 'secret123',
+        }, '注册请求体与表单内容不一致');
+        assert.strictEqual(api.hasRefreshToken(), false, '验证码还没过，这一步不该拿到刷新令牌');
+        assert.strictEqual(forms[0].hidden, true, '第一步提交后应当收起账号信息');
+        assert.strictEqual(forms[1].hidden, false, '第一步提交后应当展开验证码那一步');
+
+        const code = control('register-code');
+        assert.ok(code, '验证码输入框没有渲染出来');
+        code.value = '123456';
+        forms[1].dispatch('submit', { preventDefault() {} });
+        await settle(60);
+
+        const verified = requests
+            .find((item) => item.method === 'POST' && item.path === '/auth/register/verify');
+        assert.ok(verified, `注册页没有请求 POST /auth/register/verify，实际请求：${requests
+            .map((item) => `${item.method} ${item.path}`).join(', ')}`);
+        assert.deepStrictEqual(verified.body, {
+            email: 'newuser@example.com',
+            code: '123456',
+        }, '验证请求体应当是邮箱 + 验证码');
+        assert.strictEqual(api.hasRefreshToken(), true, '验证码通过后应当保存刷新令牌');
+    } finally {
+        global.setTimeout = realSetTimeout;
+    }
 });
 
 // ── 视频插入与受限账号 ───────────────────────────────────────────

@@ -770,6 +770,20 @@ const checks = [
       'users_email_unique_idx', 'email_codes', 'preauth_tickets', 'mail_log'],
   },
   {
+    id: 'backend-register-two-stage',
+    // 注册是两步的：第一步只发码不建号 —— 库里不该存在「注册了但邮箱没验证」的账号
+    file: 'server/src/routes/auth.js',
+    contains: ["router.post('/register'", "router.post('/register/verify'", 'isCodeRejected',
+      'email_verified', 'issueCode', 'consumeCode'],
+  },
+  {
+    id: 'backend-otp-rules',
+    // 验证码：只存哈希、等长比较、命中即原子消费、限流按库里行数算、发信留痕
+    file: 'server/src/domain/otp.js',
+    contains: ['sha256', 'timingSafeEqual', 'consumed_at IS NULL', 'RESEND_COOLDOWN_SEC',
+      'CodeRejected', 'mail_log'],
+  },
+  {
     id: 'docs-frontend-backend-boundary',
     file: 'README.md',
     contains: ['前后端边界', 'core/api.js', 'adb reverse', 'server/test/api.test.js']

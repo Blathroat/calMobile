@@ -33,6 +33,7 @@
     <string name="s_145fdbt">配色已保存</string>
     <string name="s_14c4war">五</string>
     <string name="s_14ggq2g">清空内容</string>
+    <string name="s_14nrrfg">这是你的公开页</string>
     <string name="s_14ol5jh">头像已移除</string>
     <string name="s_14pxh3f">账号已被限制，不能核销</string>
     <string name="s_153oaxf">公告</string>
@@ -53,6 +54,7 @@
     <string name="s_16uw4a2">报名二维码</string>
     <string name="s_16wt7o6">分享</string>
     <string name="s_175wm9u">删除后展会信息、报名收集项与二维码开关都会移除，且无法恢复。</string>
+    <string name="s_177p9jq">返回修改</string>
     <string name="s_17mtsm3">还没有填写简介，点击“编辑”补充你的关注方向。</string>
     <string name="s_17pstxc">已替换为粘贴内容</string>
     <string name="s_17txntc">报名已提交并通过</string>
@@ -99,7 +101,6 @@
     <string name="s_1dao2v1">进入应用时的公告</string>
     <string name="s_1dbfyef">裁剪头像</string>
     <string name="s_1dc9o49">未能读取所选图片</string>
-    <string name="s_1dev7g3"> · 这是你的公开页</string>
     <string name="s_1dixw2w">创建你的展会档案</string>
     <string name="s_1dkg6y4">审核结果会同步到用户的“我的报名”，并触发状态通知。</string>
     <string name="s_1e05tqn">该报名已完成审核，管理员未开启“允许重新审核”。</string>
@@ -115,6 +116,7 @@
     <string name="s_1fe4wn6">底部导航</string>
     <string name="s_1fpy22o">已配置 Markdown 简介</string>
     <string name="s_1fwr1ko">注册新账号</string>
+    <string name="s_1fyr64c">重新发送验证码</string>
     <string name="s_1g1m28r">用户公开页</string>
     <string name="s_1gcmqh3">报名截止日期不能早于开始日期</string>
     <string name="s_1ghvdtm">深色模式</string>
@@ -139,6 +141,7 @@
     <string name="s_1jbzuzw">可以切换到相邻日期，或搜索其它城市与分类的展会。</string>
     <string name="s_1jfbdwq">以访客身份浏览</string>
     <string name="s_1jh4uc4">用户打开首页时展示一次</string>
+    <string name="s_1jikdwu">验证并创建账号</string>
     <string name="s_1jj834o">展会已删除</string>
     <string name="s_1jlgtug">位</string>
     <string name="s_1jvhwb1">输入展会简介，可直接粘贴 Markdown 文本</string>
@@ -193,6 +196,7 @@
     <string name="s_1q9u8le">保存失败</string>
     <string name="s_1qafeqo">该字段</string>
     <string name="s_1qb27ho">服务器设置已保存</string>
+    <string name="s_1qbu9z0">秒后可重发</string>
     <string name="s_1qc01ta">暂无展会数据</string>
     <string name="s_1qd14sn">需要审核的报名会在“我的报名”中显示状态。</string>
     <string name="s_1qf1f04">已更新系统日历</string>
@@ -231,6 +235,7 @@
     <string name="s_1u8rnsb">撤销报名</string>
     <string name="s_1umrk9v">提交报名</string>
     <string name="s_1utpn11">在公开页展示我的报名记录</string>
+    <string name="s_1v481a9">验证码 10 分钟内有效，请到邮箱里查看（可能在垃圾邮件里）。</string>
     <string name="s_1v7py1m">展会分类管理</string>
     <string name="s_1va7jf9">已取消导出</string>
     <string name="s_1ve1f4n">展会详情</string>
@@ -252,6 +257,7 @@
     <string name="s_1wogqko">引用</string>
     <string name="s_1wwetl9">账号已被限制，不能修改展会</string>
     <string name="s_1wz04v2">保存后可编辑</string>
+    <string name="s_1x20l1k">请输入 6 位数字验证码</string>
     <string name="s_1xohyb0">审核通过或拒绝时通知我</string>
     <string name="s_1y0imfq">账号设置</string>
     <string name="s_1y26ptk">头像大小上限</string>
@@ -302,6 +308,7 @@
     <string name="s_50ih74">搜索展会</string>
     <string name="s_533bde">去登录</string>
     <string name="s_5iff2f">头像保存失败</string>
+    <string name="s_5rsk4v">验证码已发送</string>
     <string name="s_5rwrkf">进入应用时显示公告</string>
     <string name="s_60i0xr">报名截止</string>
     <string name="s_63jsvx">展会封面</string>
@@ -352,6 +359,7 @@
     <string name="s_d5a1x9">个</string>
     <string name="s_dn42iy">已关闭公开展示</string>
     <string name="s_dn4ida">返回展商后台</string>
+    <string name="s_doboo3">6 位数字</string>
     <string name="s_doztlr">设置用户名</string>
     <string name="s_dpoory">作用于普通用户与展商可自由填写的字段，超长时前端即时提示。</string>
     <string name="s_dpy0pe">多选选项</string>
@@ -471,6 +479,8 @@
     <string name="s_s4kamn">可以换一个关键词，或回到首页按日期浏览展会。</string>
     <string name="s_s61azp">展商还没有补充展会介绍。</string>
     <string name="s_s8p5nm">报名收集项</string>
+    <string name="s_s8pbve">邮箱验证码</string>
+    <string name="s_sg8u9h">验证码已发送到：</string>
     <string name="s_shfy40">核销成功</string>
     <string name="s_shtqx3">正在核对报名信息…</string>
     <string name="s_spr4u2">\n\n| 列 1 | 列 2 |\n| --- | --- |\n| 内容 | 内容 |\n\n</string>
