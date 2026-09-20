@@ -696,6 +696,9 @@ const SYSTEM_ACTION_NAMES = Object.keys(SYSTEM_RESPONSES);
  *
  * `overrides` 用来替换某个系统动作的返回值（例如让 `media.import` 真的返回一个
  * 视频短 URL），用例不必改这份清单就能验证「拿到结果之后页面做了什么」。
+ *
+ * 覆盖值写成 `{ failure: message, code }` 时改为**失败回调**，用来验证页面按
+ * `error.code` 判断可预期失败（例如用户取消）的行为。
  */
 function installBridge(window, calls, overrides = {}) {
     const responses = { ...SYSTEM_RESPONSES, ...overrides };
@@ -708,7 +711,12 @@ function installBridge(window, calls, overrides = {}) {
             }
             const value = responses[action];
             setTimeout(() => {
-                window.CalMobileBridge.onResult(callbackId, true, value, null);
+                if (value && typeof value === 'object' && 'failure' in value) {
+                    // 与原生一致：失败文案照旧给人看，第 5 个参数才是稳定错误码。
+                    window.CalMobileBridge.onResult(callbackId, false, null, value.failure, value.code ?? null);
+                    return;
+                }
+                window.CalMobileBridge.onResult(callbackId, true, value, null, null);
             }, 0);
         },
         report() {},
@@ -1160,6 +1168,46 @@ test('简介编辑器能插入视频，达到数量上限后不再插入', async
 });
 
 /**
+ * 「用户取消」必须按稳定错误码判断，不能匹配失败文案。
+ *
+ * 两种失败故意长得不一样、语义却相反：
+ * - `code: 'cancelled'`（用户在系统选择器点了取消）→ 静默，不能弹错误；
+ * - 一条**含「取消」二字的真失败**文案 → 必须报错。
+ * 旧的实现是 `error.message.includes('取消')`：第一种能用纯属文案巧合，第二种会被
+ * 静默吞掉。这条用例同时钉住两个方向，把判断改回按文案匹配时第二条就会失败。
+ */
+test('用户取消按稳定错误码静默，含「取消」二字的真失败照常报错', async () => {
+    const area = (dom) => dom.app.querySelectorAll((node) => node.id === 'rich-markdown')[0];
+    const unresolved = '无法取消该操作：网络错误';
+
+    // ① 取消：原生回传 code = 'cancelled'，页面静默返回。
+    const cancelled = await renderRoute('rich-editor', { id: 'exhibition-1' }, {
+        bridge: { 'media.import': { failure: '已取消选择', code: 'cancelled' } },
+    });
+    const videoButton = buttonByText(sharedDocument.documentElement, '插入视频');
+    assert.ok(videoButton, '简介编辑器没有「插入视频」入口');
+    videoButton.dispatch('click');
+    await settle(60);
+    assert.ok(!collectText(cancelled.dom.toastHost).includes('已取消选择'),
+        `用户取消不该弹错误提示：${collectText(cancelled.dom.toastHost)}`);
+    assert.ok(!String(area(cancelled.dom)?.value || '').includes('<video'),
+        '用户取消不该往正文里写视频标签');
+
+    // ② 真失败：文案里恰好含「取消」二字，但 code 不是 cancelled，必须报错。
+    const failed = await renderRoute('rich-editor', { id: 'exhibition-1' }, {
+        bridge: { 'media.import': { failure: unresolved, code: null } },
+    });
+    const retryButton = buttonByText(sharedDocument.documentElement, '插入视频');
+    assert.ok(retryButton, '简介编辑器没有「插入视频」入口');
+    retryButton.dispatch('click');
+    await settle(60);
+    assert.ok(collectText(failed.dom.toastHost).includes(unresolved),
+        `含「取消」二字的真失败被静默吞掉了，错误提示：${collectText(failed.dom.toastHost)}`);
+    assert.ok(!String(area(failed.dom)?.value || '').includes('<video'),
+        '失败的插入不该往正文里写视频标签');
+});
+
+/**
  * 受限账号的界面。
  *
  * 后端会拒绝报名、发布展会与改资料，界面必须提前把入口置灰并说明原因，
@@ -1220,6 +1268,81 @@ test('受限账号的通知偏好与改密码入口仍然可用', async () => {
     assert.strictEqual(disabled('notify-status'), false, '通知偏好开关不该被禁用');
     assert.strictEqual(disabled('privacy-registrations'), true,
         '隐私开关与资料同属 PUT /profile，受限账号应当禁用');
+});
+
+/**
+ * 受限范围已从「报名 / 发布展会 / 改资料」扩大到**一切展会写操作与核销**：
+ * 后端对 `PUT|DELETE /exhibitions/:id`、`PUT /exhibitions/:id/status`、
+ * `PUT /exhibitions/:id/fields`、`POST /checkin` 全部 403，仍然放行审核报名。
+ *
+ * 这一组用深链（直接指定路由）验证「入口置灰之外的那一层」：受限账号即使绕过
+ * 展商后台点进来，也**拿不到可提交的表单/核销入口**，看到的是限制说明。
+ * 反向验证：把任何一处 `limited` 判断去掉，对应断言就会失败。
+ */
+test('受限账号进不了展会编辑与会核销：深链只看到限制说明', async () => {
+    // ① 报名表单深链：没有可提交的表单（既没有提交按钮，也没有任何输入框）。
+    const registration = await renderRoute('registration-form', { id: 'exhibition-1' }, { user: LIMITED_USER });
+    const registrationText = collectText(registration.app);
+    assert.ok(registrationText.includes('账号已被限制，不能报名'),
+        `报名表单深链没有说明限制原因：${registrationText.slice(0, 200)}`);
+    assert.ok(!buttonByText(registration.dom.app, '提交报名'),
+        '受限账号不该拿到可提交的报名表单');
+    assert.strictEqual(registration.dom.app.querySelectorAll((node) => node.tagName === 'INPUT').length, 0,
+        '受限账号不该渲染任何可填写控件');
+
+    // ② 编辑已有展会：说明 + 没有保存入口，也没有可填的表单控件。
+    const form = await renderRoute('exhibition-form', { id: 'exhibition-1' }, { user: LIMITED_USER });
+    const formText = collectText(form.app);
+    assert.ok(formText.includes('账号已被限制，不能修改展会'),
+        `展会编辑深链没有说明限制原因：${formText.slice(0, 200)}`);
+    assert.strictEqual(form.dom.app.querySelectorAll((node) => node.id === 'form-title').length, 0,
+        '受限账号不该渲染展会表单');
+    assert.ok(!buttonByText(form.dom.app, '保存展会'),
+        '受限账号不该拿到「保存展会」按钮');
+
+    // ③ 核销页：说明 + 没有「开启摄像头扫码」与「手动输入报名码」两个入口。
+    const checkin = await renderRoute('checkin', {}, { user: LIMITED_USER });
+    assert.ok(collectText(checkin.app).includes('账号已被限制，不能核销'),
+        `核销页没有说明限制原因：${collectText(checkin.app).slice(0, 200)}`);
+    assert.ok(!buttonByText(checkin.dom.app, '开启摄像头扫码'), '受限账号不该拿到扫码入口');
+    assert.ok(!buttonByText(checkin.dom.app, '手动输入报名码'), '受限账号不该拿到手动核销入口');
+});
+
+test('受限展商后台的「编辑展会」与「核销报名码」入口不可用', async () => {
+    const exhibitor = await renderRoute('exhibitor', {}, { user: LIMITED_USER });
+    const text = collectText(exhibitor.app);
+    assert.ok(text.includes('账号已被限制，不能发布或修改展会、不能核销'),
+        `展商后台的限制说明没有跟上新的受限范围：${text.slice(0, 200)}`);
+    // 说明里不能再出现旧范围的说法（「仍可查看与审核已有展会」与当前限制不符）。
+    assert.ok(!text.includes('仍可查看与审核已有展会'),
+        '展商后台仍在用旧的受限说明');
+
+    const buttonText = (node) => collectText(node).trim();
+    const edit = exhibitor.dom.app.querySelectorAll((node) => node.tagName === 'BUTTON')
+        .find((node) => buttonText(node) === '编辑展会');
+    assert.ok(edit, '展商后台的展会卡片上没有「编辑展会」入口');
+    assert.ok(edit.hasAttribute('disabled'), '受限账号的「编辑展会」应当不可点');
+    assert.strictEqual(edit.getAttribute('title'), '账号已被限制，不能修改展会',
+        '置灰的「编辑展会」要说明原因');
+    // 审核报名仍被放行：入口不能被一起禁掉。
+    assert.ok(!exhibitor.dom.app.querySelectorAll((node) => node.tagName === 'BUTTON')
+        .find((node) => buttonText(node) === '查看报名')?.hasAttribute('disabled'),
+        '查看报名（审核入口）不该受受限影响');
+
+    // 置灰之外再兜一层：点到（无障碍聚焦 / 回车）也不能进编辑器。
+    edit.dispatch('click');
+    await settle(10);
+    assert.ok(!sharedWindow.location.hash.includes('exhibition-form'),
+        `受限展商不该进入展会编辑器：${sharedWindow.location.hash}`);
+
+    const scan = exhibitor.dom.app.querySelectorAll((node) => node.tagName === 'BUTTON'
+        && String(node.getAttribute('aria-label') || '') === '核销报名码')[0];
+    assert.ok(scan, '展商后台顶部没有「核销报名码」入口');
+    assert.ok(scan.hasAttribute('disabled'), '受限账号的「核销报名码」应当不可点');
+    scan.dispatch('click');
+    await settle(10);
+    assert.ok(!sharedWindow.location.hash.includes('checkin'),
+        `受限展商不该进入核销页：${sharedWindow.location.hash}`);
 });
 
 // ── 取数体验：先画缓存、预加载、日历本地选中 ─────────────────────

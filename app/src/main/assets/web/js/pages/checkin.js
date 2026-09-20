@@ -10,7 +10,7 @@ import { t } from '../core/strings.js';
  * 页面保留“手动输入报名码”的入口，核销链路仍然可用。
  */
 
-import { call } from '../core/bridge.js';
+import { call, state } from '../core/bridge.js';
 import { checkIn } from '../core/api.js';
 import { scaffold, onPageStop } from '../core/router.js';
 import { loadingBlock, stateBlock, statusTag, toast, openSheet } from '../ui/components.js';
@@ -51,6 +51,27 @@ export async function checkinPage(context) {
     // jsQR 按需加载（约 257KB），进入本页时加载一次，之后缓存在这个引用里。
     let decodeRef = null;
     let decoderFailed = false;
+
+    /**
+     * 受限账号不能核销（后端 `POST /checkin` 直接 403）：整页换成说明，不给出
+     * 扫码 / 手动输入入口，也不去加载 257KB 的二维码识别库。
+     */
+    if (state.user.can?.limited === true) {
+        scaffold({
+            title: t('s_zqzoiq'),
+            backTo: 'exhibitor',
+            bodyProps: { 'data-gap': 'tight' },
+            children: [
+                stateBlock({
+                    iconName: 'info',
+                    title: t('s_14pxh3f'),
+                    description: t('s_1yv1vu0'),
+                    action: { label: t('s_dn4ida'), onClick: () => context.navigate('exhibitor') },
+                }),
+            ],
+        });
+        return;
+    }
 
     loadQrDecoder()
         .then((decoder) => {

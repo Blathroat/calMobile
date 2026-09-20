@@ -42,6 +42,24 @@ export async function registrationFormPage(context) {
     const registrationId = context.params.registrationId;
 
     /**
+     * 受限账号不能报名（后端 `POST /registrations` 直接 403）。
+     * <p>
+     * 详情页的「立即报名」已经置灰，但深链（`#/registration-form?id=…`）绕得过去，
+     * 所以整页在这里就换成说明，**不渲染可填写的表单**——否则用户填完一整页答案
+     * 才在提交时吃 403。游客不走这里：访客由路由的 `requires: 'auth'` 送去登录页，
+     * 「先去登录」的引导保持不变。
+     */
+    if (state.user.loggedIn === true && state.user.can?.register === false) {
+        replace(host, stateBlock({
+            iconName: 'info',
+            title: t('s_1tanmo5'),
+            description: t('s_1yv1vu0'),
+            action: { label: t('s_dn4ida'), onClick: () => context.navigate('home') },
+        }));
+        return;
+    }
+
+    /**
      * 本页要的两份数据合成一次取数：展会（含收集项）与已有报名。
      * 两条都走 core/api.js 的只读缓存，因此不会为同一份数据发两次请求。
      */

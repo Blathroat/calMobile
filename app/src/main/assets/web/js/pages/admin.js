@@ -344,7 +344,8 @@ export async function adminPage(context) {
             });
             toast(`已导出 ${result.rows} 行到 ${result.fileName}`, 'success');
         } catch (error) {
-            if (String(error.message).includes(t('s_1589w37'))) {
+            // 用户在系统保存框点了取消：按码判断，不给红色错误，只说明没有导出。
+            if (error && error.code === 'cancelled') {
                 toast(t('s_1va7jf9'));
             } else {
                 toast(error.message, 'error');

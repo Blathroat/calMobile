@@ -34,7 +34,23 @@ public class WebAppBridge {
         void success(Object data);
 
         void failure(String message);
+
+        /**
+         * 带**稳定错误码**的失败。
+         *
+         * 前端按 `error.code` 判断可预期的结果（例如用户在系统界面点了取消），
+         * 而不是去匹配失败文案——文案是给人看的，随时会改，靠子串匹配会
+         * 「文案一改，取消分支集体失效」或者「某条真失败的文案里恰好含取消二字被吞掉」。
+         */
+        default void failure(String code, String message) {
+            failure(message);
+        }
     }
+
+    /** 用户在系统界面取消：前端据此静默返回，不弹错误。 */
+    static final String CODE_CANCELLED = "cancelled";
+    /** 原生动作迟迟不回调（前端兜底超时用）。 */
+    static final String CODE_TIMEOUT = "timeout";
 
     /** 启动系统界面或申请权限时暂存的前端回调。 */
     static final class PendingResult {
@@ -86,12 +102,17 @@ public class WebAppBridge {
         ResultCallback callback = new ResultCallback() {
             @Override
             public void success(Object data) {
-                respond(callbackId, true, data, null);
+                respond(callbackId, true, data, null, null);
             }
 
             @Override
             public void failure(String message) {
-                respond(callbackId, false, null, message);
+                respond(callbackId, false, null, message, null);
+            }
+
+            @Override
+            public void failure(String code, String message) {
+                respond(callbackId, false, null, message, code);
             }
         };
         try {
@@ -118,13 +139,26 @@ public class WebAppBridge {
 
     /** 把结果写回前端，可从任意线程调用。 */
     void respond(final String callbackId, final boolean ok, final Object data, final String error) {
+        respond(callbackId, ok, data, error, null);
+    }
+
+    /**
+     * 把结果写回前端（带稳定错误码）。
+     *
+     * `onResult` 的第 5 个参数是错误码，可为 null：页面按 `error.code` 判断可预期的失败
+     * （例如取消），不必匹配文案。
+     */
+    void respond(final String callbackId, final boolean ok, final Object data, final String error,
+            final String code) {
         final String payload = data == null ? "null" : gson.toJson(data);
         final String message = error == null ? "''" : gson.toJson(error);
+        final String codeArg = code == null ? "null" : gson.toJson(code);
         webView.post(new Runnable() {
             @Override
             public void run() {
                 String script = "window.CalMobileBridge&&window.CalMobileBridge.onResult("
-                        + quote(callbackId) + "," + ok + "," + payload + "," + message + ");";
+                        + quote(callbackId) + "," + ok + "," + payload + "," + message + ","
+                        + codeArg + ");";
                 webView.evaluateJavascript(script, null);
             }
         });

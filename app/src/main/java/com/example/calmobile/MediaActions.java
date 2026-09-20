@@ -522,7 +522,7 @@ final class MediaActions {
             return;
         }
         if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
-            pending.callback.failure("已取消选择");
+            pending.callback.failure(WebAppBridge.CODE_CANCELLED, "已取消选择");
             return;
         }
         Uri uri = data.getData();
@@ -548,7 +548,7 @@ final class MediaActions {
     static void writeCsv(Activity activity, WebAppBridge.PendingResult pending,
             int resultCode, Intent data) {
         if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
-            pending.callback.failure("已取消导出");
+            pending.callback.failure(WebAppBridge.CODE_CANCELLED, "已取消导出");
             return;
         }
         String csv = String.valueOf(pending.context.get("csv"));

@@ -87,18 +87,25 @@ function exhibitorOnly(req, res, next) {
 }
 
 /**
- * 受限账号不能发布新展会的检查（只挂在 `POST /` 上）。
+ * 受限账号的写操作拦截（文案表见 `domain/permissions.js` 的 `LIMITED_ACTIONS`）。
  *
- * 必须排在 `exhibitorOnly` **之前**：受限的普通用户两条规则都不满足，先撞角色检查
- * 会得到「只有展商或管理员可以执行此操作」，而页面需要的是「账号已被限制」这个原因。
+ * 两个位置上的要求都写在这里，各处只传动作键：
+ * - **必须排在 `exhibitorOnly` 之前**：受限的普通用户两条规则都不满足，先撞角色检查
+ *   会得到「只有展商或管理员可以执行此操作」，而页面需要的是「账号已被限制」这个原因；
+ * - **挂在 `mutate()` 之外**：403 才不会被收成 200 + `ok:false`。
+ *
+ * 编辑 / 删除 / 改状态 / 改收集项全都要拦：受限账号连自己已有的展会也不能再动，
+ * 只保留「看」的部分（列表、月视图、详情、收集项读取）与报名审核。
  */
-function notLimitedFromPublishing(req, res, next) {
-  try {
-    assertNotLimited(req.user, 'exhibition');
-    next();
-  } catch (error) {
-    next(error);
-  }
+function notLimited(action) {
+  return (req, res, next) => {
+    try {
+      assertNotLimited(req.user, action);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 /** 读取一场展会的原始行（含 `exhibitor_id`，权限判定要用它）。 */
@@ -423,11 +430,10 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
  * POST /api/v1/exhibitions
  * 新建展会：展商 / 管理员可用，`exhibitor_id` 记成当前登录用户（管理员也记自己）。
  *
- * 受限账号（管理员不受限）不能再发布新展会 → 403（`notLimitedFromPublishing` 排在角色检查前，
- * 受限的普通用户也能拿到「账号已被限制」这个原因）。**只拦这一条**：编辑 / 删除自己已有的
- * 展会、审核报名、核销都照旧可用（受限的展商仍能进后台看与收尾）。
+ * 受限账号（管理员不受限）不能再发布新展会 → 403（`notLimited('exhibition')` 排在角色检查前，
+ * 受限的普通用户也能拿到「账号已被限制」这个原因）。
  */
-router.post('/', authenticate, notLimitedFromPublishing, exhibitorOnly, (req, res, next) => {
+router.post('/', authenticate, notLimited('exhibition'), exhibitorOnly, (req, res, next) => {
   mutate(res, next, async () => {
     const input = await exhibitionInput(req.body);
     const id = newId('exh');
@@ -451,9 +457,9 @@ router.post('/', authenticate, notLimitedFromPublishing, exhibitorOnly, (req, re
 
 /**
  * PUT /api/v1/exhibitions/:id
- * 更新展会：只有自己办的展会（或管理员）能改。
+ * 更新展会：只有自己办的展会（或管理员）能改；受限账号一律 403「不能修改展会」。
  */
-router.put('/:id', authenticate, exhibitorOnly, async (req, res, next) => {
+router.put('/:id', authenticate, notLimited('exhibitionUpdate'), exhibitorOnly, async (req, res, next) => {
   try {
     const existing = await manageableRow(req, req.params.id);
     await mutate(res, next, async () => {
@@ -484,8 +490,9 @@ router.put('/:id', authenticate, exhibitorOnly, async (req, res, next) => {
 /**
  * DELETE /api/v1/exhibitions/:id
  * 删除展会；报名与收集项按外键 `ON DELETE CASCADE` 一起清掉。
+ * 受限账号一律 403「不能删除展会」（破坏性操作比编辑更该拦）。
  */
-router.delete('/:id', authenticate, exhibitorOnly, async (req, res, next) => {
+router.delete('/:id', authenticate, notLimited('exhibitionDelete'), exhibitorOnly, async (req, res, next) => {
   try {
     const existing = await manageableRow(req, req.params.id);
     await mutate(res, next, async () => {
@@ -500,8 +507,9 @@ router.delete('/:id', authenticate, exhibitorOnly, async (req, res, next) => {
 /**
  * PUT /api/v1/exhibitions/:id/status
  * 只改报名方式 / 状态；`status` 接受中文标签或英文代码。
+ * 这属于报名设置，受限账号一律 403「不能修改报名设置」。
  */
-router.put('/:id/status', authenticate, exhibitorOnly, async (req, res, next) => {
+router.put('/:id/status', authenticate, notLimited('exhibitionStatus'), exhibitorOnly, async (req, res, next) => {
   try {
     const existing = await manageableRow(req, req.params.id);
     await mutate(res, next, async () => {
@@ -531,9 +539,9 @@ router.get('/:id/fields', optionalAuth, async (req, res, next) => {
 
 /**
  * PUT /api/v1/exhibitions/:id/fields
- * 覆盖收集项：整体替换（删掉旧的，按数组顺序写新的）。
+ * 覆盖收集项：整体替换（删掉旧的，按数组顺序写新的）；受限账号一律 403「不能修改报名设置」。
  */
-router.put('/:id/fields', authenticate, exhibitorOnly, async (req, res, next) => {
+router.put('/:id/fields', authenticate, notLimited('exhibitionFields'), exhibitorOnly, async (req, res, next) => {
   try {
     const existing = await manageableRow(req, req.params.id);
     await mutate(res, next, async () => {

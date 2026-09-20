@@ -26,6 +26,31 @@ const MODES = REGISTRATION_MODES.map((value) => ({ value, label: value }));
 export async function exhibitionFormPage(context) {
     const isCreate = !context.params.id;
     const host = el('div', { class: 'stack' });
+
+    /**
+     * 受限账号的兜底：后端对 `POST /exhibitions`、`PUT /exhibitions/:id`、
+     * `PUT /exhibitions/:id/status`、`PUT /exhibitions/:id/fields` 一律 403。
+     * <p>
+     * 新建与编辑都拦：展商后台的入口已经置灰，深链（`#/exhibition-form?id=…`）
+     * 却绕得过去，而且页内「报名方式」「删除展会」是即时写库的二级入口，
+     * 只兜新建深链等于让人点进来才一个个吃 403。这里直接用 stateBlock 顶掉整页，
+     * 顶部不挂保存按钮、底部不挂保存条，不给出「填了却存不下」的表单。
+     */
+    if (state.user.can?.limited === true) {
+        scaffold({
+            title: isCreate ? t('s_p9fllo') : t('s_eutzzb'),
+            backTo: 'exhibitor',
+            bodyProps: { 'data-gap': 'tight' },
+            children: [stateBlock({
+                iconName: 'briefcase',
+                title: isCreate ? t('s_19wazv8') : t('s_1wwetl9'),
+                description: t('s_1yv1vu0'),
+                action: { label: t('s_dn4ida'), onClick: () => context.navigate('exhibitor') },
+            })],
+        });
+        return;
+    }
+
     const foot = pageFoot();
     const saveButton = topAction('save', isCreate ? t('s_gya40f') : t('s_10q6dxb'), () => submit());
 
@@ -64,18 +89,7 @@ export async function exhibitionFormPage(context) {
     let validators = [];
 
     if (isCreate) {
-        // 受限账号不能发布新展会（后端 POST /exhibitions 会 403）：
-        // 展商后台的入口已经置灰，这里再兜住直接进地址的情况，别让人白填一遍表单。
-        if (state.user.can?.limited === true) {
-            replace(host, stateBlock({
-                iconName: 'briefcase',
-                title: t('s_19wazv8'),
-                description: t('s_1yv1vu0'),
-                action: { label: t('s_dn4ida'), onClick: () => context.navigate('exhibitor') },
-            }));
-            return;
-        }
-        // 新建展会没有要取的数据，直接出空表单。
+        // 新建展会没有要取的数据，直接出空表单（受限账号已在上面拦掉）。
         buildForm();
         return;
     }
@@ -177,7 +191,8 @@ export async function exhibitionFormPage(context) {
             renderCover();
             toast(stored.compressed ? t('s_1bbs6qg') : t('s_1ckoagi'), 'success');
         } catch (error) {
-            if (String(error.message).includes(t('s_1589w37'))) {
+            // 用户在系统选择器点了取消：按稳定错误码判断，不匹配文案。
+            if (error && error.code === 'cancelled') {
                 return;
             }
             toast(error.message, 'error');

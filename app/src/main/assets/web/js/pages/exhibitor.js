@@ -22,25 +22,28 @@ import { el, replace } from '../core/dom.js';
 export async function exhibitorPage(context) {
     const listHost = el('div', { class: 'stack' });
     /**
-     * 受限账号不能发布新展会（后端 `POST /exhibitions` 直接 403）。
+     * 受限账号不能发布 / 修改 / 删除展会、不能改报名设置、不能核销
+     * （后端 `POST|PUT|DELETE /exhibitions*` 与 `POST /checkin` 全部 403）。
      * 入口提前置灰并说明原因，而不是让展商填完表单才吃 403；
      * 受限的展商照样能进后台、查看与审核已有的报名，因此后台本身不封。
      */
     const limited = state.user.can?.limited === true;
     const createAction = topAction('plus', t('s_p9fllo'), () => createExhibition());
+    const checkinAction = topAction('scan', t('s_zqzoiq'), () => openCheckin());
     if (limited) {
+        // 置灰 + 原因：核销与「编辑展会」各给一句，与后端 403 的文案对得上。
         createAction.setAttribute('disabled', '');
         createAction.setAttribute('aria-disabled', 'true');
         createAction.setAttribute('title', t('s_19wazv8'));
+        checkinAction.setAttribute('disabled', '');
+        checkinAction.setAttribute('aria-disabled', 'true');
+        checkinAction.setAttribute('title', t('s_14pxh3f'));
     }
     scaffold({
         title: t('s_1omalh8'),
         showBack: false,
         bodyProps: { 'data-gap': 'tight' },
-        actions: [
-            topAction('scan', t('s_zqzoiq'), () => context.navigate('checkin')),
-            createAction,
-        ],
+        actions: [checkinAction, createAction],
         foot: tabbar({ items: navItems(), active: 'exhibitor' }),
         children: [listHost],
     });
@@ -52,6 +55,24 @@ export async function exhibitorPage(context) {
             return;
         }
         context.navigate('exhibition-form', { mode: 'create' });
+    }
+
+    /** 编辑已有展会：受限时同样兜一层，别让残留入口/键盘回车绕过置灰。 */
+    function openExhibitionForm(id) {
+        if (limited) {
+            toast(t('s_1wwetl9'), 'error');
+            return;
+        }
+        context.navigate('exhibition-form', { id });
+    }
+
+    /** 核销报名码：受限账号进得去页面也提交不了，入口就在这里挡住。 */
+    function openCheckin() {
+        if (limited) {
+            toast(t('s_14pxh3f'), 'error');
+            return;
+        }
+        context.navigate('checkin');
     }
 
     // 列表整体交给 loadInto：先画缓存，远端结果到了才重绘，容器始终不清空。
@@ -79,7 +100,9 @@ export async function exhibitorPage(context) {
                 el('button', {
                     class: 'cta ghost',
                     type: 'button',
-                    onclick: () => context.navigate('checkin'),
+                    disabled: limited ? true : null,
+                    title: limited ? t('s_14pxh3f') : null,
+                    onclick: () => openCheckin(),
                 }, [t('s_zqzoiq')]),
                 el('p', {
                     class: 'field-hint',
@@ -98,7 +121,11 @@ export async function exhibitorPage(context) {
         },
     });
 
-    /** 受限说明：让「新建展会为什么点不动」在页面上直接有答案。 */
+    /**
+     * 受限说明：把「为什么这些入口点不动」一次说清。
+     * 受限范围已扩大到一切展会写操作与核销，这里不能再写「仍可查看与审核已有展会」——
+     * 审核报名（`PUT /review/:id/status`）仍然放行，查看与审核报名是唯一还成立的。
+     */
     function limitedNotice() {
         if (!limited) {
             return null;
@@ -112,6 +139,8 @@ export async function exhibitorPage(context) {
     /**
      * 展会卡片：信息 + 查看报名 / 编辑展会。
      * 报名方式、编辑简介、删除展会都收进“编辑展会”的二级界面。
+     * 受限账号的「编辑展会」一并置灰（后端 `PUT|DELETE /exhibitions/:id` 全部 403）；
+     * 「查看报名」与页内的审核入口不受影响。
      */
     function card(item) {
         return el('div', { class: 'card' }, [
@@ -138,7 +167,11 @@ export async function exhibitorPage(context) {
             ]),
             el('div', { class: 'grid-cols-2' }, [
                 smallCta(t('s_j8kyoz'), () => context.navigate('review', { exhibitionId: item.id }), { grow: false }),
-                smallCta(t('s_eutzzb'), () => context.navigate('exhibition-form', { id: item.id }), { grow: false }),
+                smallCta(t('s_eutzzb'), () => openExhibitionForm(item.id), {
+                    grow: false,
+                    disabled: limited,
+                    title: limited ? t('s_1wwetl9') : null,
+                }),
             ]),
         ]);
     }

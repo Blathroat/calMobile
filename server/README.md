@@ -122,12 +122,12 @@ adb reverse tcp:3000 tcp:3000
 | `GET /exhibitions/month` | `exhibitions.month` | 可匿名。`?year=&month=&day=`，返回 `{ year, month, day, monthLabel, eventDays, exhibitions, selected }` |
 | `GET /exhibitions/categories` | `exhibitions.categories` | 可匿名。管理员配置的分类 |
 | `GET /exhibitions/:id` | `exhibitions.get` | 可匿名。返回 `{ found, exhibition, fields }` |
-| `POST /exhibitions` | `exhibitions.save` | 展商 / 管理员 |
-| `PUT /exhibitions/:id` | `exhibitions.save` | 展商本人或管理员 |
-| `DELETE /exhibitions/:id` | `exhibitions.delete` | 展商本人或管理员 |
-| `PUT /exhibitions/:id/status` | `exhibitions.status` | 同上。`{ status }` 接受中文标签或英文代码 |
+| `POST /exhibitions` | `exhibitions.save` | 展商 / 管理员。受限账号 403 |
+| `PUT /exhibitions/:id` | `exhibitions.save` | 展商本人或管理员。受限账号 403 |
+| `DELETE /exhibitions/:id` | `exhibitions.delete` | 展商本人或管理员。受限账号 403 |
+| `PUT /exhibitions/:id/status` | `exhibitions.status` | 同上。`{ status }` 接受中文标签或英文代码；受限账号 403 |
 | `GET /exhibitions/:id/fields` | `exhibitions.fields` | 可匿名。没有配置过时返回默认三项收集项 |
-| `PUT /exhibitions/:id/fields` | `exhibitions.saveFields` | 展商本人或管理员，整体覆盖 |
+| `PUT /exhibitions/:id/fields` | `exhibitions.saveFields` | 展商本人或管理员，整体覆盖；受限账号 403 |
 
 ### 报名、审核与核销
 
@@ -140,7 +140,7 @@ adb reverse tcp:3000 tcp:3000
 | `GET /review` | `review.list` | 展商本人或管理员。`?exhibitionId=&status=`，返回 `{ records, counts }` |
 | `GET /review/:id` | `review.get` | 同上 |
 | `PUT /review/:id/status` | `review.updateStatus` | 同上 |
-| `POST /checkin` | `checkin.scan` | 展商本人或管理员。`{ code }` |
+| `POST /checkin` | `checkin.scan` | 展商本人或管理员。`{ code }`；受限账号 403 |
 
 ### 用户、搜索与设置
 
@@ -206,7 +206,7 @@ adb reverse tcp:3000 tcp:3000
 - **登录限流**：`/auth/login` 与 `/auth/register` 按「IP + 用户名」内存滑动窗口限速——**只统计失败**（4xx 或 200 + `ok:false`），5 分钟内失败 10 次之后给 429，挡住脚本化撞库；成功登录不计数，否则连着登录十来次就会把自己关在门外。单进程内存实现，多实例部署时换共享存储。
 - **刷新令牌轮换**：撤销与校验合成一条条件更新（`UPDATE … WHERE revoked_at IS NULL` 并检查 `rowCount`），同一个刷新令牌并发用两次时只有一个能换到新令牌，另一个按「登录状态已失效」处理。
 - **权限**：访客不能报名与编辑；普通用户不能碰展会配置与用户管理；展商只能管理自己举办的展会；服务器设置与个人外观模式都要登录（服务器设置还要求管理员）。
-- **受限账号**（`users.status = 'limited'`）：管理员在「用户管理」里设置受限后，被判定的三件事各给 403 + 一句可展示的文案 —— **不能报名**（`POST /registrations` →「账号已被限制，不能报名」）、**不能发布新展会**（`POST /exhibitions` →「账号已被限制，不能发布展会」）、**不能编辑个人信息**（`PUT /profile` →「账号已被限制，不能编辑个人信息」）。**仍然可用**：登录、浏览与查询、`PUT /profile/notifications`（通知偏好不是个人信息）、`POST /profile/password`（改密码属于账号安全）、撤销自己的报名，以及受限展商编辑 / 删除自己已有的展会、审核报名与核销。**管理员不受限**（否则没人能解除限制），判定集中在 `domain/permissions.js` 的 `isLimited()` / `assertNotLimited()`；`capabilities(role, status)` 同步给出 `can.register = false`、`can.profile = false`、`can.limited = true`，前端据此置灰按钮并说明原因。封禁（`banned`）行为不变，仍然在认证层就拒绝。
+- **受限账号**（`users.status = 'limited'`）：管理员在「用户管理」里设置受限后，被判定的操作各给 403 + 一句可展示的文案 —— **不能报名**（`POST /registrations` →「账号已被限制，不能报名」）、**不能发布展会**（`POST /exhibitions` →「账号已被限制，不能发布展会」）、**不能编辑 / 删除展会**（`PUT` / `DELETE /exhibitions/:id` →「账号已被限制，不能修改展会」/「账号已被限制，不能删除展会」，自己举办的展会也不行）、**不能改报名设置**（`PUT /exhibitions/:id/status` 暂停恢复报名与 `PUT /exhibitions/:id/fields` 报名收集项 →「账号已被限制，不能修改报名设置」）、**不能核销**（`POST /checkin` →「账号已被限制，不能核销」）、**不能编辑个人信息**（`PUT /profile` →「账号已被限制，不能编辑个人信息」）。**仍然可用**：登录、浏览与查询（展会列表 / 月视图 / 详情 / 收集项读取）、审核报名（`PUT /review/:id/status` 照常可用）、`PUT /profile/notifications`（通知偏好不是个人信息）、`POST /profile/password`（改密码属于账号安全）、撤销自己的报名。**管理员不受限**（否则没人能解除限制），判定集中在 `domain/permissions.js` 的 `isLimited()` / `assertNotLimited()`（文案表 `LIMITED_ACTIONS`）；受限拦截一律挂在 `mutate()` 之外、并排在角色检查之前，因此受限的普通用户拿到的是「账号已被限制」，而不是「只有展商或管理员可以执行此操作」。`capabilities(role, status)` 同步给出 `can.register = false`、`can.profile = false`、`can.limited = true`，前端据此置灰按钮并说明原因。封禁（`banned`）行为不变，仍然在认证层就拒绝。
 
 ## 数据模型
 
@@ -239,10 +239,10 @@ npm test                  # jest：不依赖数据库的纯函数单测
 npm run lint
 ```
 
-`test/api.test.js`（48 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
+`test/api.test.js`（49 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
 
 - 页面真正用到的字段都在（展会 25 个字段、报名、审核统计、启动数据的 12 个配置块）；
-- 权限确实拦得住（访客 / 普通用户 / 展商越权访问、受限账号的三处 403 与仍然可用的操作）；
+- 权限确实拦得住（访客 / 普通用户 / 展商越权访问、受限账号在报名 / 发布 / 编辑 / 删除展会 / 改报名设置 / 核销 / 改资料上的 403 文案与仍然可用的操作、管理员即便被标成受限也不受限）；
 - 业务规则确实生效（报名窗口、收集项必填与选项、重复报名、自动通过、审核状态机与 `canRevise` 策略、核销状态流转、隐私开关、媒体上限收敛与缺键兜底）；
 - 刷新令牌并发重放只会换到一套新令牌（轮换的撤销是原子条件更新）；
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；

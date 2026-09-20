@@ -4,9 +4,14 @@
  * Android 侧通过 `addJavascriptInterface(WebAppBridge, 'CalMobileNative')` 暴露：
  *   CalMobileNative.invoke(action, payloadJson, callbackId)
  * 原生处理完成后回调：
- *   window.CalMobileBridge.onResult(callbackId, ok, result, error)
+ *   window.CalMobileBridge.onResult(callbackId, ok, result, error, code)
  *
  * 页面只使用 `call(action, payload)`，异常统一抛出 Error 供页面展示。
+ *
+ * 失败时的 `code` 是**稳定错误码**（可预期结果才有值，其余为 null）：
+ * `'cancelled'`（用户在系统选择器/保存对话框点了取消）、`'timeout'`（前端兜底超时）。
+ * 页面据此判断「用户取消」这类可预期结果；失败文案随时会改，靠子串匹配会出现
+ * 「文案一改取消分支集体失效」或「真失败文案里恰好含取消二字被静默吞掉」。
  * 模块顶层的 window 访问都做了存在性判断，便于静态检查工具直接导入本文件。
  */
 
@@ -130,7 +135,7 @@ export function call(action, payload = {}) {
         if (!INTERACTIVE_ACTIONS.has(action) && typeof setTimeout === 'function') {
             entry.timer = setTimeout(() => {
                 pending.delete(callbackId);
-                reject(new Error(`原生动作 ${action} 超时未响应`));
+                reject(withCode(new Error(`原生动作 ${action} 超时未响应`), 'timeout'));
             }, CALL_TIMEOUT_MS);
         }
         pending.set(callbackId, entry);
@@ -146,6 +151,19 @@ export function call(action, payload = {}) {
 
 /** 系统动作超时：30 秒足够任何同步原生操作完成。 */
 const CALL_TIMEOUT_MS = 30 * 1000;
+
+/**
+ * 给错误挂上稳定错误码。
+ *
+ * 只认字符串码：原生在不适用时回传的是 `null`（JS 里是 null，不是字符串 'null'），
+ * 那种情况必须保持 `error.code === undefined`，否则页面会把「没有码」当成一个码。
+ */
+function withCode(error, code) {
+    if (typeof code === 'string' && code !== '') {
+        error.code = code;
+    }
+    return error;
+}
 
 /** 会弹系统界面、等用户操作完才回调的动作：时长由用户决定，不做超时。 */
 const INTERACTIVE_ACTIONS = new Set([
@@ -175,7 +193,7 @@ if (hasWindow) {
     }
 
     window.CalMobileBridge = {
-        onResult(callbackId, ok, result, error) {
+        onResult(callbackId, ok, result, error, code) {
             const entry = pending.get(callbackId);
             if (!entry) {
                 return;
@@ -185,7 +203,8 @@ if (hasWindow) {
             if (ok) {
                 entry.resolve(result);
             } else {
-                entry.reject(new Error(error || '操作未完成'));
+                // 失败文案照旧给人看，`code` 只用来判断可预期的结果（例如取消）。
+                entry.reject(withCode(new Error(error || '操作未完成'), code));
             }
         },
     };

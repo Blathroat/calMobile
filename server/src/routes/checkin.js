@@ -8,13 +8,16 @@
  * 响应形状与前端扫码页（`pages/checkin.js`）消费的字段一致：
  * 业务失败也是 HTTP 200 + `{ ok:false, error }`，并带上 `duplicated` / `status` / `record`
  * 供页面渲染（因此这里不用 `mutate` 的统一信封，成功分支自己给 `{ ok:true, error:'' }`）。
+ *
+ * **受限账号不能核销**：`assertNotLimited()` 抛 403，且必须排在 `requireExhibitor()`
+ * 之前 —— 受限的普通用户两条规则都不满足，「账号已被限制」才是准确的原因。
  */
 
 const express = require('express');
 const { query } = require('../config/pool');
 const { REGISTRATION_COLUMNS, REGISTRATION_FROM } = require('../domain/queries');
 const { authenticate } = require('../middleware/auth');
-const { requireExhibitor, canManageExhibition } = require('../domain/permissions');
+const { requireExhibitor, canManageExhibition, assertNotLimited } = require('../domain/permissions');
 const labels = require('../domain/labels');
 
 const router = express.Router();
@@ -43,10 +46,12 @@ function checkInRecord(row) {
 
 /**
  * POST /api/v1/checkin
- * 请求体 `{ code }`；只有展商与管理员可以核销。
+ * 请求体 `{ code }`；只有展商与管理员可以核销，且受限账号不能核销。
  */
 router.post('/', authenticate, async (req, res, next) => {
   try {
+    // 受限账号不能核销：判定放在角色检查之前（受限的普通用户先拿到「受限」这个原因）。
+    assertNotLimited(req.user, 'checkin');
     const user = requireExhibitor(req);
 
     const parsed = labels.parseCheckInCode(String(req.body.code || '').trim());

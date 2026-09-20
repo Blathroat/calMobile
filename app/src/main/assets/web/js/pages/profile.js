@@ -443,7 +443,8 @@ export async function profilePage(context) {
                 onError: (error) => toast(error.message, 'error'),
             });
         } catch (error) {
-            if (String(error.message).includes(t('s_1589w37'))) {
+            // 用户在系统选择器点了取消：按稳定错误码判断，不匹配文案。
+            if (error && error.code === 'cancelled') {
                 return;
             }
             toast(error.message, 'error');

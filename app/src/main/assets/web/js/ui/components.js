@@ -219,14 +219,16 @@ export function notFoundBlock({ iconName = 'info', title, description, backLabel
 /**
  * 卡片内的次级按钮：比 `.cta` 矮一档，用于「查看报名 / 编辑展会」这类并排小按钮。
  * `grow` 为真时等分父容器宽度（配合 `.grid-cols-2` 使用）。
+ * `disabled` 与 `title` 一起用来表达「这个入口为什么点不动」（例如受限账号）。
  */
-export function smallCta(label, onClick, { grow = true, danger = false, disabled = false } = {}) {
+export function smallCta(label, onClick, { grow = true, danger = false, disabled = false, title = '' } = {}) {
     return el('button', {
         class: `cta ${danger ? 'danger' : 'ghost'}`,
         type: 'button',
         dataset: { size: 'small' },
         style: grow ? { flex: '1 1 0' } : null,
         disabled: disabled ? true : null,
+        title: title || null,
         onclick: onClick,
     }, [label]);
 }

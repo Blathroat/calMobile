@@ -84,4 +84,34 @@ public class WebAppBridgeTest {
         assertTrue(WebAppBridge.map(payload(), "missing").isEmpty());
         assertTrue(WebAppBridge.map(null, "media").isEmpty());
     }
+
+    /**
+     * 只实现「按文案失败」的回调，收到带码的失败时应当退化成按文案失败——
+     * 这样新增错误码不会让既有实现（或第三方实现）漏掉回调、把 promise 挂死。
+     */
+    @Test
+    public void 未实现带码失败的回调会退化成按文案失败() {
+        final String[] received = new String[2];
+        WebAppBridge.ResultCallback legacy = new WebAppBridge.ResultCallback() {
+            @Override
+            public void success(Object data) {
+            }
+
+            @Override
+            public void failure(String message) {
+                received[0] = "legacy";
+                received[1] = message;
+            }
+        };
+        legacy.failure(WebAppBridge.CODE_CANCELLED, "已取消选择");
+        assertEquals("legacy", received[0]);
+        assertEquals("已取消选择", received[1]);
+    }
+
+    /** 错误码是前后端约定的字面量，改名会让前端的取消静默分支失效，因此钉住。 */
+    @Test
+    public void 错误码字面量固定() {
+        assertEquals("cancelled", WebAppBridge.CODE_CANCELLED);
+        assertEquals("timeout", WebAppBridge.CODE_TIMEOUT);
+    }
 }

@@ -199,6 +199,57 @@ function validateBridgeContract() {
   return true;
 }
 
+/**
+ * JS 与 Java 之间的回调参数必须一一对应。
+ *
+ * `onResult(callbackId, ok, result, error, code)` 的 5 个参数是冻结契约：第 5 个 `code`
+ * 是稳定错误码（`'cancelled'` / `'timeout'`），页面据此判断可预期的失败，
+ * 不再靠匹配失败文案。两边任一侧少写一个参数（例如前端还是 4 个参数），
+ * `error.code` 就会静默变成 undefined，取消分支集体失效。
+ */
+const BRIDGE_ON_RESULT_PARAMS = 5;
+
+function validateOnResultArity() {
+  const jsFile = `${WEB_ROOT}/js/core/bridge.js`;
+  const js = resolveStrings(fs.readFileSync(path.join(root, jsFile), 'utf8'));
+  const jsSignature = /window\.CalMobileBridge\s*=\s*\{[\s\S]*?onResult\(([^)]*)\)/.exec(js);
+  if (!jsSignature) {
+    return `${jsFile} 中没有解析到 window.CalMobileBridge.onResult 的定义`;
+  }
+  const jsParams = jsSignature[1].split(',').map((item) => item.trim()).filter(Boolean);
+  if (jsParams.length !== BRIDGE_ON_RESULT_PARAMS) {
+    return `${jsFile} 的 onResult 有 ${jsParams.length} 个参数（${jsParams.join(', ')}），契约要求 ${BRIDGE_ON_RESULT_PARAMS} 个`;
+  }
+  if (jsParams[4] !== 'code') {
+    return `${jsFile} 的 onResult 第 5 个参数应为 code，实际是 ${jsParams[4]}`;
+  }
+  // 页面必须真的按码判断，而不是把参数收下就丢掉。
+  if (!js.includes('error.code = code')) {
+    return `${jsFile} 没有把收到的 code 挂到 Error 上（缺 error.code = code）`;
+  }
+  // 兜底超时也要给自己的错误打上 code，否则超时会被页面当成真失败弹红字。
+  if (!/withCode\(new Error\([^)]*超时未响应[^)]*\),\s*'timeout'\)/.test(js)) {
+    return `${jsFile} 的兜底超时没有打上 code = 'timeout'`;
+  }
+
+  const javaFile = 'app/src/main/java/com/example/calmobile/WebAppBridge.java';
+  const java = fs.readFileSync(path.join(root, javaFile), 'utf8');
+  // 原生拼给 WebView 的那段 JS 必须把第 5 个参数（codeArg）真的传进去。
+  // `&amp;&amp;` 是为了只命中拼 JS 字符串的那一次调用，别抓到 Java 里的 `respond(...)` 定义。
+  const javaCall = /CalMobileBridge&&window\.CalMobileBridge\.onResult\(([\s\S]*?)\);/.exec(java);
+  if (!javaCall) {
+    return `${javaFile} 中没有解析到 CalMobileBridge.onResult 的调用`;
+  }
+  const passed = javaCall[1].split(',').length;
+  if (passed !== BRIDGE_ON_RESULT_PARAMS) {
+    return `${javaFile} 调用 onResult 时传了 ${passed} 个参数，契约要求 ${BRIDGE_ON_RESULT_PARAMS} 个（第 5 个是错误码）`;
+  }
+  if (!java.includes('CODE_CANCELLED') || !java.includes('CODE_TIMEOUT')) {
+    return `${javaFile} 没有定义 cancelled / timeout 两个稳定错误码`;
+  }
+  return true;
+}
+
 /** newUI 的页面模块清单：17 屏中“管理-展会”“管理-设置”已内联，共 15 个模块。 */
 const EXPECTED_PAGES = [
   'login.js',
@@ -345,6 +396,13 @@ const checks = [
     id: 'bridge-contract',
     file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
     validate: validateBridgeContract
+  },
+  {
+    // 回传结果的 5 个参数（第 5 个是稳定错误码 code）是 JS 与 Java 的共同契约：
+    // 只校验动作名，会让「前端还是 4 个参数 / 原生忘了传码」这类脱节悄悄放过。
+    id: 'bridge-onresult-arity',
+    file: `${WEB_ROOT}/js/core/bridge.js`,
+    validate: validateOnResultArity
   },
   {
     id: 'review-store-shared',
@@ -715,11 +773,24 @@ const checks = [
     id: 'web-exhibitor-card-trimmed',
     file: `${WEB_ROOT}/js/pages/exhibitor.js`,
     // “查看报名 / 编辑展会”是卡片上仅有的两个入口（`smallCta`）；核销报名码在页首。
-    contains: ['smallCta(', "context.navigate('review'", "context.navigate('exhibition-form'", '核销报名码'],
+    contains: ['smallCta(', "context.navigate('review'", 'openExhibitionForm(', '核销报名码'],
     // 卡片上不能再出现这些入口：报名方式、编辑简介与删除展会都搬进“编辑展会”的二级界面。
     // 断言带上调用语法，避免命中文件头的说明性注释（注释里确实会写到这些名字）。
     notContains: ["actionButton('报名方式'", "actionButton('编辑简介'", "actionButton('删除展会'",
       'askDelete(', 'changeStatus(']
+  },
+  {
+    id: 'limited-scope-notice',
+    // 受限范围已扩大到一切展会写操作与核销，展商后台的说明必须跟着走：
+    // 「仍可查看与审核已有展会」那条旧说法与当前限制不符（它曾让人以为还能编辑）。
+    // 该文案是 t('s_1yv1vu0')，源码里只剩 key，所以断言资源本体。
+    file: 'app/src/main/res/values/strings_frontend.xml',
+    contains: [
+      '<string name="s_1yv1vu0">账号已被限制，不能发布或修改展会、不能核销；仍可查看与审核已有报名。</string>',
+      '<string name="s_14pxh3f">账号已被限制，不能核销</string>',
+      '<string name="s_1wwetl9">账号已被限制，不能修改展会</string>'
+    ],
+    notContains: ['仍可查看与审核已有展会与报名']
   },
   {
     id: 'web-exhibition-form-secondary-actions',

@@ -34,6 +34,7 @@
     <string name="s_14c4war">五</string>
     <string name="s_14ggq2g">清空内容</string>
     <string name="s_14ol5jh">头像已移除</string>
+    <string name="s_14pxh3f">账号已被限制，不能核销</string>
     <string name="s_153oaxf">公告</string>
     <string name="s_1589w37">取消</string>
     <string name="s_159zzbg">该报名已经核销为已参加，状态不能再调整。</string>
@@ -180,7 +181,7 @@
     <string name="s_1oim33">用户管理</string>
     <string name="s_1omalh8">展商后台</string>
     <string name="s_1ow5v10">首页</string>
-    <string name="s_1pdejtj">状态变更立即写入后端；受限账号保留登录，但不能报名、发布展会或编辑个人信息。</string>
+    <string name="s_1pdejtj">状态变更立即写入后端；受限账号保留登录，但不能报名、发布 / 修改 / 删除展会、改报名设置或核销；仍可查看与审核已有报名。</string>
     <string name="s_1prtpth">加入日历</string>
     <string name="s_1pt7oo1">修改密码</string>
     <string name="s_1pt94qt">编辑器加载失败</string>
@@ -249,6 +250,7 @@
     <string name="s_1wlb9mw">现场向展商出示此码，扫码后报名状态会变为“已参加”。</string>
     <string name="s_1wlt01z">视频数量上限</string>
     <string name="s_1wogqko">引用</string>
+    <string name="s_1wwetl9">账号已被限制，不能修改展会</string>
     <string name="s_1wz04v2">保存后可编辑</string>
     <string name="s_1xohyb0">审核通过或拒绝时通知我</string>
     <string name="s_1y0imfq">账号设置</string>
@@ -263,7 +265,7 @@
     <string name="s_1ylv0q2">报名与简介设置</string>
     <string name="s_1yn5q3y">选择要审核的展会</string>
     <string name="s_1yqwetn">收集项标题</string>
-    <string name="s_1yv1vu0">仍可查看与审核已有展会与报名。</string>
+    <string name="s_1yv1vu0">账号已被限制，不能发布或修改展会、不能核销；仍可查看与审核已有报名。</string>
     <string name="s_1yxjgeu">已提交报名码</string>
     <string name="s_21ce2x">编辑简介</string>
     <string name="s_24nfoo">当前编辑器为纯文本模式，无实时预览</string>

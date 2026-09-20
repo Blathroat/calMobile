@@ -391,7 +391,7 @@ export async function richEditorPage(context) {
             const size = formatBytes(result.bytes);
             toast(result.compressed ? `图片已压缩为 ${size} 并插入` : `图片已插入（${size}）`, 'success');
         } catch (error) {
-            if (String(error.message).includes(t('s_1589w37'))) {
+            if (error && error.code === 'cancelled') {
                 return;
             }
             toast(error.message || `请选择 ${formatsHint(formats)} 格式的图片`, 'error');
@@ -409,7 +409,7 @@ export async function richEditorPage(context) {
      * `core/sanitize.js` 的白名单允许 `<video>` 与 `src` / `controls` 等属性，
      * 详情页与编辑器预览因此都能保留并播放它。
      *
-     * 取消（原生抛「取消」）与图片一致：静默返回，不弹红色错误。
+     * 取消（原生回传 `code: 'cancelled'`）与图片一致：静默返回，不弹红色错误。
      */
     async function insertVideo() {
         const limit = uploadCountLimit('video');
@@ -434,7 +434,7 @@ export async function richEditorPage(context) {
             insertAtCursor(`\n\n<video controls src="${result.url}"></video>\n\n`);
             toast(`视频已插入（${formatBytes(result.bytes)}）`, 'success');
         } catch (error) {
-            if (String(error.message).includes(t('s_1589w37'))) {
+            if (error && error.code === 'cancelled') {
                 return;
             }
             toast(error.message || `请选择 ${formatsHint(formats)} 格式的视频`, 'error');
