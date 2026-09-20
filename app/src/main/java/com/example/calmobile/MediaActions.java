@@ -119,6 +119,17 @@ final class MediaActions {
                     + String.join("、", formats));
             return result;
         }
+        int limitMb = avatar ? AppSettings.getMediaAvatarSizeMb(context)
+                : AppSettings.getMediaImageSizeMb(context);
+        // 先按 base64 文本长度估算再解码：base64 是 4 字符 3 字节，超限的直接拒绝，
+        // 免得先解出一个几十 MB 的数组（低内存设备上会 OOM，而 OOM 是 Error，catch 不住）。
+        long limitBytes = limitMb * 1024L * 1024L;
+        long estimatedBytes = (long) matcher.group(2).length() / 4 * 3;
+        if (estimatedBytes > limitBytes) {
+            result.put("ok", false);
+            result.put("error", (avatar ? "头像" : "图片") + "超过 " + limitMb + " MB 限制");
+            return result;
+        }
         byte[] bytes;
         try {
             bytes = Base64.decode(matcher.group(2), Base64.DEFAULT);
@@ -127,9 +138,7 @@ final class MediaActions {
             result.put("error", "图片数据解析失败");
             return result;
         }
-        int limitMb = avatar ? AppSettings.getMediaAvatarSizeMb(context)
-                : AppSettings.getMediaImageSizeMb(context);
-        if (bytes.length > limitMb * 1024L * 1024L) {
+        if (bytes.length > limitBytes) {
             result.put("ok", false);
             result.put("error", (avatar ? "头像" : "图片") + "超过 " + limitMb + " MB 限制");
             return result;

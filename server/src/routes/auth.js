@@ -21,12 +21,23 @@ const { rateLimit } = require('../middleware/rate-limit');
 
 const router = express.Router();
 
-/** 登录 / 注册限流：同一 IP + 同一账号 5 分钟内最多 10 次，挡住脚本化撞库。 */
+/**
+ * 登录 / 注册限流：同一 IP + 同一账号 5 分钟内最多 10 次**失败**（见 middleware/rate-limit.js），
+ * 挡住脚本化撞库。成功登录不计数，否则演示时连着登录几个人就会把自己关在门外。
+ */
 const authLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 10,
   message: '尝试过于频繁，请稍后再试',
 });
+
+/**
+ * 账号不存在时用来「陪着比一次」的哈希（明文是随机的，永远比不中）。
+ *
+ * 直接用 bcrypt.hashSync 在模块加载时算一次，避免每次登录都重新计算——
+ * 它的作用只是让「账号不存在」与「密码错误」两条路径的耗时接近。
+ */
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(`missing-${Date.now()}`, 10);
 
 /** 响应统一信封：成功时 ok=true 且 error 为空串。 */
 function failure(message) {
@@ -60,7 +71,10 @@ router.post('/login', authLimiter, async (req, res, next) => {
       [username],
     );
     const account = result.rows[0];
-    const matched = account ? await bcrypt.compare(password, account.password_hash) : false;
+    // 账号不存在时也走一次 bcrypt：否则「立即返回」与「比对一次再返回」的耗时差
+    // 足以让脚本枚举出哪些用户名真实存在（与上面那条「同一条提示」是同一件事）。
+    const hash = account ? account.password_hash : DUMMY_PASSWORD_HASH;
+    const matched = await bcrypt.compare(password, hash);
     if (!account || !matched) {
       res.json(failure('账号或密码不正确'));
       return;

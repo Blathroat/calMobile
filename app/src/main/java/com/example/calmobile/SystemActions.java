@@ -28,7 +28,11 @@ final class SystemActions {
     static Map<String, Object> syncDeviceMirror(Activity activity, Map<String, Object> payload) {
         String mode = AppSettings.normalizeMode(WebAppBridge.text(payload, "mode", AppSettings.MODE_AUTO));
         AppSettings.setUiMode(activity, mode);
-        AppSettings.setThemeIndex(activity, WebAppBridge.number(payload, "themeIndex", 0));
+        // 只有真正下发了配色下标才覆盖：缺字段时写 0 会把设备侧镜像悄悄重置成默认色，
+        // 而页面用的还是后端下发的配色，两边会不一致（media / upload 也是同样的写法）。
+        if (payload != null && payload.containsKey("themeIndex")) {
+            AppSettings.setThemeIndex(activity, WebAppBridge.number(payload, "themeIndex", 0));
+        }
 
         Map<String, Object> media = WebAppBridge.map(payload, "media");
         if (!media.isEmpty()) {

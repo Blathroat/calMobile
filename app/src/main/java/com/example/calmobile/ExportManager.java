@@ -68,14 +68,17 @@ final class ExportManager {
     }
 
     /**
-     * 转义一个 CSV 字段：含逗号、引号或换行时用双引号包起来，
+     * 转义一个 CSV 字段：含逗号、引号或换行（`\n` 或 `\r`）时用双引号包起来，
      * 内部的双引号按 RFC 4180 翻倍。
+     *
+     * `\r` 也要算：Windows 换行的字段不包引号会破坏行结构，把一行拆成两行。
      */
     static String escapeCsv(String field) {
         if (field == null) {
             return "";
         }
-        if (field.contains(",") || field.contains("\"") || field.contains("\n")) {
+        if (field.contains(",") || field.contains("\"")
+                || field.contains("\n") || field.contains("\r")) {
             return "\"" + field.replace("\"", "\"\"") + "\"";
         }
         return field;

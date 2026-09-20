@@ -71,6 +71,9 @@ public class ExportManagerTest {
         assertEquals("\"a,b\"", ExportManager.escapeCsv("a,b"));
         assertEquals("\"say \"\"hi\"\"\"", ExportManager.escapeCsv("say \"hi\""));
         assertEquals("\"line1\nline2\"", ExportManager.escapeCsv("line1\nline2"));
+        // \r（Windows 换行）不包引号会破坏行结构，把一条记录拆成两条
+        assertEquals("\"line1\r\nline2\"", ExportManager.escapeCsv("line1\r\nline2"));
+        assertEquals("\"carriage\rreturn\"", ExportManager.escapeCsv("carriage\rreturn"));
         assertEquals("plain", ExportManager.escapeCsv("plain"));
         assertEquals("", ExportManager.escapeCsv(null));
     }
