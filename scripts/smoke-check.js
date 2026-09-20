@@ -342,8 +342,10 @@ const checks = [
   },
   {
     id: 'consolidated-requirements-document',
+    // README 是唯一的需求/验收来源，且只描述当前状态（不记变更历史）
     file: 'README.md',
-    contains: ['历史上的', '验收场景', '报名收集项']
+    contains: ['验收场景', '报名收集项', '待裁决清单（未决项）'],
+    notContains: ['## 变更记录', '历史上的 `TODO.md`'],
   },
   {
     id: 'agent-rules',

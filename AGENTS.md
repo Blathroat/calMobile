@@ -35,4 +35,4 @@ Android 改动按 smoke-check、webui-check、单元测试、调试构建的顺�
 
 ## 文档维护
 
-新增或更新需求先修改 `README.md`，不要再创建重复的需求、架构或 Review 文档。设计稿与实现的冲突记录在 `README.md` 的「冲突与待裁决清单」，未确认前不要擅自扩大数据模型。代码行为、依赖或命令变化后同步更新对应说明，并运行 `node scripts/smoke-check.js` 与 `node scripts/webui-check.js`。
+新增或更新需求先修改 `README.md`，不要再创建重复的需求、架构或 Review 文档。**`README.md` 只描述当前状态**：不写「变更记录」、不写迁移过程、不写「以前是怎样的」，历史看 `git log`；已解决的问题从清单里删掉而不是标注「已完成」。设计稿与实现的冲突只记录在 `README.md` 的「待裁决清单（未决项）」，未确认前不要擅自扩大数据模型。代码行为、依赖或命令变化后同步更新对应说明，并运行 `node scripts/smoke-check.js` 与 `node scripts/webui-check.js`。

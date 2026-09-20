@@ -9,7 +9,7 @@ CalMobile 是面向展会排期、详情展示、报名和审核的应用。前�
 - `server/README.md`：Node.js 服务的数据库配置、启动方式和 API 目录。
 - `newUI/`：设计交付件（`index.html`、`remaining-ui.html`、`ui-spec.md`、`DESIGN-HANDOFF.md`、`DESIGN-MANIFEST.json`），是界面标准的来源。
 
-历史上的 `TODO.md`、`MOBILE_REQUIREMENTS.md`、`docs/MOBILE_REQUIREMENTS.md`、`ARCHITECTURE.md`、`DESIGN.md`、`docs/PROJECT_REVIEW.md` 和 `AGENT.md` 已在本文件中合并，避免同一需求出现多份版本。
+本文件是唯一的需求、架构、界面规范、验收场景与路线图来源；`README.md` 只描述**当前状态**（含当前限制与上线清单），不记录改动历史 —— 历史看 git log。
 
 ## 产品范围与角色
 
@@ -199,7 +199,7 @@ app/src/main/
 
 | 对象 | 主要内容 |
 | --- | --- |
-| Exhibition | 名称、地点、日期、时间、状态、分类、HTML 简介、展商 |
+| Exhibition | 名称、地点、日期、时间、状态、分类、Markdown 简介、展商 |
 | Registration | 展会、报名人、提交时间、审核状态（待审核 / 已通过 / 已拒绝 / 已参加 / 已撤销）、表单回答 |
 | RegistrationField | 标题、类型（文本/单选/多选）、选项、必填 |
 | User | 昵称、邮箱、简介、地区、头像、角色、账号状态、公开策略 |
@@ -207,14 +207,14 @@ app/src/main/
 
 ## 技术选型与权限
 
-Android 依赖只有 `app/build.gradle` 里的 Gson（桥接层 JSON）与 JUnit（单元测试）：界面在 WebView 里，旧原生页面与 Room/Retrofit/Glide/richeditor 等依赖已随旧代码删除。WebView 容器只用平台 API，不额外引入 `androidx.webkit`，资源映射由 `WebShellActivity` 自行实现。
+Android 依赖只有 `app/build.gradle` 里的 Gson（桥接层 JSON）与 JUnit（单元测试）：界面在 WebView 里，不引入 AndroidX、Room、Retrofit、图片或富文本库。WebView 容器只用平台 API，资源映射由 `WebShellActivity` 自行实现。
 
 前端的第三方运行时依赖全部内置在 `assets/web/vendor/`，不依赖 CDN、图标字体或构建工具，版本与来源记录在各目录的 `VERSION.txt`：
 
 | 目录 | 依赖 | 用途 |
 | --- | --- | --- |
 | `vendor/easymde/` | EasyMDE 2.21.0（MIT，内置 marked 与 CodeMirror 5） | Markdown 简介编辑器 |
-| `vendor/qrcode-generator/` | qrcode-generator 1.4.4（MIT） | 把报名码画成二维码 |
+| `vendor/qrcode-generator/` | qrcode-generator 1.4.4（MIT） | 报名码与绑定验证器（`otpauth://`）的二维码 |
 | `vendor/jsqr/` | jsQR 1.4.0（Apache-2.0） | 在摄像头画面里识别报名码 |
 
 应用声明 `POST_NOTIFICATIONS`、读写系统日历所需权限，以及核销报名码使用的 `CAMERA`（声明为可选硬件，无摄像头设备仍可手动输入报名码）。首次使用日历、通知或扫码时由前端发起申请，授权后继续执行原操作，拒绝时页面保留可用的浏览与报名流程。`WebShellActivity` 的 `onPermissionRequest` 只放行 `RESOURCE_VIDEO_CAPTURE`，且必须在应用层已获得摄像头权限时才同意。
@@ -223,17 +223,15 @@ Android 依赖只有 `app/build.gradle` 里的 Gson（桥接层 JSON）与 JUnit
 
 界面只有 WebView 一处入口：`WebShellActivity` 是清单里唯一的 Activity，界面代码全部在 `assets/web`。选择 WebView 的原因是 `newUI/` 交付件本身就是 HTML/CSS，直接复用可保证视觉一致；页面模块化后改动集中在 `assets/web`，无需重新编译 XML 布局。
 
-**旧的原生页面已经删除**（原 `legacy/` 包 16 个 Activity + `BaseActivity` + `MainTabState` + 17 个布局 + 只服务它们的 strings/colors/dimens/styles/drawable/anim），旧架构层（`database/`、`models/`、`network/`、`repository/`、`viewmodel/`）也一并删除，`AppDatabase` 从未被实例化、`viewmodel/` 无人调用，留着只会在接 API 时与新模型并存。`app/build.gradle` 因此只剩 Gson 与 JUnit：AndroidX、Material、Room、Retrofit、Glide、richeditor 都不再需要。
-
 代价与边界：离线资源由 APK 内置，媒体文件仍保存在设备本地；JavaScript 与 Android 返回栈通过 `history` 与 `WebView.canGoBack()` 同步；文件选择、日历写入、通知权限、CSV 导出和分享通过桥接调用系统界面；简介编辑器使用内置 EasyMDE（Markdown）。
 
 ### 界面文案
 
-用户可见文案统一维护在 `app/src/main/res/values/strings_frontend.xml`（482 条），由 `scripts/extract-strings.js` 从 `assets/web/js` 生成，原生在 `onPageStarted` 注入 `window.CalMobileStrings`，前端用 `core/strings.js` 的 `t('key')` 取用。改文案请改前端源码后重跑脚本，再用 `node scripts/check-strings.js` 校验三处（源码、资源、`FrontendStrings.NAMES`）一致——任何一边漏了都会在合入前失败，而不是在界面上静默显示成 key。
+用户可见文案统一维护在 `app/src/main/res/values/strings_frontend.xml`（574 条），由 `scripts/extract-strings.js` 从 `assets/web/js` 生成，原生在 `onPageStarted` 注入 `window.CalMobileStrings`，前端用 `core/strings.js` 的 `t('key')` 取用。改文案请改前端源码后重跑脚本，再用 `node scripts/check-strings.js` 校验三处（源码、资源、`FrontendStrings.NAMES`）一致——任何一边漏了都会在合入前失败，而不是在界面上静默显示成 key。文案资源**不得以空白开头或结尾**：Android 的 `<string>` 会裁掉首尾空白，靠它做间隔在真机上会粘在一起（该检查会拦下这种写法）。
 
 ### 静态资源缓存与按需加载
 
-APK 内的 `.js` / `.css` 由 `WebShellActivity` 以 `Cache-Control: max-age=86400` 返回（HTML 仍为 `no-store`），WebView 因此不必每次导航都重新下载并解析前端模块。改动前端后需要重新安装 APK（安装会换掉应用数据目录，缓存自然失效）。
+APK 内的 `.js` / `.css` 由 `WebShellActivity` 以 `Cache-Control: no-cache` 返回（可以缓存，但每次回来校验），HTML 为 `no-store`；用 `max-age` 会出现「新的 index.html 配旧的 js 模块」这种只在升级当天复现的错乱。改动前端后需要重新安装 APK。
 
 EasyMDE、qrcode-generator、jsQR 三个内置库全部改为按需加载（`core/vendor.js`）：它们随 APK 打包不依赖 CDN，但合计约 660KB，启动时全量解析会明显拖慢首帧。
 
@@ -337,19 +335,24 @@ adb reverse tcp:3000 tcp:3000
 
 ### `server/` 端点与前端动作的对应
 
-健康与状态页：`GET /ping`、`GET /health`、`GET /api/v1/status`，以及给人看的 `GET /status`（HTML）；其余都在 `/api/v1` 下。完整清单（含请求参数、权限与响应形状）见 `server/README.md` 的「接口清单」，这里只列骨架：
+健康与状态页：`GET /ping`、`GET /health`，以及给人看的 `GET /status` 与机器读的 `GET /api/v1/status`（这两个**在生产模式下默认关闭**，见「上线部署清单与开销」）；其余都在 `/api/v1` 下。完整清单（含请求参数、权限与响应形状）见 `server/README.md` 的「接口清单」，这里只列骨架：
 
 | 已有路由 | 对应前端动作 |
 | --- | --- |
 | `GET /api/v1/bootstrap` | `bootstrap`（一次拉取用户态 + 全部配置） |
-| `POST /api/v1/auth/login\|register\|guest\|logout\|refresh` | `auth.login`、`auth.register`、`auth.guest`、`auth.logout`（刷新令牌轮换） |
+| `POST /api/v1/auth/login`、`/login/verify`、`/login/code` | `auth.login`（开了两步验证时只回票）、`auth.loginVerify`、`auth.loginCode` |
+| `POST /api/v1/auth/register`、`/register/verify` | `auth.register`（只发码，不建号）、`auth.registerVerify` |
+| `POST /api/v1/auth/password/forgot`、`/password/reset` | `auth.forgotPassword`、`auth.resetPassword` |
+| `POST /api/v1/auth/guest`、`/logout`、`/refresh` | `auth.guest`、`auth.logout`；`/refresh` 是令牌轮换，没有独立动作 |
 | `GET\|PUT /api/v1/profile`、`POST /profile/password`、`GET\|PUT /profile/notifications` | `profile.get`、`profile.save`、`profile.password`、`notify.preferences`、`notify.savePreferences` |
+| `GET /api/v1/profile/security`、`POST /profile/2fa/enable`、`/2fa/enable/verify`、`/2fa/totp/setup`、`/2fa/totp/enable`、`/2fa/backup-codes`、`/2fa/disable` | `security.get`、`security.enable2fa`、`security.verify2fa`、`security.totpSetup`、`security.totpEnable`、`security.backupCodes`、`security.disable2fa` |
+| `POST /api/v1/profile/email`、`/email/verify` | `security.changeEmail`、`security.verifyEmail` |
 | `GET /api/v1/exhibitions`、`/month`、`/categories`、`/:id`、`/:id/fields` | `exhibitions.list`、`exhibitions.month`、`exhibitions.categories`、`exhibitions.get`、`exhibitions.fields` |
 | `POST /api/v1/exhibitions`、`PUT\|DELETE /:id`、`PUT /:id/status`、`PUT /:id/fields` | `exhibitions.save`、`exhibitions.delete`、`exhibitions.status`、`exhibitions.saveFields` |
 | `GET\|POST /api/v1/registrations`、`GET\|DELETE /:id` | `registrations.list`、`registrations.get`、`registrations.submit`、`registrations.cancel` |
 | `GET /api/v1/review`、`GET /:id`、`PUT /:id/status` | `review.list`、`review.get`、`review.updateStatus` |
 | `POST /api/v1/checkin` | `checkin.scan`（现场核销） |
-| `GET /api/v1/users`、`/:id`、`PUT /:id/status`、`GET /users/public` | `users.list`、`users.get`、`users.status`、`users.public` |
+| `GET /api/v1/users`、`/:id`、`PUT /:id/status`、`PUT /:id/two-factor`、`GET /users/public` | `users.list`、`users.get`、`users.status`、`users.disable2fa`、`users.public` |
 | `GET /api/v1/search` | `search.query` |
 | `GET\|PUT /api/v1/settings`、`PUT /settings/ui-mode` | `settings.get`、`settings.save`、`settings.uiMode` |
 
@@ -360,9 +363,9 @@ adb reverse tcp:3000 tcp:3000
 | 约定 | 说明 |
 | --- | --- |
 | `exhibitions.month` 的参数只有 `year` / `month`（`day` 可选，用于深链定位初始选中日期） | 参数形状固定，前端与预加载才发得出同一个缓存键 |
-| 请求哪个月就返回哪个月 | 不再「请求的月份没有展会就悄悄换成有展会的月份」；空月份正常返回 `eventDays: []`、`day: 0` |
+| 请求哪个月就返回哪个月 | 空月份返回 `eventDays: []`、`day: 0`，不会悄悄换成有展会的月份 |
 | 首次打开看哪个月由 `bootstrap` 的 `calendar.landing = { year, month }` 决定 | 落点规则属于「界面先给用户看什么」，不属于月视图接口；`exhibitions.month` 因此不需要 `explicit` 参数 |
-| 选中日期由前端本地决定 | 月视图一次返回整月数据，点日期不再往返一次 |
+| 选中日期由前端本地决定 | 月视图一次返回整月数据，点日期不往返请求 |
 
 后端的示例展会日期是**相对今天**生成的（`db:seed` 用 `CURRENT_DATE + N days`），因此日历落点、报名窗口这些与「今天」有关的规则永远有可演示的数据。
 
@@ -452,7 +455,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 #             page:login=210ms api-loaded=241ms bootstrap-done=1295ms entered=1296ms
 ```
 
-2026-09-17 实测：去掉「先探测再请求」的预探测、改为直接发请求之后，`bootstrap-done` 从 **5604ms 降到 1295ms**，登录页首帧从 **989ms 降到 210ms**（模拟器；预探测每次超时 1.5s、还要连试三轮）。后端不可用时不再有第二套实现接管，首屏会直接给出连接失败的原因。
+本机模拟器上的实测基线：`bootstrap-done ≈ 1.3s`、登录页首帧 `≈ 210ms`（直接发请求，不做「先探测再请求」的预探测——预探测每次超时 1.5s、还要连试三轮）。后端不可用时首屏直接给出连接失败的原因。
 
 预置演示账号：`demo/password`（管理员）、`exhibitor/password`（展商）、`user/password`（普通用户）；未登录用户只能浏览公开展会详情。
 
@@ -468,7 +471,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 | `.omo/`、`.opencode/`、`.codegraph/` | 编码助手运行记录与本地工具缓存 |
 | `*.log`、`captures/`、`*.hprof` | 日志与性能采样文件 |
 
-`docs/screenshots/` 只保留课程报告脚本 `scripts/generate_report.py` 引用的 8 张界面截图；其余迭代过程中的重复截图与 UI dump 已清理。
+`docs/screenshots/` 只保留课程报告脚本 `scripts/generate_report.py` 引用的 8 张界面截图。
 
 ## 验收场景
 
@@ -483,6 +486,10 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 9. 展商在「编辑展会 → 报名与简介设置」开启「启用报名二维码」并保存；用户报名且审核通过后，报名详情出现报名码；展商在展商后台点「核销报名码」扫码，页面提示核销成功、状态变为「已参加」；再次扫描同一张码会提示已经核销过。
 10. 展商在 Markdown 编辑器里点「插入视频」，选一个不超过「管理-设置」里视频大小上限的文件，保存后详情页可以播放；正文里已有视频数量达到上限时再插入会被提示拦住；选超限文件时提示超过上限且不会写进设备。
 11. 管理员在管理后台把某个展商的状态改为「受限」，该展商登录后：「立即报名」「新建展会」「编辑展会」「核销报名码」「编辑资料」入口全部置灰并说明原因，直接打开报名表单或展会编辑页的深链也只看到限制说明；浏览、搜索、查看与审核已有报名、改密码、通知偏好、撤销自己已有的报名仍然可用；管理员自己做同样这些事不受影响；改回「正常」后入口恢复。
+12. 新用户在注册页填完资料后看到「验证码已发送到：邮箱」并进入输码步骤，60 秒后可以重发；输对码才建号并直接进入首页，而在此之前用同样的账号密码登录会失败。mailpit（本地收件箱）里能查到这封双语邮件。
+13. 用户在登录页点「忘记密码」，填注册邮箱收到验证码、设新密码后回到登录页；用旧密码登录失败、新密码成功，其它设备上原有的登录状态一并失效（刷新令牌被撤销）。填一个没注册过的邮箱也能走到输码那一步（后端不透露邮箱是否存在）。
+14. 用户在个人页「安全」里开启两步验证，可以先选「用验证器开启」——扫码或手抄密钥后输一次验证器里的 6 位码完成绑定，并拿到 10 个一次性备用码（关掉面板就再也看不到）；也可以选「用邮箱验证码开启」。之后登录时密码对了会切到输码步骤且**还没有登录态**，用验证器里的码或备用码都能进首页，同一枚备用码第二次会被拒；用管理员账号可以在「管理 → 用户」里替他关闭两步验证。
+15. 用户在「安全」里更换邮箱：验证码发到新地址、通过后才生效，个人资料表单里没有邮箱字段；关闭两步验证需要输入当前密码。
 
 ## 路线图与已知限制
 
@@ -545,56 +552,16 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 邮箱属于个人信息，对外收集必须给告知与同意：需要补一页隐私政策（收集什么、用来做什么、保留多久、如何删除），注册页明确告知「邮箱用于接收验证码与账号安全通知」。以后若加**通知类**邮件（报名结果、展会提醒），要提供退订入口 —— 验证码这类事务型邮件不需要退订，营销与提醒类需要。以上是工程侧的检查项，具体合规结论以法务意见为准。
 
-## 冲突与待裁决清单
+## 待裁决清单（未决项）
 
-迁移中遇到“设计稿要求”与“现有业务/数据模型”不一致的地方，按“以线框为准、缺的能力在桥接层补齐”的原则处理，以下条目需要确认：
+以下是与设计稿或现有数据模型还不一致、尚未拍板的地方；其余分歧已按「以线框为准、缺的能力在桥接层补齐」处理完毕，不再记录。相关的当前行为分别写在「已实现的关键交互」「架构与数据边界」与 `server/README.md` 里。
 
-| 条目 | 现状处理 | 需要确认 |
+| 条目 | 当前行为 | 待确认 |
 | --- | --- | --- |
-| 报名方式“需审核 / 无需审核 / 仅展示” | 状态在库里存英文代码，中文标签在 `server/src/domain/labels.js` 映射一次 | 是否需要数据迁移，把历史 `报名中` 记录改写为具体方式 |
-| “无需审核”的自动通过 | 提交后直接置为已通过，展商仍可在报名管理中调整 | 已按确认实现；如需改为“提交后仍待展商确认”请说明 |
-| 报名收集项持久化 | **已落库**：后端 `exhibition_fields` 表（标题 / 类型 / 选项 / 必填 / 顺序） | 无 |
-| 报名审核记录 | **已落库**：后端 `registrations.status` + `check_in_time`，与报名同一行 | 无 |
-| 简介存储格式 | 统一以 Markdown 保存并记录 `descriptionFormat`，历史 HTML 打开编辑器时自动转换，内联图片保存时改写为短 URL | 是否需要一次性把所有历史简介转换并回写 |
-| 服务器设置生效范围 | **已落库**：后端 `app_settings` 表，管理员保存后对所有用户生效；个人外观模式在 `users.ui_mode` | 无 |
-| 首页示例展会 | 后端示例数据是 4 场**相对今天**生成的展会，`db:seed` 可反复执行 | 是否需要更多示例展会或按分类铺开 |
-| “修改报名” | 打开报名页并回填已提交的回答，保存时受“已提交过该展会”限制 | 是否需要真正的报名更新接口 |
-| 视频上传 | 仅有系统选择器占位，格式与数量按服务器设置校验 | 是否接入服务端媒体接口 |
-| 管理员角色 | 继续用 `admin` 覆盖超级管理员 | 是否需要独立超级管理员 |
-| 设计稿 16/17 屏 | 内容内联到管理后台与个人页，不再保留二级页面 | 是否需要保留独立入口 |
-| 报名二维码的启用开关 | **已落库**：后端 `exhibitions.qr_enabled`，核销状态在 `registrations` 上 | 无 |
-| 核销权限 | **已收紧**：后端按 `exhibitions.exhibitor_id` 校验，展商只能核销自己举办的展会（管理员不限） | 无 |
-| 后端必须可用 | **已定**：删掉本机数据实现与零依赖演示后端，应用只走 HTTP；连不上时如实报错 | 无 |
-
-## 变更记录
-
-- 2026-09-20：**两步验证补上验证器（TOTP）与一次性备用码**，第二因子从「只有邮箱验证码」变成三种并列可用。新增 `server/src/domain/totp.js`（**零依赖自己实现**：base32、HOTP 动态截断、±1 步时钟窗口、`otpauth://` 地址、备用码生成与归一化），正确性对着 **RFC 6238 官方测试向量**钉住 —— 自己算错一个 bit，用户遇到的会是「验证器里的码永远不对」这种没法自查的问题。验证器密钥**加密存储**（AES-256-GCM，密钥取 `TOTP_SECRET_KEY`，缺省借用 `JWT_REFRESH_SECRET` 派生），而不是明文 base32：备份、`pg_dump`、只读副本这类「只有库」的泄露不该把第二因子直接送出去；解不开时给「请重新绑定」而不是 500。备用码 10 个、只存 sha256（10 位随机串熵够，不需要慢哈希）、**一次一枚、命中即原子消费**，重新生成时旧的全部作废；手抄容易丢横线，所以 `XXXXX-XXXXX` 与丢了横线的 10 位都认（6 位验证码长度不同，不会误判）。编排集中在 `domain/two-factor.js`：登录时 6 位码按「验证器 → 邮箱验证码」试，备份码形状走备份码分支；绑定验证器分两步（生成密钥**不生效**，输对一次码才绑定成功并同时发一批备用码 —— 否则扫了个没成功的码就打开开关会把人锁在门外）；关闭时把绑定、待确认密钥与备用码一起清掉。迁移 `0005` 加 `users.totp_secret / totp_pending_secret / totp_confirmed_at` 与 `backup_codes` 表。顺手修一个设计问题（契约用例先撞上的）：**绑了验证器之后登录不再自动发邮件码** —— 那封信多半用不上，还会撞上同一邮箱 60 秒一条的冷却，用户输错一次验证器码想重新登录就会拿到 429；现在 `/auth/login` 回 `emailSent` 与 `methods { totp, email, backup }`，页面据此决定显示「验证码已发送到…」还是「请输入验证器里的码」，需要邮件码时点按钮主动要一条。前端：个人页安全区改成「先选方式（验证器 / 邮箱）」再走各自的确认流程，二维码用从报名详情抽出来的 `ui/components.js` 的 `qrCanvas` 组件（两处共用；白底深点、深色模式不反色），密钥按 4 个字符分组便于手抄，备用码生成后一次性展示并提示「关闭后不再显示」；登录页的输入框同时接受 6 位码与备用码。测试：jest 81 → 95（TOTP 14 项：RFC 向量、base32 往返、±1 窗口边界、加密往返与篡改检测、换密钥、备用码形状与哈希），契约 58 → 59（绑定要过码、登录三选一、备用码一次一枚且大小写与横线不影响匹配、重新生成作废旧码、关闭清理绑定与备用码），渲染 34 → 35（安全区两条开启路径 + 选方式面板），smoke 112 → 116，文案 552 → 574，数据动作 47 → 50；真机：绑定验证器（二维码 + 32 位密钥 + 10 个备用码）→ 验证器登录进首页 → 备用码登录进首页，并确认绑了验证器时登录页**不显示**「验证码已发送到」而按钮变成「发送邮箱验证码」。
-- 2026-09-20：**`npm start` 自动进生产模式，并关掉状态页**。新增 `server/src/config/runtime.js`：`start` 脚本改成 `node src/index.js --production`（跨平台，不用引 cross-env、也不用 shell 的 `VAR=x` 写法），`npm run dev` 不带参数留在开发模式；真实环境变量优先于 `.env`，`--production` 压过 `.env` 里的 `development`，两个环境参数同时给会直接报错。判定必须发生在**任何**读取 `NODE_ENV` 的模块之前（`config/mail.js`、`config/database.js` 都是在 require 那一刻定值的），所以 `index.js` 与 `config/migrate.js` 的第一行 require 就是它。生产模式下：`/status` 与 `/api/v1/status` **直接 404**（带一句说明；这两个接口会暴露迁移清单、各表行数、接口清单，失败时还带 pg 原文），需要时用 `ENABLE_STATUS_PAGE=true` 显式打开；启动前跑配置自检（`config/production.js`）——**致命项拒绝启动**（开发用的 JWT 密钥 / `DB_PASSWORD=postgres` / `MAIL_TRANSPORT=console|memory` 让验证码只进日志 / 缺失或占位的发件人地址），**可疑项只警告**（Mailpit 地址与 1025 端口、`CORS_ORIGIN=*`、没配 `TRUST_PROXY`、`LOG_LEVEL=debug`、远端库没开 `DB_SSL`）。另外补三处生产细节：`TRUST_PROXY` 决定是否信任反代（不配的话 `req.ip` 是代理地址，按 IP 的验证码限流会退化成全体用户共用 1 小时 20 条；配了而实际直连又能被伪造 `X-Forwarded-For` 绕过，所以必须由部署的人声明）；`DB_SSL` 接管数据库 TLS（原来按 NODE_ENV 硬开 SSL，部署到同机 Docker PostgreSQL 会直接连不上库），未知的 `NODE_ENV` 回退开发配置而不是让 `module.exports` 变成 undefined；关掉 `x-powered-by`，启动日志明确打印运行模式与状态页开关，新增 `npm run db:migrate:prod`（迁移前打印 `[production] 目标库 host:port/db`，避免对着错的库跑完才发现）。验证：`npm start` 在当前 `.env` 下按预期**拒绝启动并列出 4 条致命项 + 5 条警告**（exit 1）；换成随机密钥、非默认库密码与真实发件域后正常启动，`/ping`、`/health`、`/api/v1/bootstrap` 均 200，`/status` 与 `/api/v1/status` 均 404 并给出说明；`ENABLE_STATUS_PAGE=true` 时两者恢复 200；`db:migrate:prod` 与开发模式各打印对应环境与目标库。jest 66 → 81（运行环境优先级 8 项、生产自检 7 项），smoke 108 → 112。
-
-- 2026-09-20：**登录两步验证（用户可自选）与「邮箱即身份」收口**（邮箱验证码体系的最后一步）。开启两步验证的账号登录时，`POST /auth/login` 密码对也**只回一张预认证票 + 一枚发到邮箱的验证码，不给任何令牌**，第二步 `POST /auth/login/verify` 过码才签发会话；预认证票在 `domain/preauth.js`：只存 `sha256`、5 分钟、**单次使用**（`UPDATE … WHERE consumed_at IS NULL` 原子消费，并发提交两次只有一次拿得到会话）、验证失败计数到 5 张票作废。顺序上**先验码再消费票**：码输错时票还留着，用户改一下就能接着用；`POST /auth/login/code` 用同一张票重发。前端登录页变成两步同页（显示打码邮箱 `fl***@example.com`、60 秒重发倒计时、可返回上一步）。邮箱既然是身份，就只能在「个人页 → 安全」里改，而且要**两阶段**：验证码发到新地址、通过才落库（`POST /profile/email` + `/email/verify`，并校验这枚码是为当前账号签发的，别人账号的码用不了）；`PUT /profile` 现在**拒绝 `email` 字段**并指向正确路径，资料编辑表单也去掉了邮箱输入框 —— 否则「偷到会话 → 改邮箱 → 找回密码」是一条完整的账号接管链。同一张卡片里还有两步验证开关：**开启要先过码**（顺便证明这个邮箱现在真的能收信，避免随手打开后自己登不进去），**关闭要输当前密码**（会话被偷不等于能关掉第二道锁）；用户邮箱用不了时，管理员可以在「管理 → 用户」关闭他人的两步验证 —— 那是唯一的兜底出口（接口幂等，且不接受开启，开启只能由本人过码）。查出一个检查脚本的真缺陷：`webui-check` 与 `smoke-check` 的动作名正则写的是 `[a-zA-Z.]+`，**不含数字**，于是 `security.enable2fa` 这类带数字的动作被静默跳过 —— 既不校验也不计数（47 个动作被算成 43 个）；正则改为 `[a-zA-Z0-9.]+` 之后这些动作才真正进入校验。测试：契约 56 → 58（两步验证的票据/令牌边界、关闭要密码、改邮箱两阶段、别人的码用不了、占用邮箱被拒），jest 65 → 66（打码邮箱的边界），渲染 32 → 34（登录两步切换与「过码前无令牌」、个人页安全区开启流程），smoke 105 → 108，文案 523 → 552，数据动作 38 → 47；真机重建 APK 后走通「密码 → 切到输码那一步且 `hasRefreshToken()` 为 false → 邮箱收码 → 过码进首页」，并确认打码邮箱与倒计时都正确显示。
-
-- 2026-09-20：**补上找回密码，并让「用邮箱登录」真的能用**。新增 `POST /auth/password/forgot` 与 `POST /auth/password/reset`：验证码通过后改密码并**撤销该用户全部刷新令牌**（找回密码通常意味着密码可能已经泄露，只换门锁不赶人等于没改）；密码校验放在消费验证码之前，两次输入不一致不会把那枚码烧掉。第一个接口**不区分邮箱是否存在** —— 不存在的邮箱同样走一遍发码限流与落库（`issueCode({ silent: true })`），响应字段与耗时都一致，否则它就是个账号枚举器；代价是界面必须写「如果该邮箱已注册，验证码会发送到该邮箱」，不能写「已发送」（渲染用例专门钉住这句话：说「已发送」的那一句必须带前提条件）。前端新增「找回密码」页（两步同页、60 秒重发倒计时），登录页加了入口；顺带修掉登录页那个说谎的占位符：它一直写着「昵称 / 邮箱」，而后端只按用户名匹配、昵称又没有唯一约束 —— 现在真的支持**用户名或已验证邮箱**登录，登录框的长度上限也从用户名的 20 放宽到 120（否则长邮箱会被前端直接卡住）。查出并修掉一个只在新库上出现的问题：迁移 0004 里的「存量账号回填已验证」发生在 `seed` **之前**，全新库（以及 `db.ps1 reset` 之后）跑迁移时表还是空的，示例账号建出来就是「邮箱未验证」—— 找不回密码、也开不了后面的两步验证；改成 seed 显式写入 `email_verified = true`（示例邮箱本来就是收不到信的占位地址），这条是契约用例先变红才暴露的。另外修掉 `extract-strings.js` 的一个导入缺陷：给 `js/app.js` 这类「就在 `js/` 下」的模块补 `t` 导入时，`path.relative` 给的是不带 `./` 的路径，写出来是**裸标识符** `from 'core/strings.js'`（浏览器原生 ES 模块根本无法解析），而它判断「已有导入」时又不认 `./` 前缀，于是再插一行 —— 同一模块里 `t` 被声明两次、整个模块语法错误；现在路径统一补 `./`、判重按「去前缀后同一个文件」比较，并在 `smoke-check` 里加了一条不变量（前端 import 不许出现裸标识符），这类「只在真机加载时才炸」的写法下一轮就会被拦住。测试：契约 53 → 56（用户名与邮箱登录、找回密码不泄露存在性却确实发码、改密码后旧刷新令牌失效、两次密码不一致不吃码、一码一用），渲染 31 → 32（找回密码两步与那句「如果…」），smoke 104 → 105，文案 510 → 523，数据动作 36 → 38；真机重建 APK 后走通「登录页入口 → 邮箱发码 → 输码设新密码 → 回到登录页」，并确认旧密码失效、新密码可用。
-
-- 2026-09-20：**注册改成「先验证邮箱、通过后才建账号」**（邮箱验证码体系的第二步）。`POST /auth/register` 变成第一步：仍然做全部输入校验与查重（用户名、密码长度、邮箱格式），但**不建账号、不发令牌**，只把待建账号（用户名 + bcrypt 哈希 + 昵称）暂存在验证码记录的 `payload` 里并发码；新增 `POST /auth/register/verify` 是第二步，验证码通过才 `INSERT users` 并签发会话，新账号直接是 `email_verified = true`（这个邮箱刚刚被验证过）。好处是库里**不存在「注册了但邮箱没验证」的半成品账号**，也就不需要为那种状态设计一整套功能限制 —— 没验证就等于没注册过，待建数据 24 小时后随过期码一起清掉。验证码规则集中在 `server/src/domain/otp.js`：6 位数字、只存 `sha256(id:code)`、10 分钟过期、单码最多 5 次尝试、命中即原子消费（并发用两次只有一个成功）、限流**按库里行数**算（同一邮箱 60 秒 1 条 / 1 小时 5 条 / 24 小时 15 条，同一 IP 1 小时 20 条）—— 不用内存窗口是因为验证码是发出去就有成本、还可能被用来骚扰他人的资源，重启清零不可接受。发码接口**先落库、立刻回包、后台发信**（前端 `REQUEST_TIMEOUT = 3000`，同步等一次 SMTP 会把注册页卡成超时），发信结果写 `mail_log`。前端注册页变成同页两步：填表 → 输码，带重发 60 秒倒计时（秒数取后端返回的 `resendAfterSec`）、「返回修改」保留已填内容、错码就地提示。顺手修掉两个缺陷：**错码原本走 400 异常通道**（应当是 200 + `ok:false`，与「账号或密码不正确」同一套处理，页面的错误提示逻辑才不用分两套），以及**错码计数那条 SQL 的参数类型不定**（`$2` 既写 integer 列又参与比较，pg 报 `inconsistent types deduced for parameter $2` → 500，加显式 `::int` 转型）——后者是契约用例先变红才暴露的。顺手修掉第三个缺陷（真机截图才看出来的）：第二步的「验证码已发送到 」原本靠**资源里的尾随空格**做间隔，而 **Android 的 `<string>` 资源会裁掉首尾空白**，真机上渲染成「验证码已发送到xxx@example.com」；改成用冒号分隔，并在 `check-strings.js` 里新增一条不变量（任何文案资源首尾带空白即失败）—— 这条检查当场又抓出 `user-public.js` 里同一类历史写法（`' · 这是你的公开页'` 的前导空格，真机上同样是粘在一起的），分隔符改由代码拼接。测试：契约 49 → 53（两步注册、错码不建号、一码只能用一次、60 秒内重复发码 429、错 5 次即作废、发码后被抢注给「已被注册」而不是 500），jest 59 → 65（验证码形态 / 加盐哈希 / 等长比较 / 邮箱归一化），渲染用例重写为两步流程（第一步不拿令牌、第二步才存令牌），smoke 102 → 104，文案 500 → 510，数据动作 35 → 36。真机（重建 APK 后）：第一步提交后切到第二步、按钮显示「59 秒后可重发」、Mailpit 收到码、填码后落到 `#/home`，并单独复核了「验证码已发送到：邮箱」的分隔。
-
-- 2026-09-20：**接入邮件通道与本地收件箱**（邮箱验证码体系的第一步，为注册验证、找回密码与两步验证打底）。后端新增 `src/config/mail.js`（三条通道：`console` 本地零配置、整封邮件进后端日志；`smtp` 开发指向 Mailpit、生产指向阿里云邮件推送 / 腾讯云 SES / Resend 等托管中继；`memory` 仅测试用，**生产即使显式配置也会被拒并降级为 `smtp`** —— 否则线上会「发信成功」而用户永远收不到验证码，这是最难查的一类故障）、`src/services/mailer.js` 发送适配层与 `src/services/mail-templates.js` 文案层；新增 `scripts/mail.ps1`（Mailpit 容器 `calmobile-mail`，SMTP 1025 / 收件箱 http://127.0.0.1:8025 ）与迁移 `0004-email-verification`：`users` 补 `email_verified` / `email_verified_at` / `two_factor_enabled` 与**大小写无关的邮箱唯一索引**（此前只有 `username` 是 UNIQUE，重名邮箱只在注册路由里查一次，并发下两条注册能写成同一个邮箱，之后按邮箱找回密码就会打错账号），新增 `email_codes`（只存哈希；注册用途把待建账号暂存在 `payload` 里，密码存哈希）、`preauth_tickets`（两步验证的预认证票）、`mail_log`（发信留痕），存量账号回填为已验证。「配置缺失不抛异常」：后端连库连不上都照常启动，邮件配错更不该拦启动，缺失项由 `/status` 新增的「邮件通道」自检项显示（通道是否配全 + 最近 24 小时发信失败数，读 `mail_log`；不做实时 SMTP 握手，免得状态页的可用性取决于邮件服务商）。两条工程约定写进代码与用例：发码接口**先落库、立刻回包、后台发信**（前端 `REQUEST_TIMEOUT = 3000`，同步等一次 SMTP 往返本机实测约 1.3 秒、跨境中继更久，会把注册页卡成超时）；`send()` 不抛异常而返回 `{ ok:false, error }`，让发信失败看得见。文案层面顺手修掉一个真实缺陷：第一封测试邮件的主题是「注册**验证验证**码」（用途标签自带「验证」又拼了一次），改成按标签是否以「验证」收尾决定补「验证码」还是「码」；邮件不放链接（带链接是钓鱼邮件特征、会拉低送达率），品牌名进 HTML 前转义、进主题前清换行（品牌名来自管理员设置，不清就是邮件头注入）。验证：Mailpit 实收邮件（主题「【发现展会】注册验证码」，中英双语、验证码与有效期齐全，`/status` 的「邮件通道」显示 `SMTP 127.0.0.1:1025` 且无失败）；jest 30 → 59，smoke 97 → 102（新增邮件通道、配置守卫、文案不放链接、收件箱脚本、迁移四项断言），lint 全绿。
-- 2026-09-20：**受限范围收紧到一切展会写操作与核销，取消改用稳定错误码，深链补门禁**。受限账号原先只拦「发布新展会」：现在 `POST /exhibitions`、`PUT /exhibitions/:id`、`DELETE /exhibitions/:id`、`PUT /exhibitions/:id/status`、`PUT /exhibitions/:id/fields`、`POST /checkin` 六条写路径全部 403（文案「账号已被限制，不能发布展会 / 不能修改展会 / 不能删除展会 / 不能修改报名设置 / 不能核销」），仍允许查看、查询、**审核报名**、通知偏好、改密码与撤销自己的报名；受限判定排在角色检查之前，受限的普通用户拿到的是「已被限制」而不是「只有展商或管理员…」。界面同步：展商后台的「新建展会」「编辑展会」（卡片与入口）、「核销报名码」全部置灰并带原因，「查看报名」不受影响；报名表单、展会编辑、核销页三个**深链**直接显示限制说明、不渲染任何输入与保存入口（核销页还因此不再加载 257KB 的解码库）。取消判定改稳定错误码：桥接回调新增第 5 个参数 `code`（`cancelled` / `timeout`），`bridge.js` 把它挂到 `Error.code` 上，五处「按中文『取消』子串判断」全部改成按码判断——原来文案一改取消分支就集体失效，而任何含「取消」二字的真失败会被静默吞掉（新用例专门钉住这条：带码的取消静默、含「取消」的普通失败照常报错）；`smoke-check` 新增 `bridge-onresult-arity` 校验 JS 形参与 Java 实参都是 5 个。测试：契约 48 → 49，渲染 28 → 31，Android 单测 37 → 39（未实现带码失败的回调会退化成按文案失败、错误码字面量固定），smoke 95 → 97，文案 498 → 500。
-- 2026-09-20：**修掉一个把所有媒体上传都挡住的后缀解析缺陷**（真机回归时发现）。前端推给原生的格式白名单是数组，`WebAppBridge.text` 用 `String.valueOf(List)` 序列化成 `[mp4,mov,webm]`，而设备侧只按逗号切分，于是得到 `[mp4` 与 `webm]` 两个假后缀——「允许 mp4」却判定 mp4 非法，`media.import` 的**图片与视频两条路一起失败**，提示还把 `[mp4、mov、webm]` 当作允许列表打印出来，极具误导性。两端都修：桥接对 `List` 值按逗号拼接，`splitFormats` 容忍 `[]`、引号、顿号、分号与空白（老设备上已写坏的镜像也能自愈）。`AppSettingsTest` 补了数组 / 顿号 / 引号 / 分号的解析用例；真机复测图片与视频导入均返回 `ok:true` 并落盘。
-- 2026-09-20：**补上视频入口，让「受限」账号真正生效**。视频：原先 `media.import` 的 video 分支没有任何前端调用点，管理员配的 `videoCount` / `videoFormats` 是纯装饰，原生对视频也不做容量限制。现在 Markdown 简介编辑器有「插入视频」入口（`media.import{kind:'video'}` → `<video controls src="短URL">` 插到光标，取消与插图同一套静默处理），`sanitize.js` 只放行 `video` 的 `src / controls / poster / preload / class`（`autoplay`、`on*`、`style` 与 `javascript:` 一概丢弃，其它标签白名单未放宽），详情页与编辑器预览都能播放；插入前按 `videoCount` 计数（0 表示禁用，不再被 `|| 2` 读反）；新增服务器设置 `media.videoSizeMb`（默认 50、1..500，管理后台可改，bootstrap / settings / `ui.sync` 三处都下发），原生复制视频时先看 Provider 声明的大小、再在流式复制里数着字节，超限即中止并删掉半成品，避免几 GB 的文件写满数据分区或整份读进内存 OOM。受限账号：`permissions.js` 集中判定（`isLimited` / `assertNotLimited`），`capabilities(role, status)` 让 `can.register` / `can.profile` 对受限账号为 false 并新增 `can.limited`；后端在 `POST /registrations`、`POST /exhibitions`、`PUT /profile` 三处返回 403（文案分别是「账号已被限制，不能报名 / 不能发布展会 / 不能编辑个人信息」），登录、浏览、查询、通知偏好、改密码与撤销自己的报名照旧；前端把「立即报名」「新建展会」「编辑资料 / 头像 / 隐私开关」置灰并说明原因，通知偏好与改密码不受影响；管理员不受限制（否则没人能解除）。测试：契约 45 → 48（受限三条 403 与仍可用项、videoSizeMb 读回与收敛、老库缺键兜底），jest 24 → 30，渲染 25 → 28（插入视频与数量上限、受限入口置灰、通知偏好未被误禁），Android 单测 35 → 37（媒体上限区间与后端 clamp 对齐、后缀列表容忍数组）；顺手修掉 `extract-strings.js` 给 `js/core/*.js` 补导入时会写出重复 `import { t }` 的缺陷。
-- 2026-09-20：**继续按审查结论收尾**。限流只统计失败（4xx 或 200 + `ok:false`）：原实现把成功登录也计入，演示或回归时连着登录十来次就会把自己锁 5 分钟，而撞库脚本全是失败请求，只算失败既拦得住又不误伤（实测：连续 10 次错误密码 → 第 11 次 429；连续 12 次正确密码 → 全部 200）；登录时账号不存在也走一次 bcrypt（对固定哑哈希比对），消除「立即返回 vs 比对后返回」的耗时差，不再能用它枚举用户名。CSV 转义把 `\r` 也算作需要加引号的字符（Windows 换行不包引号会把一条记录拆成两条），导出行数改用真实数据行数而不是数 CSV 换行（字段里的换行会被算成多行）。`ui.sync` 只在真正下发 `themeIndex` 时才覆盖设备侧镜像（缺字段写 0 会把配色镜像悄悄重置成默认色，与后端下发的配色不一致）。`media.store` 先按 base64 长度估算再解码，超限直接拒绝，避免先解出几十 MB 数组在低内存设备上 OOM（OOM 是 Error，`catch (Exception)` 兜不住）。
-- 2026-09-20：**安全加固**（源自第二轮代码审计）。后端：登录与注册加内存滑动窗口限流（`/auth/login`、`/auth/register` 按 IP + 用户名 5 分钟 10 次，超出 429；不引入限流依赖，保持依赖收敛；多实例部署时再换共享存储），此前撞库没有任何成本。原生：`WebShellActivity` 的资源路径校验提取为纯函数 `AssetGuard`（`resolveAssetPath` / `isMediaFileAllowed`），在「`Uri.getPath()` 未解码」的假设下也先做一次百分号解码再判 `..` 与分隔符，编码形式的 `%2e%2e`、`%2f`、`%5c` 穿越同样拒绝；`/assets/` 下越出 `web/` 的请求从「交给系统默认处理」改为明确 403。前端：`bridge.js` 的 `call()` 对同步动作加 30 秒兜底超时——原生抛异常又忘了 `callback.failure` 时 promise 拒绝并报「原生动作 X 超时未响应」，不再永久泄漏 pending 条目（share.text 修复后这是最后一类无防线场景）；弹系统界面等用户操作的动作（选图、导入、导出、两项权限）时长不可控，不设超时。测试与文档：新增 `AssetGuardTest`（3 项，钉住路径穿越判定）、限流中间件单测（3 项）、契约用例 44 → 45（登录限流 429）、渲染用例 24 → 25（桥接超时兜底，用即时计时器替身避免拖垮测试进程）；「部署前待办」（MIXED_CONTENT 改回严格模式、CORS 收紧、bcryptjs 换代）从代码注释上提到当前限制的显眼位置。
-- 2026-09-18：**按代码审查结论修掉一批真实缺陷**（每条都先复现、再修、再用「把修复改回旧写法」的方式确认新用例会失败）。原生侧：系统日历不再写死年月——桥接契约改传后端下发的 ISO 日期（`date` 取代 `day`），`CalendarHelper` 去掉 `EXHIBITION_YEAR` / `EXHIBITION_MONTH` 与「缺日期当 1 号」的回落；写日历失败不再假装成功（`applyCalendarChange` 的返回值改为带原因的 `CalendarResult`，`SystemActions` 失败走 `callback.failure`，页面不再出现「按钮翻成移出日历但其实没写进去」）；深色模式下按底色切换状态栏图标明暗（原来只有颜色跟着变，深色图标压深色底看不见）；APK 内 js/css 的缓存从 `max-age=86400` 改为 `no-cache`，避免覆盖安装后「新外壳配旧模块」。前端：`loadInto()` 加过期响应守卫（连续切月 / 改搜索词 / 换分区时旧响应不再覆盖新视图），首页预热键带上落点年月，`TransportError` 导出且 5xx 与超时分别给出带动作与路径的文案，`clearCache()` 用 generation 让在途请求作废，个人页取数失败不再被吞掉（两份都失败画错误块，`granted` 不再把「未知」当已授权），「访客进入」补上错误处理。后端：公开页不再下发报名码（`checkInCode` 只走本人 / 管理员路径）、个人外观模式写入要求登录、审核流转加状态机白名单（已参加是终态）且展商受「允许修改已审核报名」策略限制、撤销报名与之一致（已参加不能撤销）、报名提交按收集项校验必填与选项、刷新令牌轮换的 TOCTOU 用条件更新消除、body-parser 的错误按 400/413 返回。检查脚本：`webui-check` 新增「路由注册三处一致」校验（`defineRoute` / 页面文件 / 渲染测试用例），`check-strings` 的 `t()` 正则放宽到单双引号，修掉若干「靠注释或已消失符号就能通过」的断言；渲染用例 18 → 24（补 `register` 路由、过期响应、缓存代次、落点预热、传输层诊断），契约用例 39 → 44，Android 单测重写为不把实现常量抄成期望值的 32 项。
-- 2026-09-18：删除两条历史包袱——原生侧的本机数据实现（19 个类 + 15 个测试：`AuthManager`、`DatabaseHelper`、`ExhibitionManager`、`RegistrationManager`、`RegistrationReviewStore`、`UserProfileStore`、`ExhibitionConfiguration`、8 个域动作类等）与旧的零依赖演示后端（`demo-server.js` / `demo-api.js` / `demo-data.js` + 拆分脚本），`WebAppActions` 收敛到 10 个系统动作（`ui.sync`、摄像头与通知权限、系统日历、媒体选择与落盘、分享、CSV 导出），`AppSettings` 降级为设备镜像；`api.js` 删除传输层降级分支；WSL 里的 PostgreSQL 与 `db.ps1` 的 `-Provider wsl` 一并移除，数据库只剩 Docker 一条路。新增后端健康状态页：给人看的 `GET /status`（自检数据库、迁移版本、示例数据、端口配置，失败项标红并给出修复命令）与给机器看的 `GET /api/v1/status`，后端在数据库不可用时也照常启动以便先看到状态页，库故障的接口响应从「一律 500 + pg 原文与堆栈」改为 503 + 固定文案。清理已完成的结构优化清单与文档中的离线降级描述。
-- 2026-09-18：数据库改用 Docker 部署（容器 `calmobile-pg` + 命名卷 `calmobile-pgdata`，固定 `postgres:16-alpine`，`--restart unless-stopped`），`scripts/db.ps1` 改为只认 Docker；容器显式设 `Asia/Shanghai` 时区，避免镜像默认 UTC 让数据库的「今天」在凌晨差一天。
-- 2026-09-17：**后端补齐为真实服务**（Express + PostgreSQL）：重写迁移脚本（按编号记录、可反复执行，8 张表把展会扩展字段、报名收集项、审核状态与核销时间、服务器设置、通知偏好、刷新令牌全部落库）；新增 `src/domain/` 业务层（状态词汇表、SQL 片段、响应映射、权限、校验、设置、会话）；实现前端全部 35 个数据动作的 REST 路由，服务端兜住角色权限、报名窗口、重复报名、自动通过、核销流转与隐私开关；密码改 bcrypt、令牌改 JWT + 可撤销的刷新令牌轮换；示例数据改为相对今天生成，演示不会过期。前端 `api.js` 增加「动作 → REST 路径」映射表与 401 自动续期，页面不需要知道数据来自哪一边，也不会因为换后端而改动。新增后端契约测试 33 项、前端 REST 映射用例 1 项，`npm run lint` 全绿（后续又补了「前后端路由交叉校验」2 项，并据此删掉重复的用户公开页入口）。
-- 2026-09-17：前端取数改为「先画缓存、再后台刷新」（新增 `core/loadable.js` 与 `core/preload.js`，`api.js` 的只读接口提供 `peek()` / `warm()` 并按参数排序做缓存键、并发去重），切页面与切月份不再先闪骨架屏；首页日历的选中日期改为纯本地状态，点日期与切换月份都不再重新取数；`exhibitions.month` 改为原样返回请求的月份，日历落点由 `bootstrap.calendar.landing` 下发；收敛原生三处结构（`ExhibitionConfiguration` 改 `Patch` 写入、`RegistrationReviewStore` 统一报名 id 并把示例数据显式标注、字符数上限收敛到 `AppSettings.TextLimit` 单表）；补 3 个原生单测与 6 个前端渲染用例。
-- 2026-09-17：按动作域拆分 `WebAppActions`（2,156 行 → 8 个域类 + 196 行分发入口，行为不变）；个人页新增「在公开页展示我的报名记录」隐私开关并打通持久化与公开页过滤；演示后端同步支持该字段。
-- 2026-09-17：删除旧原生页面与旧架构层（legacy 16 个 Activity、BaseActivity、MainTabState、17 个布局、Room/Retrofit/Repository/ViewModel，以及只服务它们的 drawable/anim/values 资源），依赖收敛到 Gson + JUnit；前端文案迁入 `strings_frontend.xml`（475 条，原生注入 + 三处一致性校验）；APK 内静态脚本样式改为可缓存、三个内置库改为按需加载；修复演示后端把用户选中的日期回落到有展会的日子，导致首页日历「点日期没反应」。
-- 2026-09-14：首页日历去掉选中日期的方框底色，改为「强调色加粗数字 + 数字下方一小段下划线」，保留键盘焦点环；次按钮的浅色底统一取页面底色，应用配色只改边框与文字；新增深色模式（跟随系统 / 浅色 / 深色，含原生状态栏与底色）；开关等按钮去掉点击时的系统蓝色高亮方框；首页日历「有展会」圆点改为与上方数字同轴居中；头像裁剪由滑块改为双指捏合缩放；展商卡片只保留查看报名与编辑展会，报名方式 / 编辑简介 / 删除展会移入编辑展会二级界面；修复管理后台从展会二级页面返回后跳回用户分区；管理员查看报名始终可切换报名人状态、查看用户公开页不受隐私设置影响；新增报名二维码与展商扫码核销。
-- 2026-09-14：应用配色扩展到主按钮填充、次按钮边框/填充/文字与开关打开态；新增软件中英文标题设置并显示在首页及其它品牌位；顶部导航栏统一高度并去掉标题下的强调短线；修复日历滑动切月后卡片被压缩导致下边框显示不全。
-- 2026-09-14：无需审核的展会提交即通过；长简介图片改为落盘短 URL 并自动改写历史内联图片；服务器设置迁回「管理-设置」并新增上传格式与字符数上限；修复应用配色不生效并扩大强调色覆盖面；个人页去掉用户公开页入口、联系方式改为地区、新增头像上传与圆形裁剪；分段控件与底部导航改为滑动指示动效；展会图片统一为 1080×1920 竖向比例并支持上传封面；首页日历支持左右滑动切换月份并适配六行月份；所有表单补齐前端数据格式校验。
-- 2026-09-14：加入动效层（页面切换、抽屉、按压、悬浮、状态切换），首页去掉重复入口，个人页合并设置栏，管理后台内联展会管理与系统设置，简介编辑器改用内置 EasyMDE（Markdown），收集项支持逐条增删选项，并排字段改为等高对齐。
-- 2026-09-14：前端迁移到 WebView，按 `newUI/` 的页面拆分模块，新增 `WebAppBridge`/`WebAppActions` 桥接层，旧 Activity 归档到 `legacy/`。
-- 2026-09-14：按 newUI 灰盒规范重构颜色、卡片、表单、首页月历、详情分享、搜索跳转和我的报名列表。
-- 2026-09-14：合并重复 Markdown，更新 API 34、富文本编辑、日期时间选择、四项导航、管理员设置和当前限制。
-- 2026-09-14：完成展会简介二级富文本编辑器、图片插入以及报名起止日期并排选择。
+| 报名方式的历史数据 | 状态在库里存英文代码，中文标签只在 `server/src/domain/labels.js` 映射一次 | 是否需要一次性数据迁移，把历史的旧状态值改写为具体报名方式 |
+| 历史简介的格式 | 统一以 Markdown 保存并记录 `descriptionFormat`，打开编辑器时自动转换、内联图片改写为短 URL | 是否需要一次性把全部历史简介转换并回写 |
+| 「修改报名」 | 打开报名页回填已提交的回答，保存时受「已提交过该展会」限制（同一展会只有一条未撤销报名） | 是否需要真正的报名更新接口 |
+| 视频上传 | 走系统选择器，格式与数量按服务器设置校验，只在设备侧落盘 | 是否接入服务端媒体存储与上传接口 |
+| 管理员角色 | `admin` 即超级管理员，权限不细分 | 是否需要独立超级管理员与更细的角色 |
+| 设计稿 16/17 屏 | 内容内联到管理后台与个人页，没有独立二级页面 | 是否需要保留独立入口 |
+| 示例数据规模 | 4 场**相对今天**生成的展会，`db:seed` 可反复执行 | 是否需要更多示例展会或按分类铺开 |
