@@ -32,6 +32,7 @@ const { Client } = require('pg');
 const database = require('../src/config/database');
 const { pool } = require('../src/config/pool');
 const { migrate, seed } = require('../src/config/migrate');
+const { resetRateLimits } = require('../src/middleware/rate-limit');
 const { app, routes } = require('../src/index');
 
 let server;
@@ -170,6 +171,7 @@ test('bootstrap 的日历落点月份确实有展会', async () => {
 // ── 认证 ────────────────────────────────────────────────────────
 
 test('登录返回访问令牌与刷新令牌，密码错误给业务失败', async () => {
+  resetRateLimits();
   const ok = await post('/api/v1/auth/login', { username: 'demo', password: 'password' });
   assert.strictEqual(ok.status, 200);
   assert.strictEqual(ok.body.ok, true);
@@ -181,6 +183,19 @@ test('登录返回访问令牌与刷新令牌，密码错误给业务失败', as
   assert.strictEqual(bad.status, 200, '业务失败应当是 200 + ok:false');
   assert.strictEqual(bad.body.ok, false);
   assert.ok(bad.body.error, '必须给出可展示的错误');
+});
+
+test('登录限流：同一账号连续失败到上限后给 429', async () => {
+  resetRateLimits();
+  const username = `rl-${Date.now().toString(36)}`;
+  let last;
+  for (let i = 0; i < 10; i += 1) {
+    last = await post('/api/v1/auth/login', { username, password: 'wrong' });
+    assert.strictEqual(last.status, 200, `第 ${i + 1} 次应当在窗口内放行`);
+  }
+  const blocked = await post('/api/v1/auth/login', { username, password: 'wrong' });
+  assert.strictEqual(blocked.status, 429, '超出窗口上限应当 429');
+  assert.ok(blocked.body.error, '429 也要给出可展示的错误');
 });
 
 test('刷新令牌可轮换，旧的一次性作废', async () => {

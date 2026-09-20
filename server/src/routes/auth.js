@@ -17,8 +17,16 @@ const {
 } = require('../domain/session');
 const { badRequest } = require('../domain/errors');
 const { authenticate } = require('../middleware/auth');
+const { rateLimit } = require('../middleware/rate-limit');
 
 const router = express.Router();
+
+/** 登录 / 注册限流：同一 IP + 同一账号 5 分钟内最多 10 次，挡住脚本化撞库。 */
+const authLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  message: '尝试过于频繁，请稍后再试',
+});
 
 /** 响应统一信封：成功时 ok=true 且 error 为空串。 */
 function failure(message) {
@@ -39,7 +47,7 @@ async function loadUser(id) {
  * POST /api/v1/auth/login
  * 用户名 + 密码换令牌。密码错误与账号不存在给同一条提示，避免暴露账号是否存在。
  */
-router.post('/login', async (req, res, next) => {
+router.post('/login', authLimiter, async (req, res, next) => {
   try {
     const username = String(req.body.username || '').trim();
     const password = String(req.body.password || '');
@@ -73,7 +81,7 @@ router.post('/login', async (req, res, next) => {
  * POST /api/v1/auth/register
  * 自助注册固定为普通用户；用户名 / 密码长度按管理员配置的上限校验。
  */
-router.post('/register', async (req, res, next) => {
+router.post('/register', authLimiter, async (req, res, next) => {
   try {
     const textLimits = await limits();
     const username = String(req.body.username || '').trim();

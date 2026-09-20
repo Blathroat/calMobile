@@ -273,20 +273,21 @@ public class WebShellActivity extends Activity {
         if (!"appassets.androidplatform.net".equals(uri.getHost())) {
             return null;
         }
-        String path = uri.getPath();
-        if (path == null) {
+        // 用解码后的路径做前缀判断：uri.getPath() 未解码时，编码的 %2e 会先被
+        // AssetGuard 解开再拦截，不会带着编码形式漏过去。
+        String path = uri.getPath() != null ? uri.getPath() : "";
+        String decoded = android.net.Uri.decode(path);
+        if (decoded.startsWith("/media/")) {
+            return serveMedia(decoded.substring("/media/".length()));
+        }
+        String assetPath = AssetGuard.resolveAssetPath(decoded);
+        if (assetPath == null) {
+            if (decoded.startsWith("/assets/")) {
+                // 想读 web/ 之外的打包资源或带路径穿越：明确拒绝，而不是放行给系统默认处理。
+                return new WebResourceResponse("text/plain", "utf-8", 403, "Forbidden",
+                        securityHeaders(), null);
+            }
             return null;
-        }
-        if (path.startsWith("/media/")) {
-            return serveMedia(path.substring("/media/".length()));
-        }
-        if (!path.startsWith("/assets/web/")) {
-            return null;
-        }
-        String assetPath = path.substring("/assets/".length());
-        if (assetPath.contains("..")) {
-            return new WebResourceResponse("text/plain", "utf-8", 403, "Forbidden",
-                    securityHeaders(), null);
         }
         try {
             InputStream input = getAssets().open(assetPath);
@@ -335,7 +336,7 @@ public class WebShellActivity extends Activity {
      * 避免通过 URL 读取应用私有目录里的其它文件。
      */
     private WebResourceResponse serveMedia(String name) {
-        if (name.isEmpty() || name.contains("/") || name.contains("\\") || name.contains("..")) {
+        if (!AssetGuard.isMediaFileAllowed(name)) {
             return new WebResourceResponse("text/plain", "utf-8", 403, "Forbidden",
                     securityHeaders(), null);
         }

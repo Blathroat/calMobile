@@ -1530,3 +1530,30 @@ test('传输层错误带上动作与路径，超时与连不上分开报', async
         installGlobals();
     }
 });
+
+// ── 桥接兜底 ─────────────────────────────────────────────────────
+
+test('原生不回调的同步动作会在超时后拒绝，而不是永远挂着', async () => {
+    await renderRoute('home', {});
+    const bridge = await webModule('js/core/bridge.js');
+
+    const original = sharedWindow.CalMobileNative;
+    // 假装原生拿到动作后抛了异常又忘了 failure：既不成功也不失败（share.text 曾踩过）。
+    sharedWindow.CalMobileNative = { invoke() {}, report() {} };
+    try {
+        // 真实等 30s 会拖垮整个测试进程（node --test 会等定时器排空才退出），
+        // 把全局 setTimeout 换成「立刻到点」的替身，只影响这一个用例。
+        const realSetTimeout = global.setTimeout;
+        global.setTimeout = (fn) => realSetTimeout(fn, 0);
+        try {
+            await assert.rejects(
+                bridge.call('calendar.status', { date: '2026-09-20' }),
+                /超时未响应/,
+            );
+        } finally {
+            global.setTimeout = realSetTimeout;
+        }
+    } finally {
+        sharedWindow.CalMobileNative = original;
+    }
+});

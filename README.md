@@ -54,7 +54,7 @@ app/src/main/
 
 上传文件保存在应用私有目录 `files/media`，通过 `https://appassets.androidplatform.net/media/<文件名>` 引用；`WebShellActivity` 只放行该目录下的单层文件名，路径穿越一律拒绝。
 
-桥接协议：前端调用 `CalMobileNative.invoke(action, payloadJson, callbackId)`，原生处理完成后回调 `window.CalMobileBridge.onResult(callbackId, ok, result, error)`。前端只使用 `js/core/bridge.js` 的 `call(action, payload)`，异常统一抛出 `Error` 由页面就地展示。
+桥接协议：前端调用 `CalMobileNative.invoke(action, payloadJson, callbackId)`，原生处理完成后回调 `window.CalMobileBridge.onResult(callbackId, ok, result, error)`。前端只使用 `js/core/bridge.js` 的 `call(action, payload)`，异常统一抛出 `Error` 由页面就地展示；`call()` 对不弹系统界面的同步动作（日历、`ui.sync`、`media.store`、`share.text`）带 30 秒兜底超时，原生忘记回调时 promise 会拒绝而不是永久挂起。
 
 页面与设计稿编号的对应关系：
 
@@ -381,11 +381,11 @@ gradlew.bat :app:testDebugUnitTest --tests 'com.example.calmobile.CalendarHelper
 
 后端开发请进入 `server/`，按 `server/README.md` 起好 PostgreSQL 并复制 `.env.example`；常用命令为 `npm install`、`npm run db:migrate`、`npm run db:seed`、`npm run dev`、`npm test`（jest 单测）、`npm run test:contract`（接口契约）和 `npm run lint`。
 
-客户端测试位于 `app/src/test/java/com/example/calmobile/`（32 项），覆盖系统日历的日期与时间解析、设备镜像、CSV 导出和桥接取值助手（`CalendarHelperTest`、`AppSettingsTest`、`ExportManagerTest`、`WebAppBridgeTest`）；Activity 级 UI 测试仍在路线图中。原生与前端的日历契约按**后端下发的 ISO 日期**（`YYYY-MM-DD`）传参，不要在原生侧猜年月——写死月份的缺陷曾让事件落到错误的月份，而测试把常量抄成期望值后照旧全绿。
+客户端测试位于 `app/src/test/java/com/example/calmobile/`（35 项），覆盖系统日历的日期与时间解析、设备镜像、CSV 导出、桥接取值助手和资源路径守卫（`CalendarHelperTest`、`AppSettingsTest`、`ExportManagerTest`、`WebAppBridgeTest`、`AssetGuardTest`）；Activity 级 UI 测试仍在路线图中。原生与前端的日历契约按**后端下发的 ISO 日期**（`YYYY-MM-DD`）传参，不要在原生侧猜年月——写死月份的缺陷曾让事件落到错误的月份，而测试把常量抄成期望值后照旧全绿。
 
-后端测试分两层：`server/test/api.test.js`（43 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 审核状态机与核销流转 / 报名收集项校验 / 隐私开关（公开页不下发报名码）这些业务规则、数据库不可用时的状态页降级，以及**前后端路由交叉校验**（前端每个数据动作都有对应路由、后端没有前端用不到的路由）；`server/src/**/*.test.js`（jest，19 项）是不依赖数据库的纯函数与单测。库结构变更后跑 `npm run db:migrate` 即可，迁移是幂等的。
+后端测试分两层：`server/test/api.test.js`（45 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 审核状态机与核销流转 / 报名收集项校验 / 登录限流 429 / 隐私开关（公开页不下发报名码）这些业务规则、数据库不可用时的状态页降级，以及**前后端路由交叉校验**（前端每个数据动作都有对应路由、后端没有前端用不到的路由）；`server/src/**/*.test.js`（jest，22 项）是不依赖数据库的纯函数与单测。库结构变更后跑 `npm run db:migrate` 即可，迁移是幂等的。
 
-前端另有 `scripts/webui-render.test.js`（18 项）：它用最小 DOM 打桩加假后端 `fetch`，把 18 个页面路由各渲染一次，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销、用户公开页管理视角、「数据动作不再经过原生桥接」「点日期与切月份不再取数」「缓存命中时同步出内容」「过期缓存仍可先画一屏」「并发请求去重」「标签页预加载」等取数体验，以及 `api.js` 的动作到 REST 路径映射与 401 自动续期。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，用例涉及预加载时先 `await settle()` 排空空闲队列再开始计数，不依赖固定的 sleep 猜测时序。
+前端另有 `scripts/webui-render.test.js`（25 项）：它用最小 DOM 打桩加假后端 `fetch`，把 18 个页面路由各渲染一次，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销、用户公开页管理视角、「数据动作不再经过原生桥接」「点日期与切月份不再取数」「缓存命中时同步出内容」「过期缓存仍可先画一屏」「并发请求去重」「标签页预加载」等取数体验，以及 `api.js` 的动作到 REST 路径映射与 401 自动续期。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，用例涉及预加载时先 `await settle()` 排空空闲队列再开始计数，不依赖固定的 sleep 猜测时序。
 
 可用模拟器时，可安装并逐屏回归：
 
@@ -470,7 +470,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 - 视频上传待服务端接口：Markdown 编辑器可调用系统选择器，但不做真实上传与转码。
 - 媒体文件保存到应用私有目录 `files/media` 并通过短 URL 引用，属于设备本地存储；卸载应用会一并清除，换设备不同步。
 - 通知只有落库与权限申请：事件发生在服务端，应用不在前台时不会收到本地推送（需要 FCM 或轮询）。
-- 后端没有对外开放部署（无 HTTPS、无签名校验），示例密钥与 `postgres/postgres` 只适合本机开发。
+- 后端没有对外开放部署（无 HTTPS、无签名校验），示例密钥与 `postgres/postgres` 只适合本机开发。部署前的三个待办：WebView 的 `MIXED_CONTENT_ALWAYS_ALLOW` 在后端上 HTTPS 后必须改回 `NEVER_ALLOW`（`WebShellActivity` 里有对应注释）；CORS 的 `origin: '*'` 要收紧到实际来源；`bcryptjs` 是纯 JS 实现，有性能压力时再换原生 `bcrypt` 或 argon2。
 - 继续补齐前端页面的无障碍检查，并把剩余硬编码文案迁移到 `strings.xml`。
 
 ## 冲突与待裁决清单
@@ -496,6 +496,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 ## 变更记录
 
+- 2026-09-20：**安全加固**（源自第二轮代码审计）。后端：登录与注册加内存滑动窗口限流（`/auth/login`、`/auth/register` 按 IP + 用户名 5 分钟 10 次，超出 429；不引入限流依赖，保持依赖收敛；多实例部署时再换共享存储），此前撞库没有任何成本。原生：`WebShellActivity` 的资源路径校验提取为纯函数 `AssetGuard`（`resolveAssetPath` / `isMediaFileAllowed`），在「`Uri.getPath()` 未解码」的假设下也先做一次百分号解码再判 `..` 与分隔符，编码形式的 `%2e%2e`、`%2f`、`%5c` 穿越同样拒绝；`/assets/` 下越出 `web/` 的请求从「交给系统默认处理」改为明确 403。前端：`bridge.js` 的 `call()` 对同步动作加 30 秒兜底超时——原生抛异常又忘了 `callback.failure` 时 promise 拒绝并报「原生动作 X 超时未响应」，不再永久泄漏 pending 条目（share.text 修复后这是最后一类无防线场景）；弹系统界面等用户操作的动作（选图、导入、导出、两项权限）时长不可控，不设超时。测试与文档：新增 `AssetGuardTest`（3 项，钉住路径穿越判定）、限流中间件单测（3 项）、契约用例 44 → 45（登录限流 429）、渲染用例 24 → 25（桥接超时兜底，用即时计时器替身避免拖垮测试进程）；「部署前待办」（MIXED_CONTENT 改回严格模式、CORS 收紧、bcryptjs 换代）从代码注释上提到当前限制的显眼位置。
 - 2026-09-18：**按代码审查结论修掉一批真实缺陷**（每条都先复现、再修、再用「把修复改回旧写法」的方式确认新用例会失败）。原生侧：系统日历不再写死年月——桥接契约改传后端下发的 ISO 日期（`date` 取代 `day`），`CalendarHelper` 去掉 `EXHIBITION_YEAR` / `EXHIBITION_MONTH` 与「缺日期当 1 号」的回落；写日历失败不再假装成功（`applyCalendarChange` 的返回值改为带原因的 `CalendarResult`，`SystemActions` 失败走 `callback.failure`，页面不再出现「按钮翻成移出日历但其实没写进去」）；深色模式下按底色切换状态栏图标明暗（原来只有颜色跟着变，深色图标压深色底看不见）；APK 内 js/css 的缓存从 `max-age=86400` 改为 `no-cache`，避免覆盖安装后「新外壳配旧模块」。前端：`loadInto()` 加过期响应守卫（连续切月 / 改搜索词 / 换分区时旧响应不再覆盖新视图），首页预热键带上落点年月，`TransportError` 导出且 5xx 与超时分别给出带动作与路径的文案，`clearCache()` 用 generation 让在途请求作废，个人页取数失败不再被吞掉（两份都失败画错误块，`granted` 不再把「未知」当已授权），「访客进入」补上错误处理。后端：公开页不再下发报名码（`checkInCode` 只走本人 / 管理员路径）、个人外观模式写入要求登录、审核流转加状态机白名单（已参加是终态）且展商受「允许修改已审核报名」策略限制、撤销报名与之一致（已参加不能撤销）、报名提交按收集项校验必填与选项、刷新令牌轮换的 TOCTOU 用条件更新消除、body-parser 的错误按 400/413 返回。检查脚本：`webui-check` 新增「路由注册三处一致」校验（`defineRoute` / 页面文件 / 渲染测试用例），`check-strings` 的 `t()` 正则放宽到单双引号，修掉若干「靠注释或已消失符号就能通过」的断言；渲染用例 18 → 24（补 `register` 路由、过期响应、缓存代次、落点预热、传输层诊断），契约用例 39 → 44，Android 单测重写为不把实现常量抄成期望值的 32 项。
 - 2026-09-18：删除两条历史包袱——原生侧的本机数据实现（19 个类 + 15 个测试：`AuthManager`、`DatabaseHelper`、`ExhibitionManager`、`RegistrationManager`、`RegistrationReviewStore`、`UserProfileStore`、`ExhibitionConfiguration`、8 个域动作类等）与旧的零依赖演示后端（`demo-server.js` / `demo-api.js` / `demo-data.js` + 拆分脚本），`WebAppActions` 收敛到 10 个系统动作（`ui.sync`、摄像头与通知权限、系统日历、媒体选择与落盘、分享、CSV 导出），`AppSettings` 降级为设备镜像；`api.js` 删除传输层降级分支；WSL 里的 PostgreSQL 与 `db.ps1` 的 `-Provider wsl` 一并移除，数据库只剩 Docker 一条路。新增后端健康状态页：给人看的 `GET /status`（自检数据库、迁移版本、示例数据、端口配置，失败项标红并给出修复命令）与给机器看的 `GET /api/v1/status`，后端在数据库不可用时也照常启动以便先看到状态页，库故障的接口响应从「一律 500 + pg 原文与堆栈」改为 503 + 固定文案。清理已完成的结构优化清单与文档中的离线降级描述。
 - 2026-09-18：数据库改用 Docker 部署（容器 `calmobile-pg` + 命名卷 `calmobile-pgdata`，固定 `postgres:16-alpine`，`--restart unless-stopped`），`scripts/db.ps1` 改为只认 Docker；容器显式设 `Asia/Shanghai` 时区，避免镜像默认 UTC 让数据库的「今天」在凌晨差一天。

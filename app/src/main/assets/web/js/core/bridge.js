@@ -117,14 +117,43 @@ export function call(action, payload = {}) {
     }
     const callbackId = `cb-${sequence++}`;
     return new Promise((resolve, reject) => {
-        pending.set(callbackId, { resolve, reject, action });
+        const entry = { resolve, reject, action, timer: null };
+        // 同步动作（日历、ui.sync、media.store、share.text）原生应当立刻回调；
+        // 万一原生抛了异常又忘了 failure，promise 会永远挂着（share.text 曾踩过）。
+        // 给这类动作兜底超时；弹系统界面等用户操作的动作（选图、导出、权限）
+        // 时长不可控，不设超时。
+        if (!INTERACTIVE_ACTIONS.has(action) && typeof setTimeout === 'function') {
+            entry.timer = setTimeout(() => {
+                pending.delete(callbackId);
+                reject(new Error(`原生动作 ${action} 超时未响应`));
+            }, CALL_TIMEOUT_MS);
+        }
+        pending.set(callbackId, entry);
         try {
             window.CalMobileNative.invoke(action, JSON.stringify(payload || {}), callbackId);
         } catch (error) {
+            settle(entry);
             pending.delete(callbackId);
             reject(error);
         }
     });
+}
+
+/** 系统动作超时：30 秒足够任何同步原生操作完成。 */
+const CALL_TIMEOUT_MS = 30 * 1000;
+
+/** 会弹系统界面、等用户操作完才回调的动作：时长由用户决定，不做超时。 */
+const INTERACTIVE_ACTIONS = new Set([
+    'media.pickImage', 'media.import', 'export.csv',
+    'camera.ensurePermission', 'notify.requestPermission',
+]);
+
+/** 清掉动作的兜底计时器（无论成功、失败还是同步抛错都要清，防止定时器空转）。 */
+function settle(entry) {
+    if (entry && entry.timer && typeof clearTimeout === 'function') {
+        clearTimeout(entry.timer);
+        entry.timer = null;
+    }
 }
 
 /** 原生在页面加载完成后调用；页面脚本可能尚未执行，因此先落一个标记。 */
@@ -147,6 +176,7 @@ if (hasWindow) {
                 return;
             }
             pending.delete(callbackId);
+            settle(entry);
             if (ok) {
                 entry.resolve(result);
             } else {
