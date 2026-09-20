@@ -62,7 +62,7 @@ final class WebAppActions {
                 callback.success(MediaActions.storeDataUrl(activity, payload));
                 return;
             case "share.text":
-                MediaActions.shareText(activity, payload);
+                MediaActions.shareText(activity, payload, callback);
                 return;
             case "export.csv":
                 MediaActions.exportCsv(bridge, payload, callback);

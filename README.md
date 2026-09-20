@@ -256,9 +256,10 @@ await registrations.submit(payload);
 1. 缓存命中 → **同步**渲染一屏，一个 await 都不等；
 2. 缓存没有且容器是空的 → 才画骨架屏（真正的首次加载）；
 3. 容器里已有内容时**不清空**，只把旧内容标记 `data-busy` 淡一点；
-4. 远端结果回来，内容真的变了才重绘（避免列表入场动画被无谓重放）。
+4. 远端结果回来，内容真的变了才重绘（避免列表入场动画被无谓重放）；
+5. **过期响应丢弃**：每次加载领一个自增代号，回来时代号已经不是最新的（用户又切了月份 / 改了搜索词 / 换了分区）就直接丢掉，既不渲染也不碰 `data-busy`——否则先发起的慢请求会覆盖后发起的新视图。
 
-配套的 `js/core/preload.js` 在空闲回调里预取「下一步大概率要看的数据」：底部导航各页（`preloadTabs()`）、当前页面的相邻月份与列表首项详情（`preloadFollowUps()`），以及列表行 `pointerdown` 时就起跑的 `warmOnPress()`。缓存键按参数名排序并忽略空值（见 `api.js` 的 `cacheKey`），预加载与页面取数因此一定能对上；同一份数据的并发请求会去重。
+配套的 `js/core/preload.js` 在空闲回调里预取「下一步大概率要看的数据」：底部导航各页（`preloadTabs()`）、当前页面的相邻月份与列表首项详情（`preloadFollowUps()`），以及列表行 `pointerdown` 时就起跑的 `warmOnPress()`。缓存键按参数名排序并忽略空值（见 `api.js` 的 `cacheKey`），预加载与页面取数因此一定能对上；同一份数据的并发请求会去重；首页的预热键**带上落点年月**（`home-2026-9`），所以 bootstrap 下发的落点月份变了会重新预热一次，而不是被首次调用去重掉。
 
 日历卡片另外有一条规则：`exhibitions.month` 一次返回**整月**展会，所以「选中哪一天」完全在本地完成，点日期既不重新取数也不重建日历 DOM。
 
@@ -296,7 +297,7 @@ adb reverse tcp:3000 tcp:3000
 | --- | --- |
 | `ui.sync` | 把外观模式、配色下标推给原生，并取回设备事实（通知授权状态） |
 | `camera.ensurePermission` | 扫码前申请摄像头权限 |
-| `calendar.status` / `calendar.toggle` | 系统日历里是否已存在该展会、加入或移除 |
+| `calendar.status` / `calendar.toggle` | 系统日历里是否已存在该展会、加入或移除（按后端下发的 ISO 日期定位，失败如实报错，不假装成功） |
 | `notify.requestPermission` | 申请通知权限（通知本身由后端落库，不做本地推送） |
 | `media.pickImage` | 系统图片选择器 |
 | `media.import` / `media.store` | 压缩后写入 `files/media` 并返回短 URL |
@@ -380,9 +381,9 @@ gradlew.bat :app:testDebugUnitTest --tests 'com.example.calmobile.CalendarHelper
 
 后端开发请进入 `server/`，按 `server/README.md` 起好 PostgreSQL 并复制 `.env.example`；常用命令为 `npm install`、`npm run db:migrate`、`npm run db:seed`、`npm run dev`、`npm test`（jest 单测）、`npm run test:contract`（接口契约）和 `npm run lint`。
 
-客户端测试位于 `app/src/test/java/com/example/calmobile/`（37 项），覆盖系统日历、设备镜像、CSV 导出和桥接分发（`CalendarHelperTest`、`AppSettingsTest`、`ExportManagerTest`、`WebAppBridgeTest`）；Activity 级 UI 测试仍在路线图中。
+客户端测试位于 `app/src/test/java/com/example/calmobile/`（32 项），覆盖系统日历的日期与时间解析、设备镜像、CSV 导出和桥接取值助手（`CalendarHelperTest`、`AppSettingsTest`、`ExportManagerTest`、`WebAppBridgeTest`）；Activity 级 UI 测试仍在路线图中。原生与前端的日历契约按**后端下发的 ISO 日期**（`YYYY-MM-DD`）传参，不要在原生侧猜年月——写死月份的缺陷曾让事件落到错误的月份，而测试把常量抄成期望值后照旧全绿。
 
-后端测试分两层：`server/test/api.test.js`（39 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 核销流转 / 隐私开关这些业务规则、数据库不可用时的状态页降级，以及**前后端路由交叉校验**（前端每个数据动作都有对应路由、后端没有前端用不到的路由）；`server/src/**/*.test.js`（jest，15 项）是不依赖数据库的纯函数与单测。库结构变更后跑 `npm run db:migrate` 即可，迁移是幂等的。
+后端测试分两层：`server/test/api.test.js`（43 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 审核状态机与核销流转 / 报名收集项校验 / 隐私开关（公开页不下发报名码）这些业务规则、数据库不可用时的状态页降级，以及**前后端路由交叉校验**（前端每个数据动作都有对应路由、后端没有前端用不到的路由）；`server/src/**/*.test.js`（jest，19 项）是不依赖数据库的纯函数与单测。库结构变更后跑 `npm run db:migrate` 即可，迁移是幂等的。
 
 前端另有 `scripts/webui-render.test.js`（18 项）：它用最小 DOM 打桩加假后端 `fetch`，把 18 个页面路由各渲染一次，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销、用户公开页管理视角、「数据动作不再经过原生桥接」「点日期与切月份不再取数」「缓存命中时同步出内容」「过期缓存仍可先画一屏」「并发请求去重」「标签页预加载」等取数体验，以及 `api.js` 的动作到 REST 路径映射与 401 自动续期。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，用例涉及预加载时先 `await settle()` 排空空闲队列再开始计数，不依赖固定的 sleep 猜测时序。
 
@@ -495,7 +496,8 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 ## 变更记录
 
-- 2026-09-18：删除两条历史包袱——原生侧的本机数据实现（19 个类 + 15 个测试：`AuthManager`、`DatabaseHelper`、`ExhibitionManager`、`RegistrationManager`、`RegistrationReviewStore`、`UserProfileStore`、`ExhibitionConfiguration`、8 个域动作类等）与旧的零依赖演示后端（`demo-server.js` / `demo-api.js` / `demo-data.js` + 拆分脚本），`WebAppActions` 收敛到 10 个系统动作（`ui.sync`、摄像头与通知权限、系统日历、媒体选择与落盘、分享、CSV 导出），`AppSettings` 降级为设备镜像；`api.js` 删除传输层降级分支；WSL 里的 PostgreSQL 与 `db.ps1` 的 `-Provider wsl` 一并移除，数据库只剩 Docker 一条路。新增后端健康状态页：给人看的 `GET /status`（自检数据库、迁移版本、示例数据、端口配置，失败项标红并给出修复命令）与给机器看的 `GET /api/v1/status`，后端在数据库不可用时也照常启动以便先看到状态页。清理已完成的结构优化清单与文档中的离线降级描述。
+- 2026-09-18：**按代码审查结论修掉一批真实缺陷**（每条都先复现、再修、再用「把修复改回旧写法」的方式确认新用例会失败）。原生侧：系统日历不再写死年月——桥接契约改传后端下发的 ISO 日期（`date` 取代 `day`），`CalendarHelper` 去掉 `EXHIBITION_YEAR` / `EXHIBITION_MONTH` 与「缺日期当 1 号」的回落；写日历失败不再假装成功（`applyCalendarChange` 的返回值改为带原因的 `CalendarResult`，`SystemActions` 失败走 `callback.failure`，页面不再出现「按钮翻成移出日历但其实没写进去」）；深色模式下按底色切换状态栏图标明暗（原来只有颜色跟着变，深色图标压深色底看不见）；APK 内 js/css 的缓存从 `max-age=86400` 改为 `no-cache`，避免覆盖安装后「新外壳配旧模块」。前端：`loadInto()` 加过期响应守卫（连续切月 / 改搜索词 / 换分区时旧响应不再覆盖新视图），首页预热键带上落点年月，`TransportError` 导出且 5xx 与超时分别给出带动作与路径的文案，`clearCache()` 用 generation 让在途请求作废，个人页取数失败不再被吞掉（两份都失败画错误块，`granted` 不再把「未知」当已授权），「访客进入」补上错误处理。后端：公开页不再下发报名码（`checkInCode` 只走本人 / 管理员路径）、个人外观模式写入要求登录、审核流转加状态机白名单（已参加是终态）且展商受「允许修改已审核报名」策略限制、撤销报名与之一致（已参加不能撤销）、报名提交按收集项校验必填与选项、刷新令牌轮换的 TOCTOU 用条件更新消除、body-parser 的错误按 400/413 返回。检查脚本：`webui-check` 新增「路由注册三处一致」校验（`defineRoute` / 页面文件 / 渲染测试用例），`check-strings` 的 `t()` 正则放宽到单双引号，修掉若干「靠注释或已消失符号就能通过」的断言；渲染用例 18 → 24（补 `register` 路由、过期响应、缓存代次、落点预热、传输层诊断），契约用例 39 → 44，Android 单测重写为不把实现常量抄成期望值的 32 项。
+- 2026-09-18：删除两条历史包袱——原生侧的本机数据实现（19 个类 + 15 个测试：`AuthManager`、`DatabaseHelper`、`ExhibitionManager`、`RegistrationManager`、`RegistrationReviewStore`、`UserProfileStore`、`ExhibitionConfiguration`、8 个域动作类等）与旧的零依赖演示后端（`demo-server.js` / `demo-api.js` / `demo-data.js` + 拆分脚本），`WebAppActions` 收敛到 10 个系统动作（`ui.sync`、摄像头与通知权限、系统日历、媒体选择与落盘、分享、CSV 导出），`AppSettings` 降级为设备镜像；`api.js` 删除传输层降级分支；WSL 里的 PostgreSQL 与 `db.ps1` 的 `-Provider wsl` 一并移除，数据库只剩 Docker 一条路。新增后端健康状态页：给人看的 `GET /status`（自检数据库、迁移版本、示例数据、端口配置，失败项标红并给出修复命令）与给机器看的 `GET /api/v1/status`，后端在数据库不可用时也照常启动以便先看到状态页，库故障的接口响应从「一律 500 + pg 原文与堆栈」改为 503 + 固定文案。清理已完成的结构优化清单与文档中的离线降级描述。
 - 2026-09-18：数据库改用 Docker 部署（容器 `calmobile-pg` + 命名卷 `calmobile-pgdata`，固定 `postgres:16-alpine`，`--restart unless-stopped`），`scripts/db.ps1` 改为只认 Docker；容器显式设 `Asia/Shanghai` 时区，避免镜像默认 UTC 让数据库的「今天」在凌晨差一天。
 - 2026-09-17：**后端补齐为真实服务**（Express + PostgreSQL）：重写迁移脚本（按编号记录、可反复执行，8 张表把展会扩展字段、报名收集项、审核状态与核销时间、服务器设置、通知偏好、刷新令牌全部落库）；新增 `src/domain/` 业务层（状态词汇表、SQL 片段、响应映射、权限、校验、设置、会话）；实现前端全部 35 个数据动作的 REST 路由，服务端兜住角色权限、报名窗口、重复报名、自动通过、核销流转与隐私开关；密码改 bcrypt、令牌改 JWT + 可撤销的刷新令牌轮换；示例数据改为相对今天生成，演示不会过期。前端 `api.js` 增加「动作 → REST 路径」映射表与 401 自动续期，页面不需要知道数据来自哪一边，也不会因为换后端而改动。新增后端契约测试 33 项、前端 REST 映射用例 1 项，`npm run lint` 全绿（后续又补了「前后端路由交叉校验」2 项，并据此删掉重复的用户公开页入口）。
 - 2026-09-17：前端取数改为「先画缓存、再后台刷新」（新增 `core/loadable.js` 与 `core/preload.js`，`api.js` 的只读接口提供 `peek()` / `warm()` 并按参数排序做缓存键、并发去重），切页面与切月份不再先闪骨架屏；首页日历的选中日期改为纯本地状态，点日期与切换月份都不再重新取数；`exhibitions.month` 改为原样返回请求的月份，日历落点由 `bootstrap.calendar.landing` 下发；收敛原生三处结构（`ExhibitionConfiguration` 改 `Patch` 写入、`RegistrationReviewStore` 统一报名 id 并把示例数据显式标注、字符数上限收敛到 `AppSettings.TextLimit` 单表）；补 3 个原生单测与 6 个前端渲染用例。

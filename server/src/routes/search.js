@@ -27,7 +27,7 @@ function likePattern(keyword) {
 }
 
 /**
- * 搜索结果里的用户：与演示后端 `search.query` 的字段一致，
+ * 搜索结果里的用户：字段与前端搜索页消费的一致，
  * 不带用户名、密码哈希等内部信息（`USER_COLUMNS` 本身也不含密码）。
  */
 function searchUserPayload(row) {

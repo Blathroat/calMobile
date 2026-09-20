@@ -395,12 +395,27 @@ final class MediaActions {
         return "";
     }
 
-    static void shareText(Activity activity, Map<String, Object> payload) {
-        Intent share = new Intent(Intent.ACTION_SEND);
-        share.setType("text/plain");
-        share.putExtra(Intent.EXTRA_SUBJECT, WebAppBridge.text(payload, "title", ""));
-        share.putExtra(Intent.EXTRA_TEXT, WebAppBridge.text(payload, "text", ""));
-        activity.startActivity(Intent.createChooser(share, "分享展会"));
+    /**
+     * 系统分享面板。
+     *
+     * 弹的是系统界面，用户选完应用或取消我们都拿不到结果，所以**立刻回报成功**——
+     * 之前不回调会让前端的 `await call('share.text')` 永远挂着（promise 与 pending 条目都泄漏）。
+     */
+    static void shareText(Activity activity, Map<String, Object> payload,
+            WebAppBridge.ResultCallback callback) {
+        try {
+            Intent share = new Intent(Intent.ACTION_SEND);
+            share.setType("text/plain");
+            share.putExtra(Intent.EXTRA_SUBJECT, WebAppBridge.text(payload, "title", ""));
+            share.putExtra(Intent.EXTRA_TEXT, WebAppBridge.text(payload, "text", ""));
+            activity.startActivity(Intent.createChooser(share, "分享展会"));
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("shared", true);
+            callback.success(result);
+        } catch (Exception error) {
+            // 设备上没有可接收分享的应用时 startActivity 会抛 ActivityNotFoundException。
+            callback.failure("没有可以分享的应用");
+        }
     }
 
     /**
@@ -432,6 +447,7 @@ final class MediaActions {
         WebAppBridge.PendingResult pending = new WebAppBridge.PendingResult("export.csv", callback);
         pending.context.put("csv", csv);
         pending.context.put("fileName", fileName);
+        pending.context.put("rowCount", rows.size());
         bridge.startForResult(intent, requestCode, pending);
     }
 
@@ -488,7 +504,9 @@ final class MediaActions {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("ok", true);
         result.put("fileName", String.valueOf(pending.context.get("fileName")));
-        result.put("rows", Math.max(0, csv.split("\n").length - 1));
+        // 行数用真实数据行数，而不是数 CSV 的换行：字段里的换行会被引号包起来，
+        // 按 `split("\n")` 统计会把一行算成两行（页面会显示「已导出 N 行」）。
+        result.put("rows", Number.class.cast(pending.context.getOrDefault("rowCount", 0)).intValue());
         pending.callback.success(result);
     }
     /** 选择图片：把结果交回前端做裁剪等后续处理。 */
