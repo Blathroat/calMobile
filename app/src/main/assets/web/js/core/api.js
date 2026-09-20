@@ -79,6 +79,8 @@ const ENDPOINTS = {
     'auth.login': () => ({ method: 'POST', path: '/auth/login' }),
     'auth.register': () => ({ method: 'POST', path: '/auth/register' }),
     'auth.registerVerify': () => ({ method: 'POST', path: '/auth/register/verify' }),
+    'auth.forgotPassword': () => ({ method: 'POST', path: '/auth/password/forgot' }),
+    'auth.resetPassword': () => ({ method: 'POST', path: '/auth/password/reset' }),
     'auth.guest': () => ({ method: 'POST', path: '/auth/guest' }),
     'auth.logout': (payload) => ({ method: 'POST', path: '/auth/logout', body: payload }),
 
@@ -519,6 +521,14 @@ export const api = {
             return result;
         },
         guest: () => request('auth.guest'),
+        /**
+         * 找回密码第一步：请求发码。
+         * 后端**不区分邮箱是否存在**（响应与耗时都一样），所以页面不能拿「返回成功」当成
+         * 「这个邮箱注册过」，提示语要写「如果该邮箱已注册」。
+         */
+        forgotPassword: (email) => request('auth.forgotPassword', { email }),
+        /** 找回密码第二步：验证码 + 新密码。成功后后端会撤销该用户全部刷新令牌。 */
+        resetPassword: (payload) => request('auth.resetPassword', payload),
         logout: async () => {
             // 先把刷新令牌交给后端撤销，再清本地状态：否则退出后令牌仍然有效。
             const result = await request('auth.logout', { refreshToken })

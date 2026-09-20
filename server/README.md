@@ -129,9 +129,11 @@ pwsh -File scripts\mail.ps1 clear    # 跑回归前清空，免得看错邮件
 | 方法与路径 | 动作 | 权限与说明 |
 | --- | --- | --- |
 | `GET /bootstrap` | `bootstrap` | 可匿名。一次下发 `user / theme / ui / capabilities / categories / review / media / announcement / brand / limits / server / calendar`（含 `calendar.landing` 落点月份） |
-| `POST /auth/login` | `auth.login` | 账号密码换 `token` + `refreshToken`，并更新最近登录时间 |
+| `POST /auth/login` | `auth.login` | **用户名或已验证邮箱** + 密码换 `token` + `refreshToken`，并更新最近登录时间 |
 | `POST /auth/register` | `auth.register` | 注册**第一步**：校验用户名 / 密码 / 邮箱与查重，把待建账号暂存进验证码记录并发码；**不建账号、不发令牌**。限流：同一邮箱 60 秒 1 条 / 1 小时 5 条 / 24 小时 15 条，同一 IP 1 小时 20 条（429） |
 | `POST /auth/register/verify` | `auth.registerVerify` | 注册**第二步**：验证码通过才建账号（`email_verified = true`）并发令牌；码不对 / 过期 / 次数用尽是 200 + `ok:false` |
+| `POST /auth/password/forgot` | `auth.forgotPassword` | 找回密码第一步：给**已验证邮箱**的账号发码。**不区分邮箱是否存在**——不存在的邮箱同样走一遍限流与落库，只是不发信；两种情况响应字段与耗时都一致（防账号枚举）。只给未封禁账号发 |
+| `POST /auth/password/reset` | `auth.resetPassword` | 找回密码第二步：验证码通过 → 改密码 → **撤销该用户全部刷新令牌**（密码可能已泄露，其它设备的登录状态要一起断）。密码校验在消费验证码之前，两次不一致不会烧掉这枚码 |
 | `POST /auth/guest` | `auth.guest` | 只返回访客态，不发令牌 |
 | `POST /auth/logout` | `auth.logout` | 撤销该刷新令牌 |
 | `POST /auth/refresh` | — | 刷新令牌换新令牌（轮换：旧的立即作废） |
@@ -280,7 +282,7 @@ npm test                  # jest：不依赖数据库的纯函数单测
 npm run lint
 ```
 
-`test/api.test.js`（53 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
+`test/api.test.js`（56 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
 
 - 页面真正用到的字段都在（展会 25 个字段、报名、审核统计、启动数据的 12 个配置块）；
 - 权限确实拦得住（访客 / 普通用户 / 展商越权访问、受限账号在报名 / 发布 / 编辑 / 删除展会 / 改报名设置 / 核销 / 改资料上的 403 文案与仍然可用的操作、管理员即便被标成受限也不受限）；

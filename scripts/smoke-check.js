@@ -200,6 +200,26 @@ function validateBridgeContract() {
 }
 
 /**
+ * 前端是**原生 ES 模块，没有打包器**：`import … from '…'` 只能写相对路径或绝对路径。
+ *
+ * 裸标识符（例如 `from 'core/strings.js'`）在浏览器 / WebView 里解析不了，整份模块直接报错 ——
+ * `extract-strings.js` 补 `t` 的导入时曾经写出过这种写法（`path.relative` 对 `js/app.js`
+ * 给出的是 `core/strings.js`，少了 `./`），而它只在真机加载时才炸。
+ */
+function validateModuleSpecifiers() {
+  for (const file of walkScripts(path.join(root, WEB_ROOT, 'js'))) {
+    const content = fs.readFileSync(file, 'utf8');
+    for (const match of content.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+      const specifier = match[1];
+      if (!specifier.startsWith('.') && !specifier.startsWith('/')) {
+        return `${path.relative(root, file)} 用了裸标识符 import "${specifier}"，浏览器解析不了`;
+      }
+    }
+  }
+  return true;
+}
+
+/**
  * JS 与 Java 之间的回调参数必须一一对应。
  *
  * `onResult(callbackId, ok, result, error, code)` 的 5 个参数是冻结契约：第 5 个 `code`
@@ -250,13 +270,15 @@ function validateOnResultArity() {
   return true;
 }
 
-/** newUI 的页面模块清单：17 屏中“管理-展会”“管理-设置”已内联，共 15 个模块。 */
+/** newUI 的页面模块清单：17 屏中“管理-展会”“管理-设置”已内联，另有核销与找回密码两个工具页。 */
 const EXPECTED_PAGES = [
   'login.js',
   'home.js',
   'detail.js',
   'registration-form.js',
   'register.js',
+  // 找回密码：邮箱验证码 + 新密码，不占独立设计稿
+  'forgot-password.js',
   'search.js',
   'my-registrations.js',
   'registration-detail.js',
@@ -396,6 +418,12 @@ const checks = [
     id: 'bridge-contract',
     file: 'app/src/main/java/com/example/calmobile/WebAppActions.java',
     validate: validateBridgeContract
+  },
+  {
+    // 原生 ES 模块没有打包器：import 的路径只能是相对的，裸标识符在 WebView 里直接解析失败。
+    id: 'web-module-specifiers',
+    file: `${WEB_ROOT}/js/app.js`,
+    validate: validateModuleSpecifiers
   },
   {
     // 回传结果的 5 个参数（第 5 个是稳定错误码 code）是 JS 与 Java 的共同契约：

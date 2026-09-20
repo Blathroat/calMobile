@@ -29,7 +29,9 @@ export async function loginPage(context) {
         class: 'input',
         id: 'login-account',
         type: 'text',
-        placeholder: '昵称 / 邮箱',
+        // 后端支持用户名或**已验证邮箱**登录（routes/auth.js 的 OR 查询），
+        // 占位符以前写的是「昵称 / 邮箱」—— 昵称没有唯一约束、根本没法用来登录。
+        placeholder: t('s_1sqr282'),
         autocomplete: 'username',
     });
     const password = el('input', {
@@ -49,8 +51,9 @@ export async function loginPage(context) {
     ]);
 
     // 登录只校验必填与长度上限，不套用注册时的最短长度，避免老账号无法登录。
+    // 上限取 120 而不是用户名的 20：这个框也能填邮箱，卡在 20 会把长邮箱直接挡在前面。
     const validators = [
-        fieldValidator({ control: account, label: t('s_yuxvje'), required: true, max: limit('usernameMax', 20) }),
+        fieldValidator({ control: account, label: t('s_yuxvje'), required: true, max: 120 }),
         fieldValidator({ control: password, label: t('s_1aph6eg'), required: true, max: limit('passwordMax', 32) }),
     ];
 
@@ -103,6 +106,18 @@ export async function loginPage(context) {
         }, [t('s_1fwr1ko')]),
     ]);
     append(body, footer);
+
+    // 忘记密码：邮箱收验证码 → 设置新密码。放在登录入口旁边，找不回来的人才找得到。
+    append(body, el('div', {
+        class: 'row',
+        style: { justifyContent: 'center', padding: '0 var(--s3) var(--s3)' },
+    }, [
+        el('button', {
+            class: 'text-action',
+            type: 'button',
+            onclick: () => context.navigate('forgot-password'),
+        }, [t('s_5re2h1')]),
+    ]));
 
     guest.addEventListener('click', async () => {
         // 访客身份也由后端签发（POST /auth/guest）：后端没起或端口没转发时必须说清楚，

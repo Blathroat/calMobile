@@ -45,6 +45,7 @@
     <string name="s_15hmwa0">左右滑动日历卡片可以切换月份。</string>
     <string name="s_15k74t0">请用英文逗号分隔后缀，例如 mp4,mov</string>
     <string name="s_15lwowq">点击下方按钮开启摄像头取景，或直接手动输入报名码。</string>
+    <string name="s_15so5xh">如果该邮箱已注册，验证码已发送到：</string>
     <string name="s_15vddzv">我举办的展会</string>
     <string name="s_15wm4xy">通知设置已更新</string>
     <string name="s_165tsl5">截止后用户不可再提交报名</string>
@@ -97,10 +98,12 @@
     <string name="s_1cjrrf7">展商已扫码核销，祝参展顺利</string>
     <string name="s_1ckoagi">封面已上传</string>
     <string name="s_1co82cb">展会名称</string>
+    <string name="s_1csq350">注册邮箱</string>
     <string name="s_1d9en33">该展会无需审核，已直接为你通过，可在“我的报名”查看。</string>
     <string name="s_1dao2v1">进入应用时的公告</string>
     <string name="s_1dbfyef">裁剪头像</string>
     <string name="s_1dc9o49">未能读取所选图片</string>
+    <string name="s_1de7lo">收不到时先看看垃圾邮件；验证码 10 分钟内有效。</string>
     <string name="s_1dixw2w">创建你的展会档案</string>
     <string name="s_1dkg6y4">审核结果会同步到用户的“我的报名”，并触发状态通知。</string>
     <string name="s_1e05tqn">该报名已完成审核，管理员未开启“允许重新审核”。</string>
@@ -176,6 +179,7 @@
     <string name="s_1n1wiu4">当前运行环境不支持摄像头扫码，请使用“手动输入报名码”。</string>
     <string name="s_1n2azlj">已按 Markdown 写入粘贴内容</string>
     <string name="s_1n4563g">报名方式保存失败</string>
+    <string name="s_1n9i5np">验证码 10 分钟内有效，请勿转发给他人。</string>
     <string name="s_1nl5fxw">添加选项</string>
     <string name="s_1no1khr">移除头像</string>
     <string name="s_1nxza37">已停止扫码</string>
@@ -202,9 +206,11 @@
     <string name="s_1qf1f04">已更新系统日历</string>
     <string name="s_1qfu0ss">无法加载展会信息。</string>
     <string name="s_1qk0zaw">待核销</string>
+    <string name="s_1qksguo">找回密码</string>
     <string name="s_1qnyx3k">常见图片格式</string>
     <string name="s_1qrntx4">拒绝</string>
     <string name="s_1r4txyl">审核状态</string>
+    <string name="s_1ro3s85">用注册邮箱收验证码，验证通过后设置新密码。</string>
     <string name="s_1s57su3">0 条结果</string>
     <string name="s_1sd7orv">关键词</string>
     <string name="s_1sfkhdl">展会已保存</string>
@@ -213,6 +219,7 @@
     <string name="s_1smt94y">已有账号？返回登录</string>
     <string name="s_1splm64">开启系统通知权限</string>
     <string name="s_1sq2bvr">编辑资料</string>
+    <string name="s_1sqr282">用户名或邮箱</string>
     <string name="s_1sx8n02">中文标题</string>
     <string name="s_1sz2kuw">个人设置加载失败</string>
     <string name="s_1t2vi4h">删除</string>
@@ -308,6 +315,7 @@
     <string name="s_50ih74">搜索展会</string>
     <string name="s_533bde">去登录</string>
     <string name="s_5iff2f">头像保存失败</string>
+    <string name="s_5re2h1">忘记密码？</string>
     <string name="s_5rsk4v">验证码已发送</string>
     <string name="s_5rwrkf">进入应用时显示公告</string>
     <string name="s_60i0xr">报名截止</string>
@@ -332,6 +340,7 @@
     <string name="s_8wvztz">没有可公开的资料</string>
     <string name="s_92i7f7">已开启公开展示</string>
     <string name="s_94aane">图片还在加载，请稍候</string>
+    <string name="s_9cd546">换一个邮箱</string>
     <string name="s_9dpkko">简介以 Markdown 保存，详情页自动渲染标题、列表、链接与图片。</string>
     <string name="s_9mbwb2">清空</string>
     <string name="s_9sfqbi">新密码</string>
@@ -411,6 +420,7 @@
     <string name="s_injt47">允许的视频后缀</string>
     <string name="s_iq65l2">管理可见</string>
     <string name="s_ixjm5p">单张图片大小</string>
+    <string name="s_j08rvp">密码已重置，请用新密码登录</string>
     <string name="s_j5c9oy">已开启通知权限</string>
     <string name="s_j666m6">通过</string>
     <string name="s_j8kyoz">查看报名</string>
@@ -482,8 +492,10 @@
     <string name="s_s8pbve">邮箱验证码</string>
     <string name="s_sg8u9h">验证码已发送到：</string>
     <string name="s_shfy40">核销成功</string>
+    <string name="s_shrzdv">发送验证码</string>
     <string name="s_shtqx3">正在核对报名信息…</string>
     <string name="s_spr4u2">\n\n| 列 1 | 列 2 |\n| --- | --- |\n| 内容 | 内容 |\n\n</string>
+    <string name="s_szog53">重置密码</string>
     <string name="s_tt5vxa">正常</string>
     <string name="s_u9jq8n">用户名</string>
     <string name="s_und5qj">还没有账号？</string>
@@ -500,6 +512,7 @@
     <string name="s_wkyvc2">公开资料</string>
     <string name="s_wo4aqm">粘贴后可直接替换当前内容，或在末尾追加。</string>
     <string name="s_wttsdb">开启摄像头扫码</string>
+    <string name="s_ww6ehr">重置登录密码</string>
     <string name="s_xf7p1v">报名已撤销</string>
     <string name="s_xocxb0">更换封面</string>
     <string name="s_xwhfsg">暂无安排</string>

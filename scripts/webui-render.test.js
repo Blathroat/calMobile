@@ -551,6 +551,12 @@ const BACKEND = {
             loggedIn: true, role: 'user', roleLabel: '普通用户', username: 'newuser', nickname: 'newuser',
         },
     },
+    // 找回密码：第一步只回「码多久过期、多久能重发」，后端不区分邮箱是否注册过，
+    // 因此这里也不该有「有没有这个账号」的字段。
+    'POST /auth/password/forgot': {
+        ok: true, error: '', email: 'user@example.com', expiresInSec: 600, resendAfterSec: 60,
+    },
+    'POST /auth/password/reset': { ok: true, error: '' },
     'POST /auth/guest': { ok: true, error: '' },
     'POST /auth/logout': { ok: true, error: '' },
 
@@ -845,6 +851,7 @@ function collectText(node, out = []) {
 const ROUTES = [
     ['login', {}],
     ['register', {}],
+    ['forgot-password', {}],
     ['home', {}],
     ['detail', { id: 'exhibition-1' }],
     ['registration-form', { id: 'exhibition-1' }],
@@ -1140,6 +1147,66 @@ test('注册页第一步只发码不拿令牌，第二步验证码通过才保�
             code: '123456',
         }, '验证请求体应当是邮箱 + 验证码');
         assert.strictEqual(api.hasRefreshToken(), true, '验证码通过后应当保存刷新令牌');
+    } finally {
+        global.setTimeout = realSetTimeout;
+    }
+});
+
+/**
+ * 找回密码同样是两步：先要邮箱发码，再交验证码 + 新密码。
+ *
+ * 顺带钉住一条容易写错的文案：后端不区分「邮箱注册过没有」（响应与耗时都一样），
+ * 页面就只能写「如果该邮箱已注册…」，写成「已发送」等于把账号是否存在透露出去。
+ */
+test('找回密码两步：先请求发码，再提交验证码与新密码', async () => {
+    // 重发倒计时同样是长链定时器，换成「立刻到点」的替身（只影响这一个用例）。
+    const realSetTimeout = global.setTimeout;
+    global.setTimeout = (fn) => realSetTimeout(fn, 0);
+    try {
+        const { dom, requests } = await renderRoute('forgot-password', {});
+        const control = (id) => dom.app.querySelectorAll((node) => node.id === id)[0];
+        const forms = dom.app.querySelectorAll((node) => node.tagName === 'FORM');
+        assert.strictEqual(forms.length, 2, '找回密码页应当有两个表单：邮箱与重置');
+
+        const email = control('forgot-email');
+        assert.ok(email, '找回密码页没有渲染出邮箱输入框');
+        email.value = 'user@example.com';
+        forms[0].dispatch('submit', { preventDefault() {} });
+        await settle(60);
+
+        const asked = requests.find((item) => item.method === 'POST' && item.path === '/auth/password/forgot');
+        assert.ok(asked, `找回密码页没有请求发码，实际请求：${requests
+            .map((item) => `${item.method} ${item.path}`).join(', ')}`);
+        assert.deepStrictEqual(asked.body, { email: 'user@example.com' });
+        assert.strictEqual(forms[0].hidden, true, '发码后应当收起邮箱那一步');
+        assert.strictEqual(forms[1].hidden, false, '发码后应当展开重置那一步');
+
+        const copy = collectText(dom.app);
+        assert.ok(copy.includes('如果该邮箱已注册'), `提示语要留有余地，实际渲染：${copy.slice(0, 120)}`);
+        assert.ok(!copy.includes('该邮箱未注册') && !copy.includes('邮箱不存在'),
+            '反过来说透「这个邮箱没注册」同样是在泄露账号是否存在');
+        // 精确一点：说「验证码已发送到」的那一句必须带上前提条件，不能把它写成一个事实
+        const sentLine = dom.app.querySelectorAll((node) => node.tagName === 'P')
+            .map((node) => collectText(node))
+            .find((text) => text.includes('验证码已发送到'));
+        assert.ok(sentLine && sentLine.includes('如果该邮箱已注册'),
+            `「已发送」必须写在前提条件里，实际那一句：${sentLine}`);
+
+        control('forgot-code').value = '654321';
+        control('forgot-password').value = 'newsecret1';
+        control('forgot-confirm').value = 'newsecret1';
+        forms[1].dispatch('submit', { preventDefault() {} });
+        await settle(60);
+
+        const reset = requests.find((item) => item.method === 'POST' && item.path === '/auth/password/reset');
+        assert.ok(reset, `找回密码页没有请求重置，实际请求：${requests
+            .map((item) => `${item.method} ${item.path}`).join(', ')}`);
+        assert.deepStrictEqual(reset.body, {
+            email: 'user@example.com',
+            code: '654321',
+            newPassword: 'newsecret1',
+            confirmPassword: 'newsecret1',
+        }, '重置请求体应当是邮箱 + 验证码 + 新密码');
     } finally {
         global.setTimeout = realSetTimeout;
     }

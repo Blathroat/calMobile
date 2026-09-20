@@ -38,6 +38,9 @@ const authLimiter = rateLimit({
  */
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync(`missing-${Date.now()}`, 10);
 
+/** 邮箱格式：与 `routes/profile.js` 的校验保持一致（注册与找回密码共用）。 */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 /** 响应统一信封：成功时 ok=true 且 error 为空串。 */
 function failure(message) {
   return { ok: false, error: message };
@@ -55,7 +58,10 @@ async function loadUser(id) {
 
 /**
  * POST /api/v1/auth/login
- * 用户名 + 密码换令牌。密码错误与账号不存在给同一条提示，避免暴露账号是否存在。
+ * 用户名**或已验证邮箱** + 密码换令牌。密码错误与账号不存在给同一条提示，避免暴露账号是否存在。
+ *
+ * 两种标识不会互相打架：用户名的字符集不允许 `@`，而邮箱一定含 `@`，所以一个标识只会命中一边；
+ * 仍然按「用户名优先」排序，是为了万一将来放宽用户名规则时行为也确定。
  */
 router.post('/login', authLimiter, async (req, res, next) => {
   try {
@@ -65,10 +71,13 @@ router.post('/login', authLimiter, async (req, res, next) => {
       res.json(failure('请输入账号与密码'));
       return;
     }
-    const result = await query(
-      'SELECT id, username, password_hash, status FROM users WHERE lower(username) = lower($1)',
-      [username],
-    );
+    const result = await query(`
+            SELECT id, username, password_hash, status
+              FROM users
+             WHERE lower(username) = lower($1) OR lower(email) = lower($1)
+             ORDER BY (lower(username) = lower($1)) DESC
+             LIMIT 1
+        `, [username]);
     const account = result.rows[0];
     // 账号不存在时也走一次 bcrypt：否则「立即返回」与「比对一次再返回」的耗时差
     // 足以让脚本枚举出哪些用户名真实存在（与上面那条「同一条提示」是同一件事）。
@@ -145,7 +154,7 @@ router.post('/register', authLimiter, async (req, res, next) => {
       res.json(failure(`密码长度需在 ${textLimits.passwordMin}-${textLimits.passwordMax} 个字符之间`));
       return;
     }
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 120) {
+    if (!email || !EMAIL_PATTERN.test(email) || email.length > 120) {
       res.json(failure('请输入有效的邮箱地址'));
       return;
     }
@@ -223,6 +232,98 @@ router.post('/register/verify', authLimiter, async (req, res, next) => {
     }
     const session = await issueSession({ id, username, role: 'user' });
     res.json({ ok: true, error: '', ...session, user: await loadUser(id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/auth/password/forgot
+ * 找回密码第一步：把验证码发到该邮箱。
+ *
+ * **响应与耗时都不透露这个邮箱注册过没有**：不存在的邮箱同样走一遍发码限流与落库
+ * （`issueCode({ silent: true })`），只是不发邮件；响应体两种情况完全一致。
+ * 所以界面上要写「如果该邮箱已注册，验证码会发送到该邮箱」，而不是「已发送」。
+ *
+ * 只有**已验证邮箱**的账号能找回：邮箱是身份的凭据，没验证过的邮箱等于没有凭据。
+ */
+router.post('/password/forgot', authLimiter, async (req, res, next) => {
+  try {
+    const email = String(req.body.email || '').trim();
+    if (!email || !EMAIL_PATTERN.test(email) || email.length > 120) {
+      res.json(failure('请输入有效的邮箱地址'));
+      return;
+    }
+    const found = await query(`
+            SELECT id FROM users
+             WHERE lower(email) = lower($1) AND email_verified = true AND status <> 'banned'
+        `, [email]);
+    const account = found.rows[0] || null;
+    const ticket = await issueCode({
+      purpose: 'reset',
+      email,
+      userId: account ? account.id : null,
+      silent: !account,
+      ip: req.ip || '',
+    });
+    res.json({ ok: true, error: '', ...ticket });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/auth/password/reset
+ * 找回密码第二步：验证码通过 → 改密码 → 撤销该用户全部刷新令牌。
+ *
+ * 撤销刷新令牌是这条路径的关键：找回密码通常意味着「密码可能已经泄露」，
+ * 不把其它设备上的登录状态一起断掉，等于只换了门锁却没赶人。
+ */
+router.post('/password/reset', authLimiter, async (req, res, next) => {
+  try {
+    const email = String(req.body.email || '').trim();
+    const code = String(req.body.code || '').trim();
+    const newPassword = String(req.body.newPassword || '');
+    const confirm = String(req.body.confirmPassword || '');
+
+    // 先校验密码再消费验证码：密码填错不该把这枚码烧掉，用户改一下还能继续用。
+    if (newPassword !== confirm) {
+      res.json(failure('两次输入的新密码不一致'));
+      return;
+    }
+    const bounds = await limits();
+    if (newPassword.length < bounds.passwordMin || newPassword.length > bounds.passwordMax) {
+      res.json(failure(`密码长度需在 ${bounds.passwordMin}-${bounds.passwordMax} 个字符之间`));
+      return;
+    }
+
+    let consumed;
+    try {
+      consumed = await consumeCode({ purpose: 'reset', email, code });
+    } catch (error) {
+      if (isCodeRejected(error)) {
+        res.json(failure(error.message));
+        return;
+      }
+      throw error;
+    }
+
+    const found = await query(
+      'SELECT id FROM users WHERE lower(email) = lower($1) AND status <> $2',
+      [consumed.email, 'banned'],
+    );
+    if (found.rows.length === 0) {
+      // 验证码是真的（说明这个邮箱收到过我们发的码），但账号在期间被删或封禁了。
+      res.json(failure('账号不存在或已停用，请联系管理员'));
+      return;
+    }
+    const userId = found.rows[0].id;
+    await query('UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1', [
+      userId,
+      await bcrypt.hash(newPassword, 10),
+    ]);
+    await revokeAllForUser(userId);
+    res.json({ ok: true, error: '' });
   } catch (error) {
     next(error);
   }

@@ -189,10 +189,15 @@ function deliver({
  * @param {string} [options.userId] 已存在的用户（注册用途没有用户，给 null）。
  * @param {object} [options.payload] 挂在这次验证上的数据（注册用途放待建账号）。
  * @param {string} [options.ip] 请求来源，用于按 IP 限流。
+ * @param {boolean} [options.silent] 只落库、不发信。找回密码用它保证「这个邮箱注册过没有」
+ *   在**响应内容与耗时上都看不出来**：不存在的邮箱照样走一遍发码限流与落库，只是不发邮件
+ *   （与登录里「账号不存在也比一次 bcrypt」是同一个考虑）。
  * @returns {Promise<{email: string, purpose: string, expiresInSec: number, resendAfterSec: number}>}
  */
 async function issueCode(options = {}) {
-  const { purpose, userId = null, payload = null, ip = '' } = options;
+  const {
+    purpose, userId = null, payload = null, ip = '', silent = false,
+  } = options;
   assertPurpose(purpose);
   const email = normalizeEmail(options.email);
   if (!email) {
@@ -213,9 +218,11 @@ async function issueCode(options = {}) {
     payload ? JSON.stringify(payload) : null, String(CODE_TTL_MIN), ip,
   ]);
   purgeStaleCodes();
-  deliver({
-    to: email, purpose, code, brand,
-  });
+  if (!silent) {
+    deliver({
+      to: email, purpose, code, brand,
+    });
+  }
 
   return {
     email,

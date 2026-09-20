@@ -12,6 +12,7 @@ import { qs, el, append } from './core/dom.js';
 
 import { loginPage } from './pages/login.js';
 import { registerPage } from './pages/register.js';
+import { forgotPasswordPage } from './pages/forgot-password.js';
 import { homePage } from './pages/home.js';
 import { detailPage } from './pages/detail.js';
 import { registrationFormPage } from './pages/registration-form.js';
@@ -31,6 +32,8 @@ import { checkinPage } from './pages/checkin.js';
 // 管理-展会与管理-设置已内联到管理后台与个人页，不再保留二级页面。
 defineRoute('login', { title: t('s_1yggxgd'), render: loginPage });
 defineRoute('register', { title: t('s_1n008jl'), render: registerPage });
+// 找回密码：邮箱验证码 + 新密码，两步同页；重置成功会撤销全部刷新令牌，需要重新登录。
+defineRoute('forgot-password', { title: t('s_1qksguo'), render: forgotPasswordPage });
 defineRoute('home', { title: t('s_1ow5v10'), render: homePage });
 defineRoute('detail', { title: t('s_1ve1f4n'), render: detailPage });
 defineRoute('registration-form', { title: t('s_vrp4t3'), render: registrationFormPage, requires: 'auth' });

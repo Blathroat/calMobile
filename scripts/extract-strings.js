@@ -160,11 +160,17 @@ for (const file of walk(jsRoot)) {
         continue;
     }
     // 补导入：放在第一个 import 之前，保持模块顶部整洁。
-    // 路径按模块所在目录算：`js/core/*.js` 用 './strings.js'，页面用 '../core/strings.js'。
-    // 只认后者会给 core 下的模块再加一行 import，同一模块里 t 被声明两次 → 整个模块语法错误。
-    const specifier = path.relative(path.dirname(file), path.join(jsRoot, 'core', 'strings.js'))
+    // 路径按模块所在目录算：`js/core/*.js` 用 './strings.js'，页面用 '../core/strings.js'，
+    // 而 `js/app.js` 这种就在 js/ 下的模块要用 './core/strings.js' —— `path.relative` 对这种
+    // 情况给的是 `core/strings.js`（没有 `./`），那在浏览器里是**裸标识符**、根本解析不了。
+    // 所以：缺 `./` 就补上；判重也按「去掉前缀后同一个文件」来比，避免写出第二行 import
+    // （同一模块里 t 被声明两次 → 整个模块语法错误）。
+    const relative = path.relative(path.dirname(file), path.join(jsRoot, 'core', 'strings.js'))
         .split(path.sep).join('/');
-    const hasImport = replaced.includes(`from '${specifier}'`) || replaced.includes(`from "${specifier}"`);
+    const specifier = relative.startsWith('.') ? relative : `./${relative}`;
+    const importedStrings = [...replaced.matchAll(/from\s+['"]([^'"]*strings\.js)['"]/g)]
+        .map((match) => match[1].replace(/^\.\//, ''));
+    const hasImport = importedStrings.includes(specifier.replace(/^\.\//, ''));
     const withImport = hasImport
         ? replaced
         : replaced.replace(/^(?=(?:import|\/\*\*|\/\/))/m, `import { t } from '${specifier}';\n`);

@@ -296,14 +296,21 @@ async function seed() {
       ['usr-3', 'user', 'user@example.com', 'user', 'user', '展会常客，关注智能家居与新材料。'],
     ];
     for (const [id, username, email, nickname, role, bio] of accounts) {
+      // `email_verified` 必须在这里显式写 true：迁移 0004 里那条回填写在「存量账号回填」上，
+      // 而**全新库是先迁移、后 seed**，回填时表还是空的 —— 不写的话示例账号一建出来就是
+      // 「邮箱未验证」，找不回密码、也开不了两步验证（演示账号的邮箱本来就是占位地址，
+      // 收不到信，只能按已验证处理）。
       await client.query(`
-                INSERT INTO users (id, username, password_hash, email, nickname, role, bio)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                INSERT INTO users (id, username, password_hash, email, nickname, role, bio,
+                                   email_verified, email_verified_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, true, now())
                 ON CONFLICT (id) DO UPDATE SET
                     username = EXCLUDED.username,
                     email = EXCLUDED.email,
                     nickname = EXCLUDED.nickname,
                     role = EXCLUDED.role,
+                    email_verified = EXCLUDED.email_verified,
+                    email_verified_at = EXCLUDED.email_verified_at,
                     updated_at = now()
             `, [id, username, passwordHash, email, nickname, role, bio]);
     }
