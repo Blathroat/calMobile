@@ -8,36 +8,33 @@
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
+    <!-- 展商核销报名码时需要摄像头；不是必需硬件，没有摄像头的设备仍可手动输入报名码 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- 访问演示后端（HTTP）：模拟器用 10.0.2.2，真机用 adb reverse 的 127.0.0.1。
+         接入正式后端并改用 HTTPS 后应当去掉这一行。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:name=".CalMobileApp"
         android:allowBackup="true"
         android:label="@string/app_name"
-        android:theme="@style/AppTheme">
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="true">
+
+        <!-- WebView 前端容器：唯一入口，承载 newUI 的全部页面。
+             旧的原生页面已随 WebView 迁移一并删除，界面只有这一处入口。 -->
         <activity
-            android:name=".LoginActivity"
-            android:exported="true">
+            android:name=".WebShellActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".RegisterActivity" />
-        <activity
-            android:name=".MainActivity"
-            android:exported="false" />
-        <activity android:name=".ProfileActivity" />
-        <activity android:name=".UserPublicActivity" />
-        <activity android:name=".ExhibitorBackendActivity" />
-        <activity android:name=".ExhibitionFormActivity" />
-        <activity android:name=".RichDescriptionEditorActivity" />
-        <activity android:name=".RegistrationManagementActivity" />
-        <activity android:name=".RegistrationDetailActivity" />
-        <activity android:name=".MyRegistrationsActivity" />
-        <activity android:name=".MyRegistrationDetailActivity" />
-        <activity android:name=".AdminBackendActivity" />
-        <activity android:name=".SearchActivity" />
-        <activity android:name=".ExhibitionDetailActivity" />
-        <activity android:name=".RegistrationFormActivity" />
     </application>
 
 </manifest>

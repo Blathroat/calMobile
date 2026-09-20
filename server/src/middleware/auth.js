@@ -1,160 +1,106 @@
 /**
- * 认证中间件
- * 处理 JWT 令牌验证和权限检查
+ * 认证中间件：校验 JWT 并把用户挂到 `req.user`。
+ *
+ * 错误一律 `next(new ApiError(...))` 交给 index.js 的错误中间件统一序列化
+ * （Express 4 不会自动捕获 async 中间件抛出的异常，因此不能直接 throw）。
  */
 
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/pool');
 const { accessSecret } = require('../config/auth');
+const { ApiError } = require('../domain/errors');
+const { capabilities } = require('../domain/permissions');
 
-/**
- * 认证中间件
- * 验证 JWT 令牌并附加用户信息到请求对象
- */
-async function authenticate(req, res, next) {
-  try {
-    // 从请求头获取令牌
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
-        error: '认证失败',
-        message: '未提供认证令牌'
-      });
-    }
-    
-    const token = authHeader.split(' ')[1];
-    
-    // 验证令牌
-    let decoded;
-    try {
-      decoded = jwt.verify(token, accessSecret);
-    } catch (error) {
-      if (error.name === 'TokenExpiredError') {
-        return res.status(401).json({
-          error: '认证失败',
-          message: '令牌已过期，请刷新令牌'
-        });
-      }
-      return res.status(401).json({
-        error: '认证失败',
-        message: '无效的认证令牌'
-      });
-    }
-    
-    // 查询用户信息
-    const result = await query(
-      'SELECT id, username, email, nickname, role, status FROM users WHERE id = $1',
-      [decoded.userId]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(401).json({
-        error: '认证失败',
-        message: '用户不存在'
-      });
-    }
-    
-    const user = result.rows[0];
-    
-    // 检查用户状态
-    if (user.status !== 'active') {
-      return res.status(403).json({
-        error: '访问被拒绝',
-        message: '账号已被禁用'
-      });
-    }
-    
-    // 附加用户信息到请求对象
-    req.user = {
-      userId: user.id,
-      username: user.username,
-      email: user.email,
-      nickname: user.nickname,
-      role: user.role
-    };
-    
-    next();
-    
-  } catch (error) {
-    console.error('认证中间件错误：', error);
-    res.status(500).json({
-      error: '服务器错误',
-      message: '认证失败'
-    });
+const USER_FIELDS = 'id, username, email, nickname, role, status';
+
+/** 从请求头取令牌；没有令牌返回空串。 */
+function tokenFrom(req) {
+  const header = req?.headers?.authorization;
+  if (!header || !header.startsWith('Bearer ')) {
+    return '';
   }
+  return header.slice('Bearer '.length).trim();
 }
 
-/**
- * 授权中间件
- * 检查用户角色权限
- * @param {Array} roles - 允许的角色列表
- */
-function authorize(roles) {
-  return (req, res, next) => {
-    // 检查用户是否已认证
-    if (!req.user) {
-      return res.status(401).json({
-        error: '认证失败',
-        message: '未认证的用户'
-      });
-    }
-    
-    // 检查用户角色
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        error: '访问被拒绝',
-        message: '无权执行此操作'
-      });
-    }
-    
-    next();
+/** 解析令牌并查出用户；令牌无效返回 null。 */
+async function resolveUser(token) {
+  if (!token) {
+    return null;
+  }
+  let decoded;
+  try {
+    decoded = jwt.verify(token, accessSecret);
+  } catch (error) {
+    return null;
+  }
+  const result = await query(
+    `SELECT ${USER_FIELDS} FROM users WHERE id = $1`,
+    [decoded.userId],
+  );
+  if (result.rows.length === 0) {
+    return null;
+  }
+  const row = result.rows[0];
+  if (row.status === 'banned') {
+    throw new ApiError(403, '账号已被封禁');
+  }
+  return {
+    userId: row.id,
+    username: row.username,
+    email: row.email,
+    nickname: row.nickname,
+    role: row.role,
+    status: row.status,
+    can: capabilities(row.role, row.status),
   };
 }
 
+/** 必须登录。 */
+async function authenticate(req, res, next) {
+  try {
+    const user = await resolveUser(tokenFrom(req));
+    if (!user) {
+      throw new ApiError(401, '登录状态已失效，请重新登录');
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
 /**
- * 可选认证中间件
- * 如果提供了令牌则验证，否则继续
+ * 可选登录：带了令牌就解析，没带或无效也继续（页面在访客状态下也会调这些接口）。
+ * 只有一种情况会中断：账号被封禁——那不该继续按访客处理。
  */
 async function optionalAuth(req, res, next) {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return next();
-    }
-    
-    const token = authHeader.split(' ')[1];
-    
-    try {
-      const decoded = jwt.verify(token, accessSecret);
-      
-      const result = await query(
-        'SELECT id, username, email, nickname, role, status FROM users WHERE id = $1',
-        [decoded.userId]
-      );
-      
-      if (result.rows.length > 0 && result.rows[0].status === 'active') {
-        req.user = {
-          userId: result.rows[0].id,
-          username: result.rows[0].username,
-          email: result.rows[0].email,
-          nickname: result.rows[0].nickname,
-          role: result.rows[0].role
-        };
-      }
-    } catch (error) {
-      // 令牌无效，继续而不附加用户信息
-    }
-    
+    req.user = await resolveUser(tokenFrom(req));
     next();
-    
   } catch (error) {
-    console.error('可选认证中间件错误：', error);
-    next();
+    next(error);
   }
+}
+
+/** 角色白名单；配合 authenticate 使用。 */
+function authorize(roles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      next(new ApiError(401, '请先登录'));
+      return;
+    }
+    if (!roles.includes(req.user.role)) {
+      next(new ApiError(403, '无权执行此操作'));
+      return;
+    }
+    next();
+  };
 }
 
 module.exports = {
   authenticate,
   authorize,
-  optionalAuth
+  optionalAuth,
+  resolveUser,
+  tokenFrom,
 };

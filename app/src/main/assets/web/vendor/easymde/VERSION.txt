@@ -1,0 +1,4 @@
+EasyMDE 2.21.0 (MIT)
+来源：https://registry.npmjs.org/easymde/-/easymde-2.21.0.tgz
+文件：dist/easymde.min.js、dist/easymde.min.css、LICENSE
+说明：内置 marked 与 CodeMirror 5，运行时不依赖 CDN、字体或图标资源。

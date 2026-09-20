@@ -1,91 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- AppTheme 引用的基础颜色。
+     WebView 外壳只保留真正需要的条目；旧原生页面的资源已随 legacy 一并删除。
+     前端文案在 strings_frontend.xml（由 scripts/extract-strings.js 生成）。
+-->
 <resources>
-    <!-- newUI 灰盒规范：深石墨用于主要操作，橙色只表示焦点与提示。 -->
-    <color name="primary">#48515D</color>
-    <color name="primary_light">#626A74</color>
-    <color name="primary_dark">#20252B</color>
-    <color name="primary_container">#FAEADD</color>
-    <color name="on_primary">#FFFFFF</color>
-    <color name="on_primary_container">#963F17</color>
-
-    <color name="secondary">#C05621</color>
-    <color name="secondary_light">#E3B28D</color>
-    <color name="secondary_dark">#963F17</color>
-    <color name="secondary_container">#FAEADD</color>
-    <color name="on_secondary">#FFFFFF</color>
-
-    <!-- 页面与容器。 -->
-    <color name="surface_background">#F7F6F3</color>
-    <color name="surface_variant">#F1F2F4</color>
-    <color name="card_background">#FFFFFF</color>
-    <color name="card_stroke">#C5CAD1</color>
-    <color name="scrim">#3320252B</color>
-
-    <!-- 文本层级。 -->
-    <color name="text_primary">#20252B</color>
-    <color name="text_secondary">#626A74</color>
-    <color name="text_tertiary">#969DA7</color>
-    <color name="text_hint">#969DA7</color>
-    <color name="text_on_primary">#FFFFFF</color>
-
-    <!-- 业务状态。 -->
-    <color name="status_open">#245D3C</color>
-    <color name="status_open_bg">#E4EFE8</color>
-    <color name="registered_blue">#48515D</color>
-    <color name="registered_blue_bg">#F1F2F4</color>
-    <color name="status_closed">#963F17</color>
-    <color name="status_closed_bg">#FAEADD</color>
-    <color name="status_pending">#C05621</color>
-    <color name="status_pending_bg">#FAEADD</color>
-    <color name="status_locked">#626A74</color>
-    <color name="status_locked_bg">#F1F2F4</color>
-
-    <!-- 交互反馈。 -->
-    <color name="ripple_color">#1A48515D</color>
-    <color name="ripple_light">#12FFFFFF</color>
-    <color name="focus_ring">#40C05621</color>
-    <color name="pressed_overlay">#0A20252B</color>
-
-    <color name="divider_color">#E3ECEE</color>
-    <color name="empty_icon_color">#969DA7</color>
-    <color name="back_button_tint">#48515D</color>
-
-    <!-- 日历与表单。 -->
-    <color name="date_active_background">#FAEADD</color>
-    <color name="date_active_text">#963F17</color>
-    <color name="date_selected_background">#48515D</color>
-    <color name="date_selected_text">#FFFFFF</color>
-    <color name="date_selected_stroke">#48515D</color>
-    <color name="date_today_background">#48515D</color>
-    <color name="date_today_text">#FFFFFF</color>
-    <color name="input_background">#F1F2F4</color>
-    <color name="input_border">#C5CAD1</color>
-    <color name="input_focused_border">#C05621</color>
-    <color name="input_error_border">#963F17</color>
-
-    <!-- 按钮与标签。 -->
-    <color name="button_primary_bg">#48515D</color>
-    <color name="button_primary_text">#FFFFFF</color>
-    <color name="button_secondary_bg">#FFFFFF</color>
-    <color name="button_secondary_text">#48515D</color>
-    <color name="button_danger_bg">#FAEADD</color>
-    <color name="button_danger_text">#963F17</color>
-    <color name="button_disabled_bg">#F1F2F4</color>
-    <color name="button_disabled_text">#969DA7</color>
-    <color name="tab_active_bg">#48515D</color>
-    <color name="tab_active_text">#FFFFFF</color>
-    <color name="tab_inactive_bg">#FFFFFF</color>
-    <color name="tab_inactive_text">#626A74</color>
-    <color name="avatar_bg">#48515D</color>
-    <color name="avatar_text">#FFFFFF</color>
-    <color name="chip_bg">#FAEADD</color>
-    <color name="chip_text">#963F17</color>
-    <color name="chip_border">#E3B28D</color>
-
-    <!-- 底部导航。 -->
-    <color name="nav_active_icon">#48515D</color>
-    <color name="nav_inactive_icon">#969DA7</color>
-    <color name="nav_active_text">#48515D</color>
-    <color name="nav_inactive_text">#969DA7</color>
-    <color name="nav_bar_bg">#FFFFFF</color>
+<color name="primary">#48515D</color>
+<color name="secondary">#C05621</color>
+<color name="surface_background">#F7F6F3</color>
+<color name="card_background">#FFFFFF</color>
+<color name="text_primary">#20252B</color>
+<color name="text_secondary">#626A74</color>
+<color name="text_hint">#969DA7</color>
 </resources>

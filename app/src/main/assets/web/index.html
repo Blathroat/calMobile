@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>CalMobile · 展会排期助手</title>
+    <script>
+        // 在样式表生效前先落到上次选择的明暗模式，避免首帧闪白。
+        try {
+            var mode = localStorage.getItem('calmobile.mode');
+            if (mode === 'dark' || mode === 'light') {
+                document.documentElement.dataset.mode = mode;
+            }
+        } catch (ignored) {
+            // 隐私模式下忽略存储读取失败，保持跟随系统
+        }
+    </script>
+    <!-- EasyMDE 的样式只在简介编辑器用到，由 core/vendor.js 在进入该页时注入，
+         不放在这里阻塞首帧。 -->
+    <link rel="stylesheet" href="styles/tokens.css" />
+    <link rel="stylesheet" href="styles/motion.css" />
+</head>
+
+<body>
+    <div id="app" class="app"></div>
+    <div id="toast-host" class="toast-host" role="status" aria-live="polite"></div>
+    <div id="overlay-host"></div>
+    <!-- 内置第三方脚本（EasyMDE / qrcode-generator / jsQR）全部按需加载：
+         它们随 APK 打包不依赖 CDN，但解析要花时间，启动时全加载会拖慢首帧。
+         见 js/core/vendor.js。 -->
+    <script type="module" src="js/app.js"></script>
+</body>
+
+</html>

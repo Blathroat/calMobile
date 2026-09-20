@@ -1,0 +1,84 @@
+/**
+ * 认证接口的内存滑动窗口限流。
+ *
+ * 登录 / 注册此前没有任何限速，bcrypt 只拖慢单次猜测，挡不住脚本化撞库。
+ * 不引入 express-rate-limit 依赖（保持依赖收敛），单进程内存窗口足够兜住
+ * 当前「应用唯一客户端 + 本机部署」的形态；将来多实例部署时再换共享存储。
+ */
+
+const { ApiError } = require('../domain/errors');
+
+const buckets = new Map();
+
+/** 上次清理时间：避免每个请求都全表扫一遍。 */
+let lastSweep = 0;
+
+function sweep(now) {
+  if (now - lastSweep < 60 * 1000) {
+    return;
+  }
+  lastSweep = now;
+  for (const [key, hits] of buckets) {
+    const fresh = hits.filter((at) => now - at < 15 * 60 * 1000);
+    if (fresh.length === 0) {
+      buckets.delete(key);
+    } else {
+      buckets.set(key, fresh);
+    }
+  }
+}
+
+/**
+ * 固定窗口内最多 max 次**失败**，超出给 429。
+ *
+ * key 按「IP + 用户名」分桶：只按 IP 会把同一 NAT 后的用户一起误伤，
+ * 只按用户名又挡不住对一批账号的轮询爆破，两个维度相与才够窄。
+ *
+ * **只统计失败**：登录成功不该被计数——否则一个人连着登录十来次（演示、回归、
+ * 换账号）就会把自己锁在外面 5 分钟，而撞库脚本恰恰全是失败请求，这样拦得住。
+ * 失败包含两类：4xx（认证 / 授权错误）与 200 + `{ ok:false }`（业务失败信封）。
+ */
+function rateLimit({ windowMs, max, message }) {
+  return (req, res, next) => {
+    const now = Date.now();
+    sweep(now);
+    const identity = String(req.body?.username || req.body?.email || '').toLowerCase();
+    const key = `${req.path}|${req.ip || ''}|${identity}`;
+    const hits = (buckets.get(key) || []).filter((at) => now - at < windowMs);
+    if (hits.length >= max) {
+      next(new ApiError(429, message));
+      return;
+    }
+
+    // 响应是失败才记账：先看信封（业务失败也是 200），再看状态码。
+    let envelopeFailure = false;
+    const sendJson = res.json.bind(res);
+    res.json = (body) => {
+      if (body && body.ok === false) {
+        envelopeFailure = true;
+      }
+      return sendJson(body);
+    };
+    res.on('finish', () => {
+      if (envelopeFailure || res.statusCode >= 400) {
+        record(key, Date.now());
+      }
+    });
+    next();
+  };
+}
+
+/** 记一次失败；顺手按 15 分钟清掉过老的记录，避免长尾堆积。 */
+function record(key, at) {
+  const hits = (buckets.get(key) || []).filter((time) => at - time < 15 * 60 * 1000);
+  hits.push(at);
+  buckets.set(key, hits);
+}
+
+/** 测试用：清空全部计数，避免用例之间互相污染。 */
+function resetRateLimits() {
+  buckets.clear();
+  lastSweep = 0;
+}
+
+module.exports = { rateLimit, resetRateLimits };
