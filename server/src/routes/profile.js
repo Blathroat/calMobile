@@ -22,7 +22,11 @@ const { mutate } = require('../domain/respond');
 const { badRequest, notFound } = require('../domain/errors');
 const { issueCode, consumeCode, isCodeRejected, maskEmail } = require('../domain/otp');
 const {
-  readNotificationPreferences, saveNotificationPreferences,
+  secondFactorState, beginTotpSetup, confirmTotpSetup,
+  regenerateBackupCodes, clearSecondFactors,
+} = require('../domain/two-factor');
+const {
+  readNotificationPreferences, saveNotificationPreferences, readServerSettings,
 } = require('../domain/settings');
 const { revokeAllForUser } = require('../domain/session');
 const { authenticate } = require('../middleware/auth');
@@ -194,26 +198,32 @@ router.post('/password', authenticate, async (req, res, next) => {
  */
 router.get('/security', authenticate, async (req, res, next) => {
   try {
-    const result = await query(`
-            SELECT email, email_verified, email_verified_at, two_factor_enabled
-              FROM users WHERE id = $1
-        `, [req.user.userId]);
-    if (result.rows.length === 0) {
+    const factors = await secondFactorState(req.user.userId);
+    if (!factors) {
       throw notFound('用户不存在或已删除');
     }
-    const row = result.rows[0];
-    const email = String(row.email || '');
     res.json({
-      email,
-      emailVerified: row.email_verified === true,
-      emailVerifiedAt: row.email_verified_at ? new Date(row.email_verified_at).toISOString() : '',
-      twoFactorEnabled: row.two_factor_enabled === true,
-      canEnable: row.email_verified === true && email !== '',
+      email: factors.email,
+      emailVerified: factors.emailVerified,
+      emailVerifiedAt: await verifiedAt(req.user.userId),
+      twoFactorEnabled: factors.enabled,
+      // 绑定过验证器 ≠ 开关打开；这两个字段分开，页面才画得对
+      totpEnabled: factors.totpBound,
+      backupCodesLeft: factors.backupCodesLeft,
+      // 两步验证只支持邮箱方式：没有已验证邮箱就不该让开关亮起来
+      canEnable: factors.emailVerified && factors.email !== '',
     });
   } catch (error) {
     next(error);
   }
 });
+
+/** 邮箱验证时间（`secondFactorState` 不带它，这里单独取一次，只用于展示）。 */
+async function verifiedAt(userId) {
+  const result = await query('SELECT email_verified_at FROM users WHERE id = $1', [userId]);
+  const row = result.rows[0];
+  return row && row.email_verified_at ? new Date(row.email_verified_at).toISOString() : '';
+}
 
 /**
  * POST /api/v1/profile/2fa/enable
@@ -278,7 +288,86 @@ router.post('/2fa/enable/verify', authenticate, async (req, res, next) => {
       return;
     }
     await query('UPDATE users SET two_factor_enabled = true, updated_at = now() WHERE id = $1', [req.user.userId]);
-    res.json({ ok: true, error: '', twoFactorEnabled: true });
+    // 开启成功就给一批备用码：它和「用哪种方式验证」无关，是手机与邮箱都用不了时的最后一道
+    res.json({
+      ok: true,
+      error: '',
+      twoFactorEnabled: true,
+      backupCodes: await regenerateBackupCodes(req.user.userId),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/profile/2fa/totp/setup
+ * 绑定验证器第一步：生成密钥，返回 base32 密钥与 `otpauth://` 二维码地址。
+ *
+ * **这一步不改开关**：密钥先落在 `totp_pending_secret`，只有用户输对一次验证码
+ * （`/2fa/totp/enable`）才算绑定成功 —— 否则扫了个没成功的码就把自己锁在门外。
+ */
+router.post('/2fa/totp/setup', authenticate, async (req, res, next) => {
+  try {
+    const found = await query('SELECT id, username, email FROM users WHERE id = $1', [req.user.userId]);
+    const user = found.rows[0];
+    if (!user) {
+      throw notFound('用户不存在或已删除');
+    }
+    const settings = await readServerSettings();
+    const issuer = String((settings.brand && (settings.brand.zh || settings.brand.en)) || 'calMobile');
+    const setup = await beginTotpSetup({ id: user.id, username: user.username, email: user.email }, issuer);
+    res.json({ ok: true, error: '', issuer, ...setup });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/profile/2fa/totp/enable
+ * 绑定验证器第二步：验证码对得上刚生成的密钥 → 正式绑定、打开开关、发一批备用码。
+ */
+router.post('/2fa/totp/enable', authenticate, async (req, res, next) => {
+  try {
+    const code = String((req.body || {}).code || '').trim();
+    const result = await confirmTotpSetup(req.user.userId, code);
+    res.json({ ok: true, error: '', twoFactorEnabled: true, ...result });
+  } catch (error) {
+    if (isCodeRejected(error)) {
+      res.json({ ok: false, error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/profile/2fa/backup-codes
+ * 重新生成备用码（旧的一次性码全部作废）。要当前密码：会话被偷不该能重置恢复凭据。
+ *
+ * 返回的明文列表**只出现这一次**，库里只有 sha256。
+ */
+router.post('/2fa/backup-codes', authenticate, async (req, res, next) => {
+  try {
+    await mutate(res, next, async () => {
+      const password = String((req.body || {}).password || '');
+      if (!password) {
+        throw badRequest('请输入当前密码');
+      }
+      const found = await query(
+        'SELECT password_hash, two_factor_enabled FROM users WHERE id = $1',
+        [req.user.userId],
+      );
+      const row = found.rows[0];
+      const matched = row && await bcrypt.compare(password, row.password_hash);
+      if (!matched) {
+        throw badRequest('当前密码不正确');
+      }
+      if (row.two_factor_enabled !== true) {
+        throw badRequest('请先开启两步验证，再生成备用码');
+      }
+      return { backupCodes: await regenerateBackupCodes(req.user.userId) };
+    });
   } catch (error) {
     next(error);
   }
@@ -301,7 +390,8 @@ router.post('/2fa/disable', authenticate, async (req, res, next) => {
       if (!matched) {
         throw badRequest('当前密码不正确');
       }
-      await query('UPDATE users SET two_factor_enabled = false, updated_at = now() WHERE id = $1', [req.user.userId]);
+      // 关闭要把验证器绑定与备用码一起清掉：只翻开关的话，下次开启会静默沿用旧密钥与旧备用码。
+      await clearSecondFactors(req.user.userId);
       return { twoFactorEnabled: false };
     });
   } catch (error) {

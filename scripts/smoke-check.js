@@ -854,6 +854,26 @@ const checks = [
       'local-dev', 'TRUST_PROXY'],
   },
   {
+    id: 'backend-totp-rfc6238',
+    // 自己实现 OTP：base32 + HOTP 动态截断 + ±1 步窗口，且密钥加密存储、备用码只存哈希
+    file: 'server/src/domain/totp.js',
+    contains: ['HMAC', 'sha1', 'base32Decode', 'aes-256-gcm', 'otpauth://totp/',
+      'generateBackupCodes', 'hashBackupCode'],
+  },
+  {
+    id: 'backend-second-factor-methods',
+    // 三种第二因子并列可用：验证器 → 邮箱验证码 → 备用码；备用码命中即原子消费
+    file: 'server/src/domain/two-factor.js',
+    contains: ['verifySecondFactor', 'consumeBackupCode', 'used_at IS NULL', 'confirmTotpSetup',
+      'regenerateBackupCodes'],
+  },
+  {
+    id: 'backend-login-totp-invisible-until-verified',
+    // 绑了验证器就不自动发邮件码（省一封多半用不上的信，也避开 60 秒冷却）
+    file: 'server/src/routes/auth.js',
+    contains: ['emailSent', 'methods: {', 'twoFactorRequired'],
+  },
+  {
     id: 'docs-frontend-backend-boundary',
     file: 'README.md',
     contains: ['前后端边界', 'core/api.js', 'adb reverse', 'server/test/api.test.js']
@@ -922,7 +942,14 @@ const checks = [
   {
     id: 'web-registration-code-shown',
     file: `${WEB_ROOT}/js/pages/registration-detail.js`,
-    contains: ['checkInCode', 'drawQr', 'window.qrcode']
+    contains: ['checkInCode', 'qrCanvas']
+  },
+  {
+    id: 'web-qr-canvas-component',
+    // 二维码绘制集中在 ui/components.js：报名码与「绑定验证器」共用一套，
+    // 且必须保持白底深点的高对比（深色模式不跟随主题反色，否则相机扫不出来）
+    file: `${WEB_ROOT}/js/ui/components.js`,
+    contains: ['export function qrCanvas', 'window.qrcode', "fillStyle = '#ffffff'", "fillStyle = '#20252b'"]
   },
   {
     id: 'web-checkin-page',

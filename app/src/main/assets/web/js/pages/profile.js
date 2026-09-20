@@ -11,7 +11,7 @@ import { t } from '../core/strings.js';
 import { call, state, applyTheme, applySettings, applyMode } from '../core/bridge.js';
 import { authApi, profileApi, securityApi, settingsApi } from '../core/api.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
-import { avatarNode, loadErrorBlock, loadingBlock, openAvatarCropper, openSheet, segmented, smallCta, stateBlock, switchRow, toast } from '../ui/components.js';
+import { avatarNode, loadErrorBlock, loadingBlock, openAvatarCropper, openSheet, qrCanvas, segmented, smallCta, stateBlock, switchRow, toast } from '../ui/components.js';
 import { el, append, replace } from '../core/dom.js';
 import { fieldValidator, validateAll, limit, passwordRule, matchRule, PATTERNS } from '../core/validate.js';
 
@@ -337,6 +337,7 @@ export async function profilePage(context) {
         const card = el('div', { class: 'card' });
         const view = {
             info: null, error: '', panel: '', pendingEmail: '', busy: false,
+            secret: '', uri: '', newCodes: [],
         };
 
         load();
@@ -368,11 +369,23 @@ export async function profilePage(context) {
                 blocks.push(emailPanel());
             }
             blocks.push(twoFactorRow(view.info));
+            if (view.panel === 'choose') {
+                blocks.push(choosePanel());
+            }
+            if (view.panel === 'totp') {
+                blocks.push(totpPanel());
+            }
             if (view.panel === 'enable2fa') {
                 blocks.push(codePanel(t('s_1mimz3w'), 'enable2fa'));
             }
             if (view.panel === 'disable2fa') {
                 blocks.push(passwordPanel());
+            }
+            if (view.panel === 'backupCodes') {
+                blocks.push(backupCodesPanel());
+            }
+            if (view.panel === 'codes') {
+                blocks.push(codesPanel());
             }
             replace(card, blocks);
         }
@@ -469,9 +482,12 @@ export async function profilePage(context) {
             ]);
         }
 
-        /** 两步验证那一行：开关本身不直接生效，先过码（开）或验密码（关）。 */
+        /** 两步验证那一行：开关是总开关，打开后先选「用验证器」还是「用邮箱」。 */
         function twoFactorRow(info) {
             const limited = profileLimited();
+            const method = info.totpEnabled
+                ? t('s_1lteqo2')
+                : (info.emailVerified ? t('s_s8pbve') : t('s_bk5dms'));
             return el('div', { class: 'stack', 'data-gap': 'sm' }, [
                 switchRow({
                     id: 'security-2fa',
@@ -487,7 +503,8 @@ export async function profilePage(context) {
                                 paint();
                                 return;
                             }
-                            openEnable();
+                            view.panel = 'choose';
+                            paint();
                             return;
                         }
                         view.panel = 'disable2fa';
@@ -496,13 +513,161 @@ export async function profilePage(context) {
                 }),
                 el('p', {
                     class: 'field-hint',
-                    text: info.canEnable
-                        ? (info.twoFactorEnabled
-                            ? t('s_1c59miq')
-                            : t('s_kzys7n'))
-                        : t('s_1qj48cz'),
+                    text: info.twoFactorEnabled
+                        ? `当前验证方式：${method}；备用码还剩 ${info.backupCodesLeft} 个。`
+                        : (info.canEnable
+                            ? t('s_kzys7n')
+                            : t('s_1qj48cz')),
                 }),
+                // 已经开着的时候才给这两个恢复入口
+                info.twoFactorEnabled
+                    ? el('div', { class: 'row', 'data-gap': 'sm' }, [
+                        smallCta(t('s_u2zwo3'), () => {
+                            view.panel = 'backupCodes';
+                            view.error = '';
+                            paint();
+                        }),
+                        info.totpEnabled
+                            ? smallCta(t('s_1xbevn8'), () => startTotpSetup())
+                            : null,
+                    ])
+                    : null,
                 limited ? el('p', { class: 'field-hint', text: profileLimitHint() }) : null,
+            ]);
+        }
+
+        /** 选择第二因子的方式：验证器（推荐）或邮箱验证码。 */
+        function choosePanel() {
+            return el('div', { class: 'stack', 'data-gap': 'sm' }, [
+                el('p', { class: 'field-hint', text: t('s_16wrqub') }),
+                el('div', { class: 'row', 'data-gap': 'sm' }, [
+                    smallCta(t('s_1mdazxm'), () => startTotpSetup()),
+                    smallCta(t('s_16xoiwx'), () => openEnable()),
+                    smallCta(t('s_1589w37'), () => {
+                        view.panel = '';
+                        paint();
+                    }),
+                ]),
+            ]);
+        }
+
+        /** 绑定验证器第一步：拿密钥画二维码。 */
+        async function startTotpSetup() {
+            await run(async () => {
+                const result = await securityApi.totpSetup();
+                if (!result?.ok) {
+                    return result?.error || t('s_osck6n');
+                }
+                view.secret = result.secret || '';
+                view.uri = result.otpauthUri || '';
+                view.panel = 'totp';
+                return '';
+            });
+        }
+
+        /**
+         * 绑定验证器面板：二维码 + 手抄密钥 + 输码确认。
+         *
+         * 手抄密钥是必须的：相机权限、屏幕反光、老手机都可能扫不出来。
+         */
+        function totpPanel() {
+            const codeInput = el('input', {
+                class: 'input', id: 'security-totp-code', type: 'text', placeholder: t('s_doboo3'), maxlength: '6',
+            });
+            codeInput.setAttribute('inputmode', 'numeric');
+            const hint = el('p', { class: 'field-hint', text: t('s_ijepao') });
+            const canvas = qrCanvas({
+                text: view.uri,
+                size: 200,
+                onError: (message) => {
+                    hint.textContent = `${message}，请手动输入下面的密钥。`;
+                },
+            });
+            const confirm = smallCta(t('s_115qa00'), async () => {
+                const value = codeInput.value.trim();
+                if (!/^\d{6}$/.test(value)) {
+                    view.error = t('s_1x20l1k');
+                    paint();
+                    return;
+                }
+                await run(async () => {
+                    const result = await securityApi.totpEnable(value);
+                    if (!result?.ok) {
+                        return result?.error || t('s_osck6n');
+                    }
+                    view.newCodes = Array.isArray(result.backupCodes) ? result.backupCodes : [];
+                    view.panel = 'codes';
+                    toast(t('s_1p1p02k'), 'success');
+                    await load();
+                    return '';
+                });
+            });
+            const cancel = smallCta(t('s_1589w37'), () => {
+                view.panel = '';
+                view.error = '';
+                paint();
+            });
+            return el('div', { class: 'stack', 'data-gap': 'sm' }, [
+                hint,
+                el('div', { class: 'qr-wrap' }, [canvas]),
+                el('code', { class: 'qr-code-text', text: (view.secret.match(/.{1,4}/g) || []).join(' ') }),
+                codeInput,
+                el('div', { class: 'row', 'data-gap': 'sm' }, [confirm, cancel]),
+            ]);
+        }
+
+        /** 重新生成备用码：要当前密码。 */
+        function backupCodesPanel() {
+            const input = el('input', {
+                class: 'input', id: 'security-backup-password', type: 'password', placeholder: t('s_f478sb'),
+            });
+            const confirm = smallCta(t('s_yvmn4o'), async () => {
+                if (!input.value) {
+                    view.error = t('s_1okxm8b');
+                    paint();
+                    return;
+                }
+                await run(async () => {
+                    const result = await securityApi.backupCodes(input.value);
+                    if (!result?.ok) {
+                        return result?.error || t('s_osck6n');
+                    }
+                    view.newCodes = Array.isArray(result.backupCodes) ? result.backupCodes : [];
+                    view.panel = 'codes';
+                    await load();
+                    return '';
+                });
+            });
+            const cancel = smallCta(t('s_1589w37'), () => {
+                view.panel = '';
+                view.error = '';
+                paint();
+            });
+            return el('div', { class: 'stack', 'data-gap': 'sm' }, [
+                el('p', { class: 'field-hint', text: t('s_m70x1a') }),
+                input,
+                el('div', { class: 'row', 'data-gap': 'sm' }, [confirm, cancel]),
+            ]);
+        }
+
+        /** 一次性展示新生成的备用码：库里只有哈希，关掉就再也看不到。 */
+        function codesPanel() {
+            if (view.newCodes.length === 0) {
+                return el('p', { class: 'field-hint', text: t('s_1qnrion') });
+            }
+            return el('div', { class: 'stack', 'data-gap': 'sm' }, [
+                el('strong', { text: t('s_eqtk1v') }),
+                el('p', {
+                    class: 'field-hint',
+                    text: t('s_116vgro'),
+                }),
+                el('div', { class: 'stack', 'data-gap': 'xs' },
+                    view.newCodes.map((code) => el('code', { class: 'qr-code-text', text: code }))),
+                smallCta(t('s_1qhhjx1'), () => {
+                    view.newCodes = [];
+                    view.panel = '';
+                    paint();
+                }),
             ]);
         }
 
@@ -536,7 +701,9 @@ export async function profilePage(context) {
                     if (!result?.ok) {
                         return result?.error || t('s_osck6n');
                     }
-                    view.panel = '';
+                    // 开启成功会带一批备用码回来：切到「抄下来」面板，别让用户错过
+                    view.newCodes = Array.isArray(result.backupCodes) ? result.backupCodes : [];
+                    view.panel = view.newCodes.length > 0 ? 'codes' : '';
                     toast(t('s_14jjxmk'), 'success');
                     await load();
                     return '';

@@ -5,6 +5,7 @@ import { t } from '../core/strings.js';
  */
 
 import { el, append, replace, qs } from '../core/dom.js';
+import { loadQrEncoder } from '../core/vendor.js';
 
 // 状态文案与色调集中在 core/status.js；这里再导出一次，页面只需引一个模块。
 export { statusTone } from '../core/status.js';
@@ -627,4 +628,71 @@ export function openAvatarCropper({ source, onDone, onError }) {
             0, 0, CROP_OUTPUT_SIZE, CROP_OUTPUT_SIZE);
         return canvas.toDataURL('image/jpeg', 0.9);
     }
+}
+
+/**
+ * 把一段文本画成二维码的 canvas（内置 qrcode-generator，按需加载）。
+ *
+ * 两处会用到它：报名详情的报名码、个人页绑定验证器时的 `otpauth://` 地址。
+ * 高对比是硬要求 —— 白底黑点、深色模式下**不**跟随主题反色，否则相机扫不出来。
+ * 组件加载失败或内容画不出来时回调 `onError`（页面把它显示在二维码旁边），
+ * 不抛异常：拿不到二维码不该让整页挂掉。
+ *
+ * @param {{text: string, size?: number, quiet?: number, className?: string, onReady?: Function, onError?: Function}} options
+ */
+export function qrCanvas(options = {}) {
+    const {
+        text, size = 220, quiet = 4, className = 'qr-canvas', onReady, onError,
+    } = options;
+    const canvas = el('canvas', { class: className, width: String(size), height: String(size) });
+    loadQrEncoder()
+        .then(() => {
+            if (drawQr(canvas, text, quiet)) {
+                onReady?.();
+            } else {
+                onError?.(t('s_3rgb49'));
+            }
+        })
+        .catch((error) => onError?.(`二维码组件加载失败（${error.message}）`));
+    return canvas;
+}
+
+/** 真正落笔；返回是否画成功。 */
+function drawQr(canvas, text, quiet) {
+    const generator = typeof window !== 'undefined' ? window.qrcode : null;
+    if (typeof generator !== 'function') {
+        return false;
+    }
+    let model;
+    try {
+        // 0 表示按内容自动选择版本，M 级纠错在屏幕与打印下都够用。
+        model = generator(0, 'M');
+        model.addData(String(text || ''));
+        model.make();
+    } catch (error) {
+        return false;
+    }
+    const context = canvas.getContext('2d');
+    if (!context) {
+        return false;
+    }
+    const modules = model.getModuleCount();
+    const scale = canvas.width / (modules + quiet * 2);
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#20252b';
+    for (let row = 0; row < modules; row += 1) {
+        for (let column = 0; column < modules; column += 1) {
+            if (!model.isDark(row, column)) {
+                continue;
+            }
+            context.fillRect(
+                Math.round((column + quiet) * scale),
+                Math.round((row + quiet) * scale),
+                Math.ceil(scale),
+                Math.ceil(scale),
+            );
+        }
+    }
+    return true;
 }

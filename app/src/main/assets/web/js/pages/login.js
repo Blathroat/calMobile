@@ -16,7 +16,7 @@ import { scaffold } from '../core/router.js';
 import { toast } from '../ui/components.js';
 import { el, append } from '../core/dom.js';
 import {
-    fieldValidator, validateAll, limit, PATTERNS,
+    fieldValidator, validateAll, limit,
 } from '../core/validate.js';
 
 export async function loginPage(context) {
@@ -136,12 +136,15 @@ export async function loginPage(context) {
         class: 'input',
         id: 'login-code',
         type: 'text',
-        placeholder: t('s_doboo3'),
+        placeholder: t('s_tvr34s'),
         autocomplete: 'one-time-code',
     });
     codeInput.setAttribute('inputmode', 'numeric');
-    codeInput.setAttribute('maxlength', '6');
+    codeInput.setAttribute('maxlength', '12');
     const verifyError = el('p', { class: 'field-error', role: 'alert', hidden: true });
+    const methodHint = el('p', { class: 'field-hint', hidden: true });
+    const sentLine = el('p', { class: 'muted' }, [t('s_sg8u9h'), maskedEmail]);
+    const unsentLine = el('p', { class: 'muted', hidden: true });
     const verifySubmit = el('button', { class: 'cta', type: 'submit' }, [t('s_rvg0ck')]);
     const resend = el('button', { class: 'cta ghost', type: 'button' }, [t('s_1fyr64c')]);
     const back = el('button', { class: 'cta ghost', type: 'button' }, [t('s_knqdo0')]);
@@ -150,8 +153,11 @@ export async function loginPage(context) {
         el('div', { class: 'stack', 'data-gap': 'sm' }, [
             el('h2', { text: t('s_15msj8x') }),
             // 冒号而不是尾随空格：Android 的 string 资源会裁掉首尾空白
-            el('p', { class: 'muted' }, [t('s_sg8u9h'), maskedEmail]),
+            sentLine,
+            // 绑了验证器时第一步不会自动发邮件（省一封多半用不上的信，也避开 60 秒冷却）
+            unsentLine,
             el('p', { class: 'field-hint', text: t('s_1xtehpy') }),
+            methodHint,
         ]),
         el('div', { class: 'field' }, [
             el('label', { for: 'login-code', text: t('s_s8pbve') }),
@@ -168,6 +174,30 @@ export async function loginPage(context) {
     let ticket = '';
     let timer = null;
     let remaining = 0;
+    /** 这个账号能用哪些第二因子（由第一步下发）：验证器 / 邮箱验证码 / 备用码。 */
+    let methods = { totp: false, email: true, backup: false };
+    /** 第一步有没有真的发出邮件验证码（绑了验证器时不会发）。 */
+    let emailSent = false;
+
+    /** 按账号实际可用的方式给出提示，并藏掉用不上的按钮。 */
+    function paintMethods() {
+        const lines = [];
+        if (methods.totp) {
+            lines.push(t('s_1c20uoy'));
+        }
+        if (methods.backup) {
+            lines.push(t('s_dowbxh'));
+        }
+        methodHint.textContent = lines.join(' ');
+        methodHint.hidden = lines.length === 0;
+        // 邮箱验证码不可用（邮箱没验证）时，别摆一个点了会报错的按钮
+        resend.hidden = methods.email === false;
+        // 发过邮件才说「验证码已发送到…」，否则会让人一直等一封不会来的信
+        sentLine.hidden = !emailSent;
+        unsentLine.hidden = emailSent;
+        unsentLine.textContent = emailSent ? '' : t('s_1rbi8qf');
+        paintResend();
+    }
 
     function showStep(step) {
         form.hidden = step !== 1;
@@ -201,7 +231,8 @@ export async function loginPage(context) {
 
     function paintResend() {
         resend.disabled = remaining > 0;
-        const ready = t('s_1fyr64c');
+        // 还没发过邮件时按钮是「发送邮箱验证码」，发过之后才是「重新发送验证码」
+        const ready = emailSent ? t('s_1fyr64c') : t('s_hzjdbg');
         const waiting = t('s_1qbu9z0');
         resend.textContent = remaining > 0 ? `${remaining} ${waiting}` : ready;
     }
@@ -213,7 +244,7 @@ export async function loginPage(context) {
         }
         remaining = 0;
         resend.disabled = false;
-        resend.textContent = t('s_1fyr64c');
+        paintResend();
     }
 
     /** 登录前所在页面携带的参数（例如展会 id），登录后原样带回。 */
@@ -276,12 +307,17 @@ export async function loginPage(context) {
                 return;
             }
             if (result.twoFactorRequired) {
-                // 这一步没有令牌：只有一张票 + 一封刚发出的验证码邮件
+                // 这一步没有令牌：只有一张票，外加（邮箱是主方式时）一封刚发出的验证码邮件
                 ticket = result.ticket || '';
+                methods = result.methods || methods;
+                emailSent = result.emailSent === true;
                 maskedEmail.textContent = result.maskedEmail || '';
                 codeInput.value = '';
+                paintMethods();
                 showStep(2);
-                startCountdown(result.resendAfterSec);
+                if (Number(result.resendAfterSec) > 0) {
+                    startCountdown(result.resendAfterSec);
+                }
                 return;
             }
             enterAs(result.user);
@@ -301,8 +337,11 @@ export async function loginPage(context) {
                 control: codeInput,
                 label: t('s_s8pbve'),
                 required: true,
-                pattern: PATTERNS.verificationCode,
-                patternMessage: t('s_1x20l1k'),
+                max: 12,
+                // 第二因子三选一：6 位验证码（验证器或邮箱），或 XXXXX-XXXXX 形式的备用码
+                custom: (value) => (/^\d{6}$/.test(value) || /^[0-9A-Z]{5}-[0-9A-Z]{5}$/i.test(value)
+                    ? ''
+                    : t('s_28a6dt')),
             }),
         ]);
         if (!checked.ok) {
@@ -345,6 +384,10 @@ export async function loginPage(context) {
                 return;
             }
             toast(t('s_5rsk4v'), 'success');
+            // 从这一刻起才算「已经发过邮件」：按钮文案与「验证码已发送到…」都跟着变
+            emailSent = true;
+            sentLine.hidden = false;
+            unsentLine.hidden = true;
             startCountdown(sent.resendAfterSec);
         } catch (error) {
             verifyError.textContent = error.message;

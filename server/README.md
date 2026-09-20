@@ -144,9 +144,9 @@ pwsh -File scripts\mail.ps1 clear    # 跑回归前清空，免得看错邮件
 | 方法与路径 | 动作 | 权限与说明 |
 | --- | --- | --- |
 | `GET /bootstrap` | `bootstrap` | 可匿名。一次下发 `user / theme / ui / capabilities / categories / review / media / announcement / brand / limits / server / calendar`（含 `calendar.landing` 落点月份） |
-| `POST /auth/login` | `auth.login` | **用户名或已验证邮箱** + 密码换 `token` + `refreshToken`，并更新最近登录时间。账号开启两步验证时**不发令牌**：只回 `{ twoFactorRequired, ticket, maskedEmail, expiresInSec, resendAfterSec }` |
-| `POST /auth/login/verify` | `auth.loginVerify` | 两步验证第二步：`{ ticket, code }` → 会话。先验码再消费票（码错了票还能接着用），票单次使用；码不对 / 过期是 200 + `ok:false` |
-| `POST /auth/login/code` | `auth.loginCode` | 两步验证：用同一张票重发验证码（票没过期就还有效），限流同上 |
+| `POST /auth/login` | `auth.login` | **用户名或已验证邮箱** + 密码换 `token` + `refreshToken`，并更新最近登录时间。账号开启两步验证时**不发令牌**：只回 `{ twoFactorRequired, ticket, maskedEmail, expiresInSec, resendAfterSec, emailSent, methods: { totp, email, backup } }`。**绑了验证器就不会自动发邮件码**（`emailSent:false`，需要时走 `/auth/login/code`） |
+| `POST /auth/login/verify` | `auth.loginVerify` | 两步验证第二步：`{ ticket, code }` → 会话。`code` 可以是 6 位验证码（验证器或邮箱）或 `XXXXX-XXXXX` 形式的备用码，按「验证器 → 邮箱验证码 → 备用码」依次试；先验码再消费票（码错了票还能接着用），票单次使用；码不对 / 过期是 200 + `ok:false` |
+| `POST /auth/login/code` | `auth.loginCode` | 两步验证：用同一张票补发一封邮箱验证码（票没过期就还有效），限流同上 |
 | `POST /auth/register` | `auth.register` | 注册**第一步**：校验用户名 / 密码 / 邮箱与查重，把待建账号暂存进验证码记录并发码；**不建账号、不发令牌**。限流：同一邮箱 60 秒 1 条 / 1 小时 5 条 / 24 小时 15 条，同一 IP 1 小时 20 条（429） |
 | `POST /auth/register/verify` | `auth.registerVerify` | 注册**第二步**：验证码通过才建账号（`email_verified = true`）并发令牌；码不对 / 过期 / 次数用尽是 200 + `ok:false` |
 | `POST /auth/password/forgot` | `auth.forgotPassword` | 找回密码第一步：给**已验证邮箱**的账号发码。**不区分邮箱是否存在**——不存在的邮箱同样走一遍限流与落库，只是不发信；两种情况响应字段与耗时都一致（防账号枚举）。只给未封禁账号发 |
@@ -166,8 +166,11 @@ pwsh -File scripts\mail.ps1 clear    # 跑回归前清空，免得看错邮件
 | `PUT /profile/notifications` | `notify.savePreferences` | 登录，支持部分字段 |
 | `GET /profile/security` | `security.get` | 登录。返回 `{ email, emailVerified, emailVerifiedAt, twoFactorEnabled, canEnable }` |
 | `POST /profile/2fa/enable` | `security.enable2fa` | 登录。把验证码发到**已验证邮箱**（开启也要过码，顺便证明邮箱现在真能收信）。没有已验证邮箱时 400 |
-| `POST /profile/2fa/enable/verify` | `security.verify2fa` | 登录。`{ code }` 通过才把 `two_factor_enabled` 置真 |
-| `POST /profile/2fa/disable` | `security.disable2fa` | 登录。`{ password }` 校验当前密码后关闭（会话被偷不等于能关掉第二道锁） |
+| `POST /profile/2fa/enable/verify` | `security.verify2fa` | 登录。`{ code }` 通过才把 `two_factor_enabled` 置真，并返回一批**备用码**（明文只出现这一次） |
+| `POST /profile/2fa/totp/setup` | `security.totpSetup` | 登录。生成验证器密钥（base32）与 `otpauth://` 地址；**这一步不生效**，密钥先进 `totp_pending_secret`，确认过码才算绑定 |
+| `POST /profile/2fa/totp/enable` | `security.totpEnable` | 登录。`{ code }` 对得上刚生成的密钥才正式绑定、打开开关，并返回一批备用码 |
+| `POST /profile/2fa/backup-codes` | `security.backupCodes` | 登录。`{ password }` 校验后**重新生成**备用码（旧的全部作废），要求两步验证已开启 |
+| `POST /profile/2fa/disable` | `security.disable2fa` | 登录。`{ password }` 校验当前密码后关闭，并**清掉验证器绑定与备用码**（只翻开关会让下次开启静默沿用旧密钥） |
 | `POST /profile/email` | `security.changeEmail` | 登录。`{ email }` 把验证码发到**新**地址；与当前相同 / 已被占用会被拒 |
 | `POST /profile/email/verify` | `security.verifyEmail` | 登录。`{ email, code }` 通过才落库，并把 `email_verified` 置真；验证码必须是为当前账号签发的 |
 
@@ -310,18 +313,19 @@ npm test                  # jest：不依赖数据库的纯函数单测
 npm run lint
 ```
 
-`test/api.test.js`（58 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
+`test/api.test.js`（59 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
 
 - 页面真正用到的字段都在（展会 25 个字段、报名、审核统计、启动数据的 12 个配置块）；
 - 权限确实拦得住（访客 / 普通用户 / 展商越权访问、受限账号在报名 / 发布 / 编辑 / 删除展会 / 改报名设置 / 核销 / 改资料上的 403 文案与仍然可用的操作、管理员即便被标成受限也不受限）；
 - 业务规则确实生效（报名窗口、收集项必填与选项、重复报名、自动通过、审核状态机与 `canRevise` 策略、核销状态流转、隐私开关、媒体上限收敛与缺键兜底）；
 - **注册两步流程与验证码规则**：第一步只发码、不建号、不发令牌，账号在验证通过前登不进去；错码不建号；同一枚码只能用一次；同一邮箱 60 秒内不能重复发码（429）；错够 5 次这枚码即作废（连正确的码也不再认）；发码与验证之间用户名被抢注时给「已被注册」而不是 500。
+- **TOTP 与备用码**：绑定验证器要先把生成的密钥输对一次才算成功（生成密钥这一步不生效）；登录时 6 位码按「验证器 → 邮箱验证码」试，`XXXXX-XXXXX`（或丢掉横线的 10 位）按备用码试；备用码一次一枚、用过的立即失效，重新生成会让旧码全部作废，关闭两步验证会把验证器绑定与备用码一起清掉。TOTP 实现对着 RFC 6238 官方向量测（`domain/totp.test.js`），密钥在库里是 AES-256-GCM 密文。
 - **找回密码与两步验证**：找回密码对已注册与未注册邮箱的响应字段完全一致（不泄露账号是否存在），但只有已注册的会真的收到邮件；改密码后旧刷新令牌失效、一码一用；两步验证开启后 `POST /auth/login` 只回票不发令牌、错码仍然没令牌、过码才发令牌、同一张票只能用一次、关闭要当前密码；改邮箱必须把码发到新地址、通过才落库，且别人账号的改邮箱验证码用不了；验证码的明文只存在于邮件里，用例从内存收件箱的正文里把它读出来 —— 走的是用户实际收到的那条路径，后端没有、也不该有「读出明文码」的接口；
 - 刷新令牌并发重放只会换到一套新令牌（轮换的撤销是原子条件更新）；
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
 - 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、带上错误原文，不抛 500）。
 
-`src/**/*.test.js`（jest，81 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.js`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.js`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.js`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.js`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `npm test` 的前置条件——测试不该依赖一个容器。
+`src/**/*.test.js`（jest，95 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.js`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.js`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.js`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.js`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `npm test` 的前置条件——测试不该依赖一个容器。
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 

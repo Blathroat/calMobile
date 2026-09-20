@@ -573,13 +573,31 @@ const BACKEND = {
         emailVerified: true,
         emailVerifiedAt: '2026-09-01T00:00:00.000Z',
         twoFactorEnabled: false,
+        totpEnabled: false,
+        backupCodesLeft: 0,
         canEnable: true,
     },
     'POST /profile/2fa/enable': {
         ok: true, error: '', email: 'demo@example.com', expiresInSec: 600, resendAfterSec: 60, maskedEmail: 'de***@example.com',
     },
-    'POST /profile/2fa/enable/verify': { ok: true, error: '', twoFactorEnabled: true },
+    'POST /profile/2fa/enable/verify': {
+        ok: true, error: '', twoFactorEnabled: true, backupCodes: ['AAAAA-BBBBB', 'CCCCC-DDDDD', 'EEEEE-FFFFF'],
+    },
     'POST /profile/2fa/disable': { ok: true, error: '', twoFactorEnabled: false },
+    // 绑定验证器：先给密钥与 otpauth 地址，输对码后绑定成功并带回备用码
+    'POST /profile/2fa/totp/setup': {
+        ok: true,
+        error: '',
+        issuer: '发现展会',
+        secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+        otpauthUri: 'otpauth://totp/%E5%8F%91%E7%8E%B0%E5%B1%95%E4%BC%9A:demo@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=%E5%8F%91%E7%8E%B0%E5%B1%95%E4%BC%9A&algorithm=SHA1&digits=6&period=30',
+    },
+    'POST /profile/2fa/totp/enable': {
+        ok: true, error: '', twoFactorEnabled: true, backupCodes: ['22222-33333', '44444-55555'],
+    },
+    'POST /profile/2fa/backup-codes': {
+        ok: true, error: '', backupCodes: ['66666-77777', '88888-99999'],
+    },
     'POST /profile/email': {
         ok: true, error: '', email: 'new@example.com', expiresInSec: 600, resendAfterSec: 60,
     },
@@ -1197,7 +1215,9 @@ test('两步验证：登录先拿票，过码之后才保存令牌', async () =>
         ticket: 'ticket-2fa',
         expiresInSec: 300,
         resendAfterSec: 60,
+        emailSent: true,
         maskedEmail: 'de***@example.com',
+        methods: { totp: true, email: true, backup: true },
     };
     try {
         const { dom, requests } = await renderRoute('login', {});
@@ -1236,11 +1256,12 @@ test('两步验证：登录先拿票，过码之后才保存令牌', async () =>
 });
 
 /**
- * 个人页的「安全」区：邮箱与两步验证开关都在这里。
+ * 个人页的「安全」区：邮箱与两步验证都在这里。
  *
- * 开启不是「按一下就好」：先请求发码（后端把码发到已验证邮箱），再输码确认。
+ * 开关是总开关：打开后先在「用验证器」和「用邮箱验证码」之间选一个。
+ * 两条路都要真的走通 —— 验证器那条会先拿密钥（此时还没生效），输对码才绑定成功并发备用码。
  */
-test('个人页安全区开启两步验证：先请求发码，再输码确认', async () => {
+test('个人页安全区：先选第二因子方式，验证器与邮箱两条路都能走通', async () => {
     const realSetTimeout = global.setTimeout;
     global.setTimeout = (fn) => realSetTimeout(fn, 0);
     try {
@@ -1248,28 +1269,76 @@ test('个人页安全区开启两步验证：先请求发码，再输码确认',
         await settle(60);
 
         const control = (id) => dom.app.querySelectorAll((node) => node.id === id)[0];
+        const button = (text) => dom.app.querySelectorAll((node) => node.tagName === 'BUTTON')
+            .find((node) => collectText(node).trim() === text);
         assert.ok(requests.some((item) => item.path === '/profile/security'), '没有读取安全设置');
         const toggle = control('security-2fa');
         assert.ok(toggle, '安全区没有渲染出两步验证开关');
         assert.strictEqual(toggle.disabled, false, '有已验证邮箱时开关应当可用');
 
+        // 打开开关：先出「选方式」面板，这一步不该直接发邮件码
+        toggle.checked = true;
+        toggle.dispatch('change');
+        await settle(60);
+        assert.ok(button('用验证器开启（推荐）') && button('用邮箱验证码开启'),
+            `打开开关后应当让用户选方式：${requests.map((item) => item.path).join(', ')}`);
+        assert.ok(!requests.some((item) => item.path === '/profile/2fa/enable'),
+            '选方式之前不该先发邮件码');
+
+        // 路线一：验证器 —— 拿密钥 → 画二维码 → 输码绑定
+        button('用验证器开启（推荐）').dispatch('click');
+        await settle(60);
+        const setup = requests.find((item) => item.path === '/profile/2fa/totp/setup');
+        assert.ok(setup, '没有请求验证器密钥');
+        const secret = control('security-totp-code');
+        assert.ok(secret, '绑定验证器应当出现输码输入框');
+        // 密钥按 4 个字符分组显示，方便手抄
+        assert.ok(collectText(dom.app).includes('JBSW Y3DP'), '页面要显示可手抄的密钥');
+        assert.ok(dom.app.querySelectorAll((node) => node.classList.contains('qr-canvas')).length > 0,
+            '绑定验证器应当画出二维码');
+
+        secret.value = '123456';
+        button('确认绑定').dispatch('click');
+        await settle(60);
+        const enabled = requests.find((item) => item.path === '/profile/2fa/totp/enable');
+        assert.ok(enabled, '没有提交验证码');
+        assert.deepStrictEqual(enabled.body, { code: '123456' });
+        assert.ok(collectText(dom.app).includes('22222-33333'), '绑定成功后要展示备用码');
+    } finally {
+        global.setTimeout = realSetTimeout;
+    }
+});
+
+/** 另一个入口：不想装验证器 App 的用户可以只用邮箱验证码。 */
+test('个人页安全区：选「用邮箱验证码开启」会发码，输码后开启', async () => {
+    const realSetTimeout = global.setTimeout;
+    global.setTimeout = (fn) => realSetTimeout(fn, 0);
+    try {
+        const { dom, requests } = await renderRoute('profile', {});
+        await settle(60);
+        const control = (id) => dom.app.querySelectorAll((node) => node.id === id)[0];
+        const button = (text) => dom.app.querySelectorAll((node) => node.tagName === 'BUTTON')
+            .find((node) => collectText(node).trim() === text);
+
+        const toggle = control('security-2fa');
         toggle.checked = true;
         toggle.dispatch('change');
         await settle(60);
 
-        assert.ok(requests.some((item) => item.path === '/profile/2fa/enable'),
-            `开启两步验证应当先请求发码，实际：${requests.map((item) => item.path).join(', ')}`);
+        button('用邮箱验证码开启').dispatch('click');
+        await settle(60);
+        assert.ok(requests.some((item) => item.path === '/profile/2fa/enable'), '应当请求发码');
+
         const code = control('security-2fa-code');
         assert.ok(code, '发码之后应当出现输码输入框');
         code.value = '135790';
-        dom.app.querySelectorAll((node) => node.tagName === 'BUTTON')
-            .find((node) => collectText(node).trim() === '确认开启')
-            .dispatch('click');
+        button('确认开启').dispatch('click');
         await settle(60);
 
         const verified = requests.find((item) => item.path === '/profile/2fa/enable/verify');
         assert.ok(verified, '没有提交验证码');
         assert.deepStrictEqual(verified.body, { code: '135790' });
+        assert.ok(collectText(dom.app).includes('AAAAA-BBBBB'), '开启后同样要展示备用码');
     } finally {
         global.setTimeout = realSetTimeout;
     }

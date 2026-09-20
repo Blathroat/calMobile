@@ -14,10 +14,9 @@ import { state } from '../core/bridge.js';
 import { registrations } from '../core/api.js';
 import { loadInto } from '../core/loadable.js';
 import { scaffold } from '../core/router.js';
-import { confirmSheet, notFoundBlock, pageFoot, statusTag, statusTone, toast } from '../ui/components.js';
+import { confirmSheet, notFoundBlock, pageFoot, qrCanvas, statusTag, statusTone, toast } from '../ui/components.js';
 import { el, replace, answerLines, formatRecordDate } from '../core/dom.js';
 import { REGISTRATION_STATUS } from '../core/status.js';
-import { loadQrEncoder } from '../core/vendor.js';
 
 export async function registrationDetailPage(context) {
     const host = el('div', { class: 'stack' });
@@ -98,19 +97,25 @@ export async function registrationDetailPage(context) {
             return null;
         }
         const attended = record.statusLabel === REGISTRATION_STATUS.ATTENDED;
-        const canvas = el('canvas', {
-            class: 'qr-canvas',
-            width: 480,
-            height: 480,
-            role: 'img',
-            'aria-label': t('s_16uw4a2'),
-        });
         const hint = el('p', {
             class: 'field-hint',
             style: { textAlign: 'center' },
             text: t('s_1wlb9mw'),
         });
-        const card = el('div', { class: 'card' }, [
+        // 二维码绘制集中在 ui/components.js 的 qrCanvas（个人页绑定验证器用的是同一套）。
+        const canvas = qrCanvas({
+            text: record.checkInCode,
+            size: 480,
+            onReady: () => {
+                hint.textContent = attended ? t('s_132avex') : t('s_aoirc6');
+            },
+            onError: (message) => {
+                hint.textContent = `${message}，可让展商手动输入上方报名码。`;
+            },
+        });
+        canvas.setAttribute('role', 'img');
+        canvas.setAttribute('aria-label', t('s_16uw4a2'));
+        return el('div', { class: 'card' }, [
             el('div', { class: 'row', 'data-between': 'true' }, [
                 el('span', { class: 'section-label', text: t('s_w5wyci') }),
                 statusTag(attended ? t('s_107xpf9') : t('s_1qk0zaw'), attended ? 'ok' : 'pending'),
@@ -119,62 +124,6 @@ export async function registrationDetailPage(context) {
             el('code', { class: 'qr-code-text', text: record.checkInCode }),
             hint,
         ]);
-
-        loadQrEncoder()
-            .then(() => {
-                drawQr(canvas, record.checkInCode);
-                hint.textContent = attended
-                    ? t('s_132avex')
-                    : t('s_aoirc6');
-            })
-            .catch((error) => {
-                hint.textContent = `二维码组件加载失败（${error.message}），可让展商手动输入上方报名码。`;
-            });
-        return card;
-    }
-
-    /** 用内置的 qrcode-generator 把报名码画成二维码。 */
-    function drawQr(canvas, text) {
-        const generator = typeof window !== 'undefined' ? window.qrcode : null;
-        if (typeof generator !== 'function') {
-            return;
-        }
-        let model;
-        try {
-            // 0 表示按内容自动选择版本，M 级纠错在屏幕与打印下都够用。
-            model = generator(0, 'M');
-            model.addData(text);
-            model.make();
-        } catch (error) {
-            replace(canvas.parentNode, [
-                el('p', { class: 'field-hint', text: `二维码生成失败：${error.message}` }),
-            ]);
-            return;
-        }
-        const context = canvas.getContext('2d');
-        if (!context) {
-            return;
-        }
-        const modules = model.getModuleCount();
-        const quiet = 4;
-        const size = canvas.width / (modules + quiet * 2);
-        // 二维码必须保持高对比：白底黑点，深色模式下也不跟随主题反色。
-        context.fillStyle = '#ffffff';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.fillStyle = '#20252b';
-        for (let row = 0; row < modules; row += 1) {
-            for (let column = 0; column < modules; column += 1) {
-                if (!model.isDark(row, column)) {
-                    continue;
-                }
-                context.fillRect(
-                    Math.round((column + quiet) * size),
-                    Math.round((row + quiet) * size),
-                    Math.ceil(size),
-                    Math.ceil(size),
-                );
-            }
-        }
     }
 
     function statusHint(status) {

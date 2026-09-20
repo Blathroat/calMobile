@@ -100,6 +100,9 @@ const ENDPOINTS = {
     'security.disable2fa': () => ({ method: 'POST', path: '/profile/2fa/disable' }),
     'security.changeEmail': () => ({ method: 'POST', path: '/profile/email' }),
     'security.verifyEmail': () => ({ method: 'POST', path: '/profile/email/verify' }),
+    'security.totpSetup': () => ({ method: 'POST', path: '/profile/2fa/totp/setup' }),
+    'security.totpEnable': () => ({ method: 'POST', path: '/profile/2fa/totp/enable' }),
+    'security.backupCodes': () => ({ method: 'POST', path: '/profile/2fa/backup-codes' }),
 
     'exhibitions.list': (payload) => ({ method: 'GET', path: '/exhibitions', query: payload }),
     'exhibitions.month': (payload) => ({ method: 'GET', path: '/exhibitions/month', query: payload }),
@@ -603,6 +606,12 @@ export const api = {
             }
             return result;
         },
+        /** 绑定验证器第一步：拿到 base32 密钥与 otpauth 地址（**此时还没生效**）。 */
+        totpSetup: () => request('security.totpSetup'),
+        /** 绑定验证器第二步：输对码才生效，并带回一批备用码（只出现这一次）。 */
+        totpEnable: (code) => request('security.totpEnable', { code }),
+        /** 重新生成备用码（旧的一次性码全部作废），要当前密码。 */
+        backupCodes: (password) => request('security.backupCodes', { password }),
     },
 
     // ── 展会 ───────────────────────────────────────────────────────

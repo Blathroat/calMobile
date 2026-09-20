@@ -226,6 +226,33 @@ const STEPS = [
         CREATE INDEX IF NOT EXISTS mail_log_failed_idx ON mail_log (status, created_at DESC);
         `,
   },
+  {
+    id: '0005-totp-backup-codes',
+    sql: `
+        -- 验证器（TOTP）与备用码：两步验证从「只有邮箱验证码」扩展成三种并列的第二因子。
+        --
+        -- totp_secret 存的是 **AES-256-GCM 密文**（见 domain/totp.js），不是明文 base32：
+        -- 备份、pg_dump、只读副本这类「只有库」的泄露不该直接把第二因子送出去。
+        -- totp_pending_secret 是「扫了码但还没输码确认」的中间态，确认后搬进 totp_secret。
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT NOT NULL DEFAULT '';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_pending_secret TEXT NOT NULL DEFAULT '';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_confirmed_at TIMESTAMPTZ;
+
+        -- 备用码：只存 sha256 哈希（10 位随机串，熵足够，不需要慢哈希），一次一枚、用完即废。
+        CREATE TABLE IF NOT EXISTS backup_codes (
+            id          TEXT PRIMARY KEY,
+            user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            code_hash   TEXT NOT NULL,
+            used_at     TIMESTAMPTZ,
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        CREATE INDEX IF NOT EXISTS backup_codes_user_idx ON backup_codes (user_id);
+        -- 登录时的查表只找「没用过」的那些
+        CREATE INDEX IF NOT EXISTS backup_codes_active_idx
+            ON backup_codes (user_id, code_hash) WHERE used_at IS NULL;
+        `,
+  },
 ];
 
 const DEFAULT_SETTINGS = {

@@ -14,6 +14,7 @@ const { capabilities } = require('../domain/permissions');
 const { limits } = require('../domain/validation');
 const { issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser } = require('../domain/session');
 const { issueCode, consumeCode, isCodeRejected, maskEmail } = require('../domain/otp');
+const { secondFactorState, verifySecondFactor } = require('../domain/two-factor');
 const {
   issueTicket, findTicket, consumeTicket, countTicketFailure,
 } = require('../domain/preauth');
@@ -105,20 +106,33 @@ router.post('/login', authLimiter, async (req, res, next) => {
         return;
       }
       const ticket = await issueTicket(account.id);
-      const sent = await issueCode({
-        purpose: 'login',
-        email: account.email,
-        userId: account.id,
-        ip: req.ip || '',
-      });
+      const factors = await secondFactorState(account.id);
+      const emailUsable = Boolean(factors && factors.emailVerified && factors.email);
+      // **绑了验证器就不再自动发邮件码**：那封邮件多半用不上，还会撞上同一邮箱
+      // 60 秒一条的冷却（用户输错一次验证器码、想重新登录就会拿到 429）。
+      // 需要邮箱验证码时，页面用 POST /auth/login/code 主动要一条。
+      const sendEmail = emailUsable && !factors.totpBound;
+      const sent = sendEmail
+        ? await issueCode({
+          purpose: 'login', email: account.email, userId: account.id, ip: req.ip || '',
+        })
+        : null;
       res.json({
         ok: true,
         error: '',
         twoFactorRequired: true,
         ticket: ticket.ticket,
         expiresInSec: ticket.expiresInSec,
-        resendAfterSec: sent.resendAfterSec,
+        resendAfterSec: sent ? sent.resendAfterSec : 0,
+        // 页面据此决定是「验证码已发送到…」还是「请输入验证器里的码」
+        emailSent: Boolean(sent),
         maskedEmail: maskEmail(account.email),
+        // 告诉页面这个账号能用哪些第二因子：验证器 / 邮箱验证码 / 备用码
+        methods: {
+          totp: Boolean(factors && factors.totpBound),
+          email: emailUsable,
+          backup: Boolean(factors && factors.backupCodesLeft > 0),
+        },
       });
       return;
     }
@@ -152,7 +166,7 @@ router.post('/login/verify', authLimiter, async (req, res, next) => {
       return;
     }
     const account = await query(
-      'SELECT id, username, role, email, email_verified, status FROM users WHERE id = $1',
+      'SELECT id, username, role, email, email_verified, totp_secret, status FROM users WHERE id = $1',
       [found.userId],
     );
     const row = account.rows[0];
@@ -161,23 +175,17 @@ router.post('/login/verify', authLimiter, async (req, res, next) => {
       return;
     }
 
-    let consumed;
+    // 第二因子三选一：验证器 → 邮箱验证码 → 备用码（见 domain/two-factor.js）。
+    // 顺序在那边定义，这里只管把失败记到票据上：拿到票也不能慢慢地猜。
     try {
-      consumed = await consumeCode({ purpose: 'login', email: row.email, code });
+      await verifySecondFactor(row, code);
     } catch (error) {
       if (isCodeRejected(error)) {
-        // 记一次失败：拿到票据也不能慢慢地猜码
         await countTicketFailure(found.id, found.attempts);
         res.json(failure(error.message));
         return;
       }
       throw error;
-    }
-    if (consumed.userId && consumed.userId !== found.userId) {
-      // 这张码不属于这张票对应的账号（同一邮箱换了账号之类的边界），按失败处理
-      await countTicketFailure(found.id, found.attempts);
-      res.json(failure('验证码不正确'));
-      return;
     }
 
     if (!await consumeTicket(found.id)) {

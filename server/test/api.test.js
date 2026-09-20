@@ -624,6 +624,96 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
   }
 });
 
+test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备用码一次一枚', async () => {
+  // eslint-disable-next-line global-require
+  const totp = require('../src/domain/totp');
+  await createVerifiedAccount('usr-totp', 'totpuser', 'totp@example.com');
+  try {
+    const session = await login('totpuser');
+
+    // 绑定第一步：拿到密钥与 otpauth 地址，但**这一步还不生效**
+    const setup = await post('/api/v1/profile/2fa/totp/setup', undefined, { token: session.token });
+    assert.strictEqual(setup.body.ok, true, `生成密钥失败：${JSON.stringify(setup.body)}`);
+    assert.match(setup.body.secret, /^[A-Z2-7]{32}$/, '密钥应当是 32 个 base32 字符');
+    assert.ok(String(setup.body.otpauthUri).startsWith('otpauth://totp/'), '要给出验证器能扫的地址');
+    assert.ok(setup.body.issuer, 'otpauth 里要带发行方');
+
+    // 码不对不给绑，开关也不能开
+    const farCode = totp.codeFor(setup.body.secret, { at: Date.now() + 5 * 60 * 1000 });
+    const wrong = await post('/api/v1/profile/2fa/totp/enable', { code: farCode }, { token: session.token });
+    assert.strictEqual(wrong.body.ok, false, '漂移 5 分钟的码不该通过');
+    let security = await get('/api/v1/profile/security', { token: session.token });
+    assert.strictEqual(security.body.twoFactorEnabled, false, '没确认之前开关不该被打开');
+
+    // 输对码 → 正式绑定，并带回一批备用码
+    const bound = await post('/api/v1/profile/2fa/totp/enable',
+      { code: totp.codeFor(setup.body.secret) }, { token: session.token });
+    assert.strictEqual(bound.body.ok, true, `绑定失败：${JSON.stringify(bound.body)}`);
+    assert.strictEqual(bound.body.backupCodes.length, 10, '开启时应当发一批备用码');
+    security = await get('/api/v1/profile/security', { token: session.token });
+    assert.strictEqual(security.body.twoFactorEnabled, true);
+    assert.strictEqual(security.body.totpEnabled, true, '要能区分「绑过验证器」与「开关打开」');
+    assert.strictEqual(security.body.backupCodesLeft, 10);
+
+    // 登录第一步要告诉页面能用哪些方式
+    const step1 = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
+    assert.strictEqual(step1.body.twoFactorRequired, true);
+    assert.deepStrictEqual(step1.body.methods, { totp: true, email: true, backup: true });
+    assert.strictEqual(step1.body.token, undefined, '第一步仍然不能有令牌');
+
+    // 用验证器码登录
+    const viaTotp = await post('/api/v1/auth/login/verify',
+      { ticket: step1.body.ticket, code: totp.codeFor(setup.body.secret) });
+    assert.strictEqual(viaTotp.body.ok, true, `验证器登录失败：${JSON.stringify(viaTotp.body)}`);
+    assert.ok(viaTotp.body.token, '过码后应当发令牌');
+
+    // 用备用码登录（换一张票）
+    const step2 = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
+    const backupCode = bound.body.backupCodes[0];
+    const viaBackup = await post('/api/v1/auth/login/verify',
+      { ticket: step2.body.ticket, code: backupCode });
+    assert.strictEqual(viaBackup.body.ok, true, `备用码登录失败：${JSON.stringify(viaBackup.body)}`);
+
+    const step3 = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
+    const loose = bound.body.backupCodes[1].replace('-', '').toLowerCase();
+    const viaLoose = await post('/api/v1/auth/login/verify', { ticket: step3.body.ticket, code: loose });
+    assert.strictEqual(viaLoose.body.ok, true, `备用码的大小写与横线不该影响匹配：${JSON.stringify(viaLoose.body)}`);
+
+    // 同一枚备用码不能用第二次
+    const step4 = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
+    const replay = await post('/api/v1/auth/login/verify',
+      { ticket: step4.body.ticket, code: backupCode });
+    assert.strictEqual(replay.body.ok, false, '用过的备用码必须失效');
+    security = await get('/api/v1/profile/security', { token: session.token });
+    assert.strictEqual(security.body.backupCodesLeft, 8, '用掉两枚之后应当只剩 8 枚');
+
+    // 重新生成会作废旧码
+    const regenerated = await post('/api/v1/profile/2fa/backup-codes',
+      { password: 'password' }, { token: session.token });
+    assert.strictEqual(regenerated.body.ok, true, JSON.stringify(regenerated.body));
+    assert.strictEqual(regenerated.body.backupCodes.length, 10);
+    assert.notDeepEqual(regenerated.body.backupCodes, bound.body.backupCodes);
+    const step5 = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
+    const stale = await post('/api/v1/auth/login/verify',
+      { ticket: step5.body.ticket, code: bound.body.backupCodes[2] });
+    assert.strictEqual(stale.body.ok, false, '重新生成之后旧备用码必须失效');
+
+    // 关闭要把绑定、待确认密钥与备用码一起清掉
+    const disabled = await post('/api/v1/profile/2fa/disable',
+      { password: 'password' }, { token: session.token });
+    assert.strictEqual(disabled.body.ok, true, JSON.stringify(disabled.body));
+    security = await get('/api/v1/profile/security', { token: session.token });
+    assert.strictEqual(security.body.twoFactorEnabled, false);
+    assert.strictEqual(security.body.totpEnabled, false, '关闭后验证器绑定要被清掉');
+    assert.strictEqual(security.body.backupCodesLeft, 0, '关闭后备用码要被清掉');
+
+    const plain = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
+    assert.ok(plain.body.token, '关闭之后应当恢复成一步登录');
+  } finally {
+    await pool.query("DELETE FROM users WHERE id = 'usr-totp'");
+  }
+});
+
 // ── 展会契约 ────────────────────────────────────────────────────
 
 test('展会列表字段覆盖页面渲染所需的全部字段', async () => {
@@ -1840,14 +1930,14 @@ function backendRoutes() {
 /**
  * 前端每个数据动作都必须能在后端找到对应路由。
  *
- * 这条断言是「47 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
+ * 这条断言是「50 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
  * 同步 `ENDPOINTS`，都会在这里失败，而不是等到某个页面在真机上静默报错。
  */
 test('前端每个数据动作都对应后端已注册的路由', () => {
   const endpoints = frontendEndpoints();
   const actions = Object.keys(endpoints);
-  assert.strictEqual(actions.length, 47,
-    `前端数据动作数量变了（期望 47）：${actions.length} 个 —— ${actions.join(', ')}`);
+  assert.strictEqual(actions.length, 50,
+    `前端数据动作数量变了（期望 50）：${actions.length} 个 —— ${actions.join(', ')}`);
 
   const declared = backendRoutes();
   // 用「带 id 的完整参数」和「空参数」各算一次：像 exhibitions.save 这种
