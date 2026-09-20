@@ -43,7 +43,7 @@ router.get('/bootstrap', optionalAuth, async (req, res, next) => {
       const result = await query(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [req.user.userId]);
       if (result.rows.length > 0) {
         const row = result.rows[0];
-        user = userPayload(row, capabilities(row.role));
+        user = userPayload(row, capabilities(row.role, row.status));
       }
     }
 

@@ -17,7 +17,7 @@ const {
 const { registrationPayload } = require('../domain/payloads');
 const { loadFields } = require('./exhibitions');
 const { authenticate } = require('../middleware/auth');
-const { requireUser } = require('../domain/permissions');
+const { requireUser, assertNotLimited } = require('../domain/permissions');
 const { badRequest, forbidden } = require('../domain/errors');
 const { mutate } = require('../domain/respond');
 const { limits: readLimits, text } = require('../domain/validation');
@@ -174,8 +174,18 @@ router.get('/:id', authenticate, async (req, res, next) => {
  *
  * 「没有重复报名」放在报名窗口之前：已经报过的人再点一次，提示「已提交过该展会的报名」
  * 比「报名已截止」更准确（否则展会截止后，老报名人连自己报过都看不出来）。
+ *
+ * 受限账号（`users.status = 'limited'`，管理员不受限）由 `assertNotLimited()` 给 403：
+ * 判定放在 `mutate()` **外面**，否则会被收成 200 + `ok:false`，前端拿不到状态码。
+ * 撤销自己的报名不在受限范围内（见 `DELETE /:id`）。
  */
 router.post('/', authenticate, async (req, res, next) => {
+  try {
+    assertNotLimited(requireUser(req, '请先登录后再报名'), 'register');
+  } catch (error) {
+    next(error);
+    return;
+  }
   await mutate(res, next, async () => {
     const user = requireUser(req, '请先登录后再报名');
 

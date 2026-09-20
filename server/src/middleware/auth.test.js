@@ -77,7 +77,21 @@ test('authenticate 挂上用户与角色能力', async () => {
   assert.equal(req.user.userId, 'user-1');
   assert.equal(req.user.username, 'demo');
   assert.equal(req.user.role, 'admin');
-  assert.deepEqual(req.user.can, { register: true, profile: true, exhibitor: true, admin: true });
+  assert.deepEqual(req.user.can,
+    { register: true, profile: true, exhibitor: true, admin: true, limited: false });
+});
+
+test('authenticate 放行受限账号，但能力位按状态置灰', async () => {
+  query.mockResolvedValueOnce({ rows: [{ ...USER_ROW, role: 'user', status: 'limited' }] });
+  const req = { headers: { authorization: `Bearer ${tokenFor({ userId: 'user-1' })}` } };
+
+  const error = await run(authenticate, req);
+
+  assert.equal(error, undefined, '受限账号仍然能登录与浏览');
+  assert.equal(req.user.role, 'user');
+  assert.equal(req.user.status, 'limited');
+  assert.deepEqual(req.user.can,
+    { register: false, profile: false, exhibitor: false, admin: false, limited: true });
 });
 
 test('authenticate 对已删除的用户给出 401', async () => {

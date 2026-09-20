@@ -17,7 +17,7 @@ const { query, getClient } = require('../config/pool');
 const { EXHIBITION_COLUMNS, EXHIBITION_FROM } = require('../domain/queries');
 const { exhibitionPayload, fieldPayload } = require('../domain/payloads');
 const labels = require('../domain/labels');
-const { requireExhibitor, assertCanManageExhibition } = require('../domain/permissions');
+const { requireExhibitor, assertCanManageExhibition, assertNotLimited } = require('../domain/permissions');
 const { readSection } = require('../domain/settings');
 const {
   limits, text, int, bool, isoDate, timeRange, stringList,
@@ -80,6 +80,21 @@ async function transaction(run) {
 function exhibitorOnly(req, res, next) {
   try {
     requireExhibitor(req);
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * 受限账号不能发布新展会的检查（只挂在 `POST /` 上）。
+ *
+ * 必须排在 `exhibitorOnly` **之前**：受限的普通用户两条规则都不满足，先撞角色检查
+ * 会得到「只有展商或管理员可以执行此操作」，而页面需要的是「账号已被限制」这个原因。
+ */
+function notLimitedFromPublishing(req, res, next) {
+  try {
+    assertNotLimited(req.user, 'exhibition');
     next();
   } catch (error) {
     next(error);
@@ -407,8 +422,12 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
 /**
  * POST /api/v1/exhibitions
  * 新建展会：展商 / 管理员可用，`exhibitor_id` 记成当前登录用户（管理员也记自己）。
+ *
+ * 受限账号（管理员不受限）不能再发布新展会 → 403（`notLimitedFromPublishing` 排在角色检查前，
+ * 受限的普通用户也能拿到「账号已被限制」这个原因）。**只拦这一条**：编辑 / 删除自己已有的
+ * 展会、审核报名、核销都照旧可用（受限的展商仍能进后台看与收尾）。
  */
-router.post('/', authenticate, exhibitorOnly, (req, res, next) => {
+router.post('/', authenticate, notLimitedFromPublishing, exhibitorOnly, (req, res, next) => {
   mutate(res, next, async () => {
     const input = await exhibitionInput(req.body);
     const id = newId('exh');

@@ -51,7 +51,7 @@ async function resolveUser(token) {
     nickname: row.nickname,
     role: row.role,
     status: row.status,
-    can: capabilities(row.role),
+    can: capabilities(row.role, row.status),
   };
 }
 

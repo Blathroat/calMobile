@@ -172,6 +172,22 @@ adb reverse tcp:3000 tcp:3000
 - **探测不会把连接池占满**：状态页 5 秒自刷新一次，每次要跑 9 条查询，因此 `reportOnce()` 把并发请求合并成同一次探测（不做 TTL 缓存，拿到的仍是刚测出来的数据），探测查询用 `pool.connect()` + 超时 `release(true)` **销毁**那条连接（`Promise.race` 只放弃 promise，连接会一直被占着），连接池另有 `statement_timeout: 10s` 兜慢查询。
 - 已知边界：探针自己出错时给 `{ ok:false }` + `checks` 里一条失败项（`fallbackReport()`），不会 500 —— 唯一的排查入口不能跟着坏掉。
 
+## 媒体与上传限制
+
+`app_settings.media` / `app_settings.upload` 是管理员在「管理-设置」里维护的容量与格式上限，**同一个 payload 同时供 `GET /bootstrap`（`media` 块）与 `GET /settings`（`media` + `upload`）使用**（`domain/settings.js` 的 `readServerSettings()`），两处字段不会漂移：
+
+| 键 | 默认值 | 取值范围 | 消费方 |
+| --- | --- | --- | --- |
+| `media.imageCount` | 8 | 1–30 | 一次最多选几张图 |
+| `media.imageSizeMb` | 10 | 1–50 | 单张图片容量上限（MB） |
+| `media.videoCount` | 2 | 0–10 | 一次最多选几段视频 |
+| `media.videoSizeMb` | 50 | 1–500 | **单段视频容量上限（MB）**。原生侧由 `ui.sync` 同步到 `AppSettings.getMediaVideoSizeMb()`，`MediaActions` 用它算 `limitMb`（为 0 会变成「不限」，因此这里不给 0） |
+| `upload.avatarSizeMb` | 2 | 1–20 | 头像容量上限（MB） |
+| `upload.imageFormats` | `jpg,jpeg,png,webp` | 非空列表 | 允许的图片格式 |
+| `upload.videoFormats` | `mp4,mov,webm` | 非空列表 | 允许的视频格式 |
+
+越界值由 `domain/settings.js` 的 `applyServerPatch()` **收敛到范围内**（不是拒绝请求），例如 `videoSizeMb: 9999` 保存后读回 500、`0` 读回 1。这几个键都是 `app_settings` 里那一项 JSON 的成员，**不是数据库列**，因此新增上限不需要迁移步骤：`readServerSettings()` 以 `DEFAULT_SETTINGS` 为底、用库里的值覆盖，老库里没有 `videoSizeMb` 时会自动拿到默认值 50，不会给出 `undefined`。
+
 ## 业务规则（服务端兜住的部分）
 
 这些规则以前只在页面里，改接口就能绕过；现在服务端也校验一遍：
@@ -190,6 +206,7 @@ adb reverse tcp:3000 tcp:3000
 - **登录限流**：`/auth/login` 与 `/auth/register` 按「IP + 用户名」内存滑动窗口限速——**只统计失败**（4xx 或 200 + `ok:false`），5 分钟内失败 10 次之后给 429，挡住脚本化撞库；成功登录不计数，否则连着登录十来次就会把自己关在门外。单进程内存实现，多实例部署时换共享存储。
 - **刷新令牌轮换**：撤销与校验合成一条条件更新（`UPDATE … WHERE revoked_at IS NULL` 并检查 `rowCount`），同一个刷新令牌并发用两次时只有一个能换到新令牌，另一个按「登录状态已失效」处理。
 - **权限**：访客不能报名与编辑；普通用户不能碰展会配置与用户管理；展商只能管理自己举办的展会；服务器设置与个人外观模式都要登录（服务器设置还要求管理员）。
+- **受限账号**（`users.status = 'limited'`）：管理员在「用户管理」里设置受限后，被判定的三件事各给 403 + 一句可展示的文案 —— **不能报名**（`POST /registrations` →「账号已被限制，不能报名」）、**不能发布新展会**（`POST /exhibitions` →「账号已被限制，不能发布展会」）、**不能编辑个人信息**（`PUT /profile` →「账号已被限制，不能编辑个人信息」）。**仍然可用**：登录、浏览与查询、`PUT /profile/notifications`（通知偏好不是个人信息）、`POST /profile/password`（改密码属于账号安全）、撤销自己的报名，以及受限展商编辑 / 删除自己已有的展会、审核报名与核销。**管理员不受限**（否则没人能解除限制），判定集中在 `domain/permissions.js` 的 `isLimited()` / `assertNotLimited()`；`capabilities(role, status)` 同步给出 `can.register = false`、`can.profile = false`、`can.limited = true`，前端据此置灰按钮并说明原因。封禁（`banned`）行为不变，仍然在认证层就拒绝。
 
 ## 数据模型
 
@@ -222,16 +239,16 @@ npm test                  # jest：不依赖数据库的纯函数单测
 npm run lint
 ```
 
-`test/api.test.js`（43 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
+`test/api.test.js`（48 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
 
 - 页面真正用到的字段都在（展会 25 个字段、报名、审核统计、启动数据的 12 个配置块）；
-- 权限确实拦得住（访客 / 普通用户 / 展商越权访问）；
-- 业务规则确实生效（报名窗口、收集项必填与选项、重复报名、自动通过、审核状态机与 `canRevise` 策略、核销状态流转、隐私开关）；
+- 权限确实拦得住（访客 / 普通用户 / 展商越权访问、受限账号的三处 403 与仍然可用的操作）；
+- 业务规则确实生效（报名窗口、收集项必填与选项、重复报名、自动通过、审核状态机与 `canRevise` 策略、核销状态流转、隐私开关、媒体上限收敛与缺键兜底）；
 - 刷新令牌并发重放只会换到一套新令牌（轮换的撤销是原子条件更新）；
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
 - 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、带上错误原文，不抛 500）。
 
-`src/**/*.test.js`（jest，19 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件、以及**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500）。
+`src/**/*.test.js`（jest，30 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、以及**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500）。
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 

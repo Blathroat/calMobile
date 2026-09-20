@@ -116,6 +116,7 @@ function userPayload(row, can) {
     avatar: row.avatar || '',
     showRegistrations: row.show_registrations === true,
     status: labels.USER_STATUS[row.status] || labels.USER_STATUS.active,
+    statusCode: row.status || 'active',
     lastLoginTime: row.last_login_time || '',
     registrationTime: row.registration_time || '',
     can,
@@ -138,9 +139,10 @@ function guestPayload() {
     avatar: '',
     showRegistrations: false,
     status: '',
+    statusCode: 'guest',
     lastLoginTime: '',
     registrationTime: '',
-    can: { register: false, profile: false, exhibitor: false, admin: false },
+    can: { register: false, profile: false, exhibitor: false, admin: false, limited: false },
   };
 }
 

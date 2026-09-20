@@ -158,7 +158,7 @@ const DEFAULT_SETTINGS = {
   capabilities: { calendar: false, notifications: false, richText: true, export: true },
   categories: ['智能家居', '物流技术', '医疗健康', '新材料'],
   review: { canRevise: false, statuses: ['待审核', '已通过', '已拒绝'] },
-  media: { imageCount: 8, imageSizeMb: 10, videoCount: 2 },
+  media: { imageCount: 8, imageSizeMb: 10, videoCount: 2, videoSizeMb: 50 },
   upload: { avatarSizeMb: 2, imageFormats: ['jpg', 'jpeg', 'png', 'webp'], videoFormats: ['mp4', 'mov', 'webm'] },
   limits: {
     exhibitionTitle: 60, exhibitionVenue: 60, category: 20, fieldTitle: 30,

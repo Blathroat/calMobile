@@ -51,7 +51,7 @@ async function loadUser(id) {
     return null;
   }
   const row = result.rows[0];
-  return userPayload(row, capabilities(row.role));
+  return userPayload(row, capabilities(row.role, row.status));
 }
 
 /**

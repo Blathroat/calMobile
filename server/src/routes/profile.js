@@ -16,7 +16,7 @@ const bcrypt = require('bcryptjs');
 const { query } = require('../config/pool');
 const { USER_COLUMNS, USER_FROM } = require('../domain/queries');
 const { userPayload } = require('../domain/payloads');
-const { capabilities } = require('../domain/permissions');
+const { capabilities, assertNotLimited } = require('../domain/permissions');
 const { limits, bool } = require('../domain/validation');
 const { mutate } = require('../domain/respond');
 const { badRequest, notFound } = require('../domain/errors');
@@ -43,7 +43,7 @@ async function loadUser(id) {
     throw notFound('用户不存在或已删除');
   }
   const row = result.rows[0];
-  return userPayload(row, capabilities(row.role));
+  return userPayload(row, capabilities(row.role, row.status));
 }
 
 /**
@@ -62,8 +62,17 @@ router.get('/', authenticate, async (req, res, next) => {
  * PUT /api/v1/profile
  * 保存资料：`nickname / email / bio / region / socialMedia / avatar / showRegistrations`，
  * 只更新出现过的字段（隐私开关此前没有落库，这里真的写 `users.show_registrations`）。
+ *
+ * 受限账号（管理员不受限）不能改个人信息 → 403；判定放在 `mutate()` 外面，
+ * 前端才拿得到状态码。改密码与通知偏好是另外两条路由，不受这条限制。
  */
 router.put('/', authenticate, async (req, res, next) => {
+  try {
+    assertNotLimited(req.user, 'profile');
+  } catch (error) {
+    next(error);
+    return;
+  }
   try {
     await mutate(res, next, async () => {
       const body = req.body || {};

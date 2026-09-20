@@ -9,19 +9,70 @@
  * - `user`    普通用户：可以报名、维护个人资料；
  * - `exhibitor` 展商：额外可以管理自己举办的展会与报名审核、现场核销；
  * - `admin`   管理员：全部权限，并且不受用户隐私开关限制。
+ *
+ * 账号状态（`users.status`）在角色之上再收一层：
+ * - `limited` **受限**：不能报名、不能发布新展会、不能改个人信息，其余照旧可用
+ *   （登录、浏览、查询、通知偏好、改密码、撤销自己的报名）；
+ * - `banned`  **封禁**：在认证层就被拒绝（见 `middleware/auth.js`），不走这里；
+ * - 管理员永远不受限 —— 否则没有任何人能解除限制。
  */
 
 const { forbidden, unauthorized } = require('./errors');
 
-/** 角色能力：与前端 `user.can` 的四个键一致。 */
-function capabilities(role) {
+/**
+ * 角色 + 状态能力：与前端 `user.can` 的五个键一致。
+ *
+ * `limited` 让前端能在按钮置灰时说明原因，因此**受限时 register / profile 为 false**
+ * （服务端路由也按同一判定拦截，见 `assertNotLimited()`），两边不会说两套话。
+ * `exhibitor` / `admin` 仍按角色给：受限的展商照样能进后台查看自己已有的展会，
+ * 只是不能再发布新的。
+ */
+function capabilities(role, status) {
   const loggedIn = role === 'user' || role === 'exhibitor' || role === 'admin';
+  const limited = isLimited({ role, status });
   return {
-    register: loggedIn,
-    profile: loggedIn,
+    register: loggedIn && !limited,
+    profile: loggedIn && !limited,
     exhibitor: role === 'exhibitor' || role === 'admin',
     admin: role === 'admin',
+    limited,
   };
+}
+
+/** 是不是「受限」账号。管理员不算（否则没人能解除限制）；缺 status 时按未受限处理。 */
+function isLimited(user) {
+  if (!user || user.role === 'admin') {
+    return false;
+  }
+  return user.status === 'limited';
+}
+
+/**
+ * 受限账号的统一拦截点：三处禁止的操作各给一句可展示的文案。
+ *
+ * 路由里只调用这里，不各写一遍 `status === 'limited'`，避免改规则时漏掉某一处。
+ * 拦截范围（与 README「业务规则」一致）：
+ * - `register` 报名（`POST /registrations`）；
+ * - `exhibition` 发布新展会（`POST /exhibitions`）；
+ * - `profile` 编辑个人信息（`PUT /profile`）；
+ * 通知偏好、改密码、撤销自己的报名、浏览查询都不在拦截范围内。
+ */
+const LIMITED_ACTIONS = {
+  register: '账号已被限制，不能报名',
+  exhibition: '账号已被限制，不能发布展会',
+  profile: '账号已被限制，不能编辑个人信息',
+};
+
+/** 受限账号执行被禁操作时抛出 403；返回当前用户便于串起来用。 */
+function assertNotLimited(user, action) {
+  if (!isLimited(user)) {
+    return user;
+  }
+  const message = LIMITED_ACTIONS[action];
+  if (!message) {
+    throw new Error(`未知的受限操作：${action}`);
+  }
+  throw forbidden(message);
 }
 
 /** 要求已登录；返回当前用户行。 */
@@ -82,7 +133,10 @@ function assertCanManageExhibition(user, exhibition) {
 }
 
 module.exports = {
+  LIMITED_ACTIONS,
   capabilities,
+  isLimited,
+  assertNotLimited,
   requireUser,
   requireRole,
   requireExhibitor,

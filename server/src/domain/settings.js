@@ -46,7 +46,14 @@ function clampNumber(value, fallback, min, max) {
   return Math.max(min, Math.min(max, number));
 }
 
-/** 读取服务器设置：数据库里的值盖在默认值之上，缺项自动有默认值。 */
+/**
+ * 读取服务器设置：数据库里的值盖在默认值之上，缺项自动有默认值。
+ *
+ * `media` 与 `upload` 是**一项 JSON 里的多个键**（不是数据库列），所以库里那一项可能是
+ * 加新键之前写入的：例如老库的 `app_settings.media` 里没有 `videoSizeMb`。
+ * 这两段按「默认值为底、库里的键覆盖」补齐，保证 `GET /bootstrap` 与 `GET /settings`
+ * （两者都来自这里）永远能读到 `videoSizeMb`，不会给出 undefined。
+ */
 async function readServerSettings() {
   const result = await query('SELECT key, value FROM app_settings');
   const settings = clone(DEFAULT_SETTINGS);
@@ -55,6 +62,8 @@ async function readServerSettings() {
       settings[row.key] = row.value;
     }
   }
+  settings.media = { ...DEFAULT_SETTINGS.media, ...settings.media };
+  settings.upload = { ...DEFAULT_SETTINGS.upload, ...settings.upload };
   return settings;
 }
 
@@ -111,11 +120,15 @@ function applyServerPatch(current, patch) {
   if (Object.prototype.hasOwnProperty.call(source, 'canRevise')) {
     next.review = { ...next.review, canRevise: Boolean(source.canRevise) };
   }
-  if (['imageCount', 'imageSizeMb', 'videoCount'].some((key) => key in source)) {
+  if (['imageCount', 'imageSizeMb', 'videoCount', 'videoSizeMb'].some((key) => key in source)) {
+    // 兜底值再取一次默认设置：库里那一项可能是加新键**之前**写入的 JSON
+    // （例如 media 里还没有 videoSizeMb），直接拿 `next.media.videoSizeMb` 会是 undefined。
+    const fallback = { ...DEFAULT_SETTINGS.media, ...next.media };
     next.media = {
-      imageCount: clampInt(source.imageCount, next.media.imageCount, [1, 30]),
-      imageSizeMb: clampNumber(source.imageSizeMb, next.media.imageSizeMb, 1, 50),
-      videoCount: clampInt(source.videoCount, next.media.videoCount, [0, 10]),
+      imageCount: clampInt(source.imageCount, fallback.imageCount, [1, 30]),
+      imageSizeMb: clampNumber(source.imageSizeMb, fallback.imageSizeMb, 1, 50),
+      videoCount: clampInt(source.videoCount, fallback.videoCount, [0, 10]),
+      videoSizeMb: clampNumber(source.videoSizeMb, fallback.videoSizeMb, 1, 500),
     };
   }
   if (['avatarSizeMb', 'imageFormats', 'videoFormats'].some((key) => key in source)) {

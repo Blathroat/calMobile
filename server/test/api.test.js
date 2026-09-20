@@ -31,7 +31,7 @@ const { Client } = require('pg');
 
 const database = require('../src/config/database');
 const { pool } = require('../src/config/pool');
-const { migrate, seed } = require('../src/config/migrate');
+const { migrate, seed, DEFAULT_SETTINGS } = require('../src/config/migrate');
 const { resetRateLimits } = require('../src/middleware/rate-limit');
 const { app, routes } = require('../src/index');
 
@@ -148,7 +148,8 @@ test('bootstrap 下发前端启动所需的全部配置块', async () => {
   assert.strictEqual(body.user.loggedIn, false, '匿名访问应当是访客态');
   assert.ok(body.brand.zh, '缺少中文标题');
   assert.ok(Number(body.limits.exhibitionTitle) > 0, '缺少表单字符数上限');
-  assert.deepStrictEqual(body.user.can, { register: false, profile: false, exhibitor: false, admin: false });
+  assert.deepStrictEqual(body.user.can,
+    { register: false, profile: false, exhibitor: false, admin: false, limited: false });
 });
 
 test('带令牌的 bootstrap 返回真实用户态与个人外观模式', async () => {
@@ -835,6 +836,114 @@ test('用户列表与账号状态只有管理员能操作', async () => {
   assert.strictEqual(self.body.ok, false, '管理员不应该能封禁自己');
 });
 
+/**
+ * 受限账号（`users.status = 'limited'`）真的生效：三件事被禁、其余照旧、管理员不受限。
+ *
+ * 用例自己改状态、自己在 finally 里还原（usr-3 是种子数据里的普通用户，别的用例也在用），
+ * 因此不依赖其它用例的执行顺序，也不留下共享状态。
+ */
+test('受限账号不能报名 / 发布展会 / 编辑个人信息，其余照旧且管理员不受限', async () => {
+  const profileBefore = (await get('/api/v1/profile', { token: tokens.user.token })).body;
+  const notifyBefore = (await get('/api/v1/profile/notifications', { token: tokens.user.token })).body;
+  try {
+    const limited = await put('/api/v1/users/usr-3/status', { status: '受限' }, { token: tokens.admin.token });
+    assert.strictEqual(limited.body.ok, true, JSON.stringify(limited.body));
+
+    // 受限账号的用户态：能力位同步置灰，并带上原因标记
+    const me = await get('/api/v1/bootstrap', { token: tokens.user.token });
+    assert.strictEqual(me.body.user.can.register, false, '受限账号 can.register 应为 false');
+    assert.strictEqual(me.body.user.can.profile, false, '受限账号 can.profile 应为 false');
+    assert.strictEqual(me.body.user.can.limited, true, '受限账号 can.limited 应为 true');
+    assert.strictEqual(me.body.user.can.admin, false);
+
+    // ① 不能报名
+    const registration = await post('/api/v1/registrations', {
+      exhibitionId: 'exh-1', visitorName: '受限用户', visitorType: '专业观众', answers: '',
+    }, { token: tokens.user.token });
+    assert.strictEqual(registration.status, 403, `受限账号报名应当 403：${JSON.stringify(registration.body)}`);
+    assert.strictEqual(registration.body.error, '账号已被限制，不能报名');
+
+    // ② 不能发布展会
+    const exhibition = await post('/api/v1/exhibitions', {
+      title: '受限账号不该发出的展会',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: '2026-09-20',
+      status: '需审核',
+    }, { token: tokens.user.token });
+    assert.strictEqual(exhibition.status, 403, `受限账号发布展会应当 403：${JSON.stringify(exhibition.body)}`);
+    assert.strictEqual(exhibition.body.error, '账号已被限制，不能发布展会');
+
+    // ③ 不能编辑个人信息
+    const profile = await put('/api/v1/profile', { nickname: '受限昵称' }, { token: tokens.user.token });
+    assert.strictEqual(profile.status, 403, `受限账号改资料应当 403：${JSON.stringify(profile.body)}`);
+    assert.strictEqual(profile.body.error, '账号已被限制，不能编辑个人信息');
+
+    // 仍然允许：浏览与查询（200），通知偏好与改密码（不是 403）
+    assert.strictEqual((await get('/api/v1/bootstrap', { token: tokens.user.token })).status, 200);
+    assert.strictEqual((await get('/api/v1/exhibitions', { token: tokens.user.token })).status, 200);
+    assert.strictEqual((await get('/api/v1/settings', { token: tokens.user.token })).status, 200);
+    const notify = await put('/api/v1/profile/notifications', {
+      exhibitionReminder: !notifyBefore.exhibitionReminder,
+    }, { token: tokens.user.token });
+    assert.notStrictEqual(notify.status, 403, `通知偏好不受限：${JSON.stringify(notify.body)}`);
+    assert.strictEqual(notify.body.ok, true, JSON.stringify(notify.body));
+    const password = await post('/api/v1/profile/password', {
+      currentPassword: 'x', newPassword: 'y', confirmPassword: 'y',
+    }, { token: tokens.user.token });
+    assert.notStrictEqual(password.status, 403, '改密码属于账号安全，不应被受限拦下');
+
+    // 管理员自己做同样三件事仍然成功（admin 自己发的展会用来报名，用完连展会一起删掉）
+    const adminBootstrap = await get('/api/v1/bootstrap', { token: tokens.admin.token });
+    assert.strictEqual(adminBootstrap.body.user.can.limited, false, '管理员不受限，can.limited 应为 false');
+    assert.strictEqual(adminBootstrap.body.user.can.register, true);
+    assert.strictEqual(adminBootstrap.body.user.can.profile, true);
+
+    const adminExhibition = await post('/api/v1/exhibitions', {
+      title: '管理员发布的展会',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: '2026-09-21',
+      registrationStart: '2026-01-01',
+      registrationEnd: '2026-12-31',
+      status: '无需审核',
+    }, { token: tokens.admin.token });
+    assert.strictEqual(adminExhibition.body.ok, true, `管理员发布展会应当成功：${JSON.stringify(adminExhibition.body)}`);
+    const adminExhibitionId = adminExhibition.body.exhibition.id;
+
+    const adminRegistration = await post('/api/v1/registrations', {
+      exhibitionId: adminExhibitionId,
+      visitorName: '管理员',
+      visitorType: '专业观众',
+      // 新展会没有自定义收集项，服务端按默认三项校验：必填的「姓名 / 公司名称」要填上
+      answers: '姓名 / 公司名称：管理员\n参观身份：专业观众',
+    }, { token: tokens.admin.token });
+    assert.strictEqual(adminRegistration.body.ok, true, `管理员报名应当成功：${JSON.stringify(adminRegistration.body)}`);
+
+    // 写一个与当前值相同的字段：既证明没被受限逻辑拦下，也不改动管理员的资料
+    const adminProfile = await put('/api/v1/profile', {
+      nickname: adminBootstrap.body.user.nickname, region: adminBootstrap.body.user.region,
+    }, { token: tokens.admin.token });
+    assert.strictEqual(adminProfile.body.ok, true, `管理员改资料应当成功：${JSON.stringify(adminProfile.body)}`);
+
+    // 清理：删掉展会（报名按外键级联删除）
+    assert.strictEqual((await del(`/api/v1/exhibitions/${adminExhibitionId}`,
+      { token: tokens.admin.token })).body.ok, true);
+  } finally {
+    // 还原：账号状态与个人资料，后面的用例还要用这个账号
+    await put('/api/v1/users/usr-3/status', { status: '正常' }, { token: tokens.admin.token });
+    await put('/api/v1/profile', {
+      nickname: profileBefore.nickname, region: profileBefore.region, bio: profileBefore.bio,
+      socialMedia: profileBefore.socialMedia,
+    }, { token: tokens.user.token });
+    await put('/api/v1/profile/notifications', {
+      exhibitionReminder: notifyBefore.exhibitionReminder,
+    }, { token: tokens.user.token });
+    const restored = await get('/api/v1/bootstrap', { token: tokens.user.token });
+    assert.strictEqual(restored.body.user.can.limited, false, '受限状态没有还原，后续用例会被污染');
+  }
+});
+
 test('隐私开关决定公开页是否展示报名记录，管理员始终可见', async () => {
   const hidden = await get('/api/v1/users/public?userId=usr-3', { token: tokens.exhibitor.token });
   assert.strictEqual(hidden.body.found, true);
@@ -1024,6 +1133,56 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
   await put('/api/v1/settings', {
     appTitleZh: '发现展会', canRevise: false, themeIndex: 0, exhibitionTitle: 60,
   }, { token: tokens.admin.token });
+});
+
+test('视频大小上限可配置，bootstrap 与 settings 读回同一个值，越界被收敛', async () => {
+  // 老库（app_settings 里还没有 videoSizeMb）也要能拿到默认值，而不是 undefined
+  const bootstrapBefore = await get('/api/v1/bootstrap');
+  assert.ok(Number(bootstrapBefore.body.media.videoSizeMb) > 0,
+    `bootstrap 的 media 必须带 videoSizeMb：${JSON.stringify(bootstrapBefore.body.media)}`);
+  const settingsBefore = await get('/api/v1/settings');
+  const defaultSize = Number(settingsBefore.body.media.videoSizeMb);
+  const imageSizeBefore = Number(settingsBefore.body.media.imageSizeMb);
+  assert.strictEqual(Number(bootstrapBefore.body.media.videoSizeMb), defaultSize,
+    'bootstrap 与 settings 的 media 来自同一份 payload，值必须一致');
+
+  try {
+    const saved = await put('/api/v1/settings', { videoSizeMb: 120 }, { token: tokens.admin.token });
+    assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+    assert.strictEqual(saved.body.settings.media.videoSizeMb, 120, '保存结果里应当带上新的上限');
+
+    const bootstrap = await get('/api/v1/bootstrap');
+    assert.strictEqual(Number(bootstrap.body.media.videoSizeMb), 120, 'bootstrap 应当读回新的上限');
+    const settings = await get('/api/v1/settings');
+    assert.strictEqual(Number(settings.body.media.videoSizeMb), 120, 'settings 应当读回新的上限');
+    // 同一段里的其它键不受影响
+    assert.strictEqual(Number(settings.body.media.imageSizeMb), imageSizeBefore);
+
+    const tooSmall = await put('/api/v1/settings', { videoSizeMb: 0 }, { token: tokens.admin.token });
+    assert.strictEqual(tooSmall.body.settings.media.videoSizeMb, 1, '0 应当被夹到下限 1');
+    const tooLarge = await put('/api/v1/settings', { videoSizeMb: 9999 }, { token: tokens.admin.token });
+    assert.strictEqual(tooLarge.body.settings.media.videoSizeMb, 500, '9999 应当被夹到上限 500');
+    assert.strictEqual(Number((await get('/api/v1/bootstrap')).body.media.videoSizeMb), 500);
+  } finally {
+    await put('/api/v1/settings', { videoSizeMb: defaultSize }, { token: tokens.admin.token });
+  }
+});
+
+test('老库的 app_settings.media 缺 videoSizeMb 时用默认值兜底', async () => {
+  // 直接写一条「加这个键之前」的 media：只有三个键，没有任何 videoSizeMb
+  await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2',
+    [JSON.stringify({ imageCount: 6, imageSizeMb: 4, videoCount: 1 }), 'media']);
+  try {
+    const bootstrap = await get('/api/v1/bootstrap');
+    assert.strictEqual(bootstrap.body.media.videoSizeMb, DEFAULT_SETTINGS.media.videoSizeMb,
+      `缺键时应当补默认值，而不是 undefined：${JSON.stringify(bootstrap.body.media)}`);
+    assert.strictEqual(bootstrap.body.media.imageCount, 6, '库里已有的键照旧生效');
+    const settings = await get('/api/v1/settings');
+    assert.strictEqual(settings.body.media.videoSizeMb, DEFAULT_SETTINGS.media.videoSizeMb);
+  } finally {
+    await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2',
+      [JSON.stringify(DEFAULT_SETTINGS.media), 'media']);
+  }
 });
 
 test('外观模式只接受三个取值，且是个人偏好', async () => {
