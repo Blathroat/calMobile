@@ -310,7 +310,12 @@ npm run lint
 
 ## 上线前必须处理
 
-- 更换两个 JWT 密钥、限制 `CORS_ORIGIN`、启用 TLS，并去掉客户端侧的明文放行（`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`）；
+完整的清单、命令与开销见根目录 `README.md` 的「上线部署清单与开销」。与服务端直接相关的几条：
+
+- 更换两个 JWT 密钥与数据库密码、限制 `CORS_ORIGIN`、启用 TLS，并去掉客户端侧的明文放行（`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`）；
+- **`/status` 与 `/api/v1/status` 不要匿名对外开放**：它们会给出迁移清单、各表行数与接口清单，失败时还带 pg 的错误原文，属于运维排查入口（`/ping` 才是给外部探活用的事实源）；
+- **不要在服务器上跑 Mailpit**：`scripts/mail.ps1` 与 `MAIL_SMTP_HOST=127.0.0.1` 只用于本地开发；生产要指向托管中继，并用专用子域配好 SPF / DKIM / DMARC；
+- 生产环境不要把 `MAIL_TRANSPORT` 配成 `console`：那样验证码只写日志，用户永远收不到（`resolveMailConfig` 会拦截 `memory`，但 `console` 是合法通道，只能靠部署时确认）；
 - 上传的媒体目前仍在客户端私有目录（`files/media`），需要补对象存储与上传接口；
 - 通知只有数据库落点，还没有推送通道；
 - 系统日历、分享、摄像头属于设备能力，永远留在客户端（`ui.sync`、`calendar.status` / `calendar.toggle` 等 10 个动作不进 API）。
