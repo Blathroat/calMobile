@@ -829,6 +829,31 @@ const checks = [
     contains: ["邮箱需要通过「验证新邮箱」修改", 'two_factor_enabled', 'security'],
   },
   {
+    id: 'backend-start-is-production',
+    // npm start 必须进生产模式：状态页会关、启动自检会跑
+    file: 'server/package.json',
+    contains: ['"start": "node src/index.js --production"', '"dev": "nodemon src/index.js"',
+      '"db:migrate:prod"'],
+  },
+  {
+    id: 'backend-runtime-modes',
+    file: 'server/src/config/runtime.js',
+    contains: ['resolveRuntime', '--production', 'statusPageEnabled', 'trustProxy'],
+  },
+  {
+    id: 'backend-status-page-gated',
+    // 生产默认关掉状态页；生产启动前必须做配置自检
+    file: 'server/src/index.js',
+    contains: ['runtime.statusPageEnabled', 'productionProblems', '状态页在生产环境已关闭',
+      "app.disable('x-powered-by')"],
+  },
+  {
+    id: 'backend-production-guards',
+    file: 'server/src/config/production.js',
+    contains: ['productionProblems', 'MAIL_TRANSPORT=console', 'DB_PASSWORD 还是 postgres',
+      'local-dev', 'TRUST_PROXY'],
+  },
+  {
     id: 'docs-frontend-backend-boundary',
     file: 'README.md',
     contains: ['前后端边界', 'core/api.js', 'adb reverse', 'server/test/api.test.js']

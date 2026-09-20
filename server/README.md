@@ -35,8 +35,23 @@ npm run db:seed               # 示例账号与展会（可反复执行）
 pwsh -File ..\scripts\mail.ps1 start
 # 不想开容器也行：把 .env 的 MAIL_TRANSPORT 改成 console，整封邮件（含验证码）进后端日志
 
-npm run dev                   # nodemon，默认 http://127.0.0.1:3000
+npm run dev                   # 开发模式（nodemon），默认 http://127.0.0.1:3000
 ```
+
+### 开发模式与生产模式
+
+`npm start` 会自动进**生产模式**（脚本里就是 `node src/index.js --production`），`npm run dev` 留在开发模式：
+
+| | `npm run dev` | `npm start` |
+| --- | --- | --- |
+| `NODE_ENV` | `.env` 里的 `development`（或注入的真实值） | `production`（`--production` 压过 `.env`） |
+| `/status` 与 `/api/v1/status` | 打开 | **关闭**（404 + 一句说明）；需要时 `ENABLE_STATUS_PAGE=true` 打开，并自行限制来源 |
+| 启动前配置自检 | 不检查 | **致命项拒绝启动**：开发用的 JWT 密钥、`DB_PASSWORD=postgres`、`MAIL_TRANSPORT=console|memory`、占位或缺失的发件人地址；可疑项（Mailpit 地址、`CORS_ORIGIN=*`、没配 `TRUST_PROXY`、`LOG_LEVEL=debug`）只打警告 |
+| 发信通道 | 缺省 `console` | 缺省 `smtp`，且 `memory` 被拒 |
+| 迁移目标 | `npm run db:migrate`（开发库） | `npm run db:migrate:prod`（会先打印 `[production] 目标库 host:port/db`） |
+| 存活探针 | `/ping`、`/health` | 同左（**这两个不受影响**，编排的探针用它们） |
+
+判定集中在 `src/config/runtime.js`（纯函数 `resolveRuntime(argv, env)`，有用例钉住优先级），启动自检在 `src/config/production.js`。`node src/index.js` 直接跑、不带参数时是**开发模式**——生产请用 `npm start` 或显式 `NODE_ENV=production`，别用裸命令，否则状态页会开着。
 
 示例账号：`demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`。
 
@@ -265,8 +280,12 @@ pwsh -File scripts\mail.ps1 clear    # 跑回归前清空，免得看错邮件
 | 变量 | 作用 | 示例 |
 | --- | --- | --- |
 | `PORT` | 服务端口 | `3000` |
+| `NODE_ENV` | 运行环境；`npm start` 传 `--production` 覆盖它 | `development` |
+| `ENABLE_STATUS_PAGE` | 强制开关状态页；**生产默认关闭** | `true`（谨慎） |
+| `TRUST_PROXY` | 反向代理跳数或可信来源；反代后面必须设 | `1` |
 | `DB_HOST` / `DB_PORT` | PostgreSQL 地址和端口 | `127.0.0.1` / `5432` |
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` | 数据库凭据 | 仅本地配置 |
+| `DB_SSL` | 数据库 TLS；同机 Docker 不需要，托管库一般要 | `true` |
 | `JWT_SECRET` | 访问令牌密钥 | 至少 32 个随机字符 |
 | `JWT_REFRESH_SECRET` | 刷新令牌密钥 | 至少 32 个随机字符 |
 | `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | 令牌有效期 | `15m` / `7d` |
@@ -302,7 +321,7 @@ npm run lint
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
 - 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、带上错误原文，不抛 500）。
 
-`src/**/*.test.js`（jest，66 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.js`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.js`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.js`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.js`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `npm test` 的前置条件——测试不该依赖一个容器。
+`src/**/*.test.js`（jest，81 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.js`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.js`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.js`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.js`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `npm test` 的前置条件——测试不该依赖一个容器。
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 
@@ -312,9 +331,10 @@ npm run lint
 
 完整的清单、命令与开销见根目录 `README.md` 的「上线部署清单与开销」。与服务端直接相关的几条：
 
-- 更换两个 JWT 密钥与数据库密码、限制 `CORS_ORIGIN`、启用 TLS，并去掉客户端侧的明文放行（`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`）；
-- **`/status` 与 `/api/v1/status` 不要匿名对外开放**：它们会给出迁移清单、各表行数与接口清单，失败时还带 pg 的错误原文，属于运维排查入口（`/ping` 才是给外部探活用的事实源）；
-- **不要在服务器上跑 Mailpit**：`scripts/mail.ps1` 与 `MAIL_SMTP_HOST=127.0.0.1` 只用于本地开发；生产要指向托管中继，并用专用子域配好 SPF / DKIM / DMARC；
+- `npm start`（生产模式）已经**默认关闭 `/status` 与 `/api/v1/status`**，并会对配置做启动前自检；只需要用 `TRUST_PROXY`、`ENABLE_STATUS_PAGE`、`DB_SSL` 按部署形态配一下，详见上面的「开发模式与生产模式」；
+- 更换两个 JWT 密钥与数据库密码、限制 `CORS_ORIGIN`、启用 TLS，并去掉客户端侧的明文放行（`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`）——第一项与库密码会被启动自检拦住，`CORS_ORIGIN` 目前只是警告；
+- **不要把状态页对公网打开**：它给出迁移清单、各表行数与接口清单，失败时还带 pg 的错误原文；`/ping` 才是给外部探活用的事实源；
+- **不要在服务器上跑 Mailpit**：`scripts/mail.ps1` 与 `MAIL_SMTP_HOST=127.0.0.1` 只用于本地开发；生产要指向托管中继，并用专用子域配好 SPF / DKIM / DMARC（启动自检对 127.0.0.1 / 1025 会警告）；
 - 生产环境不要把 `MAIL_TRANSPORT` 配成 `console`：那样验证码只写日志，用户永远收不到（`resolveMailConfig` 会拦截 `memory`，但 `console` 是合法通道，只能靠部署时确认）；
 - 上传的媒体目前仍在客户端私有目录（`files/media`），需要补对象存储与上传接口；
 - 通知只有数据库落点，还没有推送通道；

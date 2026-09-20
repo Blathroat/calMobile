@@ -12,6 +12,9 @@
  * - 报名记录不冗余展会标题、时间、地点，读取时 JOIN 展会表，避免展会改期后两边不一致。
  */
 
+// 运行环境要先定下来：迁移脚本也要能对着生产库跑（`npm run db:migrate:prod`），
+// 而 pool 在 require 的那一刻就按 NODE_ENV 选好库了（见 config/runtime.js）。
+const runtime = require('./runtime');
 const { pool } = require('./pool');
 
 /** 迁移步骤：id 一旦发布就不要改内容，只能追加新步骤。 */
@@ -443,9 +446,12 @@ if (require.main === module) {
   const command = process.argv[2];
   const run = command === 'seed' ? seed : command === 'migrate' ? migrate : null;
   if (!run) {
-    console.log('用法：node src/config/migrate.js [migrate|seed]');
+    console.log('用法：node src/config/migrate.js [migrate|seed] [--production]');
     process.exit(1);
   }
+  // 打印目标库：迁移是不可逆操作，别对着错的库跑完才发现。
+  const database = require('./database');
+  console.log(`[${runtime.nodeEnv}] 目标库 ${database.host}:${database.port}/${database.database}`);
   run()
     .then(() => pool.end())
     .then(() => process.exit(0))

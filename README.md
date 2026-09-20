@@ -287,11 +287,13 @@ pwsh -File scripts\db.ps1 start
 cd server && npm install
 cp .env.example .env                # 按需改数据库连接与 JWT 密钥
 npm run db:migrate && npm run db:seed
-npm run dev                         # http://127.0.0.1:3000
+npm run dev                         # 开发模式（nodemon），http://127.0.0.1:3000
 
 # 3. 真机 / 模拟器访问本机后端
 adb reverse tcp:3000 tcp:3000
 ```
+
+**`npm run dev` 与 `npm start` 是两种模式**：`dev` 走开发模式（状态页开着、不做启动自检）；`start` 自动进**生产模式**（`node src/index.js --production`）——关掉 `/status` 与 `/api/v1/status`、对配置做启动前自检（开发密钥、默认库密码、验证码只写日志这类致命项直接拒绝启动），对生产库迁移用 `npm run db:migrate:prod`。判定集中在 `server/src/config/runtime.js`，细节见 `server/README.md`。
 
 示例账号 `demo` / `exhibitor` / `user`，密码都是 `password`（角色分别是管理员、展商、普通用户）。
 
@@ -395,7 +397,7 @@ gradlew.bat :app:testDebugUnitTest --tests 'com.example.calmobile.CalendarHelper
 
 客户端测试位于 `app/src/test/java/com/example/calmobile/`（39 项），覆盖系统日历的日期与时间解析、媒体上限区间与后缀列表解析、设备镜像、CSV 导出、桥接取值助手和资源路径守卫（`CalendarHelperTest`、`AppSettingsTest`、`ExportManagerTest`、`WebAppBridgeTest`、`AssetGuardTest`）；Activity 级 UI 测试仍在路线图中。原生与前端的日历契约按**后端下发的 ISO 日期**（`YYYY-MM-DD`）传参，不要在原生侧猜年月——写死月份的缺陷曾让事件落到错误的月份，而测试把常量抄成期望值后照旧全绿。
 
-后端测试分两层：`server/test/api.test.js`（58 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 审核状态机与核销流转 / 报名收集项校验 / 登录限流 429 / 隐私开关（公开页不下发报名码）这些业务规则、**邮箱验证码体系**（两步注册、找回密码不泄露存在性、两步验证的票据与令牌边界、改邮箱要验证新地址）、数据库不可用时的状态页降级，以及**前后端路由交叉校验**（前端每个数据动作都有对应路由、后端没有前端用不到的路由）；`server/src/**/*.test.js`（jest，66 项）是不依赖数据库的纯函数与单测。库结构变更后跑 `npm run db:migrate` 即可，迁移是幂等的。
+后端测试分两层：`server/test/api.test.js`（58 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 审核状态机与核销流转 / 报名收集项校验 / 登录限流 429 / 隐私开关（公开页不下发报名码）这些业务规则、**邮箱验证码体系**（两步注册、找回密码不泄露存在性、两步验证的票据与令牌边界、改邮箱要验证新地址）、数据库不可用时的状态页降级，以及**前后端路由交叉校验**（前端每个数据动作都有对应路由、后端没有前端用不到的路由）；`server/src/**/*.test.js`（jest，81 项）是不依赖数据库的纯函数与单测。库结构变更后跑 `npm run db:migrate` 即可，迁移是幂等的。
 
 前端另有 `scripts/webui-render.test.js`（34 项）：它用最小 DOM 打桩加假后端 `fetch`，把 20 条路由用例（同一页面的不同参数各渲染一次）都真渲染一遍，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销、用户公开页管理视角、注册与找回密码的两步流程、「数据动作不再经过原生桥接」「点日期与切月份不再取数」「缓存命中时同步出内容」「过期缓存仍可先画一屏」「并发请求去重」「标签页预加载」等取数体验，以及 `api.js` 的动作到 REST 路径映射与 401 自动续期。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，用例涉及预加载时先 `await settle()` 排空空闲队列再开始计数，不依赖固定的 sleep 猜测时序。
 
@@ -499,7 +501,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 | 客户端改回严格模式 | `WebShellActivity` 的 `MIXED_CONTENT_ALWAYS_ALLOW` 改回 `NEVER_ALLOW`；`js/core/api.js` 的 `BASE_URL` 指向 `https://api.<域名>/api/v1`；顺手清掉 manifest 里不再需要的明文放行 | ¥0，但要重新出包 |
 | 收紧 CORS | `CORS_ORIGIN` 从 `*` 改为 WebView 的起源（`https://appassets.androidplatform.net`），`credentials` 保持 false | ¥0 |
 | 换掉示例密钥 | `JWT_SECRET` / `JWT_REFRESH_SECRET` 换成随机值（`openssl rand -hex 32`），数据库密码别再是 `postgres/postgres` | ¥0 |
-| **保护 `/status` 与 `/api/v1/status`** | 这两个接口会暴露迁移清单、各表行数、接口清单与 pg 的错误原文，是给运维看的排查入口，**不该匿名对外开放**：用反代加 Basic Auth / IP 白名单，或只监听内网；对外探活只留 `/ping` | ¥0 |
+| **保护 `/status` 与 `/api/v1/status`** | **已内置**：`npm start` 进生产模式后这两个接口直接 404（它们会暴露迁移清单、各表行数与接口清单，失败时还带 pg 的错误原文）。确实需要时用 `ENABLE_STATUS_PAGE=true` 打开，并靠反代加 Basic Auth / IP 白名单；对外探活只留 `/ping` | ¥0 |
 | 发信域名 | 用**专用子域**（如 `mail.<域名>`）而不是主域，并配好 SPF / DKIM / DMARC —— 验证码邮件的信誉问题不该污染主域 | ¥0 |
 | 不要部署 Mailpit | `scripts/mail.ps1` 与 `MAIL_SMTP_HOST=127.0.0.1:1025` 只用于本地开发；生产必须指向托管中继 | ¥0 |
 
@@ -517,6 +519,8 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 ### 上线后观察
 
+- **启动日志**：`npm start` 会打印「运行模式：production」「状态页：已关闭」以及配置自检的警告项；致命项（开发密钥、默认库密码、验证码只写日志）会直接拒绝启动 —— 这是上线前最后一道机器检查。
+- 需要排查时临时开一次状态页：`ENABLE_STATUS_PAGE=true npm start`（或在 `.env` 里打开），查完记得关掉。
 - `/status` 的「邮件通道」自检项：通道配置是否完整 + 最近 24 小时发信失败数（读 `mail_log`）。**发信失败率是这套功能的第一指标** —— 发信成功而用户收不到最难查。
 - 发信量与限流命中：`email_codes` 按用途 + 邮箱限流（60 秒 1 条 / 1 小时 5 条 / 24 小时 15 条，同 IP 1 小时 20 条）。真被脚本刷时再加图形验证码。
 - 两步验证的支持成本：邮箱失效的账号只能由管理员在「管理 → 用户」关闭两步验证，这条路要写进客服流程。
@@ -559,6 +563,8 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 | 后端必须可用 | **已定**：删掉本机数据实现与零依赖演示后端，应用只走 HTTP；连不上时如实报错 | 无 |
 
 ## 变更记录
+
+- 2026-09-20：**`npm start` 自动进生产模式，并关掉状态页**。新增 `server/src/config/runtime.js`：`start` 脚本改成 `node src/index.js --production`（跨平台，不用引 cross-env、也不用 shell 的 `VAR=x` 写法），`npm run dev` 不带参数留在开发模式；真实环境变量优先于 `.env`，`--production` 压过 `.env` 里的 `development`，两个环境参数同时给会直接报错。判定必须发生在**任何**读取 `NODE_ENV` 的模块之前（`config/mail.js`、`config/database.js` 都是在 require 那一刻定值的），所以 `index.js` 与 `config/migrate.js` 的第一行 require 就是它。生产模式下：`/status` 与 `/api/v1/status` **直接 404**（带一句说明；这两个接口会暴露迁移清单、各表行数、接口清单，失败时还带 pg 原文），需要时用 `ENABLE_STATUS_PAGE=true` 显式打开；启动前跑配置自检（`config/production.js`）——**致命项拒绝启动**（开发用的 JWT 密钥 / `DB_PASSWORD=postgres` / `MAIL_TRANSPORT=console|memory` 让验证码只进日志 / 缺失或占位的发件人地址），**可疑项只警告**（Mailpit 地址与 1025 端口、`CORS_ORIGIN=*`、没配 `TRUST_PROXY`、`LOG_LEVEL=debug`、远端库没开 `DB_SSL`）。另外补三处生产细节：`TRUST_PROXY` 决定是否信任反代（不配的话 `req.ip` 是代理地址，按 IP 的验证码限流会退化成全体用户共用 1 小时 20 条；配了而实际直连又能被伪造 `X-Forwarded-For` 绕过，所以必须由部署的人声明）；`DB_SSL` 接管数据库 TLS（原来按 NODE_ENV 硬开 SSL，部署到同机 Docker PostgreSQL 会直接连不上库），未知的 `NODE_ENV` 回退开发配置而不是让 `module.exports` 变成 undefined；关掉 `x-powered-by`，启动日志明确打印运行模式与状态页开关，新增 `npm run db:migrate:prod`（迁移前打印 `[production] 目标库 host:port/db`，避免对着错的库跑完才发现）。验证：`npm start` 在当前 `.env` 下按预期**拒绝启动并列出 4 条致命项 + 5 条警告**（exit 1）；换成随机密钥、非默认库密码与真实发件域后正常启动，`/ping`、`/health`、`/api/v1/bootstrap` 均 200，`/status` 与 `/api/v1/status` 均 404 并给出说明；`ENABLE_STATUS_PAGE=true` 时两者恢复 200；`db:migrate:prod` 与开发模式各打印对应环境与目标库。jest 66 → 81（运行环境优先级 8 项、生产自检 7 项），smoke 108 → 112。
 
 - 2026-09-20：**登录两步验证（用户可自选）与「邮箱即身份」收口**（邮箱验证码体系的最后一步）。开启两步验证的账号登录时，`POST /auth/login` 密码对也**只回一张预认证票 + 一枚发到邮箱的验证码，不给任何令牌**，第二步 `POST /auth/login/verify` 过码才签发会话；预认证票在 `domain/preauth.js`：只存 `sha256`、5 分钟、**单次使用**（`UPDATE … WHERE consumed_at IS NULL` 原子消费，并发提交两次只有一次拿得到会话）、验证失败计数到 5 张票作废。顺序上**先验码再消费票**：码输错时票还留着，用户改一下就能接着用；`POST /auth/login/code` 用同一张票重发。前端登录页变成两步同页（显示打码邮箱 `fl***@example.com`、60 秒重发倒计时、可返回上一步）。邮箱既然是身份，就只能在「个人页 → 安全」里改，而且要**两阶段**：验证码发到新地址、通过才落库（`POST /profile/email` + `/email/verify`，并校验这枚码是为当前账号签发的，别人账号的码用不了）；`PUT /profile` 现在**拒绝 `email` 字段**并指向正确路径，资料编辑表单也去掉了邮箱输入框 —— 否则「偷到会话 → 改邮箱 → 找回密码」是一条完整的账号接管链。同一张卡片里还有两步验证开关：**开启要先过码**（顺便证明这个邮箱现在真的能收信，避免随手打开后自己登不进去），**关闭要输当前密码**（会话被偷不等于能关掉第二道锁）；用户邮箱用不了时，管理员可以在「管理 → 用户」关闭他人的两步验证 —— 那是唯一的兜底出口（接口幂等，且不接受开启，开启只能由本人过码）。查出一个检查脚本的真缺陷：`webui-check` 与 `smoke-check` 的动作名正则写的是 `[a-zA-Z.]+`，**不含数字**，于是 `security.enable2fa` 这类带数字的动作被静默跳过 —— 既不校验也不计数（47 个动作被算成 43 个）；正则改为 `[a-zA-Z0-9.]+` 之后这些动作才真正进入校验。测试：契约 56 → 58（两步验证的票据/令牌边界、关闭要密码、改邮箱两阶段、别人的码用不了、占用邮箱被拒），jest 65 → 66（打码邮箱的边界），渲染 32 → 34（登录两步切换与「过码前无令牌」、个人页安全区开启流程），smoke 105 → 108，文案 523 → 552，数据动作 38 → 47；真机重建 APK 后走通「密码 → 切到输码那一步且 `hasRefreshToken()` 为 false → 邮箱收码 → 过码进首页」，并确认打码邮箱与倒计时都正确显示。
 

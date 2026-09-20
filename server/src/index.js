@@ -9,17 +9,30 @@
  *   不是 500 —— 这是「暂时不可用、可以重试」，也能避免把 pg 的错误原文回给调用方。
  */
 
-require('dotenv').config();
+// 运行环境必须在**任何**读取 NODE_ENV 的模块之前定下来（见 config/runtime.js：
+// npm start 走生产、npm run dev 走开发，状态页与启动自检都按它决定）。
+const runtime = require('./config/runtime');
 
 const express = require('express');
 const cors = require('cors');
 const { pool } = require('./config/pool');
+const { productionProblems } = require('./config/production');
 const { ApiError, isDatabaseUnavailable } = require('./domain/errors');
 const { version: SERVICE_VERSION } = require('../package.json');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+
+// 不广播技术栈（一行成本的信息收敛）。
+app.disable('x-powered-by');
+
+// 反向代理后面必须显式声明：不设的话 `req.ip` 是代理地址，按 IP 的验证码限流会
+// 退化成「全体用户共用一个 1 小时 20 条」的额度；反过来在直连场景开着它，
+// 客户端就能伪造 X-Forwarded-For 绕过限流 —— 所以由部署的人用 TRUST_PROXY 声明。
+if (runtime.trustProxy !== false) {
+  app.set('trust proxy', runtime.trustProxy);
+}
 
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
@@ -61,9 +74,20 @@ for (const [prefix, router] of Object.entries(routes)) {
 // 状态页：人读的 HTML（/status）与机器读的 JSON（/api/v1/status）共用一份探测逻辑。
 // 它**不进上面的 `routes` 动作表** —— 那张表是「前端动作 ↔ 后端路由」的对照，
 // 状态接口没有对应的前端动作，登记进去会让覆盖断言失真。
+//
+// **生产环境默认关闭**：这两个接口会暴露迁移清单、各表行数、接口清单，失败时还带 pg 的
+// 错误原文，属于运维排查入口而不是公开接口。需要时用 `ENABLE_STATUS_PAGE=true` 显式打开，
+// 并由反向代理做来源限制（见根目录 README 的「上线部署清单与开销」）。
 const statusRoutes = require('./routes/status');
-app.use('/api/v1/status', statusRoutes);
-app.use('/status', statusRoutes);
+if (runtime.statusPageEnabled) {
+  app.use('/api/v1/status', statusRoutes);
+  app.use('/status', statusRoutes);
+} else {
+  const disabled = (req, res) => res.status(404).json({
+    error: '状态页在生产环境已关闭（需要时设 ENABLE_STATUS_PAGE=true 再启动）',
+  });
+  app.get(['/status', '/api/v1/status'], disabled);
+}
 
 /**
  * 进程存活探针（**不代表数据库可用**）：只回答「HTTP 服务还在不在」。
@@ -138,16 +162,43 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
  * 业务接口在数据库恢复后自动可用（连接池会重建连接）。
  */
 async function start() {
+  const startedBy = runtime.startedBy ? `（npm run ${runtime.startedBy}）` : '';
+  console.log(`运行模式：${runtime.nodeEnv}${startedBy}`);
+
+  // 生产环境先做配置自检：致命项**拒绝启动**（配错了会静默地不安全或根本用不了），
+  // 可疑项只打警告。开发/测试不检查，保持 `npm run dev` 开箱即用。
+  if (runtime.isProduction) {
+    const { fatal, warnings } = productionProblems(process.env);
+    for (const item of warnings) {
+      console.warn(`[生产环境警告] ${item}`);
+    }
+    if (fatal.length > 0) {
+      console.error('生产环境配置检查未通过，拒绝启动：');
+      for (const item of fatal) {
+        console.error(`  · ${item}`);
+      }
+      console.error('本机开发请用 npm run dev（开发模式，不做这些检查）。');
+      process.exit(1);
+    }
+    console.log(runtime.statusPageEnabled
+      ? '状态页：已按 ENABLE_STATUS_PAGE 打开，请确保外部访问不到'
+      : '状态页：已关闭（生产默认；需要时设 ENABLE_STATUS_PAGE=true）');
+  }
+
   try {
     const client = await pool.connect();
     client.release();
     console.log('数据库连接成功');
   } catch (error) {
-    console.error('数据库暂时不可用，服务仍会启动；打开 /status 查看原因：', error.message);
+    console.error(runtime.statusPageEnabled
+      ? '数据库暂时不可用，服务仍会启动；打开 /status 查看原因：'
+      : '数据库暂时不可用，服务仍会启动（生产环境状态页已关闭，请看日志）：', error.message);
   }
   return app.listen(PORT, () => {
     console.log(`服务器运行在 http://localhost:${PORT}`);
-    console.log(`状态页：http://localhost:${PORT}/status`);
+    if (runtime.statusPageEnabled) {
+      console.log(`状态页：http://localhost:${PORT}/status`);
+    }
     console.log(`连通性检查：http://localhost:${PORT}/ping`);
     console.log(`健康检查：http://localhost:${PORT}/health`);
   });
