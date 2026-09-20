@@ -52,6 +52,7 @@ const REGISTRATION_FROM = `
 const USER_COLUMNS = `
     u.id, u.username, u.email, u.nickname, u.role, u.status, u.bio, u.region,
     u.avatar, u.social_media, u.show_registrations,
+    u.email_verified, u.two_factor_enabled,
     to_char(u.registration_time, 'YYYY-MM-DD')  AS registration_time,
     to_char(u.last_login_time, 'YYYY-MM-DD')    AS last_login_time
 `;

@@ -177,7 +177,7 @@ function validateBridgeContract() {
   const actionsFile = 'app/src/main/java/com/example/calmobile/WebAppActions.java';
   const source = fs.readFileSync(path.join(root, actionsFile), 'utf8');
   const implemented = new Set();
-  const casePattern = /case "([a-zA-Z.]+)":/g;
+  const casePattern = /case "([a-zA-Z0-9.]+)":/g;
   let match;
   while ((match = casePattern.exec(source)) !== null) {
     implemented.add(match[1]);
@@ -188,7 +188,7 @@ function validateBridgeContract() {
 
   for (const file of walkScripts(path.join(root, WEB_ROOT, 'js'))) {
     const content = fs.readFileSync(file, 'utf8');
-    const callPattern = /\bcall\(\s*'([a-zA-Z.]+)'/g;
+    const callPattern = /\bcall\(\s*'([a-zA-Z0-9.]+)'/g;
     let callMatch;
     while ((callMatch = callPattern.exec(content)) !== null) {
       if (!implemented.has(callMatch[1])) {
@@ -810,6 +810,23 @@ const checks = [
     file: 'server/src/domain/otp.js',
     contains: ['sha256', 'timingSafeEqual', 'consumed_at IS NULL', 'RESEND_COOLDOWN_SEC',
       'CodeRejected', 'mail_log'],
+  },
+  {
+    id: 'backend-two-factor-ticket',
+    // 两步验证：密码对了也只发预认证票（「密码对」≠「登录成功」），票单次使用、只存哈希
+    file: 'server/src/routes/auth.js',
+    contains: ['twoFactorRequired', 'issueTicket', 'consumeTicket', 'maskEmail'],
+  },
+  {
+    id: 'backend-preauth-ticket-single-use',
+    file: 'server/src/domain/preauth.js',
+    contains: ['consumed_at IS NULL', 'token_hash', 'MAX_TICKET_ATTEMPTS'],
+  },
+  {
+    id: 'backend-email-is-identity',
+    // 邮箱是身份：改邮箱只能走「验证新地址」，PUT /profile 不再写 email
+    file: 'server/src/routes/profile.js',
+    contains: ["邮箱需要通过「验证新邮箱」修改", 'two_factor_enabled', 'security'],
   },
   {
     id: 'docs-frontend-backend-boundary',

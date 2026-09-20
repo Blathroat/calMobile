@@ -153,12 +153,15 @@ export async function adminPage(context) {
                     el('strong', { class: 'row-title', text: `${user.nickname} · ${user.role}` }),
                     el('span', { class: 'row-meta', text: `${user.status} · 最近登录 ${user.lastLoginTime || t('s_1lpnuh4')}` }),
                     el('span', { class: 'row-meta truncate', text: truncate(user.email, 40) }),
+                    user.twoFactorEnabled ? el('span', { class: 'row-meta', text: t('s_16q73v0') }) : null,
                 ]),
                 statusTag(user.status, statusTone(user.status)),
             ]),
             el('div', { class: 'row', 'data-gap': 'md' }, [
                 smallCta(t('s_pzy8ri'), () => manageUser(user)),
                 smallCta(t('s_gt2gfg'), () => context.navigate('user-public', { userId: user.id })),
+                // 兜底出口：用户邮箱用不了（离职、邮箱被回收）时，只有管理员能帮他关掉两步验证
+                user.twoFactorEnabled ? smallCta(t('s_p1k61'), () => disableTwoFactor(user)) : null,
             ]),
         ])));
 
@@ -236,8 +239,34 @@ export async function adminPage(context) {
         }
     }
 
-    // ── 展会管理 ───────────────────────────────────────────────────
+    /**
+     * 关闭某个账号的两步验证 —— 两步验证唯一的兜底出口。
+     *
+     * 用户邮箱用不了（离职、邮箱被回收、域名过期）时，本人是登不进去也关不掉的，
+     * 只有管理员能帮他恢复访问。要二次确认，避免误点。
+     */
+    async function disableTwoFactor(user) {
+        confirmSheet({
+            title: t('s_p1k61'),
+            message: `关闭后 ${user.nickname} 登录时只校验密码。请确认这是账号本人提出的请求。`,
+            confirmLabel: t('s_g0fanx'),
+            onConfirm: async () => {
+                try {
+                    const result = await usersApi.disableTwoFactor(user.id);
+                    const ok = result?.ok === true;
+                    toast(ok ? `已关闭 ${user.nickname} 的两步验证` : (result?.error || t('s_10lkv9z')),
+                        ok ? 'success' : 'error');
+                    if (ok) {
+                        loadPanel();
+                    }
+                } catch (error) {
+                    toast(error.message, 'error');
+                }
+            },
+        });
+    }
 
+    // ── 展会管理 ───────────────────────────────────────────────────
     function renderExhibitions(items) {
         replace(panel, [
             el('div', { class: 'field' }, [

@@ -557,6 +557,34 @@ const BACKEND = {
         ok: true, error: '', email: 'user@example.com', expiresInSec: 600, resendAfterSec: 60,
     },
     'POST /auth/password/reset': { ok: true, error: '' },
+    // 两步验证第二步：票据 + 码换真正的会话（这一步才有令牌）
+    'POST /auth/login/verify': {
+        ok: true, error: '', token: 'token-2fa', refreshToken: 'refresh-token-2fa',
+        user: {
+            loggedIn: true, role: 'admin', roleLabel: '管理员', username: 'demo', nickname: 'demo',
+        },
+    },
+    'POST /auth/login/code': {
+        ok: true, error: '', email: 'demo@example.com', expiresInSec: 600, resendAfterSec: 60,
+    },
+    // 安全设置：邮箱与两步验证开关
+    'GET /profile/security': {
+        email: 'demo@example.com',
+        emailVerified: true,
+        emailVerifiedAt: '2026-09-01T00:00:00.000Z',
+        twoFactorEnabled: false,
+        canEnable: true,
+    },
+    'POST /profile/2fa/enable': {
+        ok: true, error: '', email: 'demo@example.com', expiresInSec: 600, resendAfterSec: 60, maskedEmail: 'de***@example.com',
+    },
+    'POST /profile/2fa/enable/verify': { ok: true, error: '', twoFactorEnabled: true },
+    'POST /profile/2fa/disable': { ok: true, error: '', twoFactorEnabled: false },
+    'POST /profile/email': {
+        ok: true, error: '', email: 'new@example.com', expiresInSec: 600, resendAfterSec: 60,
+    },
+    'POST /profile/email/verify': { ok: true, error: '', user: { email: 'new@example.com', emailVerified: true } },
+    'PUT /users/user-1/two-factor': { ok: true, error: '' },
     'POST /auth/guest': { ok: true, error: '' },
     'POST /auth/logout': { ok: true, error: '' },
 
@@ -1147,6 +1175,101 @@ test('注册页第一步只发码不拿令牌，第二步验证码通过才保�
             code: '123456',
         }, '验证请求体应当是邮箱 + 验证码');
         assert.strictEqual(api.hasRefreshToken(), true, '验证码通过后应当保存刷新令牌');
+    } finally {
+        global.setTimeout = realSetTimeout;
+    }
+});
+
+/**
+ * 开了两步验证的账号：第一步只拿到一张预认证票，第二步过码才保存令牌。
+ *
+ * 这是这套流程里最要紧的一条性质 —— 「密码对了」不等于「登录了」：
+ * 第一步的响应里不该有 token / refreshToken，客户端也就存不下任何可用凭据。
+ */
+test('两步验证：登录先拿票，过码之后才保存令牌', async () => {
+    const realLogin = BACKEND['POST /auth/login'];
+    const realSetTimeout = global.setTimeout;
+    global.setTimeout = (fn) => realSetTimeout(fn, 0);
+    BACKEND['POST /auth/login'] = {
+        ok: true,
+        error: '',
+        twoFactorRequired: true,
+        ticket: 'ticket-2fa',
+        expiresInSec: 300,
+        resendAfterSec: 60,
+        maskedEmail: 'de***@example.com',
+    };
+    try {
+        const { dom, requests } = await renderRoute('login', {});
+        const api = await webModule('js/core/api.js');
+        api.setRefreshToken('');
+
+        const control = (id) => dom.app.querySelectorAll((node) => node.id === id)[0];
+        control('login-account').value = 'demo';
+        control('login-password').value = 'password';
+
+        const forms = dom.app.querySelectorAll((node) => node.tagName === 'FORM');
+        assert.strictEqual(forms.length, 2, '登录页应当有两个表单：账号密码与两步验证');
+        forms[0].dispatch('submit', { preventDefault() {} });
+        await settle(60);
+
+        assert.ok(requests.some((item) => item.path === '/auth/login'), '没有请求登录');
+        assert.strictEqual(api.hasRefreshToken(), false, '过码之前不该保存任何令牌');
+        assert.strictEqual(forms[0].hidden, true, '应当收起账号密码那一步');
+        assert.strictEqual(forms[1].hidden, false, '应当展开输码那一步');
+        const copy = collectText(dom.app);
+        assert.ok(copy.includes('de***@example.com'), `应当显示打码后的邮箱，实际：${copy.slice(0, 120)}`);
+
+        control('login-code').value = '246810';
+        forms[1].dispatch('submit', { preventDefault() {} });
+        await settle(60);
+
+        const verified = requests.find((item) => item.path === '/auth/login/verify');
+        assert.ok(verified, `没有请求 /auth/login/verify，实际：${requests
+            .map((item) => item.path).join(', ')}`);
+        assert.deepStrictEqual(verified.body, { ticket: 'ticket-2fa', code: '246810' });
+        assert.strictEqual(api.hasRefreshToken(), true, '过码之后才保存令牌');
+    } finally {
+        global.setTimeout = realSetTimeout;
+        BACKEND['POST /auth/login'] = realLogin;
+    }
+});
+
+/**
+ * 个人页的「安全」区：邮箱与两步验证开关都在这里。
+ *
+ * 开启不是「按一下就好」：先请求发码（后端把码发到已验证邮箱），再输码确认。
+ */
+test('个人页安全区开启两步验证：先请求发码，再输码确认', async () => {
+    const realSetTimeout = global.setTimeout;
+    global.setTimeout = (fn) => realSetTimeout(fn, 0);
+    try {
+        const { dom, requests } = await renderRoute('profile', {});
+        await settle(60);
+
+        const control = (id) => dom.app.querySelectorAll((node) => node.id === id)[0];
+        assert.ok(requests.some((item) => item.path === '/profile/security'), '没有读取安全设置');
+        const toggle = control('security-2fa');
+        assert.ok(toggle, '安全区没有渲染出两步验证开关');
+        assert.strictEqual(toggle.disabled, false, '有已验证邮箱时开关应当可用');
+
+        toggle.checked = true;
+        toggle.dispatch('change');
+        await settle(60);
+
+        assert.ok(requests.some((item) => item.path === '/profile/2fa/enable'),
+            `开启两步验证应当先请求发码，实际：${requests.map((item) => item.path).join(', ')}`);
+        const code = control('security-2fa-code');
+        assert.ok(code, '发码之后应当出现输码输入框');
+        code.value = '135790';
+        dom.app.querySelectorAll((node) => node.tagName === 'BUTTON')
+            .find((node) => collectText(node).trim() === '确认开启')
+            .dispatch('click');
+        await settle(60);
+
+        const verified = requests.find((item) => item.path === '/profile/2fa/enable/verify');
+        assert.ok(verified, '没有提交验证码');
+        assert.deepStrictEqual(verified.body, { code: '135790' });
     } finally {
         global.setTimeout = realSetTimeout;
     }

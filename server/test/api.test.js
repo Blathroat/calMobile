@@ -120,6 +120,26 @@ function otherCode(code) {
 
 const tokens = {};
 
+/**
+ * 建一个「已验证邮箱」的临时账号。
+ *
+ * 两步验证与改邮箱的用例需要一个干净的账号：示例账号的密码被改掉会影响后面的用例，
+ * 邮箱也不能随便动（`demo@example.com` 之类在别处当已知数据用）。
+ */
+async function createVerifiedAccount(id, username, email, password = 'password') {
+  // eslint-disable-next-line global-require
+  const bcrypt = require('bcryptjs');
+  await pool.query(`
+        INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at)
+        VALUES ($1, $2, $3, $4, $5, 'user', true, now())
+        ON CONFLICT (id) DO UPDATE
+            SET password_hash = EXCLUDED.password_hash,
+                email = EXCLUDED.email,
+                email_verified = true,
+                two_factor_enabled = false
+    `, [id, username, await bcrypt.hash(password, 4), email, username]);
+}
+
 before(async () => {
   // 每次运行都重建测试库：连接维护库（postgres）后 drop/create。
   const admin = new Client({
@@ -495,6 +515,112 @@ test('找回密码：验证码通过后改密码、撤销全部刷新令牌，�
     assert.strictEqual(again.body.ok, false, '同一枚码不该能重复使用');
   } finally {
     await pool.query("DELETE FROM users WHERE id = 'usr-reset'");
+  }
+});
+
+test('开启两步验证后，密码对了也只发预认证票，过码才发令牌', async () => {
+  await createVerifiedAccount('usr-2fa', 'twofactor', 'twofactor@example.com');
+  try {
+    const session = await login('twofactor');
+
+    // 开启第一步：验证码发到已验证邮箱，且回给页面的是打码后的地址
+    const enable = await post('/api/v1/profile/2fa/enable', undefined, { token: session.token });
+    assert.strictEqual(enable.body.ok, true, `开启失败：${JSON.stringify(enable.body)}`);
+    assert.ok(enable.body.maskedEmail, '要告诉用户码发到哪个邮箱了');
+    assert.ok(!enable.body.maskedEmail.includes('twofactor@'), `邮箱应当打码：${enable.body.maskedEmail}`);
+
+    const enableCode = codeFromInbox('twofactor@example.com');
+    const enabled = await post('/api/v1/profile/2fa/enable/verify',
+      { code: enableCode.code }, { token: session.token });
+    assert.strictEqual(enabled.body.ok, true, `验证码通过却没开起来：${JSON.stringify(enabled.body)}`);
+    assert.strictEqual(enabled.body.twoFactorEnabled, true);
+
+    // 再登录：密码正确，但**没有令牌**，只有一张票
+    const step1 = await post('/api/v1/auth/login', { username: 'twofactor', password: 'password' });
+    assert.strictEqual(step1.body.ok, true, JSON.stringify(step1.body));
+    assert.strictEqual(step1.body.twoFactorRequired, true, '应当进入两步验证');
+    assert.strictEqual(step1.body.token, undefined, '两步验证没过之前不能有访问令牌');
+    assert.strictEqual(step1.body.refreshToken, undefined, '更不能有刷新令牌');
+    assert.strictEqual(step1.body.user, undefined, '这一步也不该下发用户态');
+    assert.ok(step1.body.ticket, '要给出预认证票');
+
+    const loginCode = codeFromInbox('twofactor@example.com');
+    const wrong = await post('/api/v1/auth/login/verify',
+      { ticket: step1.body.ticket, code: otherCode(loginCode.code) });
+    assert.strictEqual(wrong.body.ok, false, '错码不该通过');
+    assert.strictEqual(wrong.body.token, undefined, '错码之后仍然不能有令牌');
+
+    const done = await post('/api/v1/auth/login/verify', { ticket: step1.body.ticket, code: loginCode.code });
+    assert.strictEqual(done.body.ok, true, `过码后应当登录成功：${JSON.stringify(done.body)}`);
+    assert.ok(done.body.token && done.body.refreshToken, '过码后才发令牌');
+    assert.strictEqual(done.body.user.username, 'twofactor');
+
+    // 同一张票不能再用（单次使用）
+    const replay = await post('/api/v1/auth/login/verify', { ticket: step1.body.ticket, code: loginCode.code });
+    assert.strictEqual(replay.body.ok, false, '预认证票只能用一次');
+
+    // 关闭要当前密码
+    const wrongPassword = await post('/api/v1/profile/2fa/disable',
+      { password: 'not-my-password' }, { token: done.body.token });
+    assert.strictEqual(wrongPassword.body.ok, false, '密码不对不该能关掉两步验证');
+
+    const disabled = await post('/api/v1/profile/2fa/disable',
+      { password: 'password' }, { token: done.body.token });
+    assert.strictEqual(disabled.body.ok, true, JSON.stringify(disabled.body));
+
+    const plain = await post('/api/v1/auth/login', { username: 'twofactor', password: 'password' });
+    assert.ok(plain.body.token, '关掉之后应当恢复成一步登录');
+  } finally {
+    await pool.query("DELETE FROM users WHERE id = 'usr-2fa'");
+  }
+});
+
+test('改邮箱要把验证码发到新地址，通过才落库；别人的码用不了', async () => {
+  await createVerifiedAccount('usr-email', 'emailchange', 'before@example.com');
+  try {
+    const session = await login('emailchange');
+
+    // 直接写 email 被拦住：PUT /profile 不再接受这个字段
+    const direct = await put('/api/v1/profile', { email: 'hacked@example.com' }, { token: session.token });
+    assert.strictEqual(direct.body.ok, false, '邮箱不该能直接改');
+    assert.ok(direct.body.error.includes('验证'), `要指出正确路径：${direct.body.error}`);
+    const untouched = await get('/api/v1/profile', { token: session.token });
+    assert.strictEqual(untouched.body.email, 'before@example.com', '被拦住之后邮箱不能变');
+
+    // 第一轮：换到 after1，验证码被别人拿去用（换了登录身份）应当失败
+    const asked = await post('/api/v1/profile/email',
+      { email: 'after1@example.com' }, { token: session.token });
+    assert.strictEqual(asked.body.ok, true, `发码失败：${JSON.stringify(asked.body)}`);
+    const stolen = codeFromInbox('after1@example.com');
+    const adminSession = await login('demo');
+    const foreign = await post('/api/v1/profile/email/verify',
+      { email: 'after1@example.com', code: stolen.code }, { token: adminSession.token });
+    assert.strictEqual(foreign.body.ok, false, '别人账号的改邮箱验证码不能用来改自己的邮箱');
+    assert.strictEqual(foreign.body.error.includes('不正确') || foreign.body.error.includes('失效'), true,
+      `文案要说不通：${foreign.body.error}`);
+
+    // 第二轮：换到 after2，这一次自己走完
+    const asked2 = await post('/api/v1/profile/email',
+      { email: 'after2@example.com' }, { token: session.token });
+    assert.strictEqual(asked2.body.ok, true, JSON.stringify(asked2.body));
+    const own = codeFromInbox('after2@example.com');
+    const done = await post('/api/v1/profile/email/verify',
+      { email: 'after2@example.com', code: own.code }, { token: session.token });
+    assert.strictEqual(done.body.ok, true, `改邮箱失败：${JSON.stringify(done.body)}`);
+    assert.strictEqual(done.body.user.email, 'after2@example.com');
+    assert.strictEqual(done.body.user.emailVerified, true, '新邮箱是验证过的，账号不会掉进「未验证」状态');
+
+    // 新邮箱可以直接用来登录
+    const byNewEmail = await post('/api/v1/auth/login', { username: 'after2@example.com', password: 'password' });
+    assert.strictEqual(byNewEmail.body.ok, true, '改完之后新邮箱应当能登录');
+
+    // 已被占用的邮箱不能再被改成目标
+    const taken = await post('/api/v1/profile/email',
+      { email: 'demo@example.com' }, { token: session.token });
+    assert.strictEqual(taken.body.ok, false);
+    assert.ok(taken.body.error.includes('已被'), taken.body.error);
+  } finally {
+    await pool.query("DELETE FROM users WHERE id = 'usr-email'");
   }
 });
 
@@ -1714,14 +1840,14 @@ function backendRoutes() {
 /**
  * 前端每个数据动作都必须能在后端找到对应路由。
  *
- * 这条断言是「38 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
+ * 这条断言是「47 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
  * 同步 `ENDPOINTS`，都会在这里失败，而不是等到某个页面在真机上静默报错。
  */
 test('前端每个数据动作都对应后端已注册的路由', () => {
   const endpoints = frontendEndpoints();
   const actions = Object.keys(endpoints);
-  assert.strictEqual(actions.length, 38,
-    `前端数据动作数量变了（期望 38）：${actions.length} 个 —— ${actions.join(', ')}`);
+  assert.strictEqual(actions.length, 47,
+    `前端数据动作数量变了（期望 47）：${actions.length} 个 —— ${actions.join(', ')}`);
 
   const declared = backendRoutes();
   // 用「带 id 的完整参数」和「空参数」各算一次：像 exhibitions.save 这种

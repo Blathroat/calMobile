@@ -13,7 +13,10 @@ const { userPayload, guestPayload } = require('../domain/payloads');
 const { capabilities } = require('../domain/permissions');
 const { limits } = require('../domain/validation');
 const { issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser } = require('../domain/session');
-const { issueCode, consumeCode, isCodeRejected } = require('../domain/otp');
+const { issueCode, consumeCode, isCodeRejected, maskEmail } = require('../domain/otp');
+const {
+  issueTicket, findTicket, consumeTicket, countTicketFailure,
+} = require('../domain/preauth');
 const { badRequest } = require('../domain/errors');
 const { authenticate } = require('../middleware/auth');
 const { rateLimit } = require('../middleware/rate-limit');
@@ -72,7 +75,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
       return;
     }
     const result = await query(`
-            SELECT id, username, password_hash, status
+            SELECT id, username, email, email_verified, two_factor_enabled, password_hash, status
               FROM users
              WHERE lower(username) = lower($1) OR lower(email) = lower($1)
              ORDER BY (lower(username) = lower($1)) DESC
@@ -91,9 +94,129 @@ router.post('/login', authLimiter, async (req, res, next) => {
       res.json(failure('账号已被封禁，请联系管理员'));
       return;
     }
+
+    // 开了两步验证：这一步**只发预认证票 + 验证码，不发令牌**。
+    // 密码对了不等于登录成功，否则两步验证只是多一步表演。
+    if (account.two_factor_enabled === true) {
+      if (account.email_verified !== true || !account.email) {
+        // 开启两步验证时会校验邮箱可用；走到这里说明邮箱被改坏了（改邮箱也要过验证，
+        // 正常改不出来）。这时不能放行，但也要给一句能照着做的话。
+        res.json(failure('两步验证邮箱不可用，请联系管理员关闭两步验证'));
+        return;
+      }
+      const ticket = await issueTicket(account.id);
+      const sent = await issueCode({
+        purpose: 'login',
+        email: account.email,
+        userId: account.id,
+        ip: req.ip || '',
+      });
+      res.json({
+        ok: true,
+        error: '',
+        twoFactorRequired: true,
+        ticket: ticket.ticket,
+        expiresInSec: ticket.expiresInSec,
+        resendAfterSec: sent.resendAfterSec,
+        maskedEmail: maskEmail(account.email),
+      });
+      return;
+    }
+
     await query('UPDATE users SET last_login_time = now() WHERE id = $1', [account.id]);
     const session = await issueSession(account);
     res.json({ ok: true, error: '', ...session, user: await loadUser(account.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/auth/login/verify
+ * 两步验证第二步：预认证票 + 邮箱验证码 → 真正的会话。
+ *
+ * 顺序有意为之：**先验码、再消费票**。码不对时票据要留着，用户改一下还能接着用；
+ * 票据的消费是原子的（`WHERE consumed_at IS NULL`），并发提交两次只有一个能换到会话。
+ */
+router.post('/login/verify', authLimiter, async (req, res, next) => {
+  try {
+    const ticket = String(req.body.ticket || '').trim();
+    const code = String(req.body.code || '').trim();
+    if (!ticket || !code) {
+      res.json(failure('请填写验证码'));
+      return;
+    }
+    const found = await findTicket(ticket);
+    if (!found) {
+      res.json(failure('验证已过期，请重新登录'));
+      return;
+    }
+    const account = await query(
+      'SELECT id, username, role, email, email_verified, status FROM users WHERE id = $1',
+      [found.userId],
+    );
+    const row = account.rows[0];
+    if (!row || row.status === 'banned') {
+      res.json(failure('账号不可用，请联系管理员'));
+      return;
+    }
+
+    let consumed;
+    try {
+      consumed = await consumeCode({ purpose: 'login', email: row.email, code });
+    } catch (error) {
+      if (isCodeRejected(error)) {
+        // 记一次失败：拿到票据也不能慢慢地猜码
+        await countTicketFailure(found.id, found.attempts);
+        res.json(failure(error.message));
+        return;
+      }
+      throw error;
+    }
+    if (consumed.userId && consumed.userId !== found.userId) {
+      // 这张码不属于这张票对应的账号（同一邮箱换了账号之类的边界），按失败处理
+      await countTicketFailure(found.id, found.attempts);
+      res.json(failure('验证码不正确'));
+      return;
+    }
+
+    if (!await consumeTicket(found.id)) {
+      res.json(failure('验证已使用，请重新登录'));
+      return;
+    }
+    await query('UPDATE users SET last_login_time = now() WHERE id = $1', [row.id]);
+    const session = await issueSession(row);
+    res.json({ ok: true, error: '', ...session, user: await loadUser(row.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/auth/login/code
+ * 两步验证：用同一张预认证票重发验证码（票据本身没消费掉就还有效）。
+ */
+router.post('/login/code', authLimiter, async (req, res, next) => {
+  try {
+    const ticket = String(req.body.ticket || '').trim();
+    const found = await findTicket(ticket);
+    if (!found) {
+      res.json(failure('验证已过期，请重新登录'));
+      return;
+    }
+    const account = await query('SELECT id, email, email_verified FROM users WHERE id = $1', [found.userId]);
+    const row = account.rows[0];
+    if (!row || row.email_verified !== true || !row.email) {
+      res.json(failure('两步验证邮箱不可用，请联系管理员关闭两步验证'));
+      return;
+    }
+    const sent = await issueCode({
+      purpose: 'login',
+      email: row.email,
+      userId: row.id,
+      ip: req.ip || '',
+    });
+    res.json({ ok: true, error: '', ...sent, maskedEmail: maskEmail(row.email) });
   } catch (error) {
     next(error);
   }

@@ -117,6 +117,9 @@ function userPayload(row, can) {
     showRegistrations: row.show_registrations === true,
     status: labels.USER_STATUS[row.status] || labels.USER_STATUS.active,
     statusCode: row.status || 'active',
+    // 邮箱验证状态与两步验证开关：个人页「安全」区与用户管理都看这两个字段
+    emailVerified: row.email_verified === true,
+    twoFactorEnabled: row.two_factor_enabled === true,
     lastLoginTime: row.last_login_time || '',
     registrationTime: row.registration_time || '',
     can,
@@ -156,6 +159,9 @@ function adminUserPayload(row, index) {
     role: labels.ROLE_LABEL[row.role] || row.role,
     roleCode: row.role,
     status: labels.USER_STATUS[row.status] || labels.USER_STATUS.active,
+    // 管理员据此决定要不要显示「关闭两步验证」这个兜底入口
+    emailVerified: row.email_verified === true,
+    twoFactorEnabled: row.two_factor_enabled === true,
     registrationTime: row.registration_time || '',
     lastLoginTime: row.last_login_time || '',
     order: index,

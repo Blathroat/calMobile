@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const {
   CODE_TTL_MIN, CODE_LENGTH, MAX_ATTEMPTS, RESEND_COOLDOWN_SEC,
   SEND_PER_HOUR, SEND_PER_DAY, IP_SEND_PER_HOUR,
-  normalizeEmail, hashCode, sameHash, generateCode,
+  normalizeEmail, maskEmail, hashCode, sameHash, generateCode,
 } = require('./otp');
 
 test('验证码是 6 位数字，含前导零', () => {
@@ -51,6 +51,15 @@ test('邮箱归一化：去空白 + 转小写（大小写不同的邮箱是同�
   assert.equal(normalizeEmail('  User@Example.COM '), 'user@example.com');
   assert.equal(normalizeEmail(undefined), '');
   assert.equal(normalizeEmail(null), '');
+});
+
+test('打码邮箱：保留前两位与域名，其余用星号（登录页可能被旁人看到）', () => {
+  assert.equal(maskEmail('zhangsan@example.com'), 'zh***@example.com');
+  assert.equal(maskEmail('ab@example.com'), 'ab***@example.com');
+  assert.equal(maskEmail('a@example.com'), 'a***@example.com');
+  assert.equal(maskEmail('User@Example.COM'), 'us***@example.com', '先归一化再打码');
+  assert.equal(maskEmail('not-an-email'), '***', '没有 @ 时不该把原文透出去');
+  assert.equal(maskEmail(''), '');
 });
 
 test('阈值就是文档里写的那些（改动要同步邮件文案与 README）', () => {

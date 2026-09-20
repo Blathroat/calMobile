@@ -159,7 +159,7 @@ function collectEndpoints(source = fs.readFileSync(apiFile, 'utf8')) {
         return endpoints;
     }
     // 每一项都在对象里缩进四个空格，形如 `bootstrap: () => ({ … }),`
-    const entryPattern = /(?:^|\n)[ \t]{4}(?:'([a-zA-Z.]+)'|([a-zA-Z.]+)):[ \t]*/g;
+    const entryPattern = /(?:^|\n)[ \t]{4}(?:'([a-zA-Z0-9.]+)'|([a-zA-Z0-9.]+)):[ \t]*/g;
     const entries = [];
     let match;
     while ((match = entryPattern.exec(body)) !== null) {
@@ -188,7 +188,7 @@ function collectCallSites() {
     const sites = new Map();
     for (const file of frontendModules()) {
         const source = fs.readFileSync(file, 'utf8');
-        const pattern = /\bcall\(\s*'([a-zA-Z.]+)'/g;
+        const pattern = /\bcall\(\s*'([a-zA-Z0-9.]+)'/g;
         let match;
         while ((match = pattern.exec(source)) !== null) {
             const action = match[1];
@@ -204,7 +204,7 @@ function collectCallSites() {
 function collectImplementedActions() {
     const source = fs.readFileSync(actionsFile, 'utf8');
     const actions = new Set();
-    const pattern = /case "([a-zA-Z.]+)":/g;
+    const pattern = /case "([a-zA-Z0-9.]+)":/g;
     let match;
     while ((match = pattern.exec(source)) !== null) {
         actions.add(match[1]);
@@ -279,7 +279,7 @@ function checkApiBoundary(endpoints) {
     let violations = 0;
     for (const file of walk(pagesDir, '.js')) {
         const source = fs.readFileSync(file, 'utf8');
-        const pattern = /\bcall\(\s*'([a-zA-Z.]+)'/g;
+        const pattern = /\bcall\(\s*'([a-zA-Z0-9.]+)'/g;
         let match;
         while ((match = pattern.exec(source)) !== null) {
             if (endpoints.has(match[1])) {

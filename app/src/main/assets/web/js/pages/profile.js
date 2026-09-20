@@ -9,11 +9,11 @@ import { t } from '../core/strings.js';
  */
 
 import { call, state, applyTheme, applySettings, applyMode } from '../core/bridge.js';
-import { authApi, profileApi, settingsApi } from '../core/api.js';
+import { authApi, profileApi, securityApi, settingsApi } from '../core/api.js';
 import { scaffold, tabbar, navItems } from '../core/router.js';
 import { avatarNode, loadErrorBlock, loadingBlock, openAvatarCropper, openSheet, segmented, smallCta, stateBlock, switchRow, toast } from '../ui/components.js';
 import { el, append, replace } from '../core/dom.js';
-import { fieldValidator, validateAll, limit, passwordRule, matchRule } from '../core/validate.js';
+import { fieldValidator, validateAll, limit, passwordRule, matchRule, PATTERNS } from '../core/validate.js';
 
 export async function profilePage(context) {
     const host = el('div', { class: 'stack' });
@@ -191,6 +191,8 @@ export async function profilePage(context) {
                 isAdmin ? themeBlock() : null,
             ]),
             appearanceCard(),
+            // 安全：邮箱与两步验证（改邮箱要先把验证码发到新地址，开启两步验证要先过码）
+            securityCard(),
         ];
 
         if (isAdmin) {
@@ -325,6 +327,287 @@ export async function profilePage(context) {
     }
 
     /**
+     * 安全设置：邮箱与两步验证。
+     *
+     * 两条放一起，因为它们是同一件事的两半：邮箱就是找回密码与两步验证的凭据。
+     * 两个改动都**要过验证码**（改邮箱发到新地址、开启两步验证发到现邮箱），
+     * 所以这里的每个动作都是「点一下 → 输码 → 生效」，面板展开在触发按钮下方。
+     */
+    function securityCard() {
+        const card = el('div', { class: 'card' });
+        const view = {
+            info: null, error: '', panel: '', pendingEmail: '', busy: false,
+        };
+
+        load();
+
+        return card;
+
+        async function load() {
+            view.error = '';
+            try {
+                view.info = await securityApi.get();
+            } catch (error) {
+                view.error = error.message;
+            }
+            paint();
+        }
+
+        function paint() {
+            const blocks = [el('span', { class: 'section-label', text: t('s_1apxo2s') })];
+            if (view.error) {
+                blocks.push(el('p', { class: 'field-error', role: 'alert', text: view.error }));
+            }
+            if (!view.info) {
+                blocks.push(el('p', { class: 'field-hint', text: t('s_1tp8nhc') }));
+                replace(card, blocks);
+                return;
+            }
+            blocks.push(emailRow(view.info));
+            if (view.panel === 'email') {
+                blocks.push(emailPanel());
+            }
+            blocks.push(twoFactorRow(view.info));
+            if (view.panel === 'enable2fa') {
+                blocks.push(codePanel(t('s_1mimz3w'), 'enable2fa'));
+            }
+            if (view.panel === 'disable2fa') {
+                blocks.push(passwordPanel());
+            }
+            replace(card, blocks);
+        }
+
+        /** 邮箱那一行：显示当前邮箱与验证状态，右侧是「更换邮箱」。 */
+        function emailRow(info) {
+            return el('div', { class: 'row', 'data-between': 'true' }, [
+                el('span', { class: 'row-copy' }, [
+                    el('span', { class: 'row-title', text: t('s_185tvls') }),
+                    el('span', {
+                        class: 'row-meta truncate',
+                        text: info.email ? `${info.email}${info.emailVerified ? t('s_1m3j883') : t('s_1webb8b')}` : t('s_tv7wlb'),
+                    }),
+                ]),
+                smallCta(t('s_1ca6fcy'), () => {
+                    view.panel = view.panel === 'email' ? '' : 'email';
+                    view.error = '';
+                    paint();
+                }, { grow: false }),
+            ]);
+        }
+
+        /** 新邮箱面板：先发码到新地址，再输码确认（通过才落库）。 */
+        function emailPanel() {
+            const input = el('input', {
+                class: 'input', id: 'security-email', type: 'email', placeholder: t('s_1i2pkg8'),
+            });
+            const codeInput = el('input', {
+                class: 'input', id: 'security-email-code', type: 'text', placeholder: t('s_doboo3'), maxlength: '6',
+            });
+            codeInput.setAttribute('inputmode', 'numeric');
+            const sent = view.pendingEmail !== '';
+
+            const send = smallCta(sent ? t('s_1fyr64c') : t('s_shrzdv'), async () => {
+                const checked = validateAll([
+                    fieldValidator({
+                        control: input,
+                        label: t('s_185tvls'),
+                        required: true,
+                        max: 120,
+                        pattern: PATTERNS.email,
+                        patternMessage: t('s_1u3yg0h'),
+                    }),
+                ]);
+                if (!checked.ok) {
+                    view.error = checked.message;
+                    paint();
+                    return;
+                }
+                await run(async () => {
+                    const result = await securityApi.changeEmail(input.value.trim());
+                    if (!result?.ok) {
+                        return result?.error || t('s_osck6n');
+                    }
+                    view.pendingEmail = input.value.trim();
+                    toast(t('s_akobwu'), 'success');
+                    return '';
+                });
+            });
+
+            const confirm = smallCta(t('s_yh7i0p'), async () => {
+                const value = codeInput.value.trim();
+                if (!/^\d{6}$/.test(value)) {
+                    view.error = t('s_1x20l1k');
+                    paint();
+                    return;
+                }
+                await run(async () => {
+                    const result = await securityApi.verifyEmail(view.pendingEmail, value);
+                    if (!result?.ok) {
+                        return result?.error || t('s_osck6n');
+                    }
+                    Object.assign(state.user, result.user || {});
+                    view.pendingEmail = '';
+                    view.panel = '';
+                    toast(t('s_vhfyh8'), 'success');
+                    await load();
+                    return '';
+                });
+            });
+
+            const cancel = smallCta(t('s_1589w37'), () => {
+                view.panel = '';
+                view.pendingEmail = '';
+                view.error = '';
+                paint();
+            }, { danger: false });
+
+            return el('div', { class: 'stack', 'data-gap': 'sm' }, [
+                el('p', { class: 'field-hint', text: t('s_1itmqlh') }),
+                input,
+                sent ? codeInput : null,
+                el('div', { class: 'row', 'data-gap': 'sm' }, [send, sent ? confirm : null, cancel]),
+            ]);
+        }
+
+        /** 两步验证那一行：开关本身不直接生效，先过码（开）或验密码（关）。 */
+        function twoFactorRow(info) {
+            const limited = profileLimited();
+            return el('div', { class: 'stack', 'data-gap': 'sm' }, [
+                switchRow({
+                    id: 'security-2fa',
+                    label: t('s_15msj8x'),
+                    description: t('s_k6xen8'),
+                    checked: info.twoFactorEnabled === true,
+                    disabled: view.busy || (!info.canEnable && info.twoFactorEnabled !== true),
+                    onChange: (value) => {
+                        view.error = '';
+                        if (value) {
+                            if (!info.canEnable) {
+                                view.error = t('s_rjdbfd');
+                                paint();
+                                return;
+                            }
+                            openEnable();
+                            return;
+                        }
+                        view.panel = 'disable2fa';
+                        paint();
+                    },
+                }),
+                el('p', {
+                    class: 'field-hint',
+                    text: info.canEnable
+                        ? (info.twoFactorEnabled
+                            ? t('s_1c59miq')
+                            : t('s_kzys7n'))
+                        : t('s_1qj48cz'),
+                }),
+                limited ? el('p', { class: 'field-hint', text: profileLimitHint() }) : null,
+            ]);
+        }
+
+        async function openEnable() {
+            await run(async () => {
+                const result = await securityApi.enableTwoFactor();
+                if (!result?.ok) {
+                    return result?.error || t('s_osck6n');
+                }
+                view.panel = 'enable2fa';
+                toast(t('s_1kc9jaw'), 'success');
+                return '';
+            });
+        }
+
+        /** 输码确认面板（开启两步验证用）。 */
+        function codePanel(title, kind) {
+            const input = el('input', {
+                class: 'input', id: 'security-2fa-code', type: 'text', placeholder: t('s_doboo3'), maxlength: '6',
+            });
+            input.setAttribute('inputmode', 'numeric');
+            const confirm = smallCta(t('s_1jjtbcm'), async () => {
+                const value = input.value.trim();
+                if (!/^\d{6}$/.test(value)) {
+                    view.error = t('s_1x20l1k');
+                    paint();
+                    return;
+                }
+                await run(async () => {
+                    const result = await securityApi.verifyTwoFactor(value);
+                    if (!result?.ok) {
+                        return result?.error || t('s_osck6n');
+                    }
+                    view.panel = '';
+                    toast(t('s_14jjxmk'), 'success');
+                    await load();
+                    return '';
+                });
+            });
+            const cancel = smallCta(t('s_1589w37'), () => {
+                view.panel = '';
+                view.error = '';
+                paint();
+            });
+            return el('div', { class: 'stack', 'data-gap': 'sm' }, [
+                el('p', { class: 'field-hint', text: `${title}：验证码已发到你的邮箱，10 分钟内有效。` }),
+                input,
+                el('div', { class: 'row', 'data-gap': 'sm' }, [confirm, cancel]),
+            ]);
+        }
+
+        /** 关两步验证要当前密码：会话被偷不等于能关掉第二道锁。 */
+        function passwordPanel() {
+            const input = el('input', {
+                class: 'input', id: 'security-2fa-password', type: 'password', placeholder: t('s_f478sb'),
+            });
+            const confirm = smallCta(t('s_1b3874r'), async () => {
+                if (!input.value) {
+                    view.error = t('s_1okxm8b');
+                    paint();
+                    return;
+                }
+                await run(async () => {
+                    const result = await securityApi.disableTwoFactor(input.value);
+                    if (!result?.ok) {
+                        return result?.error || t('s_osck6n');
+                    }
+                    view.panel = '';
+                    toast(t('s_gupxm1'), 'success');
+                    await load();
+                    return '';
+                });
+            });
+            const cancel = smallCta(t('s_1589w37'), () => {
+                view.panel = '';
+                view.error = '';
+                paint();
+            });
+            return el('div', { class: 'stack', 'data-gap': 'sm' }, [
+                el('p', { class: 'field-hint', text: t('s_kikkwz') }),
+                input,
+                el('div', { class: 'row', 'data-gap': 'sm' }, [confirm, cancel]),
+            ]);
+        }
+
+        /** 跑一个会改状态的动作：统一处理 loading、错误与重绘。 */
+        async function run(action) {
+            view.busy = true;
+            view.error = '';
+            paint();
+            try {
+                const message = await action();
+                if (message) {
+                    view.error = message;
+                }
+            } catch (error) {
+                view.error = error.message;
+            } finally {
+                view.busy = false;
+                paint();
+            }
+        }
+    }
+
+    /**
      * 隐私设置：是否在公开页展示自己的报名记录。
      * <p>
      * 这条开关此前只在保存资料时透传 `state.user.showRegistrations`（恒为 false），
@@ -365,7 +648,6 @@ export async function profilePage(context) {
         try {
             const saved = await profileApi.save({
                 nickname: state.user.nickname || '',
-                email: state.user.email || '',
                 bio: state.user.bio || '',
                 region: state.user.region || '',
                 socialMedia: state.user.socialMedia || '',
@@ -468,7 +750,6 @@ export async function profilePage(context) {
         try {
             const result = await profileApi.save({
                 nickname: state.user.nickname || state.user.username,
-                email: state.user.email || '',
                 bio: state.user.bio || '',
                 region: state.user.region || '',
                 socialMedia: state.user.socialMedia || '',
@@ -551,7 +832,9 @@ export async function profilePage(context) {
         }
         const user = state.user;
         const nickname = el('input', { class: 'input', id: 'profile-nickname', value: user.nickname || user.username });
-        const email = el('input', { class: 'input', id: 'profile-email', type: 'email', value: user.email || '' });
+        // 邮箱不在这里改：它是找回密码与两步验证的凭据，必须走「安全」里的
+        // 「更换邮箱」（验证码发到新地址、通过才落库）。放在这个表单里就会变成
+        // 「偷到会话 → 改邮箱 → 找回密码」的账号接管链。
         const bio = el('textarea', { class: 'textarea', id: 'profile-bio', rows: 3 });
         bio.value = user.bio || '';
         const region = el('input', {
@@ -569,13 +852,6 @@ export async function profilePage(context) {
 
         const validators = [
             fieldValidator({ control: nickname, label: t('s_1c2rfxc'), required: true, max: limit('nickname', 20) }),
-            fieldValidator({
-                control: email,
-                label: t('s_185tvls'),
-                max: 60,
-                pattern: /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/,
-                patternMessage: t('s_1u3yg0h'),
-            }),
             fieldValidator({ control: bio, label: t('s_ml9unw'), max: limit('bio', 200) }),
             fieldValidator({ control: region, label: t('s_11ftk7j'), max: limit('region', 40) }),
             fieldValidator({ control: social, label: t('s_1hnvqec'), max: 40 }),
@@ -588,7 +864,6 @@ export async function profilePage(context) {
             content: [
                 el('div', { class: 'form' }, [
                     field(t('s_1c2rfxc'), nickname),
-                    field(t('s_185tvls'), email),
                     field(t('s_ml9unw'), bio),
                     field(t('s_11ftk7j'), region),
                     field(t('s_1hnvqec'), social),
@@ -611,7 +886,6 @@ export async function profilePage(context) {
                         try {
                             const saved = await profileApi.save({
                                 nickname: nickname.value.trim(),
-                                email: email.value.trim(),
                                 bio: bio.value.trim(),
                                 region: region.value.trim(),
                                 socialMedia: social.value.trim(),

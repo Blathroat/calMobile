@@ -148,8 +148,36 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
   }
 });
 
-/** 公开页的查询目标：按 id 精确匹配，昵称兜底（昵称没有唯一约束，取最早注册的一个）。 */
-async function findPublicTarget({ id, nickname }) {
+/**
+ * PUT /api/v1/users/:id/two-factor  （管理员）
+ *
+ * 关闭某个账号的两步验证 —— **这是两步验证唯一的兜底出口**：用户的邮箱一旦用不了
+ * （离职、邮箱被回收、域名过期），没有这条路他就永远登不进来。
+ * 接口是幂等的：本来就关着也返回成功。
+ */
+router.put('/:id/two-factor', authenticate, async (req, res, next) => {
+  try {
+    requireAdmin(req, '只有管理员可以关闭他人的两步验证');
+    await mutate(res, next, async () => {
+      const enabled = (req.body || {}).enabled !== false;
+      if (enabled) {
+        throw badRequest('两步验证只能由本人开启（需要验证码）');
+      }
+      const row = await findUserById(req.params.id);
+      if (!row) {
+        throw notFound('用户不存在或已删除');
+      }
+      await query('UPDATE users SET two_factor_enabled = false, updated_at = now() WHERE id = $1', [
+        req.params.id,
+      ]);
+      return { user: statusPayload(row), twoFactorEnabled: false };
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** 公开页的查询目标：按 id 精确匹配，昵称兜底（昵称没有唯一约束，取最早注册的一个）。 */async function findPublicTarget({ id, nickname }) {
   if (id) {
     return findUserById(id);
   }

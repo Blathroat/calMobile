@@ -20,6 +20,7 @@ const { capabilities, assertNotLimited } = require('../domain/permissions');
 const { limits, bool } = require('../domain/validation');
 const { mutate } = require('../domain/respond');
 const { badRequest, notFound } = require('../domain/errors');
+const { issueCode, consumeCode, isCodeRejected, maskEmail } = require('../domain/otp');
 const {
   readNotificationPreferences, saveNotificationPreferences,
 } = require('../domain/settings');
@@ -96,11 +97,10 @@ router.put('/', authenticate, async (req, res, next) => {
         set('nickname', nickname);
       }
       if (has(body, 'email')) {
-        const email = String(body.email === undefined ? '' : body.email).trim();
-        if (email && (!EMAIL_PATTERN.test(email) || email.length > 120)) {
-          throw badRequest('邮箱格式不正确');
-        }
-        set('email', email);
+        // 邮箱**不能**在这里直接改：它是找回密码与两步验证的凭据，必须走
+        // `POST /profile/email` + `/profile/email/verify`（码发到新地址、通过才落库）。
+        // 否则「偷到会话 → 改邮箱 → 找回密码」就是一条完整的账号接管链。
+        throw badRequest('邮箱需要通过「验证新邮箱」修改');
       }
       if (has(body, 'bio')) {
         const bio = String(body.bio === undefined ? '' : body.bio).trim();
@@ -181,6 +181,206 @@ router.post('/password', authenticate, async (req, res, next) => {
       await revokeAllForUser(req.user.userId);
       return {};
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/v1/profile/security
+ * 安全设置：邮箱与验证状态、两步验证开关。
+ *
+ * `canEnable` 由后端算：两步验证只支持邮箱方式，没有已验证邮箱就不该让前端把开关点亮。
+ */
+router.get('/security', authenticate, async (req, res, next) => {
+  try {
+    const result = await query(`
+            SELECT email, email_verified, email_verified_at, two_factor_enabled
+              FROM users WHERE id = $1
+        `, [req.user.userId]);
+    if (result.rows.length === 0) {
+      throw notFound('用户不存在或已删除');
+    }
+    const row = result.rows[0];
+    const email = String(row.email || '');
+    res.json({
+      email,
+      emailVerified: row.email_verified === true,
+      emailVerifiedAt: row.email_verified_at ? new Date(row.email_verified_at).toISOString() : '',
+      twoFactorEnabled: row.two_factor_enabled === true,
+      canEnable: row.email_verified === true && email !== '',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/profile/2fa/enable
+ * 开启两步验证第一步：把验证码发到已验证邮箱。
+ *
+ * 开启也要求过码（而不只是按一下开关）：这既是「证明这个邮箱现在真的能收到信」，
+ * 也避免用户随手打开、然后在下一次登录时发现自己收不到码而进不去。
+ */
+router.post('/2fa/enable', authenticate, async (req, res, next) => {
+  try {
+    const found = await query(
+      'SELECT email, email_verified, two_factor_enabled FROM users WHERE id = $1',
+      [req.user.userId],
+    );
+    const row = found.rows[0];
+    if (!row) {
+      throw notFound('用户不存在或已删除');
+    }
+    if (row.two_factor_enabled === true) {
+      res.json({ ok: true, error: '', alreadyEnabled: true });
+      return;
+    }
+    if (row.email_verified !== true || !row.email) {
+      throw badRequest('请先验证邮箱，再开启两步验证');
+    }
+    const sent = await issueCode({
+      purpose: 'enable2fa',
+      email: row.email,
+      userId: req.user.userId,
+      ip: req.ip || '',
+    });
+    res.json({ ok: true, error: '', ...sent, maskedEmail: maskEmail(row.email) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/profile/2fa/enable/verify
+ * 开启两步验证第二步：验证码通过才真的打开开关。
+ */
+router.post('/2fa/enable/verify', authenticate, async (req, res, next) => {
+  try {
+    const code = String((req.body || {}).code || '').trim();
+    const found = await query('SELECT email FROM users WHERE id = $1', [req.user.userId]);
+    if (found.rows.length === 0) {
+      throw notFound('用户不存在或已删除');
+    }
+    let consumed;
+    try {
+      consumed = await consumeCode({ purpose: 'enable2fa', email: found.rows[0].email, code });
+    } catch (error) {
+      if (isCodeRejected(error)) {
+        res.json({ ok: false, error: error.message });
+        return;
+      }
+      throw error;
+    }
+    // 这枚码必须是为当前账号签发的（邮箱可能在这期间被改过）
+    if (consumed.userId !== req.user.userId) {
+      res.json({ ok: false, error: '验证码不正确或已失效' });
+      return;
+    }
+    await query('UPDATE users SET two_factor_enabled = true, updated_at = now() WHERE id = $1', [req.user.userId]);
+    res.json({ ok: true, error: '', twoFactorEnabled: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/profile/2fa/disable
+ * 关闭两步验证：要当前密码（拿到会话还不够，否则会话被偷就等于能关掉第二道锁）。
+ */
+router.post('/2fa/disable', authenticate, async (req, res, next) => {
+  try {
+    await mutate(res, next, async () => {
+      const password = String((req.body || {}).password || '');
+      if (!password) {
+        throw badRequest('请输入当前密码');
+      }
+      const found = await query('SELECT password_hash FROM users WHERE id = $1', [req.user.userId]);
+      const matched = found.rows.length > 0
+                && await bcrypt.compare(password, found.rows[0].password_hash);
+      if (!matched) {
+        throw badRequest('当前密码不正确');
+      }
+      await query('UPDATE users SET two_factor_enabled = false, updated_at = now() WHERE id = $1', [req.user.userId]);
+      return { twoFactorEnabled: false };
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/profile/email
+ * 改邮箱第一步：把验证码发到**新**地址。
+ *
+ * 「先验证新地址、通过后才落库」有两个好处：账号永远处于「邮箱已验证」的状态，
+ * 不需要再为「未验证」设计一套功能限制；也不存在「改成别人的邮箱」这种接管路径。
+ */
+router.post('/email', authenticate, async (req, res, next) => {
+  try {
+    const email = String((req.body || {}).email || '').trim();
+    if (!EMAIL_PATTERN.test(email) || email.length > 120) {
+      throw badRequest('邮箱格式不正确');
+    }
+    const current = await query('SELECT email FROM users WHERE id = $1', [req.user.userId]);
+    if (String(current.rows[0] ? current.rows[0].email : '').toLowerCase() === email.toLowerCase()) {
+      throw badRequest('新邮箱与当前邮箱相同');
+    }
+    const taken = await query('SELECT id FROM users WHERE lower(email) = lower($1)', [email]);
+    if (taken.rows.length > 0) {
+      res.json({ ok: false, error: '该邮箱已被其他账号使用' });
+      return;
+    }
+    const sent = await issueCode({
+      purpose: 'email',
+      email,
+      userId: req.user.userId,
+      ip: req.ip || '',
+    });
+    res.json({ ok: true, error: '', ...sent });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/profile/email/verify
+ * 改邮箱第二步：验证码通过才把新地址写进账号。
+ */
+router.post('/email/verify', authenticate, async (req, res, next) => {
+  try {
+    const email = String((req.body || {}).email || '').trim();
+    const code = String((req.body || {}).code || '').trim();
+    let consumed;
+    try {
+      consumed = await consumeCode({ purpose: 'email', email, code });
+    } catch (error) {
+      if (isCodeRejected(error)) {
+        res.json({ ok: false, error: error.message });
+        return;
+      }
+      throw error;
+    }
+    // 这枚码必须是为**当前登录用户**签发的，否则别人用自己账号发的改邮箱码也能拿来改你的账号
+    if (consumed.userId !== req.user.userId) {
+      res.json({ ok: false, error: '验证码不正确或已失效' });
+      return;
+    }
+    try {
+      await query(`
+                UPDATE users
+                   SET email = $2, email_verified = true, email_verified_at = now(), updated_at = now()
+                 WHERE id = $1
+            `, [req.user.userId, consumed.email]);
+    } catch (error) {
+      // 唯一索引冲突：这期间被别的账号占用了
+      if (error && error.code === '23505') {
+        res.json({ ok: false, error: '该邮箱已被其他账号使用' });
+        return;
+      }
+      throw error;
+    }
+    res.json({ ok: true, error: '', user: await loadUser(req.user.userId) });
   } catch (error) {
     next(error);
   }

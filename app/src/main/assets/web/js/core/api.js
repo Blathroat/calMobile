@@ -77,6 +77,9 @@ const ENDPOINTS = {
     bootstrap: () => ({ method: 'GET', path: '/bootstrap' }),
 
     'auth.login': () => ({ method: 'POST', path: '/auth/login' }),
+    // 两步验证的第二步与重发：密码对但还没过码时，后端只发一张预认证票，不发令牌。
+    'auth.loginVerify': () => ({ method: 'POST', path: '/auth/login/verify' }),
+    'auth.loginCode': () => ({ method: 'POST', path: '/auth/login/code' }),
     'auth.register': () => ({ method: 'POST', path: '/auth/register' }),
     'auth.registerVerify': () => ({ method: 'POST', path: '/auth/register/verify' }),
     'auth.forgotPassword': () => ({ method: 'POST', path: '/auth/password/forgot' }),
@@ -89,6 +92,14 @@ const ENDPOINTS = {
     'profile.password': () => ({ method: 'POST', path: '/profile/password' }),
     'notify.preferences': () => ({ method: 'GET', path: '/profile/notifications' }),
     'notify.savePreferences': () => ({ method: 'PUT', path: '/profile/notifications' }),
+
+    // 安全设置：邮箱（改邮箱要先验证新地址）与两步验证开关
+    'security.get': () => ({ method: 'GET', path: '/profile/security' }),
+    'security.enable2fa': () => ({ method: 'POST', path: '/profile/2fa/enable' }),
+    'security.verify2fa': () => ({ method: 'POST', path: '/profile/2fa/enable/verify' }),
+    'security.disable2fa': () => ({ method: 'POST', path: '/profile/2fa/disable' }),
+    'security.changeEmail': () => ({ method: 'POST', path: '/profile/email' }),
+    'security.verifyEmail': () => ({ method: 'POST', path: '/profile/email/verify' }),
 
     'exhibitions.list': (payload) => ({ method: 'GET', path: '/exhibitions', query: payload }),
     'exhibitions.month': (payload) => ({ method: 'GET', path: '/exhibitions/month', query: payload }),
@@ -116,6 +127,8 @@ const ENDPOINTS = {
     'users.list': (payload) => ({ method: 'GET', path: '/users', query: payload }),
     'users.get': (payload) => ({ method: 'GET', path: `/users/${encodeURIComponent(payload.id)}` }),
     'users.status': (payload) => ({ method: 'PUT', path: `/users/${encodeURIComponent(payload.id)}/status` }),
+    // 管理员关闭他人两步验证：用户邮箱用不了时唯一的兜底出口
+    'users.disable2fa': (payload) => ({ method: 'PUT', path: `/users/${encodeURIComponent(payload.id)}/two-factor` }),
     'users.public': (payload) => ({ method: 'GET', path: '/users/public', query: payload }),
 
     'search.query': (payload) => ({ method: 'GET', path: '/search', query: payload }),
@@ -311,6 +324,10 @@ const INVALIDATE = {
     'review.updateStatus': ['review.', 'registrations.', 'users.public'],
     'checkin.scan': ['review.', 'registrations.', 'users.public'],
     'users.status': ['users.'],
+    // 关闭他人两步验证后，用户列表里的账号状态要重新取
+    'users.disable2fa': ['users.'],
+    // 换邮箱会改资料里的邮箱，也会影响公开页
+    'security.verifyEmail': ['profile.', 'users.public'],
     // 分类由「管理-设置」维护，保存后展会分类缓存要一起作废。
     'settings.save': ['settings.', 'notify.', 'exhibitions.categories'],
     'settings.uiMode': ['settings.'],
@@ -522,6 +539,21 @@ export const api = {
         },
         guest: () => request('auth.guest'),
         /**
+         * 两步验证第二步：预认证票 + 验证码换真正的会话。
+         * 这一步才保存令牌 —— 第一步（login）只回一张票，密码对了还不算登录。
+         */
+        loginVerify: async (payload) => {
+            const result = await request('auth.loginVerify', payload);
+            if (result?.token) {
+                setToken(result.token);
+                setRefreshToken(result.refreshToken);
+            }
+            clearCache();
+            return result;
+        },
+        /** 两步验证：用同一张预认证票重发验证码（票据没被消费掉就还有效）。 */
+        loginCode: (ticket) => request('auth.loginCode', { ticket }),
+        /**
          * 找回密码第一步：请求发码。
          * 后端**不区分邮箱是否存在**（响应与耗时都一样），所以页面不能拿「返回成功」当成
          * 「这个邮箱注册过」，提示语要写「如果该邮箱已注册」。
@@ -547,6 +579,30 @@ export const api = {
         changePassword: (payload) => request('profile.password', payload),
         notifications: reader('notify.preferences'),
         saveNotifications: (patch) => request('notify.savePreferences', patch),
+    },
+
+    /**
+     * 安全设置：邮箱与两步验证。
+     *
+     * `get` 故意**不进缓存**：开关的状态必须跟库里的真实值一致，
+     * 拿一份 20 秒前的缓存去渲染「已开启」会让人以为改动没生效。
+     */
+    security: {
+        get: () => request('security.get'),
+        /** 开启两步验证第一步：发码到已验证邮箱（开启也要过码）。 */
+        enableTwoFactor: () => request('security.enable2fa'),
+        verifyTwoFactor: (code) => request('security.verify2fa', { code }),
+        disableTwoFactor: (password) => request('security.disable2fa', { password }),
+        /** 改邮箱第一步：码发到**新**地址。 */
+        changeEmail: (email) => request('security.changeEmail', { email }),
+        /** 改邮箱第二步：通过才落库（账号因此永远处于「邮箱已验证」状态）。 */
+        verifyEmail: async (email, code) => {
+            const result = await request('security.verifyEmail', { email, code });
+            if (result?.ok) {
+                clearCache();
+            }
+            return result;
+        },
     },
 
     // ── 展会 ───────────────────────────────────────────────────────
@@ -585,6 +641,8 @@ export const api = {
         list: reader('users.list'),
         get: reader('users.get', byId),
         setStatus: (id, status) => request('users.status', { id, status }),
+        /** 管理员关闭某账号的两步验证：用户邮箱用不了时唯一的兜底出口。 */
+        disableTwoFactor: (id) => request('users.disable2fa', { id, enabled: false }),
         publicProfile: reader('users.public'),
     },
     search: reader('search.query', (query) => ({ query })),
@@ -608,9 +666,11 @@ export const usersApi = api.users;
 export const profileApi = api.profile;
 export const settingsApi = api.settings;
 export const authApi = api.auth;
+/** 安全设置（邮箱与两步验证）：个人页要它，与 profile 分开是为了语义清楚。 */
+export const securityApi = api.security;
 
 // 具名导出：页面按域导入，例如 `import { exhibitions } from '../core/api.js'`。
 export const {
     bootstrap, auth, profile, exhibitions, registrations, review, checkIn, users,
-    search, settings,
+    search, settings, security,
 } = api;

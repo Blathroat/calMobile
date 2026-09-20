@@ -91,6 +91,22 @@ function generateCode() {
   return String(crypto.randomInt(0, 10 ** CODE_LENGTH)).padStart(CODE_LENGTH, '0');
 }
 
+/**
+ * 打码后的邮箱：`zhangsan@example.com` → `zh***@example.com`。
+ *
+ * 两步验证那一步要告诉用户「码发到哪个邮箱了」，但登录页可能被旁人看到，
+ * 所以只回打码后的地址（用户自己清楚完整地址是什么）。
+ */
+function maskEmail(email) {
+  const text = normalizeEmail(email);
+  const at = text.indexOf('@');
+  if (at <= 0) {
+    return text ? '***' : '';
+  }
+  const name = text.slice(0, at);
+  return `${name.slice(0, Math.min(2, name.length))}***${text.slice(at)}`;
+}
+
 /** 用途校验：写错用途会让 CHECK 约束报 500，不如在这里给 400（这是代码缺陷，不是用户操作失败）。 */
 function assertPurpose(purpose) {
   if (!PURPOSE_KEYS.includes(purpose)) {
@@ -250,7 +266,7 @@ async function consumeCode(options = {}) {
   }
 
   const result = await query(`
-        SELECT id, code_hash, payload, attempts, expires_at
+        SELECT id, user_id, code_hash, payload, attempts, expires_at
           FROM email_codes
          WHERE purpose = $1 AND lower(email) = $2 AND consumed_at IS NULL
          ORDER BY created_at DESC
@@ -289,7 +305,7 @@ async function consumeCode(options = {}) {
     // 并发：同一枚码被两个请求同时提交，只有一个能消费到。
     throw new CodeRejected('验证码已被使用，请重新获取');
   }
-  return { email, payload: row.payload || null };
+  return { email, userId: row.user_id || null, payload: row.payload || null };
 }
 
 module.exports = {
@@ -303,6 +319,7 @@ module.exports = {
   CodeRejected,
   isCodeRejected,
   normalizeEmail,
+  maskEmail,
   hashCode,
   sameHash,
   generateCode,
