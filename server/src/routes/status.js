@@ -277,6 +277,43 @@ async function runChecks({ database, databaseMs, migrations, migrationsMs, count
     return '两个密钥都不是模板里的占位值';
   });
 
+  /**
+   * 邮件通道：验证码靠它出去，配错了用户就卡在注册页 —— 所以要在状态页上一眼看到。
+   *
+   * 这里**不做实时 SMTP 握手**（`transporter.verify()`）：那会让状态页的可用性取决于
+   * 邮件服务商，而且多数中继对 verify 有频率限制。改成「配置是否完整」+
+   * 「最近 24 小时的发信失败数」（读 `mail_log`），既真实又不会把状态页拖住。
+   */
+  await run('邮件通道', async () => {
+    const { mailConfig, describeMailConfig } = require('../config/mail');
+    const mail = describeMailConfig(mailConfig);
+    if (!mail.configured) {
+      throw new Error(mail.problems.join('；'));
+    }
+    const where = mail.transport === 'smtp'
+      ? `SMTP ${mail.smtpHost}:${mail.smtpPort}${mail.smtpSecure ? '（隐式 TLS）' : ''}`
+        + `${mail.smtpAuth ? ' + 认证' : ''}，发件人 ${mail.fromAddress}`
+      : `${mail.transport}（${mail.transport === 'console' ? '邮件只写日志，未真正发送' : '仅测试用'}）`;
+
+    if (!database.connected) {
+      return `${where}；数据库不可用，这次统计不了发信失败`;
+    }
+    let failed = 0;
+    try {
+      const result = await probeQuery('发信统计', `
+                SELECT count(*)::int AS total FROM mail_log
+                 WHERE status = 'failed' AND created_at > now() - interval '24 hours'
+            `);
+      failed = Number(result.rows[0].total);
+    } catch (error) {
+      throw new Error(`${where}；mail_log 读不到（迁移 0004 没跑？）：${safeMessage(error)}`);
+    }
+    if (failed > 0) {
+      throw new Error(`${where}；最近 24 小时有 ${failed} 封发送失败，明细见 mail_log`);
+    }
+    return `${where}；最近 24 小时无发送失败`;
+  });
+
   await run('数据库连通', () => {
     if (!database.connected) {
       throw new Error(database.error || '数据库没有应答');

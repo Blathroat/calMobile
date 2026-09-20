@@ -7,7 +7,8 @@
 | `src/index.js` | 入口：中间件、路由挂载、统一错误处理 |
 | `src/routes/` | 按资源分的路由（认证、资料、展会、报名、审核、核销、用户、搜索、设置、启动数据） |
 | `src/domain/` | 业务层：状态词汇、SQL 片段、响应映射、权限、校验、设置、会话 |
-| `src/config/` | 连接池、迁移与示例数据、JWT 配置 |
+| `src/config/` | 连接池、迁移与示例数据、JWT 与邮件通道配置 |
+| `src/services/` | 邮件发送适配层与验证码邮件文案（`mailer.js` / `mail-templates.js`） |
 | `src/middleware/auth.js` | JWT 认证中间件 |
 | `src/routes/status.js` + `src/status-page.js` | 健康状态页：JSON 报告 + 单文件中文 HTML |
 
@@ -29,6 +30,11 @@ pwsh -File ..\scripts\db.ps1 start
 
 npm run db:migrate            # 可反复执行，只跑没跑过的迁移
 npm run db:seed               # 示例账号与展会（可反复执行）
+
+# 起本地收件箱（Mailpit 容器：SMTP 1025 / 网页 8025），验证码邮件往这里发
+pwsh -File ..\scripts\mail.ps1 start
+# 不想开容器也行：把 .env 的 MAIL_TRANSPORT 改成 console，整封邮件（含验证码）进后端日志
+
 npm run dev                   # nodemon，默认 http://127.0.0.1:3000
 ```
 
@@ -64,6 +70,31 @@ adb reverse tcp:3000 tcp:3000
 ```
 
 改了 `src/*.js` 之后**必须重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
+
+### 邮件：验证码与两步验证的通道
+
+验证码走**托管中继或本地收件箱**，不在应用服务器上自建 SMTP —— 自建的账看着免费，实则最贵：国内云默认封 25 端口、要固定公网 IP 的反解析、要 SPF/DKIM/DMARC 与几周 IP 预热，而验证码一旦进垃圾箱，注册流程就直接废掉。
+
+| 通道（`MAIL_TRANSPORT`） | 用途 | 邮件去哪 |
+| --- | --- | --- |
+| `console` | 本地零配置开发：整封邮件（含验证码）打进后端日志 | 你看日志 |
+| `smtp` | 开发指向 Mailpit，生产指向阿里云邮件推送 / 腾讯云 SES / Resend 等 | 收件箱 |
+| `memory` | 只给自动化测试用；**生产配了也会被拒并降级为 `smtp`** | 用例内存 |
+
+```bash
+pwsh -File scripts\mail.ps1 start    # 起 Mailpit（容器 calmobile-mail，SMTP 1025 / 收件箱 8025）
+pwsh -File scripts\mail.ps1 status   # 容器状态 + 邮件数与最近几封
+pwsh -File scripts\mail.ps1 clear    # 跑回归前清空，免得看错邮件
+```
+
+收件箱在 http://127.0.0.1:8025 ，`.env` 里对应 `MAIL_SMTP_HOST=127.0.0.1`、`MAIL_SMTP_PORT=1025`、`MAIL_SMTP_SECURE=false`。生产换成托管中继的 SMTP 地址与凭据即可，代码不动。
+
+两条工程约定（都有对应用例钉住）：
+
+1. **发码接口先落库、立刻回包，后台发信**：前端 `api.js` 的请求超时是 3 秒，同步等一次 SMTP 往返（本机 Mailpit 实测约 1.3 秒，跨境中继更久）会把注册页卡成超时错误。发信结果只写 `mail_log`，页面不等它。
+2. **发信失败要让用户看见**：`send()` 不抛异常，返回 `{ ok:false, error }`；`/status` 的「邮件通道」自检项显示通道配置与最近 24 小时的失败数。「发信成功但用户收不到」是最难查的一类故障，留痕与自检比日志翻滚有用得多。
+
+邮件文案在 `src/services/mail-templates.js`，那是**唯一允许写死后端用户可见中文的地方**（前端文案才走 `res/values/strings_frontend.xml`）：中英双语同封，不放链接（带链接既是钓鱼邮件的典型特征、会拉低送达率，也养成用户点邮件里链接的坏习惯），品牌名进 HTML 前转义、进主题前清换行（品牌名来自管理员设置，不清就是邮件头注入）。
 
 ## 响应约定
 
@@ -214,7 +245,8 @@ adb reverse tcp:3000 tcp:3000
 - **展会日期只存 `exhibition_date`**，年 / 月 / 日由 SQL 派生（`src/domain/queries.js` 的 `EXHIBITION_COLUMNS`），不会出现三者互相漂移；日期一律用 `to_char` 取成字符串，避免时区把日期挪一天。
 - **报名记录不冗余展会标题 / 时间 / 地点**，读取时 JOIN 展会表，展会改期后不会两边不一致。
 - 迁移按编号记录在 `schema_migrations`，只跑没跑过的步骤；新增字段请追加新步骤，不要改已发布的那一步。
-- 表：`users`、`exhibitions`、`exhibition_fields`、`registrations`、`app_settings`、`notification_preferences`、`refresh_tokens`、`notifications`、`schema_migrations`。
+- **邮箱是身份，不只是联系方式**：`users.email` 大小写无关唯一（只有空串例外，允许留空的老数据并存），`email_verified` / `email_verified_at` 记验证状态，`two_factor_enabled` 是两步验证开关。验证码只存哈希；注册用途的待建账号暂存在 `email_codes.payload`（密码存哈希）——「先验证邮箱、通过后才建账号」因此不会往 `users` 里留下未验证的半成品。两步验证的预认证票在 `preauth_tickets`，发信留痕在 `mail_log`。
+- 表：`users`、`exhibitions`、`exhibition_fields`、`registrations`、`app_settings`、`notification_preferences`、`refresh_tokens`、`notifications`、`email_codes`、`preauth_tickets`、`mail_log`、`schema_migrations`。
 
 ## 环境变量
 
@@ -227,6 +259,14 @@ adb reverse tcp:3000 tcp:3000
 | `JWT_REFRESH_SECRET` | 刷新令牌密钥 | 至少 32 个随机字符 |
 | `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | 令牌有效期 | `15m` / `7d` |
 | `CORS_ORIGIN` | 允许的来源 | WebView 场景用 `*` |
+| `MAIL_TRANSPORT` | 邮件通道：`console` / `smtp` / `memory`（生产禁用） | 开发 `smtp`（Mailpit），或 `console` |
+| `MAIL_SMTP_HOST` / `MAIL_SMTP_PORT` | SMTP 地址与端口 | `127.0.0.1` / `1025`（Mailpit）、`465`（隐式 TLS） |
+| `MAIL_SMTP_SECURE` | 是否隐式 TLS；缺省按端口推断（465 → true） | `false` / `true` |
+| `MAIL_SMTP_USER` / `MAIL_SMTP_PASSWORD` | SMTP 认证凭据；不填则匿名（Mailpit 不需要） | 托管中继的账号 / API Key |
+| `MAIL_FROM_ADDRESS` | 发件人地址；**生产必须显式配置** | `no-reply@你的域名` |
+| `MAIL_REPLY_TO` | 回复地址（可选） | `support@你的域名` |
+| `MAIL_SEND_TIMEOUT_MS` | 单封发信超时 | `8000` |
+| `MAIL_SMTP_TLS_REJECT_UNAUTHORIZED` | 只有自签名内网中继才该关掉 | `false`（默认不关） |
 | `LOG_LEVEL` | `quiet` 可关掉请求日志 | `info` |
 
 真实 `.env` 不得提交；`.env.example` 里放占位值。
@@ -248,7 +288,7 @@ npm run lint
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
 - 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、带上错误原文，不抛 500）。
 
-`src/**/*.test.js`（jest，30 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、以及**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500）。
+`src/**/*.test.js`（jest，59 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500），以及邮件层：通道选择与「生产禁用 `memory`」（`config/mail.test.js`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.js`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.js`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `npm test` 的前置条件——测试不该依赖一个容器。
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 

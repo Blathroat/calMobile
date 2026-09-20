@@ -737,6 +737,39 @@ const checks = [
     contains: ['migrations', 'pool', 'endpoints'],
   },
   {
+    id: 'backend-mail-channel',
+    // 邮件通道：三条路（console / smtp / memory），且 memory 在生产必须被拦 ——
+    // 否则线上会「发信成功」而用户永远收不到验证码。nodemailer 只在 smtp 分支延迟加载。
+    file: 'server/src/services/mailer.js',
+    contains: ['memory', 'console', 'smtp', 'nodemailer', 'outbox', 'closeTransporter'],
+  },
+  {
+    id: 'backend-mail-config-guards',
+    file: 'server/src/config/mail.js',
+    contains: ["['console', 'smtp', 'memory']", '生产环境不能用 memory', 'MAIL_SMTP_HOST',
+      'MAIL_FROM_ADDRESS', 'configured', 'describeMailConfig'],
+  },
+  {
+    id: 'backend-mail-templates-no-links',
+    // 验证码邮件不放链接（钓鱼特征会拉低送达率）；主题与品牌名要先清洗（邮件头注入）
+    file: 'server/src/services/mail-templates.js',
+    contains: ['verificationMail', 'sanitizeHeader', 'escapeHtml', 'subjectSuffix'],
+    notContains: ['http://', 'https://', '<a href'],
+  },
+  {
+    id: 'backend-mail-dev-sink',
+    // 本地收件箱：Mailpit 容器（SMTP 1025 / 收件箱 8025），不进真实邮箱
+    file: 'scripts/mail.ps1',
+    contains: ['calmobile-mail', 'axllent/mailpit', '1025', '8025', 'console'],
+  },
+  {
+    id: 'backend-mail-migration',
+    // 邮箱从「联系方式」升级为「身份」：唯一索引 + 验证码 / 预认证票 / 发信留痕三张表
+    file: 'server/src/config/migrate.js',
+    contains: ['0004-email-verification', 'email_verified', 'two_factor_enabled',
+      'users_email_unique_idx', 'email_codes', 'preauth_tickets', 'mail_log'],
+  },
+  {
     id: 'docs-frontend-backend-boundary',
     file: 'README.md',
     contains: ['前后端边界', 'core/api.js', 'adb reverse', 'server/test/api.test.js']

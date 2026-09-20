@@ -150,6 +150,79 @@ const STEPS = [
         ALTER TABLE users ADD COLUMN IF NOT EXISTS ui_mode TEXT NOT NULL DEFAULT 'auto';
         `,
   },
+  {
+    id: '0004-email-verification',
+    sql: `
+        -- 邮箱从「联系方式」升级为「身份」：验证过的邮箱是找回密码与两步验证的唯一凭据，
+        -- 因此它必须唯一（此前只有 username 是 UNIQUE，重名邮箱只在注册路由里查一次，
+        -- 并发下两条注册能写成同一个邮箱，之后按邮箱找回密码就会打错账号）。
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT false;
+
+        -- 存量账号回填为已验证：后端尚未公网部署，这些账号是在「注册要求邮箱验证」
+        -- 上线之前建的，不回填的话它们一迁移就成了没有验证邮箱的账号，找不回密码也开不了两步验证。
+        UPDATE users
+           SET email_verified = true, email_verified_at = now()
+         WHERE email <> '' AND email_verified = false;
+
+        -- 大小写无关的唯一性；空串不参与唯一（允许留空的老数据并存）。
+        -- 已存在重复邮箱时这一步会失败并回滚整个 0004，**必须先人工清掉重复**再迁移。
+        CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx
+            ON users (lower(email)) WHERE email <> '';
+
+        -- 验证码：一行一个用途，只存哈希，不存明文码。
+        -- purpose=register 时 user_id 为空，待建账号暂存在 payload 里（密码存哈希）——
+        -- 这样「先验证邮箱、通过后才建账号」不会往 users 表里留下未验证的半成品。
+        CREATE TABLE IF NOT EXISTS email_codes (
+            id          TEXT PRIMARY KEY,
+            purpose     TEXT NOT NULL
+                        CHECK (purpose IN ('register', 'reset', 'login', 'enable2fa', 'email')),
+            email       TEXT NOT NULL,
+            user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
+            code_hash   TEXT NOT NULL,
+            payload     JSONB,
+            attempts    INTEGER NOT NULL DEFAULT 0,
+            expires_at  TIMESTAMPTZ NOT NULL,
+            consumed_at TIMESTAMPTZ,
+            ip          TEXT NOT NULL DEFAULT '',
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        CREATE INDEX IF NOT EXISTS email_codes_lookup_idx
+            ON email_codes (purpose, lower(email), created_at DESC);
+        CREATE INDEX IF NOT EXISTS email_codes_expiry_idx ON email_codes (expires_at);
+
+        -- 两步验证的预认证票：密码对了但还没过码时发这个，单次使用、可作废。
+        -- 访问令牌只在这一步之后签发，因此「密码对了」不等于「已登录」。
+        CREATE TABLE IF NOT EXISTS preauth_tickets (
+            id          TEXT PRIMARY KEY,
+            user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash  TEXT NOT NULL UNIQUE,
+            attempts    INTEGER NOT NULL DEFAULT 0,
+            expires_at  TIMESTAMPTZ NOT NULL,
+            consumed_at TIMESTAMPTZ,
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        CREATE INDEX IF NOT EXISTS preauth_tickets_user_idx ON preauth_tickets (user_id);
+
+        -- 发信留痕：送达率是这类功能的第一风险，没有留痕就无从排查
+        -- （status 页的「邮件通道」自检项读的也是这张表）。
+        CREATE TABLE IF NOT EXISTS mail_log (
+            id          TEXT PRIMARY KEY,
+            to_email    TEXT NOT NULL,
+            purpose     TEXT NOT NULL DEFAULT '',
+            transport   TEXT NOT NULL,
+            status      TEXT NOT NULL CHECK (status IN ('sent', 'failed')),
+            error       TEXT NOT NULL DEFAULT '',
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        CREATE INDEX IF NOT EXISTS mail_log_created_idx ON mail_log (created_at DESC);
+        CREATE INDEX IF NOT EXISTS mail_log_failed_idx ON mail_log (status, created_at DESC);
+        `,
+  },
 ];
 
 const DEFAULT_SETTINGS = {
