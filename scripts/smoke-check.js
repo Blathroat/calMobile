@@ -362,8 +362,10 @@ const checks = [
   // ── 构建与清单 ──────────────────────────────────────────────────
   {
     id: 'android-gradle-files',
+    // AGP 9 + Gradle 9：属性用赋值式（`compileSdk = 36.1`），方法调用式在 Gradle 10 会被移除
     file: 'app/build.gradle',
-    contains: ['compileSdk 34', 'targetSdk 34', "namespace 'com.example.calmobile'"]
+    contains: ['compileSdk = 36.1', 'targetSdk = 34', "namespace = 'com.example.calmobile'",
+      'sourceCompatibility JavaVersion.VERSION_17']
   },
   {
     id: 'android-manifest-main-activity',
@@ -381,7 +383,7 @@ const checks = [
   {
     id: 'gradle-wrapper-properties',
     file: 'gradle/wrapper/gradle-wrapper.properties',
-    contains: ['distributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-bin.zip']
+    contains: ['distributionUrl=https\\://services.gradle.org/distributions/gradle-9.7.1-bin.zip']
   },
   {
     id: 'gradle-wrapper-jar',

@@ -371,7 +371,7 @@ adb reverse tcp:3000 tcp:3000
 
 ## 构建、测试与运行
 
-环境要求：Android Studio、JDK 17、Android SDK 34、Gradle Wrapper 8.5；Windows 命令如下，Linux/macOS 将 `gradlew.bat` 换为 `./gradlew`。
+环境要求：Android Studio、JDK 17、Android SDK 36.1（`compileSdk`）、Gradle Wrapper 9.7.1（Android Gradle Plugin 9.4.1）；Windows 命令如下，Linux/macOS 将 `gradlew.bat` 换为 `./gradlew`。
 
 ```bash
 # 结构检查（清单、桥接契约、页面文件、设计令牌、动效层、内置依赖、文档）

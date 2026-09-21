@@ -3,29 +3,27 @@ plugins {
 }
 
 android {
-    namespace 'com.example.calmobile'
-    compileSdk 34
-    buildToolsVersion "36.0.0"
+    namespace = 'com.example.calmobile'
+    compileSdk = 36.1
+    buildToolsVersion = "37.0.0"
 
     defaultConfig {
-        applicationId 'com.example.calmobile'
-        minSdk 24
-        targetSdk 34
-        versionCode 1
-        versionName '0.1.0'
+        applicationId = 'com.example.calmobile'
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 1
+        versionName = '0.1.0'
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    
-
 }
 
 dependencies {
     // Gson：WebAppBridge 的 JSON 编解码，前端与原生之间唯一的序列化依赖。
-    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'com.google.code.gson:gson:2.14.0'
 
     // 测试
     testImplementation 'junit:junit:4.13.2'
