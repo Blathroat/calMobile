@@ -62,6 +62,29 @@ async function getClient() {
 }
 
 /**
+ * 事务外壳：回调拿到 client，抛错自动回滚。
+ *
+ * `BEGIN` / `COMMIT` / `ROLLBACK` 与连接归还都在这里，调用方只写业务语句：
+ * 手写这一套时漏掉 `release()` 会把连接池占满，正是要避免的写法。
+ * @param {(client: Object) => Promise<any>} run 事务体
+ * @returns {Promise<any>} 事务体的返回值
+ */
+async function transaction(run) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await run(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * 关闭连接池
  */
 async function close() {
@@ -72,6 +95,7 @@ async function close() {
 module.exports = {
   query,
   getClient,
+  transaction,
   close,
   pool,
 };

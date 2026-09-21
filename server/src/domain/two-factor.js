@@ -13,7 +13,7 @@
  */
 
 const crypto = require('node:crypto');
-const { query } = require('../config/pool');
+const { query, transaction } = require('../config/pool');
 const { CodeRejected, isCodeRejected, consumeCode } = require('./otp');
 const totp = require('./totp');
 
@@ -72,19 +72,28 @@ async function consumeBackupCode(userId, code) {
   return used.rowCount === 1;
 }
 
-/** 生成一批备用码（**旧的全部作废**），返回明文列表 —— 只在这一刻能看到。 */
+/**
+ * 生成一批备用码（**旧的全部作废**），返回明文列表 —— 只在这一刻能看到。
+ *
+ * 作废与写入放在同一个事务里：中途失败不会留下「旧码已删、新码没写」的账号 ——
+ * 那等于把两步验证的最后一道退路悄悄拆掉。`unnest` 让 10 枚码只走一次往返，
+ * 不再逐条 `await`（也不需要 `Promise.all` 那种「一半成功」的中间态）。
+ */
 async function regenerateBackupCodes(userId, count = totp.BACKUP_CODE_COUNT) {
   const codes = totp.generateBackupCodes(count);
-  await query('DELETE FROM backup_codes WHERE user_id = $1', [userId]);
-  await Promise.all(
-    codes.map((code) =>
-      query('INSERT INTO backup_codes (id, user_id, code_hash) VALUES ($1, $2, $3)', [
-        crypto.randomUUID(),
-        userId,
-        totp.hashBackupCode(code),
-      ]),
-    ),
-  );
+  const ids = codes.map(() => crypto.randomUUID());
+  const hashes = codes.map((code) => totp.hashBackupCode(code));
+  await transaction(async (client) => {
+    await client.query('DELETE FROM backup_codes WHERE user_id = $1', [userId]);
+    await client.query(
+      `
+        INSERT INTO backup_codes (id, user_id, code_hash)
+        SELECT id, $1, code_hash
+          FROM unnest($2::text[], $3::text[]) AS t(id, code_hash)
+      `,
+      [userId, ids, hashes],
+    );
+  });
   return codes;
 }
 
