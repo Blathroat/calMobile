@@ -2,7 +2,7 @@
 
 ## 项目结构
 
-Android 客户端位于 `app/`，使用 Java 17。启动页是 `WebShellActivity`，它是承载 `newUI/` 设计的 WebView 容器；前端页面、样式与脚本位于 `app/src/main/assets/web/`，原生侧**只剩系统能力**（`app/src/main/java/com/example/calmobile/`：系统日历、通知与摄像头权限、媒体选择与落盘、分享、导出、系统栏配色）。业务数据（展会、报名、用户、认证、设置）全部由 `server/` 的 Express + PostgreSQL 后端提供，原生不再持有任何数据实现。旧 Java/XML 页面已随 WebView 迁移删除，界面只有 `WebShellActivity` 一个入口；`res/` 只保留 `AppTheme` 与应用名/日历提示等原生必需资源，前端文案在 `res/values/strings_frontend.xml`（由 `scripts/extract-strings.js` 生成）。单元测试在 `app/src/test/`。`server/` 是独立的 Node.js、Express 与 PostgreSQL 服务，不属于 Gradle 模块。构建工具链是 **Gradle 9.7.1 + AGP 9.4.1**（`compileSdk 36.1`、JDK 17）：AGP 9 的 Groovy DSL 用**赋值式**（`compileSdk = 36.1`、`namespace = '…'`），方法调用式（`compileSdk 34`）在 Gradle 10 会被移除；`android.enableJetifier` 已随 AGP 9.0 删除，不要加回来。项目说明、架构、需求、设计令牌和路线图统一维护在根目录 `README.md`，后端运行细节维护在 `server/README.md`。
+Android 客户端位于 `app/`，使用 Java 17。启动页是 `WebShellActivity`，它是承载 `newUI/` 设计的 WebView 容器；前端页面、样式与脚本位于 `app/src/main/assets/web/`，原生侧**只剩系统能力**（`app/src/main/java/com/example/calmobile/`：系统日历、通知与摄像头权限、媒体选择与落盘、分享、导出、系统栏配色）。业务数据（展会、报名、用户、认证、设置）全部由 `server/` 的 Express + PostgreSQL 后端提供，原生不再持有任何数据实现。旧 Java/XML 页面已随 WebView 迁移删除，界面只有 `WebShellActivity` 一个入口；`res/` 只保留 `AppTheme` 与应用名/日历提示等原生必需资源，前端文案在 `res/values/strings_frontend.xml`（由 `scripts/extract-strings.js` 生成）。单元测试在 `app/src/test/`。`server/` 是独立的 Node.js、Express 与 PostgreSQL 服务，不属于 Gradle 模块。构建工具链是 **Gradle 9.7.1 + AGP 9.3.0**（`compileSdk 36.1`、JDK 17；AGP 版本不要高于本机 Android Studio 支持的上限，Studio 会在同步时直接拦下）：AGP 9 的 Groovy DSL 用**赋值式**（`compileSdk = 36.1`、`namespace = '…'`），方法调用式（`compileSdk 34`）在 Gradle 10 会被移除；`android.enableJetifier` 已随 AGP 9.0 删除，不要加回来。项目说明、架构、需求、设计令牌和路线图统一维护在根目录 `README.md`，后端运行细节维护在 `server/README.md`。
 
 ## 构建、测试与开发
 
