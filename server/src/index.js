@@ -77,7 +77,7 @@ for (const [prefix, router] of Object.entries(routes)) {
 //
 // **生产环境默认关闭**：这两个接口会暴露迁移清单、各表行数、接口清单，失败时还带 pg 的
 // 错误原文，属于运维排查入口而不是公开接口。需要时用 `ENABLE_STATUS_PAGE=true` 显式打开，
-// 并由反向代理做来源限制（见根目录 README 的「上线部署清单与开销」）。
+// 并由反向代理做来源限制（见 `docs/deployment.md` 的「上线部署清单与开销」）。
 const statusRoutes = require('./routes/status');
 if (runtime.statusPageEnabled) {
   app.use('/api/v1/status', statusRoutes);

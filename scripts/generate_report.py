@@ -6,11 +6,10 @@ CalMobile 课程报告生成脚本
 """
 
 from docx import Document
-from docx.shared import Inches, Pt, Cm, Emu
+from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
-import os
 
 def set_run_font(run, font_name, font_size, bold=False):
     """设置 run 的字体"""
@@ -52,39 +51,11 @@ def add_indented_paragraph(doc, text, bold=False):
     set_run_font(run, '宋体', 12, bold)
     return p
 
-def add_image_with_text(doc, image_path, text_list, width=Inches(2.5)):
-    """添加图片和文本的组合，图片在右，文本在左，支持首行缩进"""
-    # 创建表格实现左右布局
-    table = doc.add_table(rows=1, cols=2)
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-    
-    # 设置表格宽度
-    table.autofit = False
-    
-    # 左侧文本
-    cell_text = table.rows[0].cells[0]
-    cell_text.width = Inches(3.5)
-    
-    # 添加所有文本段落
-    for i, text in enumerate(text_list):
-        if i == 0:
-            p = cell_text.paragraphs[0]
-        else:
-            p = cell_text.add_paragraph()
-        p.paragraph_format.first_line_indent = Pt(24)
-        run = p.add_run(text)
-        set_run_font(run, '宋体', 12)
-    
-    # 右侧图片
-    cell_img = table.rows[0].cells[1]
-    cell_img.width = Inches(3)
-    if os.path.exists(image_path):
-        p = cell_img.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run()
-        run.add_picture(image_path, width=width)
-    
-    # 添加空行
+def add_text_block(doc, text_list):
+    """添加一组首行缩进的正文段落（功能展示各节用）。"""
+    for text in text_list:
+        add_indented_paragraph(doc, text)
+    # 段落之间留一行空白
     doc.add_paragraph()
 
 def create_report():
@@ -118,7 +89,7 @@ def create_report():
     run = info.add_run('目标平台：Android (API 34)')
     set_run_font(run, '宋体', 12)
     info.add_run('\n')
-    run = info.add_run('开发工具：Android Studio + Gradle 8.5')
+    run = info.add_run('开发工具：Android Studio + Gradle 9.7.1（AGP 9.3.0）')
     set_run_font(run, '宋体', 12)
     
     doc.add_page_break()
@@ -131,7 +102,7 @@ def create_report():
         'CalMobile 是一款基于 Android 平台的展会排期与管理移动应用。该应用面向展会组织者、'
         '展商和普通用户，提供展会日历浏览、展会详情查看、在线报名、个人资料管理、'
         '展商后台管理和管理员控制等完整功能。项目采用 Java 语言开发，基于 Android SDK API 34，'
-        '使用 Gradle 8.5 构建，旨在为展会行业提供一个高效、便捷的移动管理工具。'
+        '使用 Gradle 9.7.1（Android Gradle Plugin 9.3.0）构建，旨在为展会行业提供一个高效、便捷的移动管理工具。'
     )
     set_run_font(run, '宋体', 12)
     
@@ -275,7 +246,7 @@ def create_report():
     # 4.1 登录页面
     doc.add_page_break()
     doc.add_heading('4.1 登录页面', 2)
-    add_image_with_text(doc, 'docs/screenshots/01_login_page.png', [
+    add_text_block(doc, [
         '应用启动后首先显示登录页面。用户可以输入用户名和密码进行登录，'
         '也可以选择注册新账号。应用预置了测试账号：demo（管理员）、'
         'exhibitor（展商）、user（普通用户）。',
@@ -287,7 +258,7 @@ def create_report():
     # 4.2 首页展会日历
     doc.add_page_break()
     doc.add_heading('4.2 首页展会日历', 2)
-    add_image_with_text(doc, 'docs/screenshots/02_home_page.png', [
+    add_text_block(doc, [
         '登录后进入首页，展示月视图展会日历。有展会的日期显示标记，'
         '用户可以点击日期查看当天的展会列表。首页还提供顶部搜索入口，'
         '方便用户快速搜索展会。',
@@ -298,7 +269,7 @@ def create_report():
     # 4.3 底部导航
     doc.add_page_break()
     doc.add_heading('4.3 底部导航', 2)
-    add_image_with_text(doc, 'docs/screenshots/03_profile_tab.png', [
+    add_text_block(doc, [
         '应用采用 4 标签底部导航：首页、展商、管理、个人。'
         '不同角色的用户可以看到不同的导航标签，例如普通用户只能看到首页和个人标签。',
         '点击标签时在 WebView 的内容区域切换页面（哈希路由），并保持底部导航栏可见。'
@@ -308,18 +279,18 @@ def create_report():
     # 4.4 展商后台
     doc.add_page_break()
     doc.add_heading('4.4 展商后台', 2)
-    add_image_with_text(doc, 'docs/screenshots/04_exhibitor_tab.png', [
+    add_text_block(doc, [
         '展商可以访问展商后台，管理自己创建的展会。支持创建、编辑、删除展会，'
         '以及管理展会报名。展商后台提供展会列表，显示展会名称、状态、报名人数等信息。',
         '展商可以设置展会状态（报名中、截止报名、已结束），'
-        '并查看和审核报名记录。新建/编辑展会使用独立的 ExhibitionFormActivity 页面，'
+        '并查看和审核报名记录。新建 / 编辑展会是 WebView 里的独立页面（一屏一 ES 模块），'
         '提供完整的表单输入体验。',
     ])
     
     # 4.5 管理后台
     doc.add_page_break()
     doc.add_heading('4.5 管理后台', 2)
-    add_image_with_text(doc, 'docs/screenshots/05_admin_tab.png', [
+    add_text_block(doc, [
         '管理员可以访问管理后台，管理所有用户和展会。支持用户封禁/解封、'
         '展会锁定/解锁、数据导出等功能。',
         '管理后台分为用户管理和展会管理两个 tab，用户管理显示所有用户信息，'
@@ -330,7 +301,7 @@ def create_report():
     # 4.6 展会详情
     doc.add_page_break()
     doc.add_heading('4.6 展会详情', 2)
-    add_image_with_text(doc, 'docs/screenshots/06_exhibition_detail.png', [
+    add_text_block(doc, [
         '用户可以查看展会详情，包括展会名称、地点、时间、状态和介绍。'
         '支持富文本渲染，可以展示 HTML 格式的展会介绍。',
         '详情页面提供报名按钮，根据用户权限和展会状态决定按钮是否可点击。'
@@ -341,7 +312,7 @@ def create_report():
     # 4.7 报名表单
     doc.add_page_break()
     doc.add_heading('4.7 报名表单', 2)
-    add_image_with_text(doc, 'docs/screenshots/07_registration_form.png', [
+    add_text_block(doc, [
         '用户可以填写报名表单，提交报名申请。报名表单支持自定义字段，'
         '包括单选、多选和填空类型。表单设计简洁直观，支持输入验证和错误提示。',
         '提交后会显示报名结果，包括报名编号和状态。如果展会需要审核，'
@@ -351,7 +322,7 @@ def create_report():
     # 4.8 搜索功能
     doc.add_page_break()
     doc.add_heading('4.8 搜索功能', 2)
-    add_image_with_text(doc, 'docs/screenshots/08_search.png', [
+    add_text_block(doc, [
         '用户可以通过搜索功能快速查找展会和用户。搜索结果以卡片形式展示，'
         '支持关键词匹配。搜索页面提供搜索历史和热门搜索推荐，'
         '帮助用户快速找到所需内容。',
@@ -472,7 +443,7 @@ def create_report():
     
     doc.add_heading('6.1 单元测试', 2)
     add_indented_paragraph(doc,
-        'Android 侧的单元测试使用 JUnit 4，覆盖不依赖设备与数据库的纯逻辑（共 32 项）。'
+        'Android 侧的单元测试使用 JUnit 4，覆盖不依赖设备与数据库的纯逻辑（共 39 项）。'
         '测试只断言真实契约，不把实现里的常量抄成期望值——'
         '这一点尤其重要：日期这类「写死常量」的缺陷，如果测试照着常量写期望值就永远测不出来。'
         '主要测试包括：'
@@ -496,12 +467,12 @@ def create_report():
     )
     
     integration_tests = [
-        '前端渲染冒烟测试（18 项）：用最小 DOM 打桩与「假后端」把每个页面真实渲染一次，'
+        '前端渲染冒烟测试（35 项）：用最小 DOM 打桩与「假后端」把每个页面真实渲染一次，'
         '校验取数接线、缓存先行、并发去重、401 自动续期与动作到 REST 路径的映射',
-        '后端接口契约测试（39 项）：跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、'
+        '后端接口契约测试（59 项）：跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、'
         '四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 核销流转等业务规则，'
         '并交叉校验前端每个数据动作都有后端路由接住',
-        '后端单元测试（jest）：不依赖数据库的纯函数与中间件，'
+        '后端单元测试（jest，95 项）：不依赖数据库的纯函数与中间件，'
         '包括 JWT 配置校验、认证中间件与「数据库不可用」的状态码判定',
         '前端静态检查：ES 模块能否解析、页面是否绕过取数入口、'
         '用户可见文案在源码 / 资源 / 原生清单三处是否一致、原生动作是否都在白名单内',
@@ -514,7 +485,7 @@ def create_report():
     
     doc.add_heading('6.3 冒烟测试', 2)
     add_indented_paragraph(doc,
-        '项目包含一组静态检查脚本（node scripts/smoke-check.js，95 项检查），'
+        '项目包含一组静态检查脚本（node scripts/smoke-check.js，一百多项检查），'
         '验证项目骨架、桥接契约、页面模块、设计令牌、动效层、内置依赖与文档关键内容，'
         '并守住「已删除的旧结构不要重新出现」。检查内容包括：清单入口、'
         '原生动作白名单、页面文件与路由注册、颜色与动效是否只在令牌层声明等。'
@@ -530,8 +501,9 @@ def create_report():
         '报名、个人管理、展商后台和管理后台等核心功能。应用采用前后端分离架构：'
         '界面由 WebView 承载并复用设计交付件，业务数据由自建的 Express + PostgreSQL '
         '后端提供，原生只保留系统能力。项目包含完整的测试体系（单元测试、渲染冒烟测试、'
-        '接口契约测试与静态检查），确保了代码质量。文档齐全，包括 README（需求、架构、'
-        '验收场景与路线图）、后端说明与贡献者约定，为后续开发和维护提供了参考。'
+        '接口契约测试与静态检查），确保了代码质量。文档齐全，包括 README（简介与文档索引）、'
+        'docs/ 下的架构、功能与验收、界面规范、构建与上线、路线图，'
+        '后端说明与贡献者约定，为后续开发和维护提供了参考。'
     )
     
     doc.add_heading('7.2 技术收获', 2)
@@ -567,7 +539,7 @@ def create_report():
         '应用必须先启动后端才能取到数据（数据只在服务端，没有离线降级），'
         '课堂演示时需要先起数据库与后端，后续可考虑打包一键启动脚本',
         '后端目前只在本机以明文 HTTP 运行，尚未部署到服务器，'
-        '也没有 HTTPS、签名校验与登录限流',
+        '也没有 HTTPS 与签名校验',
         '通知只落库、没有推送通道，应用不在前台时收不到提醒，'
         '需要接入推送服务或在打开应用时拉取',
         '上传的媒体仍保存在设备私有目录，换设备不同步，'

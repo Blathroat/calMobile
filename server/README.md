@@ -334,7 +334,7 @@ pnpm run lint
 
 ## 上线前必须处理
 
-完整的清单、命令与开销见根目录 `README.md` 的「上线部署清单与开销」。与服务端直接相关的几条：
+完整的清单、命令与开销见 `docs/deployment.md` 的「上线部署清单与开销」。与服务端直接相关的几条：
 
 - `pnpm start`（生产模式）已经**默认关闭 `/status` 与 `/api/v1/status`**，并会对配置做启动前自检；只需要用 `TRUST_PROXY`、`ENABLE_STATUS_PAGE`、`DB_SSL` 按部署形态配一下，详见上面的「开发模式与生产模式」；
 - 更换两个 JWT 密钥与数据库密码、限制 `CORS_ORIGIN`、启用 TLS，并去掉客户端侧的明文放行（`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`）——第一项与库密码会被启动自检拦住，`CORS_ORIGIN` 目前只是警告；
