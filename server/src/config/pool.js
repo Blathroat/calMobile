@@ -5,6 +5,9 @@
 
 const { Pool } = require('pg');
 const config = require('./database');
+const { resolveProcessSettings } = require('./env');
+
+const logLevel = resolveProcessSettings(process.env).logLevel;
 
 // 创建连接池
 const pool = new Pool({
@@ -42,7 +45,7 @@ async function query(text, params) {
   try {
     const result = await pool.query(text, params);
     // 逐条 SQL 只在 LOG_LEVEL=debug 时打印：默认级别下每个请求都刷一整条语句太吵。
-    if (process.env.LOG_LEVEL === 'debug') {
+    if (logLevel === 'debug') {
       console.log('执行查询', { text, duration: Date.now() - start, rows: result.rowCount });
     }
     return result;

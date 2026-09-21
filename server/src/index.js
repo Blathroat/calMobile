@@ -12,6 +12,7 @@
 // 运行环境必须在**任何**读取 NODE_ENV 的模块之前定下来（见 config/runtime.js：
 // pnpm start 走生产、pnpm dev 走开发，状态页与启动自检都按它决定）。
 const runtime = require('./config/runtime');
+const { loadProcessConfig } = require('./config/env');
 
 const express = require('express');
 const cors = require('cors');
@@ -20,9 +21,10 @@ const { productionProblems } = require('./config/production');
 const { ApiError, isDatabaseUnavailable } = require('./domain/errors');
 const { version: SERVICE_VERSION } = require('../package.json');
 
+const config = loadProcessConfig();
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
-const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+const PORT = config.port;
+const LOG_LEVEL = config.logLevel;
 
 // 不广播技术栈（一行成本的信息收敛）。
 app.disable('x-powered-by');
@@ -36,7 +38,7 @@ if (runtime.trustProxy !== false) {
 
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: config.corsOrigin,
     credentials: false,
   }),
 );
@@ -171,7 +173,7 @@ async function start() {
   // 生产环境先做配置自检：致命项**拒绝启动**（配错了会静默地不安全或根本用不了），
   // 可疑项只打警告。开发/测试不检查，保持 `pnpm dev` 开箱即用。
   if (runtime.isProduction) {
-    const { fatal, warnings } = productionProblems(process.env);
+    const { fatal, warnings } = productionProblems(config.env);
     for (const item of warnings) {
       console.warn(`[生产环境警告] ${item}`);
     }

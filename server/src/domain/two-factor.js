@@ -13,9 +13,14 @@
  */
 
 const crypto = require('node:crypto');
+const { totpSecretKey } = require('../config/auth');
 const { query, transaction } = require('../config/pool');
 const { CodeRejected, isCodeRejected, consumeCode } = require('./otp');
 const totp = require('./totp');
+
+function totpKey() {
+  return totp.encryptionKey(totpSecretKey);
+}
 
 /**
  * 读某个用户当前可用的第二因子。
@@ -50,7 +55,7 @@ async function secondFactorState(userId) {
 /** 解密已绑定的验证器密钥；密钥换过或数据坏了时给一句能照着做的话，而不是 500。 */
 function openSecret(stored) {
   try {
-    return totp.decryptSecret(stored, totp.encryptionKey());
+    return totp.decryptSecret(stored, totpKey());
   } catch {
     throw new CodeRejected('验证器密钥无法解读，请在「安全」里重新绑定验证器');
   }
@@ -169,7 +174,7 @@ async function beginTotpSetup(user, issuer) {
   const secret = totp.generateSecret();
   await query('UPDATE users SET totp_pending_secret = $2, updated_at = now() WHERE id = $1', [
     user.id,
-    totp.encryptSecret(secret, totp.encryptionKey()),
+    totp.encryptSecret(secret, totpKey()),
   ]);
   return {
     secret,

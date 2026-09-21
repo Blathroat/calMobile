@@ -17,6 +17,7 @@ const express = require('express');
 const { pool } = require('../config/pool');
 const { STEPS } = require('../config/migrate');
 const databaseConfig = require('../config/database');
+const { MIN_SECRET_LENGTH, PLACEHOLDER_SECRET } = require('../config/auth');
 const { renderStatusPage } = require('../status-page');
 const { version: SERVICE_VERSION } = require('../../package.json');
 
@@ -24,10 +25,6 @@ const router = express.Router();
 
 /** 服务标识与 `/ping` 保持一致。 */
 const SERVICE_NAME = 'calmobile-server';
-
-/** `config/auth.js` 的门槛：密钥不少于 32 个字符，且不能是模板里的占位值。 */
-const MIN_SECRET_LENGTH = 32;
-const PLACEHOLDER_SECRET = /^(your_|replace-with|change-me)/i;
 
 /** 数据量卡片统计的表，固定白名单（表名直接拼进 SQL，不接受外部输入）。 */
 const COUNT_TABLES = ['users', 'exhibitions', 'registrations', 'exhibition_fields', 'app_settings'];
@@ -277,9 +274,11 @@ async function runChecks({ database, databaseMs, migrations, migrationsMs, count
   });
 
   await run('JWT 密钥不是占位值', () => {
-    const placeholders = ['JWT_SECRET', 'JWT_REFRESH_SECRET'].filter((key) =>
-      PLACEHOLDER_SECRET.test(String(process.env[key] || '')),
-    );
+    const auth = require('../config/auth');
+    const placeholders = [
+      PLACEHOLDER_SECRET.test(auth.accessSecret) ? 'JWT_SECRET' : '',
+      PLACEHOLDER_SECRET.test(auth.refreshSecret) ? 'JWT_REFRESH_SECRET' : '',
+    ].filter(Boolean);
     if (placeholders.length > 0) {
       throw new Error(`${placeholders.join(' / ')} 还是 your_ / replace-with / change-me 之类的占位值`);
     }

@@ -10,22 +10,29 @@
  * `module.exports` 变成 undefined —— 那样会在建连接池时报一句看不懂的错。
  */
 
-require('dotenv').config({ quiet: true });
 const { bool } = require('./runtime');
 
 const KNOWN_ENVS = ['development', 'test', 'production'];
 
-function build(env) {
+/**
+ * 解析数据库连接配置。纯函数：用例与 `parseEnv` 直接喂环境对象。
+ *
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} env 形如 `process.env`。
+ */
+function resolveDatabaseConfig(env = {}) {
+  const nodeEnv = String(env.NODE_ENV || 'development');
+  const known = KNOWN_ENVS.includes(nodeEnv) ? nodeEnv : 'development';
   return {
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    database: process.env.DB_NAME || (env === 'test' ? 'calmobile_test' : 'calmobile_dev'),
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    ssl: bool(process.env.DB_SSL) ? { rejectUnauthorized: false } : false,
+    host: env.DB_HOST || 'localhost',
+    port: env.DB_PORT || 5432,
+    database: env.DB_NAME || (known === 'test' ? 'calmobile_test' : 'calmobile_dev'),
+    user: env.DB_USER || 'postgres',
+    password: env.DB_PASSWORD || 'postgres',
+    ssl: bool(env.DB_SSL) ? { rejectUnauthorized: false } : false,
   };
 }
 
-const env = process.env.NODE_ENV || 'development';
+const databaseConfig = resolveDatabaseConfig(process.env);
+databaseConfig.resolveDatabaseConfig = resolveDatabaseConfig;
 
-module.exports = build(KNOWN_ENVS.includes(env) ? env : 'development');
+module.exports = databaseConfig;

@@ -109,7 +109,7 @@ test('otpauth URI：验证器 App 要能直接扫，issuer 与账号都在标签
 });
 
 test('密钥加密：同样的明文两次得到不同密文，且能解回原文', () => {
-  const key = encryptionKey({ TOTP_SECRET_KEY: 'test-key-for-totp-encryption' });
+  const key = encryptionKey('test-key-for-totp-encryption');
   const first = encryptSecret(RFC_SECRET, key);
   const second = encryptSecret(RFC_SECRET, key);
   assert.notEqual(first, second, '每次都要换 IV，不能是确定性密文');
@@ -120,8 +120,8 @@ test('密钥加密：同样的明文两次得到不同密文，且能解回原�
 });
 
 test('密钥加密：换密钥或改动密文都会被 GCM 拦下', () => {
-  const key = encryptionKey({ TOTP_SECRET_KEY: 'key-one-for-totp' });
-  const other = encryptionKey({ TOTP_SECRET_KEY: 'key-two-for-totp' });
+  const key = encryptionKey('key-one-for-totp');
+  const other = encryptionKey('key-two-for-totp');
   const payload = encryptSecret(RFC_SECRET, key);
   assert.throws(() => decryptSecret(payload, other), /unable to authenticate|bad decrypt/i);
 
@@ -132,12 +132,13 @@ test('密钥加密：换密钥或改动密文都会被 GCM 拦下', () => {
   assert.throws(() => decryptSecret('v1:only-two', key), /内容不完整/);
 });
 
-test('加密密钥：优先 TOTP_SECRET_KEY，缺省借用 JWT_REFRESH_SECRET；都没有才报错', () => {
-  const dedicated = encryptionKey({ TOTP_SECRET_KEY: 'dedicated', JWT_REFRESH_SECRET: 'borrowed' });
-  const borrowed = encryptionKey({ JWT_REFRESH_SECRET: 'borrowed' });
-  assert.notDeepEqual(dedicated, borrowed, '配了专用密钥就不该再用刷新令牌密钥');
-  assert.deepEqual(encryptionKey({ TOTP_SECRET_KEY: 'borrowed' }), borrowed, '派生规则稳定');
-  assert.throws(() => encryptionKey({}), /缺少 TOTP 加密密钥/);
+test('加密密钥：同样的材料得到同样的派生结果，空材料才报错', () => {
+  const first = encryptionKey('borrowed');
+  const second = encryptionKey('borrowed');
+  assert.deepEqual(first, second, '派生规则稳定');
+  assert.notDeepEqual(encryptionKey('dedicated'), first, '材料不同则密钥不同');
+  assert.throws(() => encryptionKey(''), /缺少 TOTP 加密密钥/);
+  assert.throws(() => encryptionKey(), /缺少 TOTP 加密密钥/);
 });
 
 test('备用码：10 个、五五分组、字符集里没有易混字符、每次不同', () => {
