@@ -336,16 +336,24 @@ function findNativeDataLayer() {
 const checks = [
   // ── 文档 ────────────────────────────────────────────────────────
   {
+    // README 只放简介、快速开始、项目结构与文档索引，详细说明按主题拆在 docs/ 下
     id: 'project-documentation',
     file: 'README.md',
-    contains: ['# CalMobile', '产品范围与角色', '已实现的关键交互', '路线图与已知限制']
+    contains: ['# CalMobile', '快速开始', '项目结构', '文档索引', 'docs/architecture.md',
+      'docs/features.md', 'docs/roadmap.md'],
+    notContains: ['## 变更记录', '历史上的 `TODO.md`'],
   },
   {
+    // 需求、已实现行为与验收场景的唯一来源，且只描述当前状态（不记变更历史）
     id: 'consolidated-requirements-document',
-    // README 是唯一的需求/验收来源，且只描述当前状态（不记变更历史）
-    file: 'README.md',
-    contains: ['验收场景', '报名收集项', '待裁决清单（未决项）'],
+    file: 'docs/features.md',
+    contains: ['产品范围与角色', '已实现的关键交互', '报名收集项', '验收场景'],
     notContains: ['## 变更记录', '历史上的 `TODO.md`'],
+  },
+  {
+    id: 'pending-decisions-document',
+    file: 'docs/roadmap.md',
+    contains: ['路线图与已知限制', '待裁决清单（未决项）'],
   },
   {
     id: 'agent-rules',
@@ -355,15 +363,26 @@ const checks = [
   },
   {
     id: 'webui-documentation',
-    file: 'README.md',
+    file: 'docs/architecture.md',
     contains: ['WebView', 'newUI', 'assets/web', 'WebAppBridge', 'EasyMDE']
+  },
+  {
+    id: 'ui-standards-document',
+    file: 'docs/ui-standards.md',
+    contains: ['界面标准', '深色模式', '配色作用范围', '动效标准']
+  },
+  {
+    id: 'deployment-document',
+    file: 'docs/deployment.md',
+    contains: ['构建、测试与运行', '模拟器回归', '上线部署清单与开销']
   },
 
   // ── 构建与清单 ──────────────────────────────────────────────────
   {
     id: 'android-gradle-files',
+    // AGP 9 + Gradle 9：属性用赋值式（`compileSdk = 36.1`），方法调用式在 Gradle 10 会被移除
     file: 'app/build.gradle',
-    contains: ['compileSdk = 34', 'targetSdk = 34', "namespace = 'com.example.calmobile'",
+    contains: ['compileSdk = 36.1', 'targetSdk = 34', "namespace = 'com.example.calmobile'",
       'JavaVersion.VERSION_25']
   },
   {
@@ -878,7 +897,7 @@ const checks = [
   },
   {
     id: 'docs-frontend-backend-boundary',
-    file: 'README.md',
+    file: 'docs/architecture.md',
     contains: ['前后端边界', 'core/api.js', 'adb reverse', 'server/test/api.test.js']
   },
   {

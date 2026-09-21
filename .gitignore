@@ -14,6 +14,8 @@ captures/
 local.properties
 gradle-local/
 .gradle-local/
+# Gradle 自动供给 toolchain 时生成的守护进程 JVM 配置：里面钉着本机的 JDK 厂商与版本
+gradle/gradle-daemon-jvm.properties
 
 # 后端依赖与本机配置：node_modules 体积大，.env 里有数据库口令与 JWT 密钥
 node_modules/

@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-> 给代理的短指南。每条都回答：「不写的话会不会做错？」能从代码、`package.json`、`README.md` 直接读到的细节不要复述。产品说明只维护在根目录 `README.md`，后端细节在 `server/README.md`。
+> 给代理的短指南。每条都回答：「不写的话会不会做错？」能从代码、`package.json`、`README.md` 直接读到的细节不要复述。产品说明按主题拆在 `docs/` 下（`README.md` 只放简介、快速开始与文档索引），后端细节在 `server/README.md`。
 
 ## 命令（按这个顺序）
 
@@ -49,7 +49,7 @@ pnpm format              # oxfmt
 - 用户可见文案：`res/values/strings_frontend.xml` + `t('key')`。资源**不得首尾空白**（Android 会裁掉，JS 不会，间隔会粘在一起）。间隔用标点或代码拼接。
 - 颜色 / 字号 / 间距 / 圆角只在 `styles/tokens.css`；动效只在 `styles/motion.css`。强调色只用 `--accent*`，不要写死色值。
 - Markdown / HTML 先经 `js/core/sanitize.js`；渲染用 `core/markdown.js` 的 `renderMarkdown`。第三方库内置到 `assets/web/vendor/`，不引用 CDN。
-- 新页面同时改：`js/app.js` 路由、`README.md` 屏幕对照表、`scripts/smoke-check.js` 与 `scripts/webui-check.js` 的页面清单。管理功能优先内联，不新开二级页。
+- 新页面同时改：`js/app.js` 路由、`docs/architecture.md` 的屏幕对照表、`scripts/smoke-check.js` 与 `scripts/webui-check.js` 的页面清单。管理功能优先内联，不新开二级页。
 - 表单校验走 `js/core/validate.js`，上限取 `state.limits`。
 
 ## 原生
@@ -78,4 +78,4 @@ pnpm format              # oxfmt
 
 ## 文档
 
-需求、架构、验收只改 `README.md`：只写当前状态，不写变更记录（历史看 git log）。未决冲突放「待裁决清单」。行为或命令变了就同步文档，并跑 `node scripts/smoke-check.js` 与 `node scripts/webui-check.js`。
+新增或更新需求按主题改 `docs/` 下对应的那一份（`features.md` 功能与验收、`architecture.md` 架构与前后端边界、`ui-standards.md` 界面与动效、`deployment.md` 构建与上线、`roadmap.md` 限制与未决项），不要再创建重复的需求、架构或 Review 文档；`README.md` 只保留简介、快速开始、项目结构、常用命令与文档索引。**所有文档只描述当前状态**：不写「变更记录」、不写迁移过程、不写「以前是怎样的」，历史看 `git log`；已解决的问题从清单里删掉而不是标注「已完成」。设计稿与实现的冲突只记录在 `docs/roadmap.md` 的「待裁决清单（未决项）」，未确认前不要擅自扩大数据模型。代码行为、依赖或命令变化后同步更新对应说明，并运行 `node scripts/smoke-check.js` 与 `node scripts/webui-check.js`。
