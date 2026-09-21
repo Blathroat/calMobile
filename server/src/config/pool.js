@@ -53,15 +53,6 @@ async function query(text, params) {
 }
 
 /**
- * 获取客户端连接（用于事务）
- * @returns {Promise<Object>} 数据库客户端
- */
-async function getClient() {
-  const client = await pool.connect();
-  return client;
-}
-
-/**
  * 事务外壳：回调拿到 client，抛错自动回滚。
  *
  * `BEGIN` / `COMMIT` / `ROLLBACK` 与连接归还都在这里，调用方只写业务语句：
@@ -94,7 +85,6 @@ async function close() {
 
 module.exports = {
   query,
-  getClient,
   transaction,
   close,
   pool,

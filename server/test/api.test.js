@@ -1240,8 +1240,11 @@ test('报名收集项的必填与选项由服务端校验', async () => {
   const exhibitionId = created.body.exhibition.id;
 
   try {
-    // 没有配置收集项时按默认三项校验：默认的「姓名 / 公司名称」必填，空答案要被拦住。
-    const fallback = await post(
+    // 没有配置收集项就是空的：不塞默认三项，报名页只有提交按钮，空答案也能提交。
+    const noFields = await get(`/api/v1/exhibitions/${exhibitionId}/fields`);
+    assert.deepStrictEqual(noFields.body, [], '新建展会没有收集项时应当返回空数组');
+
+    const bare = await post(
       '/api/v1/registrations',
       {
         exhibitionId,
@@ -1251,8 +1254,13 @@ test('报名收集项的必填与选项由服务端校验', async () => {
       },
       { token: tokens.user.token },
     );
-    assert.strictEqual(fallback.body.ok, false, '默认收集项的必填项没有被校验');
-    assert.ok(fallback.body.error.includes('姓名 / 公司名称'), `提示要指出缺哪一项：${fallback.body.error}`);
+    assert.strictEqual(bare.body.ok, true, `没有收集项时提交不应被拦：${JSON.stringify(bare.body)}`);
+
+    // 腾出「同一用户同一展会只允许一条未撤销报名」的位置：下面还要用这个身份提交。
+    const released = await del(`/api/v1/registrations/${bare.body.registration.id}`, {
+      token: tokens.user.token,
+    });
+    assert.strictEqual(released.body.ok, true, `撤销后应当能再次报名：${JSON.stringify(released.body)}`);
 
     // 配置成必填 + 选项的收集项
     const saved = await put(
@@ -1697,7 +1705,7 @@ test('受限账号不能报名 / 发布展会 / 编辑个人信息，其余照�
         exhibitionId: adminExhibitionId,
         visitorName: '管理员',
         visitorType: '专业观众',
-        // 新展会没有自定义收集项，服务端按默认三项校验：必填的「姓名 / 公司名称」要填上
+        // 新展会没有配置收集项，答案是自由文本（没有可校验的项）
         answers: '姓名 / 公司名称：管理员\n参观身份：专业观众',
       },
       { token: tokens.admin.token },
@@ -1859,7 +1867,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     const untouched = await get(`/api/v1/exhibitions/${exhibitionA}`);
     assert.strictEqual(untouched.body.found, true, '受限拦截之后展会必须还在');
     assert.strictEqual(untouched.body.exhibition.title, '受限收紧用例展 A', '受限账号不该改到标题');
-    assert.strictEqual(untouched.body.fields[0].title, '姓名 / 公司名称', '受限账号不该改到收集项');
+    assert.deepStrictEqual(untouched.body.fields, [], '受限账号不该给展会加上收集项');
     const beforeCheckin = await get(`/api/v1/registrations/${registrationA}`, { token: tokens.user.token });
     assert.strictEqual(beforeCheckin.body.registration.statusLabel, '已通过', '受限账号不该核销成功');
 

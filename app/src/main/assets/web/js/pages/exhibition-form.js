@@ -351,7 +351,7 @@ export async function exhibitionFormPage(context) {
                     el('span', { class: 'section-label', text: t('s_s8p5nm') }),
                     el('span', { class: 'pill', text: `${fields.length} 项` }),
                 ]),
-                el('p', { class: 'field-hint', text: t('s_3q8q3k') }),
+                el('p', { class: 'field-hint', text: t('s_1qc3lcl') }),
                 fieldsHost,
                 el('button', {
                     class: 'cta ghost',

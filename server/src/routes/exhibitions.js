@@ -13,7 +13,7 @@
  */
 
 const express = require('express');
-const { query, getClient } = require('../config/pool');
+const { query, transaction } = require('../config/pool');
 const { EXHIBITION_COLUMNS, EXHIBITION_FROM } = require('../domain/queries');
 const { exhibitionPayload, fieldPayload } = require('../domain/payloads');
 const labels = require('../domain/labels');
@@ -25,19 +25,6 @@ const { mutate } = require('../domain/respond');
 const { authenticate, optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
-
-/**
- * 报名收集项的默认三项：这场展会没有配置过（或被清空）收集项时返回它。
- *
- * 取值与 `db:seed` 写入的默认收集项一致；报名提交时的必填 / 选项校验
- * （见 registrations.js 的 `validateAnswers()`）也走同一份默认值，
- * 因此「没有配置收集项」不等于「什么都能提交」。
- */
-const DEFAULT_FIELDS = [
-  { title: '姓名 / 公司名称', type: '文本', required: true, options: [] },
-  { title: '参观身份', type: '单选', required: true, options: ['专业观众', '采购负责人', '媒体'] },
-  { title: '报名需求', type: '多选', required: false, options: ['希望安排展商洽谈', '需要停车位', '需要翻译服务'] },
-];
 
 /** 收集项类型：与 `exhibition_fields.type` 的 CHECK 约束一致。 */
 const FIELD_TYPES = ['文本', '单选', '多选'];
@@ -56,22 +43,6 @@ const NOT_FOUND_TEXT = '展会不存在或已删除';
 /** 新建主键：与 auth.js 的 `usr-…` 同一种风格，避免自增序列互相打架。 */
 function newId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-}
-
-/** 事务外壳：回调拿到 client，抛错自动回滚。 */
-async function transaction(run) {
-  const client = await getClient();
-  try {
-    await client.query('BEGIN');
-    const result = await run(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
 }
 
 /** 展商 / 管理员专用写接口的前置检查：401 / 403 是 HTTP 状态码，不被 mutate 收成信封。 */
@@ -174,8 +145,8 @@ function monthSummary(item) {
 /**
  * 报名收集项：按 `position` 顺序取。
  *
- * 没有配置过（或被清空）时回退到默认三项，`id` 为空串——页面据此仍能渲染出一份可填的
- * 报名表，提交时 `registrations.js` 也用同一份默认值校验（导出给那边复用）。
+ * **没有配置过就是空的**：不塞默认项。展商新建展会时若不填收集项，报名页就只有提交按钮；
+ * 提交时 `registrations.js` 用同一份（空的）收集项校验，因此「没有收集项」＝「没有要校验的答案」。
  */
 async function loadFields(exhibitionId) {
   const result = await query(
@@ -187,9 +158,6 @@ async function loadFields(exhibitionId) {
     `,
     [exhibitionId],
   );
-  if (result.rows.length === 0) {
-    return DEFAULT_FIELDS.map((item) => fieldPayload({ ...item, id: '' }));
-  }
   return result.rows.map(fieldPayload);
 }
 
@@ -577,7 +545,7 @@ router.put('/:id/status', authenticate, notLimited('exhibitionStatus'), exhibito
 
 /**
  * GET /api/v1/exhibitions/:id/fields
- * 报名收集项数组；没有配置过时返回默认三项（页面据此渲染出一份可填的报名表）。
+ * 报名收集项数组；没有配置过就是空数组（报名页据此只渲染提交按钮）。
  */
 router.get('/:id/fields', optionalAuth, async (req, res, next) => {
   try {
@@ -605,7 +573,6 @@ router.put('/:id/fields', authenticate, notLimited('exhibitionFields'), exhibito
 });
 
 module.exports = router;
-// 报名提交时的必填 / 选项校验要用同一份收集项（含「没配置就回退默认三项」的规则），
-// 因此把取数函数与默认值导出给 registrations.js 复用，避免两处各写一遍默认项。
+// 报名提交时的必填 / 选项校验要用同一份收集项，因此把取数函数导出给 registrations.js 复用，
+// 免得两处各写一遍「这场展会要填什么」。
 module.exports.loadFields = loadFields;
-module.exports.DEFAULT_FIELDS = DEFAULT_FIELDS;

@@ -194,7 +194,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `PUT /exhibitions/:id` | `exhibitions.save` | 展商本人或管理员。受限账号 403 |
 | `DELETE /exhibitions/:id` | `exhibitions.delete` | 展商本人或管理员。受限账号 403 |
 | `PUT /exhibitions/:id/status` | `exhibitions.status` | 同上。`{ status }` 接受中文标签或英文代码；受限账号 403 |
-| `GET /exhibitions/:id/fields` | `exhibitions.fields` | 可匿名。没有配置过时返回默认三项收集项 |
+| `GET /exhibitions/:id/fields` | `exhibitions.fields` | 可匿名。按 `position` 返回这场展会的收集项；**没有配置过就是空数组**，不塞默认项 |
 | `PUT /exhibitions/:id/fields` | `exhibitions.saveFields` | 展商本人或管理员，整体覆盖；受限账号 403 |
 
 ### 报名、审核与核销
@@ -262,7 +262,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 这些规则以前只在页面里，改接口就能绕过；现在服务端也校验一遍：
 
 - **报名窗口**：展会状态必须是「需审核 / 无需审核」；`registration_start` / `registration_end` 存在时必须在窗口内（用数据库 `CURRENT_DATE` 比较）；「仅展示 / 截止报名 / 已结束」分别给出对应提示。
-- **报名内容**：提交时按这场展会的收集项校验（没有配置过就用默认三项，与 `GET /exhibitions/:id/fields` 同一份数据）——必填项不能为空，单选 / 多选的值必须落在选项里，页面被绕过后同样拦得住。
+- **报名内容**：提交时按这场展会的收集项校验（与 `GET /exhibitions/:id/fields` 同一份数据；没有配置收集项时是空数组，即没有可校验的项）——必填项不能为空，单选 / 多选的值必须落在选项里，页面被绕过后同样拦得住。
 - **重复报名**：同一用户同一展会只允许一条未撤销的报名，由部分唯一索引 + 应用层双重拦截（唯一冲突不会变成 500）。
 - **自动通过**：「无需审核」的展会提交即 `approved`，其余为 `pending`。
 - **审核流转**：状态只接受五种中的值，且只允许白名单内的流转（待审核 → 已通过 / 已拒绝 / 已撤销；已通过 → 已参加 / 已拒绝 / 已撤销；已拒绝 → 已通过 / 已撤销；**已参加是终态**；已撤销 → 待审核 / 已通过）。越权的流转给 403，白名单之外的流转是业务失败（200 + `ok:false`）。

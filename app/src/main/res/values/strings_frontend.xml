@@ -222,6 +222,7 @@
     <string name="s_1qb27ho">服务器设置已保存</string>
     <string name="s_1qbu9z0">秒后可重发</string>
     <string name="s_1qc01ta">暂无展会数据</string>
+    <string name="s_1qc3lcl">收集项决定报名页展示的字段；单选与多选可逐条增删选项，删除全部后报名页不再显示任何收集项。</string>
     <string name="s_1qd14sn">需要审核的报名会在“我的报名”中显示状态。</string>
     <string name="s_1qf1f04">已更新系统日历</string>
     <string name="s_1qfu0ss">无法加载展会信息。</string>
@@ -328,7 +329,6 @@
     <string name="s_3fklp8">输入关键词开始搜索</string>
     <string name="s_3fnyn8">三</string>
     <string name="s_3ppp7q">在这里粘贴 Markdown 文本</string>
-    <string name="s_3q8q3k">收集项决定报名页展示的字段；单选与多选可逐条增删选项，删除全部后使用默认三项。</string>
     <string name="s_3rgb49">二维码生成失败</string>
     <string name="s_3rxr06">头像已更新</string>
     <string name="s_3xcdlm">未启用：报名详情不展示报名码，展商仍可在报名管理中手动调整状态。</string>

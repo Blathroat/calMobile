@@ -101,7 +101,7 @@ function splitChoices(value) {
 }
 
 /**
- * 按这场展会配置的收集项校验 `answers`（没有配置收集项时用默认三项，见 `loadFields`）。
+ * 按这场展会配置的收集项校验 `answers`（没有配置收集项时字段列表为空，见 `loadFields`）。
  *
  * 页面的 `core/validate.js` 会被绕过，所以服务端也校验一遍：
  * - 必填项不能为空 → `请填写「XX」`；
@@ -231,7 +231,7 @@ router.post('/', authenticate, async (req, res, next) => {
     if (maxAnswer > 0 && answers.length > maxAnswer) {
       throw badRequest(`报名填写内容最多 ${maxAnswer} 个字符`);
     }
-    // 字段合法：按这场展会的收集项（没配置过就回退默认三项）校验必填与选项，
+    // 字段合法：按这场展会的收集项校验必填与选项（没配收集项时列表为空，就没有要校验的答案），
     // 页面的校验被绕过后同样拦得住。
     validateAnswers(await loadFields(exhibitionId), answers);
 
