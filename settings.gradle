@@ -6,6 +6,12 @@ pluginManagement {
     }
 }
 
+// 让 Gradle 在找不到合适 JDK 时按需自动拉取 toolchain（AGP 9 需要 JDK 17）。
+// 不写这一行，Gradle 也会自己往本文件里塞一遍——受控文件被工具偷偷改更糟。
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
