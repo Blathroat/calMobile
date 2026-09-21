@@ -7,7 +7,7 @@
  * - `smtp`：真发信。开发指向 Mailpit（`pwsh -File scripts\mail.ps1 start`，
  *   SMTP 1025 / 收件箱 8025），生产指向阿里云邮件推送 / 腾讯云 SES / Resend 之类的
  *   SMTP 中继 —— 应用服务器**不自建 SMTP**（25 端口被封、没有 IP 信誉，验证码会进垃圾箱）；
- * - `memory`：仅测试用，邮件留在内存里给用例取（`services/mailer.js` 的 `outbox()`）。
+ * - `memory`：仅测试用，邮件留在内存里给用例取（`services/mailer.ts` 的 `outbox()`）。
  *   生产环境下即使显式配置也会被拒并降级为 `smtp` —— 否则线上会「发信成功」，
  *   而用户永远收不到验证码，这种故障最难查。
  *

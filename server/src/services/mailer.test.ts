@@ -6,13 +6,12 @@
  * 依赖一个容器。这里要钉住的是「失败不抛异常、注入被清掉、生产不许用 memory」。
  */
 
-const assert = require('node:assert/strict');
-
-const { resolveMailConfig } = require('../config/mail');
-const { send, outbox, lastMail, resetMailer, closeTransporter, buildMessage, formatFrom } = require('./mailer');
+import assert from 'node:assert/strict';
+import { resolveMailConfig } from '../config/mail';
+import { send, outbox, lastMail, resetMailer, closeTransporter, buildMessage, formatFrom } from './mailer';
 
 /** 内存收件箱配置：只有测试会用它。 */
-const memoryConfig = (extra = {}) =>
+const memoryConfig = (extra: Record<string, string> = {}) =>
   resolveMailConfig({
     NODE_ENV: 'test',
     MAIL_TRANSPORT: 'memory',
@@ -34,19 +33,19 @@ test('memory 通道把邮件留在收件箱里，收件人 / 主题 / 正文 / �
 
   assert.equal(result.ok, true);
   assert.equal(result.transport, 'memory');
-  assert.ok(result.messageId.startsWith('memory-'));
+  assert.ok(result.messageId?.startsWith('memory-'));
 
   const mail = lastMail();
-  assert.equal(mail.to, 'user@example.com');
-  assert.equal(mail.subject, '【发现展会】注册验证码');
-  assert.ok(mail.text.includes('123456'));
-  assert.equal(mail.purpose, 'register');
+  assert.equal(mail?.to, 'user@example.com');
+  assert.equal(mail?.subject, '【发现展会】注册验证码');
+  assert.ok(mail?.text.includes('123456'));
+  assert.equal(mail?.purpose, 'register');
   assert.equal(outbox().length, 1);
 });
 
 test('console 通道把整封邮件打进日志：本地不开容器也能拿到验证码', async () => {
-  const lines = [];
-  const spy = vi.spyOn(console, 'log').mockImplementation((...args) => {
+  const lines: string[] = [];
+  const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
     lines.push(args.join(' '));
   });
   let result;
@@ -78,7 +77,7 @@ test('通道没配好时不抛异常，返回 ok:false 并说清缺什么', asyn
   const broken = resolveMailConfig({ NODE_ENV: 'production' });
   const result = await send({ to: 'user@example.com', subject: '主题', text: '正文' }, { config: broken });
   assert.equal(result.ok, false);
-  assert.ok(result.error.includes('MAIL_SMTP_HOST'), `原因要具体，实际：${result.error}`);
+  assert.ok(result.error?.includes('MAIL_SMTP_HOST'), `原因要具体，实际：${result.error}`);
 });
 
 test('收件地址非法时不发信，也不进收件箱', async () => {
@@ -125,7 +124,7 @@ test('memory 通道在生产配置下被拒（纵深防御，绕不过去）', a
   const forced = { ...memoryConfig(), isProduction: true };
   const result = await send({ to: 'user@example.com', subject: '主题', text: '正文' }, { config: forced });
   assert.equal(result.ok, false);
-  assert.ok(result.error.includes('memory'));
+  assert.ok(result.error?.includes('memory'));
   assert.equal(outbox().length, 0);
 });
 

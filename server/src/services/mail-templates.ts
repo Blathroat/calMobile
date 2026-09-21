@@ -13,16 +13,28 @@
  *    进主题要清掉换行 —— 否则 `\r\n` 就是邮件头注入。
  */
 
+export interface PurposeLabel {
+  zh: string;
+  en: string;
+}
+
 /** 用途 → 中英标签。键与 `email_codes.purpose` 的 CHECK 约束一一对应。 */
-const PURPOSES = {
+export const PURPOSES = {
   register: { zh: '注册', en: 'sign-up verification' },
   reset: { zh: '找回密码', en: 'password reset' },
   login: { zh: '登录', en: 'sign-in verification' },
   enable2fa: { zh: '开启两步验证', en: 'two-factor setup' },
   email: { zh: '更换邮箱', en: 'email change' },
-};
+} as const satisfies Record<string, PurposeLabel>;
 
-const PURPOSE_KEYS = Object.keys(PURPOSES);
+export const PURPOSE_KEYS = Object.keys(PURPOSES);
+
+function purposeLabel(purpose: string | undefined): PurposeLabel {
+  if (purpose && purpose in PURPOSES) {
+    return PURPOSES[purpose as keyof typeof PURPOSES];
+  }
+  return PURPOSES.register;
+}
 
 /**
  * 主题里的用途后缀。
@@ -30,22 +42,31 @@ const PURPOSE_KEYS = Object.keys(PURPOSES);
  * 标签都是「您正在做的那件事」（注册 / 开启两步验证…），直接拼「验证码」就会出现
  * 「开启两步验证验证码」这种叠字；标签本身已经以「验证」结尾时只补一个「码」。
  */
-function subjectSuffix(zhLabel) {
+function subjectSuffix(zhLabel: string): string {
   return zhLabel.endsWith('验证') ? '码' : '验证码';
 }
 
-const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
 
 /** HTML 转义（品牌名、验证码都从这里过一遍）。 */
-function escapeHtml(value) {
-  return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
+export function escapeHtml(value: unknown): string {
+  return String(value === undefined || value === null ? '' : value).replace(
+    /[&<>"']/g,
+    (char) => HTML_ESCAPES[char] ?? char,
+  );
 }
 
 /**
  * 清洗邮件头字段：换行与其它控制字符会让一个字段变成两个头（邮件头注入），
  * 而主题里的品牌名来自管理员设置，属于用户可控输入。
  */
-function sanitizeHeader(value, fallback = '') {
+export function sanitizeHeader(value: unknown, fallback = ''): string {
   const text = String(value === undefined || value === null ? '' : value)
     .replace(/[\r\n]+/g, ' ')
     // 邮件头注入：清掉 NUL 到 US、DEL。这里就是要匹配控制字符。
@@ -55,19 +76,30 @@ function sanitizeHeader(value, fallback = '') {
   return text || fallback;
 }
 
+export interface VerificationMailOptions {
+  purpose?: string;
+  code?: string | number;
+  expiresInMin?: number;
+  brand?: { zh?: string; en?: string };
+}
+
+export interface VerificationMail {
+  subject: string;
+  text: string;
+  html: string;
+}
+
 /**
  * 生成一封验证码邮件。
  *
- * @param {object} options
- * @param {string} options.purpose  `register` / `reset` / `login` / `enable2fa` / `email`。
- * @param {string|number} options.code 4–8 位数字；格式不对直接抛错，宁可不发也不发一封没码的邮件。
- * @param {number} [options.expiresInMin] 有效期（分钟），与后端实际 TTL 保持一致。
- * @param {{zh?: string, en?: string}} [options.brand] 应用名，来自服务器设置。
- * @returns {{subject: string, text: string, html: string}}
+ * @param options.purpose  `register` / `reset` / `login` / `enable2fa` / `email`。
+ * @param options.code 4–8 位数字；格式不对直接抛错，宁可不发也不发一封没码的邮件。
+ * @param options.expiresInMin 有效期（分钟），与后端实际 TTL 保持一致。
+ * @param options.brand 应用名，来自服务器设置。
  */
-function verificationMail(options = {}) {
+export function verificationMail(options: VerificationMailOptions = {}): VerificationMail {
   const { purpose, code, expiresInMin, brand } = options;
-  const label = PURPOSES[purpose] || PURPOSES.register;
+  const label = purposeLabel(purpose);
   const zhBrand = sanitizeHeader(brand && brand.zh, '展会排期助手');
   const enBrand = sanitizeHeader(brand && brand.en, 'ExpoHub');
 
@@ -119,11 +151,3 @@ function verificationMail(options = {}) {
 
   return { subject, text, html };
 }
-
-module.exports = {
-  PURPOSES,
-  PURPOSE_KEYS,
-  escapeHtml,
-  sanitizeHeader,
-  verificationMail,
-};

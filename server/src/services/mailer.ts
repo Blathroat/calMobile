@@ -1,7 +1,7 @@
 /**
  * 邮件发送适配层。
  *
- * 上层（`services/otp.js`）只认 `send(message)`，不关心码是怎么出去的：
+ * 上层（`domain/otp.ts`）只认 `send(message)`，不关心码是怎么出去的：
  * 本地走 `console`（打进日志）或 `smtp`（打进 Mailpit），测试走 `memory`（留在内存里）。
  * 换生产通道（阿里云邮件推送 / 腾讯云 SES / Resend 的 SMTP）只改 `.env`，代码不动。
  *
@@ -10,42 +10,78 @@
  *    调用方要写进 `mail_log` 并决定要不要重试，而不是把异常冒泡成 500 ——
  *    用户看到「验证码已发送」但收不到，和接口直接报 500，是两件需要分别处理的事。
  * 2. **调用方不等发信**：SMTP 往返轻易超过前端 `api.js` 的 `REQUEST_TIMEOUT = 3000`，
- *    所以发码接口一律「先落库、立刻回包、后台发信」（见 `services/otp.js`）。
+ *    所以发码接口一律「先落库、立刻回包、后台发信」（见 `domain/otp.ts`）。
  *
  * `nodemailer` 在 `smtp` 分支里**延迟 require**：console / memory 通道与单测都不必加载它。
  */
 
-const { mailConfig } = require('../config/mail');
-const { sanitizeHeader } = require('./mail-templates');
+import { mailConfig, type MailConfig } from '../config/mail';
+import { sanitizeHeader } from './mail-templates';
 
 /** 与 `routes/auth.js` 的注册校验、`routes/profile.js` 的邮箱校验保持一致。 */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+export interface MailMessage {
+  to?: unknown;
+  subject?: unknown;
+  text?: unknown;
+  html?: unknown;
+  fromName?: unknown;
+  purpose?: unknown;
+}
+
+export interface BuiltMessage {
+  from: string;
+  to: string;
+  replyTo?: string;
+  subject: string;
+  text: string;
+  html: string;
+}
+
+export interface StoredMail extends BuiltMessage {
+  purpose: string;
+  sentAt: string;
+}
+
+export interface SendResult {
+  ok: boolean;
+  transport: string;
+  messageId?: string;
+  error?: string;
+  ms: number;
+}
+
+interface SmtpTransport {
+  sendMail(message: BuiltMessage): Promise<{ messageId?: string }>;
+  close?: () => void;
+}
+
 /** `memory` 通道的收件箱。用例靠它拿到验证码，别在业务代码里读它。 */
-const inbox = [];
+const inbox: StoredMail[] = [];
 
 /** 复用的 SMTP 连接池；键变了（换配置）就重建。 */
-let transporter = null;
+let transporter: SmtpTransport | null = null;
 let transporterKey = '';
 
 /** 测试用：清空收件箱并断开连接池。 */
-function resetMailer() {
+export function resetMailer(): void {
   inbox.length = 0;
   closeTransporter();
 }
 
 /** `memory` 通道收到的邮件（按时间先后）。 */
-function outbox() {
+export function outbox(): StoredMail[] {
   return inbox.slice();
 }
 
 /** 最近一封 `memory` 通道的邮件；没有就是 null。 */
-function lastMail() {
-  return inbox.length > 0 ? inbox[inbox.length - 1] : null;
+export function lastMail(): StoredMail | null {
+  return inbox.length > 0 ? inbox[inbox.length - 1] || null : null;
 }
 
 /** 把配置变成邮件头里的 from：显示名去掉引号与尖括号，再整体加引号。 */
-function formatFrom(name, address) {
+export function formatFrom(name: unknown, address: string): string {
   const safe = sanitizeHeader(name).replace(/["<>]/g, '').trim();
   return safe ? `"${safe}" <${address}>` : address;
 }
@@ -54,7 +90,7 @@ function formatFrom(name, address) {
  * 组装邮件的最终形态（该清洗的都在这里清洗完），memory 通道存的也是它。
  * 收件地址必须是合法邮箱：`to` 里带空白就等于带换行，同样是邮件头注入。
  */
-function buildMessage(message, config) {
+export function buildMessage(message: MailMessage, config: MailConfig): BuiltMessage {
   const to = String(message.to === undefined || message.to === null ? '' : message.to).trim();
   if (!EMAIL_PATTERN.test(to) || to.length > 120) {
     throw new Error('收件地址为空或格式不正确');
@@ -70,32 +106,35 @@ function buildMessage(message, config) {
 }
 
 /** 错误 → 一行可读的原因（nodemailer 的错误码比 message 更能说明问题）。 */
-function describeError(error) {
+function describeError(error: unknown): string {
   if (!error) {
     return '未知错误';
   }
-  const code = error.code ? `${error.code}: ` : '';
-  return `${code}${error.message || String(error)}`;
+  const record = error as { code?: unknown; message?: unknown };
+  const code = record.code ? `${record.code}: ` : '';
+  return `${code}${record.message || String(error)}`;
 }
 
 /** 给一个 promise 套总超时：连接与 socket 超时之外再兜一层。 */
-function withTimeout(promise, ms) {
-  let timer = null;
-  const timeout = new Promise((resolve, reject) => {
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => reject(new Error(`发信超时（${ms} ms）`)), ms);
   });
   return Promise.race([promise.finally(() => clearTimeout(timer)), timeout]);
 }
 
 /** 延迟创建（并复用）SMTP 连接池；配置变了就重建。 */
-function smtpTransport(config) {
+function smtpTransport(config: MailConfig): SmtpTransport {
   const key = [config.smtp.host, config.smtp.port, config.smtp.secure, config.smtp.user].join('|');
   if (transporter && transporterKey === key) {
     return transporter;
   }
   closeTransporter();
   // 延迟 require：走 console / memory 时完全不需要这个依赖。
-  const nodemailer = require('nodemailer');
+  const nodemailer = require('nodemailer') as {
+    createTransport(options: unknown): SmtpTransport;
+  };
   transporter = nodemailer.createTransport({
     host: config.smtp.host,
     port: config.smtp.port,
@@ -114,7 +153,7 @@ function smtpTransport(config) {
 }
 
 /** 断开发信连接池；进程退出与用例清理时调用，没建过就是空操作。 */
-function closeTransporter() {
+export function closeTransporter(): void {
   if (transporter && typeof transporter.close === 'function') {
     transporter.close();
   }
@@ -123,7 +162,7 @@ function closeTransporter() {
 }
 
 /** console 通道的排版：本地不开容器也能把验证码抄下来。 */
-function logToConsole(built, purpose) {
+function logToConsole(built: BuiltMessage, purpose: unknown): void {
   const line = '─'.repeat(56);
   console.log(
     [
@@ -141,11 +180,10 @@ function logToConsole(built, purpose) {
 /**
  * 发一封邮件。
  *
- * @param {object} message `{ to, subject, text, html, fromName?, purpose? }`。
- * @param {{config?: object}} [options] `config` 供测试与脚本注入，默认取进程配置。
- * @returns {Promise<{ok: boolean, transport: string, messageId?: string, error?: string, ms: number}>}
+ * @param message `{ to, subject, text, html, fromName?, purpose? }`。
+ * @param options.config 供测试与脚本注入，默认取进程配置。
  */
-async function send(message, options = {}) {
+export async function send(message: MailMessage, options: { config?: MailConfig } = {}): Promise<SendResult> {
   const config = options.config || mailConfig;
   const startedAt = Date.now();
   const ms = () => Date.now() - startedAt;
@@ -159,10 +197,10 @@ async function send(message, options = {}) {
     };
   }
 
-  let built;
+  let built: BuiltMessage;
   try {
     built = buildMessage(message, config);
-  } catch (error) {
+  } catch (error: unknown) {
     return { ok: false, transport: config.transport, error: describeError(error), ms: ms() };
   }
 
@@ -181,18 +219,7 @@ async function send(message, options = {}) {
     }
     const info = await withTimeout(smtpTransport(config).sendMail(built), config.sendTimeoutMs);
     return { ok: true, transport: 'smtp', messageId: (info && info.messageId) || '', ms: ms() };
-  } catch (error) {
+  } catch (error: unknown) {
     return { ok: false, transport: config.transport, error: describeError(error), ms: ms() };
   }
 }
-
-module.exports = {
-  send,
-  outbox,
-  lastMail,
-  resetMailer,
-  closeTransporter,
-  // 导出给用例：最终邮件形态的组装（清洗规则）值得被单独钉住。
-  buildMessage,
-  formatFrom,
-};

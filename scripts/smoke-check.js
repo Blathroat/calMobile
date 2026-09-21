@@ -790,7 +790,7 @@ const checks = [
     id: 'backend-mail-channel',
     // 邮件通道：三条路（console / smtp / memory），且 memory 在生产必须被拦 ——
     // 否则线上会「发信成功」而用户永远收不到验证码。nodemailer 只在 smtp 分支延迟加载。
-    file: 'server/src/services/mailer.js',
+    file: 'server/src/services/mailer.ts',
     contains: ['memory', 'console', 'smtp', 'nodemailer', 'outbox', 'closeTransporter'],
   },
   {
@@ -802,7 +802,7 @@ const checks = [
   {
     id: 'backend-mail-templates-no-links',
     // 验证码邮件不放链接（钓鱼特征会拉低送达率）；主题与品牌名要先清洗（邮件头注入）
-    file: 'server/src/services/mail-templates.js',
+    file: 'server/src/services/mail-templates.ts',
     contains: ['verificationMail', 'sanitizeHeader', 'escapeHtml', 'subjectSuffix'],
     notContains: ['http://', 'https://', '<a href'],
   },

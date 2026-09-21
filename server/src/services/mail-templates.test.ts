@@ -3,9 +3,8 @@
  * （品牌名进 HTML 要转义、进主题要清换行）。
  */
 
-const assert = require('node:assert/strict');
-
-const { verificationMail, PURPOSE_KEYS, PURPOSES, escapeHtml, sanitizeHeader } = require('./mail-templates');
+import assert from 'node:assert/strict';
+import { verificationMail, PURPOSE_KEYS, PURPOSES, escapeHtml, sanitizeHeader } from './mail-templates';
 
 const BRAND = { zh: '发现展会', en: 'ExpoHub' };
 
@@ -17,10 +16,11 @@ test('五种用途都能生成中英双语邮件，主题带品牌中文名与�
       expiresInMin: 10,
       brand: BRAND,
     });
+    const label = PURPOSES[purpose as keyof typeof PURPOSES];
     assert.ok(mail.subject.includes('发现展会'), `${purpose} 的主题缺品牌名`);
-    assert.ok(mail.subject.includes(PURPOSES[purpose].zh), `${purpose} 的主题缺用途`);
+    assert.ok(mail.subject.includes(label.zh), `${purpose} 的主题缺用途`);
     assert.ok(mail.text.includes('ExpoHub'), `${purpose} 的正文缺英文品牌`);
-    assert.ok(mail.text.includes(PURPOSES[purpose].en), `${purpose} 的正文缺英文用途`);
+    assert.ok(mail.text.includes(label.en), `${purpose} 的正文缺英文用途`);
     assert.ok(mail.html.includes('ExpoHub'));
     assert.ok(mail.text.length > 0 && mail.html.length > 0);
   }

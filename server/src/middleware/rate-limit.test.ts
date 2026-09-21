@@ -5,11 +5,11 @@
  * 断言用 node 的 assert/strict，不绑死 vitest 的 expect API。
  */
 
-const assert = require('node:assert/strict');
+import assert from 'node:assert/strict';
+import { ApiError } from '../domain/errors';
+import { isAuthFailure, isEnvelopeFailure, rateLimit, resetRateLimits } from './rate-limit';
 
-const { rateLimit, resetRateLimits } = require('./rate-limit');
-
-function fakeReq(username, ip = '10.0.0.1') {
+function fakeReq(username: string, ip = '10.0.0.1') {
   return { path: '/login', ip, body: { username } };
 }
 
@@ -17,13 +17,13 @@ function fakeReq(username, ip = '10.0.0.1') {
 function fakeRes() {
   const res = {
     statusCode: 200,
-    body: null,
-    listeners: {},
-    json(body) {
+    body: null as unknown,
+    listeners: {} as Record<string, () => void>,
+    json(body: unknown) {
       res.body = body;
       return res;
     },
-    on(event, handler) {
+    on(event: string, handler: () => void) {
       res.listeners[event] = handler;
       return res;
     },
@@ -34,12 +34,12 @@ function fakeRes() {
 /**
  * 跑一次请求。
  *
- * @param {boolean} failed 是否模拟「失败」——失败的两种形态都会计数：
- *                          200 + `{ ok:false }` 的信封，或 4xx 状态码。
+ * @param failed 是否模拟「失败」——失败的两种形态都会计数：
+ *               200 + `{ ok:false }` 的信封，或 4xx 状态码。
  */
-function once(limiter, req, failed = true) {
+function once(limiter: ReturnType<typeof rateLimit>, req: ReturnType<typeof fakeReq>, failed = true) {
   const res = fakeRes();
-  let error = null;
+  let error: unknown = null;
   limiter(req, res, (received) => {
     error = received || null;
   });
@@ -51,12 +51,12 @@ function once(limiter, req, failed = true) {
     }
     res.listeners.finish?.();
   }
-  return error;
+  return error as ApiError | null;
 }
 
 /** 连续跑 times 次，返回最后一次的错误（没有错误就是 null）。 */
-function run(limiter, req, times, failed = true) {
-  let lastError = null;
+function run(limiter: ReturnType<typeof rateLimit>, req: ReturnType<typeof fakeReq>, times: number, failed = true) {
+  let lastError: ApiError | null = null;
   for (let i = 0; i < times; i += 1) {
     lastError = once(limiter, req, failed);
   }
@@ -64,6 +64,24 @@ function run(limiter, req, times, failed = true) {
 }
 
 beforeEach(() => resetRateLimits());
+
+test('信封失败只认 { ok: false }，与猴补丁时期同一判定', () => {
+  assert.equal(isEnvelopeFailure({ ok: false, error: '账号或密码不正确' }), true);
+  assert.equal(isEnvelopeFailure({ ok: true, error: '' }), false);
+  assert.equal(isEnvelopeFailure({ error: '请先登录' }), false);
+  assert.equal(isEnvelopeFailure(null), false);
+  assert.equal(isEnvelopeFailure(undefined), false);
+  assert.equal(isEnvelopeFailure('nope'), false);
+  assert.equal(isEnvelopeFailure(0), false);
+});
+
+test('认证失败计数：4xx 或业务信封都算，成功信封不算', () => {
+  assert.equal(isAuthFailure(200, { ok: false, error: '账号或密码不正确' }), true);
+  assert.equal(isAuthFailure(401, { error: '请先登录' }), true);
+  assert.equal(isAuthFailure(429, undefined), true);
+  assert.equal(isAuthFailure(200, { ok: true, error: '' }), false);
+  assert.equal(isAuthFailure(200, undefined), false);
+});
 
 test('失败累计到上限后给 429', () => {
   const limiter = rateLimit({ windowMs: 60 * 1000, max: 3, message: '太频繁' });
@@ -81,6 +99,17 @@ test('成功登录不计数：连着登录很多次也不会把自己锁住', ()
   // 期间夹着的失败仍要计数：打满 3 次之后第 4 次失败被拦
   assert.equal(run(limiter, req, 3), null);
   assert.equal(run(limiter, req, 1)?.status, 429);
+});
+
+test('同一次响应里信封失败是粘性的：先 ok:false 再 ok:true 仍计数', () => {
+  const limiter = rateLimit({ windowMs: 60 * 1000, max: 1, message: '太频繁' });
+  const req = fakeReq('demo');
+  const res = fakeRes();
+  limiter(req, res, () => {});
+  res.json({ ok: false, error: '账号或密码不正确' });
+  res.json({ ok: true, error: '' });
+  res.listeners.finish?.();
+  assert.equal(once(limiter, req, false)?.status, 429, '粘性信封失败之后应当已被计数');
 });
 
 test('4xx 状态码也算失败', () => {
