@@ -807,10 +807,14 @@ const checks = [
     notContains: ['http://', 'https://', '<a href'],
   },
   {
-    id: 'backend-mail-dev-sink',
-    // 本地收件箱：Mailpit 容器（SMTP 1025 / 收件箱 8025），不进真实邮箱
-    file: 'scripts/mail.ps1',
-    contains: ['calmobile-mail', 'axllent/mailpit', '1025', '8025', 'console'],
+    id: 'dev-infra-compose',
+    // 本机基础设施只有一处定义：根目录 docker-compose.yml（postgres + Mailpit）。
+    // 数据库 18+ 的数据目录是 /var/lib/postgresql/18/docker，卷必须挂在 /var/lib/postgresql，
+    // 挂在 /var/lib/postgresql/data 会被镜像拒绝启动（docker-library/postgres#1259）。
+    file: 'docker-compose.yml',
+    contains: ['postgres:18-alpine', 'axllent/mailpit', 'calmobile-pg', 'calmobile-mail',
+      'calmobile-pgdata:/var/lib/postgresql', 'Asia/Shanghai', '1025', '8025'],
+    notContains: ['- calmobile-pgdata:/var/lib/postgresql/data'],
   },
   {
     id: 'backend-mail-migration',

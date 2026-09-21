@@ -7,8 +7,8 @@ CalMobile 是展会排期助手：按月历浏览展会、查看详情、在线�
 ## 快速开始
 
 ```bash
-# 1. 起数据库（Docker 容器 calmobile-pg）与后端
-pwsh -File scripts\db.ps1 start
+# 1. 起数据库（PostgreSQL 容器 calmobile-pg）与本地收件箱（Mailpit）
+docker compose up -d
 cd server
 pnpm install
 cp .env.example .env          # 按需改数据库连接与 JWT 密钥
@@ -16,14 +16,13 @@ pnpm db:migrate           # 建表（可反复执行）
 pnpm db:seed              # 示例账号与展会
 pnpm dev                  # http://127.0.0.1:3000（状态页 /status）
 
-# 2. 起本地收件箱（Mailpit：SMTP 1025 / 网页 8025），验证码邮件往这里发
-pwsh -File scripts\mail.ps1 start
-
-# 3. 出包并装到设备，把设备端口指向本机后端
+# 2. 出包并装到设备，把设备端口指向本机后端
 gradlew.bat :app:assembleDebug
 adb install -r app\build\outputs\apk\debug\app-debug.apk
 adb reverse tcp:3000 tcp:3000
 ```
+
+两个服务定义在仓库根的 `docker-compose.yml`（镜像版本、时区、数据卷都在那里，日常启停也可用薄封装 `pwsh -File scripts\db.ps1 start` 与 `pwsh -File scripts\mail.ps1 start`）。
 
 示例账号：`demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`；未登录只能浏览公开展会。
 

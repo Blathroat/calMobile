@@ -30,7 +30,7 @@ pnpm lint                # oxlint
 pnpm format              # oxfmt
 ```
 
-数据库：`pwsh -File scripts\db.ps1 start`。本地收件箱：`pwsh -File scripts\mail.ps1 start`。配置抄 `server/.env.example`，不要提交 `.env`。起来后看 `http://127.0.0.1:3000/status`。
+数据库：`docker compose up -d`（postgres 与本地收件箱 Mailpit，定义在根目录 `docker-compose.yml`；日常启停也可用薄封装 `scripts\db.ps1 start` / `scripts\mail.ps1 start`）。配置抄 `server/.env.example`，不要提交 `.env`。起来后看 `http://127.0.0.1:3000/status`。
 
 改了前端文案源码后跑 `node scripts/extract-strings.js --write`。
 
