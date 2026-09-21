@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    // 现有 JS 必须零报错：strict / checkJs 关闭。NodeNext、verbatimModuleSyntax、
+    // noUncheckedIndexedAccess 等收紧项等源码转成 TypeScript 后再开。
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "allowJs": true,
+    "checkJs": false,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "sourceMap": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.js"],
+  "exclude": ["node_modules", "dist"]
+}
