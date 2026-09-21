@@ -40,7 +40,7 @@ adb reverse tcp:3000 tcp:3000
 
 ## 技术栈
 
-- **客户端**：Java 25 + Android SDK（`compileSdk 36.1`、`targetSdk 34`，Gradle 9.7.1 + AGP 9.4.1）。界面是 WebView 承载的原生 HTML/CSS/ES 模块，没有打包器与构建步骤；运行时依赖只有 Gson（桥接层 JSON）与 JUnit（单元测试）。
+- **客户端**：Java 25 + Android SDK（`compileSdk 36.1`、`targetSdk 36.1`，Gradle 9.7.1 + AGP 9.4.1）。界面是 WebView 承载的原生 HTML/CSS/ES 模块，没有打包器与构建步骤；运行时依赖只有 Gson（桥接层 JSON）与 JUnit（单元测试）。
 - **前端**：设计令牌集中在 `styles/tokens.css`，动效集中在 `styles/motion.css`；第三方库内置在 `assets/web/vendor/`，不引用 CDN 或图标字体；数据一律走 `js/core/api.js` 这一个入口。
 - **后端**：Node.js + Express + PostgreSQL，JWT 认证，REST 接口按资源分路由；写操作返回 `{ ok, error, ... }` 信封，状态存英文代码、中文标签只映射一次。
 

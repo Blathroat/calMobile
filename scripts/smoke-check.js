@@ -382,7 +382,7 @@ const checks = [
     id: 'android-gradle-files',
     // AGP 9 + Gradle 9：属性用赋值式（`compileSdk = 36.1`），方法调用式在 Gradle 10 会被移除
     file: 'app/build.gradle',
-    contains: ['compileSdk = 36.1', 'targetSdk = 34', "namespace = 'com.example.calmobile'",
+    contains: ['compileSdk = 36.1', 'targetSdk = 36.1', "namespace = 'com.example.calmobile'",
       'JavaVersion.VERSION_25']
   },
   {

@@ -3,7 +3,7 @@
 ## 环境要求
 
 - Android Studio、JDK 25、Android SDK 36.1（`compileSdk`）、Gradle Wrapper 9.7.1（Android Gradle Plugin 9.4.1）；Windows 用 `gradlew.bat`，Linux/macOS 用 `./gradlew`。
-- Node.js 18+ 与 pnpm（后端 `server/`），PostgreSQL 与本地收件箱跑在 Docker 里（根目录 `docker-compose.yml`，`docker compose up -d` 起两个服务）。
+- Node.js 20.19+（或 22.12+）与 pnpm（后端 `server/`），PostgreSQL 与本地收件箱跑在 Docker 里（根目录 `docker-compose.yml`，`docker compose up -d` 起两个服务）。下限由工具链决定：`nodemailer` 10 要 Node 20+，`oxlint` / `oxfmt` 要 `^20.19 || >=22.12`。
 
 ## 构建、测试与运行
 
