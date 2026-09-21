@@ -80,3 +80,18 @@ pnpm format              # oxfmt
 ## 文档
 
 新增或更新需求按主题改 `docs/` 下对应的那一份（`features.md` 功能与验收、`architecture.md` 架构与前后端边界、`ui-standards.md` 界面与动效、`deployment.md` 构建与上线、`roadmap.md` 限制与未决项），不要再创建重复的需求、架构或 Review 文档；`README.md` 只保留简介、快速开始、项目结构、常用命令与文档索引。**所有文档只描述当前状态**：不写「变更记录」、不写迁移过程、不写「以前是怎样的」，历史看 `git log`；已解决的问题从清单里删掉而不是标注「已完成」。设计稿与实现的冲突只记录在 `docs/roadmap.md` 的「待裁决清单（未决项）」，未确认前不要擅自扩大数据模型。代码行为、依赖或命令变化后同步更新对应说明，并运行 `node scripts/smoke-check.js` 与 `node scripts/webui-check.js`。
+
+## Agent skills
+
+### Issue tracker
+
+工单在本仓库 GitHub Issues，用 `gh` 读写。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+五个分流角色与标签同名：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+布局为 single-context（根目录一份 `CONTEXT.md` + `docs/adr/`）。详见 `docs/agents/domain.md`。
+
