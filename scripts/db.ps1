@@ -92,7 +92,7 @@ switch ($Action) {
         docker rm -f $ContainerName *> $null
         docker volume rm $VolumeName *> $null
         Start-Db
-        Write-Output '接下来在 server/ 里跑：npm run db:migrate; npm run db:seed'
+        Write-Output '接下来在 server/ 里跑：pnpm run db:migrate; pnpm run db:seed'
     }
     default {
         throw "未知操作：$Action（可用：start / stop / status / psql / reset）"

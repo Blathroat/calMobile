@@ -247,7 +247,7 @@ const one = await exhibitions.get(id);
 await registrations.submit(payload);
 ```
 
-`api.js` 内部是一张**动作名 → REST 请求**的映射表（`ENDPOINTS`）：按表把动作翻成 `GET/POST/PUT/DELETE /api/v1/...`，带 `Authorization: Bearer`；访问令牌过期（401）时自动用刷新令牌换一次再重试。**没有第二条路径**，原生不再有数据实现，5xx 与连不上都会如实抛出 `TransportError`，由页面把原因（后端地址、`npm run dev`、`adb reverse` 提示）显示出来。`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法。
+`api.js` 内部是一张**动作名 → REST 请求**的映射表（`ENDPOINTS`）：按表把动作翻成 `GET/POST/PUT/DELETE /api/v1/...`，带 `Authorization: Bearer`；访问令牌过期（401）时自动用刷新令牌换一次再重试。**没有第二条路径**，原生不再有数据实现，5xx 与连不上都会如实抛出 `TransportError`，由页面把原因（后端地址、`pnpm run dev`、`adb reverse` 提示）显示出来。`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法。
 
 响应约定：**读取类直接返回数据**（列表、对象）；**写入类返回 `{ ok, error, ... }` 信封**，页面按 `.ok` 判断。状态码只有三种含义：**4xx 是业务/权限问题**（抛出错误由页面提示），**400/409 这类可预期的规则失败**由后端包成 HTTP 200 + `{ ok:false, error }`，**5xx 与连不上**是传输层失败。
 
@@ -286,16 +286,16 @@ await registrations.submit(payload);
 pwsh -File scripts\db.ps1 start
 
 # 2. 建表 + 示例数据（可反复执行）
-cd server && npm install
+cd server && pnpm install
 cp .env.example .env                # 按需改数据库连接与 JWT 密钥
-npm run db:migrate && npm run db:seed
-npm run dev                         # 开发模式（nodemon），http://127.0.0.1:3000
+pnpm run db:migrate && pnpm run db:seed
+pnpm run dev                         # 开发模式（nodemon），http://127.0.0.1:3000
 
 # 3. 真机 / 模拟器访问本机后端
 adb reverse tcp:3000 tcp:3000
 ```
 
-**`npm run dev` 与 `npm start` 是两种模式**：`dev` 走开发模式（状态页开着、不做启动自检）；`start` 自动进**生产模式**（`node src/index.js --production`）——关掉 `/status` 与 `/api/v1/status`、对配置做启动前自检（开发密钥、默认库密码、验证码只写日志这类致命项直接拒绝启动），对生产库迁移用 `npm run db:migrate:prod`。判定集中在 `server/src/config/runtime.js`，细节见 `server/README.md`。
+**`pnpm run dev` 与 `pnpm start` 是两种模式**：`dev` 走开发模式（状态页开着、不做启动自检）；`start` 自动进**生产模式**（`node src/index.js --production`）——关掉 `/status` 与 `/api/v1/status`、对配置做启动前自检（开发密钥、默认库密码、验证码只写日志这类致命项直接拒绝启动），对生产库迁移用 `pnpm run db:migrate:prod`。判定集中在 `server/src/config/runtime.js`，细节见 `server/README.md`。
 
 示例账号 `demo` / `exhibitor` / `user`，密码都是 `password`（角色分别是管理员、展商、普通用户）。
 
@@ -400,11 +400,11 @@ gradlew.bat :app:assembleDebug
 gradlew.bat :app:testDebugUnitTest --tests 'com.example.calmobile.CalendarHelperTest'
 ```
 
-后端开发请进入 `server/`，按 `server/README.md` 起好 PostgreSQL 并复制 `.env.example`；常用命令为 `npm install`、`npm run db:migrate`、`npm run db:seed`、`npm run dev`、`npm test`（jest 单测）、`npm run test:contract`（接口契约）和 `npm run lint`。
+后端开发请进入 `server/`，按 `server/README.md` 起好 PostgreSQL 并复制 `.env.example`；常用命令为 `pnpm install`、`pnpm run db:migrate`、`pnpm run db:seed`、`pnpm run dev`、`pnpm test`（jest 单测）、`pnpm run test:contract`（接口契约）和 `pnpm run lint`。
 
 客户端测试位于 `app/src/test/java/com/example/calmobile/`（39 项），覆盖系统日历的日期与时间解析、媒体上限区间与后缀列表解析、设备镜像、CSV 导出、桥接取值助手和资源路径守卫（`CalendarHelperTest`、`AppSettingsTest`、`ExportManagerTest`、`WebAppBridgeTest`、`AssetGuardTest`）；Activity 级 UI 测试仍在路线图中。原生与前端的日历契约按**后端下发的 ISO 日期**（`YYYY-MM-DD`）传参，不要在原生侧猜年月——写死月份的缺陷曾让事件落到错误的月份，而测试把常量抄成期望值后照旧全绿。
 
-后端测试分两层：`server/test/api.test.js`（59 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 审核状态机与核销流转 / 报名收集项校验 / 登录限流 429 / 隐私开关（公开页不下发报名码）这些业务规则、**邮箱验证码体系**（两步注册、找回密码不泄露存在性、两步验证的票据与令牌边界、改邮箱要验证新地址）、数据库不可用时的状态页降级，以及**前后端路由交叉校验**（前端每个数据动作都有对应路由、后端没有前端用不到的路由）；`server/src/**/*.test.js`（jest，95 项）是不依赖数据库的纯函数与单测。库结构变更后跑 `npm run db:migrate` 即可，迁移是幂等的。
+后端测试分两层：`server/test/api.test.js`（59 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 审核状态机与核销流转 / 报名收集项校验 / 登录限流 429 / 隐私开关（公开页不下发报名码）这些业务规则、**邮箱验证码体系**（两步注册、找回密码不泄露存在性、两步验证的票据与令牌边界、改邮箱要验证新地址）、数据库不可用时的状态页降级，以及**前后端路由交叉校验**（前端每个数据动作都有对应路由、后端没有前端用不到的路由）；`server/src/**/*.test.js`（jest，95 项）是不依赖数据库的纯函数与单测。库结构变更后跑 `pnpm run db:migrate` 即可，迁移是幂等的。
 
 前端另有 `scripts/webui-render.test.js`（35 项）：它用最小 DOM 打桩加假后端 `fetch`，把 20 条路由用例（同一页面的不同参数各渲染一次）都真渲染一遍，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销、用户公开页管理视角、注册与找回密码的两步流程、「数据动作不再经过原生桥接」「点日期与切月份不再取数」「缓存命中时同步出内容」「过期缓存仍可先画一屏」「并发请求去重」「标签页预加载」等取数体验，以及 `api.js` 的动作到 REST 路径映射与 401 自动续期。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，用例涉及预加载时先 `await settle()` 排空空闲队列再开始计数，不依赖固定的 sleep 猜测时序。
 
@@ -493,7 +493,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 ## 路线图与已知限制
 
-- **应用必须连后端**：数据只在 PostgreSQL 里，没起后端（或没做 `adb reverse`）时页面会显示连接失败与排查提示，不做离线降级。开发时可用 `pwsh -File scripts\db.ps1 start` + `npm run dev`，并打开 `http://127.0.0.1:3000/status` 确认各检查项。
+- **应用必须连后端**：数据只在 PostgreSQL 里，没起后端（或没做 `adb reverse`）时页面会显示连接失败与排查提示，不做离线降级。开发时可用 `pwsh -File scripts\db.ps1 start` + `pnpm run dev`，并打开 `http://127.0.0.1:3000/status` 确认各检查项。
 - 视频只限大小与后缀，不做转码与压缩：超过「管理-设置」里的视频大小上限会被拒（默认 50 MB，原生复制过程中也会数着字节，避免写满数据分区），但不会转码成通用码率，弱网/老设备播放不保证。
 - 媒体文件保存到应用私有目录 `files/media` 并通过短 URL 引用，属于设备本地存储；卸载应用会一并清除，换设备不同步。
 - 通知只有落库与权限申请：事件发生在服务端，应用不在前台时不会收到本地推送（需要 FCM 或轮询）。
@@ -512,7 +512,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 | 客户端改回严格模式 | `WebShellActivity` 的 `MIXED_CONTENT_ALWAYS_ALLOW` 改回 `NEVER_ALLOW`；`js/core/api.js` 的 `BASE_URL` 指向 `https://api.<域名>/api/v1`；顺手清掉 manifest 里不再需要的明文放行 | ¥0，但要重新出包 |
 | 收紧 CORS | `CORS_ORIGIN` 从 `*` 改为 WebView 的起源（`https://appassets.androidplatform.net`），`credentials` 保持 false | ¥0 |
 | 换掉示例密钥 | `JWT_SECRET` / `JWT_REFRESH_SECRET` 换成随机值（`openssl rand -hex 32`），数据库密码别再是 `postgres/postgres`；**再配一个 `TOTP_SECRET_KEY`** 并长期保管（验证器密钥用它加密，换掉它用户得重新绑定） | ¥0 |
-| **保护 `/status` 与 `/api/v1/status`** | **已内置**：`npm start` 进生产模式后这两个接口直接 404（它们会暴露迁移清单、各表行数与接口清单，失败时还带 pg 的错误原文）。确实需要时用 `ENABLE_STATUS_PAGE=true` 打开，并靠反代加 Basic Auth / IP 白名单；对外探活只留 `/ping` | ¥0 |
+| **保护 `/status` 与 `/api/v1/status`** | **已内置**：`pnpm start` 进生产模式后这两个接口直接 404（它们会暴露迁移清单、各表行数与接口清单，失败时还带 pg 的错误原文）。确实需要时用 `ENABLE_STATUS_PAGE=true` 打开，并靠反代加 Basic Auth / IP 白名单；对外探活只留 `/ping` | ¥0 |
 | 发信域名 | 用**专用子域**（如 `mail.<域名>`）而不是主域，并配好 SPF / DKIM / DMARC —— 验证码邮件的信誉问题不该污染主域 | ¥0 |
 | 不要部署 Mailpit | `scripts/mail.ps1` 与 `MAIL_SMTP_HOST=127.0.0.1:1025` 只用于本地开发；生产必须指向托管中继 | ¥0 |
 
@@ -525,13 +525,13 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 | 备份 | `pg_dump` 每日导出 + 卷快照保留 7 天，并**演练一次恢复**（没演练过的备份不算备份） | ¥0 |
 | 日志 | 请求日志交给 journald / Docker 日志轮转，避免把磁盘写满 | ¥0 |
 | 发信通道 | 阿里云邮件推送 / 腾讯云 SES（国内收件箱送达最好，大陆节点通常要求发信域名已备案）或 Resend / Brevo（免备案，QQ/163 可能进垃圾箱）；只改 `.env`，代码不动 | 见下 |
-| 部署顺序 | `npm ci` → `npm run db:migrate` → 重启进程；迁移幂等，**先迁移再重启** | ¥0 |
+| 部署顺序 | `pnpm install --frozen-lockfile` → `pnpm run db:migrate` → 重启进程；迁移幂等，**先迁移再重启** | ¥0 |
 | 重新出包 | 上面的客户端改动 + 域名一起发版；Android 侧还要把 `usesCleartextTraffic` 与明文说明去掉 | ¥0 |
 
 ### 上线后观察
 
-- **启动日志**：`npm start` 会打印「运行模式：production」「状态页：已关闭」以及配置自检的警告项；致命项（开发密钥、默认库密码、验证码只写日志）会直接拒绝启动 —— 这是上线前最后一道机器检查。
-- 需要排查时临时开一次状态页：`ENABLE_STATUS_PAGE=true npm start`（或在 `.env` 里打开），查完记得关掉。
+- **启动日志**：`pnpm start` 会打印「运行模式：production」「状态页：已关闭」以及配置自检的警告项；致命项（开发密钥、默认库密码、验证码只写日志）会直接拒绝启动 —— 这是上线前最后一道机器检查。
+- 需要排查时临时开一次状态页：`ENABLE_STATUS_PAGE=true pnpm start`（或在 `.env` 里打开），查完记得关掉。
 - `/status` 的「邮件通道」自检项：通道配置是否完整 + 最近 24 小时发信失败数（读 `mail_log`）。**发信失败率是这套功能的第一指标** —— 发信成功而用户收不到最难查。
 - 发信量与限流命中：`email_codes` 按用途 + 邮箱限流（60 秒 1 条 / 1 小时 5 条 / 24 小时 15 条，同 IP 1 小时 20 条）。真被脚本刷时再加图形验证码。
 - 两步验证的支持成本：邮箱失效的账号只能由管理员在「管理 → 用户」关闭两步验证，这条路要写进客服流程。
