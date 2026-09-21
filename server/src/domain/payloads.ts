@@ -5,10 +5,91 @@
  * 保持一致，因此换实现不需要改页面。映射集中在这里，路由只负责取数与校验。
  */
 
-const labels = require('./labels');
+import * as labels from './labels';
+import type { Capabilities } from './permissions';
+
+interface ExhibitionRow {
+  id: string;
+  title: string;
+  venue: string;
+  time: string;
+  category?: string | null;
+  description?: string | null;
+  description_format?: string | null;
+  status: string;
+  year?: number | null;
+  month?: number | null;
+  day?: number | null;
+  exhibition_date?: string | null;
+  exhibitor?: string | null;
+  exhibitor_note?: string | null;
+  highlights?: unknown;
+  image_uri?: string | null;
+  registration_start?: string | null;
+  registration_end?: string | null;
+  qr_enabled?: boolean | null;
+  registration_count?: number | null;
+  field_count?: number | null;
+}
+
+interface FieldRow {
+  id: string;
+  title: string;
+  type: string;
+  required?: boolean | null;
+  options?: unknown;
+}
+
+interface RegistrationRow {
+  id: string;
+  exhibition_id: string;
+  exhibition_title?: string | null;
+  exhibition_day?: number | null;
+  exhibition_month?: number | null;
+  exhibition_year?: number | null;
+  exhibition_date?: string | null;
+  exhibition_time?: string | null;
+  exhibition_venue?: string | null;
+  visitor_name: string;
+  visitor_type: string;
+  answers?: string | null;
+  status: string;
+  exhibition_qr_enabled?: boolean | null;
+  check_in_time?: string | Date | null;
+}
+
+interface UserRow {
+  role: string;
+  username: string;
+  nickname: string;
+  email?: string | null;
+  bio?: string | null;
+  region?: string | null;
+  social_media?: string | null;
+  avatar?: string | null;
+  show_registrations?: boolean | null;
+  status?: string | null;
+  email_verified?: boolean | null;
+  two_factor_enabled?: boolean | null;
+  last_login_time?: string | null;
+  registration_time?: string | null;
+}
+
+interface AdminUserRow {
+  id: string;
+  username: string;
+  nickname: string;
+  email?: string | null;
+  role: string;
+  status?: string | null;
+  email_verified?: boolean | null;
+  two_factor_enabled?: boolean | null;
+  registration_time?: string | null;
+  last_login_time?: string | null;
+}
 
 /** 展会行 → 列表 / 详情的展会对象。 */
-function exhibitionPayload(row) {
+export function exhibitionPayload(row: ExhibitionRow) {
   const statusCode = row.status;
   return {
     id: row.id,
@@ -40,7 +121,7 @@ function exhibitionPayload(row) {
 }
 
 /** 收集项行 → 表单定义。 */
-function fieldPayload(row) {
+export function fieldPayload(row: FieldRow) {
   return {
     id: row.id,
     title: row.title,
@@ -57,7 +138,7 @@ function fieldPayload(row) {
  * 其余状态给空串，页面据此不渲染二维码。这是现场核销的唯一凭据，
  * 因此只在本人 / 管理员可见的路径上下发（公开页用 publicRegistrationPayload）。
  */
-function registrationPayload(row) {
+export function registrationPayload(row: RegistrationRow) {
   const statusCode = row.status;
   const codeAllowed = row.exhibition_qr_enabled === true && (statusCode === 'approved' || statusCode === 'attended');
   return {
@@ -90,17 +171,17 @@ function registrationPayload(row) {
  * `checkInTime` 不是凭据，且「已参加」这一状态本身对访客可见，因此照常给出。
  * 字段名与形状与 `registrationPayload` 一致，页面才能共用同一套渲染。
  */
-function publicRegistrationPayload(row) {
+export function publicRegistrationPayload(row: RegistrationRow) {
   return { ...registrationPayload(row), checkInCode: '' };
 }
 
 /**
  * 用户行 → 前端需要的用户态。
  *
- * `can` 是页面与路由共用的权限判定结果（见 domain/permissions.js），
+ * `can` 是页面与路由共用的权限判定结果（见 domain/permissions.ts），
  * 这里只做字段拼装，不重复判断角色。
  */
-function userPayload(row, can) {
+export function userPayload(row: UserRow, can: Capabilities) {
   return {
     loggedIn: true,
     guest: false,
@@ -114,7 +195,7 @@ function userPayload(row, can) {
     socialMedia: row.social_media || '',
     avatar: row.avatar || '',
     showRegistrations: row.show_registrations === true,
-    status: labels.USER_STATUS[row.status] || labels.USER_STATUS.active,
+    status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active,
     statusCode: row.status || 'active',
     // 邮箱验证状态与两步验证开关：个人页「安全」区与用户管理都看这两个字段
     emailVerified: row.email_verified === true,
@@ -126,7 +207,7 @@ function userPayload(row, can) {
 }
 
 /** 未登录（访客）时的用户态，字段与 userPayload 对齐。 */
-function guestPayload() {
+export function guestPayload() {
   return {
     loggedIn: false,
     guest: true,
@@ -149,7 +230,7 @@ function guestPayload() {
 }
 
 /** 管理员用户列表里的一行：与 `users.list` 的字段一致。 */
-function adminUserPayload(row, index) {
+export function adminUserPayload(row: AdminUserRow, index: number) {
   return {
     id: row.id,
     username: row.username,
@@ -157,7 +238,7 @@ function adminUserPayload(row, index) {
     email: row.email || '',
     role: labels.ROLE_LABEL[row.role] || row.role,
     roleCode: row.role,
-    status: labels.USER_STATUS[row.status] || labels.USER_STATUS.active,
+    status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active,
     // 管理员据此决定要不要显示「关闭两步验证」这个兜底入口
     emailVerified: row.email_verified === true,
     twoFactorEnabled: row.two_factor_enabled === true,
@@ -166,13 +247,3 @@ function adminUserPayload(row, index) {
     order: index,
   };
 }
-
-module.exports = {
-  exhibitionPayload,
-  fieldPayload,
-  registrationPayload,
-  publicRegistrationPayload,
-  userPayload,
-  guestPayload,
-  adminUserPayload,
-};

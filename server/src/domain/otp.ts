@@ -20,15 +20,15 @@
  * 不放在这里的话，码的有效期、尝试次数与限流就散在路由里了。
  */
 
-const crypto = require('node:crypto');
-const { query } = require('../config/pool');
-const { ApiError, badRequest } = require('./errors');
-const { readSection } = require('./settings');
-const { send } = require('../services/mailer');
-const { verificationMail, PURPOSE_KEYS } = require('../services/mail-templates');
+import crypto from 'node:crypto';
+import { query } from '../config/pool';
+import { ApiError, badRequest } from './errors';
+import { readSection } from './settings';
+import { send } from '../services/mailer';
+import { verificationMail, PURPOSE_KEYS } from '../services/mail-templates';
 
 /** 验证码有效期（分钟）。前端要显示的「10 分钟内有效」跟着它走。 */
-const CODE_TTL_MIN = 10;
+export const CODE_TTL_MIN = 10;
 
 /**
  * 验证码业务失败：码不对、过期、次数用尽、已被使用、缺参数。
@@ -37,41 +37,85 @@ const CODE_TTL_MIN = 10;
  * 「可预期的规则失败」（和登录密码错误一样），页面要就地提示，而不是走 4xx 的异常通道。
  * 限流（429）仍然是 `ApiError`：那是另一类语义。
  */
-class CodeRejected extends Error {
-  constructor(message) {
+export class CodeRejected extends Error {
+  constructor(message: string) {
     super(message);
     this.name = 'CodeRejected';
   }
 }
 
 /** 判断是不是「验证码业务失败」，供路由决定用哪种信封。 */
-function isCodeRejected(error) {
+export function isCodeRejected(error: unknown): error is CodeRejected {
   return error instanceof CodeRejected;
 }
 
 /** 单枚码最多尝试几次；用尽即作废。 */
-const MAX_ATTEMPTS = 5;
+export const MAX_ATTEMPTS = 5;
 
 /** 码长（位）。 */
-const CODE_LENGTH = 6;
+export const CODE_LENGTH = 6;
 
 /** 同一用途 + 同一邮箱的发码节奏。 */
-const RESEND_COOLDOWN_SEC = 60;
-const SEND_PER_HOUR = 5;
-const SEND_PER_DAY = 15;
+export const RESEND_COOLDOWN_SEC = 60;
+export const SEND_PER_HOUR = 5;
+export const SEND_PER_DAY = 15;
 
 /** 同一 IP 每小时最多发几条（挡住换邮箱刷发信额度）。 */
-const IP_SEND_PER_HOUR = 20;
+export const IP_SEND_PER_HOUR = 20;
+
+interface IssueCodeOptions {
+  purpose?: string;
+  email?: string;
+  userId?: string | null;
+  payload?: unknown;
+  ip?: string;
+  silent?: boolean;
+}
+
+interface ConsumeCodeOptions {
+  purpose?: string;
+  email?: string;
+  code?: unknown;
+}
+
+interface CountRow {
+  last_minute?: string | number;
+  last_hour?: string | number;
+  last_day?: string | number;
+}
+
+interface IpCountRow {
+  total?: number;
+}
+
+interface EmailCodeRow {
+  id: string;
+  user_id?: string | null;
+  code_hash: string;
+  payload?: unknown;
+  attempts?: number;
+  expires_at: string | Date;
+}
+
+interface MailSendResult {
+  ok?: boolean;
+  transport?: string;
+  error?: unknown;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 /** 邮箱一律小写比对：大小写不同不该被当成两个邮箱。 */
-function normalizeEmail(email) {
+export function normalizeEmail(email: unknown): string {
   return String(email === undefined || email === null ? '' : email)
     .trim()
     .toLowerCase();
 }
 
 /** 码的哈希：把行 id 当盐，两个用途下同样的码也不会撞哈希。 */
-function hashCode(code, id) {
+export function hashCode(code: string, id: string): string {
   return crypto.createHash('sha256').update(`${id}:${code}`).digest('hex');
 }
 
@@ -79,7 +123,7 @@ function hashCode(code, id) {
  * 等长比较，避免按字节提前返回带来的时间差。
  * 长度不同直接判否 —— `timingSafeEqual` 对不等长入参会抛异常。
  */
-function sameHash(left, right) {
+export function sameHash(left: unknown, right: unknown): boolean {
   const a = Buffer.from(String(left || ''), 'utf8');
   const b = Buffer.from(String(right || ''), 'utf8');
   if (a.length !== b.length || a.length === 0) {
@@ -89,7 +133,7 @@ function sameHash(left, right) {
 }
 
 /** 均匀的 6 位码（`randomInt` 上限取 10^6，不引入取模偏差）。 */
-function generateCode() {
+export function generateCode(): string {
   return String(crypto.randomInt(0, 10 ** CODE_LENGTH)).padStart(CODE_LENGTH, '0');
 }
 
@@ -99,7 +143,7 @@ function generateCode() {
  * 两步验证那一步要告诉用户「码发到哪个邮箱了」，但登录页可能被旁人看到，
  * 所以只回打码后的地址（用户自己清楚完整地址是什么）。
  */
-function maskEmail(email) {
+export function maskEmail(email: unknown): string {
   const text = normalizeEmail(email);
   const at = text.indexOf('@');
   if (at <= 0) {
@@ -110,8 +154,8 @@ function maskEmail(email) {
 }
 
 /** 用途校验：写错用途会让 CHECK 约束报 500，不如在这里给 400（这是代码缺陷，不是用户操作失败）。 */
-function assertPurpose(purpose) {
-  if (!PURPOSE_KEYS.includes(purpose)) {
+function assertPurpose(purpose: unknown): asserts purpose is string {
+  if (!(PURPOSE_KEYS as string[]).includes(purpose as string)) {
     throw badRequest('验证码用途不合法');
   }
 }
@@ -120,8 +164,16 @@ function assertPurpose(purpose) {
  * 发码限流：全部按 `email_codes` 里的真实行数算，重启不清零。
  * 一分钟内的重复请求给 429（与项目里其它限流一致，前端按 4xx 提示原因）。
  */
-async function assertSendAllowed({ purpose, email, ip }) {
-  const counted = await query(
+async function assertSendAllowed({
+  purpose,
+  email,
+  ip,
+}: {
+  purpose: string;
+  email: string;
+  ip?: string;
+}): Promise<void> {
+  const counted = await query<CountRow>(
     `
         SELECT count(*) FILTER (WHERE created_at > now() - interval '1 minute') AS last_minute,
                count(*) FILTER (WHERE created_at > now() - interval '1 hour')   AS last_hour,
@@ -132,41 +184,49 @@ async function assertSendAllowed({ purpose, email, ip }) {
     [purpose, email],
   );
   const row = counted.rows[0];
-  if (Number(row.last_minute) > 0) {
+  if (Number(row?.last_minute) > 0) {
     throw new ApiError(429, `验证码已发送，请 ${RESEND_COOLDOWN_SEC} 秒后再试`);
   }
-  if (Number(row.last_hour) >= SEND_PER_HOUR) {
+  if (Number(row?.last_hour) >= SEND_PER_HOUR) {
     throw new ApiError(429, '获取验证码过于频繁，请稍后再试');
   }
-  if (Number(row.last_day) >= SEND_PER_DAY) {
+  if (Number(row?.last_day) >= SEND_PER_DAY) {
     throw new ApiError(429, '今天获取验证码的次数已达上限，请明天再试');
   }
   if (ip) {
-    const byIp = await query(
+    const byIp = await query<IpCountRow>(
       `
             SELECT count(*)::int AS total FROM email_codes
              WHERE ip = $1 AND created_at > now() - interval '1 hour'
         `,
       [ip],
     );
-    if (Number(byIp.rows[0].total) >= IP_SEND_PER_HOUR) {
+    if (Number(byIp.rows[0]?.total) >= IP_SEND_PER_HOUR) {
       throw new ApiError(429, '当前网络获取验证码过于频繁，请稍后再试');
     }
   }
 }
 
 /** 清理过期的验证码；失败不影响本次发码。 */
-function purgeStaleCodes() {
+export function purgeStaleCodes(): Promise<unknown> {
   return query(`
         DELETE FROM email_codes
          WHERE created_at < now() - interval '1 day'
-    `).catch((error) => {
-    console.warn('清理过期验证码失败：', error.message);
+    `).catch((error: unknown) => {
+    console.warn('清理过期验证码失败：', errorMessage(error));
   });
 }
 
 /** 发信留痕；失败只记日志 —— 留痕本身不该把发码接口带崩。 */
-async function recordMailLog({ to, purpose, result }) {
+async function recordMailLog({
+  to,
+  purpose,
+  result,
+}: {
+  to: string;
+  purpose: string;
+  result: MailSendResult;
+}): Promise<void> {
   try {
     await query(
       `
@@ -182,8 +242,8 @@ async function recordMailLog({ to, purpose, result }) {
         result.ok ? '' : String(result.error || ''),
       ],
     );
-  } catch (error) {
-    console.warn('写发信留痕失败：', error.message);
+  } catch (error: unknown) {
+    console.warn('写发信留痕失败：', errorMessage(error));
   }
 }
 
@@ -193,13 +253,23 @@ async function recordMailLog({ to, purpose, result }) {
  * `brand` 由调用方先读好再传进来：一是品牌名来自服务器设置，二是这样 `send()` 在
  * **同一个 tick** 里就被调用（`memory` 通道的收件箱当场就有邮件，契约用例不必轮询）。
  */
-function deliver({ to, purpose, code, brand }) {
+function deliver({
+  to,
+  purpose,
+  code,
+  brand,
+}: {
+  to: string;
+  purpose: string;
+  code: string;
+  brand: { zh?: string; en?: string } | null | undefined;
+}): void {
   const mail = verificationMail({
     purpose,
     code,
     expiresInMin: CODE_TTL_MIN,
-    brand,
-  });
+    brand: brand || undefined,
+  }) as { subject: string; text: string; html: string };
   send({
     to,
     subject: mail.subject,
@@ -208,25 +278,19 @@ function deliver({ to, purpose, code, brand }) {
     fromName: (brand && brand.zh) || '',
     purpose,
   })
-    .then((result) => recordMailLog({ to, purpose, result }))
-    .catch((error) => console.warn('发送验证码邮件时出错：', error.message));
+    .then((result: MailSendResult) => recordMailLog({ to, purpose, result }))
+    .catch((error: unknown) => console.warn('发送验证码邮件时出错：', errorMessage(error)));
 }
 
 /**
  * 签发一枚验证码并把它发出去。
- *
- * @param {object} options
- * @param {string} options.purpose 用途（见 `PURPOSE_KEYS`）。
- * @param {string} options.email 收件邮箱。
- * @param {string} [options.userId] 已存在的用户（注册用途没有用户，给 null）。
- * @param {object} [options.payload] 挂在这次验证上的数据（注册用途放待建账号）。
- * @param {string} [options.ip] 请求来源，用于按 IP 限流。
- * @param {boolean} [options.silent] 只落库、不发信。找回密码用它保证「这个邮箱注册过没有」
- *   在**响应内容与耗时上都看不出来**：不存在的邮箱照样走一遍发码限流与落库，只是不发邮件
- *   （与登录里「账号不存在也比一次 bcrypt」是同一个考虑）。
- * @returns {Promise<{email: string, purpose: string, expiresInSec: number, resendAfterSec: number}>}
  */
-async function issueCode(options = {}) {
+export async function issueCode(options: IssueCodeOptions = {}): Promise<{
+  email: string;
+  purpose: string;
+  expiresInSec: number;
+  resendAfterSec: number;
+}> {
   const { purpose, userId = null, payload = null, ip = '', silent = false } = options;
   assertPurpose(purpose);
   const email = normalizeEmail(options.email);
@@ -236,7 +300,7 @@ async function issueCode(options = {}) {
   await assertSendAllowed({ purpose, email, ip });
 
   // 品牌名读不到不该拦住发码：模板里本来就有兜底的应用名。
-  const brand = await readSection('brand').catch(() => null);
+  const brand = (await readSection('brand').catch(() => null)) as { zh?: string; en?: string } | null;
 
   const id = `code-${crypto.randomUUID()}`;
   const code = generateCode();
@@ -256,7 +320,7 @@ async function issueCode(options = {}) {
       ip,
     ],
   );
-  purgeStaleCodes();
+  void purgeStaleCodes();
   if (!silent) {
     deliver({
       to: email,
@@ -279,10 +343,12 @@ async function issueCode(options = {}) {
  *
  * 失败一律抛 `CodeRejected`，由路由翻成 200 + `{ ok:false, error }`（可预期的规则失败，
  * 页面要就地提示）；文案要说清下一步该干什么（重新获取 / 稍后重试）。
- *
- * @returns {Promise<{email: string, payload: object|null}>} 命中那一行上挂的数据。
  */
-async function consumeCode(options = {}) {
+export async function consumeCode(options: ConsumeCodeOptions = {}): Promise<{
+  email: string;
+  userId: string | null;
+  payload: unknown;
+}> {
   const { purpose } = options;
   assertPurpose(purpose);
   const email = normalizeEmail(options.email);
@@ -291,7 +357,7 @@ async function consumeCode(options = {}) {
     throw new CodeRejected('请填写邮箱与验证码');
   }
 
-  const result = await query(
+  const result = await query<EmailCodeRow>(
     `
         SELECT id, user_id, code_hash, payload, attempts, expires_at
           FROM email_codes
@@ -338,23 +404,3 @@ async function consumeCode(options = {}) {
   }
   return { email, userId: row.user_id || null, payload: row.payload || null };
 }
-
-module.exports = {
-  CODE_TTL_MIN,
-  MAX_ATTEMPTS,
-  CODE_LENGTH,
-  RESEND_COOLDOWN_SEC,
-  SEND_PER_HOUR,
-  SEND_PER_DAY,
-  IP_SEND_PER_HOUR,
-  CodeRejected,
-  isCodeRejected,
-  normalizeEmail,
-  maskEmail,
-  hashCode,
-  sameHash,
-  generateCode,
-  issueCode,
-  consumeCode,
-  purgeStaleCodes,
-};

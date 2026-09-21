@@ -7,21 +7,32 @@
  * 不能由环境推断。远端的库没开 SSL 时，生产启动自检会给出警告。
  *
  * 未知的 `NODE_ENV`（例如有人写 staging）回退到 development 配置，而不是让
- * `module.exports` 变成 undefined —— 那样会在建连接池时报一句看不懂的错。
+ * 导出变成 undefined —— 那样会在建连接池时报一句看不懂的错。
  */
 
-const { bool } = require('./runtime');
+import { bool } from './runtime';
 
-const KNOWN_ENVS = ['development', 'test', 'production'];
+type EnvLike = NodeJS.ProcessEnv | Record<string, string | undefined>;
+
+const KNOWN_ENVS = ['development', 'test', 'production'] as const;
+
+export interface DatabaseConfig {
+  host: string;
+  port: string | number;
+  database: string;
+  user: string;
+  password: string;
+  ssl: false | { rejectUnauthorized: false };
+}
 
 /**
  * 解析数据库连接配置。纯函数：用例与 `parseEnv` 直接喂环境对象。
  *
- * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} env 形如 `process.env`。
+ * @param env 形如 `process.env`。
  */
-function resolveDatabaseConfig(env = {}) {
+export function resolveDatabaseConfig(env: EnvLike = {}): DatabaseConfig {
   const nodeEnv = String(env.NODE_ENV || 'development');
-  const known = KNOWN_ENVS.includes(nodeEnv) ? nodeEnv : 'development';
+  const known = (KNOWN_ENVS as readonly string[]).includes(nodeEnv) ? nodeEnv : 'development';
   return {
     host: env.DB_HOST || 'localhost',
     port: env.DB_PORT || 5432,
@@ -33,6 +44,10 @@ function resolveDatabaseConfig(env = {}) {
 }
 
 const databaseConfig = resolveDatabaseConfig(process.env);
-databaseConfig.resolveDatabaseConfig = resolveDatabaseConfig;
 
-module.exports = databaseConfig;
+export const host = databaseConfig.host;
+export const port = databaseConfig.port;
+export const database = databaseConfig.database;
+export const user = databaseConfig.user;
+export const password = databaseConfig.password;
+export const ssl = databaseConfig.ssl;

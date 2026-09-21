@@ -5,9 +5,8 @@
  * 那些行为的正确性取决于真实的行数与并发，打桩反而测不出东西。
  */
 
-const assert = require('node:assert/strict');
-
-const {
+import assert from 'node:assert/strict';
+import {
   CODE_TTL_MIN,
   CODE_LENGTH,
   MAX_ATTEMPTS,
@@ -20,7 +19,7 @@ const {
   hashCode,
   sameHash,
   generateCode,
-} = require('./otp');
+} from './otp';
 
 test('验证码是 6 位数字，含前导零', () => {
   for (let i = 0; i < 500; i += 1) {

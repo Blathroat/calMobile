@@ -7,18 +7,51 @@
  *
  * 约定：
  * - 状态一律存**英文代码**（pending / approved / review / optional …），
- *   中文标签只在 `src/domain/labels.js` 里映射一次；
+ *   中文标签只在 `src/domain/labels.ts` 里映射一次；
  * - 展会日期只存 `exhibition_date`，年 / 月 / 日由 SQL 派生，避免三者互相漂移；
  * - 报名记录不冗余展会标题、时间、地点，读取时 JOIN 展会表，避免展会改期后两边不一致。
  */
 
 // 运行环境要先定下来：迁移脚本也要能对着生产库跑（`pnpm db:migrate:prod`），
-// 而 pool 在 require 的那一刻就按 NODE_ENV 选好库了（见 config/runtime.js）。
-const runtime = require('./runtime');
-const { pool } = require('./pool');
+// 而 pool 在 require 的那一刻就按 NODE_ENV 选好库了（见 config/runtime.ts）。
+import * as runtime from './runtime';
+import { pool } from './pool';
+import type { PoolClient } from 'pg';
+import * as dbConfig from './database';
+
+export interface MigrationStep {
+  id: string;
+  sql: string;
+}
+
+export interface ServerSettings {
+  theme: { index: number; colors: string[] };
+  ui: { mode: string };
+  capabilities: { calendar: boolean; notifications: boolean; richText: boolean; export: boolean };
+  categories: string[];
+  review: { canRevise: boolean; statuses: string[] };
+  media: { imageCount: number; imageSizeMb: number; videoCount: number; videoSizeMb: number };
+  upload: { avatarSizeMb: number; imageFormats: string[]; videoFormats: string[] };
+  limits: {
+    exhibitionTitle: number;
+    exhibitionVenue: number;
+    category: number;
+    fieldTitle: number;
+    usernameMin: number;
+    usernameMax: number;
+    passwordMin: number;
+    passwordMax: number;
+    nickname: number;
+    bio: number;
+    region: number;
+    answer: number;
+  };
+  announcement: { enabled: boolean; text: string };
+  brand: { zh: string; en: string };
+}
 
 /** 迁移步骤：id 一旦发布就不要改内容，只能追加新步骤。 */
-const STEPS = [
+export const STEPS: MigrationStep[] = [
   {
     id: '0001-core',
     sql: `
@@ -231,7 +264,7 @@ const STEPS = [
     sql: `
         -- 验证器（TOTP）与备用码：两步验证从「只有邮箱验证码」扩展成三种并列的第二因子。
         --
-        -- totp_secret 存的是 **AES-256-GCM 密文**（见 domain/totp.js），不是明文 base32：
+        -- totp_secret 存的是 **AES-256-GCM 密文**（见 domain/totp.ts），不是明文 base32：
         -- 备份、pg_dump、只读副本这类「只有库」的泄露不该直接把第二因子送出去。
         -- totp_pending_secret 是「扫了码但还没输码确认」的中间态，确认后搬进 totp_secret。
         ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT NOT NULL DEFAULT '';
@@ -255,7 +288,7 @@ const STEPS = [
   },
 ];
 
-const DEFAULT_SETTINGS = {
+export const DEFAULT_SETTINGS: ServerSettings = {
   theme: { index: 0, colors: ['#C05621', '#48515D', '#245D3C', '#2F6F8F'] },
   ui: { mode: 'auto' },
   capabilities: { calendar: false, notifications: false, richText: true, export: true },
@@ -281,20 +314,24 @@ const DEFAULT_SETTINGS = {
   brand: { zh: '发现展会', en: 'ExpoHub' },
 };
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** 创建迁移记录表，返回已应用的步骤 id。 */
-async function appliedSteps(client) {
+async function appliedSteps(client: PoolClient): Promise<Set<string>> {
   await client.query(`
         CREATE TABLE IF NOT EXISTS schema_migrations (
             id          TEXT PRIMARY KEY,
             applied_at  TIMESTAMPTZ NOT NULL DEFAULT now()
         )
     `);
-  const result = await client.query('SELECT id FROM schema_migrations');
+  const result = await client.query<{ id: string }>('SELECT id FROM schema_migrations');
   return new Set(result.rows.map((row) => row.id));
 }
 
 /** 执行未应用的迁移步骤；每一步各自一个事务，失败即回滚。 */
-async function migrate() {
+export async function migrate(): Promise<void> {
   const client = await pool.connect();
   try {
     const applied = await appliedSteps(client);
@@ -310,9 +347,9 @@ async function migrate() {
         await client.query('INSERT INTO schema_migrations (id) VALUES ($1)', [step.id]);
         await client.query('COMMIT');
         console.log(`迁移完成：${step.id}`);
-      } catch (error) {
+      } catch (error: unknown) {
         await client.query('ROLLBACK');
-        console.error(`迁移失败：${step.id}`, error.message);
+        console.error(`迁移失败：${step.id}`, errorMessage(error));
         throw error;
       }
     }
@@ -322,14 +359,14 @@ async function migrate() {
 }
 
 /** 示例数据：账号、展会（含收集项）、报名、服务器设置。可重复执行。 */
-async function seed() {
-  const bcrypt = require('bcryptjs');
+export async function seed(): Promise<void> {
+  const bcrypt = require('bcryptjs') as { hash(value: string, rounds: number): Promise<string> };
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const passwordHash = await bcrypt.hash('password', 10);
-    const accounts = [
+    const accounts: [string, string, string, string, string, string][] = [
       ['usr-1', 'demo', 'demo@example.com', 'demo', 'admin', ''],
       ['usr-2', 'exhibitor', 'exhibitor@example.com', 'exhibitor', 'exhibitor', ''],
       ['usr-3', 'user', 'user@example.com', 'user', 'user', '展会常客，关注智能家居与新材料。'],
@@ -468,17 +505,17 @@ async function seed() {
 
     // 示例展会的报名收集项：**只写在这里**，是给演示用的数据。
     // 展会本身没有「默认收集项」这回事 —— 展商新建展会时没填收集项，报名页就是空的。
-    const fields = [
+    const fields: [string, string, boolean, string[]][] = [
       ['姓名 / 公司名称', '文本', true, []],
       ['参观身份', '单选', true, ['专业观众', '采购负责人', '媒体']],
       ['报名需求', '多选', false, ['希望安排展商洽谈', '需要停车位', '需要翻译服务']],
     ];
     for (const exhibition of exhibitions) {
-      const existing = await client.query(
+      const existing = await client.query<{ total: number }>(
         'SELECT count(*)::int AS total FROM exhibition_fields WHERE exhibition_id = $1',
         [exhibition.id],
       );
-      if (existing.rows[0].total > 0) {
+      if ((existing.rows[0]?.total ?? 0) > 0) {
         continue;
       }
       for (const [index, [title, type, required, options]] of fields.entries()) {
@@ -493,7 +530,7 @@ async function seed() {
     }
     console.log('示例报名收集项就绪');
 
-    const registrations = [
+    const registrations: [string, string, string, string, string, string, string][] = [
       [
         'reg-1',
         'exh-1',
@@ -536,9 +573,9 @@ async function seed() {
 
     await client.query('COMMIT');
     console.log('示例数据插入完成');
-  } catch (error) {
+  } catch (error: unknown) {
     await client.query('ROLLBACK');
-    console.error('示例数据插入失败：', error.message);
+    console.error('示例数据插入失败：', errorMessage(error));
     throw error;
   } finally {
     client.release();
@@ -549,24 +586,16 @@ if (require.main === module) {
   const command = process.argv[2];
   const run = command === 'seed' ? seed : command === 'migrate' ? migrate : null;
   if (!run) {
-    console.log('用法：node src/config/migrate.js [migrate|seed] [--production]');
+    console.log('用法：tsx src/config/migrate.ts [migrate|seed] [--production]');
     process.exit(1);
   }
   // 打印目标库：迁移是不可逆操作，别对着错的库跑完才发现。
-  const database = require('./database');
-  console.log(`[${runtime.nodeEnv}] 目标库 ${database.host}:${database.port}/${database.database}`);
+  console.log(`[${runtime.nodeEnv}] 目标库 ${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`);
   run()
     .then(() => pool.end())
     .then(() => process.exit(0))
-    .catch((error) => {
+    .catch((error: unknown) => {
       console.error(error);
       process.exit(1);
     });
 }
-
-module.exports = {
-  migrate,
-  seed,
-  DEFAULT_SETTINGS,
-  STEPS,
-};

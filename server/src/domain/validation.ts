@@ -7,16 +7,45 @@
  * 校验失败抛 `ApiError(400)`：写路由会把它转成 `{ ok:false, error }` 信封返回给页面。
  */
 
-const { badRequest } = require('./errors');
-const { readSection } = require('./settings');
+import { badRequest } from './errors';
+import { readSection } from './settings';
+
+interface TextOptions {
+  label?: string;
+  max?: number;
+  required?: boolean;
+}
+
+interface IntOptions {
+  label?: string;
+  min?: number;
+  max?: number;
+  fallback?: number;
+}
+
+interface IsoDateOptions {
+  label?: string;
+  required?: boolean;
+}
+
+interface TimeRangeOptions {
+  label?: string;
+  required?: boolean;
+}
+
+interface StringListOptions {
+  label?: string;
+  max?: number;
+  itemMax?: number;
+}
 
 /** 当前生效的字符数上限。 */
-async function limits() {
+export async function limits() {
   return readSection('limits');
 }
 
 /** 必填文本：去空白、校验长度。 */
-function text(value, { label, max, required = true } = {}) {
+export function text(value: unknown, { label, max, required = true }: TextOptions = {}): string {
   const result = String(value === undefined || value === null ? '' : value).trim();
   if (!result) {
     if (required) {
@@ -31,14 +60,14 @@ function text(value, { label, max, required = true } = {}) {
 }
 
 /** 整数：可给范围与默认值。 */
-function int(value, { label, min, max, fallback } = {}) {
+export function int(value: unknown, { label, min, max, fallback }: IntOptions = {}): number {
   if (value === undefined || value === null || value === '') {
     if (fallback !== undefined) {
       return fallback;
     }
     throw badRequest(`请输入${label || '数值'}`);
   }
-  const number = Number.parseInt(value, 10);
+  const number = Number.parseInt(String(value), 10);
   if (!Number.isFinite(number)) {
     throw badRequest(`${label || '数值'}必须是整数`);
   }
@@ -52,7 +81,7 @@ function int(value, { label, min, max, fallback } = {}) {
 }
 
 /** 布尔：接受 true/false、"true"/"false"、1/0。 */
-function bool(value, fallback = false) {
+export function bool(value: unknown, fallback = false): boolean {
   if (value === undefined || value === null || value === '') {
     return fallback;
   }
@@ -63,7 +92,7 @@ function bool(value, fallback = false) {
 }
 
 /** 日期：只接受 YYYY-MM-DD，返回 ISO 串或 ''。 */
-function isoDate(value, { label, required = false } = {}) {
+export function isoDate(value: unknown, { label, required = false }: IsoDateOptions = {}): string {
   const result = String(value === undefined || value === null ? '' : value).trim();
   if (!result) {
     if (required) {
@@ -89,7 +118,7 @@ function isoDate(value, { label, required = false } = {}) {
 }
 
 /** 时间：接受 09:00-17:30 或 09:00。 */
-function timeRange(value, { label = '时间', required = true } = {}) {
+export function timeRange(value: unknown, { label = '时间', required = true }: TimeRangeOptions = {}): string {
   const result = String(value === undefined || value === null ? '' : value).trim();
   if (!result) {
     if (required) {
@@ -104,9 +133,9 @@ function timeRange(value, { label = '时间', required = true } = {}) {
 }
 
 /** 字符串数组：用于 highlights、options、categories。 */
-function stringList(value, { label, max = 40, itemMax = 60 } = {}) {
+export function stringList(value: unknown, { label, max = 40, itemMax = 60 }: StringListOptions = {}): string[] {
   const items = Array.isArray(value) ? value : [];
-  const result = [];
+  const result: string[] = [];
   for (const item of items) {
     const text2 = String(item === undefined || item === null ? '' : item).trim();
     if (!text2) {
@@ -122,13 +151,3 @@ function stringList(value, { label, max = 40, itemMax = 60 } = {}) {
   }
   return result;
 }
-
-module.exports = {
-  limits,
-  text,
-  int,
-  bool,
-  isoDate,
-  timeRange,
-  stringList,
-};

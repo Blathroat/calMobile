@@ -5,9 +5,8 @@
  * 后者在 runner 的模块缓存下极易互相污染。
  */
 
-const assert = require('node:assert/strict');
-
-const { resolveMailConfig, describeMailConfig, TRANSPORTS } = require('./mail');
+import assert from 'node:assert/strict';
+import { resolveMailConfig, describeMailConfig, TRANSPORTS } from './mail';
 
 test('开发环境不配通道时走 console：不需要任何邮件配置就能开发', () => {
   const config = resolveMailConfig({ NODE_ENV: 'development' });
@@ -21,11 +20,11 @@ test('生产环境不配通道时默认 smtp，并把缺失项逐条指出来', 
   assert.equal(config.transport, 'smtp');
   assert.equal(config.configured, false);
   assert.ok(
-    config.problems.some((item) => item.includes('MAIL_SMTP_HOST')),
+    config.problems.some((item: string) => item.includes('MAIL_SMTP_HOST')),
     `应当指出缺少 SMTP 主机，实际：${config.problems.join('；')}`,
   );
   assert.ok(
-    config.problems.some((item) => item.includes('MAIL_FROM_ADDRESS')),
+    config.problems.some((item: string) => item.includes('MAIL_FROM_ADDRESS')),
     `应当指出缺少发件人地址，实际：${config.problems.join('；')}`,
   );
 });
@@ -34,13 +33,13 @@ test('生产环境显式配 memory 会被拒绝并降级为 smtp', () => {
   const config = resolveMailConfig({ NODE_ENV: 'production', MAIL_TRANSPORT: 'memory' });
   assert.equal(config.transport, 'smtp', 'memory 在生产必须被降级，否则用户永远收不到码');
   assert.equal(config.configured, false);
-  assert.ok(config.problems.some((item) => item.includes('memory')));
+  assert.ok(config.problems.some((item: string) => item.includes('memory')));
 });
 
 test('通道名写错会被指出，并回退到该环境的默认通道', () => {
   const dev = resolveMailConfig({ NODE_ENV: 'development', MAIL_TRANSPORT: 'sendmail' });
   assert.equal(dev.transport, 'console');
-  assert.ok(dev.problems.some((item) => item.includes('sendmail')));
+  assert.ok(dev.problems.some((item: string) => item.includes('sendmail')));
 
   const prod = resolveMailConfig({ NODE_ENV: 'production', MAIL_TRANSPORT: 'sendmail' });
   assert.equal(prod.transport, 'smtp');
@@ -63,7 +62,7 @@ test('SMTP 配了用户却没配密码会被指出', () => {
     MAIL_FROM_ADDRESS: 'no-reply@example.com',
   });
   assert.equal(config.configured, false);
-  assert.ok(config.problems.some((item) => item.includes('MAIL_SMTP_PASSWORD')));
+  assert.ok(config.problems.some((item: string) => item.includes('MAIL_SMTP_PASSWORD')));
 });
 
 test('证书默认校验，只有显式关闭才放行自签名中继', () => {

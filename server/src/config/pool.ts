@@ -3,20 +3,20 @@
  * 管理 PostgreSQL 连接
  */
 
-const { Pool } = require('pg');
-const config = require('./database');
-const { resolveProcessSettings } = require('./env');
+import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
+import * as databaseConfig from './database';
+import { resolveProcessSettings } from './env';
 
 const logLevel = resolveProcessSettings(process.env).logLevel;
 
 // 创建连接池
-const pool = new Pool({
-  host: config.host,
-  port: config.port,
-  database: config.database,
-  user: config.user,
-  password: config.password,
-  ssl: config.ssl,
+export const pool = new Pool({
+  host: databaseConfig.host,
+  port: Number(databaseConfig.port),
+  database: databaseConfig.database,
+  user: databaseConfig.user,
+  password: databaseConfig.password,
+  ssl: databaseConfig.ssl,
   max: 20, // 最大连接数
   idleTimeoutMillis: 30000, // 空闲连接超时时间
   connectionTimeoutMillis: 2000, // 建连（含握手）超时时间
@@ -34,23 +34,29 @@ pool.on('error', (err) => {
   console.error('数据库连接池错误：', err);
 });
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * 执行查询
- * @param {string} text - SQL 查询语句
- * @param {Array} params - 查询参数
- * @returns {Promise<Object>} 查询结果
+ * @param text SQL 查询语句
+ * @param params 查询参数
  */
-async function query(text, params) {
+export async function query<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: unknown[],
+): Promise<QueryResult<T>> {
   const start = Date.now();
   try {
-    const result = await pool.query(text, params);
+    const result = await pool.query<T>(text, params);
     // 逐条 SQL 只在 LOG_LEVEL=debug 时打印：默认级别下每个请求都刷一整条语句太吵。
     if (logLevel === 'debug') {
       console.log('执行查询', { text, duration: Date.now() - start, rows: result.rowCount });
     }
     return result;
-  } catch (error) {
-    console.error('查询错误：', { text, error: error.message });
+  } catch (error: unknown) {
+    console.error('查询错误：', { text, error: errorMessage(error) });
     throw error;
   }
 }
@@ -60,17 +66,17 @@ async function query(text, params) {
  *
  * `BEGIN` / `COMMIT` / `ROLLBACK` 与连接归还都在这里，调用方只写业务语句：
  * 手写这一套时漏掉 `release()` 会把连接池占满，正是要避免的写法。
- * @param {(client: Object) => Promise<any>} run 事务体
- * @returns {Promise<any>} 事务体的返回值
+ * @param run 事务体
+ * @returns 事务体的返回值
  */
-async function transaction(run) {
+export async function transaction<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const result = await run(client);
     await client.query('COMMIT');
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     await client.query('ROLLBACK');
     throw error;
   } finally {
@@ -81,14 +87,7 @@ async function transaction(run) {
 /**
  * 关闭连接池
  */
-async function close() {
+export async function close(): Promise<void> {
   await pool.end();
   console.log('数据库连接池已关闭');
 }
-
-module.exports = {
-  query,
-  transaction,
-  close,
-  pool,
-};

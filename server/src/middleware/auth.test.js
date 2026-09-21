@@ -11,7 +11,7 @@ const path = require('node:path');
 
 // vi.mock 只拦 import；本文件与被测模块都是 require，所以把桩写进 require.cache。
 const query = vi.fn();
-const poolPath = path.resolve(__dirname, '../config/pool.js');
+const poolPath = path.resolve(__dirname, '../config/pool.ts');
 require.cache[poolPath] = {
   id: poolPath,
   filename: poolPath,

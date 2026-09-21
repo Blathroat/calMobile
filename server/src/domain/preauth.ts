@@ -9,36 +9,40 @@
  * 区别是它必须**单次使用**且很短命（5 分钟），只用于把「密码对」换成「过码了」。
  */
 
-const crypto = require('node:crypto');
-const { query } = require('../config/pool');
+import crypto from 'node:crypto';
+import { query } from '../config/pool';
 
 /** 票据有效期（分钟）。 */
-const TICKET_TTL_MIN = 5;
+export const TICKET_TTL_MIN = 5;
 
 /** 单张票据最多验证几次；超过就作废（防止拿到票据后慢慢猜码）。 */
-const MAX_TICKET_ATTEMPTS = 5;
+export const MAX_TICKET_ATTEMPTS = 5;
 
-function hashTicket(ticket) {
+export function hashTicket(ticket: string): string {
   return crypto.createHash('sha256').update(String(ticket)).digest('hex');
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** 清理过期或已消费的票据（失败不影响登录）。 */
-function purgeStaleTickets() {
+export function purgeStaleTickets(): Promise<unknown> {
   return query(`
         DELETE FROM preauth_tickets
          WHERE expires_at < now() - interval '1 hour'
             OR (consumed_at IS NOT NULL AND consumed_at < now() - interval '1 hour')
-    `).catch((error) => {
-    console.warn('清理过期预认证票失败：', error.message);
+    `).catch((error: unknown) => {
+    console.warn('清理过期预认证票失败：', errorMessage(error));
   });
 }
 
 /**
  * 给某个用户签一张预认证票。
  *
- * @returns {Promise<{ticket: string, expiresInSec: number}>} `ticket` 是明文，**只在这一次响应里出现**。
+ * @returns `ticket` 是明文，**只在这一次响应里出现**。
  */
-async function issueTicket(userId) {
+export async function issueTicket(userId: string): Promise<{ ticket: string; expiresInSec: number }> {
   const ticket = crypto.randomBytes(32).toString('hex');
   await query(
     `
@@ -47,17 +51,21 @@ async function issueTicket(userId) {
     `,
     [crypto.randomUUID(), userId, hashTicket(ticket), String(TICKET_TTL_MIN)],
   );
-  purgeStaleTickets();
+  void purgeStaleTickets();
   return { ticket, expiresInSec: TICKET_TTL_MIN * 60 };
+}
+
+interface TicketRow {
+  id: string;
+  user_id: string;
+  attempts: number;
 }
 
 /**
  * 读一张**仍然可用**的票据（不改状态）：验证码不对时票据要留着让用户重试。
- *
- * @returns {Promise<{id: string, userId: string, attempts: number} | null>}
  */
-async function findTicket(ticket) {
-  const result = await query(
+export async function findTicket(ticket: string): Promise<{ id: string; userId: string; attempts: number } | null> {
+  const result = await query<TicketRow>(
     `
         SELECT id, user_id, attempts
           FROM preauth_tickets
@@ -69,11 +77,14 @@ async function findTicket(ticket) {
     return null;
   }
   const row = result.rows[0];
+  if (!row) {
+    return null;
+  }
   return { id: row.id, userId: row.user_id, attempts: Number(row.attempts) };
 }
 
 /** 记一次失败的验证；到上限就把票据作废。返回是否还能继续用。 */
-async function countTicketFailure(id, attempts) {
+export async function countTicketFailure(id: string, attempts: number): Promise<boolean> {
   const next = Number(attempts) + 1;
   await query(
     `
@@ -93,20 +104,9 @@ async function countTicketFailure(id, attempts) {
  * 与刷新令牌轮换同一个道理：判断用 `WHERE consumed_at IS NULL` 的 `rowCount`，
  * 并发提交两次时只有一次能换到会话。
  */
-async function consumeTicket(id) {
+export async function consumeTicket(id: string): Promise<boolean> {
   const result = await query('UPDATE preauth_tickets SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL', [
     id,
   ]);
   return result.rowCount === 1;
 }
-
-module.exports = {
-  TICKET_TTL_MIN,
-  MAX_TICKET_ATTEMPTS,
-  hashTicket,
-  issueTicket,
-  findTicket,
-  countTicketFailure,
-  consumeTicket,
-  purgeStaleTickets,
-};

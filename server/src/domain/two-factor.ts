@@ -12,14 +12,39 @@
  * 真正的基础设施故障继续上抛成 5xx。
  */
 
-const crypto = require('node:crypto');
-const { totpSecretKey } = require('../config/auth');
-const { query, transaction } = require('../config/pool');
-const { CodeRejected, isCodeRejected, consumeCode } = require('./otp');
-const totp = require('./totp');
+import crypto from 'node:crypto';
+import auth = require('../config/auth');
+import { query, transaction } from '../config/pool';
+import { CodeRejected, isCodeRejected, consumeCode } from './otp';
+import * as totp from './totp';
 
-function totpKey() {
+const { totpSecretKey } = auth;
+
+function totpKey(): Buffer {
   return totp.encryptionKey(totpSecretKey);
+}
+
+interface FactorStateRow {
+  email?: string | null;
+  email_verified?: boolean | null;
+  two_factor_enabled?: boolean | null;
+  totp_secret?: string | null;
+  backup_left?: number | null;
+}
+
+interface BackupCodeRow {
+  id: string;
+}
+
+interface PendingSecretRow {
+  totp_pending_secret?: string | null;
+}
+
+export interface SecondFactorUser {
+  id: string;
+  email?: string;
+  username?: string;
+  totp_secret?: string | null;
 }
 
 /**
@@ -27,8 +52,14 @@ function totpKey() {
  *
  * `totpBound` 只表示「绑过验证器」，不代表开关打开；开关始终是 `two_factor_enabled`。
  */
-async function secondFactorState(userId) {
-  const result = await query(
+export async function secondFactorState(userId: string): Promise<{
+  enabled: boolean;
+  totpBound: boolean;
+  email: string;
+  emailVerified: boolean;
+  backupCodesLeft: number;
+} | null> {
+  const result = await query<FactorStateRow>(
     `
         SELECT u.email, u.email_verified, u.two_factor_enabled, u.totp_secret,
                (SELECT count(*)::int FROM backup_codes c
@@ -53,7 +84,7 @@ async function secondFactorState(userId) {
 }
 
 /** 解密已绑定的验证器密钥；密钥换过或数据坏了时给一句能照着做的话，而不是 500。 */
-function openSecret(stored) {
+function openSecret(stored: string): string {
   try {
     return totp.decryptSecret(stored, totpKey());
   } catch {
@@ -62,18 +93,17 @@ function openSecret(stored) {
 }
 
 /** 消费一枚备用码：命中即原子置为已用，并发提交两次只有一个能过。 */
-async function consumeBackupCode(userId, code) {
+export async function consumeBackupCode(userId: string, code: string): Promise<boolean> {
   const hash = totp.hashBackupCode(code);
-  const found = await query('SELECT id FROM backup_codes WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL', [
-    userId,
-    hash,
-  ]);
-  if (found.rows.length === 0) {
+  const found = await query<BackupCodeRow>(
+    'SELECT id FROM backup_codes WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL',
+    [userId, hash],
+  );
+  const foundRow = found.rows[0];
+  if (!foundRow) {
     return false;
   }
-  const used = await query('UPDATE backup_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL', [
-    found.rows[0].id,
-  ]);
+  const used = await query('UPDATE backup_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL', [foundRow.id]);
   return used.rowCount === 1;
 }
 
@@ -84,7 +114,7 @@ async function consumeBackupCode(userId, code) {
  * 那等于把两步验证的最后一道退路悄悄拆掉。`unnest` 让 10 枚码只走一次往返，
  * 不再逐条 `await`（也不需要 `Promise.all` 那种「一半成功」的中间态）。
  */
-async function regenerateBackupCodes(userId, count = totp.BACKUP_CODE_COUNT) {
+export async function regenerateBackupCodes(userId: string, count = totp.BACKUP_CODE_COUNT): Promise<string[]> {
   const codes = totp.generateBackupCodes(count);
   const ids = codes.map(() => crypto.randomUUID());
   const hashes = codes.map((code) => totp.hashBackupCode(code));
@@ -103,7 +133,7 @@ async function regenerateBackupCodes(userId, count = totp.BACKUP_CODE_COUNT) {
 }
 
 /** 清掉验证器绑定与备用码（关闭两步验证、或重新绑定时用）。 */
-async function clearSecondFactors(userId) {
+export async function clearSecondFactors(userId: string): Promise<void> {
   await query(
     `
         UPDATE users
@@ -122,11 +152,13 @@ async function clearSecondFactors(userId) {
 /**
  * 校验第二因子。
  *
- * @param {{id: string, email: string, totp_secret?: string}} user 至少要有 id 与 email。
- * @param {string} code 用户输入的 6 位验证码或备用码。
- * @returns {Promise<{method: 'totp'|'email'|'backup'}>}
+ * @param user 至少要有 id 与 email。
+ * @param code 用户输入的 6 位验证码或备用码。
  */
-async function verifySecondFactor(user, code) {
+export async function verifySecondFactor(
+  user: SecondFactorUser,
+  code: unknown,
+): Promise<{ method: 'totp' | 'email' | 'backup' }> {
   const value = String(code === undefined || code === null ? '' : code).trim();
   if (!value) {
     throw new CodeRejected('请输入验证码');
@@ -161,7 +193,7 @@ async function verifySecondFactor(user, code) {
       throw new CodeRejected('验证码不正确');
     }
     return { method: 'email' };
-  } catch (error) {
+  } catch (error: unknown) {
     if (isCodeRejected(error)) {
       throw new CodeRejected(stored ? '验证码不正确（验证器与邮箱验证码都对不上）' : '验证码不正确');
     }
@@ -170,7 +202,10 @@ async function verifySecondFactor(user, code) {
 }
 
 /** 开始绑定验证器：密钥先放「待确认」列，确认过码之后才真正生效。 */
-async function beginTotpSetup(user, issuer) {
+export async function beginTotpSetup(
+  user: SecondFactorUser,
+  issuer: string,
+): Promise<{ secret: string; otpauthUri: string }> {
   const secret = totp.generateSecret();
   await query('UPDATE users SET totp_pending_secret = $2, updated_at = now() WHERE id = $1', [
     user.id,
@@ -178,17 +213,17 @@ async function beginTotpSetup(user, issuer) {
   ]);
   return {
     secret,
-    otpauthUri: totp.otpauthUri({ secret, account: user.email || user.username, issuer }),
+    otpauthUri: totp.otpauthUri({ secret, account: (user.email || user.username) as string, issuer }),
   };
 }
 
 /**
  * 确认绑定验证器：码要对得上「待确认」的密钥，成功后开关打开并生成第一批备用码。
  *
- * @returns {Promise<{backupCodes: string[]}>} 备用码的明文，只出现这一次。
+ * @returns 备用码的明文，只出现这一次。
  */
-async function confirmTotpSetup(userId, code) {
-  const found = await query('SELECT totp_pending_secret FROM users WHERE id = $1', [userId]);
+export async function confirmTotpSetup(userId: string, code: unknown): Promise<{ backupCodes: string[] }> {
+  const found = await query<PendingSecretRow>('SELECT totp_pending_secret FROM users WHERE id = $1', [userId]);
   const pending = String((found.rows[0] || {}).totp_pending_secret || '');
   if (!pending) {
     throw new CodeRejected('请先生成验证器密钥');
@@ -211,13 +246,3 @@ async function confirmTotpSetup(userId, code) {
   );
   return { backupCodes: await regenerateBackupCodes(userId) };
 }
-
-module.exports = {
-  secondFactorState,
-  verifySecondFactor,
-  consumeBackupCode,
-  regenerateBackupCodes,
-  clearSecondFactors,
-  beginTotpSetup,
-  confirmTotpSetup,
-};

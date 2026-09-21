@@ -5,9 +5,8 @@
  * 太紧会让一次正常的部署起不来，所以每一档都写清楚理由。
  */
 
-const assert = require('node:assert/strict');
-
-const { productionProblems } = require('./production');
+import assert from 'node:assert/strict';
+import { productionProblems } from './production';
 
 /** 一份「配齐了」的生产环境，用例按需覆盖其中某一项。 */
 function readyEnv(override = {}) {
@@ -27,7 +26,8 @@ function readyEnv(override = {}) {
   };
 }
 
-const fatalOf = (env) => productionProblems(env).fatal.join('；');
+const fatalOf = (env: NodeJS.ProcessEnv | Record<string, string | undefined>) =>
+  productionProblems(env).fatal.join('；');
 
 test('配齐的生产环境没有任何致命项', () => {
   const { fatal } = productionProblems(readyEnv());
@@ -87,5 +87,5 @@ test('警告与致命项各自独立：一边拦启动不妨碍另一边继续�
     CORS_ORIGIN: '*',
   });
   assert.ok(fatal.length >= 3, `缺密钥、缺库密码、发信配置都要报出来：${fatal.join('；')}`);
-  assert.ok(warnings.some((item) => item.includes('CORS_ORIGIN')));
+  assert.ok(warnings.some((item: string) => item.includes('CORS_ORIGIN')));
 });

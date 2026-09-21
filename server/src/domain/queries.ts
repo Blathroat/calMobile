@@ -7,7 +7,7 @@
  */
 
 /** 展会：字段 + 展商昵称 + 报名数 + 收集项数。 */
-const EXHIBITION_COLUMNS = `
+export const EXHIBITION_COLUMNS = `
     e.id, e.title, e.venue, e.time, e.category, e.description, e.description_format,
     e.highlights, e.image_uri, e.exhibitor_note, e.qr_enabled, e.exhibitor_id, e.status,
     to_char(e.exhibition_date, 'YYYY-MM-DD')                AS exhibition_date,
@@ -15,7 +15,7 @@ const EXHIBITION_COLUMNS = `
     EXTRACT(MONTH FROM e.exhibition_date)::int              AS month,
     EXTRACT(DAY FROM e.exhibition_date)::int                AS day,
     to_char(e.registration_start, 'YYYY-MM-DD')             AS registration_start,
-    to_char(e.registration_end, 'YYYY-MM-DD')               AS registration_end,
+    to_char(e.registration_end, 'YYYY-MM-DD')             AS registration_end,
     COALESCE(u.nickname, '')                                AS exhibitor,
     (SELECT count(*)::int FROM registrations r
       WHERE r.exhibition_id = e.id AND r.status <> 'cancelled')  AS registration_count,
@@ -23,13 +23,13 @@ const EXHIBITION_COLUMNS = `
       WHERE f.exhibition_id = e.id)                              AS field_count
 `;
 
-const EXHIBITION_FROM = `
+export const EXHIBITION_FROM = `
     FROM exhibitions e
     LEFT JOIN users u ON u.id = e.exhibitor_id
 `;
 
 /** 报名：字段 + 展会信息（报名表不冗余展会标题，改期后不会两边不一致）。 */
-const REGISTRATION_COLUMNS = `
+export const REGISTRATION_COLUMNS = `
     r.id, r.exhibition_id, r.visitor_id, r.visitor_name, r.visitor_type, r.answers,
     r.status, r.check_in_time, r.created_at,
     e.title                 AS exhibition_title,
@@ -43,13 +43,13 @@ const REGISTRATION_COLUMNS = `
     to_char(e.exhibition_date, 'YYYY-MM-DD')    AS exhibition_date
 `;
 
-const REGISTRATION_FROM = `
+export const REGISTRATION_FROM = `
     FROM registrations r
     JOIN exhibitions e ON e.id = r.exhibition_id
 `;
 
 /** 用户：对外字段（绝不带 password_hash）。 */
-const USER_COLUMNS = `
+export const USER_COLUMNS = `
     u.id, u.username, u.email, u.nickname, u.role, u.status, u.bio, u.region,
     u.avatar, u.social_media, u.show_registrations,
     u.email_verified, u.two_factor_enabled,
@@ -57,13 +57,4 @@ const USER_COLUMNS = `
     to_char(u.last_login_time, 'YYYY-MM-DD')    AS last_login_time
 `;
 
-const USER_FROM = ' FROM users u ';
-
-module.exports = {
-  EXHIBITION_COLUMNS,
-  EXHIBITION_FROM,
-  REGISTRATION_COLUMNS,
-  REGISTRATION_FROM,
-  USER_COLUMNS,
-  USER_FROM,
-};
+export const USER_FROM = ' FROM users u ';

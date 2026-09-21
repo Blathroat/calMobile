@@ -1,6 +1,5 @@
-const assert = require('node:assert/strict');
-
-const { ApiError, serviceUnavailable, isDatabaseUnavailable } = require('./errors');
+import assert from 'node:assert/strict';
+import { ApiError, serviceUnavailable, isDatabaseUnavailable } from './errors';
 
 /**
  * 数据库不可用的判定。

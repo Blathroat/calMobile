@@ -1,7 +1,10 @@
 /**
  * 契约测试环境：在加载 src 之前注入。
- * database.js / mail.js 都是 require 时读环境变量。
+ * database / mail 都是加载时读环境变量。
  */
+const { register } = require('tsx/cjs/api');
+register();
+
 vi.stubEnv('NODE_ENV', 'test');
 vi.stubEnv('DB_NAME', process.env.TEST_DB_NAME || 'calmobile_test');
 vi.stubEnv('LOG_LEVEL', 'quiet');

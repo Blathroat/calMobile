@@ -457,7 +457,7 @@ const checks = [
   {
     id: 'review-store-shared',
     // 审核状态词汇现在只由服务端维护；状态存英文代码、中文标签在 labels.js 映射一次
-    file: 'server/src/domain/labels.js',
+    file: 'server/src/domain/labels.ts',
     contains: ['REGISTRATION_STATUS', 'pending', 'approved', 'rejected', 'cancelled', 'attended']
   },
   {
@@ -467,7 +467,7 @@ const checks = [
   },
   {
     id: 'exhibition-status-modes',
-    file: 'server/src/domain/labels.js',
+    file: 'server/src/domain/labels.ts',
     contains: ['EXHIBITION_STATUS', 'review', 'optional', 'display', 'closed', 'ended']
   },
   {
@@ -496,7 +496,7 @@ const checks = [
   },
   {
     id: 'avatar-and-region-profile',
-    file: 'server/src/domain/payloads.js',
+    file: 'server/src/domain/payloads.ts',
     contains: ['region', 'avatar', 'showRegistrations']
   },
   {
@@ -507,7 +507,7 @@ const checks = [
   {
     id: 'registration-code-and-checkin',
     // 报名码前缀与解析与前端 core/status.js 约定同一批字符串，只由服务端实现一次
-    file: 'server/src/domain/labels.js',
+    file: 'server/src/domain/labels.ts',
     contains: ['CODE_PREFIX', 'checkInCode', 'parseCheckInCode', 'acceptsRegistration']
   },
   {
@@ -646,7 +646,7 @@ const checks = [
   {
     id: 'app-title-setting',
     // 软件中英文标题属于服务器级配置，默认值与补丁规则都在服务端
-    file: 'server/src/domain/settings.js',
+    file: 'server/src/domain/settings.ts',
     contains: ['appTitleZh', 'appTitleEn', 'DEFAULT_SETTINGS']
   },
   {
@@ -795,7 +795,7 @@ const checks = [
   },
   {
     id: 'backend-mail-config-guards',
-    file: 'server/src/config/mail.js',
+    file: 'server/src/config/mail.ts',
     contains: ["['console', 'smtp', 'memory']", '生产环境不能用 memory', 'MAIL_SMTP_HOST',
       'MAIL_FROM_ADDRESS', 'configured', 'describeMailConfig'],
   },
@@ -819,7 +819,7 @@ const checks = [
   {
     id: 'backend-mail-migration',
     // 邮箱从「联系方式」升级为「身份」：唯一索引 + 验证码 / 预认证票 / 发信留痕三张表
-    file: 'server/src/config/migrate.js',
+    file: 'server/src/config/migrate.ts',
     contains: ['0004-email-verification', 'email_verified', 'two_factor_enabled',
       'users_email_unique_idx', 'email_codes', 'preauth_tickets', 'mail_log'],
   },
@@ -833,7 +833,7 @@ const checks = [
   {
     id: 'backend-otp-rules',
     // 验证码：只存哈希、等长比较、命中即原子消费、限流按库里行数算、发信留痕
-    file: 'server/src/domain/otp.js',
+    file: 'server/src/domain/otp.ts',
     contains: ['sha256', 'timingSafeEqual', 'consumed_at IS NULL', 'RESEND_COOLDOWN_SEC',
       'CodeRejected', 'mail_log'],
   },
@@ -845,7 +845,7 @@ const checks = [
   },
   {
     id: 'backend-preauth-ticket-single-use',
-    file: 'server/src/domain/preauth.js',
+    file: 'server/src/domain/preauth.ts',
     contains: ['consumed_at IS NULL', 'token_hash', 'MAX_TICKET_ATTEMPTS'],
   },
   {
@@ -858,12 +858,12 @@ const checks = [
     id: 'backend-start-is-production',
     // pnpm start 必须进生产模式：状态页会关、启动自检会跑
     file: 'server/package.json',
-    contains: ['"start": "node src/index.js --production"', '"dev": "nodemon src/index.js"',
+    contains: ['"start": "node dist/index.js --production"', '"dev": "tsx watch src/index.js"',
       '"db:migrate:prod"'],
   },
   {
     id: 'backend-runtime-modes',
-    file: 'server/src/config/runtime.js',
+    file: 'server/src/config/runtime.ts',
     contains: ['resolveRuntime', '--production', 'statusPageEnabled', 'trustProxy'],
   },
   {
@@ -875,21 +875,21 @@ const checks = [
   },
   {
     id: 'backend-production-guards',
-    file: 'server/src/config/production.js',
+    file: 'server/src/config/production.ts',
     contains: ['productionProblems', 'MAIL_TRANSPORT=console', 'DB_PASSWORD 还是 postgres',
       'local-dev', 'TRUST_PROXY'],
   },
   {
     id: 'backend-totp-rfc6238',
     // 自己实现 OTP：base32 + HOTP 动态截断 + ±1 步窗口，且密钥加密存储、备用码只存哈希
-    file: 'server/src/domain/totp.js',
+    file: 'server/src/domain/totp.ts',
     contains: ['HMAC', 'sha1', 'base32Decode', 'aes-256-gcm', 'otpauth://totp/',
       'generateBackupCodes', 'hashBackupCode'],
   },
   {
     id: 'backend-second-factor-methods',
     // 三种第二因子并列可用：验证器 → 邮箱验证码 → 备用码；备用码命中即原子消费
-    file: 'server/src/domain/two-factor.js',
+    file: 'server/src/domain/two-factor.ts',
     contains: ['verifySecondFactor', 'consumeBackupCode', 'used_at IS NULL', 'confirmTotpSetup',
       'regenerateBackupCodes'],
   },

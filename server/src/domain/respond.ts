@@ -11,17 +11,27 @@
  *   catch 展示；也避免把「无权访问」伪装成 200 成功。
  */
 
-const { ApiError } = require('./errors');
+import { ApiError } from './errors';
 
 /** 会被转成应用层信封的状态码。 */
-const ENVELOPE_STATUS = new Set([400, 409]);
+export const ENVELOPE_STATUS = new Set([400, 409]);
+
+interface EnvelopeResponse {
+  json(body: Record<string, unknown>): void;
+}
+
+type NextFn = (error?: unknown) => void;
 
 /** 包住一段写操作：成功补上 ok/error，业务失败转成信封。 */
-async function mutate(res, next, run) {
+export async function mutate(
+  res: EnvelopeResponse,
+  next: NextFn,
+  run: () => unknown | Promise<unknown>,
+): Promise<void> {
   try {
     const payload = await run();
-    res.json({ ok: true, error: '', ...payload });
-  } catch (error) {
+    res.json({ ok: true, error: '', ...(payload as Record<string, unknown>) });
+  } catch (error: unknown) {
     if (error instanceof ApiError && ENVELOPE_STATUS.has(error.status)) {
       res.json({ ok: false, error: error.message });
       return;
@@ -29,5 +39,3 @@ async function mutate(res, next, run) {
     next(error);
   }
 }
-
-module.exports = { mutate, ENVELOPE_STATUS };

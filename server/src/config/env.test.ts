@@ -5,11 +5,10 @@
  * 再重新 require。密钥校验、dev/start 两种模式、邮件通道解析都从这里钉住。
  */
 
-const assert = require('node:assert/strict');
-
-const { parseEnv } = require('./env');
-const { resolveMailConfig } = require('./mail');
-const { resolveRuntime } = require('./runtime');
+import assert from 'node:assert/strict';
+import { parseEnv } from './env';
+import { resolveMailConfig } from './mail';
+import { resolveRuntime } from './runtime';
 
 const ACCESS = 'test-access-secret-012345678901234567890';
 const REFRESH = 'test-refresh-secret-012345678901234567890';
@@ -23,7 +22,7 @@ function validEnv(override = {}) {
   };
 }
 
-const argv = (...args) => ['node', 'src/index.js', ...args];
+const argv = (...args: string[]) => ['node', 'src/index.js', ...args];
 
 test('注入的环境对象不会去读或改 process.env', () => {
   const previous = process.env.JWT_SECRET;

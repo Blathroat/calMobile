@@ -9,13 +9,13 @@
  * `applyServerPatch()` 是纯函数：只做「校验 + 合并」，方便单测；落库由 `saveServerSettings()` 完成。
  */
 
-const { query } = require('../config/pool');
-const { DEFAULT_SETTINGS } = require('../config/migrate');
-const { badRequest } = require('./errors');
-const { toUserStatus } = require('./labels');
+import { query } from '../config/pool';
+import { DEFAULT_SETTINGS, type ServerSettings } from '../config/migrate';
+import { badRequest } from './errors';
+import { toUserStatus } from './labels';
 
 /** 表单字符数上限的取值范围：前端 `core/validate.js` 的 `limit()` 按同一批键取值。 */
-const LIMIT_BOUNDS = {
+export const LIMIT_BOUNDS: Record<keyof ServerSettings['limits'], [number, number]> = {
   exhibitionTitle: [4, 120],
   exhibitionVenue: [4, 120],
   category: [2, 60],
@@ -31,23 +31,69 @@ const LIMIT_BOUNDS = {
 };
 
 /** 成对的上限不能小于下限。 */
-const PAIRED_FLOOR = { usernameMax: 'usernameMin', passwordMax: 'passwordMin' };
+const PAIRED_FLOOR: Partial<Record<keyof ServerSettings['limits'], keyof ServerSettings['limits']>> = {
+  usernameMax: 'usernameMin',
+  passwordMax: 'passwordMin',
+};
 
-const MODES = ['auto', 'light', 'dark'];
+export const MODES = ['auto', 'light', 'dark'];
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
+export interface ServerPatch {
+  themeIndex?: unknown;
+  announcement?: unknown;
+  announcementEnabled?: unknown;
+  appTitleZh?: unknown;
+  appTitleEn?: unknown;
+  categories?: unknown;
+  canRevise?: unknown;
+  imageCount?: unknown;
+  imageSizeMb?: unknown;
+  videoCount?: unknown;
+  videoSizeMb?: unknown;
+  avatarSizeMb?: unknown;
+  imageFormats?: unknown;
+  videoFormats?: unknown;
+  exhibitionTitle?: unknown;
+  exhibitionVenue?: unknown;
+  category?: unknown;
+  fieldTitle?: unknown;
+  usernameMin?: unknown;
+  usernameMax?: unknown;
+  passwordMin?: unknown;
+  passwordMax?: unknown;
+  nickname?: unknown;
+  bio?: unknown;
+  region?: unknown;
+  answer?: unknown;
 }
 
-function clampInt(value, fallback, [min, max]) {
-  const number = Number.parseInt(value, 10);
+interface SettingRow {
+  key: string;
+  value: unknown;
+}
+
+interface UiModeRow {
+  ui_mode: string;
+}
+
+interface NotificationRow {
+  exhibition_reminder: boolean;
+  registration_updates: boolean;
+}
+
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function clampInt(value: unknown, fallback: number, [min, max]: [number, number]): number {
+  const number = Number.parseInt(String(value), 10);
   if (!Number.isFinite(number)) {
     return fallback;
   }
   return Math.max(min, Math.min(max, number));
 }
 
-function clampNumber(value, fallback, min, max) {
+function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
   const number = Number(value);
   if (!Number.isFinite(number)) {
     return fallback;
@@ -63,12 +109,12 @@ function clampNumber(value, fallback, min, max) {
  * 这两段按「默认值为底、库里的键覆盖」补齐，保证 `GET /bootstrap` 与 `GET /settings`
  * （两者都来自这里）永远能读到 `videoSizeMb`，不会给出 undefined。
  */
-async function readServerSettings() {
-  const result = await query('SELECT key, value FROM app_settings');
+export async function readServerSettings(): Promise<ServerSettings> {
+  const result = await query<SettingRow>('SELECT key, value FROM app_settings');
   const settings = clone(DEFAULT_SETTINGS);
   for (const row of result.rows) {
     if (Object.prototype.hasOwnProperty.call(settings, row.key)) {
-      settings[row.key] = row.value;
+      (settings as unknown as Record<string, unknown>)[row.key] = row.value;
     }
   }
   settings.media = { ...DEFAULT_SETTINGS.media, ...settings.media };
@@ -77,7 +123,7 @@ async function readServerSettings() {
 }
 
 /** 取一项设置（例如 limits）。 */
-async function readSection(key) {
+export async function readSection<K extends keyof ServerSettings>(key: K): Promise<ServerSettings[K]> {
   const settings = await readServerSettings();
   return settings[key];
 }
@@ -86,7 +132,7 @@ async function readSection(key) {
  * 把前端（管理-设置 / 个人页）提交的**扁平**字段合并进服务器设置。
  * 只处理出现过的键，因此保存配色不会把别的设置改回默认值。
  */
-function applyServerPatch(current, patch) {
+export function applyServerPatch(current: ServerSettings, patch: ServerPatch | null | undefined): ServerSettings {
   const next = clone(current);
   const source = patch || {};
 
@@ -152,12 +198,15 @@ function applyServerPatch(current, patch) {
   }
   // 字符数上限：逐项收敛，成对的上下限再互相约束一次。
   const limits = { ...next.limits };
-  for (const [key, bounds] of Object.entries(LIMIT_BOUNDS)) {
+  for (const [key, bounds] of Object.entries(LIMIT_BOUNDS) as [keyof ServerSettings['limits'], [number, number]][]) {
     if (Object.prototype.hasOwnProperty.call(source, key)) {
       limits[key] = clampInt(source[key], limits[key], bounds);
     }
   }
-  for (const [upper, lower] of Object.entries(PAIRED_FLOOR)) {
+  for (const [upper, lower] of Object.entries(PAIRED_FLOOR) as [
+    keyof ServerSettings['limits'],
+    keyof ServerSettings['limits'],
+  ][]) {
     limits[upper] = Math.max(limits[upper], limits[lower]);
   }
   next.limits = limits;
@@ -166,9 +215,9 @@ function applyServerPatch(current, patch) {
 }
 
 /** 「jpg,png」或数组都接受，返回去重后的小写数组。 */
-function formatList(value, fallback) {
+export function formatList(value: unknown, fallback: string[]): string[] {
   const items = Array.isArray(value) ? value : String(value === undefined ? '' : value).split(',');
-  const formats = [];
+  const formats: string[] = [];
   for (const item of items) {
     const format = String(item).trim().toLowerCase().replace(/^\./, '');
     if (format && /^[a-z0-9]{1,10}$/.test(format) && !formats.includes(format)) {
@@ -179,8 +228,8 @@ function formatList(value, fallback) {
 }
 
 /** 落库：只写值发生变化的段。 */
-async function saveServerSettings(current, next) {
-  for (const key of Object.keys(next)) {
+export async function saveServerSettings(current: ServerSettings, next: ServerSettings): Promise<ServerSettings> {
+  for (const key of Object.keys(next) as (keyof ServerSettings)[]) {
     if (JSON.stringify(current[key]) === JSON.stringify(next[key])) {
       continue;
     }
@@ -196,51 +245,60 @@ async function saveServerSettings(current, next) {
 }
 
 /** 个人外观模式：登录用户读自己的，未登录读服务器默认值。 */
-async function readUiMode(userId, serverSettings) {
+export async function readUiMode(userId: string | null | undefined, serverSettings?: ServerSettings): Promise<string> {
   if (userId) {
-    const result = await query('SELECT ui_mode FROM users WHERE id = $1', [userId]);
-    if (result.rows.length > 0 && MODES.includes(result.rows[0].ui_mode)) {
-      return result.rows[0].ui_mode;
+    const result = await query<UiModeRow>('SELECT ui_mode FROM users WHERE id = $1', [userId]);
+    const mode = result.rows[0]?.ui_mode;
+    if (result.rows.length > 0 && mode && MODES.includes(mode)) {
+      return mode;
     }
   }
   const mode = serverSettings?.ui?.mode;
-  return MODES.includes(mode) ? mode : 'auto';
+  return mode && MODES.includes(mode) ? mode : 'auto';
 }
 
 /** 保存个人外观模式：只写调用者自己的 `users.ui_mode`。 */
-async function saveUiMode(userId, mode) {
+export async function saveUiMode(userId: string | null | undefined, mode: unknown): Promise<string> {
   if (!userId) {
     // 没有 userId 就写不了「个人」偏好；以前这里会退回写全局 app_settings.ui，
     // 于是匿名请求能改掉所有用户的默认外观，现在直接拒绝。
     throw badRequest('请先登录后再保存外观模式');
   }
-  const next = MODES.includes(mode) ? mode : 'auto';
+  const next = typeof mode === 'string' && MODES.includes(mode) ? mode : 'auto';
   await query('UPDATE users SET ui_mode = $2, updated_at = now() WHERE id = $1', [userId, next]);
   return next;
 }
 
 /** 通知偏好：没有记录时返回默认值并顺手建一行。 */
-async function readNotificationPreferences(userId) {
+export async function readNotificationPreferences(userId: string | null | undefined): Promise<{
+  exhibitionReminder: boolean;
+  registrationUpdates: boolean;
+  granted: boolean;
+}> {
   if (!userId) {
     return { exhibitionReminder: true, registrationUpdates: true, granted: true };
   }
-  const result = await query(
+  const result = await query<NotificationRow>(
     'SELECT exhibition_reminder, registration_updates FROM notification_preferences WHERE user_id = $1',
     [userId],
   );
-  if (result.rows.length === 0) {
+  const row = result.rows[0];
+  if (!row) {
     await query('INSERT INTO notification_preferences (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [userId]);
     return { exhibitionReminder: true, registrationUpdates: true, granted: true };
   }
   return {
-    exhibitionReminder: result.rows[0].exhibition_reminder,
-    registrationUpdates: result.rows[0].registration_updates,
+    exhibitionReminder: row.exhibition_reminder,
+    registrationUpdates: row.registration_updates,
     granted: true,
   };
 }
 
 /** 保存通知偏好（部分字段也可以）。 */
-async function saveNotificationPreferences(userId, patch) {
+export async function saveNotificationPreferences(
+  userId: string | null | undefined,
+  patch: { exhibitionReminder?: unknown; registrationUpdates?: unknown } | null | undefined,
+): Promise<{ exhibitionReminder: boolean; registrationUpdates: boolean }> {
   if (!userId) {
     throw badRequest('请先登录后再保存通知偏好');
   }
@@ -266,25 +324,10 @@ async function saveNotificationPreferences(userId, patch) {
 }
 
 /** 前端传给「管理-设置」的账号状态值校验（复用标签映射，避免多写一份）。 */
-function normalizeUserStatus(value) {
+export function normalizeUserStatus(value: unknown): string {
   const status = toUserStatus(value);
   if (!status) {
     throw badRequest('账号状态只能是 正常 / 受限 / 封禁');
   }
   return status;
 }
-
-module.exports = {
-  LIMIT_BOUNDS,
-  MODES,
-  applyServerPatch,
-  readServerSettings,
-  readSection,
-  saveServerSettings,
-  readUiMode,
-  saveUiMode,
-  readNotificationPreferences,
-  saveNotificationPreferences,
-  normalizeUserStatus,
-  formatList,
-};

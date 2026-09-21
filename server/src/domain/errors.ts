@@ -7,20 +7,22 @@
  * 没有第二条路径可以退回。
  */
 
-class ApiError extends Error {
-  constructor(status, message) {
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
   }
 }
 
-const badRequest = (message) => new ApiError(400, message);
-const unauthorized = (message = '请先登录') => new ApiError(401, message);
-const forbidden = (message = '无权执行此操作') => new ApiError(403, message);
-const notFound = (message = '内容不存在或已删除') => new ApiError(404, message);
-const conflict = (message = '操作与当前状态冲突') => new ApiError(409, message);
-const serviceUnavailable = (message = '数据库暂时不可用，请稍后重试') => new ApiError(503, message);
+export const badRequest = (message: string) => new ApiError(400, message);
+export const unauthorized = (message = '请先登录') => new ApiError(401, message);
+export const forbidden = (message = '无权执行此操作') => new ApiError(403, message);
+export const notFound = (message = '内容不存在或已删除') => new ApiError(404, message);
+export const conflict = (message = '操作与当前状态冲突') => new ApiError(409, message);
+export const serviceUnavailable = (message = '数据库暂时不可用，请稍后重试') => new ApiError(503, message);
 
 /**
  * 「数据库现在用不了」的错误码。
@@ -53,32 +55,21 @@ const UNAVAILABLE_CODES = new Set([
 ]);
 
 /** 判断一个错误是不是「数据库暂时不可用」。 */
-function isDatabaseUnavailable(error) {
+export function isDatabaseUnavailable(error: unknown): boolean {
   if (!error) {
     return false;
   }
-  if (UNAVAILABLE_CODES.has(String(error.code || ''))) {
+  const record = error as { code?: unknown; message?: unknown };
+  if (UNAVAILABLE_CODES.has(String(record.code || ''))) {
     return true;
   }
-  const message = String(error.message || '');
+  const message = String(record.message || '');
   return message.includes('timeout exceeded when trying to connect') || message.includes('Connection terminated');
 }
 
 /** 条件成立时抛出，用于把「校验 + 报错」写成一行。 */
-function assert(condition, error) {
+export function assert(condition: unknown, error: Error): asserts condition {
   if (!condition) {
     throw error;
   }
 }
-
-module.exports = {
-  ApiError,
-  badRequest,
-  unauthorized,
-  forbidden,
-  notFound,
-  conflict,
-  serviceUnavailable,
-  isDatabaseUnavailable,
-  assert,
-};

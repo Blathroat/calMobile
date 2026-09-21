@@ -7,9 +7,8 @@
  * base32 为 `GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ`）。
  */
 
-const assert = require('node:assert/strict');
-
-const {
+import assert from 'node:assert/strict';
+import {
   base32Encode,
   base32Decode,
   generateSecret,
@@ -23,13 +22,13 @@ const {
   normalizeBackupCode,
   isBackupCodeShape,
   hashBackupCode,
-} = require('./totp');
+} from './totp';
 
 /** RFC 6238 附录 B 的种子（ASCII 的 "12345678901234567890"）。 */
 const RFC_SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
 
 /** RFC 6238 附录 B 的 8 位向量（时间秒 → 码）。 */
-const RFC_VECTORS = [
+const RFC_VECTORS: [number, string][] = [
   [59, '94287082'],
   [1111111109, '07081804'],
   [1111111111, '14050471'],
@@ -151,7 +150,7 @@ test('备用码：10 个、五五分组、字符集里没有易混字符、每�
 });
 
 test('备用码：归一化与形状判定（大小写、多打少打横线都要能对上）', () => {
-  const code = generateBackupCodes()[0];
+  const code = generateBackupCodes()[0]!;
   const raw = code.replace('-', '');
   assert.equal(normalizeBackupCode(code), raw);
   assert.equal(normalizeBackupCode(code.toLowerCase()), raw, '小写也要认');

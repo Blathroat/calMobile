@@ -1,6 +1,5 @@
-const assert = require('node:assert/strict');
-
-const { resolveAuthConfig } = require('./auth');
+import assert from 'node:assert/strict';
+import { resolveAuthConfig } from './auth';
 
 test('rejects missing JWT secrets', () => {
   assert.throws(

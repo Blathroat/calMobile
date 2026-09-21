@@ -5,12 +5,11 @@
  * 不必真的去启动一次服务：只要钉住优先级，`package.json` 的脚本传对参数就够了。
  */
 
-const assert = require('node:assert/strict');
-
-const { resolveRuntime } = require('./runtime');
+import assert from 'node:assert/strict';
+import { resolveRuntime } from './runtime';
 
 /** 造一个 argv：第一个元素是 node，第二个是脚本路径，其余是脚本参数。 */
-const argv = (...args) => ['node', 'src/index.js', ...args];
+const argv = (...args: string[]) => ['node', 'src/index.js', ...args];
 
 test('pnpm start 传 --production：自动进生产模式', () => {
   const runtime = resolveRuntime(argv('--production'), { NODE_ENV: 'development' });

@@ -10,8 +10,10 @@
  * 纯函数：用例直接把环境对象喂进来，不需要真的改 `process.env` 再重新 require。
  */
 
+type EnvLike = NodeJS.ProcessEnv | Record<string, string | undefined>;
+
 /** 一眼能看出是「开发用」的密钥特征。 */
-const DEV_SECRET_HINTS = [
+export const DEV_SECRET_HINTS = [
   /local-dev/i,
   /please-change/i,
   /calmobile-local/i,
@@ -21,15 +23,19 @@ const DEV_SECRET_HINTS = [
 ];
 
 /** 一眼能看出是「占位」的发件人地址。 */
-const PLACEHOLDER_FROM = [/@localhost$/i, /\.local$/i];
+export const PLACEHOLDER_FROM = [/@localhost$/i, /\.local$/i];
+
+export interface ProductionProblems {
+  fatal: string[];
+  warnings: string[];
+}
 
 /**
- * @param {object} env 形如 `process.env`。
- * @returns {{fatal: string[], warnings: string[]}}
+ * @param env 形如 `process.env`。
  */
-function productionProblems(env = {}) {
-  const fatal = [];
-  const warnings = [];
+export function productionProblems(env: EnvLike = {}): ProductionProblems {
+  const fatal: string[] = [];
+  const warnings: string[] = [];
 
   // ── 会让攻击者直接伪造身份 / 进数据库的 ──────────────────────────
   for (const name of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
@@ -104,7 +110,7 @@ function productionProblems(env = {}) {
 
   // 非本机数据库却没开 SSL：托管数据库通常要求 TLS。
   const dbHost = String(env.DB_HOST || '').trim();
-  const remoteDb = dbHost && !/^(127\.0\.0\.1|localhost|::1)$/i.test(dbHost);
+  const remoteDb = Boolean(dbHost) && !/^(127\.0\.0\.1|localhost|::1)$/i.test(dbHost);
   if (
     remoteDb &&
     !['true', '1', 'yes', 'on'].includes(
@@ -118,5 +124,3 @@ function productionProblems(env = {}) {
 
   return { fatal, warnings };
 }
-
-module.exports = { productionProblems, DEV_SECRET_HINTS, PLACEHOLDER_FROM };

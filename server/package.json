@@ -4,8 +4,8 @@
   "description": "展会排期助手后端服务器",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js --production",
-    "dev": "nodemon src/index.js",
+    "start": "node dist/index.js --production",
+    "dev": "tsx watch src/index.js",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
@@ -14,9 +14,9 @@
     "lint:fix": "oxlint --fix src test vitest.config.mjs",
     "format": "oxfmt src test vitest.config.mjs",
     "format:check": "oxfmt --check src test vitest.config.mjs",
-    "db:migrate": "node src/config/migrate.js migrate",
-    "db:migrate:prod": "node src/config/migrate.js migrate --production",
-    "db:seed": "node src/config/migrate.js seed"
+    "db:migrate": "tsx src/config/migrate.ts migrate",
+    "db:migrate:prod": "node dist/config/migrate.js migrate --production",
+    "db:seed": "tsx src/config/migrate.ts seed"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -29,9 +29,12 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/pg": "^8.23.1",
     "nodemon": "^3.1.14",
     "oxfmt": "^0.68.0",
     "oxlint": "^1.83.0",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   },

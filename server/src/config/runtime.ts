@@ -3,13 +3,13 @@
  *
  * **`pnpm start` 自动进生产模式，`pnpm dev` 留在开发模式**：
  * - `start` 脚本传 `--production`（跨平台，不依赖 shell 的 `VAR=x` 写法，也不用引入 cross-env）；
- * - `dev` 走 nodemon，不带参数，读 `.env` 里的 `NODE_ENV=development`；
+ * - `dev` 走 tsx watch，不带参数，读 `.env` 里的 `NODE_ENV=development`；
  * - 真实环境变量优先于 `.env`（`dotenv` 默认不覆盖已存在的变量），所以
  *   `NODE_ENV=production node src/index.js` 与容器里注入的 `NODE_ENV` 同样有效。
  *
- * **本模块必须在任何读取 `NODE_ENV` 的模块之前加载**：`config/mail.js` 与
- * `config/database.js` 都是在 require 的那一刻就把值定下来的，晚一步就白改了。
- * `index.js` 与 `config/migrate.js` 的第一行 require 就是它。
+ * **本模块必须在任何读取 `NODE_ENV` 的模块之前加载**：`config/mail.ts` 与
+ * `config/database.ts` 都是在 require 的那一刻就把值定下来的，晚一步就白改了。
+ * `index.js` 与 `config/migrate.ts` 的第一行导入就是它。
  *
  * 模块里同时给出三件生产环境相关的东西（都可用环境变量覆盖）：
  * - `statusPageEnabled`：生产环境**默认关闭** `/status` 与 `/api/v1/status`
@@ -19,12 +19,26 @@
  * - `startedBy`：给启动日志用，一眼看出这次是 `pnpm start` 还是 `pnpm dev` 起的。
  */
 
-require('dotenv').config({ quiet: true });
+import dotenv from 'dotenv';
+
+dotenv.config({ quiet: true });
+
+type EnvLike = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
 const TRUTHY = ['true', '1', 'yes', 'on'];
 const FALSY = ['false', '0', 'no', 'off'];
 
-function bool(value) {
+export type TrustProxy = false | number | string;
+
+export interface Runtime {
+  nodeEnv: string;
+  isProduction: boolean;
+  statusPageEnabled: boolean;
+  trustProxy: TrustProxy;
+  startedBy: string;
+}
+
+export function bool(value: unknown): boolean {
   return TRUTHY.includes(
     String(value === undefined || value === null ? '' : value)
       .trim()
@@ -35,10 +49,10 @@ function bool(value) {
 /**
  * 解析运行环境（纯函数，用例直接喂 argv 与环境对象）。
  *
- * @param {string[]} argv 形如 `process.argv`（含 node 与脚本路径，函数自己 slice）。
- * @param {object} env 形如 `process.env`。
+ * @param argv 形如 `process.argv`（含 node 与脚本路径，函数自己 slice）。
+ * @param env 形如 `process.env`。
  */
-function resolveRuntime(argv = [], env = {}) {
+export function resolveRuntime(argv: string[] = [], env: EnvLike = {}): Runtime {
   const args = argv.slice(2);
   const wantsProduction = args.includes('--production') || args.includes('--prod');
   const wantsDevelopment = args.includes('--development') || args.includes('--dev');
@@ -62,7 +76,7 @@ function resolveRuntime(argv = [], env = {}) {
   const trustSetting = String(env.TRUST_PROXY || '')
     .trim()
     .toLowerCase();
-  let trustProxy = false;
+  let trustProxy: TrustProxy = false;
   if (trustSetting !== '' && !FALSY.includes(trustSetting)) {
     trustProxy = /^\d+$/.test(trustSetting) ? Number(trustSetting) : trustSetting;
   }
@@ -77,8 +91,10 @@ function resolveRuntime(argv = [], env = {}) {
   };
 }
 
-module.exports = {
-  ...resolveRuntime(process.argv, process.env),
-  resolveRuntime,
-  bool,
-};
+const resolved = resolveRuntime(process.argv, process.env);
+
+export const nodeEnv = resolved.nodeEnv;
+export const isProduction = resolved.isProduction;
+export const statusPageEnabled = resolved.statusPageEnabled;
+export const trustProxy = resolved.trustProxy;
+export const startedBy = resolved.startedBy;

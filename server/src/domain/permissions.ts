@@ -17,7 +17,29 @@
  * - 管理员永远不受限 —— 否则没有任何人能解除限制。
  */
 
-const { forbidden, unauthorized } = require('./errors');
+import { forbidden, unauthorized } from './errors';
+
+export interface Actor {
+  userId: string;
+  role: string;
+  status?: string;
+}
+
+export interface AuthedRequest {
+  user?: Actor;
+}
+
+export interface ExhibitionOwner {
+  exhibitor_id?: string | null;
+}
+
+export interface Capabilities {
+  register: boolean;
+  profile: boolean;
+  exhibitor: boolean;
+  admin: boolean;
+  limited: boolean;
+}
 
 /**
  * 角色 + 状态能力：与前端 `user.can` 的五个键一致。
@@ -28,7 +50,7 @@ const { forbidden, unauthorized } = require('./errors');
  * 审核报名，只是所有展会写操作都会在路由层被 `assertNotLimited()` 拦成 403
  * （能力位保持角色口径，写操作的拦截以服务端为准）。
  */
-function capabilities(role, status) {
+export function capabilities(role: string, status?: string): Capabilities {
   const loggedIn = role === 'user' || role === 'exhibitor' || role === 'admin';
   const limited = isLimited({ role, status });
   return {
@@ -41,7 +63,7 @@ function capabilities(role, status) {
 }
 
 /** 是不是「受限」账号。管理员不算（否则没人能解除限制）；缺 status 时按未受限处理。 */
-function isLimited(user) {
+export function isLimited(user: { role?: string; status?: string } | null | undefined): boolean {
   if (!user || user.role === 'admin') {
     return false;
   }
@@ -52,21 +74,8 @@ function isLimited(user) {
  * 受限账号的统一拦截点：每个禁止的操作各给一句可展示的文案。
  *
  * 路由里只调用这里，不各写一遍 `status === 'limited'`，避免改规则时漏掉某一处。
- * 拦截范围（与 README「业务规则」一致）：
- * - `register` 报名（`POST /registrations`）；
- * - `exhibition` 发布新展会（`POST /exhibitions`）；
- * - `exhibitionUpdate` 编辑展会（`PUT /exhibitions/:id`）；
- * - `exhibitionDelete` 删除展会（`DELETE /exhibitions/:id`）；
- * - `exhibitionStatus` 暂停 / 恢复报名（`PUT /exhibitions/:id/status`）；
- * - `exhibitionFields` 报名收集项（`PUT /exhibitions/:id/fields`）；
- * - `checkin` 现场核销（`POST /checkin`）；
- * - `profile` 编辑个人信息（`PUT /profile`）；
- * 通知偏好、改密码、撤销自己的报名、浏览查询、审核报名都不在拦截范围内。
- *
- * 「暂停 / 恢复报名」与「报名收集项」都是报名设置，文案目前相同，但仍是两个键：
- * 将来其中之一要单独改说法时不必动另一处，测试与排查也能直接指到是哪条路由。
  */
-const LIMITED_ACTIONS = {
+export const LIMITED_ACTIONS: Record<string, string> = {
   register: '账号已被限制，不能报名',
   exhibition: '账号已被限制，不能发布展会',
   exhibitionUpdate: '账号已被限制，不能修改展会',
@@ -78,7 +87,7 @@ const LIMITED_ACTIONS = {
 };
 
 /** 受限账号执行被禁操作时抛出 403；返回当前用户便于串起来用。 */
-function assertNotLimited(user, action) {
+export function assertNotLimited(user: Actor, action: string): Actor {
   if (!isLimited(user)) {
     return user;
   }
@@ -90,7 +99,7 @@ function assertNotLimited(user, action) {
 }
 
 /** 要求已登录；返回当前用户行。 */
-function requireUser(req, message = '请先登录') {
+export function requireUser(req: AuthedRequest, message = '请先登录'): Actor {
   if (!req.user) {
     throw unauthorized(message);
   }
@@ -98,7 +107,7 @@ function requireUser(req, message = '请先登录') {
 }
 
 /** 要求是指定角色之一。 */
-function requireRole(req, roles, message = '无权执行此操作') {
+export function requireRole(req: AuthedRequest, roles: string[], message = '无权执行此操作'): Actor {
   const user = requireUser(req);
   if (!roles.includes(user.role)) {
     throw forbidden(message);
@@ -107,12 +116,12 @@ function requireRole(req, roles, message = '无权执行此操作') {
 }
 
 /** 展商后台 / 报名管理 / 核销：展商与管理员可用。 */
-function requireExhibitor(req, message = '只有展商或管理员可以执行此操作') {
+export function requireExhibitor(req: AuthedRequest, message = '只有展商或管理员可以执行此操作'): Actor {
   return requireRole(req, ['exhibitor', 'admin'], message);
 }
 
 /** 服务器级设置：只有管理员可改。 */
-function requireAdmin(req, message = '只有管理员可以修改服务器设置') {
+export function requireAdmin(req: AuthedRequest, message = '只有管理员可以修改服务器设置'): Actor {
   return requireRole(req, ['admin'], message);
 }
 
@@ -122,7 +131,10 @@ function requireAdmin(req, message = '只有管理员可以修改服务器设置
  * 管理员不限；展商只能管理自己举办的展会（`exhibitor_id` 为空的历史数据
  * 视为公共数据，管理员以外不可改）。
  */
-function canManageExhibition(user, exhibition) {
+export function canManageExhibition(
+  user: Actor | null | undefined,
+  exhibition: ExhibitionOwner | null | undefined,
+): boolean {
   if (!user) {
     return false;
   }
@@ -132,11 +144,14 @@ function canManageExhibition(user, exhibition) {
   if (user.role !== 'exhibitor') {
     return false;
   }
-  return Boolean(exhibition && exhibition.exhibitor_id) && exhibition.exhibitor_id === user.userId;
+  return Boolean(exhibition && exhibition.exhibitor_id && exhibition.exhibitor_id === user.userId);
 }
 
 /** 不能管理时抛出 403；返回展会行便于继续使用。 */
-function assertCanManageExhibition(user, exhibition) {
+export function assertCanManageExhibition(
+  user: Actor | null | undefined,
+  exhibition: ExhibitionOwner | null | undefined,
+): boolean {
   if (!exhibition) {
     return false;
   }
@@ -145,16 +160,3 @@ function assertCanManageExhibition(user, exhibition) {
   }
   return true;
 }
-
-module.exports = {
-  LIMITED_ACTIONS,
-  capabilities,
-  isLimited,
-  assertNotLimited,
-  requireUser,
-  requireRole,
-  requireExhibitor,
-  requireAdmin,
-  canManageExhibition,
-  assertCanManageExhibition,
-};

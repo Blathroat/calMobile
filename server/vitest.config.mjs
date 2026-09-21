@@ -8,13 +8,19 @@ export default defineConfig({
   test: {
     pool: 'forks',
     exclude: ['dist/**', 'node_modules/**'],
+    server: {
+      deps: {
+        inline: [/src[\\/]/],
+      },
+    },
     projects: [
       {
         test: {
           name: 'unit',
-          include: ['src/**/*.test.js'],
+          include: ['src/**/*.test.js', 'src/**/*.test.ts'],
           environment: 'node',
           globals: true,
+          execArgv: ['--import', 'tsx'],
           setupFiles: ['./test/setup-unit.js'],
         },
       },
@@ -24,6 +30,7 @@ export default defineConfig({
           include: ['test/api.test.js'],
           environment: 'node',
           globals: true,
+          execArgv: ['--import', 'tsx'],
           setupFiles: ['./test/setup-contract.js'],
           fileParallelism: false,
           testTimeout: 30000,

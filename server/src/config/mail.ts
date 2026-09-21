@@ -16,14 +16,51 @@
  * 结果落进 `mail_log`（见 `services/otp.js`）。
  */
 
-/** 可用通道。顺序即文档顺序，改动要同步 README 与 .env.example。 */
-const TRANSPORTS = ['console', 'smtp', 'memory'];
+type EnvLike = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
-const DEFAULT_SMTP_PORT = 587;
-const DEFAULT_SEND_TIMEOUT_MS = 8000;
+/** 可用通道。顺序即文档顺序，改动要同步 README 与 .env.example。 */
+export const TRANSPORTS = ['console', 'smtp', 'memory'];
+
+export const DEFAULT_SMTP_PORT = 587;
+export const DEFAULT_SEND_TIMEOUT_MS = 8000;
+
+export interface MailSmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  rejectUnauthorized: boolean;
+}
+
+export interface MailConfig {
+  nodeEnv: string;
+  isProduction: boolean;
+  transport: string;
+  smtp: MailSmtpConfig;
+  fromAddress: string;
+  replyTo: string;
+  sendTimeoutMs: number;
+  problems: string[];
+  configured: boolean;
+}
+
+export interface MailConfigSummary {
+  nodeEnv: string;
+  transport: string;
+  configured: boolean;
+  problems: string[];
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpAuth: boolean;
+  fromAddress: string;
+  replyTo: string;
+  sendTimeoutMs: number;
+}
 
 /** 布尔环境变量：只认 true / 1 / yes / on（大小写无关）。 */
-function bool(value) {
+function bool(value: unknown): boolean {
   return ['true', '1', 'yes', 'on'].includes(
     String(value === undefined || value === null ? '' : value)
       .trim()
@@ -32,7 +69,7 @@ function bool(value) {
 }
 
 /** 解析端口等正整数；非法值退回 fallback（不抛异常，问题由 problems 说话）。 */
-function positiveInt(value, fallback) {
+function positiveInt(value: unknown, fallback: number): number {
   const parsed = Number.parseInt(String(value === undefined || value === null ? '' : value).trim(), 10);
   return Number.isInteger(parsed) && parsed > 0 && parsed <= 65535 ? parsed : fallback;
 }
@@ -40,15 +77,15 @@ function positiveInt(value, fallback) {
 /**
  * 解析一份配置。抽成纯函数，用例可以直接喂各种环境组合，不必改 `process.env` 再重新 require。
  *
- * @param {object} env 形如 `process.env` 的对象。
+ * @param env 形如 `process.env` 的对象。
  */
-function resolveMailConfig(env = {}) {
+export function resolveMailConfig(env: EnvLike = {}): MailConfig {
   const nodeEnv = String(env.NODE_ENV || 'development');
   const isProduction = nodeEnv === 'production';
   const requested = String(env.MAIL_TRANSPORT || '')
     .trim()
     .toLowerCase();
-  const problems = [];
+  const problems: string[] = [];
 
   if (requested && !TRANSPORTS.includes(requested)) {
     problems.push(`MAIL_TRANSPORT=${requested} 不是可用通道（可选：${TRANSPORTS.join(' / ')}）`);
@@ -66,7 +103,7 @@ function resolveMailConfig(env = {}) {
   // 465 是隐式 TLS；其余交给 STARTTLS。显式给了 MAIL_SMTP_SECURE 就听它的。
   const secure = env.MAIL_SMTP_SECURE === undefined ? port === 465 : bool(env.MAIL_SMTP_SECURE);
 
-  const smtp = {
+  const smtp: MailSmtpConfig = {
     host: String(env.MAIL_SMTP_HOST || '').trim(),
     port,
     secure,
@@ -109,7 +146,7 @@ function resolveMailConfig(env = {}) {
  * 给状态页与日志用的摘要：**不带 SMTP 密码**。
  * 状态页是给人看的排查入口，把凭据放上去等于把密码写进浏览器。
  */
-function describeMailConfig(config) {
+export function describeMailConfig(config: MailConfig): MailConfigSummary {
   return {
     nodeEnv: config.nodeEnv,
     transport: config.transport,
@@ -126,13 +163,4 @@ function describeMailConfig(config) {
 }
 
 /** 进程启动时解析一次；`resolveMailConfig` 供用例与脚本另算。 */
-const mailConfig = resolveMailConfig(process.env);
-
-module.exports = {
-  TRANSPORTS,
-  DEFAULT_SMTP_PORT,
-  DEFAULT_SEND_TIMEOUT_MS,
-  mailConfig,
-  resolveMailConfig,
-  describeMailConfig,
-};
+export const mailConfig = resolveMailConfig(process.env);
