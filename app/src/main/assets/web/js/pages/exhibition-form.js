@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 11 · 展会编辑（新建 / 编辑）
- * 线框：newUI/remaining-ui.html #screen-exhibition-form
+ * 线框：docs/newUI/remaining-ui.html #screen-exhibition-form
  * 业务：POST / PUT /exhibitions 与 /exhibitions/:id/fields（server/ 的 REST），
  * 维护日期、报名起止与报名收集项；字段长度与取值上限由后端校验。
  *

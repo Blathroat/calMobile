@@ -1,6 +1,6 @@
 # 界面与动效规范
 
-界面标准来自 `newUI/` 设计交付件（`index.html`、`remaining-ui.html`、`ui-spec.md`、`DESIGN-HANDOFF.md`、`DESIGN-MANIFEST.json`）。颜色、字号、间距、圆角只在 `styles/tokens.css` 声明，交互动效只在 `styles/motion.css` 声明，页面不重复定义。
+界面标准来自 `docs/newUI/` 设计交付件（`index.html`、`remaining-ui.html`、`ui-spec.md`、`DESIGN-HANDOFF.md`、`DESIGN-MANIFEST.json`）。颜色、字号、间距、圆角只在 `styles/tokens.css` 声明，交互动效只在 `styles/motion.css` 声明，页面不重复定义。
 
 ## 界面标准
 
@@ -29,7 +29,7 @@
 
 ## 动效标准
 
-`styles/motion.css` 集中声明交互动效，参照 `newUI/remaining-ui.html` 的状态语义，只动画 `transform` 与 `opacity`，并统一受 `prefers-reduced-motion` 保护：
+`styles/motion.css` 集中声明交互动效，参照 `docs/newUI/remaining-ui.html` 的状态语义，只动画 `transform` 与 `opacity`，并统一受 `prefers-reduced-motion` 保护：
 
 | 场景 | 表现 |
 | --- | --- |

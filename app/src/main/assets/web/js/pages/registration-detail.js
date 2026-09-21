@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 08 · 报名详情
- * 线框：newUI/remaining-ui.html #screen-registration-detail
+ * 线框：docs/newUI/remaining-ui.html #screen-registration-detail
  * 业务：查看完整报名回答，可撤销报名；已通过的报名是否需要重新审核由管理员设置决定。
  *
  * 展商在展会设置里开启“启用报名二维码”后，审核通过的报名会在这里展示报名码：

@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 09 · 个人主页
- * 线框：newUI/remaining-ui.html #screen-profile
+ * 线框：docs/newUI/remaining-ui.html #screen-profile
  * 业务：账号资料、头像、通知与提醒，以及个人偏好里的应用配色。
  *
  * 服务器级设置（启动公告、展会分类、审核策略、媒体与上传限制、字符数上限）

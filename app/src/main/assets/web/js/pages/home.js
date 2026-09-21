@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 02 · 首页（月视图 + 当天展会列表）
- * 线框：newUI/index.html #screen-home、newUI/remaining-ui.html #screen-home
+ * 线框：docs/newUI/index.html #screen-home、docs/newUI/remaining-ui.html #screen-home
  * 业务：展会与报名数据来自 server/ 的 REST 接口（统一走 core/api.js）。
  *
  * 日历卡片支持左右滑动切换月份：拖动时卡片跟手位移，松手超过阈值则滑出并载入相邻月份；

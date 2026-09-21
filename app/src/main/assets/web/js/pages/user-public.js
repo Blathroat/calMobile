@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 14 · 用户公开页
- * 线框：newUI/remaining-ui.html #screen-user-public
+ * 线框：docs/newUI/remaining-ui.html #screen-user-public
  * 业务：展示昵称、简介、所在地区与报名记录。
  *
  * 普通访问者按用户的“展示我的报名”策略过滤；管理员从管理后台进入时不受该策略影响，

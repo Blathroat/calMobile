@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 01 · 入口（登录 / 访客 / 两步验证）
- * 线框：newUI/index.html #screen-login、newUI/remaining-ui.html #screen-login
+ * 线框：docs/newUI/index.html #screen-login、docs/newUI/remaining-ui.html #screen-login
  * 业务：POST /auth/login 与 POST /auth/guest（server/ 的 REST），通过后进入首页。
  *
  * 账号开了两步验证时，`POST /auth/login` **不回令牌**，只回一张 5 分钟有效的预认证票

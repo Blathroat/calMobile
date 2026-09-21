@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 05 · 注册（创建账号）
- * 线框：newUI/remaining-ui.html #screen-register-account
+ * 线框：docs/newUI/remaining-ui.html #screen-register-account
  * 业务：POST /auth/register（第一步：校验 + 发码）→ POST /auth/register/verify（第二步：验证码通过才建号）
  *
  * 两步的意义在**后端**：邮箱验证通过之前不会创建账号，所以库里不会留下「注册了但邮箱

@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 13 · 报名管理 / 审核
- * 线框：newUI/remaining-ui.html #screen-registration-management
+ * 线框：docs/newUI/remaining-ui.html #screen-registration-management
  * 业务：GET /review 与 PUT /review/:id/status（server/ 的 REST），
  * 状态为待审核 / 已通过 / 已拒绝 / 已参加；
  * 展商能否重新审核由管理员设置决定，管理员自己不受该开关限制。

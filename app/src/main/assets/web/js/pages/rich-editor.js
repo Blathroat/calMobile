@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 12 · 展会简介（Markdown 编辑）
- * 线框：newUI/remaining-ui.html #screen-rich-editor
+ * 线框：docs/newUI/remaining-ui.html #screen-rich-editor
  *
  * 编辑器使用成熟的 EasyMDE（已随包内置在 assets/web/vendor/easymde，MIT），
  * 不自行实现富文本；支持直接粘贴 Markdown 文本、实时预览与插图。

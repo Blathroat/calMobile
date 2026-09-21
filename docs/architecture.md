@@ -104,7 +104,7 @@ Android 依赖只有 `app/build.gradle` 里的 Gson（桥接层 JSON）与 JUnit
 
 ### 原生界面与 WebView 的取舍
 
-界面只有 WebView 一处入口：`WebShellActivity` 是清单里唯一的 Activity，界面代码全部在 `assets/web`。选择 WebView 的原因是 `newUI/` 交付件本身就是 HTML/CSS，直接复用可保证视觉一致；页面模块化后改动集中在 `assets/web`，无需重新编译 XML 布局。
+界面只有 WebView 一处入口：`WebShellActivity` 是清单里唯一的 Activity，界面代码全部在 `assets/web`。选择 WebView 的原因是 `docs/newUI/` 交付件本身就是 HTML/CSS，直接复用可保证视觉一致；页面模块化后改动集中在 `assets/web`，无需重新编译 XML 布局。
 
 代价与边界：离线资源由 APK 内置，媒体文件仍保存在设备本地；JavaScript 与 Android 返回栈通过 `history` 与 `WebView.canGoBack()` 同步；文件选择、日历写入、通知权限、CSV 导出和分享通过桥接调用系统界面；简介编辑器使用内置 EasyMDE（Markdown）。
 

@@ -39,6 +39,7 @@ pnpm format              # oxfmt
 - `app/`：Android 客户端，**Java 25**（toolchain + `compileOptions`）。唯一入口是 `WebShellActivity`（WebView 容器）。页面在 `app/src/main/assets/web/`。纯 Java 工程必须关 `android.builtInKotlin`：AGP 9 仍会建 Kotlin 编译任务，而 Kotlin JVM 目标最高 24。
 - 原生只做设备能力：日历、通知、摄像头、媒体、分享、导出、系统栏。权威动作表是 `WebAppActions.handle()` 的 switch，**不要往原生加数据实现**。
 - `server/`：Express + PostgreSQL，独立 Node 工程（pnpm），不是 Gradle 模块。数据只在后端。
+- `docs/`：产品与技术文档；设计交付件（线框 `index.html` / `remaining-ui.html`、`ui-spec.md`、`DESIGN-HANDOFF.md`）在 `docs/newUI/`，是界面标准的来源，改界面以它为准。
 - 旧 Room / Retrofit / 本机 SQLite / legacy 页面已删除，不要重新引入。
 
 ## 前端

@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 10 · 展商后台
- * 线框：newUI/remaining-ui.html #screen-exhibitor-backend
+ * 线框：docs/newUI/remaining-ui.html #screen-exhibitor-backend
  * 业务：GET /exhibitions（server/ 的 REST），报名管理与展会编辑入口。
  *
  * 卡片上只保留“查看报名”和“编辑展会”两个入口：报名方式、编辑简介与删除展会

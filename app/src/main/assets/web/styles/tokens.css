@@ -1,5 +1,5 @@
 /* ============================================================================
- * calMobile · 设计令牌（源自 newUI/index.html、newUI/remaining-ui.html）
+ * calMobile · 设计令牌（源自 docs/newUI/index.html、docs/newUI/remaining-ui.html）
  *
  * newUI 的线框以 216×480 的手机框绘制，生产版以 390dp 逻辑宽度为基准，
  * 缩放系数 k ≈ 1.8。下列 px 值即线框值的等比例换算结果，字号保持整数、

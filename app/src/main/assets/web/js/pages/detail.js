@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 03 · 展会详情
- * 线框：newUI/index.html #screen-detail、newUI/remaining-ui.html #screen-detail
+ * 线框：docs/newUI/index.html #screen-detail、docs/newUI/remaining-ui.html #screen-detail
  * 业务：展会信息 + 报名收集项 + 系统日历 + 分享。
  *
  * 取数走 core/loadable.js：预热或缓存命中时同步出内容，因此点进卡片不会先闪骨架屏。

@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 15 · 管理后台（用户 / 展会 / 设置）
- * 线框：newUI/remaining-ui.html #screen-admin-backend、#screen-admin-settings
+ * 线框：docs/newUI/remaining-ui.html #screen-admin-backend、#screen-admin-settings
  * 业务：server/ 的 REST —— 用户列表与状态（/users）、展会状态（/exhibitions/:id/status）、
  * 服务器设置（/settings，读写 app_settings）。
  *

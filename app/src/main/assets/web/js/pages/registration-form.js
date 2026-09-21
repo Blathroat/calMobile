@@ -1,7 +1,7 @@
 import { t } from '../core/strings.js';
 /**
  * 屏幕 04 · 报名信息
- * 线框：newUI/index.html #screen-register
+ * 线框：docs/newUI/index.html #screen-register
  * 业务：按展商配置的报名收集项渲染表单，提交后写入报名记录并进入我的报名。
  *
  * 取数走 core/loadable.js：展会与已有报名都命中缓存时同步出内容，从详情页切进来不闪骨架屏。
