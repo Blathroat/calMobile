@@ -24,7 +24,11 @@ const DEFAULT_SEND_TIMEOUT_MS = 8000;
 
 /** 布尔环境变量：只认 true / 1 / yes / on（大小写无关）。 */
 function bool(value) {
-  return ['true', '1', 'yes', 'on'].includes(String(value === undefined || value === null ? '' : value).trim().toLowerCase());
+  return ['true', '1', 'yes', 'on'].includes(
+    String(value === undefined || value === null ? '' : value)
+      .trim()
+      .toLowerCase(),
+  );
 }
 
 /** 解析端口等正整数；非法值退回 fallback（不抛异常，问题由 problems 说话）。 */
@@ -41,7 +45,9 @@ function positiveInt(value, fallback) {
 function resolveMailConfig(env = {}) {
   const nodeEnv = String(env.NODE_ENV || 'development');
   const isProduction = nodeEnv === 'production';
-  const requested = String(env.MAIL_TRANSPORT || '').trim().toLowerCase();
+  const requested = String(env.MAIL_TRANSPORT || '')
+    .trim()
+    .toLowerCase();
   const problems = [];
 
   if (requested && !TRANSPORTS.includes(requested)) {
@@ -50,7 +56,7 @@ function resolveMailConfig(env = {}) {
 
   // 生产默认 smtp：忘了配也要在状态页上直说「缺 MAIL_SMTP_HOST」，
   // 而不是安静地走 console —— 那等于验证码只写在服务器日志里，用户永远卡在注册页。
-  let transport = TRANSPORTS.includes(requested) ? requested : (isProduction ? 'smtp' : 'console');
+  let transport = TRANSPORTS.includes(requested) ? requested : isProduction ? 'smtp' : 'console';
   if (transport === 'memory' && isProduction) {
     problems.push('生产环境不能用 memory 通道（邮件只留在内存里，用户收不到）');
     transport = 'smtp';
@@ -67,14 +73,12 @@ function resolveMailConfig(env = {}) {
     user: String(env.MAIL_SMTP_USER || ''),
     pass: String(env.MAIL_SMTP_PASSWORD || ''),
     // 默认校验证书；只有自签名的内网中继才该显式关掉。
-    rejectUnauthorized: env.MAIL_SMTP_TLS_REJECT_UNAUTHORIZED === undefined
-      ? true
-      : bool(env.MAIL_SMTP_TLS_REJECT_UNAUTHORIZED),
+    rejectUnauthorized:
+      env.MAIL_SMTP_TLS_REJECT_UNAUTHORIZED === undefined ? true : bool(env.MAIL_SMTP_TLS_REJECT_UNAUTHORIZED),
   };
 
   // 开发默认一个带点的假地址（Mailpit 什么都收）；生产必须显式配，否则报缺失。
-  const fromAddress = String(env.MAIL_FROM_ADDRESS || '').trim()
-    || (isProduction ? '' : 'no-reply@calmobile.local');
+  const fromAddress = String(env.MAIL_FROM_ADDRESS || '').trim() || (isProduction ? '' : 'no-reply@calmobile.local');
 
   if (transport === 'smtp') {
     if (!smtp.host) {

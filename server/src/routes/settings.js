@@ -15,8 +15,13 @@ const { authenticate, optionalAuth } = require('../middleware/auth');
 const { requireAdmin } = require('../domain/permissions');
 const { mutate } = require('../domain/respond');
 const {
-  applyServerPatch, readNotificationPreferences, readServerSettings, readUiMode,
-  saveNotificationPreferences, saveServerSettings, saveUiMode,
+  applyServerPatch,
+  readNotificationPreferences,
+  readServerSettings,
+  readUiMode,
+  saveNotificationPreferences,
+  saveServerSettings,
+  saveUiMode,
 } = require('../domain/settings');
 
 const router = express.Router();

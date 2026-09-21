@@ -19,9 +19,7 @@ const { exhibitionPayload, fieldPayload } = require('../domain/payloads');
 const labels = require('../domain/labels');
 const { requireExhibitor, assertCanManageExhibition, assertNotLimited } = require('../domain/permissions');
 const { readSection } = require('../domain/settings');
-const {
-  limits, text, int, bool, isoDate, timeRange, stringList,
-} = require('../domain/validation');
+const { limits, text, int, bool, isoDate, timeRange, stringList } = require('../domain/validation');
 const { badRequest, notFound } = require('../domain/errors');
 const { mutate } = require('../domain/respond');
 const { authenticate, optionalAuth } = require('../middleware/auth');
@@ -180,12 +178,15 @@ function monthSummary(item) {
  * 报名表，提交时 `registrations.js` 也用同一份默认值校验（导出给那边复用）。
  */
 async function loadFields(exhibitionId) {
-  const result = await query(`
+  const result = await query(
+    `
         SELECT id, title, type, required, options
         FROM exhibition_fields
         WHERE exhibition_id = $1
         ORDER BY position, id
-    `, [exhibitionId]);
+    `,
+    [exhibitionId],
+  );
   if (result.rows.length === 0) {
     return DEFAULT_FIELDS.map((item) => fieldPayload({ ...item, id: '' }));
   }
@@ -220,11 +221,13 @@ function normalizeFields(raw, config) {
 async function replaceFields(client, exhibitionId, fields) {
   await client.query('DELETE FROM exhibition_fields WHERE exhibition_id = $1', [exhibitionId]);
   for (const [index, item] of fields.entries()) {
-    await client.query(`
+    await client.query(
+      `
             INSERT INTO exhibition_fields (id, exhibition_id, title, type, required, options, position)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `, [newId('field'), exhibitionId, item.title, item.type, item.required,
-      JSON.stringify(item.options), index]);
+        `,
+      [newId('field'), exhibitionId, item.title, item.type, item.required, JSON.stringify(item.options), index],
+    );
   }
 }
 
@@ -250,18 +253,20 @@ async function exhibitionInput(body, existing) {
     throw badRequest('展会名称不能为空');
   }
 
-  const venue = given(source, 'venue') || creating
-    ? text(source.venue, { label: '展会地点', max: config.exhibitionVenue, required: false })
-    : (current.venue || '');
-  const category = given(source, 'category') || creating
-    ? text(source.category, { label: '展会分类', max: config.category, required: false })
-    : (current.category || '');
-  const date = given(source, 'date') || creating
-    ? isoDate(source.date, { label: '展会日期', required: true })
-    : current.exhibition_date;
-  const time = given(source, 'time') || creating
-    ? timeRange(source.time, { label: '展会时间', required: true })
-    : current.time;
+  const venue =
+    given(source, 'venue') || creating
+      ? text(source.venue, { label: '展会地点', max: config.exhibitionVenue, required: false })
+      : current.venue || '';
+  const category =
+    given(source, 'category') || creating
+      ? text(source.category, { label: '展会分类', max: config.category, required: false })
+      : current.category || '';
+  const date =
+    given(source, 'date') || creating
+      ? isoDate(source.date, { label: '展会日期', required: true })
+      : current.exhibition_date;
+  const time =
+    given(source, 'time') || creating ? timeRange(source.time, { label: '展会时间', required: true }) : current.time;
 
   let status = current.status || 'review';
   if (given(source, 'status') && String(source.status).trim() !== '') {
@@ -271,24 +276,28 @@ async function exhibitionInput(body, existing) {
     }
   }
 
-  const registrationStart = given(source, 'registrationStart') || creating
-    ? isoDate(source.registrationStart, { label: '报名开始日期' })
-    : (current.registration_start || '');
-  const registrationEnd = given(source, 'registrationEnd') || creating
-    ? isoDate(source.registrationEnd, { label: '报名截止日期' })
-    : (current.registration_end || '');
+  const registrationStart =
+    given(source, 'registrationStart') || creating
+      ? isoDate(source.registrationStart, { label: '报名开始日期' })
+      : current.registration_start || '';
+  const registrationEnd =
+    given(source, 'registrationEnd') || creating
+      ? isoDate(source.registrationEnd, { label: '报名截止日期' })
+      : current.registration_end || '';
   if (registrationStart && registrationEnd && registrationEnd < registrationStart) {
     throw badRequest('报名截止日期不能早于开始日期');
   }
 
   const description = given(source, 'description')
     ? String(source.description === undefined || source.description === null ? '' : source.description)
-    : (current.description || '');
-    // 存库的格式要和对外返回的一致：读取时按正文嗅探 HTML（见 payloads.js），
-    // 这里在写入时做同一件事，否则同一段富文本会被当成 Markdown 渲染。
+    : current.description || '';
+  // 存库的格式要和对外返回的一致：读取时按正文嗅探 HTML（见 payloads.js），
+  // 这里在写入时做同一件事，否则同一段富文本会被当成 Markdown 渲染。
   const requestedFormat = given(source, 'descriptionFormat')
-    ? (source.descriptionFormat === 'html' ? 'html' : 'md')
-    : (current.description_format || 'md');
+    ? source.descriptionFormat === 'html'
+      ? 'html'
+      : 'md'
+    : current.description_format || 'md';
   const descriptionFormat = requestedFormat === 'html' || looksLikeHtml(description) ? 'html' : 'md';
 
   return {
@@ -304,17 +313,19 @@ async function exhibitionInput(body, existing) {
     descriptionFormat,
     highlights: given(source, 'highlights')
       ? stringList(source.highlights, { label: '展会亮点' })
-      : (Array.isArray(current.highlights) ? current.highlights : []),
-    imageUri: given(source, 'imageUri') ? String(source.imageUri || '') : (current.image_uri || ''),
+      : Array.isArray(current.highlights)
+        ? current.highlights
+        : [],
+    imageUri: given(source, 'imageUri') ? String(source.imageUri || '') : current.image_uri || '',
     // 新建时给一个默认备注：列表与详情页会直接显示它。
     exhibitorNote: given(source, 'exhibitorNote')
       ? String(source.exhibitorNote || '')
-      : (creating ? '主办方公开信息' : (current.exhibitor_note || '')),
+      : creating
+        ? '主办方公开信息'
+        : current.exhibitor_note || '',
     qrEnabled: given(source, 'qrEnabled') ? bool(source.qrEnabled, false) : Boolean(current.qr_enabled),
     // 收集项允许跟展会一起保存（页面表单就是这么发的）；没带就保持原样。
-    fields: Array.isArray(source.fields) && source.fields.length > 0
-      ? normalizeFields(source.fields, config)
-      : null,
+    fields: Array.isArray(source.fields) && source.fields.length > 0 ? normalizeFields(source.fields, config) : null,
   };
 }
 
@@ -333,11 +344,14 @@ router.get('/', optionalAuth, async (req, res, next) => {
       params.push(likePattern(keyword));
       where = 'WHERE e.title ILIKE $1 OR e.venue ILIKE $1 OR e.category ILIKE $1 OR e.description ILIKE $1';
     }
-    const result = await query(`
+    const result = await query(
+      `
             SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM}
             ${where}
             ORDER BY e.exhibition_date, e.id
-        `, params);
+        `,
+      params,
+    );
     res.json(result.rows.map(exhibitionPayload));
   } catch (error) {
     next(error);
@@ -366,12 +380,15 @@ router.get('/month', optionalAuth, async (req, res, next) => {
     const month = int(requestedMonth, { label: '月份', min: 1, max: 12 });
     let day = int(req.query.day, { label: '日期', min: 0, max: 31, fallback: 0 });
 
-    const result = await query(`
+    const result = await query(
+      `
             SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM}
             WHERE EXTRACT(YEAR FROM e.exhibition_date)::int = $1
               AND EXTRACT(MONTH FROM e.exhibition_date)::int = $2
             ORDER BY e.exhibition_date, e.id
-        `, [year, month]);
+        `,
+      [year, month],
+    );
 
     const items = result.rows.map(exhibitionPayload);
     const eventDays = [...new Set(items.map((item) => item.day))].sort((a, b) => a - b);
@@ -438,15 +455,32 @@ router.post('/', authenticate, notLimited('exhibition'), exhibitorOnly, (req, re
     const input = await exhibitionInput(req.body);
     const id = newId('exh');
     await transaction(async (client) => {
-      await client.query(`
+      await client.query(
+        `
                 INSERT INTO exhibitions (id, title, venue, time, exhibition_date, status, category,
                     description, description_format, highlights, image_uri, exhibitor_note,
                     registration_start, registration_end, qr_enabled, exhibitor_id)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-            `, [id, input.title, input.venue, input.time, input.date, input.status, input.category,
-        input.description, input.descriptionFormat, JSON.stringify(input.highlights),
-        input.imageUri, input.exhibitorNote, input.registrationStart || null,
-        input.registrationEnd || null, input.qrEnabled, req.user.userId]);
+            `,
+        [
+          id,
+          input.title,
+          input.venue,
+          input.time,
+          input.date,
+          input.status,
+          input.category,
+          input.description,
+          input.descriptionFormat,
+          JSON.stringify(input.highlights),
+          input.imageUri,
+          input.exhibitorNote,
+          input.registrationStart || null,
+          input.registrationEnd || null,
+          input.qrEnabled,
+          req.user.userId,
+        ],
+      );
       if (input.fields) {
         await replaceFields(client, id, input.fields);
       }
@@ -465,17 +499,33 @@ router.put('/:id', authenticate, notLimited('exhibitionUpdate'), exhibitorOnly, 
     await mutate(res, next, async () => {
       const input = await exhibitionInput(req.body, existing);
       await transaction(async (client) => {
-        await client.query(`
+        await client.query(
+          `
                     UPDATE exhibitions SET
                         title = $2, venue = $3, time = $4, exhibition_date = $5, status = $6,
                         category = $7, description = $8, description_format = $9, highlights = $10,
                         image_uri = $11, exhibitor_note = $12, registration_start = $13,
                         registration_end = $14, qr_enabled = $15, updated_at = now()
                     WHERE id = $1
-                `, [existing.id, input.title, input.venue, input.time, input.date, input.status,
-          input.category, input.description, input.descriptionFormat,
-          JSON.stringify(input.highlights), input.imageUri, input.exhibitorNote,
-          input.registrationStart || null, input.registrationEnd || null, input.qrEnabled]);
+                `,
+          [
+            existing.id,
+            input.title,
+            input.venue,
+            input.time,
+            input.date,
+            input.status,
+            input.category,
+            input.description,
+            input.descriptionFormat,
+            JSON.stringify(input.highlights),
+            input.imageUri,
+            input.exhibitorNote,
+            input.registrationStart || null,
+            input.registrationEnd || null,
+            input.qrEnabled,
+          ],
+        );
         if (input.fields) {
           await replaceFields(client, existing.id, input.fields);
         }

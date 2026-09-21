@@ -40,7 +40,9 @@ function fakeRes() {
 function once(limiter, req, failed = true) {
   const res = fakeRes();
   let error = null;
-  limiter(req, res, (received) => { error = received || null; });
+  limiter(req, res, (received) => {
+    error = received || null;
+  });
   if (!error) {
     if (failed) {
       res.json({ ok: false, error: '账号或密码不正确' });

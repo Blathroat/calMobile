@@ -25,7 +25,11 @@ const TRUTHY = ['true', '1', 'yes', 'on'];
 const FALSY = ['false', '0', 'no', 'off'];
 
 function bool(value) {
-  return TRUTHY.includes(String(value === undefined || value === null ? '' : value).trim().toLowerCase());
+  return TRUTHY.includes(
+    String(value === undefined || value === null ? '' : value)
+      .trim()
+      .toLowerCase(),
+  );
 }
 
 /**
@@ -43,19 +47,21 @@ function resolveRuntime(argv = [], env = {}) {
   }
 
   const declared = String(env.NODE_ENV || '').trim();
-  const nodeEnv = wantsProduction
-    ? 'production'
-    : (wantsDevelopment ? 'development' : (declared || 'development'));
+  const nodeEnv = wantsProduction ? 'production' : wantsDevelopment ? 'development' : declared || 'development';
   const isProduction = nodeEnv === 'production';
 
   // 状态页：没显式配就按环境取默认（生产关闭、其它开着）。
-  const statusSetting = String(env.ENABLE_STATUS_PAGE || '').trim().toLowerCase();
+  const statusSetting = String(env.ENABLE_STATUS_PAGE || '')
+    .trim()
+    .toLowerCase();
   const statusPageEnabled = statusSetting === '' ? !isProduction : bool(statusSetting);
 
   // trust proxy：默认**关闭**。反代后面不开的话，所有请求的 IP 都是代理地址，
   // 按 IP 的限流会误伤全体用户；但反过来在直连场景开启，客户端就能伪造
   // `X-Forwarded-For` 绕过按 IP 的限流 —— 所以必须由部署的人自己声明。
-  const trustSetting = String(env.TRUST_PROXY || '').trim().toLowerCase();
+  const trustSetting = String(env.TRUST_PROXY || '')
+    .trim()
+    .toLowerCase();
   let trustProxy = false;
   if (trustSetting !== '' && !FALSY.includes(trustSetting)) {
     trustProxy = /^\d+$/.test(trustSetting) ? Number(trustSetting) : trustSetting;

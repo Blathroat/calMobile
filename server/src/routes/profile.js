@@ -22,12 +22,13 @@ const { mutate } = require('../domain/respond');
 const { badRequest, notFound } = require('../domain/errors');
 const { issueCode, consumeCode, isCodeRejected, maskEmail } = require('../domain/otp');
 const {
-  secondFactorState, beginTotpSetup, confirmTotpSetup,
-  regenerateBackupCodes, clearSecondFactors,
+  secondFactorState,
+  beginTotpSetup,
+  confirmTotpSetup,
+  regenerateBackupCodes,
+  clearSecondFactors,
 } = require('../domain/two-factor');
-const {
-  readNotificationPreferences, saveNotificationPreferences, readServerSettings,
-} = require('../domain/settings');
+const { readNotificationPreferences, saveNotificationPreferences, readServerSettings } = require('../domain/settings');
 const { revokeAllForUser } = require('../domain/session');
 const { authenticate } = require('../middleware/auth');
 
@@ -132,10 +133,13 @@ router.put('/', authenticate, async (req, res, next) => {
 
       if (assignments.length > 0) {
         values.push(req.user.userId);
-        await query(`
+        await query(
+          `
                     UPDATE users SET ${assignments.join(', ')}, updated_at = now()
                     WHERE id = $${values.length}
-                `, values);
+                `,
+          values,
+        );
       }
       return { user: await loadUser(req.user.userId) };
     });
@@ -172,8 +176,7 @@ router.post('/password', authenticate, async (req, res, next) => {
       }
 
       const found = await query('SELECT password_hash FROM users WHERE id = $1', [req.user.userId]);
-      const matched = found.rows.length > 0
-                && await bcrypt.compare(current, found.rows[0].password_hash);
+      const matched = found.rows.length > 0 && (await bcrypt.compare(current, found.rows[0].password_hash));
       if (!matched) {
         throw badRequest('当前密码不正确');
       }
@@ -234,10 +237,9 @@ async function verifiedAt(userId) {
  */
 router.post('/2fa/enable', authenticate, async (req, res, next) => {
   try {
-    const found = await query(
-      'SELECT email, email_verified, two_factor_enabled FROM users WHERE id = $1',
-      [req.user.userId],
-    );
+    const found = await query('SELECT email, email_verified, two_factor_enabled FROM users WHERE id = $1', [
+      req.user.userId,
+    ]);
     const row = found.rows[0];
     if (!row) {
       throw notFound('用户不存在或已删除');
@@ -354,12 +356,9 @@ router.post('/2fa/backup-codes', authenticate, async (req, res, next) => {
       if (!password) {
         throw badRequest('请输入当前密码');
       }
-      const found = await query(
-        'SELECT password_hash, two_factor_enabled FROM users WHERE id = $1',
-        [req.user.userId],
-      );
+      const found = await query('SELECT password_hash, two_factor_enabled FROM users WHERE id = $1', [req.user.userId]);
       const row = found.rows[0];
-      const matched = row && await bcrypt.compare(password, row.password_hash);
+      const matched = row && (await bcrypt.compare(password, row.password_hash));
       if (!matched) {
         throw badRequest('当前密码不正确');
       }
@@ -385,8 +384,7 @@ router.post('/2fa/disable', authenticate, async (req, res, next) => {
         throw badRequest('请输入当前密码');
       }
       const found = await query('SELECT password_hash FROM users WHERE id = $1', [req.user.userId]);
-      const matched = found.rows.length > 0
-                && await bcrypt.compare(password, found.rows[0].password_hash);
+      const matched = found.rows.length > 0 && (await bcrypt.compare(password, found.rows[0].password_hash));
       if (!matched) {
         throw badRequest('当前密码不正确');
       }
@@ -457,11 +455,14 @@ router.post('/email/verify', authenticate, async (req, res, next) => {
       return;
     }
     try {
-      await query(`
+      await query(
+        `
                 UPDATE users
                    SET email = $2, email_verified = true, email_verified_at = now(), updated_at = now()
                  WHERE id = $1
-            `, [req.user.userId, consumed.email]);
+            `,
+        [req.user.userId, consumed.email],
+      );
     } catch (error) {
       // 唯一索引冲突：这期间被别的账号占用了
       if (error && error.code === '23505') {

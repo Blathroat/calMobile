@@ -85,23 +85,26 @@ function probeQuery(label, text, params) {
         client.release(true); // 销毁：这条连接已经不可信，不能还给池
         reject(new Error(`${label}超时（${PROBE_TIMEOUT_MS} ms 没有响应）`));
       }, PROBE_TIMEOUT_MS);
-      client.query(text, params).then((result) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timer);
-        client.release();
-        resolve(result);
-      }, (error) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timer);
-        client.release();
-        reject(error);
-      });
+      client.query(text, params).then(
+        (result) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timer);
+          client.release();
+          resolve(result);
+        },
+        (error) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timer);
+          client.release();
+          reject(error);
+        },
+      );
     }, reject);
   });
 }
@@ -135,12 +138,15 @@ async function probeDatabase() {
     pool: poolStats(),
   };
   try {
-    const result = await probeQuery('数据库查询', `
+    const result = await probeQuery(
+      '数据库查询',
+      `
             SELECT version() AS version,
                    current_database() AS database,
                    coalesce(host(inet_server_addr()), 'local') AS host,
                    coalesce(inet_server_port(), 0) AS port
-        `);
+        `,
+    );
     // 第二条查询确认连接真的能来回，而不是只握了个手。
     await probeQuery('数据库查询', 'SELECT 1 AS ping');
     const row = result.rows[0];
@@ -172,10 +178,7 @@ async function probeMigrations(database) {
   }
   const startedAt = process.hrtime.bigint();
   try {
-    const result = await probeQuery(
-      '迁移查询',
-      'SELECT id, applied_at FROM schema_migrations ORDER BY applied_at, id',
-    );
+    const result = await probeQuery('迁移查询', 'SELECT id, applied_at FROM schema_migrations ORDER BY applied_at, id');
     const appliedIds = new Set(result.rows.map((row) => row.id));
     return {
       report: {
@@ -236,9 +239,9 @@ function routeInventory() {
       }
     }
   }
-  return endpoints.sort((a, b) => (a.path === b.path
-    ? a.method.localeCompare(b.method)
-    : a.path.localeCompare(b.path)));
+  return endpoints.sort((a, b) =>
+    a.path === b.path ? a.method.localeCompare(b.method) : a.path.localeCompare(b.path),
+  );
 }
 
 /**
@@ -258,7 +261,12 @@ async function runChecks({ database, databaseMs, migrations, migrationsMs, count
       const detail = await probe();
       checks.push({ name, status: 'ok', detail, ms: measured === null ? elapsedMs(startedAt) : measured });
     } catch (error) {
-      checks.push({ name, status: 'fail', detail: safeMessage(error), ms: measured === null ? elapsedMs(startedAt) : measured });
+      checks.push({
+        name,
+        status: 'fail',
+        detail: safeMessage(error),
+        ms: measured === null ? elapsedMs(startedAt) : measured,
+      });
     }
   };
 
@@ -269,8 +277,9 @@ async function runChecks({ database, databaseMs, migrations, migrationsMs, count
   });
 
   await run('JWT 密钥不是占位值', () => {
-    const placeholders = ['JWT_SECRET', 'JWT_REFRESH_SECRET']
-      .filter((key) => PLACEHOLDER_SECRET.test(String(process.env[key] || '')));
+    const placeholders = ['JWT_SECRET', 'JWT_REFRESH_SECRET'].filter((key) =>
+      PLACEHOLDER_SECRET.test(String(process.env[key] || '')),
+    );
     if (placeholders.length > 0) {
       throw new Error(`${placeholders.join(' / ')} 还是 your_ / replace-with / change-me 之类的占位值`);
     }
@@ -290,20 +299,24 @@ async function runChecks({ database, databaseMs, migrations, migrationsMs, count
     if (!mail.configured) {
       throw new Error(mail.problems.join('；'));
     }
-    const where = mail.transport === 'smtp'
-      ? `SMTP ${mail.smtpHost}:${mail.smtpPort}${mail.smtpSecure ? '（隐式 TLS）' : ''}`
-        + `${mail.smtpAuth ? ' + 认证' : ''}，发件人 ${mail.fromAddress}`
-      : `${mail.transport}（${mail.transport === 'console' ? '邮件只写日志，未真正发送' : '仅测试用'}）`;
+    const where =
+      mail.transport === 'smtp'
+        ? `SMTP ${mail.smtpHost}:${mail.smtpPort}${mail.smtpSecure ? '（隐式 TLS）' : ''}` +
+          `${mail.smtpAuth ? ' + 认证' : ''}，发件人 ${mail.fromAddress}`
+        : `${mail.transport}（${mail.transport === 'console' ? '邮件只写日志，未真正发送' : '仅测试用'}）`;
 
     if (!database.connected) {
       return `${where}；数据库不可用，这次统计不了发信失败`;
     }
     let failed = 0;
     try {
-      const result = await probeQuery('发信统计', `
+      const result = await probeQuery(
+        '发信统计',
+        `
                 SELECT count(*)::int AS total FROM mail_log
                  WHERE status = 'failed' AND created_at > now() - interval '24 hours'
-            `);
+            `,
+      );
       failed = Number(result.rows[0].total);
     } catch (error) {
       throw new Error(`${where}；mail_log 读不到（迁移 0004 没跑？）：${safeMessage(error)}`);
@@ -314,32 +327,39 @@ async function runChecks({ database, databaseMs, migrations, migrationsMs, count
     return `${where}；最近 24 小时无发送失败`;
   });
 
-  await run('数据库连通', () => {
-    if (!database.connected) {
-      throw new Error(database.error || '数据库没有应答');
-    }
-    const version = String(database.version || '').split(' on ')[0].trim();
-    return `${version || 'PostgreSQL'} 应答正常，往返 ${database.latencyMs} ms`;
-  }, databaseMs);
+  await run(
+    '数据库连通',
+    () => {
+      if (!database.connected) {
+        throw new Error(database.error || '数据库没有应答');
+      }
+      const version = String(database.version || '')
+        .split(' on ')[0]
+        .trim();
+      return `${version || 'PostgreSQL'} 应答正常，往返 ${database.latencyMs} ms`;
+    },
+    databaseMs,
+  );
 
-  await run('迁移无遗漏', () => {
-    if (migrations.error) {
-      throw new Error(migrations.error);
-    }
-    if (migrations.pending.length > 0) {
-      throw new Error(`还有 ${migrations.pending.length} 项未应用：${migrations.pending.join('、')}`);
-    }
-    return `${migrations.applied.length} 项迁移全部已应用`;
-  }, migrationsMs);
+  await run(
+    '迁移无遗漏',
+    () => {
+      if (migrations.error) {
+        throw new Error(migrations.error);
+      }
+      if (migrations.pending.length > 0) {
+        throw new Error(`还有 ${migrations.pending.length} 项未应用：${migrations.pending.join('、')}`);
+      }
+      return `${migrations.applied.length} 项迁移全部已应用`;
+    },
+    migrationsMs,
+  );
 
   await run('至少一个可登录账号', async () => {
     if (!database.connected) {
       throw new Error(`数据库不可用，统计不了账号：${database.error || '未连接'}`);
     }
-    const result = await probeQuery(
-      '账号统计',
-      "SELECT count(*)::int AS total FROM users WHERE status = 'active'",
-    );
+    const result = await probeQuery('账号统计', "SELECT count(*)::int AS total FROM users WHERE status = 'active'");
     const total = Number(result.rows[0].total);
     if (total < 1) {
       throw new Error("没有 status='active' 的账号，谁都登录不了");
@@ -347,16 +367,20 @@ async function runChecks({ database, databaseMs, migrations, migrationsMs, count
     return `status='active' 的账号 ${total} 个`;
   });
 
-  await run('至少一场展会', () => {
-    const total = counts.exhibitions;
-    if (total === null || total === undefined) {
-      throw new Error(`数据库不可用，统计不了展会：${database.error || '未连接'}`);
-    }
-    if (total < 1) {
-      throw new Error('一场展会都没有，前端列表会是空的');
-    }
-    return `展会 ${total} 场`;
-  }, countsMs);
+  await run(
+    '至少一场展会',
+    () => {
+      const total = counts.exhibitions;
+      if (total === null || total === undefined) {
+        throw new Error(`数据库不可用，统计不了展会：${database.error || '未连接'}`);
+      }
+      if (total < 1) {
+        throw new Error('一场展会都没有，前端列表会是空的');
+      }
+      return `展会 ${total} 场`;
+    },
+    countsMs,
+  );
 
   return checks;
 }
@@ -455,12 +479,14 @@ function fallbackReport(error) {
  * 状态页渲染失败的兜底：宁可给一页纯文本，也不要让唯一的排查入口变成 500。
  */
 function fallbackHtml(error) {
-  return '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
-    + '<title>状态页渲染失败</title></head>'
-    + '<body style="font:16px/1.6 system-ui,sans-serif;padding:24px">'
-    + '<h1>状态页渲染失败</h1><p>后端进程还活着，但状态页自身的模板出错了。</p>'
-    + `<pre style="white-space:pre-wrap">${String(safeMessage(error)).replace(/[<>&]/g, '')}</pre>`
-    + '<p><a href="/api/v1/status">查看 JSON 报告</a></p></body></html>';
+  return (
+    '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">' +
+    '<title>状态页渲染失败</title></head>' +
+    '<body style="font:16px/1.6 system-ui,sans-serif;padding:24px">' +
+    '<h1>状态页渲染失败</h1><p>后端进程还活着，但状态页自身的模板出错了。</p>' +
+    `<pre style="white-space:pre-wrap">${String(safeMessage(error)).replace(/[<>&]/g, '')}</pre>` +
+    '<p><a href="/api/v1/status">查看 JSON 报告</a></p></body></html>'
+  );
 }
 
 // 状态数据永远要新鲜：探活脚本和页面都不能拿到缓存的旧结果（并发合并见 reportOnce）。

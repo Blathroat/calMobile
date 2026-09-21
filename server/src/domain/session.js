@@ -25,11 +25,9 @@ function hashToken(token) {
 
 /** 签发访问令牌。 */
 function signAccessToken(user) {
-  return jwt.sign(
-    { userId: user.id, username: user.username, role: user.role },
-    accessSecret,
-    { expiresIn: accessExpiresIn },
-  );
+  return jwt.sign({ userId: user.id, username: user.username, role: user.role }, accessSecret, {
+    expiresIn: accessExpiresIn,
+  });
 }
 
 /**
@@ -38,10 +36,13 @@ function signAccessToken(user) {
  */
 async function issueRefreshToken(userId) {
   const token = crypto.randomBytes(32).toString('hex');
-  await query(`
+  await query(
+    `
         INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at)
         VALUES ($1, $2, $3, now() + ($4 || ' days')::interval)
-    `, [crypto.randomUUID(), userId, hashToken(token), String(refreshDays())]);
+    `,
+    [crypto.randomUUID(), userId, hashToken(token), String(refreshDays())],
+  );
   // 顺手清掉过期与已撤销的：不清的话这张表会随每次登录一直长。
   purgeStaleTokens();
   return token;
@@ -78,9 +79,12 @@ async function issueSession(user) {
  */
 async function rotateRefreshToken(token) {
   const hash = hashToken(token);
-  const result = await query(`
+  const result = await query(
+    `
         SELECT id, user_id, expires_at, revoked_at FROM refresh_tokens WHERE token_hash = $1
-    `, [hash]);
+    `,
+    [hash],
+  );
   if (result.rows.length === 0) {
     throw unauthorized('登录状态已失效，请重新登录');
   }
@@ -95,10 +99,9 @@ async function rotateRefreshToken(token) {
   if (user.rows.length === 0 || user.rows[0].status === 'banned') {
     throw unauthorized('账号不可用，请重新登录');
   }
-  const revoked = await query(
-    'UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL',
-    [row.id],
-  );
+  const revoked = await query('UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL', [
+    row.id,
+  ]);
   if (revoked.rowCount !== 1) {
     // 并发重放：这一行已经被另一个请求撤销掉了，这个令牌不能再换令牌。
     throw unauthorized('登录状态已失效，请重新登录');

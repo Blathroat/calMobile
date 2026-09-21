@@ -12,8 +12,12 @@
 
 /** 一眼能看出是「开发用」的密钥特征。 */
 const DEV_SECRET_HINTS = [
-  /local-dev/i, /please-change/i, /calmobile-local/i,
-  /^your_/i, /^replace-with/i, /^change-me/i,
+  /local-dev/i,
+  /please-change/i,
+  /calmobile-local/i,
+  /^your_/i,
+  /^replace-with/i,
+  /^change-me/i,
 ];
 
 /** 一眼能看出是「占位」的发件人地址。 */
@@ -47,7 +51,9 @@ function productionProblems(env = {}) {
   }
 
   // ── 会让验证码整条链路静默失效的 ────────────────────────────────
-  const transport = String(env.MAIL_TRANSPORT || '').trim().toLowerCase();
+  const transport = String(env.MAIL_TRANSPORT || '')
+    .trim()
+    .toLowerCase();
   if (transport === 'console') {
     fatal.push('MAIL_TRANSPORT=console：验证码只会写进日志，用户永远收不到（生产请用 smtp）');
   }
@@ -77,21 +83,36 @@ function productionProblems(env = {}) {
 
   // trust proxy 与限流的关系：反代后面不开，按 IP 的限流会变成全体用户共用额度。
   if (!String(env.TRUST_PROXY || '').trim()) {
-    warnings.push('TRUST_PROXY 没有配置：如果前面有反向代理，请设为 1（否则 req.ip 是代理地址，按 IP 的验证码限流会退化成全局额度）');
+    warnings.push(
+      'TRUST_PROXY 没有配置：如果前面有反向代理，请设为 1（否则 req.ip 是代理地址，按 IP 的验证码限流会退化成全局额度）',
+    );
   }
 
   if (String(env.LOG_LEVEL || '').toLowerCase() === 'debug') {
     warnings.push('LOG_LEVEL=debug 会打印每个请求，生产建议 info 或 quiet');
   }
 
-  if (['true', '1', 'yes', 'on'].includes(String(env.ENABLE_STATUS_PAGE || '').trim().toLowerCase())) {
+  if (
+    ['true', '1', 'yes', 'on'].includes(
+      String(env.ENABLE_STATUS_PAGE || '')
+        .trim()
+        .toLowerCase(),
+    )
+  ) {
     warnings.push('ENABLE_STATUS_PAGE 显式打开了状态页：它包含迁移清单、各表行数与接口清单，请确保外部访问不到');
   }
 
   // 非本机数据库却没开 SSL：托管数据库通常要求 TLS。
   const dbHost = String(env.DB_HOST || '').trim();
   const remoteDb = dbHost && !/^(127\.0\.0\.1|localhost|::1)$/i.test(dbHost);
-  if (remoteDb && !['true', '1', 'yes', 'on'].includes(String(env.DB_SSL || '').trim().toLowerCase())) {
+  if (
+    remoteDb &&
+    !['true', '1', 'yes', 'on'].includes(
+      String(env.DB_SSL || '')
+        .trim()
+        .toLowerCase(),
+    )
+  ) {
     warnings.push(`DB_HOST=${dbHost} 是远端地址但 DB_SSL 没开：托管数据库一般要求 TLS，确认一下`);
   }
 

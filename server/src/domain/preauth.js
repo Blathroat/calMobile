@@ -40,10 +40,13 @@ function purgeStaleTickets() {
  */
 async function issueTicket(userId) {
   const ticket = crypto.randomBytes(32).toString('hex');
-  await query(`
+  await query(
+    `
         INSERT INTO preauth_tickets (id, user_id, token_hash, expires_at)
         VALUES ($1, $2, $3, now() + ($4 || ' minutes')::interval)
-    `, [crypto.randomUUID(), userId, hashTicket(ticket), String(TICKET_TTL_MIN)]);
+    `,
+    [crypto.randomUUID(), userId, hashTicket(ticket), String(TICKET_TTL_MIN)],
+  );
   purgeStaleTickets();
   return { ticket, expiresInSec: TICKET_TTL_MIN * 60 };
 }
@@ -54,11 +57,14 @@ async function issueTicket(userId) {
  * @returns {Promise<{id: string, userId: string, attempts: number} | null>}
  */
 async function findTicket(ticket) {
-  const result = await query(`
+  const result = await query(
+    `
         SELECT id, user_id, attempts
           FROM preauth_tickets
          WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > now()
-    `, [hashTicket(ticket)]);
+    `,
+    [hashTicket(ticket)],
+  );
   if (result.rows.length === 0) {
     return null;
   }
@@ -69,12 +75,15 @@ async function findTicket(ticket) {
 /** 记一次失败的验证；到上限就把票据作废。返回是否还能继续用。 */
 async function countTicketFailure(id, attempts) {
   const next = Number(attempts) + 1;
-  await query(`
+  await query(
+    `
         UPDATE preauth_tickets
            SET attempts = $2::int,
                consumed_at = CASE WHEN $2::int >= $3::int THEN now() ELSE consumed_at END
          WHERE id = $1
-    `, [id, next, MAX_TICKET_ATTEMPTS]);
+    `,
+    [id, next, MAX_TICKET_ATTEMPTS],
+  );
   return next < MAX_TICKET_ATTEMPTS;
 }
 
@@ -85,10 +94,9 @@ async function countTicketFailure(id, attempts) {
  * 并发提交两次时只有一次能换到会话。
  */
 async function consumeTicket(id) {
-  const result = await query(
-    'UPDATE preauth_tickets SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL',
-    [id],
-  );
+  const result = await query('UPDATE preauth_tickets SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL', [
+    id,
+  ]);
   return result.rowCount === 1;
 }
 

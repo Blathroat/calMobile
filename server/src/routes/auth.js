@@ -15,9 +15,7 @@ const { limits } = require('../domain/validation');
 const { issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser } = require('../domain/session');
 const { issueCode, consumeCode, isCodeRejected, maskEmail } = require('../domain/otp');
 const { secondFactorState, verifySecondFactor } = require('../domain/two-factor');
-const {
-  issueTicket, findTicket, consumeTicket, countTicketFailure,
-} = require('../domain/preauth');
+const { issueTicket, findTicket, consumeTicket, countTicketFailure } = require('../domain/preauth');
 const { badRequest } = require('../domain/errors');
 const { authenticate } = require('../middleware/auth');
 const { rateLimit } = require('../middleware/rate-limit');
@@ -75,13 +73,16 @@ router.post('/login', authLimiter, async (req, res, next) => {
       res.json(failure('请输入账号与密码'));
       return;
     }
-    const result = await query(`
+    const result = await query(
+      `
             SELECT id, username, email, email_verified, two_factor_enabled, password_hash, status
               FROM users
              WHERE lower(username) = lower($1) OR lower(email) = lower($1)
              ORDER BY (lower(username) = lower($1)) DESC
              LIMIT 1
-        `, [username]);
+        `,
+      [username],
+    );
     const account = result.rows[0];
     // 账号不存在时也走一次 bcrypt：否则「立即返回」与「比对一次再返回」的耗时差
     // 足以让脚本枚举出哪些用户名真实存在（与上面那条「同一条提示」是同一件事）。
@@ -114,8 +115,11 @@ router.post('/login', authLimiter, async (req, res, next) => {
       const sendEmail = emailUsable && !factors.totpBound;
       const sent = sendEmail
         ? await issueCode({
-          purpose: 'login', email: account.email, userId: account.id, ip: req.ip || '',
-        })
+            purpose: 'login',
+            email: account.email,
+            userId: account.id,
+            ip: req.ip || '',
+          })
         : null;
       res.json({
         ok: true,
@@ -188,7 +192,7 @@ router.post('/login/verify', authLimiter, async (req, res, next) => {
       throw error;
     }
 
-    if (!await consumeTicket(found.id)) {
+    if (!(await consumeTicket(found.id))) {
       res.json(failure('验证已使用，请重新登录'));
       return;
     }
@@ -243,11 +247,14 @@ async function registrationConflict(username, email) {
   if (!email) {
     return '请输入有效的邮箱地址';
   }
-  const existing = await query(`
+  const existing = await query(
+    `
         SELECT lower(username) AS username, lower(email) AS email
           FROM users
          WHERE lower(username) = lower($1) OR lower(email) = lower($2)
-    `, [username, email]);
+    `,
+    [username, email],
+  );
   if (existing.rows.some((row) => row.username === username.toLowerCase())) {
     return '该用户名已被注册';
   }
@@ -349,10 +356,13 @@ router.post('/register/verify', authLimiter, async (req, res, next) => {
 
     const id = `usr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     try {
-      await query(`
+      await query(
+        `
                 INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at)
                 VALUES ($1, $2, $3, $4, $5, 'user', true, now())
-            `, [id, username, pending.passwordHash, consumed.email, pending.nickname || username]);
+            `,
+        [id, username, pending.passwordHash, consumed.email, pending.nickname || username],
+      );
     } catch (error) {
       // 唯一索引冲突：两个请求几乎同时验证同一个用户名或邮箱。
       if (error && error.code === '23505') {
@@ -385,10 +395,13 @@ router.post('/password/forgot', authLimiter, async (req, res, next) => {
       res.json(failure('请输入有效的邮箱地址'));
       return;
     }
-    const found = await query(`
+    const found = await query(
+      `
             SELECT id FROM users
              WHERE lower(email) = lower($1) AND email_verified = true AND status <> 'banned'
-        `, [email]);
+        `,
+      [email],
+    );
     const account = found.rows[0] || null;
     const ticket = await issueCode({
       purpose: 'reset',
@@ -439,10 +452,10 @@ router.post('/password/reset', authLimiter, async (req, res, next) => {
       throw error;
     }
 
-    const found = await query(
-      'SELECT id FROM users WHERE lower(email) = lower($1) AND status <> $2',
-      [consumed.email, 'banned'],
-    );
+    const found = await query('SELECT id FROM users WHERE lower(email) = lower($1) AND status <> $2', [
+      consumed.email,
+      'banned',
+    ]);
     if (found.rows.length === 0) {
       // 验证码是真的（说明这个邮箱收到过我们发的码），但账号在期间被删或封禁了。
       res.json(failure('账号不存在或已停用，请联系管理员'));

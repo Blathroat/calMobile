@@ -38,8 +38,7 @@ const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'
 
 /** HTML 转义（品牌名、验证码都从这里过一遍）。 */
 function escapeHtml(value) {
-  return String(value === undefined || value === null ? '' : value)
-    .replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
+  return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
 }
 
 /**
@@ -100,21 +99,21 @@ function verificationMail(options = {}) {
     '<!doctype html>',
     '<html lang="zh-CN"><head><meta charset="utf-8">',
     `<title>${escapeHtml(subject)}</title></head>`,
-    '<body style="margin:0;padding:24px;background:#F7F6F3;'
-      + 'font:16px/1.7 -apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;color:#20252B">',
-    '<div style="max-width:480px;margin:0 auto;background:#FFFFFF;border:1px solid #C5CAD1;'
-      + 'border-radius:12px;padding:24px">',
-    `<p style="margin:0 0 12px">您好，您正在${escapeHtml(label.zh)}（${escapeHtml(enBrand)}`
-      + ` - ${escapeHtml(label.en)}）。</p>`,
+    '<body style="margin:0;padding:24px;background:#F7F6F3;' +
+      "font:16px/1.7 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#20252B\">",
+    '<div style="max-width:480px;margin:0 auto;background:#FFFFFF;border:1px solid #C5CAD1;' +
+      'border-radius:12px;padding:24px">',
+    `<p style="margin:0 0 12px">您好，您正在${escapeHtml(label.zh)}（${escapeHtml(enBrand)}` +
+      ` - ${escapeHtml(label.en)}）。</p>`,
     '<p style="margin:0 0 8px;font-size:18px;font-weight:700">验证码</p>',
-    '<p style="margin:0 0 16px;font:700 30px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;'
-      + `letter-spacing:6px;color:#C05621">${escapeHtml(digits)}</p>`,
-    `<p style="margin:0 0 16px;color:#626A74">${minutes} 分钟内有效，请勿转发给他人。`
-      + '如果这不是您本人的操作，忽略本邮件即可，账号不会受影响。</p>',
+    '<p style="margin:0 0 16px;font:700 30px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;' +
+      `letter-spacing:6px;color:#C05621">${escapeHtml(digits)}</p>`,
+    `<p style="margin:0 0 16px;color:#626A74">${minutes} 分钟内有效，请勿转发给他人。` +
+      '如果这不是您本人的操作，忽略本邮件即可，账号不会受影响。</p>',
     '<hr style="border:none;border-top:1px solid #C5CAD1;margin:20px 0">',
-    `<p style="margin:0;color:#626A74;font-size:14px">${escapeHtml(enBrand)} - `
-      + `${escapeHtml(label.en)} code: <strong>${escapeHtml(digits)}</strong><br>`
-      + `This code expires in ${minutes} minutes. Never share it with anyone.</p>`,
+    `<p style="margin:0;color:#626A74;font-size:14px">${escapeHtml(enBrand)} - ` +
+      `${escapeHtml(label.en)} code: <strong>${escapeHtml(digits)}</strong><br>` +
+      `This code expires in ${minutes} minutes. Never share it with anyone.</p>`,
     '</div></body></html>',
   ].join('\n');
 

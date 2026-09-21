@@ -9,9 +9,7 @@
 
 const express = require('express');
 const { query } = require('../config/pool');
-const {
-  EXHIBITION_COLUMNS, EXHIBITION_FROM, USER_COLUMNS, USER_FROM,
-} = require('../domain/queries');
+const { EXHIBITION_COLUMNS, EXHIBITION_FROM, USER_COLUMNS, USER_FROM } = require('../domain/queries');
 const { exhibitionPayload } = require('../domain/payloads');
 const labels = require('../domain/labels');
 const { optionalAuth } = require('../middleware/auth');
@@ -52,7 +50,9 @@ router.get('/', optionalAuth, async (req, res, next) => {
     }
     const pattern = likePattern(keyword);
 
-    const exhibitions = (await query(`
+    const exhibitions = (
+      await query(
+        `
             SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM}
             WHERE e.title ILIKE $1 ESCAPE '\\'
                OR e.venue ILIKE $1 ESCAPE '\\'
@@ -60,17 +60,25 @@ router.get('/', optionalAuth, async (req, res, next) => {
                OR e.description ILIKE $1 ESCAPE '\\'
             ORDER BY e.exhibition_date
             LIMIT ${RESULT_LIMIT}
-        `, [pattern])).rows.map(exhibitionPayload);
+        `,
+        [pattern],
+      )
+    ).rows.map(exhibitionPayload);
 
     // 管理员能看到受限 / 封禁账号（用于排查），其余访问者只看正常账号。
     const isAdmin = req.user?.role === 'admin';
-    const users = (await query(`
+    const users = (
+      await query(
+        `
             SELECT ${USER_COLUMNS} ${USER_FROM}
             WHERE (u.nickname ILIKE $1 ESCAPE '\\' OR u.email ILIKE $1 ESCAPE '\\')
               AND ($2::boolean OR u.status = 'active')
             ORDER BY u.nickname
             LIMIT ${RESULT_LIMIT}
-        `, [pattern, isAdmin])).rows.map(searchUserPayload);
+        `,
+        [pattern, isAdmin],
+      )
+    ).rows.map(searchUserPayload);
 
     res.json({
       query: keyword,

@@ -46,30 +46,35 @@ let server;
 function request(method, path, { token, body } = {}) {
   const payload = body === undefined ? null : JSON.stringify(body);
   return new Promise((resolve, reject) => {
-    const req = http.request({
-      host: '127.0.0.1',
-      port: server.address().port,
-      // 查询串里有中文（状态筛选、搜索关键词），http 模块要求路径已编码；
-      // encodeURI 保留 / ? & =，正好是「路径 + 查询串」需要的粒度。
-      path: encodeURI(path),
-      method,
-      headers: {
-        ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: server.address().port,
+        // 查询串里有中文（状态筛选、搜索关键词），http 模块要求路径已编码；
+        // encodeURI 保留 / ? & =，正好是「路径 + 查询串」需要的粒度。
+        path: encodeURI(path),
+        method,
+        headers: {
+          ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       },
-    }, (res) => {
-      let text = '';
-      res.on('data', (chunk) => { text += chunk; });
-      res.on('end', () => {
-        let parsed = text;
-        try {
-          parsed = text ? JSON.parse(text) : null;
-        } catch {
-          // 保持原始文本，便于断言失败时看清返回了什么
-        }
-        resolve({ status: res.statusCode, body: parsed });
-      });
-    });
+      (res) => {
+        let text = '';
+        res.on('data', (chunk) => {
+          text += chunk;
+        });
+        res.on('end', () => {
+          let parsed = text;
+          try {
+            parsed = text ? JSON.parse(text) : null;
+          } catch {
+            // 保持原始文本，便于断言失败时看清返回了什么
+          }
+          resolve({ status: res.statusCode, body: parsed });
+        });
+      },
+    );
     req.on('error', reject);
     if (payload) {
       req.write(payload);
@@ -106,7 +111,9 @@ async function login(username, password = 'password') {
  */
 function codeFromInbox(email) {
   const target = String(email).trim().toLowerCase();
-  const mail = outbox().filter((item) => item.to === target).pop();
+  const mail = outbox()
+    .filter((item) => item.to === target)
+    .pop();
   assert.ok(mail, `内存收件箱里没有发给 ${target} 的邮件`);
   const match = /验证码：(\d{6})/.exec(mail.text);
   assert.ok(match, `邮件正文里没有 6 位验证码：\n${mail.text}`);
@@ -128,7 +135,8 @@ const tokens = {};
  */
 async function createVerifiedAccount(id, username, email, password = 'password') {
   const bcrypt = require('bcryptjs');
-  await pool.query(`
+  await pool.query(
+    `
         INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at)
         VALUES ($1, $2, $3, $4, $5, 'user', true, now())
         ON CONFLICT (id) DO UPDATE
@@ -136,7 +144,9 @@ async function createVerifiedAccount(id, username, email, password = 'password')
                 email = EXCLUDED.email,
                 email_verified = true,
                 two_factor_enabled = false
-    `, [id, username, await bcrypt.hash(password, 4), email, username]);
+    `,
+    [id, username, await bcrypt.hash(password, 4), email, username],
+  );
 }
 
 before(async () => {
@@ -183,15 +193,32 @@ test('连通性接口返回服务标识', async () => {
 
 test('bootstrap 下发前端启动所需的全部配置块', async () => {
   const { body } = await get('/api/v1/bootstrap');
-  for (const key of ['user', 'theme', 'ui', 'capabilities', 'categories', 'review',
-    'media', 'announcement', 'brand', 'limits', 'server', 'calendar']) {
+  for (const key of [
+    'user',
+    'theme',
+    'ui',
+    'capabilities',
+    'categories',
+    'review',
+    'media',
+    'announcement',
+    'brand',
+    'limits',
+    'server',
+    'calendar',
+  ]) {
     assert.ok(body[key] !== undefined, `bootstrap 缺少 ${key}`);
   }
   assert.strictEqual(body.user.loggedIn, false, '匿名访问应当是访客态');
   assert.ok(body.brand.zh, '缺少中文标题');
   assert.ok(Number(body.limits.exhibitionTitle) > 0, '缺少表单字符数上限');
-  assert.deepStrictEqual(body.user.can,
-    { register: false, profile: false, exhibitor: false, admin: false, limited: false });
+  assert.deepStrictEqual(body.user.can, {
+    register: false,
+    profile: false,
+    exhibitor: false,
+    admin: false,
+    limited: false,
+  });
 });
 
 test('带令牌的 bootstrap 返回真实用户态与个人外观模式', async () => {
@@ -301,7 +328,9 @@ test('注册是两步的：第一步只发码不建号，验证码通过才建�
 
   const email = 'tester01@example.com';
   const applied = await post('/api/v1/auth/register', {
-    username: 'tester01', password: 'password', email,
+    username: 'tester01',
+    password: 'password',
+    email,
   });
   assert.strictEqual(applied.body.ok, true, `申请发码失败：${JSON.stringify(applied.body)}`);
   assert.strictEqual(applied.body.email, email, '要告诉用户码发到了哪个邮箱');
@@ -320,7 +349,11 @@ test('注册是两步的：第一步只发码不建号，验证码通过才建�
   assert.ok(mail.text.includes('10 分钟'), '邮件要写上有效期');
 
   const wrong = await post('/api/v1/auth/register/verify', { email, code: otherCode(code) });
-  assert.strictEqual(wrong.status, 200, `错码应当走 200 + ok:false 信封，实际 ${wrong.status}：${JSON.stringify(wrong.body)}`);
+  assert.strictEqual(
+    wrong.status,
+    200,
+    `错码应当走 200 + ok:false 信封，实际 ${wrong.status}：${JSON.stringify(wrong.body)}`,
+  );
   assert.strictEqual(wrong.body.ok, false, `错码不该通过：${JSON.stringify(wrong.body)}`);
   assert.ok(wrong.body.error.includes('验证码'), `错码要说明是验证码的问题：${wrong.body.error}`);
   const stillNot = await post('/api/v1/auth/login', { username: 'tester01', password: 'password' });
@@ -333,10 +366,9 @@ test('注册是两步的：第一步只发码不建号，验证码通过才建�
   assert.ok(created.body.token, '验证通过后应当直接进入登录态');
 
   // 邮箱当场就是已验证状态：它就是刚刚被验证过的那个
-  const stored = await pool.query(
-    'SELECT email_verified, email_verified_at FROM users WHERE lower(email) = $1',
-    [email],
-  );
+  const stored = await pool.query('SELECT email_verified, email_verified_at FROM users WHERE lower(email) = $1', [
+    email,
+  ]);
   assert.strictEqual(stored.rows.length, 1, '验证通过后应当建出账号');
   assert.strictEqual(stored.rows[0].email_verified, true, '新账号的邮箱必须是已验证状态');
   assert.ok(stored.rows[0].email_verified_at);
@@ -351,7 +383,9 @@ test('注册是两步的：第一步只发码不建号，验证码通过才建�
 
   // 用户名与邮箱各自唯一，且都在第一步就查出来（不必等用户输完码）
   const duplicateName = await post('/api/v1/auth/register', {
-    username: 'tester01', password: 'password', email: 'tester01-other@example.com',
+    username: 'tester01',
+    password: 'password',
+    email: 'tester01-other@example.com',
   });
   assert.strictEqual(duplicateName.body.ok, false);
   assert.ok(duplicateName.body.error.includes('用户名已被注册'), `错误文案要具体：${duplicateName.body.error}`);
@@ -360,7 +394,9 @@ test('注册是两步的：第一步只发码不建号，验证码通过才建�
 test('邮箱已被注册时在第一步就拦下，不发码也不建号', async () => {
   const before = outbox().length;
   const applied = await post('/api/v1/auth/register', {
-    username: 'fresh01', password: 'password', email: 'demo@example.com',
+    username: 'fresh01',
+    password: 'password',
+    email: 'demo@example.com',
   });
   assert.strictEqual(applied.body.ok, false, 'demo@example.com 是示例管理员的邮箱，不该被重复注册');
   assert.ok(applied.body.error.includes('邮箱已被注册'), `错误文案要具体：${applied.body.error}`);
@@ -386,8 +422,11 @@ test('错码累计到上限后这枚码作废，必须重新获取', async () =>
 
   for (let i = 1; i <= 5; i += 1) {
     const attempt = await post('/api/v1/auth/register/verify', { email, code: wrong });
-    assert.strictEqual(attempt.body.ok, false,
-      `第 ${i} 次错码不该通过：status=${attempt.status} body=${JSON.stringify(attempt.body)}`);
+    assert.strictEqual(
+      attempt.body.ok,
+      false,
+      `第 ${i} 次错码不该通过：status=${attempt.status} body=${JSON.stringify(attempt.body)}`,
+    );
   }
 
   // 试满 5 次之后，连正确的码也不认了：这枚码已经作废
@@ -461,12 +500,15 @@ test('找回密码不透露邮箱是否存在，但确实给已注册邮箱发�
 test('找回密码：验证码通过后改密码、撤销全部刷新令牌，且一码一用', async () => {
   const bcrypt = require('bcryptjs');
   const email = 'reset-target@example.com';
-  await pool.query(`
+  await pool.query(
+    `
         INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified)
         VALUES ('usr-reset', 'resettarget', $1, $2, 'resettarget', 'user', true)
         ON CONFLICT (id) DO UPDATE
             SET password_hash = EXCLUDED.password_hash, email = EXCLUDED.email
-    `, [await bcrypt.hash('password', 4), email]);
+    `,
+    [await bcrypt.hash('password', 4), email],
+  );
 
   try {
     // 先在「另一台设备」上登录，改完密码这套刷新令牌必须失效
@@ -479,21 +521,30 @@ test('找回密码：验证码通过后改密码、撤销全部刷新令牌，�
 
     // 两次密码不一致不该把这枚码烧掉（校验在消费之前）
     const mismatch = await post('/api/v1/auth/password/reset', {
-      email, code, newPassword: 'brand-new-1', confirmPassword: 'brand-new-2',
+      email,
+      code,
+      newPassword: 'brand-new-1',
+      confirmPassword: 'brand-new-2',
     });
     assert.strictEqual(mismatch.body.ok, false);
     assert.ok(mismatch.body.error.includes('不一致'), mismatch.body.error);
 
     // 错码要被拒
     const wrong = await post('/api/v1/auth/password/reset', {
-      email, code: otherCode(code), newPassword: 'brand-new-1', confirmPassword: 'brand-new-1',
+      email,
+      code: otherCode(code),
+      newPassword: 'brand-new-1',
+      confirmPassword: 'brand-new-1',
     });
     assert.strictEqual(wrong.status, 200, `业务失败应当是 200 信封，实际 ${wrong.status}`);
     assert.strictEqual(wrong.body.ok, false);
 
     // 前面两次都没消费掉它，这个码仍然可用
     const done = await post('/api/v1/auth/password/reset', {
-      email, code, newPassword: 'brand-new-1', confirmPassword: 'brand-new-1',
+      email,
+      code,
+      newPassword: 'brand-new-1',
+      confirmPassword: 'brand-new-1',
     });
     assert.strictEqual(done.body.ok, true, `重置失败：${JSON.stringify(done.body)}`);
 
@@ -508,7 +559,10 @@ test('找回密码：验证码通过后改密码、撤销全部刷新令牌，�
 
     // 同一枚码不能再改一次
     const again = await post('/api/v1/auth/password/reset', {
-      email, code, newPassword: 'another-1', confirmPassword: 'another-1',
+      email,
+      code,
+      newPassword: 'another-1',
+      confirmPassword: 'another-1',
     });
     assert.strictEqual(again.body.ok, false, '同一枚码不该能重复使用');
   } finally {
@@ -528,8 +582,11 @@ test('开启两步验证后，密码对了也只发预认证票，过码才发�
     assert.ok(!enable.body.maskedEmail.includes('twofactor@'), `邮箱应当打码：${enable.body.maskedEmail}`);
 
     const enableCode = codeFromInbox('twofactor@example.com');
-    const enabled = await post('/api/v1/profile/2fa/enable/verify',
-      { code: enableCode.code }, { token: session.token });
+    const enabled = await post(
+      '/api/v1/profile/2fa/enable/verify',
+      { code: enableCode.code },
+      { token: session.token },
+    );
     assert.strictEqual(enabled.body.ok, true, `验证码通过却没开起来：${JSON.stringify(enabled.body)}`);
     assert.strictEqual(enabled.body.twoFactorEnabled, true);
 
@@ -543,8 +600,10 @@ test('开启两步验证后，密码对了也只发预认证票，过码才发�
     assert.ok(step1.body.ticket, '要给出预认证票');
 
     const loginCode = codeFromInbox('twofactor@example.com');
-    const wrong = await post('/api/v1/auth/login/verify',
-      { ticket: step1.body.ticket, code: otherCode(loginCode.code) });
+    const wrong = await post('/api/v1/auth/login/verify', {
+      ticket: step1.body.ticket,
+      code: otherCode(loginCode.code),
+    });
     assert.strictEqual(wrong.body.ok, false, '错码不该通过');
     assert.strictEqual(wrong.body.token, undefined, '错码之后仍然不能有令牌');
 
@@ -558,12 +617,14 @@ test('开启两步验证后，密码对了也只发预认证票，过码才发�
     assert.strictEqual(replay.body.ok, false, '预认证票只能用一次');
 
     // 关闭要当前密码
-    const wrongPassword = await post('/api/v1/profile/2fa/disable',
-      { password: 'not-my-password' }, { token: done.body.token });
+    const wrongPassword = await post(
+      '/api/v1/profile/2fa/disable',
+      { password: 'not-my-password' },
+      { token: done.body.token },
+    );
     assert.strictEqual(wrongPassword.body.ok, false, '密码不对不该能关掉两步验证');
 
-    const disabled = await post('/api/v1/profile/2fa/disable',
-      { password: 'password' }, { token: done.body.token });
+    const disabled = await post('/api/v1/profile/2fa/disable', { password: 'password' }, { token: done.body.token });
     assert.strictEqual(disabled.body.ok, true, JSON.stringify(disabled.body));
 
     const plain = await post('/api/v1/auth/login', { username: 'twofactor', password: 'password' });
@@ -586,24 +647,31 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
     assert.strictEqual(untouched.body.email, 'before@example.com', '被拦住之后邮箱不能变');
 
     // 第一轮：换到 after1，验证码被别人拿去用（换了登录身份）应当失败
-    const asked = await post('/api/v1/profile/email',
-      { email: 'after1@example.com' }, { token: session.token });
+    const asked = await post('/api/v1/profile/email', { email: 'after1@example.com' }, { token: session.token });
     assert.strictEqual(asked.body.ok, true, `发码失败：${JSON.stringify(asked.body)}`);
     const stolen = codeFromInbox('after1@example.com');
     const adminSession = await login('demo');
-    const foreign = await post('/api/v1/profile/email/verify',
-      { email: 'after1@example.com', code: stolen.code }, { token: adminSession.token });
+    const foreign = await post(
+      '/api/v1/profile/email/verify',
+      { email: 'after1@example.com', code: stolen.code },
+      { token: adminSession.token },
+    );
     assert.strictEqual(foreign.body.ok, false, '别人账号的改邮箱验证码不能用来改自己的邮箱');
-    assert.strictEqual(foreign.body.error.includes('不正确') || foreign.body.error.includes('失效'), true,
-      `文案要说不通：${foreign.body.error}`);
+    assert.strictEqual(
+      foreign.body.error.includes('不正确') || foreign.body.error.includes('失效'),
+      true,
+      `文案要说不通：${foreign.body.error}`,
+    );
 
     // 第二轮：换到 after2，这一次自己走完
-    const asked2 = await post('/api/v1/profile/email',
-      { email: 'after2@example.com' }, { token: session.token });
+    const asked2 = await post('/api/v1/profile/email', { email: 'after2@example.com' }, { token: session.token });
     assert.strictEqual(asked2.body.ok, true, JSON.stringify(asked2.body));
     const own = codeFromInbox('after2@example.com');
-    const done = await post('/api/v1/profile/email/verify',
-      { email: 'after2@example.com', code: own.code }, { token: session.token });
+    const done = await post(
+      '/api/v1/profile/email/verify',
+      { email: 'after2@example.com', code: own.code },
+      { token: session.token },
+    );
     assert.strictEqual(done.body.ok, true, `改邮箱失败：${JSON.stringify(done.body)}`);
     assert.strictEqual(done.body.user.email, 'after2@example.com');
     assert.strictEqual(done.body.user.emailVerified, true, '新邮箱是验证过的，账号不会掉进「未验证」状态');
@@ -613,8 +681,7 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
     assert.strictEqual(byNewEmail.body.ok, true, '改完之后新邮箱应当能登录');
 
     // 已被占用的邮箱不能再被改成目标
-    const taken = await post('/api/v1/profile/email',
-      { email: 'demo@example.com' }, { token: session.token });
+    const taken = await post('/api/v1/profile/email', { email: 'demo@example.com' }, { token: session.token });
     assert.strictEqual(taken.body.ok, false);
     assert.ok(taken.body.error.includes('已被'), taken.body.error);
   } finally {
@@ -643,8 +710,11 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     assert.strictEqual(security.body.twoFactorEnabled, false, '没确认之前开关不该被打开');
 
     // 输对码 → 正式绑定，并带回一批备用码
-    const bound = await post('/api/v1/profile/2fa/totp/enable',
-      { code: totp.codeFor(setup.body.secret) }, { token: session.token });
+    const bound = await post(
+      '/api/v1/profile/2fa/totp/enable',
+      { code: totp.codeFor(setup.body.secret) },
+      { token: session.token },
+    );
     assert.strictEqual(bound.body.ok, true, `绑定失败：${JSON.stringify(bound.body)}`);
     assert.strictEqual(bound.body.backupCodes.length, 10, '开启时应当发一批备用码');
     security = await get('/api/v1/profile/security', { token: session.token });
@@ -659,16 +729,17 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     assert.strictEqual(step1.body.token, undefined, '第一步仍然不能有令牌');
 
     // 用验证器码登录
-    const viaTotp = await post('/api/v1/auth/login/verify',
-      { ticket: step1.body.ticket, code: totp.codeFor(setup.body.secret) });
+    const viaTotp = await post('/api/v1/auth/login/verify', {
+      ticket: step1.body.ticket,
+      code: totp.codeFor(setup.body.secret),
+    });
     assert.strictEqual(viaTotp.body.ok, true, `验证器登录失败：${JSON.stringify(viaTotp.body)}`);
     assert.ok(viaTotp.body.token, '过码后应当发令牌');
 
     // 用备用码登录（换一张票）
     const step2 = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
     const backupCode = bound.body.backupCodes[0];
-    const viaBackup = await post('/api/v1/auth/login/verify',
-      { ticket: step2.body.ticket, code: backupCode });
+    const viaBackup = await post('/api/v1/auth/login/verify', { ticket: step2.body.ticket, code: backupCode });
     assert.strictEqual(viaBackup.body.ok, true, `备用码登录失败：${JSON.stringify(viaBackup.body)}`);
 
     const step3 = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
@@ -678,26 +749,29 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
 
     // 同一枚备用码不能用第二次
     const step4 = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
-    const replay = await post('/api/v1/auth/login/verify',
-      { ticket: step4.body.ticket, code: backupCode });
+    const replay = await post('/api/v1/auth/login/verify', { ticket: step4.body.ticket, code: backupCode });
     assert.strictEqual(replay.body.ok, false, '用过的备用码必须失效');
     security = await get('/api/v1/profile/security', { token: session.token });
     assert.strictEqual(security.body.backupCodesLeft, 8, '用掉两枚之后应当只剩 8 枚');
 
     // 重新生成会作废旧码
-    const regenerated = await post('/api/v1/profile/2fa/backup-codes',
-      { password: 'password' }, { token: session.token });
+    const regenerated = await post(
+      '/api/v1/profile/2fa/backup-codes',
+      { password: 'password' },
+      { token: session.token },
+    );
     assert.strictEqual(regenerated.body.ok, true, JSON.stringify(regenerated.body));
     assert.strictEqual(regenerated.body.backupCodes.length, 10);
     assert.notDeepEqual(regenerated.body.backupCodes, bound.body.backupCodes);
     const step5 = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
-    const stale = await post('/api/v1/auth/login/verify',
-      { ticket: step5.body.ticket, code: bound.body.backupCodes[2] });
+    const stale = await post('/api/v1/auth/login/verify', {
+      ticket: step5.body.ticket,
+      code: bound.body.backupCodes[2],
+    });
     assert.strictEqual(stale.body.ok, false, '重新生成之后旧备用码必须失效');
 
     // 关闭要把绑定、待确认密钥与备用码一起清掉
-    const disabled = await post('/api/v1/profile/2fa/disable',
-      { password: 'password' }, { token: session.token });
+    const disabled = await post('/api/v1/profile/2fa/disable', { password: 'password' }, { token: session.token });
     assert.strictEqual(disabled.body.ok, true, JSON.stringify(disabled.body));
     security = await get('/api/v1/profile/security', { token: session.token });
     assert.strictEqual(security.body.twoFactorEnabled, false);
@@ -716,11 +790,33 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
 test('展会列表字段覆盖页面渲染所需的全部字段', async () => {
   const { body } = await get('/api/v1/exhibitions');
   assert.ok(Array.isArray(body) && body.length > 0, '示例数据至少要有展会');
-  const required = ['id', 'title', 'venue', 'time', 'category', 'description',
-    'descriptionFormat', 'status', 'mode', 'modeLabel', 'openForRegistration',
-    'year', 'month', 'day', 'date', 'dateLabel', 'exhibitor', 'exhibitorNote',
-    'highlights', 'imageUri', 'registrationStart', 'registrationEnd', 'qrEnabled',
-    'registrationCount', 'fieldCount'];
+  const required = [
+    'id',
+    'title',
+    'venue',
+    'time',
+    'category',
+    'description',
+    'descriptionFormat',
+    'status',
+    'mode',
+    'modeLabel',
+    'openForRegistration',
+    'year',
+    'month',
+    'day',
+    'date',
+    'dateLabel',
+    'exhibitor',
+    'exhibitorNote',
+    'highlights',
+    'imageUri',
+    'registrationStart',
+    'registrationEnd',
+    'qrEnabled',
+    'registrationCount',
+    'fieldCount',
+  ];
   for (const item of body) {
     for (const key of required) {
       assert.ok(item[key] !== undefined, `展会 ${item.id} 缺少字段 ${key}`);
@@ -747,14 +843,14 @@ test('月视图返回三块数据，且原样返回请求的月份与日期', as
   // 指定了没有展会的日期：原样返回，由页面显示空状态
   const firstEventDay = june.body.eventDays[0];
   const otherDay = firstEventDay === 1 ? 2 : 1;
-  const emptyDay = await get(
-    `/api/v1/exhibitions/month?year=${landing.year}&month=${landing.month}&day=${otherDay}`,
-  );
+  const emptyDay = await get(`/api/v1/exhibitions/month?year=${landing.year}&month=${landing.month}&day=${otherDay}`);
   assert.strictEqual(emptyDay.body.day, otherDay, '选中日期被服务端改写了');
   assert.strictEqual(emptyDay.body.selected.length, 0);
 
   // 空月份：原样返回，不回落到有数据的月份
-  const emptyMonth = await get(`/api/v1/exhibitions/month?year=${landing.year}&month=${((landing.month + 5) % 12) + 1}`);
+  const emptyMonth = await get(
+    `/api/v1/exhibitions/month?year=${landing.year}&month=${((landing.month + 5) % 12) + 1}`,
+  );
   assert.strictEqual(emptyMonth.body.month, ((landing.month + 5) % 12) + 1);
   assert.strictEqual(emptyMonth.body.eventDays.length, 0);
   assert.strictEqual(emptyMonth.body.day, 0);
@@ -774,7 +870,10 @@ test('展会详情带收集项，找不到时给 found:false', async () => {
 
 test('展会可按关键词搜索，分类来自服务器设置', async () => {
   const hit = await get('/api/v1/exhibitions?query=智能');
-  assert.ok(hit.body.some((item) => item.title.includes('智能')), '搜索没有命中');
+  assert.ok(
+    hit.body.some((item) => item.title.includes('智能')),
+    '搜索没有命中',
+  );
   const miss = await get('/api/v1/exhibitions?query=不存在的关键词');
   assert.deepStrictEqual(miss.body, []);
 
@@ -792,39 +891,68 @@ test('展会的增删改受角色与归属限制', async () => {
   assert.strictEqual(asUser.status, 403, '普通用户不能新建展会');
 
   // 展商新建一场自己的展会
-  const created = await post('/api/v1/exhibitions', {
-    title: '接口测试展',
-    venue: '测试展馆',
-    time: '09:00-17:00',
-    date: '2026-09-20',
-    registrationStart: '2026-08-01',
-    registrationEnd: '2026-09-10',
-    category: '智能家居',
-    status: '需审核',
-    description: '契约测试用',
-    highlights: ['测试'],
-  }, { token: tokens.exhibitor.token });
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '接口测试展',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: '2026-09-20',
+      registrationStart: '2026-08-01',
+      registrationEnd: '2026-09-10',
+      category: '智能家居',
+      status: '需审核',
+      description: '契约测试用',
+      highlights: ['测试'],
+    },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(created.body.ok, true, `新建失败：${JSON.stringify(created.body)}`);
   const id = created.body.exhibition.id;
   assert.strictEqual(created.body.exhibition.date, '2026-09-20');
   assert.strictEqual(created.body.exhibition.day, 20, '日期必须按 SQL 派生，不能因时区差一天');
 
   // 校验：截止早于开始、日期非法、标题超长
-  const badRange = await put(`/api/v1/exhibitions/${id}`, {
-    title: '接口测试展', venue: '测试展馆', time: '09:00-17:00', date: '2026-09-20',
-    registrationStart: '2026-09-10', registrationEnd: '2026-08-01', status: '需审核',
-  }, { token: tokens.exhibitor.token });
+  const badRange = await put(
+    `/api/v1/exhibitions/${id}`,
+    {
+      title: '接口测试展',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: '2026-09-20',
+      registrationStart: '2026-09-10',
+      registrationEnd: '2026-08-01',
+      status: '需审核',
+    },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(badRange.body.ok, false);
   assert.ok(badRange.body.error.includes('报名截止'), `提示不对：${badRange.body.error}`);
 
-  const badDate = await put(`/api/v1/exhibitions/${id}`, {
-    title: '接口测试展', venue: '测试展馆', time: '09:00-17:00', date: '2026-02-31', status: '需审核',
-  }, { token: tokens.exhibitor.token });
+  const badDate = await put(
+    `/api/v1/exhibitions/${id}`,
+    {
+      title: '接口测试展',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: '2026-02-31',
+      status: '需审核',
+    },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(badDate.body.ok, false, '2026-02-31 不是有效日期');
 
-  const longTitle = await put(`/api/v1/exhibitions/${id}`, {
-    title: '超'.repeat(200), venue: '测试展馆', time: '09:00-17:00', date: '2026-09-20', status: '需审核',
-  }, { token: tokens.exhibitor.token });
+  const longTitle = await put(
+    `/api/v1/exhibitions/${id}`,
+    {
+      title: '超'.repeat(200),
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: '2026-09-20',
+      status: '需审核',
+    },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(longTitle.body.ok, false, '标题超长必须被服务端拦住');
 
   // 另一个展商（用普通用户冒充）不能改别人的展会
@@ -843,12 +971,16 @@ test('展会的增删改受角色与归属限制', async () => {
 });
 
 test('展会收集项可以整体覆盖并读回', async () => {
-  const saved = await put('/api/v1/exhibitions/exh-2/fields', {
-    fields: [
-      { title: '姓名 / 公司名称', type: '文本', required: true, options: [] },
-      { title: '参观身份', type: '单选', required: true, options: ['专业观众', '媒体'] },
-    ],
-  }, { token: tokens.exhibitor.token });
+  const saved = await put(
+    '/api/v1/exhibitions/exh-2/fields',
+    {
+      fields: [
+        { title: '姓名 / 公司名称', type: '文本', required: true, options: [] },
+        { title: '参观身份', type: '单选', required: true, options: ['专业观众', '媒体'] },
+      ],
+    },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(saved.body.ok, true, `保存收集项失败：${JSON.stringify(saved.body)}`);
   assert.strictEqual(saved.body.fields.length, 2);
 
@@ -862,17 +994,30 @@ test('展会收集项可以整体覆盖并读回', async () => {
 test('我的报名只返回自己的记录', async () => {
   const mine = await get('/api/v1/registrations', { token: tokens.user.token });
   assert.ok(Array.isArray(mine.body) && mine.body.length > 0);
-  const required = ['id', 'exhibitionId', 'exhibitionTitle', 'exhibitionDay',
-    'exhibitionTime', 'exhibitionVenue', 'visitorName', 'visitorType', 'answers',
-    'statusLabel', 'qrEnabled', 'checkInCode'];
+  const required = [
+    'id',
+    'exhibitionId',
+    'exhibitionTitle',
+    'exhibitionDay',
+    'exhibitionTime',
+    'exhibitionVenue',
+    'visitorName',
+    'visitorType',
+    'answers',
+    'statusLabel',
+    'qrEnabled',
+    'checkInCode',
+  ];
   for (const item of mine.body) {
     for (const key of required) {
       assert.ok(item[key] !== undefined, `报名 ${item.id} 缺少字段 ${key}`);
     }
   }
   // 种子数据里 reg-1/reg-3 属于 user，reg-2 属于 exhibitor
-  assert.ok(mine.body.every((item) => ['reg-1', 'reg-3'].includes(item.id)),
-    `看到了别人的报名：${mine.body.map((item) => item.id).join(',')}`);
+  assert.ok(
+    mine.body.every((item) => ['reg-1', 'reg-3'].includes(item.id)),
+    `看到了别人的报名：${mine.body.map((item) => item.id).join(',')}`,
+  );
 
   const others = await get('/api/v1/registrations', { token: tokens.exhibitor.token });
   assert.ok(others.body.every((item) => item.id === 'reg-2'));
@@ -881,8 +1026,10 @@ test('我的报名只返回自己的记录', async () => {
 test('报名码只在启用二维码且已通过时下发', async () => {
   const mine = await get('/api/v1/registrations', { token: tokens.user.token });
   const approved = mine.body.find((item) => item.id === 'reg-1');
-  assert.ok(approved.checkInCode.startsWith('CALMOBILE-CHECKIN|exh-1|reg-1'),
-    `已通过且启用二维码应当有报名码：${approved.checkInCode}`);
+  assert.ok(
+    approved.checkInCode.startsWith('CALMOBILE-CHECKIN|exh-1|reg-1'),
+    `已通过且启用二维码应当有报名码：${approved.checkInCode}`,
+  );
 
   const pending = mine.body.find((item) => item.id === 'reg-3');
   assert.strictEqual(pending.checkInCode, '', '未通过或未启用二维码不应下发报名码');
@@ -890,34 +1037,64 @@ test('报名码只在启用二维码且已通过时下发', async () => {
 
 test('报名受展会状态与窗口限制，重复报名被拒', async () => {
   // exh-4 仅展示
-  const display = await post('/api/v1/registrations', {
-    exhibitionId: 'exh-4', visitorName: '测试', visitorType: '专业观众', answers: '',
-  }, { token: tokens.user.token });
+  const display = await post(
+    '/api/v1/registrations',
+    {
+      exhibitionId: 'exh-4',
+      visitorName: '测试',
+      visitorType: '专业观众',
+      answers: '',
+    },
+    { token: tokens.user.token },
+  );
   assert.strictEqual(display.body.ok, false);
   assert.ok(display.body.error.includes('仅展示'), display.body.error);
 
   // exh-3 截止报名
-  const closed = await post('/api/v1/registrations', {
-    exhibitionId: 'exh-3', visitorName: '测试', visitorType: '专业观众', answers: '',
-  }, { token: tokens.user.token });
+  const closed = await post(
+    '/api/v1/registrations',
+    {
+      exhibitionId: 'exh-3',
+      visitorName: '测试',
+      visitorType: '专业观众',
+      answers: '',
+    },
+    { token: tokens.user.token },
+  );
   assert.strictEqual(closed.body.ok, false);
 
   // 重复报名 exh-1（user 已有 reg-1）
-  const duplicate = await post('/api/v1/registrations', {
-    exhibitionId: 'exh-1', visitorName: '测试', visitorType: '专业观众', answers: '',
-  }, { token: tokens.user.token });
+  const duplicate = await post(
+    '/api/v1/registrations',
+    {
+      exhibitionId: 'exh-1',
+      visitorName: '测试',
+      visitorType: '专业观众',
+      answers: '',
+    },
+    { token: tokens.user.token },
+  );
   assert.strictEqual(duplicate.body.ok, false);
   assert.ok(duplicate.body.error.includes('已提交过'), duplicate.body.error);
 
   // 必填缺失
-  const missing = await post('/api/v1/registrations', {
-    exhibitionId: 'exh-2', visitorType: '专业观众', answers: '',
-  }, { token: tokens.user.token });
+  const missing = await post(
+    '/api/v1/registrations',
+    {
+      exhibitionId: 'exh-2',
+      visitorType: '专业观众',
+      answers: '',
+    },
+    { token: tokens.user.token },
+  );
   assert.strictEqual(missing.body.ok, false);
 
   // 访客不能报名
   const anonymous = await post('/api/v1/registrations', {
-    exhibitionId: 'exh-2', visitorName: '测试', visitorType: '专业观众', answers: '',
+    exhibitionId: 'exh-2',
+    visitorName: '测试',
+    visitorType: '专业观众',
+    answers: '',
   });
   assert.strictEqual(anonymous.status, 401);
 });
@@ -926,9 +1103,16 @@ test('无需审核的展会提交即通过，撤销后可以重新报名', async
   // exh-2 是需审核；用 admin（种子里没有他的报名）验证流转，避开 usr-3 已有的 reg-3。
   // 报名内容要满足该展会的收集项（必填项不能为空，单选值要在选项里）。
   const worksAnswers = '姓名 / 公司名称：接口测试\n参观身份：专业观众';
-  const pending = await post('/api/v1/registrations', {
-    exhibitionId: 'exh-2', visitorName: '接口测试', visitorType: '专业观众', answers: worksAnswers,
-  }, { token: tokens.admin.token });
+  const pending = await post(
+    '/api/v1/registrations',
+    {
+      exhibitionId: 'exh-2',
+      visitorName: '接口测试',
+      visitorType: '专业观众',
+      answers: worksAnswers,
+    },
+    { token: tokens.admin.token },
+  );
   assert.strictEqual(pending.body.ok, true, JSON.stringify(pending.body));
   assert.strictEqual(pending.body.autoApproved, false, '需审核的展会不应自动通过');
   assert.strictEqual(pending.body.statusLabel, '待审核');
@@ -936,18 +1120,29 @@ test('无需审核的展会提交即通过，撤销后可以重新报名', async
   const cancelled = await del(`/api/v1/registrations/${pending.body.registration.id}`, { token: tokens.admin.token });
   assert.strictEqual(cancelled.body.ok, true, JSON.stringify(cancelled.body));
 
-  const again = await post('/api/v1/registrations', {
-    exhibitionId: 'exh-2', visitorName: '接口测试', visitorType: '专业观众', answers: worksAnswers,
-  }, { token: tokens.admin.token });
+  const again = await post(
+    '/api/v1/registrations',
+    {
+      exhibitionId: 'exh-2',
+      visitorName: '接口测试',
+      visitorType: '专业观众',
+      answers: worksAnswers,
+    },
+    { token: tokens.admin.token },
+  );
   assert.strictEqual(again.body.ok, true, `撤销后应当可以重新报名：${JSON.stringify(again.body)}`);
 
   // admin 报 exh-1（无需审核）→ 自动通过
-  const auto = await post('/api/v1/registrations', {
-    exhibitionId: 'exh-1',
-    visitorName: '管理员报名',
-    visitorType: '专业观众',
-    answers: '姓名 / 公司名称：管理员报名\n参观身份：专业观众',
-  }, { token: tokens.admin.token });
+  const auto = await post(
+    '/api/v1/registrations',
+    {
+      exhibitionId: 'exh-1',
+      visitorName: '管理员报名',
+      visitorType: '专业观众',
+      answers: '姓名 / 公司名称：管理员报名\n参观身份：专业观众',
+    },
+    { token: tokens.admin.token },
+  );
   assert.strictEqual(auto.body.ok, true, JSON.stringify(auto.body));
   assert.strictEqual(auto.body.autoApproved, true, '无需审核的展会应当自动通过');
   assert.strictEqual(auto.body.statusLabel, '已通过');
@@ -958,40 +1153,69 @@ test('报名窗口由服务端按数据库当前日期判断', async () => {
   const open = await get('/api/v1/exhibitions/exh-1');
   const today = new Date().toISOString().slice(0, 10);
   const window = open.body.exhibition;
-  assert.ok(window.registrationStart <= today && window.registrationEnd >= today,
-    `exh-1 的窗口应当覆盖今天：${window.registrationStart} ~ ${window.registrationEnd}`);
+  assert.ok(
+    window.registrationStart <= today && window.registrationEnd >= today,
+    `exh-1 的窗口应当覆盖今天：${window.registrationStart} ~ ${window.registrationEnd}`,
+  );
 
   // 造一场窗口还没开始的展会，提交必须被拒且提示说的是窗口而不是别的
-  const created = await post('/api/v1/exhibitions', {
-    title: '窗口测试展',
-    venue: '测试展馆',
-    time: '09:00-17:00',
-    date: isoDateAfter(60),
-    registrationStart: isoDateAfter(30),
-    registrationEnd: isoDateAfter(50),
-    category: '智能家居',
-    status: '无需审核',
-  }, { token: tokens.exhibitor.token });
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '窗口测试展',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: isoDateAfter(60),
+      registrationStart: isoDateAfter(30),
+      registrationEnd: isoDateAfter(50),
+      category: '智能家居',
+      status: '无需审核',
+    },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
   const futureId = created.body.exhibition.id;
 
-  const tooEarly = await post('/api/v1/registrations', {
-    exhibitionId: futureId, visitorName: '测试', visitorType: '专业观众', answers: '',
-  }, { token: tokens.user.token });
+  const tooEarly = await post(
+    '/api/v1/registrations',
+    {
+      exhibitionId: futureId,
+      visitorName: '测试',
+      visitorType: '专业观众',
+      answers: '',
+    },
+    { token: tokens.user.token },
+  );
   assert.strictEqual(tooEarly.body.ok, false, '窗口未开始不应报名成功');
   assert.ok(tooEarly.body.error.includes('尚未开始'), `提示应说明窗口未开始：${tooEarly.body.error}`);
 
   // 把窗口改成已结束，提示应当变成截止
-  const past = await put(`/api/v1/exhibitions/${futureId}`, {
-    title: '窗口测试展', venue: '测试展馆', time: '09:00-17:00', date: isoDateAfter(60),
-    registrationStart: isoDateAfter(-30), registrationEnd: isoDateAfter(-1),
-    category: '智能家居', status: '无需审核',
-  }, { token: tokens.exhibitor.token });
+  const past = await put(
+    `/api/v1/exhibitions/${futureId}`,
+    {
+      title: '窗口测试展',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: isoDateAfter(60),
+      registrationStart: isoDateAfter(-30),
+      registrationEnd: isoDateAfter(-1),
+      category: '智能家居',
+      status: '无需审核',
+    },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(past.body.ok, true, JSON.stringify(past.body));
 
-  const tooLate = await post('/api/v1/registrations', {
-    exhibitionId: futureId, visitorName: '测试', visitorType: '专业观众', answers: '',
-  }, { token: tokens.user.token });
+  const tooLate = await post(
+    '/api/v1/registrations',
+    {
+      exhibitionId: futureId,
+      visitorName: '测试',
+      visitorType: '专业观众',
+      answers: '',
+    },
+    { token: tokens.user.token },
+  );
   assert.strictEqual(tooLate.body.ok, false, '窗口已结束不应报名成功');
   assert.ok(tooLate.body.error.includes('截止'), `提示应说明已截止：${tooLate.body.error}`);
 
@@ -1000,68 +1224,106 @@ test('报名窗口由服务端按数据库当前日期判断', async () => {
 
 test('报名收集项的必填与选项由服务端校验', async () => {
   // 自造一场展会：不依赖其它用例留下的展会配置，跑完即删（外键级联清掉收集项与报名）。
-  const created = await post('/api/v1/exhibitions', {
-    title: '收集项校验展',
-    venue: '测试展馆',
-    time: '09:00-17:00',
-    date: isoDateAfter(30),
-    category: '智能家居',
-    status: '无需审核',
-  }, { token: tokens.exhibitor.token });
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '收集项校验展',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: isoDateAfter(30),
+      category: '智能家居',
+      status: '无需审核',
+    },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
   const exhibitionId = created.body.exhibition.id;
 
   try {
     // 没有配置收集项时按默认三项校验：默认的「姓名 / 公司名称」必填，空答案要被拦住。
-    const fallback = await post('/api/v1/registrations', {
-      exhibitionId, visitorName: '校验用例', visitorType: '专业观众', answers: '',
-    }, { token: tokens.user.token });
+    const fallback = await post(
+      '/api/v1/registrations',
+      {
+        exhibitionId,
+        visitorName: '校验用例',
+        visitorType: '专业观众',
+        answers: '',
+      },
+      { token: tokens.user.token },
+    );
     assert.strictEqual(fallback.body.ok, false, '默认收集项的必填项没有被校验');
-    assert.ok(fallback.body.error.includes('姓名 / 公司名称'),
-      `提示要指出缺哪一项：${fallback.body.error}`);
+    assert.ok(fallback.body.error.includes('姓名 / 公司名称'), `提示要指出缺哪一项：${fallback.body.error}`);
 
     // 配置成必填 + 选项的收集项
-    const saved = await put(`/api/v1/exhibitions/${exhibitionId}/fields`, {
-      fields: [
-        { title: '姓名 / 公司名称', type: '文本', required: true, options: [] },
-        { title: '参观身份', type: '单选', required: true, options: ['专业观众', '媒体'] },
-        { title: '报名需求', type: '多选', required: false, options: ['停车位', '翻译服务'] },
-      ],
-    }, { token: tokens.exhibitor.token });
+    const saved = await put(
+      `/api/v1/exhibitions/${exhibitionId}/fields`,
+      {
+        fields: [
+          { title: '姓名 / 公司名称', type: '文本', required: true, options: [] },
+          { title: '参观身份', type: '单选', required: true, options: ['专业观众', '媒体'] },
+          { title: '报名需求', type: '多选', required: false, options: ['停车位', '翻译服务'] },
+        ],
+      },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
 
     const base = { exhibitionId, visitorName: '校验用例', visitorType: '专业观众' };
 
-    const missing = await post('/api/v1/registrations', {
-      ...base, answers: '参观身份：专业观众',
-    }, { token: tokens.user.token });
+    const missing = await post(
+      '/api/v1/registrations',
+      {
+        ...base,
+        answers: '参观身份：专业观众',
+      },
+      { token: tokens.user.token },
+    );
     assert.strictEqual(missing.body.ok, false, '缺必填项必须被拒');
     assert.ok(missing.body.error.includes('请填写「姓名 / 公司名称」'), missing.body.error);
 
-    const badOption = await post('/api/v1/registrations', {
-      ...base, answers: '姓名 / 公司名称：校验用例\n参观身份：同行人员',
-    }, { token: tokens.user.token });
+    const badOption = await post(
+      '/api/v1/registrations',
+      {
+        ...base,
+        answers: '姓名 / 公司名称：校验用例\n参观身份：同行人员',
+      },
+      { token: tokens.user.token },
+    );
     assert.strictEqual(badOption.body.ok, false, '选项以外的单选值必须被拒');
     assert.ok(badOption.body.error.includes('参观身份'), badOption.body.error);
 
-    const badMulti = await post('/api/v1/registrations', {
-      ...base, answers: '姓名 / 公司名称：校验用例\n参观身份：专业观众\n报名需求：停车位、接送机',
-    }, { token: tokens.user.token });
+    const badMulti = await post(
+      '/api/v1/registrations',
+      {
+        ...base,
+        answers: '姓名 / 公司名称：校验用例\n参观身份：专业观众\n报名需求：停车位、接送机',
+      },
+      { token: tokens.user.token },
+    );
     assert.strictEqual(badMulti.body.ok, false, '多选里混入选项以外的值必须被拒');
 
-    const accepted = await post('/api/v1/registrations', {
-      ...base, answers: '姓名 / 公司名称：校验用例\n参观身份：专业观众\n报名需求：停车位、翻译服务',
-    }, { token: tokens.user.token });
+    const accepted = await post(
+      '/api/v1/registrations',
+      {
+        ...base,
+        answers: '姓名 / 公司名称：校验用例\n参观身份：专业观众\n报名需求：停车位、翻译服务',
+      },
+      { token: tokens.user.token },
+    );
     assert.strictEqual(accepted.body.ok, true, `合规提交应当成功：${JSON.stringify(accepted.body)}`);
     assert.strictEqual(accepted.body.registration.statusLabel, '已通过');
 
     // 选填项没填：页面会写「未填写」占位（见 pages/registration-form.js），
     // 服务端要把它当成空值，而不是一个不在选项里的多选值。
-    const blank = await post('/api/v1/registrations', {
-      ...base,
-      visitorName: '校验用例二',
-      answers: '姓名 / 公司名称：校验用例二\n参观身份：媒体\n报名需求：未填写',
-    }, { token: tokens.admin.token });
+    const blank = await post(
+      '/api/v1/registrations',
+      {
+        ...base,
+        visitorName: '校验用例二',
+        answers: '姓名 / 公司名称：校验用例二\n参观身份：媒体\n报名需求：未填写',
+      },
+      { token: tokens.admin.token },
+    );
     assert.strictEqual(blank.body.ok, true, `未填写占位不应被当成非法选项：${JSON.stringify(blank.body)}`);
   } finally {
     await del(`/api/v1/exhibitions/${exhibitionId}`, { token: tokens.exhibitor.token });
@@ -1072,32 +1334,44 @@ test('报名收集项的必填与选项由服务端校验', async () => {
 
 test('已参加是终态：本人不能撤销，展商也不能再改', async () => {
   // 自造展会与报名，不依赖其它用例留下的记录（跑完删展会，外键级联清掉报名）。
-  const created = await post('/api/v1/exhibitions', {
-    title: '终态校验展',
-    venue: '测试展馆',
-    time: '09:00-17:00',
-    date: isoDateAfter(20),
-    category: '智能家居',
-    status: '无需审核',
-    qrEnabled: true,
-  }, { token: tokens.exhibitor.token });
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '终态校验展',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: isoDateAfter(20),
+      category: '智能家居',
+      status: '无需审核',
+      qrEnabled: true,
+    },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
   const exhibitionId = created.body.exhibition.id;
 
   try {
-    const submitted = await post('/api/v1/registrations', {
-      exhibitionId,
-      visitorName: '终态用例',
-      visitorType: '专业观众',
-      answers: '姓名 / 公司名称：终态用例\n参观身份：专业观众',
-    }, { token: tokens.user.token });
+    const submitted = await post(
+      '/api/v1/registrations',
+      {
+        exhibitionId,
+        visitorName: '终态用例',
+        visitorType: '专业观众',
+        answers: '姓名 / 公司名称：终态用例\n参观身份：专业观众',
+      },
+      { token: tokens.user.token },
+    );
     assert.strictEqual(submitted.body.ok, true, JSON.stringify(submitted.body));
     const registrationId = submitted.body.registration.id;
 
     // 展商核销 → 已参加
-    const checked = await post('/api/v1/checkin', {
-      code: `CALMOBILE-CHECKIN|${exhibitionId}|${registrationId}`,
-    }, { token: tokens.exhibitor.token });
+    const checked = await post(
+      '/api/v1/checkin',
+      {
+        code: `CALMOBILE-CHECKIN|${exhibitionId}|${registrationId}`,
+      },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(checked.body.ok, true, JSON.stringify(checked.body));
 
     // 本人不能再撤销（出勤记录不能事后抹掉）：业务规则失败走 200 + ok:false
@@ -1107,8 +1381,11 @@ test('已参加是终态：本人不能撤销，展商也不能再改', async ()
     assert.ok(cancel.body.error.includes('已参加'), cancel.body.error);
 
     // 展商也不能把它改回别的状态（状态机里已参加是终态）
-    const reopen = await put(`/api/v1/review/${registrationId}/status`,
-      { status: '已通过' }, { token: tokens.exhibitor.token });
+    const reopen = await put(
+      `/api/v1/review/${registrationId}/status`,
+      { status: '已通过' },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(reopen.status, 200);
     assert.strictEqual(reopen.body.ok, false, `已参加不应允许改回已通过：${JSON.stringify(reopen.body)}`);
   } finally {
@@ -1124,7 +1401,10 @@ test('审核列表给出五种状态计数，且只能看自己举办的展会',
     assert.strictEqual(typeof list.body.counts[key], 'number', `counts 缺少 ${key}`);
   }
   const pending = await get('/api/v1/review?exhibitionId=exh-1&status=待审核', { token: tokens.exhibitor.token });
-  assert.ok(pending.body.records.every((item) => item.status === '待审核'), '筛选项混入了其它状态');
+  assert.ok(
+    pending.body.records.every((item) => item.status === '待审核'),
+    '筛选项混入了其它状态',
+  );
 
   // 普通用户不能看审核
   const asUser = await get('/api/v1/review?exhibitionId=exh-1', { token: tokens.user.token });
@@ -1140,11 +1420,19 @@ test('审核状态可以流转，非法状态被拒', async () => {
   const target = list.body.records.find((item) => item.status === '待审核');
   assert.ok(target, 'exh-2 应当有待审核的报名');
 
-  const approved = await put(`/api/v1/review/${target.id}/status`, { status: '已通过' }, { token: tokens.exhibitor.token });
+  const approved = await put(
+    `/api/v1/review/${target.id}/status`,
+    { status: '已通过' },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(approved.body.ok, true, JSON.stringify(approved.body));
   assert.strictEqual(approved.body.record.status, '已通过');
 
-  const invalid = await put(`/api/v1/review/${target.id}/status`, { status: '瞎写的状态' }, { token: tokens.exhibitor.token });
+  const invalid = await put(
+    `/api/v1/review/${target.id}/status`,
+    { status: '瞎写的状态' },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(invalid.body.ok, false);
 
   const asUser = await put(`/api/v1/review/${target.id}/status`, { status: '已拒绝' }, { token: tokens.user.token });
@@ -1156,26 +1444,34 @@ test('审核流转受状态机与「允许修改已审核报名」策略限制',
   const originalCanRevise = settingsBefore.body.review.canRevise === true;
 
   // 自造展会与报名：不碰其它用例共享的展会与报名记录，跑完即删（级联清掉报名）。
-  const created = await post('/api/v1/exhibitions', {
-    title: '审核流转用例展',
-    venue: '测试展馆',
-    time: '09:00-17:00',
-    date: isoDateAfter(30),
-    category: '智能家居',
-    status: '需审核',
-  }, { token: tokens.exhibitor.token });
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '审核流转用例展',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: isoDateAfter(30),
+      category: '智能家居',
+      status: '需审核',
+    },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
   const exhibitionId = created.body.exhibition.id;
 
   try {
     await put('/api/v1/settings', { canRevise: false }, { token: tokens.admin.token });
 
-    const submitted = await post('/api/v1/registrations', {
-      exhibitionId,
-      visitorName: '流转用例',
-      visitorType: '专业观众',
-      answers: '姓名 / 公司名称：流转用例\n参观身份：专业观众',
-    }, { token: tokens.user.token });
+    const submitted = await post(
+      '/api/v1/registrations',
+      {
+        exhibitionId,
+        visitorName: '流转用例',
+        visitorType: '专业观众',
+        answers: '姓名 / 公司名称：流转用例\n参观身份：专业观众',
+      },
+      { token: tokens.user.token },
+    );
     assert.strictEqual(submitted.body.ok, true, JSON.stringify(submitted.body));
     const id = submitted.body.registration.id;
     assert.strictEqual(submitted.body.registration.statusLabel, '待审核');
@@ -1186,8 +1482,11 @@ test('审核流转受状态机与「允许修改已审核报名」策略限制',
 
     // canRevise=false：展商不能改已通过的记录（越权 → 403，不是 200 的业务信封）
     const locked = await put(`/api/v1/review/${id}/status`, { status: '已拒绝' }, { token: tokens.exhibitor.token });
-    assert.strictEqual(locked.status, 403,
-      `展商改已通过的记录应当是 403：${locked.status} ${JSON.stringify(locked.body)}`);
+    assert.strictEqual(
+      locked.status,
+      403,
+      `展商改已通过的记录应当是 403：${locked.status} ${JSON.stringify(locked.body)}`,
+    );
     assert.ok(locked.body.error, '403 要带可展示的原因');
 
     // 管理员不受这条策略限制，可以在已通过 / 已拒绝之间切换
@@ -1222,12 +1521,20 @@ test('核销把已通过推进为已参加，重复核销与非法码都有明�
   const approved = list.body.records[0];
   assert.ok(approved, 'exh-1 应当有已通过的报名');
 
-  const first = await post('/api/v1/checkin', { code: `CALMOBILE-CHECKIN|exh-1|${approved.id}` }, { token: tokens.exhibitor.token });
+  const first = await post(
+    '/api/v1/checkin',
+    { code: `CALMOBILE-CHECKIN|exh-1|${approved.id}` },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(first.body.ok, true, `首次核销应当成功：${JSON.stringify(first.body)}`);
   assert.strictEqual(first.body.status, '已参加');
   assert.ok(first.body.record.visitorName, '核销结果要带报名人信息');
 
-  const again = await post('/api/v1/checkin', { code: `CALMOBILE-CHECKIN|exh-1|${approved.id}` }, { token: tokens.exhibitor.token });
+  const again = await post(
+    '/api/v1/checkin',
+    { code: `CALMOBILE-CHECKIN|exh-1|${approved.id}` },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(again.body.ok, false);
   assert.strictEqual(again.body.duplicated, true);
   assert.ok(again.body.error.includes('已经核销'), again.body.error);
@@ -1240,7 +1547,11 @@ test('核销把已通过推进为已参加，重复核销与非法码都有明�
   const pendingList = await get('/api/v1/review?exhibitionId=exh-2&status=待审核', { token: tokens.exhibitor.token });
   if (pendingList.body.records.length > 0) {
     const pending = pendingList.body.records[0];
-    const rejected = await post('/api/v1/checkin', { code: `CALMOBILE-CHECKIN|exh-2|${pending.id}` }, { token: tokens.exhibitor.token });
+    const rejected = await post(
+      '/api/v1/checkin',
+      { code: `CALMOBILE-CHECKIN|exh-2|${pending.id}` },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(rejected.body.ok, false);
     assert.ok(rejected.body.error.includes('待审核'), rejected.body.error);
   }
@@ -1297,20 +1608,31 @@ test('受限账号不能报名 / 发布展会 / 编辑个人信息，其余照�
     assert.strictEqual(me.body.user.can.admin, false);
 
     // ① 不能报名
-    const registration = await post('/api/v1/registrations', {
-      exhibitionId: 'exh-1', visitorName: '受限用户', visitorType: '专业观众', answers: '',
-    }, { token: tokens.user.token });
+    const registration = await post(
+      '/api/v1/registrations',
+      {
+        exhibitionId: 'exh-1',
+        visitorName: '受限用户',
+        visitorType: '专业观众',
+        answers: '',
+      },
+      { token: tokens.user.token },
+    );
     assert.strictEqual(registration.status, 403, `受限账号报名应当 403：${JSON.stringify(registration.body)}`);
     assert.strictEqual(registration.body.error, '账号已被限制，不能报名');
 
     // ② 不能发布展会
-    const exhibition = await post('/api/v1/exhibitions', {
-      title: '受限账号不该发出的展会',
-      venue: '测试展馆',
-      time: '09:00-17:00',
-      date: '2026-09-20',
-      status: '需审核',
-    }, { token: tokens.user.token });
+    const exhibition = await post(
+      '/api/v1/exhibitions',
+      {
+        title: '受限账号不该发出的展会',
+        venue: '测试展馆',
+        time: '09:00-17:00',
+        date: '2026-09-20',
+        status: '需审核',
+      },
+      { token: tokens.user.token },
+    );
     assert.strictEqual(exhibition.status, 403, `受限账号发布展会应当 403：${JSON.stringify(exhibition.body)}`);
     assert.strictEqual(exhibition.body.error, '账号已被限制，不能发布展会');
 
@@ -1323,14 +1645,24 @@ test('受限账号不能报名 / 发布展会 / 编辑个人信息，其余照�
     assert.strictEqual((await get('/api/v1/bootstrap', { token: tokens.user.token })).status, 200);
     assert.strictEqual((await get('/api/v1/exhibitions', { token: tokens.user.token })).status, 200);
     assert.strictEqual((await get('/api/v1/settings', { token: tokens.user.token })).status, 200);
-    const notify = await put('/api/v1/profile/notifications', {
-      exhibitionReminder: !notifyBefore.exhibitionReminder,
-    }, { token: tokens.user.token });
+    const notify = await put(
+      '/api/v1/profile/notifications',
+      {
+        exhibitionReminder: !notifyBefore.exhibitionReminder,
+      },
+      { token: tokens.user.token },
+    );
     assert.notStrictEqual(notify.status, 403, `通知偏好不受限：${JSON.stringify(notify.body)}`);
     assert.strictEqual(notify.body.ok, true, JSON.stringify(notify.body));
-    const password = await post('/api/v1/profile/password', {
-      currentPassword: 'x', newPassword: 'y', confirmPassword: 'y',
-    }, { token: tokens.user.token });
+    const password = await post(
+      '/api/v1/profile/password',
+      {
+        currentPassword: 'x',
+        newPassword: 'y',
+        confirmPassword: 'y',
+      },
+      { token: tokens.user.token },
+    );
     assert.notStrictEqual(password.status, 403, '改密码属于账号安全，不应被受限拦下');
 
     // 管理员自己做同样三件事仍然成功（admin 自己发的展会用来报名，用完连展会一起删掉）
@@ -1339,46 +1671,79 @@ test('受限账号不能报名 / 发布展会 / 编辑个人信息，其余照�
     assert.strictEqual(adminBootstrap.body.user.can.register, true);
     assert.strictEqual(adminBootstrap.body.user.can.profile, true);
 
-    const adminExhibition = await post('/api/v1/exhibitions', {
-      title: '管理员发布的展会',
-      venue: '测试展馆',
-      time: '09:00-17:00',
-      date: '2026-09-21',
-      registrationStart: '2026-01-01',
-      registrationEnd: '2026-12-31',
-      status: '无需审核',
-    }, { token: tokens.admin.token });
-    assert.strictEqual(adminExhibition.body.ok, true, `管理员发布展会应当成功：${JSON.stringify(adminExhibition.body)}`);
+    const adminExhibition = await post(
+      '/api/v1/exhibitions',
+      {
+        title: '管理员发布的展会',
+        venue: '测试展馆',
+        time: '09:00-17:00',
+        date: '2026-09-21',
+        registrationStart: '2026-01-01',
+        registrationEnd: '2026-12-31',
+        status: '无需审核',
+      },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(
+      adminExhibition.body.ok,
+      true,
+      `管理员发布展会应当成功：${JSON.stringify(adminExhibition.body)}`,
+    );
     const adminExhibitionId = adminExhibition.body.exhibition.id;
 
-    const adminRegistration = await post('/api/v1/registrations', {
-      exhibitionId: adminExhibitionId,
-      visitorName: '管理员',
-      visitorType: '专业观众',
-      // 新展会没有自定义收集项，服务端按默认三项校验：必填的「姓名 / 公司名称」要填上
-      answers: '姓名 / 公司名称：管理员\n参观身份：专业观众',
-    }, { token: tokens.admin.token });
-    assert.strictEqual(adminRegistration.body.ok, true, `管理员报名应当成功：${JSON.stringify(adminRegistration.body)}`);
+    const adminRegistration = await post(
+      '/api/v1/registrations',
+      {
+        exhibitionId: adminExhibitionId,
+        visitorName: '管理员',
+        visitorType: '专业观众',
+        // 新展会没有自定义收集项，服务端按默认三项校验：必填的「姓名 / 公司名称」要填上
+        answers: '姓名 / 公司名称：管理员\n参观身份：专业观众',
+      },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(
+      adminRegistration.body.ok,
+      true,
+      `管理员报名应当成功：${JSON.stringify(adminRegistration.body)}`,
+    );
 
     // 写一个与当前值相同的字段：既证明没被受限逻辑拦下，也不改动管理员的资料
-    const adminProfile = await put('/api/v1/profile', {
-      nickname: adminBootstrap.body.user.nickname, region: adminBootstrap.body.user.region,
-    }, { token: tokens.admin.token });
+    const adminProfile = await put(
+      '/api/v1/profile',
+      {
+        nickname: adminBootstrap.body.user.nickname,
+        region: adminBootstrap.body.user.region,
+      },
+      { token: tokens.admin.token },
+    );
     assert.strictEqual(adminProfile.body.ok, true, `管理员改资料应当成功：${JSON.stringify(adminProfile.body)}`);
 
     // 清理：删掉展会（报名按外键级联删除）
-    assert.strictEqual((await del(`/api/v1/exhibitions/${adminExhibitionId}`,
-      { token: tokens.admin.token })).body.ok, true);
+    assert.strictEqual(
+      (await del(`/api/v1/exhibitions/${adminExhibitionId}`, { token: tokens.admin.token })).body.ok,
+      true,
+    );
   } finally {
     // 还原：账号状态与个人资料，后面的用例还要用这个账号
     await put('/api/v1/users/usr-3/status', { status: '正常' }, { token: tokens.admin.token });
-    await put('/api/v1/profile', {
-      nickname: profileBefore.nickname, region: profileBefore.region, bio: profileBefore.bio,
-      socialMedia: profileBefore.socialMedia,
-    }, { token: tokens.user.token });
-    await put('/api/v1/profile/notifications', {
-      exhibitionReminder: notifyBefore.exhibitionReminder,
-    }, { token: tokens.user.token });
+    await put(
+      '/api/v1/profile',
+      {
+        nickname: profileBefore.nickname,
+        region: profileBefore.region,
+        bio: profileBefore.bio,
+        socialMedia: profileBefore.socialMedia,
+      },
+      { token: tokens.user.token },
+    );
+    await put(
+      '/api/v1/profile/notifications',
+      {
+        exhibitionReminder: notifyBefore.exhibitionReminder,
+      },
+      { token: tokens.user.token },
+    );
     const restored = await get('/api/v1/bootstrap', { token: tokens.user.token });
     assert.strictEqual(restored.body.user.can.limited, false, '受限状态没有还原，后续用例会被污染');
   }
@@ -1401,15 +1766,19 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
 
   // 两场自造展会：A 给受限展商 / 受限普通用户与「恢复正常后照旧」用；B 专门留给管理员核销。
   const createExhibition = async (title) => {
-    const created = await post('/api/v1/exhibitions', {
-      title,
-      venue: '测试展馆',
-      time: '09:00-17:00',
-      date: isoDateAfter(30),
-      category: '智能家居',
-      status: '无需审核',
-      qrEnabled: true,
-    }, { token: tokens.exhibitor.token });
+    const created = await post(
+      '/api/v1/exhibitions',
+      {
+        title,
+        venue: '测试展馆',
+        time: '09:00-17:00',
+        date: isoDateAfter(30),
+        category: '智能家居',
+        status: '无需审核',
+        qrEnabled: true,
+      },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
     return created.body.exhibition.id;
   };
@@ -1418,12 +1787,16 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
   const exhibitionB = await createExhibition('受限收紧用例展 B');
 
   const submit = async (exhibitionId, token, name) => {
-    const submitted = await post('/api/v1/registrations', {
-      exhibitionId,
-      visitorName: name,
-      visitorType: '专业观众',
-      answers: `姓名 / 公司名称：${name}\n参观身份：专业观众`,
-    }, { token });
+    const submitted = await post(
+      '/api/v1/registrations',
+      {
+        exhibitionId,
+        visitorName: name,
+        visitorType: '专业观众',
+        answers: `姓名 / 公司名称：${name}\n参观身份：专业观众`,
+      },
+      { token },
+    );
     assert.strictEqual(submitted.body.ok, true, JSON.stringify(submitted.body));
     return submitted.body.registration.id;
   };
@@ -1450,16 +1823,26 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     {
       name: '改报名收集项',
       message: '账号已被限制，不能修改报名设置',
-      send: (token, id) => put(`/api/v1/exhibitions/${id}/fields`, {
-        fields: [{ title: '受限账号不该改成的问题', type: '文本', required: false }],
-      }, { token }),
+      send: (token, id) =>
+        put(
+          `/api/v1/exhibitions/${id}/fields`,
+          {
+            fields: [{ title: '受限账号不该改成的问题', type: '文本', required: false }],
+          },
+          { token },
+        ),
     },
     {
       name: '现场核销',
       message: '账号已被限制，不能核销',
-      send: (token, id, registrationId) => post('/api/v1/checkin', {
-        code: `CALMOBILE-CHECKIN|${id}|${registrationId}`,
-      }, { token }),
+      send: (token, id, registrationId) =>
+        post(
+          '/api/v1/checkin',
+          {
+            code: `CALMOBILE-CHECKIN|${id}|${registrationId}`,
+          },
+          { token },
+        ),
     },
   ];
 
@@ -1468,8 +1851,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     await setStatus('usr-2', 'limited');
     for (const item of calls) {
       const response = await item.send(tokens.exhibitor.token, exhibitionA, registrationA);
-      assert.strictEqual(response.status, 403,
-        `${item.name}对受限展商应当 403：${JSON.stringify(response.body)}`);
+      assert.strictEqual(response.status, 403, `${item.name}对受限展商应当 403：${JSON.stringify(response.body)}`);
       assert.strictEqual(response.body.error, item.message, `${item.name}的受限文案不对`);
     }
 
@@ -1486,52 +1868,66 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     await setStatus('usr-3', 'limited');
     for (const item of calls) {
       const response = await item.send(tokens.user.token, exhibitionA, registrationA);
-      assert.strictEqual(response.status, 403,
-        `${item.name}对受限普通用户应当 403：${JSON.stringify(response.body)}`);
-      assert.ok(response.body.error.includes('已被限制'),
-        `${item.name}应当给「账号已被限制」文案：${response.body.error}`);
-      assert.ok(!response.body.error.includes('展商'),
-        `${item.name}不该给角色文案：${response.body.error}`);
+      assert.strictEqual(response.status, 403, `${item.name}对受限普通用户应当 403：${JSON.stringify(response.body)}`);
+      assert.ok(
+        response.body.error.includes('已被限制'),
+        `${item.name}应当给「账号已被限制」文案：${response.body.error}`,
+      );
+      assert.ok(!response.body.error.includes('展商'), `${item.name}不该给角色文案：${response.body.error}`);
     }
 
     // ③ 摘掉受限标签后，普通用户被拒的原因变回角色权限（不再因为「已被限制」）
     await setStatus('usr-3', 'active');
     for (const item of calls) {
       const response = await item.send(tokens.user.token, exhibitionA, registrationA);
-      assert.strictEqual(response.status, 403,
-        `${item.name}普通用户仍应因角色被拒：${JSON.stringify(response.body)}`);
-      assert.ok(!response.body.error.includes('已被限制'),
-        `${item.name}恢复正常后不该再因受限被拒：${response.body.error}`);
+      assert.strictEqual(response.status, 403, `${item.name}普通用户仍应因角色被拒：${JSON.stringify(response.body)}`);
+      assert.ok(
+        !response.body.error.includes('已被限制'),
+        `${item.name}恢复正常后不该再因受限被拒：${response.body.error}`,
+      );
     }
 
     // ④ 同一账号改回「正常」后，受限展商五件事全部做得成
     await setStatus('usr-2', 'active');
-    const edited = await put(`/api/v1/exhibitions/${exhibitionA}`,
-      { title: '恢复正常后改的标题' }, { token: tokens.exhibitor.token });
+    const edited = await put(
+      `/api/v1/exhibitions/${exhibitionA}`,
+      { title: '恢复正常后改的标题' },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(edited.body.ok, true, `恢复正常后编辑展会应当成功：${JSON.stringify(edited.body)}`);
     assert.strictEqual(edited.body.exhibition.title, '恢复正常后改的标题');
 
-    const paused = await put(`/api/v1/exhibitions/${exhibitionA}/status`,
-      { status: '需审核' }, { token: tokens.exhibitor.token });
+    const paused = await put(
+      `/api/v1/exhibitions/${exhibitionA}/status`,
+      { status: '需审核' },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(paused.body.ok, true, `恢复正常后改报名设置应当成功：${JSON.stringify(paused.body)}`);
     assert.strictEqual(paused.body.exhibition.status, '需审核');
 
-    const refields = await put(`/api/v1/exhibitions/${exhibitionA}/fields`, {
-      fields: [{ title: '恢复正常后的问题', type: '文本', required: false }],
-    }, { token: tokens.exhibitor.token });
+    const refields = await put(
+      `/api/v1/exhibitions/${exhibitionA}/fields`,
+      {
+        fields: [{ title: '恢复正常后的问题', type: '文本', required: false }],
+      },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(refields.body.ok, true, `恢复正常后改收集项应当成功：${JSON.stringify(refields.body)}`);
     assert.strictEqual(refields.body.fields[0].title, '恢复正常后的问题');
 
-    const checked = await post('/api/v1/checkin', {
-      code: `CALMOBILE-CHECKIN|${exhibitionA}|${registrationA}`,
-    }, { token: tokens.exhibitor.token });
+    const checked = await post(
+      '/api/v1/checkin',
+      {
+        code: `CALMOBILE-CHECKIN|${exhibitionA}|${registrationA}`,
+      },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(checked.body.ok, true, `恢复正常后核销应当成功：${JSON.stringify(checked.body)}`);
     assert.strictEqual(checked.body.status, '已参加');
 
     const removed = await del(`/api/v1/exhibitions/${exhibitionA}`, { token: tokens.exhibitor.token });
     assert.strictEqual(removed.body.ok, true, `恢复正常后删除展会应当成功：${JSON.stringify(removed.body)}`);
-    assert.strictEqual((await get(`/api/v1/exhibitions/${exhibitionA}`)).body.found, false,
-      '删除之后展会不应还在');
+    assert.strictEqual((await get(`/api/v1/exhibitions/${exhibitionA}`)).body.found, false, '删除之后展会不应还在');
 
     // ⑤ 管理员：库里被标成「受限」也不受这些限制（否则没人能解除限制）
     await setStatus('usr-1', 'limited');
@@ -1540,23 +1936,49 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     assert.strictEqual(adminState.body.user.can.register, true);
     assert.strictEqual(adminState.body.user.can.profile, true);
 
-    const adminEdit = await put(`/api/v1/exhibitions/${exhibitionB}`,
-      { title: '管理员受限态下仍能改' }, { token: tokens.admin.token });
+    const adminEdit = await put(
+      `/api/v1/exhibitions/${exhibitionB}`,
+      { title: '管理员受限态下仍能改' },
+      { token: tokens.admin.token },
+    );
     assert.strictEqual(adminEdit.body.ok, true, `管理员受限态下编辑展会应当成功：${JSON.stringify(adminEdit.body)}`);
-    const adminStatus = await put(`/api/v1/exhibitions/${exhibitionB}/status`,
-      { status: '需审核' }, { token: tokens.admin.token });
-    assert.strictEqual(adminStatus.body.ok, true, `管理员受限态下改报名设置应当成功：${JSON.stringify(adminStatus.body)}`);
-    const adminFields = await put(`/api/v1/exhibitions/${exhibitionB}/fields`, {
-      fields: [{ title: '管理员受限态下改的收集项', type: '文本', required: false }],
-    }, { token: tokens.admin.token });
-    assert.strictEqual(adminFields.body.ok, true, `管理员受限态下改收集项应当成功：${JSON.stringify(adminFields.body)}`);
-    const adminCheckin = await post('/api/v1/checkin', {
-      code: `CALMOBILE-CHECKIN|${exhibitionB}|${registrationB}`,
-    }, { token: tokens.admin.token });
+    const adminStatus = await put(
+      `/api/v1/exhibitions/${exhibitionB}/status`,
+      { status: '需审核' },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(
+      adminStatus.body.ok,
+      true,
+      `管理员受限态下改报名设置应当成功：${JSON.stringify(adminStatus.body)}`,
+    );
+    const adminFields = await put(
+      `/api/v1/exhibitions/${exhibitionB}/fields`,
+      {
+        fields: [{ title: '管理员受限态下改的收集项', type: '文本', required: false }],
+      },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(
+      adminFields.body.ok,
+      true,
+      `管理员受限态下改收集项应当成功：${JSON.stringify(adminFields.body)}`,
+    );
+    const adminCheckin = await post(
+      '/api/v1/checkin',
+      {
+        code: `CALMOBILE-CHECKIN|${exhibitionB}|${registrationB}`,
+      },
+      { token: tokens.admin.token },
+    );
     assert.strictEqual(adminCheckin.body.ok, true, `管理员受限态下核销应当成功：${JSON.stringify(adminCheckin.body)}`);
     assert.strictEqual(adminCheckin.body.status, '已参加');
     const adminDelete = await del(`/api/v1/exhibitions/${exhibitionB}`, { token: tokens.admin.token });
-    assert.strictEqual(adminDelete.body.ok, true, `管理员受限态下删除展会应当成功：${JSON.stringify(adminDelete.body)}`);
+    assert.strictEqual(
+      adminDelete.body.ok,
+      true,
+      `管理员受限态下删除展会应当成功：${JSON.stringify(adminDelete.body)}`,
+    );
   } finally {
     // 还原：三个种子账号的状态（后面的用例还要用它们），再清掉自造展会（级联清报名；
     // 上面已经删掉的那场会拿到 404，忽略即可）。
@@ -1608,27 +2030,35 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
   assert.ok(self, '种子里的 user 账号应当存在');
 
   // 启用二维码 + 无需审核：提交即已通过，因此本人应当拿得到报名码。
-  const created = await post('/api/v1/exhibitions', {
-    title: '公开页报名码用例展',
-    venue: '测试展馆',
-    time: '09:00-17:00',
-    date: isoDateAfter(30),
-    category: '智能家居',
-    status: '无需审核',
-    qrEnabled: true,
-  }, { token: tokens.exhibitor.token });
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '公开页报名码用例展',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: isoDateAfter(30),
+      category: '智能家居',
+      status: '无需审核',
+      qrEnabled: true,
+    },
+    { token: tokens.exhibitor.token },
+  );
   assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
   const exhibitionId = created.body.exhibition.id;
 
   const before = await get('/api/v1/profile', { token: tokens.user.token });
   const originalShow = before.body.showRegistrations === true;
   try {
-    const submitted = await post('/api/v1/registrations', {
-      exhibitionId,
-      visitorName: '公开页用例',
-      visitorType: '专业观众',
-      answers: '姓名 / 公司名称：公开页用例\n参观身份：专业观众',
-    }, { token: tokens.user.token });
+    const submitted = await post(
+      '/api/v1/registrations',
+      {
+        exhibitionId,
+        visitorName: '公开页用例',
+        visitorType: '专业观众',
+        answers: '姓名 / 公司名称：公开页用例\n参观身份：专业观众',
+      },
+      { token: tokens.user.token },
+    );
     assert.strictEqual(submitted.body.ok, true, JSON.stringify(submitted.body));
     const registrationId = submitted.body.registration.id;
     const codePrefix = `CALMOBILE-CHECKIN|${exhibitionId}|${registrationId}`;
@@ -1636,8 +2066,10 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
     // 本人的取码路径（报名详情）照常带报名码
     const own = await get(`/api/v1/registrations/${registrationId}`, { token: tokens.user.token });
     assert.strictEqual(own.body.found, true);
-    assert.ok(String(own.body.registration.checkInCode).startsWith(codePrefix),
-      `本人应当拿到报名码：${own.body.registration.checkInCode}`);
+    assert.ok(
+      String(own.body.registration.checkInCode).startsWith(codePrefix),
+      `本人应当拿到报名码：${own.body.registration.checkInCode}`,
+    );
 
     // 打开「展示我的报名」后，匿名访问公开页也必须看不到报名码
     const saved = await put('/api/v1/profile', { showRegistrations: true }, { token: tokens.user.token });
@@ -1647,15 +2079,16 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
     assert.strictEqual(anonymous.body.found, true);
     const record = anonymous.body.registrations.find((item) => item.id === registrationId);
     assert.ok(record, '打开隐私开关后，匿名访问应当看到这条已通过的报名');
-    assert.ok(record.checkInCode === '' || record.checkInCode === undefined,
-      `公开页不能下发报名码：${JSON.stringify(record.checkInCode)}`);
+    assert.ok(
+      record.checkInCode === '' || record.checkInCode === undefined,
+      `公开页不能下发报名码：${JSON.stringify(record.checkInCode)}`,
+    );
 
     // 公开页对所有视角一致（本人 / 管理员也一样）：要报名码请走报名详情或审核接口
     const asSelf = await get(`/api/v1/users/public?userId=${self.id}`, { token: tokens.user.token });
     const selfRecord = asSelf.body.registrations.find((item) => item.id === registrationId);
     assert.ok(selfRecord, '本人应当能在公开页看到自己的报名');
-    assert.ok(selfRecord.checkInCode === '' || selfRecord.checkInCode === undefined,
-      '公开页对本人也不下发报名码');
+    assert.ok(selfRecord.checkInCode === '' || selfRecord.checkInCode === undefined, '公开页对本人也不下发报名码');
 
     const asAdmin = await get(`/api/v1/users/public?userId=${self.id}`, { token: tokens.admin.token });
     const adminRecord = asAdmin.body.registrations.find((item) => item.id === registrationId);
@@ -1666,8 +2099,10 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
     // 管理员另有带报名码的路径：报名详情对管理员开放任意一条
     const adminDetail = await get(`/api/v1/registrations/${registrationId}`, { token: tokens.admin.token });
     assert.strictEqual(adminDetail.body.found, true);
-    assert.ok(String(adminDetail.body.registration.checkInCode).startsWith(codePrefix),
-      '管理员走报名详情应当仍能拿到报名码');
+    assert.ok(
+      String(adminDetail.body.registration.checkInCode).startsWith(codePrefix),
+      '管理员走报名详情应当仍能拿到报名码',
+    );
   } finally {
     await put('/api/v1/profile', { showRegistrations: originalShow }, { token: tokens.user.token });
     await del(`/api/v1/exhibitions/${exhibitionId}`, { token: tokens.exhibitor.token });
@@ -1688,19 +2123,37 @@ test('资料保存只改提交过的字段', async () => {
 
 test('改密码校验当前密码，成功后旧刷新令牌失效', async () => {
   const session = await login('user');
-  const wrong = await post('/api/v1/profile/password', {
-    currentPassword: 'nope', newPassword: 'newpassword', confirmPassword: 'newpassword',
-  }, { token: session.token });
+  const wrong = await post(
+    '/api/v1/profile/password',
+    {
+      currentPassword: 'nope',
+      newPassword: 'newpassword',
+      confirmPassword: 'newpassword',
+    },
+    { token: session.token },
+  );
   assert.strictEqual(wrong.body.ok, false);
 
-  const mismatch = await post('/api/v1/profile/password', {
-    currentPassword: 'password', newPassword: 'newpassword', confirmPassword: 'other',
-  }, { token: session.token });
+  const mismatch = await post(
+    '/api/v1/profile/password',
+    {
+      currentPassword: 'password',
+      newPassword: 'newpassword',
+      confirmPassword: 'other',
+    },
+    { token: session.token },
+  );
   assert.strictEqual(mismatch.body.ok, false);
 
-  const changed = await post('/api/v1/profile/password', {
-    currentPassword: 'password', newPassword: 'newpassword', confirmPassword: 'newpassword',
-  }, { token: session.token });
+  const changed = await post(
+    '/api/v1/profile/password',
+    {
+      currentPassword: 'password',
+      newPassword: 'newpassword',
+      confirmPassword: 'newpassword',
+    },
+    { token: session.token },
+  );
   assert.strictEqual(changed.body.ok, true, JSON.stringify(changed.body));
 
   const reused = await post('/api/v1/auth/refresh', { refreshToken: session.refreshToken });
@@ -1708,9 +2161,15 @@ test('改密码校验当前密码，成功后旧刷新令牌失效', async () =>
 
   const relogin = await login('user', 'newpassword');
   assert.ok(relogin.token);
-  const restored = await post('/api/v1/profile/password', {
-    currentPassword: 'newpassword', newPassword: 'password', confirmPassword: 'password',
-  }, { token: relogin.token });
+  const restored = await post(
+    '/api/v1/profile/password',
+    {
+      currentPassword: 'newpassword',
+      newPassword: 'password',
+      confirmPassword: 'password',
+    },
+    { token: relogin.token },
+  );
   assert.strictEqual(restored.body.ok, true, '还原密码失败，后续用例会受影响');
   tokens.user = await login('user');
 });
@@ -1732,10 +2191,18 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
   const asUser = await put('/api/v1/settings', { appTitleZh: 'x' }, { token: tokens.user.token });
   assert.strictEqual(asUser.status, 403);
 
-  const saved = await put('/api/v1/settings', {
-    appTitleZh: '展会助手', appTitleEn: 'ExpoHub', canRevise: true,
-    themeIndex: 2, categories: ['智能家居', '新材料'], exhibitionTitle: 80,
-  }, { token: tokens.admin.token });
+  const saved = await put(
+    '/api/v1/settings',
+    {
+      appTitleZh: '展会助手',
+      appTitleEn: 'ExpoHub',
+      canRevise: true,
+      themeIndex: 2,
+      categories: ['智能家居', '新材料'],
+      exhibitionTitle: 80,
+    },
+    { token: tokens.admin.token },
+  );
   assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
   assert.strictEqual(saved.body.settings.brand.zh, '展会助手');
   assert.strictEqual(saved.body.settings.theme.index, 2);
@@ -1754,21 +2221,33 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
   assert.strictEqual(clamped.body.settings.brand.zh, '展会助手');
 
   // 还原
-  await put('/api/v1/settings', {
-    appTitleZh: '发现展会', canRevise: false, themeIndex: 0, exhibitionTitle: 60,
-  }, { token: tokens.admin.token });
+  await put(
+    '/api/v1/settings',
+    {
+      appTitleZh: '发现展会',
+      canRevise: false,
+      themeIndex: 0,
+      exhibitionTitle: 60,
+    },
+    { token: tokens.admin.token },
+  );
 });
 
 test('视频大小上限可配置，bootstrap 与 settings 读回同一个值，越界被收敛', async () => {
   // 老库（app_settings 里还没有 videoSizeMb）也要能拿到默认值，而不是 undefined
   const bootstrapBefore = await get('/api/v1/bootstrap');
-  assert.ok(Number(bootstrapBefore.body.media.videoSizeMb) > 0,
-    `bootstrap 的 media 必须带 videoSizeMb：${JSON.stringify(bootstrapBefore.body.media)}`);
+  assert.ok(
+    Number(bootstrapBefore.body.media.videoSizeMb) > 0,
+    `bootstrap 的 media 必须带 videoSizeMb：${JSON.stringify(bootstrapBefore.body.media)}`,
+  );
   const settingsBefore = await get('/api/v1/settings');
   const defaultSize = Number(settingsBefore.body.media.videoSizeMb);
   const imageSizeBefore = Number(settingsBefore.body.media.imageSizeMb);
-  assert.strictEqual(Number(bootstrapBefore.body.media.videoSizeMb), defaultSize,
-    'bootstrap 与 settings 的 media 来自同一份 payload，值必须一致');
+  assert.strictEqual(
+    Number(bootstrapBefore.body.media.videoSizeMb),
+    defaultSize,
+    'bootstrap 与 settings 的 media 来自同一份 payload，值必须一致',
+  );
 
   try {
     const saved = await put('/api/v1/settings', { videoSizeMb: 120 }, { token: tokens.admin.token });
@@ -1794,18 +2273,25 @@ test('视频大小上限可配置，bootstrap 与 settings 读回同一个值，
 
 test('老库的 app_settings.media 缺 videoSizeMb 时用默认值兜底', async () => {
   // 直接写一条「加这个键之前」的 media：只有三个键，没有任何 videoSizeMb
-  await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2',
-    [JSON.stringify({ imageCount: 6, imageSizeMb: 4, videoCount: 1 }), 'media']);
+  await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [
+    JSON.stringify({ imageCount: 6, imageSizeMb: 4, videoCount: 1 }),
+    'media',
+  ]);
   try {
     const bootstrap = await get('/api/v1/bootstrap');
-    assert.strictEqual(bootstrap.body.media.videoSizeMb, DEFAULT_SETTINGS.media.videoSizeMb,
-      `缺键时应当补默认值，而不是 undefined：${JSON.stringify(bootstrap.body.media)}`);
+    assert.strictEqual(
+      bootstrap.body.media.videoSizeMb,
+      DEFAULT_SETTINGS.media.videoSizeMb,
+      `缺键时应当补默认值，而不是 undefined：${JSON.stringify(bootstrap.body.media)}`,
+    );
     assert.strictEqual(bootstrap.body.media.imageCount, 6, '库里已有的键照旧生效');
     const settings = await get('/api/v1/settings');
     assert.strictEqual(settings.body.media.videoSizeMb, DEFAULT_SETTINGS.media.videoSizeMb);
   } finally {
-    await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2',
-      [JSON.stringify(DEFAULT_SETTINGS.media), 'media']);
+    await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [
+      JSON.stringify(DEFAULT_SETTINGS.media),
+      'media',
+    ]);
   }
 });
 
@@ -1816,8 +2302,7 @@ test('外观模式只接受三个取值，且是个人偏好', async () => {
   assert.strictEqual(anonymous.status, 401, '未登录不能修改外观模式');
   assert.ok(anonymous.body.error, '401 要带可展示的原因');
   const defaultAfter = await get('/api/v1/settings');
-  assert.strictEqual(defaultAfter.body.ui.mode, defaultBefore.body.ui.mode,
-    '匿名请求不能改掉服务器级的默认外观');
+  assert.strictEqual(defaultAfter.body.ui.mode, defaultBefore.body.ui.mode, '匿名请求不能改掉服务器级的默认外观');
 
   const dark = await put('/api/v1/settings/ui-mode', { mode: 'dark' }, { token: tokens.admin.token });
   assert.strictEqual(dark.body.mode, 'dark');
@@ -1879,7 +2364,7 @@ function frontendEndpoints() {
       }
       continue;
     }
-    if (char === '\'' || char === '"' || char === '`') {
+    if (char === "'" || char === '"' || char === '`') {
       quote = char;
       continue;
     }
@@ -1900,9 +2385,9 @@ function frontendEndpoints() {
 
 /** 把 `/exhibitions/:id/status` 这样的声明转成匹配用的正则。 */
 function routePattern(full) {
-  const segments = full.split('/').map((segment) => (segment.startsWith(':')
-    ? '[^/]+'
-    : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  const segments = full
+    .split('/')
+    .map((segment) => (segment.startsWith(':') ? '[^/]+' : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   return new RegExp(`^${segments.join('/')}$`);
 }
 
@@ -1933,8 +2418,11 @@ function backendRoutes() {
 test('前端每个数据动作都对应后端已注册的路由', () => {
   const endpoints = frontendEndpoints();
   const actions = Object.keys(endpoints);
-  assert.strictEqual(actions.length, 50,
-    `前端数据动作数量变了（期望 50）：${actions.length} 个 —— ${actions.join(', ')}`);
+  assert.strictEqual(
+    actions.length,
+    50,
+    `前端数据动作数量变了（期望 50）：${actions.length} 个 —— ${actions.join(', ')}`,
+  );
 
   const declared = backendRoutes();
   // 用「带 id 的完整参数」和「空参数」各算一次：像 exhibitions.save 这种
@@ -1942,8 +2430,16 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
   const payloads = [
     {},
     {
-      id: 'sample-id', userId: 'sample-id', exhibitionId: 'sample-id', nickname: 'n',
-      query: 'q', year: 2026, month: 6, day: 1, status: '待审核', code: 'c',
+      id: 'sample-id',
+      userId: 'sample-id',
+      exhibitionId: 'sample-id',
+      nickname: 'n',
+      query: 'q',
+      year: 2026,
+      month: 6,
+      day: 1,
+      status: '待审核',
+      code: 'c',
     },
   ];
 
@@ -1954,16 +2450,14 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
       assert.ok(request && request.method && request.path, `${action} 的映射没返回 method/path`);
       // 前端映射里的 path 是 BASE_URL（…/api/v1）之后的相对路径。
       const full = `/api/v1${request.path}`;
-      const hit = declared.some((route) => route.method === request.method
-        && route.pattern.test(full));
+      const hit = declared.some((route) => route.method === request.method && route.pattern.test(full));
       if (!hit) {
         missing.push(`${action} → ${request.method} ${full}`);
       }
     }
   }
 
-  assert.deepStrictEqual(missing, [],
-    `以下前端动作在后端没有对应路由：\n  ${missing.join('\n  ')}`);
+  assert.deepStrictEqual(missing, [], `以下前端动作在后端没有对应路由：\n  ${missing.join('\n  ')}`);
 });
 
 test('后端没有前端用不到的孤立路由', () => {
@@ -1972,8 +2466,16 @@ test('后端没有前端用不到的孤立路由', () => {
   const payloads = [
     {},
     {
-      id: 'sample-id', userId: 'sample-id', exhibitionId: 'sample-id', nickname: 'n',
-      query: 'q', year: 2026, month: 6, day: 1, status: '待审核', code: 'c',
+      id: 'sample-id',
+      userId: 'sample-id',
+      exhibitionId: 'sample-id',
+      nickname: 'n',
+      query: 'q',
+      year: 2026,
+      month: 6,
+      day: 1,
+      status: '待审核',
+      code: 'c',
     },
   ];
   const used = new Set();
@@ -1989,15 +2491,11 @@ test('后端没有前端用不到的孤立路由', () => {
     }
   }
   // 这几个是刻意保留、不走前端动作表的：刷新令牌与「撤销全部会话」由 api.js 直接调用。
-  const intentional = new Set([
-    'POST /api/v1/auth/refresh',
-    'POST /api/v1/auth/logout-all',
-  ]);
+  const intentional = new Set(['POST /api/v1/auth/refresh', 'POST /api/v1/auth/logout-all']);
   const orphans = declared
     .map((route) => `${route.method} ${route.path}`)
     .filter((key) => !used.has(key) && !intentional.has(key));
-  assert.deepStrictEqual(orphans, [],
-    `以下后端路由没有任何前端动作用到，属于冗余：\n  ${orphans.join('\n  ')}`);
+  assert.deepStrictEqual(orphans, [], `以下后端路由没有任何前端动作用到，属于冗余：\n  ${orphans.join('\n  ')}`);
 });
 
 // ── 状态报告与状态页 ─────────────────────────────────────────────
@@ -2008,16 +2506,21 @@ test('后端没有前端用不到的孤立路由', () => {
  */
 function requestRaw(method, path) {
   return new Promise((resolve, reject) => {
-    const req = http.request({
-      host: '127.0.0.1',
-      port: server.address().port,
-      path: encodeURI(path),
-      method,
-    }, (res) => {
-      let text = '';
-      res.on('data', (chunk) => { text += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: text }));
-    });
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: server.address().port,
+        path: encodeURI(path),
+        method,
+      },
+      (res) => {
+        let text = '';
+        res.on('data', (chunk) => {
+          text += chunk;
+        });
+        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: text }));
+      },
+    );
     req.on('error', reject);
     req.end();
   });
@@ -2031,7 +2534,10 @@ test('状态接口给出一份完整的健康报告', async () => {
   assert.strictEqual(report.ok, true, 'ok 只在服务活着且数据库答得上时为 true');
   assert.strictEqual(report.database.connected, true);
   assert.ok(Number.isFinite(report.database.latencyMs) && report.database.latencyMs >= 0, '必须实测数据库延迟');
-  assert.ok(String(report.database.version).includes('PostgreSQL'), `版本串不像 PostgreSQL：${report.database.version}`);
+  assert.ok(
+    String(report.database.version).includes('PostgreSQL'),
+    `版本串不像 PostgreSQL：${report.database.version}`,
+  );
   assert.ok(report.database.database, '缺少库名');
   assert.ok(report.database.host, '缺少地址');
   assert.strictEqual(typeof report.database.pool.total, 'number');
@@ -2073,8 +2579,11 @@ test('状态接口给出一份完整的健康报告', async () => {
     assert.ok(['ok', 'fail'].includes(check.status), `自检项状态只能是 ok/fail：${check.status}`);
     assert.ok(Number.isFinite(check.ms), `${check.name} 缺少耗时`);
   }
-  assert.deepStrictEqual(report.checks.filter((check) => check.status === 'fail').map((check) => check.name), [],
-    '测试环境里不该有失败的自检项');
+  assert.deepStrictEqual(
+    report.checks.filter((check) => check.status === 'fail').map((check) => check.name),
+    [],
+    '测试环境里不该有失败的自检项',
+  );
 
   const endpoints = report.endpoints.map((item) => `${item.method} ${item.path}`);
   assert.ok(endpoints.includes('GET /api/v1/bootstrap'), '接口清单缺少 GET /api/v1/bootstrap');
@@ -2086,7 +2595,9 @@ test('状态报告的接口清单与后端注册路由、前端动作覆盖一�
   assert.ok(body.endpoints.length > 0, '接口清单不能为空');
 
   // 1) 与后端实际注册的路由逐条对齐（清单与 backendRoutes() 同源，漂移就会失败）
-  const declared = backendRoutes().map((route) => `${route.method} ${route.path}`).sort();
+  const declared = backendRoutes()
+    .map((route) => `${route.method} ${route.path}`)
+    .sort();
   const reported = body.endpoints.map((item) => `${item.method} ${item.path}`).sort();
   assert.deepStrictEqual(reported, declared, '接口清单与后端注册的路由对不上');
 
@@ -2094,8 +2605,10 @@ test('状态报告的接口清单与后端注册路由、前端动作覆盖一�
   const documentedPlain = new Set(['/ping', '/health', '/status']);
   for (const item of body.endpoints) {
     assert.ok(item.method && item.path, '接口清单每一项都要有 method 与 path');
-    assert.ok(item.path.startsWith('/api/v1') || documentedPlain.has(item.path),
-      `接口清单里出现未登记的路径：${item.path}`);
+    assert.ok(
+      item.path.startsWith('/api/v1') || documentedPlain.has(item.path),
+      `接口清单里出现未登记的路径：${item.path}`,
+    );
   }
 
   // 3) 前端每个数据动作都能在清单里找到落点（与契约测试同一套映射）
@@ -2107,8 +2620,16 @@ test('状态报告的接口清单与后端注册路由、前端动作覆盖一�
   const payloads = [
     {},
     {
-      id: 'sample-id', userId: 'sample-id', exhibitionId: 'sample-id', nickname: 'n',
-      query: 'q', year: 2026, month: 6, day: 1, status: '待审核', code: 'c',
+      id: 'sample-id',
+      userId: 'sample-id',
+      exhibitionId: 'sample-id',
+      nickname: 'n',
+      query: 'q',
+      year: 2026,
+      month: 6,
+      day: 1,
+      status: '待审核',
+      code: 'c',
     },
   ];
   const missing = [];
@@ -2127,8 +2648,10 @@ test('状态报告的接口清单与后端注册路由、前端动作覆盖一�
 test('状态页返回可直接打开的中文 HTML', async () => {
   const response = await requestRaw('GET', '/status');
   assert.strictEqual(response.status, 200, '状态页必须打得开');
-  assert.ok(String(response.headers['content-type']).includes('text/html'),
-    `content-type 应当是 HTML：${response.headers['content-type']}`);
+  assert.ok(
+    String(response.headers['content-type']).includes('text/html'),
+    `content-type 应当是 HTML：${response.headers['content-type']}`,
+  );
   const html = response.body;
 
   assert.ok(html.includes('calmobile-server'), '页面要显示服务名');

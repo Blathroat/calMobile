@@ -45,7 +45,10 @@ test('状态页：生产默认关闭，其它环境默认打开，显式配置�
   assert.equal(resolveRuntime(argv(), { NODE_ENV: 'development' }).statusPageEnabled, true);
   assert.equal(resolveRuntime(argv(), { NODE_ENV: 'test' }).statusPageEnabled, true);
   assert.equal(resolveRuntime(argv('--production'), { ENABLE_STATUS_PAGE: 'true' }).statusPageEnabled, true);
-  assert.equal(resolveRuntime(argv(), { NODE_ENV: 'development', ENABLE_STATUS_PAGE: 'false' }).statusPageEnabled, false);
+  assert.equal(
+    resolveRuntime(argv(), { NODE_ENV: 'development', ENABLE_STATUS_PAGE: 'false' }).statusPageEnabled,
+    false,
+  );
 });
 
 test('trust proxy 默认关闭，只有显式声明才打开', () => {

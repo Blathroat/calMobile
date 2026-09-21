@@ -55,14 +55,16 @@ test('验证码发不出去的配置会被拒绝启动', () => {
 });
 
 test('可疑但可能有意为之的只给警告，不拦启动', () => {
-  const { fatal, warnings } = productionProblems(readyEnv({
-    MAIL_SMTP_HOST: '127.0.0.1',
-    MAIL_SMTP_PORT: '1025',
-    CORS_ORIGIN: '*',
-    TRUST_PROXY: '',
-    LOG_LEVEL: 'debug',
-    ENABLE_STATUS_PAGE: 'true',
-  }));
+  const { fatal, warnings } = productionProblems(
+    readyEnv({
+      MAIL_SMTP_HOST: '127.0.0.1',
+      MAIL_SMTP_PORT: '1025',
+      CORS_ORIGIN: '*',
+      TRUST_PROXY: '',
+      LOG_LEVEL: 'debug',
+      ENABLE_STATUS_PAGE: 'true',
+    }),
+  );
   assert.deepEqual(fatal, [], '这些都不该拦启动');
   const text = warnings.join('；');
   assert.match(text, /Mailpit/);

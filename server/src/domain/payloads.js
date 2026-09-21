@@ -59,8 +59,7 @@ function fieldPayload(row) {
  */
 function registrationPayload(row) {
   const statusCode = row.status;
-  const codeAllowed = row.exhibition_qr_enabled === true
-        && (statusCode === 'approved' || statusCode === 'attended');
+  const codeAllowed = row.exhibition_qr_enabled === true && (statusCode === 'approved' || statusCode === 'attended');
   return {
     id: row.id,
     exhibitionId: row.exhibition_id,

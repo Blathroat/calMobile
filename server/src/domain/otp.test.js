@@ -8,9 +8,18 @@
 const assert = require('node:assert/strict');
 
 const {
-  CODE_TTL_MIN, CODE_LENGTH, MAX_ATTEMPTS, RESEND_COOLDOWN_SEC,
-  SEND_PER_HOUR, SEND_PER_DAY, IP_SEND_PER_HOUR,
-  normalizeEmail, maskEmail, hashCode, sameHash, generateCode,
+  CODE_TTL_MIN,
+  CODE_LENGTH,
+  MAX_ATTEMPTS,
+  RESEND_COOLDOWN_SEC,
+  SEND_PER_HOUR,
+  SEND_PER_DAY,
+  IP_SEND_PER_HOUR,
+  normalizeEmail,
+  maskEmail,
+  hashCode,
+  sameHash,
+  generateCode,
 } = require('./otp');
 
 test('验证码是 6 位数字，含前导零', () => {

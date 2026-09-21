@@ -65,7 +65,9 @@ const IP_SEND_PER_HOUR = 20;
 
 /** 邮箱一律小写比对：大小写不同不该被当成两个邮箱。 */
 function normalizeEmail(email) {
-  return String(email === undefined || email === null ? '' : email).trim().toLowerCase();
+  return String(email === undefined || email === null ? '' : email)
+    .trim()
+    .toLowerCase();
 }
 
 /** 码的哈希：把行 id 当盐，两个用途下同样的码也不会撞哈希。 */
@@ -119,13 +121,16 @@ function assertPurpose(purpose) {
  * 一分钟内的重复请求给 429（与项目里其它限流一致，前端按 4xx 提示原因）。
  */
 async function assertSendAllowed({ purpose, email, ip }) {
-  const counted = await query(`
+  const counted = await query(
+    `
         SELECT count(*) FILTER (WHERE created_at > now() - interval '1 minute') AS last_minute,
                count(*) FILTER (WHERE created_at > now() - interval '1 hour')   AS last_hour,
                count(*) FILTER (WHERE created_at > now() - interval '1 day')    AS last_day
           FROM email_codes
          WHERE purpose = $1 AND lower(email) = $2
-    `, [purpose, email]);
+    `,
+    [purpose, email],
+  );
   const row = counted.rows[0];
   if (Number(row.last_minute) > 0) {
     throw new ApiError(429, `验证码已发送，请 ${RESEND_COOLDOWN_SEC} 秒后再试`);
@@ -137,10 +142,13 @@ async function assertSendAllowed({ purpose, email, ip }) {
     throw new ApiError(429, '今天获取验证码的次数已达上限，请明天再试');
   }
   if (ip) {
-    const byIp = await query(`
+    const byIp = await query(
+      `
             SELECT count(*)::int AS total FROM email_codes
              WHERE ip = $1 AND created_at > now() - interval '1 hour'
-        `, [ip]);
+        `,
+      [ip],
+    );
     if (Number(byIp.rows[0].total) >= IP_SEND_PER_HOUR) {
       throw new ApiError(429, '当前网络获取验证码过于频繁，请稍后再试');
     }
@@ -160,13 +168,20 @@ function purgeStaleCodes() {
 /** 发信留痕；失败只记日志 —— 留痕本身不该把发码接口带崩。 */
 async function recordMailLog({ to, purpose, result }) {
   try {
-    await query(`
+    await query(
+      `
             INSERT INTO mail_log (id, to_email, purpose, transport, status, error)
             VALUES ($1, $2, $3, $4, $5, $6)
-        `, [
-      crypto.randomUUID(), to, purpose, result.transport || '',
-      result.ok ? 'sent' : 'failed', result.ok ? '' : String(result.error || ''),
-    ]);
+        `,
+      [
+        crypto.randomUUID(),
+        to,
+        purpose,
+        result.transport || '',
+        result.ok ? 'sent' : 'failed',
+        result.ok ? '' : String(result.error || ''),
+      ],
+    );
   } catch (error) {
     console.warn('写发信留痕失败：', error.message);
   }
@@ -178,11 +193,12 @@ async function recordMailLog({ to, purpose, result }) {
  * `brand` 由调用方先读好再传进来：一是品牌名来自服务器设置，二是这样 `send()` 在
  * **同一个 tick** 里就被调用（`memory` 通道的收件箱当场就有邮件，契约用例不必轮询）。
  */
-function deliver({
-  to, purpose, code, brand,
-}) {
+function deliver({ to, purpose, code, brand }) {
   const mail = verificationMail({
-    purpose, code, expiresInMin: CODE_TTL_MIN, brand,
+    purpose,
+    code,
+    expiresInMin: CODE_TTL_MIN,
+    brand,
   });
   send({
     to,
@@ -211,9 +227,7 @@ function deliver({
  * @returns {Promise<{email: string, purpose: string, expiresInSec: number, resendAfterSec: number}>}
  */
 async function issueCode(options = {}) {
-  const {
-    purpose, userId = null, payload = null, ip = '', silent = false,
-  } = options;
+  const { purpose, userId = null, payload = null, ip = '', silent = false } = options;
   assertPurpose(purpose);
   const email = normalizeEmail(options.email);
   if (!email) {
@@ -226,17 +240,29 @@ async function issueCode(options = {}) {
 
   const id = `code-${crypto.randomUUID()}`;
   const code = generateCode();
-  await query(`
+  await query(
+    `
         INSERT INTO email_codes (id, purpose, email, user_id, code_hash, payload, expires_at, ip)
         VALUES ($1, $2, $3, $4, $5, $6::jsonb, now() + ($7 || ' minutes')::interval, $8)
-    `, [
-    id, purpose, email, userId, hashCode(code, id),
-    payload ? JSON.stringify(payload) : null, String(CODE_TTL_MIN), ip,
-  ]);
+    `,
+    [
+      id,
+      purpose,
+      email,
+      userId,
+      hashCode(code, id),
+      payload ? JSON.stringify(payload) : null,
+      String(CODE_TTL_MIN),
+      ip,
+    ],
+  );
   purgeStaleCodes();
   if (!silent) {
     deliver({
-      to: email, purpose, code, brand,
+      to: email,
+      purpose,
+      code,
+      brand,
     });
   }
 
@@ -265,13 +291,16 @@ async function consumeCode(options = {}) {
     throw new CodeRejected('请填写邮箱与验证码');
   }
 
-  const result = await query(`
+  const result = await query(
+    `
         SELECT id, user_id, code_hash, payload, attempts, expires_at
           FROM email_codes
          WHERE purpose = $1 AND lower(email) = $2 AND consumed_at IS NULL
          ORDER BY created_at DESC
          LIMIT 1
-    `, [purpose, email]);
+    `,
+    [purpose, email],
+  );
   const row = result.rows[0];
   if (!row) {
     throw new CodeRejected('验证码不存在或已被使用，请重新获取');
@@ -288,19 +317,21 @@ async function consumeCode(options = {}) {
     // `$2` 既写进 `attempts`（integer）又参与比较，必须显式转型：
     // 否则 pg 会报 `inconsistent types deduced for parameter $2`（text versus integer）。
     const attempts = Number(row.attempts) + 1;
-    await query(`
+    await query(
+      `
             UPDATE email_codes
                SET attempts = $2::int,
                    consumed_at = CASE WHEN $2::int >= $3::int THEN now() ELSE consumed_at END
              WHERE id = $1
-        `, [row.id, attempts, MAX_ATTEMPTS]);
+        `,
+      [row.id, attempts, MAX_ATTEMPTS],
+    );
     throw new CodeRejected('验证码不正确');
   }
 
-  const used = await query(
-    'UPDATE email_codes SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL',
-    [row.id],
-  );
+  const used = await query('UPDATE email_codes SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL', [
+    row.id,
+  ]);
   if (used.rowCount !== 1) {
     // 并发：同一枚码被两个请求同时提交，只有一个能消费到。
     throw new CodeRejected('验证码已被使用，请重新获取');

@@ -83,10 +83,11 @@ function hotp(secretBuffer, counter, digits = DEFAULT_DIGITS) {
   message.writeUInt32BE(counter >>> 0, 4);
   const digest = crypto.createHmac('sha1', secretBuffer).update(message).digest();
   const offset = digest[digest.length - 1] & 0x0f;
-  const binary = ((digest[offset] & 0x7f) << 24)
-    | ((digest[offset + 1] & 0xff) << 16)
-    | ((digest[offset + 2] & 0xff) << 8)
-    | (digest[offset + 3] & 0xff);
+  const binary =
+    ((digest[offset] & 0x7f) << 24) |
+    ((digest[offset + 1] & 0xff) << 16) |
+    ((digest[offset + 2] & 0xff) << 8) |
+    (digest[offset + 3] & 0xff);
   return String(binary % 10 ** digits).padStart(digits, '0');
 }
 
@@ -116,9 +117,7 @@ function codeFor(secret, options = {}) {
  * 不放宽会让「刚同步过手机时间」的用户莫名其妙进不去。
  */
 function verifyCode(secret, code, options = {}) {
-  const {
-    at = Date.now(), step = DEFAULT_STEP_SEC, digits = DEFAULT_DIGITS, window = DEFAULT_WINDOW,
-  } = options;
+  const { at = Date.now(), step = DEFAULT_STEP_SEC, digits = DEFAULT_DIGITS, window = DEFAULT_WINDOW } = options;
   const candidate = String(code === undefined || code === null ? '' : code).replace(/\s/g, '');
   if (!new RegExp(`^\\d{${digits}}$`).test(candidate)) {
     return false;
@@ -209,7 +208,9 @@ function generateBackupCodes(count = BACKUP_CODE_COUNT) {
 
 /** 归一化：大小写与横线都不影响匹配（用户抄错一个横线不该算错）。 */
 function normalizeBackupCode(code) {
-  return String(code === undefined || code === null ? '' : code).toUpperCase().replace(/[\s-]/g, '');
+  return String(code === undefined || code === null ? '' : code)
+    .toUpperCase()
+    .replace(/[\s-]/g, '');
 }
 
 /**
@@ -220,7 +221,9 @@ function normalizeBackupCode(code) {
  * 6 位验证码是 6 个字符，长度对不上，所以不会误判。
  */
 function isBackupCodeShape(code) {
-  const text = String(code === undefined || code === null ? '' : code).trim().toUpperCase();
+  const text = String(code === undefined || code === null ? '' : code)
+    .trim()
+    .toUpperCase();
   if (BACKUP_CODE_PATTERN.test(text)) {
     return true;
   }
@@ -234,7 +237,10 @@ function isBackupCodeShape(code) {
  * 不是人选的口令，离线爆破的成本足够高，而这里每次登录都要算一次，慢哈希不划算。
  */
 function hashBackupCode(code) {
-  return crypto.createHash('sha256').update(`calmobile-backup:${normalizeBackupCode(code)}`).digest('hex');
+  return crypto
+    .createHash('sha256')
+    .update(`calmobile-backup:${normalizeBackupCode(code)}`)
+    .digest('hex');
 }
 
 module.exports = {

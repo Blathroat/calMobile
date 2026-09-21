@@ -84,10 +84,7 @@ function withTimeout(promise, ms) {
   const timeout = new Promise((resolve, reject) => {
     timer = setTimeout(() => reject(new Error(`发信超时（${ms} ms）`)), ms);
   });
-  return Promise.race([
-    promise.finally(() => clearTimeout(timer)),
-    timeout,
-  ]);
+  return Promise.race([promise.finally(() => clearTimeout(timer)), timeout]);
 }
 
 /** 延迟创建（并复用）SMTP 连接池；配置变了就重建。 */
@@ -128,15 +125,17 @@ function closeTransporter() {
 /** console 通道的排版：本地不开容器也能把验证码抄下来。 */
 function logToConsole(built, purpose) {
   const line = '─'.repeat(56);
-  console.log([
-    line,
-    `邮件（console 通道，未真正发送${purpose ? `；用途 ${purpose}` : ''}）`,
-    `收件人：${built.to}`,
-    `主　题：${built.subject}`,
-    line,
-    built.text,
-    line,
-  ].join('\n'));
+  console.log(
+    [
+      line,
+      `邮件（console 通道，未真正发送${purpose ? `；用途 ${purpose}` : ''}）`,
+      `收件人：${built.to}`,
+      `主　题：${built.subject}`,
+      line,
+      built.text,
+      line,
+    ].join('\n'),
+  );
 }
 
 /**

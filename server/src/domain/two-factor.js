@@ -23,13 +23,16 @@ const totp = require('./totp');
  * `totpBound` 只表示「绑过验证器」，不代表开关打开；开关始终是 `two_factor_enabled`。
  */
 async function secondFactorState(userId) {
-  const result = await query(`
+  const result = await query(
+    `
         SELECT u.email, u.email_verified, u.two_factor_enabled, u.totp_secret,
                (SELECT count(*)::int FROM backup_codes c
                  WHERE c.user_id = u.id AND c.used_at IS NULL) AS backup_left
           FROM users u
          WHERE u.id = $1
-    `, [userId]);
+    `,
+    [userId],
+  );
   const row = result.rows[0];
   if (!row) {
     return null;
@@ -56,17 +59,16 @@ function openSecret(stored) {
 /** 消费一枚备用码：命中即原子置为已用，并发提交两次只有一个能过。 */
 async function consumeBackupCode(userId, code) {
   const hash = totp.hashBackupCode(code);
-  const found = await query(
-    'SELECT id FROM backup_codes WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL',
-    [userId, hash],
-  );
+  const found = await query('SELECT id FROM backup_codes WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL', [
+    userId,
+    hash,
+  ]);
   if (found.rows.length === 0) {
     return false;
   }
-  const used = await query(
-    'UPDATE backup_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL',
-    [found.rows[0].id],
-  );
+  const used = await query('UPDATE backup_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL', [
+    found.rows[0].id,
+  ]);
   return used.rowCount === 1;
 }
 
@@ -74,16 +76,22 @@ async function consumeBackupCode(userId, code) {
 async function regenerateBackupCodes(userId, count = totp.BACKUP_CODE_COUNT) {
   const codes = totp.generateBackupCodes(count);
   await query('DELETE FROM backup_codes WHERE user_id = $1', [userId]);
-  await Promise.all(codes.map((code) => query(
-    'INSERT INTO backup_codes (id, user_id, code_hash) VALUES ($1, $2, $3)',
-    [crypto.randomUUID(), userId, totp.hashBackupCode(code)],
-  )));
+  await Promise.all(
+    codes.map((code) =>
+      query('INSERT INTO backup_codes (id, user_id, code_hash) VALUES ($1, $2, $3)', [
+        crypto.randomUUID(),
+        userId,
+        totp.hashBackupCode(code),
+      ]),
+    ),
+  );
   return codes;
 }
 
 /** 清掉验证器绑定与备用码（关闭两步验证、或重新绑定时用）。 */
 async function clearSecondFactors(userId) {
-  await query(`
+  await query(
+    `
         UPDATE users
            SET two_factor_enabled = false,
                totp_secret = '',
@@ -91,7 +99,9 @@ async function clearSecondFactors(userId) {
                totp_confirmed_at = NULL,
                updated_at = now()
          WHERE id = $1
-    `, [userId]);
+    `,
+    [userId],
+  );
   await query('DELETE FROM backup_codes WHERE user_id = $1', [userId]);
 }
 
@@ -110,7 +120,7 @@ async function verifySecondFactor(user, code) {
 
   // 备用码的形状与 6 位码一眼可分：分开走分支，免得拿备用码去消耗邮箱验证码的尝试次数
   if (totp.isBackupCodeShape(value)) {
-    if (!await consumeBackupCode(user.id, value)) {
+    if (!(await consumeBackupCode(user.id, value))) {
       throw new CodeRejected('备用码不正确或已被使用');
     }
     return { method: 'backup' };
@@ -129,7 +139,9 @@ async function verifySecondFactor(user, code) {
 
   try {
     const consumed = await consumeCode({
-      purpose: 'login', email: user.email, code: value,
+      purpose: 'login',
+      email: user.email,
+      code: value,
     });
     if (consumed.userId && consumed.userId !== user.id) {
       throw new CodeRejected('验证码不正确');
@@ -137,9 +149,7 @@ async function verifySecondFactor(user, code) {
     return { method: 'email' };
   } catch (error) {
     if (isCodeRejected(error)) {
-      throw new CodeRejected(stored
-        ? '验证码不正确（验证器与邮箱验证码都对不上）'
-        : '验证码不正确');
+      throw new CodeRejected(stored ? '验证码不正确（验证器与邮箱验证码都对不上）' : '验证码不正确');
     }
     throw error;
   }
@@ -173,7 +183,8 @@ async function confirmTotpSetup(userId, code) {
   if (!totp.verifyCode(openSecret(pending), value)) {
     throw new CodeRejected('验证码不正确，请确认手机时间准确、且扫的是刚生成的密钥');
   }
-  await query(`
+  await query(
+    `
         UPDATE users
            SET totp_secret = totp_pending_secret,
                totp_pending_secret = '',
@@ -181,7 +192,9 @@ async function confirmTotpSetup(userId, code) {
                two_factor_enabled = true,
                updated_at = now()
          WHERE id = $1
-    `, [userId]);
+    `,
+    [userId],
+  );
   return { backupCodes: await regenerateBackupCodes(userId) };
 }
 

@@ -16,9 +16,18 @@ const { toUserStatus } = require('./labels');
 
 /** 表单字符数上限的取值范围：前端 `core/validate.js` 的 `limit()` 按同一批键取值。 */
 const LIMIT_BOUNDS = {
-  exhibitionTitle: [4, 120], exhibitionVenue: [4, 120], category: [2, 60], fieldTitle: [2, 60],
-  usernameMin: [2, 20], usernameMax: [4, 40], passwordMin: [4, 24], passwordMax: [8, 64],
-  nickname: [2, 40], bio: [20, 1000], region: [4, 120], answer: [20, 1000],
+  exhibitionTitle: [4, 120],
+  exhibitionVenue: [4, 120],
+  category: [2, 60],
+  fieldTitle: [2, 60],
+  usernameMin: [2, 20],
+  usernameMax: [4, 40],
+  passwordMin: [4, 24],
+  passwordMax: [8, 64],
+  nickname: [2, 40],
+  bio: [20, 1000],
+  region: [4, 120],
+  answer: [20, 1000],
 };
 
 /** 成对的上限不能小于下限。 */
@@ -84,17 +93,20 @@ function applyServerPatch(current, patch) {
   if (Object.prototype.hasOwnProperty.call(source, 'themeIndex')) {
     next.theme.index = clampInt(source.themeIndex, next.theme.index, [0, Math.max(0, next.theme.colors.length - 1)]);
   }
-  if (Object.prototype.hasOwnProperty.call(source, 'announcement')
-        || Object.prototype.hasOwnProperty.call(source, 'announcementEnabled')) {
+  if (
+    Object.prototype.hasOwnProperty.call(source, 'announcement') ||
+    Object.prototype.hasOwnProperty.call(source, 'announcementEnabled')
+  ) {
     next.announcement = {
-      enabled: source.announcementEnabled === undefined
-        ? next.announcement.enabled : Boolean(source.announcementEnabled),
-      text: source.announcement === undefined
-        ? next.announcement.text : String(source.announcement).slice(0, 200),
+      enabled:
+        source.announcementEnabled === undefined ? next.announcement.enabled : Boolean(source.announcementEnabled),
+      text: source.announcement === undefined ? next.announcement.text : String(source.announcement).slice(0, 200),
     };
   }
-  if (Object.prototype.hasOwnProperty.call(source, 'appTitleZh')
-        || Object.prototype.hasOwnProperty.call(source, 'appTitleEn')) {
+  if (
+    Object.prototype.hasOwnProperty.call(source, 'appTitleZh') ||
+    Object.prototype.hasOwnProperty.call(source, 'appTitleEn')
+  ) {
     const zh = String(source.appTitleZh === undefined ? next.brand.zh : source.appTitleZh).trim();
     const en = String(source.appTitleEn === undefined ? next.brand.en : source.appTitleEn).trim();
     if (!zh || !en) {
@@ -172,10 +184,13 @@ async function saveServerSettings(current, next) {
     if (JSON.stringify(current[key]) === JSON.stringify(next[key])) {
       continue;
     }
-    await query(`
+    await query(
+      `
             INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, now())
             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-        `, [key, JSON.stringify(next[key])]);
+        `,
+      [key, JSON.stringify(next[key])],
+    );
   }
   return next;
 }
@@ -231,19 +246,22 @@ async function saveNotificationPreferences(userId, patch) {
   }
   const current = await readNotificationPreferences(userId);
   const next = {
-    exhibitionReminder: patch && 'exhibitionReminder' in patch
-      ? Boolean(patch.exhibitionReminder) : current.exhibitionReminder,
-    registrationUpdates: patch && 'registrationUpdates' in patch
-      ? Boolean(patch.registrationUpdates) : current.registrationUpdates,
+    exhibitionReminder:
+      patch && 'exhibitionReminder' in patch ? Boolean(patch.exhibitionReminder) : current.exhibitionReminder,
+    registrationUpdates:
+      patch && 'registrationUpdates' in patch ? Boolean(patch.registrationUpdates) : current.registrationUpdates,
   };
-  await query(`
+  await query(
+    `
         INSERT INTO notification_preferences (user_id, exhibition_reminder, registration_updates, updated_at)
         VALUES ($1, $2, $3, now())
         ON CONFLICT (user_id) DO UPDATE SET
             exhibition_reminder = EXCLUDED.exhibition_reminder,
             registration_updates = EXCLUDED.registration_updates,
             updated_at = now()
-    `, [userId, next.exhibitionReminder, next.registrationUpdates]);
+    `,
+    [userId, next.exhibitionReminder, next.registrationUpdates],
+  );
   return next;
 }
 

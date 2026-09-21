@@ -33,10 +33,7 @@ async function resolveUser(token) {
   } catch {
     return null;
   }
-  const result = await query(
-    `SELECT ${USER_FIELDS} FROM users WHERE id = $1`,
-    [decoded.userId],
-  );
+  const result = await query(`SELECT ${USER_FIELDS} FROM users WHERE id = $1`, [decoded.userId]);
   if (result.rows.length === 0) {
     return null;
   }

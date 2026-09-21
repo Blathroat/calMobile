@@ -19,7 +19,7 @@ const pool = new Pool({
   connectionTimeoutMillis: 2000, // 建连（含握手）超时时间
   // 单条 SQL 的服务端上限：慢查询、锁等待不能长期占着连接（pg 通过启动参数下发）。
   // 注意它管不了「服务端整个卡住」——那种情况由 routes/status.js 的探测超时销毁连接兜底。
-  statement_timeout: 10000
+  statement_timeout: 10000,
 });
 
 // 连接池事件监听
@@ -73,5 +73,5 @@ module.exports = {
   query,
   getClient,
   close,
-  pool
+  pool,
 };

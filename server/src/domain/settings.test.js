@@ -27,10 +27,12 @@ test('videoSizeMb 超出 1..500 时被收敛到边界', () => {
   assert.equal(applyServerPatch(defaults(), { videoSizeMb: 0 }).media.videoSizeMb, 1);
   assert.equal(applyServerPatch(defaults(), { videoSizeMb: -5 }).media.videoSizeMb, 1);
   assert.equal(applyServerPatch(defaults(), { videoSizeMb: 9999 }).media.videoSizeMb, 500);
-  assert.equal(applyServerPatch(defaults(), { videoSizeMb: '30' }).media.videoSizeMb, 30,
-    '表单提交的字符串也要能解析');
-  assert.equal(applyServerPatch(defaults(), { videoSizeMb: 'abc' }).media.videoSizeMb, 50,
-    '解析不出来时保留原值，而不是写成 NaN');
+  assert.equal(applyServerPatch(defaults(), { videoSizeMb: '30' }).media.videoSizeMb, 30, '表单提交的字符串也要能解析');
+  assert.equal(
+    applyServerPatch(defaults(), { videoSizeMb: 'abc' }).media.videoSizeMb,
+    50,
+    '解析不出来时保留原值，而不是写成 NaN',
+  );
 });
 
 test('media 里的其它键不受 videoSizeMb 影响，未提交的段保持原样', () => {

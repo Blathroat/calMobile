@@ -30,9 +30,23 @@ const serviceUnavailable = (message = '数据库暂时不可用，请稍后重�
  * 同时避免把 pg 的错误原文（里面带内网 host:port）当成 500 的 `error` 回给调用方。
  */
 const UNAVAILABLE_CODES = new Set([
-  'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 'ECONNRESET', 'EPIPE',
-  '08000', '08001', '08003', '08004', '08006', '08007', '08P01', // connection_exception
-  '57P01', '57P02', '57P03', // 管理员关库 / 崩溃恢复 / 正在启动
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ECONNRESET',
+  'EPIPE',
+  '08000',
+  '08001',
+  '08003',
+  '08004',
+  '08006',
+  '08007',
+  '08P01', // connection_exception
+  '57P01',
+  '57P02',
+  '57P03', // 管理员关库 / 崩溃恢复 / 正在启动
   '53300', // too_many_connections
   '3D000', // 库不存在
   '28P01', // 密码不对
@@ -47,8 +61,7 @@ function isDatabaseUnavailable(error) {
     return true;
   }
   const message = String(error.message || '');
-  return message.includes('timeout exceeded when trying to connect')
-    || message.includes('Connection terminated');
+  return message.includes('timeout exceeded when trying to connect') || message.includes('Connection terminated');
 }
 
 /** 条件成立时抛出，用于把「校验 + 报错」写成一行。 */

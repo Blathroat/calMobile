@@ -5,16 +5,17 @@
 
 const assert = require('node:assert/strict');
 
-const {
-  verificationMail, PURPOSE_KEYS, PURPOSES, escapeHtml, sanitizeHeader,
-} = require('./mail-templates');
+const { verificationMail, PURPOSE_KEYS, PURPOSES, escapeHtml, sanitizeHeader } = require('./mail-templates');
 
 const BRAND = { zh: '发现展会', en: 'ExpoHub' };
 
 test('五种用途都能生成中英双语邮件，主题带品牌中文名与用途', () => {
   for (const purpose of PURPOSE_KEYS) {
     const mail = verificationMail({
-      purpose, code: '123456', expiresInMin: 10, brand: BRAND,
+      purpose,
+      code: '123456',
+      expiresInMin: 10,
+      brand: BRAND,
     });
     assert.ok(mail.subject.includes('发现展会'), `${purpose} 的主题缺品牌名`);
     assert.ok(mail.subject.includes(PURPOSES[purpose].zh), `${purpose} 的主题缺用途`);
@@ -27,7 +28,10 @@ test('五种用途都能生成中英双语邮件，主题带品牌中文名与�
 
 test('验证码在纯文本与 HTML 里都出现（中英各一处），有效期跟着 TTL 走', () => {
   const mail = verificationMail({
-    purpose: 'register', code: '246810', expiresInMin: 15, brand: BRAND,
+    purpose: 'register',
+    code: '246810',
+    expiresInMin: 15,
+    brand: BRAND,
   });
   // 中文段 + 英文段各一处，所以至少两处；用例只钉「不少于一次」，不绑死排版
   assert.ok(mail.text.split('246810').length - 1 >= 2, '纯文本里中英两段都要有码');
@@ -44,7 +48,9 @@ test('有效期缺省是 10 分钟，非法值同样退回 10', () => {
 
 test('品牌名里的 HTML 被转义，不会注入正文', () => {
   const mail = verificationMail({
-    purpose: 'register', code: '123456', brand: { zh: '<script>alert(1)</script>', en: 'X' },
+    purpose: 'register',
+    code: '123456',
+    brand: { zh: '<script>alert(1)</script>', en: 'X' },
   });
   assert.ok(!mail.html.includes('<script>'), '品牌名不能原样进 HTML');
   assert.ok(mail.html.includes('&lt;script&gt;'));
@@ -89,7 +95,9 @@ test('未知用途退回注册文案，而不是抛错', () => {
 test('正文里不放链接：带链接会拉低送达率，也养成点邮件链接的坏习惯', () => {
   for (const purpose of PURPOSE_KEYS) {
     const mail = verificationMail({
-      purpose, code: '123456', brand: BRAND,
+      purpose,
+      code: '123456',
+      brand: BRAND,
     });
     assert.ok(!/https?:\/\//i.test(mail.text), `${purpose} 的纯文本里不该有链接`);
     assert.ok(!/<a\s/i.test(mail.html), `${purpose} 的 HTML 里不该有 <a>`);

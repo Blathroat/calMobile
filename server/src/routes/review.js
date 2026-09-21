@@ -62,7 +62,9 @@ const REVIEW_FROM = `
 
 /** 报名内容摘要：换行折成空格再截断（`answers` 是各收集项拼成的多行文本）。 */
 function summaryOf(answers) {
-  return String(answers || '').replace(/\n/g, ' ').slice(0, 46);
+  return String(answers || '')
+    .replace(/\n/g, ' ')
+    .slice(0, 46);
 }
 
 /** 报名行 → 审核记录（含核销结果里的报名摘要，两边字段一致）。 */
@@ -133,12 +135,15 @@ router.get('/', authenticate, async (req, res, next) => {
     for (const label of Object.values(labels.REGISTRATION_STATUS)) {
       counts[label] = 0;
     }
-    const grouped = await query(`
+    const grouped = await query(
+      `
             SELECT r.status, count(*)::int AS total
             ${REVIEW_FROM}
             ${scopeSql}
             GROUP BY r.status
-        `, scopeParams);
+        `,
+      scopeParams,
+    );
     for (const row of grouped.rows) {
       counts.total += row.total;
       const label = labels.REGISTRATION_STATUS[row.status];
@@ -154,12 +159,15 @@ router.get('/', authenticate, async (req, res, next) => {
       recordParams.push(statusCode);
       recordsSql = `${scopeSql ? `${scopeSql} AND` : 'WHERE'} r.status = $${recordParams.length}`;
     }
-    const records = await query(`
+    const records = await query(
+      `
             SELECT ${REVIEW_COLUMNS}
             ${REVIEW_FROM}
             ${recordsSql}
             ORDER BY r.created_at DESC, r.id DESC
-        `, recordParams);
+        `,
+      recordParams,
+    );
 
     res.json({
       exhibitionId,
@@ -179,10 +187,7 @@ router.get('/', authenticate, async (req, res, next) => {
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
     const user = requireExhibitor(req);
-    const result = await query(
-      `SELECT ${REVIEW_COLUMNS} ${REVIEW_FROM} WHERE r.id = $1`,
-      [req.params.id],
-    );
+    const result = await query(`SELECT ${REVIEW_COLUMNS} ${REVIEW_FROM} WHERE r.id = $1`, [req.params.id]);
     const row = result.rows[0];
     if (!row || !canManageExhibition(user, { exhibitor_id: row.exhibition_exhibitor_id })) {
       res.json({ found: false, error: '报名记录不存在' });
@@ -208,10 +213,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
 router.put('/:id/status', authenticate, async (req, res, next) => {
   try {
     const user = requireExhibitor(req);
-    const result = await query(
-      `SELECT ${REVIEW_COLUMNS} ${REVIEW_FROM} WHERE r.id = $1`,
-      [req.params.id],
-    );
+    const result = await query(`SELECT ${REVIEW_COLUMNS} ${REVIEW_FROM} WHERE r.id = $1`, [req.params.id]);
     const row = result.rows[0];
     if (row && !canManageExhibition(user, { exhibitor_id: row.exhibition_exhibitor_id })) {
       throw forbidden('只能管理自己举办的展会的报名');
@@ -229,12 +231,14 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
       // 白名单之外的流转直接拒绝，别让「已参加」被改回「已通过」这类操作把核销结果抹掉。
       const allowed = REGISTRATION_TRANSITIONS[row.status] || [];
       if (!allowed.includes(status)) {
-        throw badRequest(`不能把「${labels.REGISTRATION_STATUS[row.status] || row.status}」`
-                    + `的报名改成「${labels.REGISTRATION_STATUS[status]}」`);
+        throw badRequest(
+          `不能把「${labels.REGISTRATION_STATUS[row.status] || row.status}」` +
+            `的报名改成「${labels.REGISTRATION_STATUS[status]}」`,
+        );
       }
       // 展商改动已审核（已通过 / 已拒绝）或重新激活已撤销的报名，要先由管理员开放；
       // 管理员不受这条策略限制（「管理后台查看报名时始终可以切换状态」）。
-      if (user.role !== 'admin' && !await canReviseByExhibitor()) {
+      if (user.role !== 'admin' && !(await canReviseByExhibitor())) {
         if (row.status === 'approved' || row.status === 'rejected') {
           throw forbidden('管理员未开放修改已通过或已拒绝的报名');
         }
@@ -244,10 +248,7 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
       }
 
       try {
-        await query(
-          'UPDATE registrations SET status = $2, updated_at = now() WHERE id = $1',
-          [row.id, status],
-        );
+        await query('UPDATE registrations SET status = $2, updated_at = now() WHERE id = $1', [row.id, status]);
       } catch (error) {
         // 23505：把一条「已撤销」的报名改回有效状态，而这个人在这场展会上已经有别的
         // 未撤销报名（由部分唯一索引兜底）。给业务提示，不要变成 500。

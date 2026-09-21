@@ -126,19 +126,25 @@ function chip(text, tone) {
 /** 自检项列表。 */
 function renderChecks(checks) {
   if (!Array.isArray(checks) || checks.length === 0) {
-    return '<div class="check fail"><span class="state">失败</span>'
-      + '<span class="name">自检项</span><span class="detail">没有拿到任何自检结果</span>'
-      + '<span class="ms">—</span></div>';
+    return (
+      '<div class="check fail"><span class="state">失败</span>' +
+      '<span class="name">自检项</span><span class="detail">没有拿到任何自检结果</span>' +
+      '<span class="ms">—</span></div>'
+    );
   }
-  return checks.map((check) => {
-    const status = check.status === 'ok' ? 'ok' : 'fail';
-    return `<div class="check ${status}">`
-      + `<span class="state">${CHECK_LABELS[status]}</span>`
-      + `<span class="name">${escapeHtml(check.name)}</span>`
-      + `<span class="detail">${escapeHtml(check.detail)}</span>`
-      + `<span class="ms">${escapeHtml(formatMs(check.ms))}</span>`
-      + '</div>';
-  }).join('');
+  return checks
+    .map((check) => {
+      const status = check.status === 'ok' ? 'ok' : 'fail';
+      return (
+        `<div class="check ${status}">` +
+        `<span class="state">${CHECK_LABELS[status]}</span>` +
+        `<span class="name">${escapeHtml(check.name)}</span>` +
+        `<span class="detail">${escapeHtml(check.detail)}</span>` +
+        `<span class="ms">${escapeHtml(formatMs(check.ms))}</span>` +
+        '</div>'
+      );
+    })
+    .join('');
 }
 
 /** 接口清单：按前缀分组，方法用等宽小标签。 */
@@ -147,25 +153,32 @@ function renderEndpoints(endpoints) {
   if (groups.length === 0) {
     return '<p class="muted">没有读到任何路由</p>';
   }
-  return groups.map((group) => {
-    const rows = group.items.map((item) => '<div class="endpoint">'
-      + `<span class="method ${escapeHtml(String(item.method).toLowerCase())}">${escapeHtml(item.method)}</span>`
-      + `<span class="path mono">${escapeHtml(item.path)}</span>`
-      + '</div>').join('');
-    return `<div class="group"><p class="group-title mono">${escapeHtml(group.prefix)}</p>${rows}</div>`;
-  }).join('');
+  return groups
+    .map((group) => {
+      const rows = group.items
+        .map(
+          (item) =>
+            '<div class="endpoint">' +
+            `<span class="method ${escapeHtml(String(item.method).toLowerCase())}">${escapeHtml(item.method)}</span>` +
+            `<span class="path mono">${escapeHtml(item.path)}</span>` +
+            '</div>',
+        )
+        .join('');
+      return `<div class="group"><p class="group-title mono">${escapeHtml(group.prefix)}</p>${rows}</div>`;
+    })
+    .join('');
 }
 
 /** 迁移卡片里的两串标签；未应用的用高亮色。 */
 function renderMigrations(migrations) {
   const applied = migrations.applied || [];
   const pending = migrations.pending || [];
-  const appliedChips = applied.length > 0
-    ? applied.map((item) => chip(`${item.id} · ${formatTime(item.appliedAt, migrations.timeZone)}`)).join('')
-    : '<span class="muted">无</span>';
-  const pendingChips = pending.length > 0
-    ? pending.map((id) => chip(id, 'warn')).join('')
-    : '<span class="muted">无</span>';
+  const appliedChips =
+    applied.length > 0
+      ? applied.map((item) => chip(`${item.id} · ${formatTime(item.appliedAt, migrations.timeZone)}`)).join('')
+      : '<span class="muted">无</span>';
+  const pendingChips =
+    pending.length > 0 ? pending.map((id) => chip(id, 'warn')).join('') : '<span class="muted">无</span>';
   let summary = `已应用 ${applied.length} 项，没有遗漏`;
   if (migrations.error && applied.length === 0) {
     summary = `读不到迁移记录：${migrations.error}`;
@@ -199,8 +212,11 @@ function renderStatusPage(report) {
   // 报告进页面时转义 `<`，避免任何字段里出现 `</script>` 把脚本提前截断。
   const payload = JSON.stringify(source).replace(/</g, '\\u003c');
   const migrationViews = renderMigrations(migrations);
-  const countRows = COUNT_FIELDS.map(([key, label]) => `<div><dt>${label}</dt>`
-    + `<dd class="mono" data-count="${key}">${escapeHtml(formatCount(counts[key]))}</dd></div>`).join('');
+  const countRows = COUNT_FIELDS.map(
+    ([key, label]) =>
+      `<div><dt>${label}</dt>` +
+      `<dd class="mono" data-count="${key}">${escapeHtml(formatCount(counts[key]))}</dd></div>`,
+  ).join('');
   const badgeClass = ok ? 'ok' : 'fail';
 
   return `<!doctype html>

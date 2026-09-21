@@ -9,24 +9,28 @@
 const assert = require('node:assert/strict');
 
 const { resolveMailConfig } = require('../config/mail');
-const {
-  send, outbox, lastMail, resetMailer, closeTransporter, buildMessage, formatFrom,
-} = require('./mailer');
+const { send, outbox, lastMail, resetMailer, closeTransporter, buildMessage, formatFrom } = require('./mailer');
 
 /** 内存收件箱配置：只有测试会用它。 */
-const memoryConfig = (extra = {}) => resolveMailConfig({
-  NODE_ENV: 'test', MAIL_TRANSPORT: 'memory', ...extra,
-});
+const memoryConfig = (extra = {}) =>
+  resolveMailConfig({
+    NODE_ENV: 'test',
+    MAIL_TRANSPORT: 'memory',
+    ...extra,
+  });
 
 beforeEach(() => resetMailer());
 
 test('memory 通道把邮件留在收件箱里，收件人 / 主题 / 正文 / 用途都在', async () => {
-  const result = await send({
-    to: 'user@example.com',
-    subject: '【发现展会】注册验证码',
-    text: '验证码：123456',
-    purpose: 'register',
-  }, { config: memoryConfig() });
+  const result = await send(
+    {
+      to: 'user@example.com',
+      subject: '【发现展会】注册验证码',
+      text: '验证码：123456',
+      purpose: 'register',
+    },
+    { config: memoryConfig() },
+  );
 
   assert.equal(result.ok, true);
   assert.equal(result.transport, 'memory');
@@ -47,12 +51,15 @@ test('console 通道把整封邮件打进日志：本地不开容器也能拿到
   });
   let result;
   try {
-    result = await send({
-      to: 'user@example.com',
-      subject: '【发现展会】注册验证码',
-      text: '验证码：654321',
-      purpose: 'register',
-    }, { config: resolveMailConfig({ NODE_ENV: 'development' }) });
+    result = await send(
+      {
+        to: 'user@example.com',
+        subject: '【发现展会】注册验证码',
+        text: '验证码：654321',
+        purpose: 'register',
+      },
+      { config: resolveMailConfig({ NODE_ENV: 'development' }) },
+    );
   } finally {
     spy.mockRestore();
   }
@@ -75,7 +82,13 @@ test('通道没配好时不抛异常，返回 ok:false 并说清缺什么', asyn
 });
 
 test('收件地址非法时不发信，也不进收件箱', async () => {
-  const cases = ['', 'not-an-email', 'a b@example.com', 'a@b\r\nBcc: evil@example.com', `${'x'.repeat(120)}@example.com`];
+  const cases = [
+    '',
+    'not-an-email',
+    'a b@example.com',
+    'a@b\r\nBcc: evil@example.com',
+    `${'x'.repeat(120)}@example.com`,
+  ];
   for (const to of cases) {
     const result = await send({ to, subject: '主题', text: '正文' }, { config: memoryConfig() });
     assert.equal(result.ok, false, `${JSON.stringify(to)} 不该通过`);
@@ -85,12 +98,15 @@ test('收件地址非法时不发信，也不进收件箱', async () => {
 
 test('主题与发件人名里的换行被清掉（邮件头注入）', () => {
   const config = memoryConfig({ MAIL_FROM_ADDRESS: 'no-reply@example.com' });
-  const built = buildMessage({
-    to: 'user@example.com',
-    subject: '主题\r\nBcc: evil@example.com',
-    text: '正文',
-    fromName: '发现展会\r\nBcc: evil@example.com',
-  }, config);
+  const built = buildMessage(
+    {
+      to: 'user@example.com',
+      subject: '主题\r\nBcc: evil@example.com',
+      text: '正文',
+      fromName: '发现展会\r\nBcc: evil@example.com',
+    },
+    config,
+  );
 
   assert.ok(!/[\r\n]/.test(built.subject), '主题里不能有换行');
   assert.ok(!/[\r\n]/.test(built.from), '发件人里不能有换行');

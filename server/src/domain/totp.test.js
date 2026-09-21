@@ -10,9 +10,19 @@
 const assert = require('node:assert/strict');
 
 const {
-  base32Encode, base32Decode, generateSecret, codeFor, verifyCode, otpauthUri,
-  encryptionKey, encryptSecret, decryptSecret,
-  generateBackupCodes, normalizeBackupCode, isBackupCodeShape, hashBackupCode,
+  base32Encode,
+  base32Decode,
+  generateSecret,
+  codeFor,
+  verifyCode,
+  otpauthUri,
+  encryptionKey,
+  encryptSecret,
+  decryptSecret,
+  generateBackupCodes,
+  normalizeBackupCode,
+  isBackupCodeShape,
+  hashBackupCode,
 } = require('./totp');
 
 /** RFC 6238 附录 B 的种子（ASCII 的 "12345678901234567890"）。 */

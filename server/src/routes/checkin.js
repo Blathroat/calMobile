@@ -30,7 +30,9 @@ const CHECKIN_COLUMNS = `
 
 /** 报名内容摘要：换行折成空格再截断。 */
 function summaryOf(answers) {
-  return String(answers || '').replace(/\n/g, ' ').slice(0, 46);
+  return String(answers || '')
+    .replace(/\n/g, ' ')
+    .slice(0, 46);
 }
 
 function checkInRecord(row) {
@@ -60,10 +62,9 @@ router.post('/', authenticate, async (req, res, next) => {
       return;
     }
 
-    const result = await query(
-      `SELECT ${CHECKIN_COLUMNS} ${REGISTRATION_FROM} WHERE r.id = $1`,
-      [parsed.registrationId],
-    );
+    const result = await query(`SELECT ${CHECKIN_COLUMNS} ${REGISTRATION_FROM} WHERE r.id = $1`, [
+      parsed.registrationId,
+    ]);
     const row = result.rows[0];
     if (!row) {
       res.json({ ok: false, error: '报名记录不存在，可能已被撤销' });
@@ -103,11 +104,14 @@ router.post('/', authenticate, async (req, res, next) => {
     }
 
     // 条件更新：并发下两张设备同时扫同一个码时，只有一次能把 approved 改成 attended。
-    const updated = await query(`
+    const updated = await query(
+      `
             UPDATE registrations
             SET status = 'attended', check_in_time = now(), updated_at = now()
             WHERE id = $1 AND status = 'approved'
-        `, [row.id]);
+        `,
+      [row.id],
+    );
     if (updated.rowCount === 0) {
       res.json({
         ok: false,

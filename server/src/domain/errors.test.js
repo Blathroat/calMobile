@@ -1,8 +1,6 @@
 const assert = require('node:assert/strict');
 
-const {
-  ApiError, serviceUnavailable, isDatabaseUnavailable,
-} = require('./errors');
+const { ApiError, serviceUnavailable, isDatabaseUnavailable } = require('./errors');
 
 /**
  * 数据库不可用的判定。

@@ -34,10 +34,12 @@ if (runtime.trustProxy !== false) {
   app.set('trust proxy', runtime.trustProxy);
 }
 
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
-  credentials: false,
-}));
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || '*',
+    credentials: false,
+  }),
+);
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -83,9 +85,10 @@ if (runtime.statusPageEnabled) {
   app.use('/api/v1/status', statusRoutes);
   app.use('/status', statusRoutes);
 } else {
-  const disabled = (req, res) => res.status(404).json({
-    error: '状态页在生产环境已关闭（需要时设 ENABLE_STATUS_PAGE=true 再启动）',
-  });
+  const disabled = (req, res) =>
+    res.status(404).json({
+      error: '状态页在生产环境已关闭（需要时设 ENABLE_STATUS_PAGE=true 再启动）',
+    });
   app.get(['/status', '/api/v1/status'], disabled);
 }
 
@@ -180,9 +183,11 @@ async function start() {
       console.error('本机开发请用 pnpm dev（开发模式，不做这些检查）。');
       process.exit(1);
     }
-    console.log(runtime.statusPageEnabled
-      ? '状态页：已按 ENABLE_STATUS_PAGE 打开，请确保外部访问不到'
-      : '状态页：已关闭（生产默认；需要时设 ENABLE_STATUS_PAGE=true）');
+    console.log(
+      runtime.statusPageEnabled
+        ? '状态页：已按 ENABLE_STATUS_PAGE 打开，请确保外部访问不到'
+        : '状态页：已关闭（生产默认；需要时设 ENABLE_STATUS_PAGE=true）',
+    );
   }
 
   try {
@@ -190,9 +195,12 @@ async function start() {
     client.release();
     console.log('数据库连接成功');
   } catch (error) {
-    console.error(runtime.statusPageEnabled
-      ? '数据库暂时不可用，服务仍会启动；打开 /status 查看原因：'
-      : '数据库暂时不可用，服务仍会启动（生产环境状态页已关闭，请看日志）：', error.message);
+    console.error(
+      runtime.statusPageEnabled
+        ? '数据库暂时不可用，服务仍会启动；打开 /status 查看原因：'
+        : '数据库暂时不可用，服务仍会启动（生产环境状态页已关闭，请看日志）：',
+      error.message,
+    );
   }
   return app.listen(PORT, () => {
     console.log(`服务器运行在 http://localhost:${PORT}`);

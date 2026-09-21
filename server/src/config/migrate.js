@@ -264,9 +264,18 @@ const DEFAULT_SETTINGS = {
   media: { imageCount: 8, imageSizeMb: 10, videoCount: 2, videoSizeMb: 50 },
   upload: { avatarSizeMb: 2, imageFormats: ['jpg', 'jpeg', 'png', 'webp'], videoFormats: ['mp4', 'mov', 'webm'] },
   limits: {
-    exhibitionTitle: 60, exhibitionVenue: 60, category: 20, fieldTitle: 30,
-    usernameMin: 3, usernameMax: 20, passwordMin: 6, passwordMax: 32,
-    nickname: 20, bio: 200, region: 40, answer: 200,
+    exhibitionTitle: 60,
+    exhibitionVenue: 60,
+    category: 20,
+    fieldTitle: 30,
+    usernameMin: 3,
+    usernameMax: 20,
+    passwordMin: 6,
+    passwordMax: 32,
+    nickname: 20,
+    bio: 200,
+    region: 40,
+    answer: 200,
   },
   announcement: { enabled: false, text: '' },
   brand: { zh: '发现展会', en: 'ExpoHub' },
@@ -330,7 +339,8 @@ async function seed() {
       // 而**全新库是先迁移、后 seed**，回填时表还是空的 —— 不写的话示例账号一建出来就是
       // 「邮箱未验证」，找不回密码、也开不了两步验证（演示账号的邮箱本来就是占位地址，
       // 收不到信，只能按已验证处理）。
-      await client.query(`
+      await client.query(
+        `
                 INSERT INTO users (id, username, password_hash, email, nickname, role, bio,
                                    email_verified, email_verified_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, true, now())
@@ -342,7 +352,9 @@ async function seed() {
                     email_verified = EXCLUDED.email_verified,
                     email_verified_at = EXCLUDED.email_verified_at,
                     updated_at = now()
-            `, [id, username, passwordHash, email, nickname, role, bio]);
+            `,
+        [id, username, passwordHash, email, nickname, role, bio],
+      );
     }
     console.log(`示例账号就绪（${accounts.length} 个，密码均为 password）`);
 
@@ -350,40 +362,73 @@ async function seed() {
     // 报名窗口规则一上线，演示里就再也报不上名了。偏移量以天为单位。
     const exhibitions = [
       {
-        id: 'exh-1', title: '华南智能家居展', venue: '深圳会展中心 3 号馆', time: '09:00-17:30',
-        dayOffset: 7, status: 'optional', category: '智能家居',
+        id: 'exh-1',
+        title: '华南智能家居展',
+        venue: '深圳会展中心 3 号馆',
+        time: '09:00-17:30',
+        dayOffset: 7,
+        status: 'optional',
+        category: '智能家居',
         description: '# 展会亮点\n\n- 智能门锁与全屋方案\n- 节能家电现场体验',
         highlights: ['智能门锁', '全屋方案', '节能家电'],
-        registerFrom: -14, registerTo: 3,
-        qrEnabled: true, exhibitorId: 'usr-2', note: '面向渠道商与终端用户',
+        registerFrom: -14,
+        registerTo: 3,
+        qrEnabled: true,
+        exhibitorId: 'usr-2',
+        note: '面向渠道商与终端用户',
       },
       {
-        id: 'exh-2', title: '大湾区物流技术展', venue: '广州琶洲展馆 C 区', time: '10:00-18:00',
-        dayOffset: 14, status: 'review', category: '物流技术',
+        id: 'exh-2',
+        title: '大湾区物流技术展',
+        venue: '广州琶洲展馆 C 区',
+        time: '10:00-18:00',
+        dayOffset: 14,
+        status: 'review',
+        category: '物流技术',
         description: 'AGV、仓储机器人与冷链物流方案。',
         highlights: ['AGV', '仓储机器人'],
-        registerFrom: -7, registerTo: 10,
-        qrEnabled: false, exhibitorId: 'usr-2', note: '面向制造业与物流企业',
+        registerFrom: -7,
+        registerTo: 10,
+        qrEnabled: false,
+        exhibitorId: 'usr-2',
+        note: '面向制造业与物流企业',
       },
       {
-        id: 'exh-3', title: '数字健康峰会', venue: '上海国家会展中心', time: '09:30-16:00',
-        dayOffset: 21, status: 'closed', category: '医疗健康',
+        id: 'exh-3',
+        title: '数字健康峰会',
+        venue: '上海国家会展中心',
+        time: '09:30-16:00',
+        dayOffset: 21,
+        status: 'closed',
+        category: '医疗健康',
         description: '医疗 AI、远程诊疗和穿戴设备专题。',
         highlights: ['医疗 AI', '穿戴设备'],
-        registerFrom: -30, registerTo: -1,
-        qrEnabled: false, exhibitorId: 'usr-2', note: '面向医疗机构与设备厂商',
+        registerFrom: -30,
+        registerTo: -1,
+        qrEnabled: false,
+        exhibitorId: 'usr-2',
+        note: '面向医疗机构与设备厂商',
       },
       {
-        id: 'exh-4', title: '国际新材料展', venue: '北京国家会议中心', time: '09:00-17:00',
-        dayOffset: 45, status: 'display', category: '新材料',
+        id: 'exh-4',
+        title: '国际新材料展',
+        venue: '北京国家会议中心',
+        time: '09:00-17:00',
+        dayOffset: 45,
+        status: 'display',
+        category: '新材料',
         description: '碳纤维、石墨烯和可降解材料展示。',
         highlights: ['碳纤维', '石墨烯'],
-        registerFrom: null, registerTo: null,
-        qrEnabled: false, exhibitorId: 'usr-2', note: '面向研发与采购',
+        registerFrom: null,
+        registerTo: null,
+        qrEnabled: false,
+        exhibitorId: 'usr-2',
+        note: '面向研发与采购',
       },
     ];
     for (const item of exhibitions) {
-      await client.query(`
+      await client.query(
+        `
                 INSERT INTO exhibitions (id, title, venue, time, exhibition_date, status, category,
                     description, description_format, highlights, exhibitor_note,
                     registration_start, registration_end, qr_enabled, exhibitor_id)
@@ -400,9 +445,24 @@ async function seed() {
                     registration_end = EXCLUDED.registration_end,
                     qr_enabled = EXCLUDED.qr_enabled, exhibitor_id = EXCLUDED.exhibitor_id,
                     updated_at = now()
-            `, [item.id, item.title, item.venue, item.time, item.dayOffset, item.status, item.category,
-        item.description, JSON.stringify(item.highlights), item.note,
-        item.registerFrom, item.registerTo, item.qrEnabled, item.exhibitorId]);
+            `,
+        [
+          item.id,
+          item.title,
+          item.venue,
+          item.time,
+          item.dayOffset,
+          item.status,
+          item.category,
+          item.description,
+          JSON.stringify(item.highlights),
+          item.note,
+          item.registerFrom,
+          item.registerTo,
+          item.qrEnabled,
+          item.exhibitorId,
+        ],
+      );
     }
     console.log(`示例展会就绪（${exhibitions.length} 场，日期相对今天生成）`);
 
@@ -422,22 +482,33 @@ async function seed() {
         continue;
       }
       for (const [index, [title, type, required, options]] of fields.entries()) {
-        await client.query(`
+        await client.query(
+          `
                     INSERT INTO exhibition_fields (id, exhibition_id, title, type, required, options, position)
                     VALUES ($1, $2, $3, $4, $5, $6, $7)
-                `, [`field-${exhibition.id}-${index + 1}`, exhibition.id, title, type, required,
-          JSON.stringify(options), index]);
+                `,
+          [`field-${exhibition.id}-${index + 1}`, exhibition.id, title, type, required, JSON.stringify(options), index],
+        );
       }
     }
     console.log('示例报名收集项就绪');
 
     const registrations = [
-      ['reg-1', 'exh-1', 'usr-3', '张伟', '专业观众', '姓名 / 公司名称：张伟\n参观身份：专业观众\n报名需求：希望安排展商洽谈', 'approved'],
+      [
+        'reg-1',
+        'exh-1',
+        'usr-3',
+        '张伟',
+        '专业观众',
+        '姓名 / 公司名称：张伟\n参观身份：专业观众\n报名需求：希望安排展商洽谈',
+        'approved',
+      ],
       ['reg-2', 'exh-1', 'usr-2', '李娜', '采购负责人', '姓名 / 公司名称：李娜\n参观身份：采购负责人', 'approved'],
       ['reg-3', 'exh-2', 'usr-3', '王磊', '专业观众', '姓名 / 公司名称：王磊', 'pending'],
     ];
     for (const [id, exhibitionId, visitorId, name, type, answers, status] of registrations) {
-      await client.query(`
+      await client.query(
+        `
                 INSERT INTO registrations (id, exhibition_id, visitor_id, visitor_name, visitor_type, answers, status)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (id) DO UPDATE SET
@@ -446,15 +517,20 @@ async function seed() {
                     answers = EXCLUDED.answers,
                     status = EXCLUDED.status,
                     updated_at = now()
-            `, [id, exhibitionId, visitorId, name, type, answers, status]);
+            `,
+        [id, exhibitionId, visitorId, name, type, answers, status],
+      );
     }
     console.log(`示例报名就绪（${registrations.length} 条）`);
 
     for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
-      await client.query(`
+      await client.query(
+        `
                 INSERT INTO app_settings (key, value) VALUES ($1, $2)
                 ON CONFLICT (key) DO NOTHING
-            `, [key, JSON.stringify(value)]);
+            `,
+        [key, JSON.stringify(value)],
+      );
     }
     console.log('服务器设置默认值就绪');
 

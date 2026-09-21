@@ -11,9 +11,7 @@
 
 const express = require('express');
 const { query } = require('../config/pool');
-const {
-  REGISTRATION_COLUMNS, REGISTRATION_FROM, EXHIBITION_COLUMNS, EXHIBITION_FROM,
-} = require('../domain/queries');
+const { REGISTRATION_COLUMNS, REGISTRATION_FROM, EXHIBITION_COLUMNS, EXHIBITION_FROM } = require('../domain/queries');
 const { registrationPayload } = require('../domain/payloads');
 const { loadFields } = require('./exhibitions');
 const { authenticate } = require('../middleware/auth');
@@ -49,22 +47,22 @@ function closedMessage(statusCode) {
  * 取回 Node 再 `new Date()` 拆年月日——那会按服务器本地时区算，跨时区就差一天。
  */
 async function loadExhibition(id) {
-  const result = await query(`
+  const result = await query(
+    `
         SELECT ${EXHIBITION_COLUMNS},
             (e.registration_start IS NOT NULL AND CURRENT_DATE < e.registration_start) AS before_start,
             (e.registration_end IS NOT NULL AND CURRENT_DATE > e.registration_end)     AS after_end
         ${EXHIBITION_FROM}
         WHERE e.id = $1
-    `, [id]);
+    `,
+    [id],
+  );
   return result.rows[0] || null;
 }
 
 /** 读一条报名（`REGISTRATION_COLUMNS` 已经 JOIN 了展会）。 */
 async function loadRegistration(id) {
-  const result = await query(
-    `SELECT ${REGISTRATION_COLUMNS} ${REGISTRATION_FROM} WHERE r.id = $1`,
-    [id],
-  );
+  const result = await query(`SELECT ${REGISTRATION_COLUMNS} ${REGISTRATION_FROM} WHERE r.id = $1`, [id]);
   return result.rows[0] || null;
 }
 
@@ -137,12 +135,15 @@ function validateAnswers(fields, answers) {
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const user = requireUser(req);
-    const result = await query(`
+    const result = await query(
+      `
             SELECT ${REGISTRATION_COLUMNS}
             ${REGISTRATION_FROM}
             WHERE r.visitor_id = $1
             ORDER BY r.created_at DESC, r.id DESC
-        `, [user.userId]);
+        `,
+      [user.userId],
+    );
     res.json(result.rows.map(registrationPayload));
   } catch (error) {
     next(error);
@@ -203,11 +204,14 @@ router.post('/', authenticate, async (req, res, next) => {
     }
 
     // 同一用户同一展会只允许一条未撤销的报名。
-    const existing = await query(`
+    const existing = await query(
+      `
             SELECT id FROM registrations
             WHERE exhibition_id = $1 AND visitor_id = $2 AND status <> 'cancelled'
             LIMIT 1
-        `, [exhibitionId, user.userId]);
+        `,
+      [exhibitionId, user.userId],
+    );
     if (existing.rows.length > 0) {
       throw badRequest(DUPLICATE_MESSAGE);
     }
@@ -222,8 +226,7 @@ router.post('/', authenticate, async (req, res, next) => {
     // 姓名 / 参观身份必填；报名内容上限取管理员在「管理-设置」里配的 limits.answer。
     const visitorName = text(req.body.visitorName, { label: '姓名' });
     const visitorType = text(req.body.visitorType, { label: '参观身份' });
-    const answers = String(req.body.answers === undefined || req.body.answers === null
-      ? '' : req.body.answers);
+    const answers = String(req.body.answers === undefined || req.body.answers === null ? '' : req.body.answers);
     const maxAnswer = Number((await readLimits()).answer) || 0;
     if (maxAnswer > 0 && answers.length > maxAnswer) {
       throw badRequest(`报名填写内容最多 ${maxAnswer} 个字符`);
@@ -237,11 +240,14 @@ router.post('/', authenticate, async (req, res, next) => {
     const status = autoApproved ? 'approved' : 'pending';
     const id = `reg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     try {
-      await query(`
+      await query(
+        `
                 INSERT INTO registrations
                     (id, exhibition_id, visitor_id, visitor_name, visitor_type, answers, status)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
-            `, [id, exhibitionId, user.userId, visitorName, visitorType, answers, status]);
+            `,
+        [id, exhibitionId, user.userId, visitorName, visitorType, answers, status],
+      );
     } catch (error) {
       // 23505：并发下同一用户同时提交两次时由部分唯一索引拦下，按重复报名处理，不要变成 500。
       if (error.code === '23505') {
@@ -266,10 +272,7 @@ router.post('/', authenticate, async (req, res, next) => {
 router.delete('/:id', authenticate, async (req, res, next) => {
   await mutate(res, next, async () => {
     const user = requireUser(req, '请先登录后再操作');
-    const result = await query(
-      'SELECT id, visitor_id, status FROM registrations WHERE id = $1',
-      [req.params.id],
-    );
+    const result = await query('SELECT id, visitor_id, status FROM registrations WHERE id = $1', [req.params.id]);
     const row = result.rows[0];
     if (!row) {
       throw badRequest('报名记录不存在或已撤销');
@@ -285,11 +288,14 @@ router.delete('/:id', authenticate, async (req, res, next) => {
     if (row.status === 'attended') {
       throw badRequest('已参加的报名不能再撤销');
     }
-    await query(`
+    await query(
+      `
             UPDATE registrations
             SET status = 'cancelled', updated_at = now()
             WHERE id = $1
-        `, [row.id]);
+        `,
+      [row.id],
+    );
     return {};
   });
 });

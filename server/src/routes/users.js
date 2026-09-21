@@ -10,9 +10,7 @@
 
 const express = require('express');
 const { query } = require('../config/pool');
-const {
-  USER_COLUMNS, USER_FROM, REGISTRATION_COLUMNS, REGISTRATION_FROM,
-} = require('../domain/queries');
+const { USER_COLUMNS, USER_FROM, REGISTRATION_COLUMNS, REGISTRATION_FROM } = require('../domain/queries');
 const { adminUserPayload, publicRegistrationPayload } = require('../domain/payloads');
 const labels = require('../domain/labels');
 const { requireAdmin } = require('../domain/permissions');
@@ -58,13 +56,16 @@ router.get('/', authenticate, async (req, res, next) => {
     requireAdmin(req, '只有管理员可以查看用户列表');
     const keyword = String(req.query.query === undefined ? '' : req.query.query).trim();
     const result = keyword
-      ? await query(`
+      ? await query(
+          `
                 SELECT ${USER_COLUMNS} ${USER_FROM}
                 WHERE u.nickname ILIKE $1 ESCAPE '\\'
                    OR u.username ILIKE $1 ESCAPE '\\'
                    OR u.email ILIKE $1 ESCAPE '\\'
                 ${USER_ORDER}
-            `, [likePattern(keyword)])
+            `,
+          [likePattern(keyword)],
+        )
       : await query(`SELECT ${USER_COLUMNS} ${USER_FROM} ${USER_ORDER}`);
     res.json(result.rows.map((row, index) => adminUserPayload(row, index)));
   } catch (error) {
@@ -102,16 +103,18 @@ router.get('/:id', authenticate, async (req, res, next) => {
   try {
     requireAdmin(req, '只有管理员可以查看用户资料');
     const row = await findUserById(req.params.id);
-    res.json(row
-      ? {
-        found: true,
-        user: {
-          id: row.id,
-          nickname: row.nickname,
-          role: labels.ROLE_LABEL[row.role] || row.role,
-        },
-      }
-      : { found: false, user: null });
+    res.json(
+      row
+        ? {
+            found: true,
+            user: {
+              id: row.id,
+              nickname: row.nickname,
+              role: labels.ROLE_LABEL[row.role] || row.role,
+            },
+          }
+        : { found: false, user: null },
+    );
   } catch (error) {
     next(error);
   }
@@ -134,9 +137,7 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
       if (!row) {
         throw notFound('用户不存在或已删除');
       }
-      await query('UPDATE users SET status = $2, updated_at = now() WHERE id = $1', [
-        req.params.id, status,
-      ]);
+      await query('UPDATE users SET status = $2, updated_at = now() WHERE id = $1', [req.params.id, status]);
       if (status === 'banned') {
         await revokeAllForUser(req.params.id);
       }
@@ -167,9 +168,7 @@ router.put('/:id/two-factor', authenticate, async (req, res, next) => {
       if (!row) {
         throw notFound('用户不存在或已删除');
       }
-      await query('UPDATE users SET two_factor_enabled = false, updated_at = now() WHERE id = $1', [
-        req.params.id,
-      ]);
+      await query('UPDATE users SET two_factor_enabled = false, updated_at = now() WHERE id = $1', [req.params.id]);
       return { user: statusPayload(row), twoFactorEnabled: false };
     });
   } catch (error) {
@@ -177,14 +176,20 @@ router.put('/:id/two-factor', authenticate, async (req, res, next) => {
   }
 });
 
-/** 公开页的查询目标：按 id 精确匹配，昵称兜底（昵称没有唯一约束，取最早注册的一个）。 */async function findPublicTarget({ id, nickname }) {
+/** 公开页的查询目标：按 id 精确匹配，昵称兜底（昵称没有唯一约束，取最早注册的一个）。 */ async function findPublicTarget({
+  id,
+  nickname,
+}) {
   if (id) {
     return findUserById(id);
   }
   if (nickname) {
-    const result = await query(`
+    const result = await query(
+      `
             SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.nickname = $1 ${USER_ORDER} LIMIT 1
-        `, [nickname]);
+        `,
+      [nickname],
+    );
     return result.rows[0] || null;
   }
   return null;
@@ -204,11 +209,14 @@ async function publicProfile(req, target) {
   // 公开页对访客开放，因此映射用 publicRegistrationPayload：去掉现场核销用的报名码。
   let registrations = [];
   if (viewedAsAdmin || isSelf || showRegistrations) {
-    const result = await query(`
+    const result = await query(
+      `
             SELECT ${REGISTRATION_COLUMNS} ${REGISTRATION_FROM}
             WHERE r.visitor_id = $1 AND r.status IN ('approved', 'attended')
             ORDER BY e.exhibition_date DESC, r.created_at DESC
-        `, [target.id]);
+        `,
+      [target.id],
+    );
     registrations = result.rows.map(publicRegistrationPayload);
   }
 
