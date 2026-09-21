@@ -7,15 +7,18 @@
 
 const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
+const path = require('node:path');
 
-process.env.JWT_SECRET = 'test-access-secret-012345678901234567890';
-process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-012345678901234567890';
+// vi.mock 只拦 import；本文件与被测模块都是 require，所以把桩写进 require.cache。
+const query = vi.fn();
+const poolPath = path.resolve(__dirname, '../config/pool.js');
+require.cache[poolPath] = {
+  id: poolPath,
+  filename: poolPath,
+  loaded: true,
+  exports: { query },
+};
 
-jest.mock('../config/pool', () => ({
-  query: jest.fn(),
-}));
-
-const { query } = require('../config/pool');
 const { authenticate, authorize, optionalAuth, tokenFrom, resolveUser } = require('./auth');
 
 const USER_ROW = {

@@ -8,12 +8,12 @@
     "dev": "nodemon src/index.js",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "jest",
-    "test:contract": "node --test test/api.test.js",
-    "lint": "oxlint src test",
-    "lint:fix": "oxlint --fix src test",
-    "format": "oxfmt src test",
-    "format:check": "oxfmt --check src test",
+    "test": "vitest run --project unit",
+    "test:contract": "vitest run --project contract",
+    "lint": "oxlint src test vitest.config.mjs",
+    "lint:fix": "oxlint --fix src test vitest.config.mjs",
+    "format": "oxfmt src test vitest.config.mjs",
+    "format:check": "oxfmt --check src test vitest.config.mjs",
     "db:migrate": "node src/config/migrate.js migrate",
     "db:migrate:prod": "node src/config/migrate.js migrate --production",
     "db:seed": "node src/config/migrate.js seed"
@@ -29,19 +29,13 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
-    "jest": "^30.5.2",
     "nodemon": "^3.1.14",
     "oxfmt": "^0.68.0",
     "oxlint": "^1.83.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "testMatch": [
-      "<rootDir>/src/**/*.test.js"
-    ]
   }
 }

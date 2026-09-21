@@ -12,7 +12,8 @@ node scripts/webui-check.js
 node --test scripts/smoke-check.test.js
 node --test scripts/webui-render.test.js
 node scripts/check-strings.js
-node --test server/test/api.test.js
+pnpm --dir server test
+pnpm --dir server test:contract
 gradlew.bat :app:testDebugUnitTest
 gradlew.bat :app:assembleDebug
 ```
@@ -24,7 +25,7 @@ pnpm install
 pnpm db:migrate && pnpm db:seed
 pnpm dev                 # 开发（状态页开着）
 pnpm start               # 生产（关状态页、启动自检）
-pnpm test -- --runInBand
+pnpm test
 pnpm test:contract
 pnpm lint                # oxlint
 pnpm format              # oxfmt

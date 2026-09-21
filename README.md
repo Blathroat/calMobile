@@ -55,11 +55,11 @@ node scripts/check-strings.js
 # 测试
 node --test scripts/smoke-check.test.js
 node --test scripts/webui-render.test.js     # 前端逐页渲染冒烟
-node --test server/test/api.test.js          # 前后端契约（需要数据库）
+pnpm --dir server test:contract              # 前后端契约（需要数据库）
 gradlew.bat :app:testDebugUnitTest
 ```
 
-后端命令（在 `server/` 里）：`pnpm dev`（开发模式）、`pnpm start`（生产模式，关掉状态页并做启动自检）、`pnpm test`（jest 单测）、`pnpm test:contract`（接口契约）、`pnpm lint`（oxlint）与 `pnpm format`（oxfmt）。
+后端命令（在 `server/` 里）：`pnpm dev`（开发模式）、`pnpm start`（生产模式，关掉状态页并做启动自检）、`pnpm test`（vitest 单测）、`pnpm test:contract`（接口契约）、`pnpm lint`（oxlint）与 `pnpm format`（oxfmt）。
 
 ## 文档索引
 

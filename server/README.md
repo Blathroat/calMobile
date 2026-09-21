@@ -317,8 +317,8 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 ## 测试
 
 ```bash
-pnpm test:contract        # node --test test/api.test.js —— 逐接口的契约与规则测试（需要数据库）
-pnpm test                 # jest：不依赖数据库的纯函数单测
+pnpm test:contract        # vitest contract project —— 逐接口的契约与规则测试（需要数据库）
+pnpm test                 # vitest unit project：不依赖数据库的纯函数单测
 pnpm lint                 # oxlint
 pnpm format               # oxfmt
 ```
@@ -335,7 +335,7 @@ pnpm format               # oxfmt
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
 - 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、带上错误原文，不抛 500）。
 
-`src/**/*.test.js`（jest，95 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.js`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.js`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.js`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.js`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `pnpm test` 的前置条件——测试不该依赖一个容器。
+`src/**/*.test.js`（vitest unit project，104 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.js`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.js`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.js`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.js`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `pnpm test` 的前置条件——测试不该依赖一个容器。
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 

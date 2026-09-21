@@ -2,7 +2,7 @@
  * 邮件通道配置的单元测试：默认值、生产降级、非法通道名、端口与 TLS 推导、密码不外泄。
  *
  * 用纯函数 `resolveMailConfig(env)` 直接喂环境，不去改 `process.env` 再重新 require ——
- * 后者在 jest 的模块缓存下极易互相污染。
+ * 后者在 runner 的模块缓存下极易互相污染。
  */
 
 const assert = require('node:assert/strict');

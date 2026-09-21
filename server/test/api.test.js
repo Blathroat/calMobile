@@ -1,7 +1,7 @@
 /**
  * 后端契约与规则测试。
  *
- * 跑法：`pnpm test:contract`（等价于 `node --test test/api.test.js`）。
+ * 跑法：`pnpm test:contract`（vitest 的 contract project）。
  *
  * 这个文件做三件事：
  *
@@ -14,21 +14,10 @@
  * 不会污染开发库里的数据。
  */
 
-// 必须在 require 任何 src 模块之前设置：config/database.js 是加载时读环境变量的。
-process.env.NODE_ENV = 'test';
-process.env.DB_NAME = process.env.TEST_DB_NAME || 'calmobile_test';
-process.env.LOG_LEVEL = 'quiet';
-// 契约测试走 memory 通道：验证码留在内存收件箱里给用例取，既不真发信，也不把码打进日志。
-process.env.MAIL_TRANSPORT = 'memory';
-process.env.JWT_SECRET = process.env.JWT_SECRET || 'calmobile-test-access-secret-32-characters';
-process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'calmobile-test-refresh-secret-32-chars';
-
-const test = require('node:test');
 const assert = require('node:assert');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const { before, after } = require('node:test');
 const { Client } = require('pg');
 
 const database = require('../src/config/database');
@@ -149,7 +138,7 @@ async function createVerifiedAccount(id, username, email, password = 'password')
   );
 }
 
-before(async () => {
+beforeAll(async () => {
   // 每次运行都重建测试库：连接维护库（postgres）后 drop/create。
   const admin = new Client({
     host: database.host,
@@ -175,7 +164,7 @@ before(async () => {
   tokens.user = await login('user');
 });
 
-after(async () => {
+afterAll(async () => {
   if (server) {
     await new Promise((resolve) => server.close(resolve));
   }

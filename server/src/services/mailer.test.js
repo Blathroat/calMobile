@@ -46,7 +46,7 @@ test('memory 通道把邮件留在收件箱里，收件人 / 主题 / 正文 / �
 
 test('console 通道把整封邮件打进日志：本地不开容器也能拿到验证码', async () => {
   const lines = [];
-  const spy = jest.spyOn(console, 'log').mockImplementation((...args) => {
+  const spy = vi.spyOn(console, 'log').mockImplementation((...args) => {
     lines.push(args.join(' '));
   });
   let result;
