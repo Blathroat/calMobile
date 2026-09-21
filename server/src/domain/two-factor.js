@@ -48,7 +48,7 @@ async function secondFactorState(userId) {
 function openSecret(stored) {
   try {
     return totp.decryptSecret(stored, totp.encryptionKey());
-  } catch (error) {
+  } catch {
     throw new CodeRejected('验证器密钥无法解读，请在「安全」里重新绑定验证器');
   }
 }
@@ -74,13 +74,10 @@ async function consumeBackupCode(userId, code) {
 async function regenerateBackupCodes(userId, count = totp.BACKUP_CODE_COUNT) {
   const codes = totp.generateBackupCodes(count);
   await query('DELETE FROM backup_codes WHERE user_id = $1', [userId]);
-  for (const code of codes) {
-    // eslint-disable-next-line no-await-in-loop
-    await query(
-      'INSERT INTO backup_codes (id, user_id, code_hash) VALUES ($1, $2, $3)',
-      [crypto.randomUUID(), userId, totp.hashBackupCode(code)],
-    );
-  }
+  await Promise.all(codes.map((code) => query(
+    'INSERT INTO backup_codes (id, user_id, code_hash) VALUES ($1, $2, $3)',
+    [crypto.randomUUID(), userId, totp.hashBackupCode(code)],
+  )));
   return codes;
 }
 

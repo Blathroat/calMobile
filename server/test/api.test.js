@@ -1,7 +1,7 @@
 /**
  * 后端契约与规则测试。
  *
- * 跑法：`npm run test:contract`（等价于 `node --test test/api.test.js`）。
+ * 跑法：`pnpm test:contract`（等价于 `node --test test/api.test.js`）。
  *
  * 这个文件做三件事：
  *
@@ -64,7 +64,7 @@ function request(method, path, { token, body } = {}) {
         let parsed = text;
         try {
           parsed = text ? JSON.parse(text) : null;
-        } catch (ignored) {
+        } catch {
           // 保持原始文本，便于断言失败时看清返回了什么
         }
         resolve({ status: res.statusCode, body: parsed });
@@ -127,7 +127,6 @@ const tokens = {};
  * 邮箱也不能随便动（`demo@example.com` 之类在别处当已知数据用）。
  */
 async function createVerifiedAccount(id, username, email, password = 'password') {
-  // eslint-disable-next-line global-require
   const bcrypt = require('bcryptjs');
   await pool.query(`
         INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at)
@@ -386,7 +385,6 @@ test('错码累计到上限后这枚码作废，必须重新获取', async () =>
   const wrong = otherCode(code);
 
   for (let i = 1; i <= 5; i += 1) {
-    // eslint-disable-next-line no-await-in-loop
     const attempt = await post('/api/v1/auth/register/verify', { email, code: wrong });
     assert.strictEqual(attempt.body.ok, false,
       `第 ${i} 次错码不该通过：status=${attempt.status} body=${JSON.stringify(attempt.body)}`);
@@ -625,7 +623,6 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
 });
 
 test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备用码一次一枚', async () => {
-  // eslint-disable-next-line global-require
   const totp = require('../src/domain/totp');
   await createVerifiedAccount('usr-totp', 'totpuser', 'totp@example.com');
   try {
@@ -1897,7 +1894,7 @@ function frontendEndpoints() {
     }
   }
   assert.ok(end > open, 'ENDPOINTS 对象没有配平');
-  // eslint-disable-next-line no-new-func
+  // oxlint-disable-next-line no-new-func -- 从 api.js 源码抽出 ENDPOINTS 对象做契约交叉校验
   return new Function(`return ${source.slice(open, end + 1)};`)();
 }
 

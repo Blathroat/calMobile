@@ -358,7 +358,7 @@ const checks = [
   {
     id: 'agent-rules',
     file: 'AGENTS.md',
-    contains: ['# Repository Guidelines', 'Java 17', 'WebShellActivity', 'node scripts/smoke-check.js',
+    contains: ['# Repository Guidelines', 'Java 25', 'WebShellActivity', 'node scripts/smoke-check.js',
       'node --test scripts/webui-render.test.js']
   },
   {
@@ -383,7 +383,7 @@ const checks = [
     // AGP 9 + Gradle 9：属性用赋值式（`compileSdk = 36.1`），方法调用式在 Gradle 10 会被移除
     file: 'app/build.gradle',
     contains: ['compileSdk = 36.1', 'targetSdk = 34', "namespace = 'com.example.calmobile'",
-      'sourceCompatibility JavaVersion.VERSION_17']
+      'JavaVersion.VERSION_25']
   },
   {
     id: 'android-manifest-main-activity',
@@ -807,10 +807,14 @@ const checks = [
     notContains: ['http://', 'https://', '<a href'],
   },
   {
-    id: 'backend-mail-dev-sink',
-    // 本地收件箱：Mailpit 容器（SMTP 1025 / 收件箱 8025），不进真实邮箱
-    file: 'scripts/mail.ps1',
-    contains: ['calmobile-mail', 'axllent/mailpit', '1025', '8025', 'console'],
+    id: 'dev-infra-compose',
+    // 本机基础设施只有一处定义：根目录 docker-compose.yml（postgres + Mailpit）。
+    // 数据库 18+ 的数据目录是 /var/lib/postgresql/18/docker，卷必须挂在 /var/lib/postgresql，
+    // 挂在 /var/lib/postgresql/data 会被镜像拒绝启动（docker-library/postgres#1259）。
+    file: 'docker-compose.yml',
+    contains: ['postgres:18-alpine', 'axllent/mailpit', 'calmobile-pg', 'calmobile-mail',
+      'calmobile-pgdata:/var/lib/postgresql', 'Asia/Shanghai', '1025', '8025'],
+    notContains: ['- calmobile-pgdata:/var/lib/postgresql/data'],
   },
   {
     id: 'backend-mail-migration',
@@ -852,7 +856,7 @@ const checks = [
   },
   {
     id: 'backend-start-is-production',
-    // npm start 必须进生产模式：状态页会关、启动自检会跑
+    // pnpm start 必须进生产模式：状态页会关、启动自检会跑
     file: 'server/package.json',
     contains: ['"start": "node src/index.js --production"', '"dev": "nodemon src/index.js"',
       '"db:migrate:prod"'],

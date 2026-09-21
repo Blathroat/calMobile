@@ -30,7 +30,7 @@ async function resolveUser(token) {
   let decoded;
   try {
     decoded = jwt.verify(token, accessSecret);
-  } catch (error) {
+  } catch {
     return null;
   }
   const result = await query(

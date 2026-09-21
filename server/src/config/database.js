@@ -10,7 +10,7 @@
  * `module.exports` 变成 undefined —— 那样会在建连接池时报一句看不懂的错。
  */
 
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const { bool } = require('./runtime');
 
 const KNOWN_ENVS = ['development', 'test', 'production'];

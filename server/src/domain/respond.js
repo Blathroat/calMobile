@@ -20,7 +20,7 @@ const ENVELOPE_STATUS = new Set([400, 409]);
 async function mutate(res, next, run) {
   try {
     const payload = await run();
-    res.json({ ok: true, error: '', ...(payload || {}) });
+    res.json({ ok: true, error: '', ...payload });
   } catch (error) {
     if (error instanceof ApiError && ENVELOPE_STATUS.has(error.status)) {
       res.json({ ok: false, error: error.message });

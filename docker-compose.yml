@@ -1,0 +1,54 @@
+# 本机开发基础设施：PostgreSQL 与本地收件箱（Mailpit）。
+#
+# 用法（在仓库根目录执行）：
+#   docker compose up -d          # 起数据库与收件箱（已起过就是幂等的）
+#   docker compose ps             # 容器状态
+#   docker compose logs -f db     # 跟日志
+#   docker compose exec db psql -U postgres -d calmobile_dev
+#   docker compose stop           # 停（数据留在命名卷 calmobile-pgdata 里）
+#   docker compose down -v        # 删容器与数据卷（开发数据清空，需重新 migrate + seed）
+#
+# 日常启停也可以用 scripts/db.ps1 与 scripts/mail.ps1 这两个薄封装（同样的动作加便利输出）。
+# 后端连接配置见 server/.env.example：默认 127.0.0.1:5432，不用改。
+
+name: calmobile
+
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: calmobile-pg
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: calmobile_dev
+      # 容器默认 UTC：不设时区的话，本机 00:00–08:00 这段时间里数据库的 CURRENT_DATE
+      # 还停在昨天，报名窗口与日历落点会跟着差一天。
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+    # 时区要显式传给 postgres 进程：只设 TZ/PGTZ 环境变量不够。
+    command: ['postgres', '-c', 'timezone=Asia/Shanghai']
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      # 18+ 镜像的数据目录是 /var/lib/postgresql/18/docker，所以卷挂在 /var/lib/postgresql 上；
+      # 直接挂 /var/lib/postgresql/data 会被镜像拒绝启动（docker-library/postgres#1259）。
+      - calmobile-pgdata:/var/lib/postgresql
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d calmobile_dev']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: calmobile-mail
+    ports:
+      - '127.0.0.1:1025:1025'    # SMTP：后端 MAIL_SMTP_HOST=127.0.0.1、MAIL_SMTP_PORT=1025
+      - '127.0.0.1:8025:8025'    # 收件箱网页
+    restart: unless-stopped
+
+volumes:
+  calmobile-pgdata:
+    # 固定卷名：不加 compose 项目前缀，与文档里的 docker volume rm 命令保持一致
+    name: calmobile-pgdata

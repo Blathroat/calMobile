@@ -49,6 +49,8 @@ function escapeHtml(value) {
 function sanitizeHeader(value, fallback = '') {
   const text = String(value === undefined || value === null ? '' : value)
     .replace(/[\r\n]+/g, ' ')
+    // 邮件头注入：清掉 NUL 到 US、DEL。这里就是要匹配控制字符。
+    // oxlint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .trim();
   return text || fallback;

@@ -126,7 +126,7 @@ function verifyCode(secret, code, options = {}) {
   let secretBuffer;
   try {
     secretBuffer = base32Decode(secret);
-  } catch (error) {
+  } catch {
     return false;
   }
   const counter = Math.floor(at / 1000 / step);

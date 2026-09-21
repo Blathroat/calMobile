@@ -60,7 +60,7 @@ function poolStats() {
 function serviceTimeZone() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch (error) {
+  } catch {
     return 'UTC';
   }
 }
@@ -207,7 +207,7 @@ async function probeCounts(database) {
     try {
       const result = await probeQuery('行数统计', `SELECT count(*)::int AS total FROM ${table}`);
       counts[table] = Number(result.rows[0].total);
-    } catch (error) {
+    } catch {
       counts[table] = null;
     }
   }

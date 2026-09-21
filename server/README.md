@@ -19,36 +19,31 @@ cd server
 pnpm install
 cp .env.example .env          # 本地数据库与两个 JWT 密钥
 
-# 起数据库（默认 Docker；脚本幂等，已起过就直接返回状态）
-pwsh -File ..\scripts\db.ps1 start
-# 等价的手工命令：
-#   docker run -d --name calmobile-pg \
-#     -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=calmobile_dev \
-#     -e TZ=Asia/Shanghai -e PGTZ=Asia/Shanghai \
-#     -p 5432:5432 -v calmobile-pgdata:/var/lib/postgresql/data \
-#     --restart unless-stopped postgres:16-alpine -c timezone=Asia/Shanghai
+# 起数据库与本地收件箱（在仓库根目录；幂等，已起过就直接返回状态）
+docker compose up -d
+# 只想单个起：docker compose up -d db / docker compose up -d mailpit
+# 定义见仓库根的 docker-compose.yml：postgres:18-alpine + Mailpit，
+# 端口 127.0.0.1:5432（数据库）/ 1025（SMTP）/ 8025（收件箱网页）
 
-pnpm run db:migrate            # 可反复执行，只跑没跑过的迁移
-pnpm run db:seed               # 示例账号与展会（可反复执行）
+pnpm db:migrate               # 可反复执行，只跑没跑过的迁移
+pnpm db:seed                  # 示例账号与展会（可反复执行）
 
-# 起本地收件箱（Mailpit 容器：SMTP 1025 / 网页 8025），验证码邮件往这里发
-pwsh -File ..\scripts\mail.ps1 start
-# 不想开容器也行：把 .env 的 MAIL_TRANSPORT 改成 console，整封邮件（含验证码）进后端日志
+# 不想开收件箱容器也行：把 .env 的 MAIL_TRANSPORT 改成 console，整封邮件（含验证码）进后端日志
 
-pnpm run dev                   # 开发模式（nodemon），默认 http://127.0.0.1:3000
+pnpm dev                      # 开发模式（nodemon），默认 http://127.0.0.1:3000
 ```
 
 ### 开发模式与生产模式
 
-`pnpm start` 会自动进**生产模式**（脚本里就是 `node src/index.js --production`），`pnpm run dev` 留在开发模式：
+`pnpm start` 会自动进**生产模式**（脚本里就是 `node src/index.js --production`），`pnpm dev` 留在开发模式：
 
-| | `pnpm run dev` | `pnpm start` |
+| | `pnpm dev` | `pnpm start` |
 | --- | --- | --- |
 | `NODE_ENV` | `.env` 里的 `development`（或注入的真实值） | `production`（`--production` 压过 `.env`） |
 | `/status` 与 `/api/v1/status` | 打开 | **关闭**（404 + 一句说明）；需要时 `ENABLE_STATUS_PAGE=true` 打开，并自行限制来源 |
 | 启动前配置自检 | 不检查 | **致命项拒绝启动**：开发用的 JWT 密钥、`DB_PASSWORD=postgres`、`MAIL_TRANSPORT=console|memory`、占位或缺失的发件人地址；可疑项（Mailpit 地址、`CORS_ORIGIN=*`、没配 `TRUST_PROXY`、`LOG_LEVEL=debug`）只打警告 |
 | 发信通道 | 缺省 `console` | 缺省 `smtp`，且 `memory` 被拒 |
-| 迁移目标 | `pnpm run db:migrate`（开发库） | `pnpm run db:migrate:prod`（会先打印 `[production] 目标库 host:port/db`） |
+| 迁移目标 | `pnpm db:migrate`（开发库） | `pnpm db:migrate:prod`（会先打印 `[production] 目标库 host:port/db`） |
 | 存活探针 | `/ping`、`/health` | 同左（**这两个不受影响**，编排的探针用它们） |
 
 判定集中在 `src/config/runtime.js`（纯函数 `resolveRuntime(argv, env)`，有用例钉住优先级），启动自检在 `src/config/production.js`。`node src/index.js` 直接跑、不带参数时是**开发模式**——生产请用 `pnpm start` 或显式 `NODE_ENV=production`，别用裸命令，否则状态页会开着。
@@ -57,19 +52,32 @@ pnpm run dev                   # 开发模式（nodemon），默认 http://127.0
 
 起好之后浏览器打开 **http://127.0.0.1:3000/status** 就是后端与数据库的状态页（开发模式默认打开；`pnpm start` 的生产模式默认关闭，见下面的「开发模式与生产模式」）：徽章一眼看出「正常 / 异常」，下面按卡片列出服务信息、数据库（连通、延迟、版本、连接池）、迁移、各表数据量、自检项与接口清单，默认每 5 秒自动刷新一次。**后端在数据库不可用时也照常启动**（日志里给警告，不再直接退出），因此库挂了页面照样打得开，并把失败原因与修复命令写在页面上。探活脚本读同一份数据的 JSON 版：`GET /api/v1/status`（正常 200，异常 503）。
 
-### 数据库：Docker
+### 数据库：Docker Compose
 
 ```bash
-pwsh -File scripts\db.ps1 start      # 容器 calmobile-pg，数据在命名卷 calmobile-pgdata
-pwsh -File scripts\db.ps1 status     # 容器与连接状态
-pwsh -File scripts\db.ps1 stop       # 停容器（数据保留）
-pwsh -File scripts\db.ps1 reset      # 删容器与卷，从零重来
-pwsh -File scripts\db.ps1 psql       # 直接进 psql
+docker compose up -d           # 起数据库与收件箱（在仓库根目录执行）
+docker compose ps              # 容器状态
+docker compose logs -f db      # 跟日志
+docker compose exec db psql -U postgres -d calmobile_dev
+docker compose stop            # 停（数据留在命名卷 calmobile-pgdata 里）
+docker compose down -v         # 删容器与数据卷，从零重来
 ```
 
-容器固定 `postgres:16-alpine`、`--restart unless-stopped`，监听 `127.0.0.1:5432`，所以 `server/.env` 不用改。
+日常也可以用 `scripts/db.ps1` 这个薄封装（同样的动作加便利输出）：
 
-**容器必须设时区**：镜像默认 UTC，而数据库的 `CURRENT_DATE` 决定报名窗口与日历落点。不设 `TZ`/`-c timezone=` 的话，本机 00:00–08:00 这段时间里数据库的「今天」还停在昨天，演示会出现莫名差一天。脚本里已经带上了 `Asia/Shanghai`。
+```bash
+pwsh -File ..\scripts\db.ps1 start      # up -d db，并等到就绪
+pwsh -File ..\scripts\db.ps1 status     # 容器状态 + 时区 / 当前日期 / 库列表
+pwsh -File ..\scripts\db.ps1 stop       # 停容器（数据保留）
+pwsh -File ..\scripts\db.ps1 reset      # 删容器与卷，从零重来
+pwsh -File ..\scripts\db.ps1 psql       # 直接进 psql
+```
+
+容器固定 `postgres:18-alpine`、`--restart unless-stopped`，只监听 `127.0.0.1:5432`，所以 `server/.env` 不用改。
+
+**卷要挂在 `/var/lib/postgresql`，不是 `/var/lib/postgresql/data`**：PostgreSQL 18 起官方镜像把数据目录改成 `/var/lib/postgresql/18/docker`（见 [docker-library/postgres#1259](https://github.com/docker-library/postgres/pull/1259)），入口脚本发现 `/var/lib/postgresql/data` 里有 `PG_VERSION` 会直接拒绝启动。数据卷也不能跨大版本复用（PG16 的数据文件 PG18 用不了），所以从 16 升到 18 必须 `docker compose down -v`（或 `pwsh -File ..\scripts\db.ps1 reset`）删掉旧容器与卷、从零重来（再 `pnpm db:migrate; pnpm db:seed`）；要保数据就先 `pg_dump` 再 `pg_restore`。
+
+**容器必须设时区**：镜像默认 UTC，而数据库的 `CURRENT_DATE` 决定报名窗口与日历落点。不设 `TZ`/`PGTZ`/`-c timezone=` 的话，本机 00:00–08:00 这段时间里数据库的「今天」还停在昨天，演示会出现莫名差一天。compose 文件里已经带上了 `Asia/Shanghai`。
 
 ### 让 Android 端连上
 
@@ -97,9 +105,9 @@ adb reverse tcp:3000 tcp:3000
 | `memory` | 只给自动化测试用；**生产配了也会被拒并降级为 `smtp`** | 用例内存 |
 
 ```bash
-pwsh -File scripts\mail.ps1 start    # 起 Mailpit（容器 calmobile-mail，SMTP 1025 / 收件箱 8025）
-pwsh -File scripts\mail.ps1 status   # 容器状态 + 邮件数与最近几封
-pwsh -File scripts\mail.ps1 clear    # 跑回归前清空，免得看错邮件
+docker compose up -d mailpit             # 起 Mailpit（容器 calmobile-mail，SMTP 1025 / 收件箱 8025）
+pwsh -File ..\scripts\mail.ps1 status    # 容器状态 + 邮件数与最近几封
+pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮件
 ```
 
 收件箱在 http://127.0.0.1:8025 ，`.env` 里对应 `MAIL_SMTP_HOST=127.0.0.1`、`MAIL_SMTP_PORT=1025`、`MAIL_SMTP_SECURE=false`。生产换成托管中继的 SMTP 地址与凭据即可，代码不动。
@@ -293,7 +301,7 @@ pwsh -File scripts\mail.ps1 clear    # 跑回归前清空，免得看错邮件
 | `JWT_REFRESH_SECRET` | 刷新令牌密钥 | 至少 32 个随机字符 |
 | `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | 令牌有效期 | `15m` / `7d` |
 | `TOTP_SECRET_KEY` | 验证器密钥的加密密钥；不配则借用 `JWT_REFRESH_SECRET` 派生。**换掉它用户需要重新绑定验证器**，生产建议单独配并长期保管 | 至少 32 个随机字符 |
-| `CORS_ORIGIN` | 允许的来源 | WebView 场景用 `*` |
+| `CORS_ORIGIN` | 允许的来源 | `https://appassets.androidplatform.net`（页面所在的 WebView 源；配成 `http://localhost:3000` 只在浏览器直开前端时成立，真机 / 模拟器连不上） |
 | `MAIL_TRANSPORT` | 邮件通道：`console` / `smtp` / `memory`（生产禁用） | 开发 `smtp`（Mailpit），或 `console` |
 | `MAIL_SMTP_HOST` / `MAIL_SMTP_PORT` | SMTP 地址与端口 | `127.0.0.1` / `1025`（Mailpit）、`465`（隐式 TLS） |
 | `MAIL_SMTP_SECURE` | 是否隐式 TLS；缺省按端口推断（465 → true） | `false` / `true` |
@@ -309,9 +317,10 @@ pwsh -File scripts\mail.ps1 clear    # 跑回归前清空，免得看错邮件
 ## 测试
 
 ```bash
-pnpm run test:contract     # node --test test/api.test.js —— 逐接口的契约与规则测试（需要数据库）
-pnpm test                  # jest：不依赖数据库的纯函数单测
-pnpm run lint
+pnpm test:contract        # node --test test/api.test.js —— 逐接口的契约与规则测试（需要数据库）
+pnpm test                 # jest：不依赖数据库的纯函数单测
+pnpm lint                 # oxlint
+pnpm format               # oxfmt
 ```
 
 `test/api.test.js`（59 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
@@ -339,7 +348,7 @@ pnpm run lint
 - `pnpm start`（生产模式）已经**默认关闭 `/status` 与 `/api/v1/status`**，并会对配置做启动前自检；只需要用 `TRUST_PROXY`、`ENABLE_STATUS_PAGE`、`DB_SSL` 按部署形态配一下，详见上面的「开发模式与生产模式」；
 - 更换两个 JWT 密钥与数据库密码、限制 `CORS_ORIGIN`、启用 TLS，并去掉客户端侧的明文放行（`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`）——第一项与库密码会被启动自检拦住，`CORS_ORIGIN` 目前只是警告；
 - **不要把状态页对公网打开**：它给出迁移清单、各表行数与接口清单，失败时还带 pg 的错误原文；`/ping` 才是给外部探活用的事实源；
-- **不要在服务器上跑 Mailpit**：`scripts/mail.ps1` 与 `MAIL_SMTP_HOST=127.0.0.1` 只用于本地开发；生产要指向托管中继，并用专用子域配好 SPF / DKIM / DMARC（启动自检对 127.0.0.1 / 1025 会警告）；
+- **不要在服务器上跑 Mailpit**：`docker-compose.yml` 的 `mailpit` 服务与 `MAIL_SMTP_HOST=127.0.0.1` 只用于本地开发；生产要指向托管中继，并用专用子域配好 SPF / DKIM / DMARC（启动自检对 127.0.0.1 / 1025 会警告）；
 - 生产环境不要把 `MAIL_TRANSPORT` 配成 `console`：那样验证码只写日志，用户永远收不到（`resolveMailConfig` 会拦截 `memory`，但 `console` 是合法通道，只能靠部署时确认）；
 - 上传的媒体目前仍在客户端私有目录（`files/media`），需要补对象存储与上传接口；
 - 通知只有数据库落点，还没有推送通道；

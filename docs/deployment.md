@@ -2,8 +2,8 @@
 
 ## 环境要求
 
-- Android Studio、JDK 17、Android SDK 36.1（`compileSdk`）、Gradle Wrapper 9.7.1（Android Gradle Plugin 9.3.0，Android Studio 支持的上限）；Windows 用 `gradlew.bat`，Linux/macOS 用 `./gradlew`。
-- Node.js 18+ 与 pnpm（后端 `server/`），PostgreSQL 跑在 Docker 里（`pwsh -File scripts\db.ps1 start`）。
+- Android Studio、JDK 25、Android SDK 36.1（`compileSdk`）、Gradle Wrapper 9.7.1（Android Gradle Plugin 9.4.1）；Windows 用 `gradlew.bat`，Linux/macOS 用 `./gradlew`。
+- Node.js 18+ 与 pnpm（后端 `server/`），PostgreSQL 与本地收件箱跑在 Docker 里（根目录 `docker-compose.yml`，`docker compose up -d` 起两个服务）。
 
 ## 构建、测试与运行
 
@@ -34,11 +34,11 @@ gradlew.bat :app:assembleDebug
 gradlew.bat :app:testDebugUnitTest --tests 'com.example.calmobile.CalendarHelperTest'
 ```
 
-后端开发请进入 `server/`，按 `server/README.md` 起好 PostgreSQL 并复制 `.env.example`；常用命令为 `pnpm install`、`pnpm run db:migrate`、`pnpm run db:seed`、`pnpm run dev`、`pnpm test`（jest 单测）、`pnpm run test:contract`（接口契约）和 `pnpm run lint`。
+后端开发请进入 `server/`，按 `server/README.md` 起好 PostgreSQL 并复制 `.env.example`；常用命令为 `pnpm install`、`pnpm db:migrate`、`pnpm db:seed`、`pnpm dev`、`pnpm test`（jest 单测）、`pnpm test:contract`（接口契约）、`pnpm lint`（oxlint）与 `pnpm format`（oxfmt）。
 
 客户端测试位于 `app/src/test/java/com/example/calmobile/`（39 项），覆盖系统日历的日期与时间解析、媒体上限区间与后缀列表解析、设备镜像、CSV 导出、桥接取值助手和资源路径守卫（`CalendarHelperTest`、`AppSettingsTest`、`ExportManagerTest`、`WebAppBridgeTest`、`AssetGuardTest`）；Activity 级 UI 测试仍在路线图中。原生与前端的日历契约按**后端下发的 ISO 日期**（`YYYY-MM-DD`）传参，不要在原生侧猜年月——写死月份的缺陷曾让事件落到错误的月份，而测试把常量抄成期望值后照旧全绿。
 
-后端测试分两层：`server/test/api.test.js`（59 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 审核状态机与核销流转 / 报名收集项校验 / 登录限流 429 / 隐私开关（公开页不下发报名码）这些业务规则、**邮箱验证码体系**（两步注册、找回密码不泄露存在性、两步验证的票据与令牌边界、改邮箱要验证新地址）、数据库不可用时的状态页降级，以及**前后端路由交叉校验**（前端每个数据动作都有对应路由、后端没有前端用不到的路由）；`server/src/**/*.test.js`（jest，95 项）是不依赖数据库的纯函数与单测。库结构变更后跑 `pnpm run db:migrate` 即可，迁移是幂等的。
+后端测试分两层：`server/test/api.test.js`（59 项）跑真实 Express + PostgreSQL，逐接口断言页面用到的字段、四类身份的权限边界、报名窗口 / 重复报名 / 自动通过 / 审核状态机与核销流转 / 报名收集项校验 / 登录限流 429 / 隐私开关（公开页不下发报名码）这些业务规则、**邮箱验证码体系**（两步注册、找回密码不泄露存在性、两步验证的票据与令牌边界、改邮箱要验证新地址）、数据库不可用时的状态页降级，以及**前后端路由交叉校验**（前端每个数据动作都有对应路由、后端没有前端用不到的路由）；`server/src/**/*.test.js`（jest，95 项）是不依赖数据库的纯函数与单测。库结构变更后跑 `pnpm db:migrate` 即可，迁移是幂等的。
 
 前端另有 `scripts/webui-render.test.js`（35 项）：它用最小 DOM 打桩加假后端 `fetch`，把 20 条路由用例（同一页面的不同参数各渲染一次）都真渲染一遍，并校验管理后台分区记忆、深色模式切换、报名码展示、展商卡片入口、扫码核销、用户公开页管理视角、注册与找回密码的两步流程、「数据动作不再经过原生桥接」「点日期与切月份不再取数」「缓存命中时同步出内容」「过期缓存仍可先画一屏」「并发请求去重」「标签页预加载」等取数体验，以及 `api.js` 的动作到 REST 路径映射与 401 自动续期。渲染测试通过 `router.whenStarted()` 等待首次渲染完成，用例涉及预加载时先 `await settle()` 排空空闲队列再开始计数，不依赖固定的 sleep 猜测时序。
 
@@ -127,7 +127,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 | 备份 | `pg_dump` 每日导出 + 卷快照保留 7 天，并**演练一次恢复**（没演练过的备份不算备份） | ¥0 |
 | 日志 | 请求日志交给 journald / Docker 日志轮转，避免把磁盘写满 | ¥0 |
 | 发信通道 | 阿里云邮件推送 / 腾讯云 SES（国内收件箱送达最好，大陆节点通常要求发信域名已备案）或 Resend / Brevo（免备案，QQ/163 可能进垃圾箱）；只改 `.env`，代码不动 | 见下 |
-| 部署顺序 | `pnpm install --frozen-lockfile` → `pnpm run db:migrate` → 重启进程；迁移幂等，**先迁移再重启** | ¥0 |
+| 部署顺序 | `pnpm install --frozen-lockfile` → `pnpm db:migrate` → 重启进程；迁移幂等，**先迁移再重启** | ¥0 |
 | 重新出包 | 上面的客户端改动 + 域名一起发版；Android 侧还要把 `usesCleartextTraffic` 与明文说明去掉 | ¥0 |
 
 ### 上线后观察

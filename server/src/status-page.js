@@ -87,7 +87,7 @@ function formatTime(iso, timeZone) {
       second: '2-digit',
       hour12: false,
     }).format(date);
-  } catch (error) {
+  } catch {
     return date.toISOString();
   }
 }
@@ -189,7 +189,7 @@ function renderStatusPage(report) {
   const source = report || {};
   const service = source.service || {};
   const database = source.database || {};
-  const migrations = { ...(source.migrations || {}), timeZone: service.timeZone };
+  const migrations = { ...source.migrations, timeZone: service.timeZone };
   const counts = source.data || {};
   const checks = source.checks || [];
   const endpoints = source.endpoints || [];

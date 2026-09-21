@@ -130,7 +130,7 @@ const one = await exhibitions.get(id);
 await registrations.submit(payload);
 ```
 
-`api.js` 内部是一张**动作名 → REST 请求**的映射表（`ENDPOINTS`）：按表把动作翻成 `GET/POST/PUT/DELETE /api/v1/...`，带 `Authorization: Bearer`；访问令牌过期（401）时自动用刷新令牌换一次再重试。**没有第二条路径**，原生不再有数据实现，5xx 与连不上都会如实抛出 `TransportError`，由页面把原因（后端地址、`pnpm run dev`、`adb reverse` 提示）显示出来。`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法。
+`api.js` 内部是一张**动作名 → REST 请求**的映射表（`ENDPOINTS`）：按表把动作翻成 `GET/POST/PUT/DELETE /api/v1/...`，带 `Authorization: Bearer`；访问令牌过期（401）时自动用刷新令牌换一次再重试。**没有第二条路径**，原生不再有数据实现，5xx 与连不上都会如实抛出 `TransportError`，由页面把原因（后端地址、`pnpm dev`、`adb reverse` 提示）显示出来。`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法。
 
 响应约定：**读取类直接返回数据**（列表、对象）；**写入类返回 `{ ok, error, ... }` 信封**，页面按 `.ok` 判断。状态码只有三种含义：**4xx 是业务/权限问题**（抛出错误由页面提示），**400/409 这类可预期的规则失败**由后端包成 HTTP 200 + `{ ok:false, error }`，**5xx 与连不上**是传输层失败。
 
@@ -171,24 +171,24 @@ await registrations.submit(payload);
 后端是 `server/` 里的 Express + PostgreSQL 服务，接口按 REST 组织，路径与前端 `api.js` 的动作一一对应（映射表在 `js/core/api.js` 的 `ENDPOINTS`）。
 
 ```bash
-# 1. 起数据库（Docker 容器 calmobile-pg）
-pwsh -File scripts\db.ps1 start
+# 1. 起数据库与本地收件箱（Docker 容器 calmobile-pg / calmobile-mail）
+docker compose up -d
 
 # 2. 建表 + 示例数据（可反复执行）
 cd server && pnpm install
 cp .env.example .env                # 按需改数据库连接与 JWT 密钥
-pnpm run db:migrate && pnpm run db:seed
-pnpm run dev                         # 开发模式（nodemon），http://127.0.0.1:3000
+pnpm db:migrate && pnpm db:seed
+pnpm dev                         # 开发模式（nodemon），http://127.0.0.1:3000
 
 # 3. 真机 / 模拟器访问本机后端
 adb reverse tcp:3000 tcp:3000
 ```
 
-**`pnpm run dev` 与 `pnpm start` 是两种模式**：`dev` 走开发模式（状态页开着、不做启动自检）；`start` 自动进**生产模式**（`node src/index.js --production`）——关掉 `/status` 与 `/api/v1/status`、对配置做启动前自检（开发密钥、默认库密码、验证码只写日志这类致命项直接拒绝启动），对生产库迁移用 `pnpm run db:migrate:prod`。判定集中在 `server/src/config/runtime.js`，细节见 `server/README.md`。
+**`pnpm dev` 与 `pnpm start` 是两种模式**：`dev` 走开发模式（状态页开着、不做启动自检）；`start` 自动进**生产模式**（`node src/index.js --production`）——关掉 `/status` 与 `/api/v1/status`、对配置做启动前自检（开发密钥、默认库密码、验证码只写日志这类致命项直接拒绝启动），对生产库迁移用 `pnpm db:migrate:prod`。判定集中在 `server/src/config/runtime.js`，细节见 `server/README.md`。
 
 示例账号 `demo` / `exhibitor` / `user`，密码都是 `password`（角色分别是管理员、展商、普通用户）。
 
-后端**启动时不要求数据库可用**：连不上库时会在日志里给出警告并照常监听端口，`/status` 健康页会把这些检查项标红，方便先排查连接再处理业务。数据库跑在 Docker 里（容器 `calmobile-pg` + 命名卷 `calmobile-pgdata`），`server/.env` 不用改；容器**必须带时区参数**（脚本已带 `Asia/Shanghai`）：镜像默认 UTC，而数据库的 `CURRENT_DATE` 决定报名窗口与日历落点，不设的话本机凌晨那段时间会莫名差一天。
+后端**启动时不要求数据库可用**：连不上库时会在日志里给出警告并照常监听端口，`/status` 健康页会把这些检查项标红，方便先排查连接再处理业务。数据库跑在 Docker 里（根目录 `docker-compose.yml` 的 `db` 服务：容器 `calmobile-pg` + 命名卷 `calmobile-pgdata`），`server/.env` 不用改；容器**必须带时区参数**（compose 里已配 `Asia/Shanghai`）：镜像默认 UTC，而数据库的 `CURRENT_DATE` 决定报名窗口与日历落点，不设的话本机凌晨那段时间会莫名差一天。
 
 **改了 `server/src/*.js` 要重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
 
