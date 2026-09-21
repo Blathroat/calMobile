@@ -301,7 +301,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `JWT_REFRESH_SECRET` | 刷新令牌密钥 | 至少 32 个随机字符 |
 | `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | 令牌有效期 | `15m` / `7d` |
 | `TOTP_SECRET_KEY` | 验证器密钥的加密密钥；不配则借用 `JWT_REFRESH_SECRET` 派生。**换掉它用户需要重新绑定验证器**，生产建议单独配并长期保管 | 至少 32 个随机字符 |
-| `CORS_ORIGIN` | 允许的来源 | WebView 场景用 `*` |
+| `CORS_ORIGIN` | 允许的来源 | `https://appassets.androidplatform.net`（页面所在的 WebView 源；配成 `http://localhost:3000` 只在浏览器直开前端时成立，真机 / 模拟器连不上） |
 | `MAIL_TRANSPORT` | 邮件通道：`console` / `smtp` / `memory`（生产禁用） | 开发 `smtp`（Mailpit），或 `console` |
 | `MAIL_SMTP_HOST` / `MAIL_SMTP_PORT` | SMTP 地址与端口 | `127.0.0.1` / `1025`（Mailpit）、`465`（隐式 TLS） |
 | `MAIL_SMTP_SECURE` | 是否隐式 TLS；缺省按端口推断（465 → true） | `false` / `true` |
