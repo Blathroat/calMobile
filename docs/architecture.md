@@ -192,7 +192,7 @@ adb reverse tcp:3000 tcp:3000
 
 **改了 `server/src/*.js` 要重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
 
-细节见 `server/README.md`；`server/test/api.test.js` 是前后端契约与接口测试，逐接口断言页面真正用到的字段都在、权限与业务规则都拦得住，字段漂移会在这里失败而不是静默渲染成空。
+细节见 `server/README.md`；`server/src/test/api.test.ts` 是前后端契约与接口测试，逐接口断言页面真正用到的字段都在、权限与业务规则都拦得住，字段漂移会在这里失败而不是静默渲染成空。
 
 ### 原生只剩 10 个系统动作
 
@@ -245,7 +245,7 @@ adb reverse tcp:3000 tcp:3000
 | `GET /api/v1/search` | `search.query` |
 | `GET\|PUT /api/v1/settings`、`PUT /settings/ui-mode` | `settings.get`、`settings.save`、`settings.uiMode` |
 
-前端动作名与这些路径的映射写在 `js/core/api.js` 的 `ENDPOINTS` 表里，新增接口要同时改那张表、后端路由与 `server/test/api.test.js`（那里有前后端路由交叉校验，多一条少一条都会失败）。
+前端动作名与这些路径的映射写在 `js/core/api.js` 的 `ENDPOINTS` 表里，新增接口要同时改那张表、后端路由与 `server/src/test/api.test.ts`（那里有前后端路由交叉校验，多一条少一条都会失败）。
 
 ### 月视图与日历落点（已固定的两处契约）
 

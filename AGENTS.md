@@ -64,7 +64,7 @@ pnpm format              # oxfmt
 
 - 状态在库里存英文代码，中文标签只在 `server/src/domain/labels.ts` 映射一次。
 - 写入接口返回 `{ ok, error, ... }`（页面看 `.ok`）；读取直接返回数据。规则失败用 200 + `ok:false`，认证授权 4xx，**数据库不可用 503**。正文不回传 pg 原文、SQL 或堆栈。
-- 新接口同时补：`api.js` 的 `ENDPOINTS`、后端路由、`server/test/api.test.js`（那里交叉校验前后端路由）。
+- 新接口同时补：`api.js` 的 `ENDPOINTS`、后端路由、`server/src/test/api.test.ts`（那里交叉校验前后端路由）。
 - 公开接口不要下发 `checkInCode` 这类凭据。
 - **运行模式**读 `server/src/config/runtime.ts`。`index.ts` 与 `config/migrate.ts` 的第一行 require 必须是它。`pnpm dev` 开发，`pnpm start` 生产（关 `/status`、启动自检）。生产库迁移用 `pnpm db:migrate:prod`。改了 `server/src` 源码要重启进程。
 - **邮件**：`server/src/services/mailer.ts` 的 console / smtp / memory。不要在应用服务器上自建 SMTP。发码先落库、立刻回包、后台发信（前端超时 3 秒）。邮件文案在 `services/mail-templates.ts`，不进 `strings_frontend.xml`。

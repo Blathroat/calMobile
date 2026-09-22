@@ -776,7 +776,7 @@ const checks = [
   {
     id: 'backend-contract-test',
     // 契约测试断言的是真实 REST 路径与字段，以及前后端路由交叉校验
-    file: 'server/test/api.test.js',
+    file: 'server/src/test/api.test.ts',
     contains: ['/api/v1/exhibitions', 'checkInCode', 'qrEnabled', 'viewedAsAdmin',
       '前端每个数据动作都对应后端已注册的路由'],
   },
@@ -902,7 +902,7 @@ const checks = [
   {
     id: 'docs-frontend-backend-boundary',
     file: 'docs/architecture.md',
-    contains: ['前后端边界', 'core/api.js', 'adb reverse', 'server/test/api.test.js']
+    contains: ['前后端边界', 'core/api.js', 'adb reverse', 'server/src/test/api.test.ts']
   },
   {
     id: 'web-accent-light-background',

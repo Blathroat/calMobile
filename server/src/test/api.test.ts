@@ -14,31 +14,83 @@
  * 不会污染开发库里的数据。
  */
 
-const assert = require('node:assert');
-const http = require('node:http');
-const fs = require('node:fs');
-const path = require('node:path');
-const { Client } = require('pg');
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { Client } from 'pg';
+import type { StoredMail } from '../services/mailer';
 
-const database = require('../src/config/database');
-const { pool } = require('../src/config/pool');
-const { migrate, seed, DEFAULT_SETTINGS } = require('../src/config/migrate');
-const { resetRateLimits } = require('../src/middleware/rate-limit');
-const { outbox } = require('../src/services/mailer');
-const { app, routes } = require('../src/index');
+// 源码模块用 require 载入，与 app（index.ts → routes → otp → mailer）保持**同一个 tsx CJS 模块实例**：
+// 契约用例跑在 Vite 的 SSR module runner 里，静态 `import` 会落进 Vite 的模块注册表；而 app 的处理栈
+// （index.ts 的 `import x = require(...)` 把路由树一整套拉进 tsx CJS）住在 tsx CJS 注册表。用 `import`
+// 会得到两份副本——mailer 的内存收件箱、rate-limit 计数等进程级状态就此分裂（实测 mailer 被求值两次）。
+// 只有 `require()` 才能和被测代码同表；`as typeof import(...)` 只取类型（运行期擦除），不改变载入路径。
+const database = require('../config/database') as typeof import('../config/database');
+const { pool } = require('../config/pool') as typeof import('../config/pool');
+const { migrate, seed, DEFAULT_SETTINGS, STEPS } = require('../config/migrate') as typeof import('../config/migrate');
+const { resetRateLimits } = require('../middleware/rate-limit') as typeof import('../middleware/rate-limit');
+const { outbox } = require('../services/mailer') as typeof import('../services/mailer');
+const { app, routes } = require('../index') as typeof import('../index');
+const { codeFor } = require('../domain/totp') as typeof import('../domain/totp');
 
-let server;
+// require() 一律返回 any，这里用字面签名把 hash 类型补回来（与 routes/auth.ts 同一约定）。
+const bcrypt = require('bcryptjs') as { hash(value: string, rounds: number): Promise<string> };
+
+/** 响应体：逐接口字段差异极大，契约断言直接探属性，故用宽松类型承载。 */
+interface HttpResponse {
+  status: number;
+  body: any;
+}
+
+/** `request()` 的可选参数：鉴权令牌与请求体。 */
+interface RequestOptions {
+  token?: string;
+  body?: unknown;
+}
+
+/** 前端 `api.js` 里 `ENDPOINTS` 的一个动作：求值后得到 { method, path }。 */
+interface FrontendEndpoint {
+  method: string;
+  path: string;
+}
+
+/** 前端 `ENDPOINTS` 求值结果：动作名 → (参数) => { method, path }。 */
+type EndpointMap = Record<string, (payload: Record<string, unknown>) => FrontendEndpoint>;
+
+/** 后端实际注册路由表里的一条：[方法, 路径, 匹配用的正则]。 */
+interface DeclaredRoute {
+  method: string;
+  path: string;
+  pattern: RegExp;
+}
+
+/** express 未在公共类型里暴露 `stack`，按需要求一层的结构。 */
+interface RouterLayer {
+  route?: { path: string; methods: Record<string, boolean> };
+}
+
+let server: http.Server | undefined;
+
+/** 服务的监听端口（beforeAll 起好服务后才能取到；Unix 域套接字不在测试场景内）。 */
+function serverPort(): number {
+  const address = server?.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('测试服务尚未监听在可识别的端口上');
+  }
+  return address.port;
+}
 
 // ── HTTP 小工具 ──────────────────────────────────────────────────
 
 /** 发一次请求；返回 { status, body }，body 已解析成对象（解析失败给原始文本）。 */
-function request(method, path, { token, body } = {}) {
+function request(method: string, path: string, { token, body }: RequestOptions = {}): Promise<HttpResponse> {
   const payload = body === undefined ? null : JSON.stringify(body);
   return new Promise((resolve, reject) => {
     const req = http.request(
       {
         host: '127.0.0.1',
-        port: server.address().port,
+        port: serverPort(),
         // 查询串里有中文（状态筛选、搜索关键词），http 模块要求路径已编码；
         // encodeURI 保留 / ? & =，正好是「路径 + 查询串」需要的粒度。
         path: encodeURI(path),
@@ -60,7 +112,7 @@ function request(method, path, { token, body } = {}) {
           } catch {
             // 保持原始文本，便于断言失败时看清返回了什么
           }
-          resolve({ status: res.statusCode, body: parsed });
+          resolve({ status: res.statusCode ?? 0, body: parsed });
         });
       },
     );
@@ -72,20 +124,22 @@ function request(method, path, { token, body } = {}) {
   });
 }
 
-const get = (path, options) => request('GET', path, options);
-const post = (path, body, options) => request('POST', path, { ...options, body });
-const put = (path, body, options) => request('PUT', path, { ...options, body });
-const del = (path, options) => request('DELETE', path, options);
+const get = (path: string, options?: RequestOptions): Promise<HttpResponse> => request('GET', path, options);
+const post = (path: string, body?: unknown, options?: RequestOptions): Promise<HttpResponse> =>
+  request('POST', path, { ...options, body });
+const put = (path: string, body?: unknown, options?: RequestOptions): Promise<HttpResponse> =>
+  request('PUT', path, { ...options, body });
+const del = (path: string, options?: RequestOptions): Promise<HttpResponse> => request('DELETE', path, options);
 
 /** 示例展会的日期是相对今天生成的，因此期望值也要按「今天」算出来。 */
-function isoDateAfter(days) {
+function isoDateAfter(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
 }
 
 /** 登录并返回 { token, refreshToken, user }。 */
-async function login(username, password = 'password') {
+async function login(username: string, password = 'password'): Promise<any> {
   const response = await post('/api/v1/auth/login', { username, password });
   assert.strictEqual(response.status, 200, `登录 ${username} 失败：${JSON.stringify(response.body)}`);
   assert.strictEqual(response.body.ok, true, `登录 ${username} 返回失败：${JSON.stringify(response.body)}`);
@@ -98,7 +152,7 @@ async function login(username, password = 'password') {
  * **明文码只存在于邮件正文里**（库里只有 sha256 哈希），所以用例从内存收件箱的正文里把它读出来 ——
  * 走的正是用户实际收到的那条路径，而不是给测试单开的后门（后端没有、也不该有「读出明文码」的接口）。
  */
-function codeFromInbox(email) {
+function codeFromInbox(email: string): { code: string; mail: StoredMail } {
   const target = String(email).trim().toLowerCase();
   const mail = outbox()
     .filter((item) => item.to === target)
@@ -106,15 +160,15 @@ function codeFromInbox(email) {
   assert.ok(mail, `内存收件箱里没有发给 ${target} 的邮件`);
   const match = /验证码：(\d{6})/.exec(mail.text);
   assert.ok(match, `邮件正文里没有 6 位验证码：\n${mail.text}`);
-  return { code: match[1], mail };
+  return { code: match[1]!, mail };
 }
 
 /** 一个必然与真实码不同的 6 位码（用来测错码分支，避免极小概率撞上真码）。 */
-function otherCode(code) {
+function otherCode(code: string): string {
   return code === '000000' ? '111111' : '000000';
 }
 
-const tokens = {};
+const tokens: Record<string, any> = {};
 
 /**
  * 建一个「已验证邮箱」的临时账号。
@@ -122,8 +176,12 @@ const tokens = {};
  * 两步验证与改邮箱的用例需要一个干净的账号：示例账号的密码被改掉会影响后面的用例，
  * 邮箱也不能随便动（`demo@example.com` 之类在别处当已知数据用）。
  */
-async function createVerifiedAccount(id, username, email, password = 'password') {
-  const bcrypt = require('bcryptjs');
+async function createVerifiedAccount(
+  id: string,
+  username: string,
+  email: string,
+  password = 'password',
+): Promise<void> {
   await pool.query(
     `
         INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at)
@@ -142,7 +200,7 @@ beforeAll(async () => {
   // 每次运行都重建测试库：连接维护库（postgres）后 drop/create。
   const admin = new Client({
     host: database.host,
-    port: database.port,
+    port: Number(database.port),
     user: database.user,
     password: database.password,
     database: 'postgres',
@@ -166,7 +224,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (server) {
-    await new Promise((resolve) => server.close(resolve));
+    await new Promise((resolve) => server!.close(resolve));
   }
   await pool.end();
 });
@@ -284,7 +342,7 @@ test('并发使用同一个刷新令牌只能换到一套新令牌', async () =>
     assert.strictEqual(rejected.length, 1, `第 ${round + 1} 轮：另一个请求必须按登录失效处理（${seen}）`);
 
     // 换到的新令牌仍然可用：只作废了被重放的那一个，不是把整条会话废掉
-    const rotated = await post('/api/v1/auth/refresh', { refreshToken: ok[0].body.refreshToken });
+    const rotated = await post('/api/v1/auth/refresh', { refreshToken: ok[0]!.body.refreshToken });
     assert.strictEqual(rotated.status, 200, '轮换出来的新令牌应当还能继续刷新');
   }
 });
@@ -487,7 +545,6 @@ test('找回密码不透露邮箱是否存在，但确实给已注册邮箱发�
 });
 
 test('找回密码：验证码通过后改密码、撤销全部刷新令牌，且一码一用', async () => {
-  const bcrypt = require('bcryptjs');
   const email = 'reset-target@example.com';
   await pool.query(
     `
@@ -679,7 +736,6 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
 });
 
 test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备用码一次一枚', async () => {
-  const totp = require('../src/domain/totp');
   await createVerifiedAccount('usr-totp', 'totpuser', 'totp@example.com');
   try {
     const session = await login('totpuser');
@@ -692,7 +748,7 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     assert.ok(setup.body.issuer, 'otpauth 里要带发行方');
 
     // 码不对不给绑，开关也不能开
-    const farCode = totp.codeFor(setup.body.secret, { at: Date.now() + 5 * 60 * 1000 });
+    const farCode = codeFor(setup.body.secret, { at: Date.now() + 5 * 60 * 1000 });
     const wrong = await post('/api/v1/profile/2fa/totp/enable', { code: farCode }, { token: session.token });
     assert.strictEqual(wrong.body.ok, false, '漂移 5 分钟的码不该通过');
     let security = await get('/api/v1/profile/security', { token: session.token });
@@ -701,7 +757,7 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     // 输对码 → 正式绑定，并带回一批备用码
     const bound = await post(
       '/api/v1/profile/2fa/totp/enable',
-      { code: totp.codeFor(setup.body.secret) },
+      { code: codeFor(setup.body.secret) },
       { token: session.token },
     );
     assert.strictEqual(bound.body.ok, true, `绑定失败：${JSON.stringify(bound.body)}`);
@@ -720,7 +776,7 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     // 用验证器码登录
     const viaTotp = await post('/api/v1/auth/login/verify', {
       ticket: step1.body.ticket,
-      code: totp.codeFor(setup.body.secret),
+      code: codeFor(setup.body.secret),
     });
     assert.strictEqual(viaTotp.body.ok, true, `验证器登录失败：${JSON.stringify(viaTotp.body)}`);
     assert.ok(viaTotp.body.token, '过码后应当发令牌');
@@ -860,7 +916,7 @@ test('展会详情带收集项，找不到时给 found:false', async () => {
 test('展会可按关键词搜索，分类来自服务器设置', async () => {
   const hit = await get('/api/v1/exhibitions?query=智能');
   assert.ok(
-    hit.body.some((item) => item.title.includes('智能')),
+    hit.body.some((item: any) => item.title.includes('智能')),
     '搜索没有命中',
   );
   const miss = await get('/api/v1/exhibitions?query=不存在的关键词');
@@ -1009,18 +1065,18 @@ test('我的报名只返回自己的记录', async () => {
   );
 
   const others = await get('/api/v1/registrations', { token: tokens.exhibitor.token });
-  assert.ok(others.body.every((item) => item.id === 'reg-2'));
+  assert.ok(others.body.every((item: any) => item.id === 'reg-2'));
 });
 
 test('报名码只在启用二维码且已通过时下发', async () => {
   const mine = await get('/api/v1/registrations', { token: tokens.user.token });
-  const approved = mine.body.find((item) => item.id === 'reg-1');
+  const approved = mine.body.find((item: any) => item.id === 'reg-1');
   assert.ok(
     approved.checkInCode.startsWith('CALMOBILE-CHECKIN|exh-1|reg-1'),
     `已通过且启用二维码应当有报名码：${approved.checkInCode}`,
   );
 
-  const pending = mine.body.find((item) => item.id === 'reg-3');
+  const pending = mine.body.find((item: any) => item.id === 'reg-3');
   assert.strictEqual(pending.checkInCode, '', '未通过或未启用二维码不应下发报名码');
 });
 
@@ -1399,7 +1455,7 @@ test('审核列表给出五种状态计数，且只能看自己举办的展会',
   }
   const pending = await get('/api/v1/review?exhibitionId=exh-1&status=待审核', { token: tokens.exhibitor.token });
   assert.ok(
-    pending.body.records.every((item) => item.status === '待审核'),
+    pending.body.records.every((item: any) => item.status === '待审核'),
     '筛选项混入了其它状态',
   );
 
@@ -1414,7 +1470,7 @@ test('审核列表给出五种状态计数，且只能看自己举办的展会',
 
 test('审核状态可以流转，非法状态被拒', async () => {
   const list = await get('/api/v1/review?exhibitionId=exh-2&status=全部', { token: tokens.exhibitor.token });
-  const target = list.body.records.find((item) => item.status === '待审核');
+  const target = list.body.records.find((item: any) => item.status === '待审核');
   assert.ok(target, 'exh-2 应当有待审核的报名');
 
   const approved = await put(
@@ -1759,10 +1815,11 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
   // 而种子里只有一个管理员，因此「管理员受限」这个状态只能这样构造出来。
   // 库里存的是英文代码（`users_status_check` 只认 active / limited / banned），
   // 中文标签只在接口层收发，所以这里给代码而不是「受限 / 正常」。
-  const setStatus = (id, status) => pool.query('UPDATE users SET status = $2 WHERE id = $1', [id, status]);
+  const setStatus = (id: string, status: string) =>
+    pool.query('UPDATE users SET status = $2 WHERE id = $1', [id, status]);
 
   // 两场自造展会：A 给受限展商 / 受限普通用户与「恢复正常后照旧」用；B 专门留给管理员核销。
-  const createExhibition = async (title) => {
+  const createExhibition = async (title: string) => {
     const created = await post(
       '/api/v1/exhibitions',
       {
@@ -1783,7 +1840,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
   const exhibitionA = await createExhibition('受限收紧用例展 A');
   const exhibitionB = await createExhibition('受限收紧用例展 B');
 
-  const submit = async (exhibitionId, token, name) => {
+  const submit = async (exhibitionId: string, token: string, name: string) => {
     const submitted = await post(
       '/api/v1/registrations',
       {
@@ -1805,22 +1862,23 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     {
       name: '编辑展会',
       message: '账号已被限制，不能修改展会',
-      send: (token, id) => put(`/api/v1/exhibitions/${id}`, { title: '受限账号不该改成的标题' }, { token }),
+      send: (token: string, id: string) =>
+        put(`/api/v1/exhibitions/${id}`, { title: '受限账号不该改成的标题' }, { token }),
     },
     {
       name: '删除展会',
       message: '账号已被限制，不能删除展会',
-      send: (token, id) => del(`/api/v1/exhibitions/${id}`, { token }),
+      send: (token: string, id: string) => del(`/api/v1/exhibitions/${id}`, { token }),
     },
     {
       name: '暂停 / 恢复报名',
       message: '账号已被限制，不能修改报名设置',
-      send: (token, id) => put(`/api/v1/exhibitions/${id}/status`, { status: '无需审核' }, { token }),
+      send: (token: string, id: string) => put(`/api/v1/exhibitions/${id}/status`, { status: '无需审核' }, { token }),
     },
     {
       name: '改报名收集项',
       message: '账号已被限制，不能修改报名设置',
-      send: (token, id) =>
+      send: (token: string, id: string) =>
         put(
           `/api/v1/exhibitions/${id}/fields`,
           {
@@ -1832,7 +1890,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     {
       name: '现场核销',
       message: '账号已被限制，不能核销',
-      send: (token, id, registrationId) =>
+      send: (token: string, id: string, registrationId: string) =>
         post(
           '/api/v1/checkin',
           {
@@ -2023,7 +2081,7 @@ test('公开页支持按昵称查询', async () => {
 test('公开页不下发报名码，本人与管理员仍能拿到', async () => {
   // 自己造数据、自己还原：不依赖其它用例执行到哪一步，也不改它们共享的记录。
   const users = await get('/api/v1/users?query=user', { token: tokens.admin.token });
-  const self = users.body.find((row) => row.username === 'user');
+  const self = users.body.find((row: any) => row.username === 'user');
   assert.ok(self, '种子里的 user 账号应当存在');
 
   // 启用二维码 + 无需审核：提交即已通过，因此本人应当拿得到报名码。
@@ -2074,7 +2132,7 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
 
     const anonymous = await get(`/api/v1/users/public?userId=${self.id}`);
     assert.strictEqual(anonymous.body.found, true);
-    const record = anonymous.body.registrations.find((item) => item.id === registrationId);
+    const record = anonymous.body.registrations.find((item: any) => item.id === registrationId);
     assert.ok(record, '打开隐私开关后，匿名访问应当看到这条已通过的报名');
     assert.ok(
       record.checkInCode === '' || record.checkInCode === undefined,
@@ -2083,12 +2141,12 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
 
     // 公开页对所有视角一致（本人 / 管理员也一样）：要报名码请走报名详情或审核接口
     const asSelf = await get(`/api/v1/users/public?userId=${self.id}`, { token: tokens.user.token });
-    const selfRecord = asSelf.body.registrations.find((item) => item.id === registrationId);
+    const selfRecord = asSelf.body.registrations.find((item: any) => item.id === registrationId);
     assert.ok(selfRecord, '本人应当能在公开页看到自己的报名');
     assert.ok(selfRecord.checkInCode === '' || selfRecord.checkInCode === undefined, '公开页对本人也不下发报名码');
 
     const asAdmin = await get(`/api/v1/users/public?userId=${self.id}`, { token: tokens.admin.token });
-    const adminRecord = asAdmin.body.registrations.find((item) => item.id === registrationId);
+    const adminRecord = asAdmin.body.registrations.find((item: any) => item.id === registrationId);
     assert.ok(adminRecord, '管理员应当能看到公开页上的这条报名');
     assert.strictEqual(adminRecord.checkInCode, '', '公开页对管理员也不下发报名码');
     assert.ok(String(adminRecord.answers).includes('公开页用例'), '展示报名记录仍是隐私开关的本意，回答照常给出');
@@ -2342,8 +2400,8 @@ test('未知路径返回 404 而不是 500', async () => {
  * 这段代码是纯字面量 + 箭头函数，因此在 Node 里可以直接算；用花括号配平（跳过字符串）
  * 而不是正则在对象里找结尾，避免被值里的 `{ ... }` 骗到。
  */
-function frontendEndpoints() {
-  const file = path.join(__dirname, '..', '..', 'app', 'src', 'main', 'assets', 'web', 'js', 'core', 'api.js');
+function frontendEndpoints(): EndpointMap {
+  const file = path.join(__dirname, '..', '..', '..', 'app', 'src', 'main', 'assets', 'web', 'js', 'core', 'api.js');
   const source = fs.readFileSync(file, 'utf8');
   const start = source.indexOf('const ENDPOINTS = {');
   assert.ok(start > 0, 'api.js 里找不到 ENDPOINTS');
@@ -2377,11 +2435,11 @@ function frontendEndpoints() {
   }
   assert.ok(end > open, 'ENDPOINTS 对象没有配平');
   // oxlint-disable-next-line no-new-func -- 从 api.js 源码抽出 ENDPOINTS 对象做契约交叉校验
-  return new Function(`return ${source.slice(open, end + 1)};`)();
+  return new Function(`return ${source.slice(open, end + 1)};`)() as EndpointMap;
 }
 
 /** 把 `/exhibitions/:id/status` 这样的声明转成匹配用的正则。 */
-function routePattern(full) {
+function routePattern(full: string): RegExp {
   const segments = full
     .split('/')
     .map((segment) => (segment.startsWith(':') ? '[^/]+' : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -2389,11 +2447,11 @@ function routePattern(full) {
 }
 
 /** 后端实际注册的路由表：[方法, 匹配用的正则]。 */
-function backendRoutes() {
-  const declared = [];
+function backendRoutes(): DeclaredRoute[] {
+  const declared: DeclaredRoute[] = [];
   for (const [prefix, router] of Object.entries(routes)) {
     const base = `/api/v1${prefix ? `/${prefix}` : ''}`;
-    for (const layer of router.stack) {
+    for (const layer of (router as unknown as { stack?: RouterLayer[] }).stack ?? []) {
       if (!layer.route) {
         continue;
       }
@@ -2443,7 +2501,7 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
   const missing = [];
   for (const action of actions) {
     for (const payload of payloads) {
-      const request = endpoints[action](payload);
+      const request = endpoints[action]?.(payload);
       assert.ok(request && request.method && request.path, `${action} 的映射没返回 method/path`);
       // 前端映射里的 path 是 BASE_URL（…/api/v1）之后的相对路径。
       const full = `/api/v1${request.path}`;
@@ -2476,9 +2534,9 @@ test('后端没有前端用不到的孤立路由', () => {
     },
   ];
   const used = new Set();
-  for (const action of Object.keys(endpoints)) {
+  for (const [, map] of Object.entries(endpoints)) {
     for (const payload of payloads) {
-      const request = endpoints[action](payload);
+      const request = map(payload);
       const full = `/api/v1${request.path}`;
       for (const route of declared) {
         if (route.method === request.method && route.pattern.test(full)) {
@@ -2501,12 +2559,15 @@ test('后端没有前端用不到的孤立路由', () => {
  * 连响应头一起返回的请求：既有用例共用的 `request()` 只回状态码与响应体，
  * 而状态页要断言 `content-type`，所以这里单独写一个，不动公共工具。
  */
-function requestRaw(method, path) {
+function requestRaw(
+  method: string,
+  path: string,
+): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
   return new Promise((resolve, reject) => {
     const req = http.request(
       {
         host: '127.0.0.1',
-        port: server.address().port,
+        port: serverPort(),
         path: encodeURI(path),
         method,
       },
@@ -2515,7 +2576,7 @@ function requestRaw(method, path) {
         res.on('data', (chunk) => {
           text += chunk;
         });
-        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: text }));
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: text }));
       },
     );
     req.on('error', reject);
@@ -2543,10 +2604,9 @@ test('状态接口给出一份完整的健康报告', async () => {
   assert.strictEqual(report.database.error, undefined, '数据库正常时不该带错误信息');
 
   // 迁移：与 STEPS 逐条对齐，测试库是刚建好的，因此不该有遗漏。
-  const { STEPS } = require('../src/config/migrate');
   assert.deepStrictEqual(report.migrations.pending, [], '测试库刚迁移完，不该有未应用的步骤');
   assert.deepStrictEqual(
-    report.migrations.applied.map((item) => item.id).sort(),
+    report.migrations.applied.map((item: any) => item.id).sort(),
     STEPS.map((step) => step.id).sort(),
     '已应用列表必须与 migrate.js 的 STEPS 一致',
   );
@@ -2577,12 +2637,12 @@ test('状态接口给出一份完整的健康报告', async () => {
     assert.ok(Number.isFinite(check.ms), `${check.name} 缺少耗时`);
   }
   assert.deepStrictEqual(
-    report.checks.filter((check) => check.status === 'fail').map((check) => check.name),
+    report.checks.filter((check: any) => check.status === 'fail').map((check: any) => check.name),
     [],
     '测试环境里不该有失败的自检项',
   );
 
-  const endpoints = report.endpoints.map((item) => `${item.method} ${item.path}`);
+  const endpoints = report.endpoints.map((item: any) => `${item.method} ${item.path}`);
   assert.ok(endpoints.includes('GET /api/v1/bootstrap'), '接口清单缺少 GET /api/v1/bootstrap');
   assert.ok(endpoints.includes('POST /api/v1/checkin'), '接口清单缺少 POST /api/v1/checkin');
 });
@@ -2595,7 +2655,7 @@ test('状态报告的接口清单与后端注册路由、前端动作覆盖一�
   const declared = backendRoutes()
     .map((route) => `${route.method} ${route.path}`)
     .sort();
-  const reported = body.endpoints.map((item) => `${item.method} ${item.path}`).sort();
+  const reported = body.endpoints.map((item: any) => `${item.method} ${item.path}`).sort();
   assert.deepStrictEqual(reported, declared, '接口清单与后端注册的路由对不上');
 
   // 2) 路径要么在 /api/v1 下，要么是文档里写明的非前缀路由
@@ -2610,7 +2670,7 @@ test('状态报告的接口清单与后端注册路由、前端动作覆盖一�
 
   // 3) 前端每个数据动作都能在清单里找到落点（与契约测试同一套映射）
   const endpoints = frontendEndpoints();
-  const patterns = body.endpoints.map((item) => ({
+  const patterns = body.endpoints.map((item: any) => ({
     method: item.method,
     pattern: routePattern(item.path),
   }));
@@ -2630,11 +2690,11 @@ test('状态报告的接口清单与后端注册路由、前端动作覆盖一�
     },
   ];
   const missing = [];
-  for (const action of Object.keys(endpoints)) {
+  for (const [action, map] of Object.entries(endpoints)) {
     for (const payload of payloads) {
-      const mapped = endpoints[action](payload);
+      const mapped = map(payload);
       const full = `/api/v1${mapped.path}`;
-      if (!patterns.some((route) => route.method === mapped.method && route.pattern.test(full))) {
+      if (!patterns.some((route: any) => route.method === mapped.method && route.pattern.test(full))) {
         missing.push(`${action} → ${mapped.method} ${full}`);
       }
     }
@@ -2668,7 +2728,7 @@ test('状态页返回可直接打开的中文 HTML', async () => {
 test('数据库不可用时状态页仍能渲染出失败原因', async () => {
   // 真的把数据库停掉属于运维动作，这里用一份真实的失败报告走一遍模板：
   // 页面渲染不碰数据库，因此这条断言能稳定复现「降级时页面照样打得开」。
-  const { renderStatusPage } = require('../src/status-page');
+  const { renderStatusPage } = require('../status-page') as { renderStatusPage(report: any): string };
   const { body } = await get('/api/v1/status');
   const broken = {
     ...body,

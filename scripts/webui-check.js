@@ -5,7 +5,7 @@
  * 1. assets/web 下的页面与脚本能作为 ES 模块解析（语法与导入路径）；
  * 2. 数据动作：`js/core/api.js` 的 `ENDPOINTS` 就是前端数据动作的全集，
  *    每一项都要能解析出 `method` + `path`，且 path 以 `/` 开头
- *    （后端是否真有这条路由由 server/test/api.test.js 的交叉校验负责）；
+ *    （后端是否真有这条路由由 server/src/test/api.test.ts 的交叉校验负责）；
  * 3. 系统动作：前端 `call('…')` 用到的动作必须在 `WebAppActions` 的 switch 里有 case，
  *    并且属于 10 个系统能力白名单；白名单之外的原生动作（例如又加回数据实现）报错；
  *    `WebAppActions` 里有、前端却从来不 `call` 的动作（死动作）同样报错；

@@ -9,7 +9,7 @@
  * 三条自我约束：
  * 1. **不抛异常**：数据库挂了要给 `ok:false` + 错误原文，而不是 500 —— 探针自己炸了就没法排查；
  * 2. **不编数据**：每一项都来自真实测量（SQL、进程信息、环境变量），自检项失败必须指得到出处；
- * 3. **不固化清单**：`endpoints` 直接遍历 `index.js` 导出的 `routes`（与 `test/api.test.js`
+ * 3. **不固化清单**：`endpoints` 直接遍历 `index.js` 导出的 `routes`（与 `src/test/api.test.ts`
  *    的 `backendRoutes()` 同一套走法），新增路由不会漏登记。
  */
 
@@ -288,7 +288,7 @@ async function probeCounts(database: DatabaseStatus): Promise<{ counts: Record<s
 
 /**
  * 接口清单：遍历 `index.js` 导出的 `routes`，把每个 router 的 `stack` 拼上挂载前缀，
- * 与 `test/api.test.js` 的 `backendRoutes()` 完全同源，因此清单不会和真实路由漂移。
+ * 与 `src/test/api.test.ts` 的 `backendRoutes()` 完全同源，因此清单不会和真实路由漂移。
  *
  * 这里**延迟 require**：`index.js` 加载时会 require 本模块，顶层 require 会拿到半成品 exports；
  * 请求到来时 index.js 早已加载完毕，拿到的就是完整的 `routes`。
