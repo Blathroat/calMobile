@@ -8,7 +8,7 @@
 import * as labels from './labels';
 import type { Capabilities } from './permissions';
 
-interface ExhibitionRow {
+export interface ExhibitionRow {
   id: string;
   title: string;
   venue: string;
@@ -28,11 +28,12 @@ interface ExhibitionRow {
   registration_start?: string | null;
   registration_end?: string | null;
   qr_enabled?: boolean | null;
+  exhibitor_id?: string | null;
   registration_count?: number | null;
   field_count?: number | null;
 }
 
-interface FieldRow {
+export interface FieldRow {
   id: string;
   title: string;
   type: string;
@@ -40,9 +41,11 @@ interface FieldRow {
   options?: unknown;
 }
 
-interface RegistrationRow {
+export interface RegistrationRow {
   id: string;
   exhibition_id: string;
+  visitor_id?: string | null;
+  exhibition_exhibitor_id?: string | null;
   exhibition_title?: string | null;
   exhibition_day?: number | null;
   exhibition_month?: number | null;
@@ -58,7 +61,8 @@ interface RegistrationRow {
   check_in_time?: string | Date | null;
 }
 
-interface UserRow {
+export interface UserRow {
+  id: string;
   role: string;
   username: string;
   nickname: string;
@@ -75,7 +79,7 @@ interface UserRow {
   registration_time?: string | null;
 }
 
-interface AdminUserRow {
+export interface AdminUserRow {
   id: string;
   username: string;
   nickname: string;
@@ -195,7 +199,7 @@ export function userPayload(row: UserRow, can: Capabilities) {
     socialMedia: row.social_media || '',
     avatar: row.avatar || '',
     showRegistrations: row.show_registrations === true,
-    status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active,
+    status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active || '',
     statusCode: row.status || 'active',
     // 邮箱验证状态与两步验证开关：个人页「安全」区与用户管理都看这两个字段
     emailVerified: row.email_verified === true,
@@ -238,7 +242,7 @@ export function adminUserPayload(row: AdminUserRow, index: number) {
     email: row.email || '',
     role: labels.ROLE_LABEL[row.role] || row.role,
     roleCode: row.role,
-    status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active,
+    status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active || '',
     // 管理员据此决定要不要显示「关闭两步验证」这个兜底入口
     emailVerified: row.email_verified === true,
     twoFactorEnabled: row.two_factor_enabled === true,

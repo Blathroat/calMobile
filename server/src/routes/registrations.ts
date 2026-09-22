@@ -9,17 +9,19 @@
  * 只有权限（403）与服务器问题才走 `index.js` 的错误中间件。
  */
 
-const express = require('express');
-const { query } = require('../config/pool');
-const { REGISTRATION_COLUMNS, REGISTRATION_FROM, EXHIBITION_COLUMNS, EXHIBITION_FROM } = require('../domain/queries');
-const { registrationPayload } = require('../domain/payloads');
-const { loadFields } = require('./exhibitions');
-const { authenticate } = require('../middleware/auth');
-const { requireUser, assertNotLimited } = require('../domain/permissions');
-const { badRequest, forbidden } = require('../domain/errors');
-const { mutate } = require('../domain/respond');
-const { limits: readLimits, text } = require('../domain/validation');
-const labels = require('../domain/labels');
+import express = require('express');
+import { query } from '../config/pool';
+import { REGISTRATION_COLUMNS, REGISTRATION_FROM, EXHIBITION_COLUMNS, EXHIBITION_FROM } from '../domain/queries';
+import { registrationPayload, type ExhibitionRow, type RegistrationRow } from '../domain/payloads';
+import exhibitions = require('./exhibitions');
+import { authenticate } from '../middleware/auth';
+import { requireUser, assertNotLimited } from '../domain/permissions';
+import { badRequest, forbidden } from '../domain/errors';
+import { mutate } from '../domain/respond';
+import { limits as readLimits, text } from '../domain/validation';
+import * as labels from '../domain/labels';
+
+const { loadFields } = exhibitions;
 
 const router = express.Router();
 
@@ -27,7 +29,7 @@ const router = express.Router();
 const DUPLICATE_MESSAGE = '已提交过该展会的报名';
 
 /** 报名方式不支持报名时的提示：分别说明是仅展示、已截止还是已结束。 */
-function closedMessage(statusCode) {
+function closedMessage(statusCode: string) {
   if (statusCode === 'display') {
     return '该展会仅展示，不开放报名';
   }
@@ -46,8 +48,13 @@ function closedMessage(statusCode) {
  * 日期比较一律交给 SQL 的 `CURRENT_DATE`，不把 `registration_start` / `registration_end`
  * 取回 Node 再 `new Date()` 拆年月日——那会按服务器本地时区算，跨时区就差一天。
  */
-async function loadExhibition(id) {
-  const result = await query(
+interface ExhibitionWindowRow extends ExhibitionRow {
+  before_start: boolean;
+  after_end: boolean;
+}
+
+async function loadExhibition(id: string) {
+  const result = await query<ExhibitionWindowRow>(
     `
         SELECT ${EXHIBITION_COLUMNS},
             (e.registration_start IS NOT NULL AND CURRENT_DATE < e.registration_start) AS before_start,
@@ -61,8 +68,10 @@ async function loadExhibition(id) {
 }
 
 /** 读一条报名（`REGISTRATION_COLUMNS` 已经 JOIN 了展会）。 */
-async function loadRegistration(id) {
-  const result = await query(`SELECT ${REGISTRATION_COLUMNS} ${REGISTRATION_FROM} WHERE r.id = $1`, [id]);
+async function loadRegistration(id: string) {
+  const result = await query<RegistrationRow>(`SELECT ${REGISTRATION_COLUMNS} ${REGISTRATION_FROM} WHERE r.id = $1`, [
+    id,
+  ]);
   return result.rows[0] || null;
 }
 
@@ -79,7 +88,7 @@ const EMPTY_ANSWER = '未填写';
  * 而不是按第一个冒号硬拆：收集项标题本身可能带冒号，硬拆会把标题切坏。
  * 同一个标题出现多次时以第一行为准。
  */
-function answerValue(answers, title) {
+function answerValue(answers: unknown, title: string) {
   for (const line of String(answers === undefined || answers === null ? '' : answers).split('\n')) {
     for (const separator of ['：', ':']) {
       const prefix = `${title}${separator}`;
@@ -93,7 +102,7 @@ function answerValue(answers, title) {
 }
 
 /** 多选值拆成单个选项：页面用「、」拼接，这里同时容忍半角 / 全角逗号。 */
-function splitChoices(value) {
+function splitChoices(value: string) {
   return String(value || '')
     .split(/[、,，]/)
     .map((item) => item.trim())
@@ -108,7 +117,7 @@ function splitChoices(value) {
  * - 单选 / 多选的值必须落在选项里 → 列出可选值；
  * 失败抛 400，由 `mutate()` 转成 HTTP 200 + `{ ok:false, error }` 的可读文案。
  */
-function validateAnswers(fields, answers) {
+function validateAnswers(fields: Awaited<ReturnType<typeof loadFields>>, answers: unknown) {
   for (const field of fields) {
     const value = answerValue(answers, field.title);
     if (!value) {
@@ -135,7 +144,7 @@ function validateAnswers(fields, answers) {
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const user = requireUser(req);
-    const result = await query(
+    const result = await query<RegistrationRow>(
       `
             SELECT ${REGISTRATION_COLUMNS}
             ${REGISTRATION_FROM}
@@ -145,7 +154,7 @@ router.get('/', authenticate, async (req, res, next) => {
       [user.userId],
     );
     res.json(result.rows.map(registrationPayload));
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -164,7 +173,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
       return;
     }
     res.json({ found: true, registration: registrationPayload(row) });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -183,7 +192,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
 router.post('/', authenticate, async (req, res, next) => {
   try {
     assertNotLimited(requireUser(req, '请先登录后再报名'), 'register');
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
     return;
   }
@@ -248,9 +257,9 @@ router.post('/', authenticate, async (req, res, next) => {
             `,
         [id, exhibitionId, user.userId, visitorName, visitorType, answers, status],
       );
-    } catch (error) {
+    } catch (error: unknown) {
       // 23505：并发下同一用户同时提交两次时由部分唯一索引拦下，按重复报名处理，不要变成 500。
-      if (error.code === '23505') {
+      if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505') {
         throw badRequest(DUPLICATE_MESSAGE);
       }
       throw error;
@@ -260,7 +269,7 @@ router.post('/', authenticate, async (req, res, next) => {
     return {
       autoApproved,
       statusLabel: labels.REGISTRATION_STATUS[status],
-      registration: registrationPayload(created),
+      registration: registrationPayload(created!),
     };
   });
 });
@@ -272,7 +281,10 @@ router.post('/', authenticate, async (req, res, next) => {
 router.delete('/:id', authenticate, async (req, res, next) => {
   await mutate(res, next, async () => {
     const user = requireUser(req, '请先登录后再操作');
-    const result = await query('SELECT id, visitor_id, status FROM registrations WHERE id = $1', [req.params.id]);
+    const result = await query<{ id: string; visitor_id: string | null; status: string }>(
+      'SELECT id, visitor_id, status FROM registrations WHERE id = $1',
+      [req.params.id],
+    );
     const row = result.rows[0];
     if (!row) {
       throw badRequest('报名记录不存在或已撤销');
@@ -300,4 +312,4 @@ router.delete('/:id', authenticate, async (req, res, next) => {
   });
 });
 
-module.exports = router;
+export = router;

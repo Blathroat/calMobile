@@ -11,15 +11,26 @@
 
 // 运行环境必须在**任何**读取 NODE_ENV 的模块之前定下来（见 config/runtime.js：
 // pnpm start 走生产、pnpm dev 走开发，状态页与启动自检都按它决定）。
-const runtime = require('./config/runtime');
-const { loadProcessConfig } = require('./config/env');
+import * as runtime from './config/runtime';
+import { loadProcessConfig } from './config/env';
 
-const express = require('express');
-const cors = require('cors');
-const { pool } = require('./config/pool');
-const { productionProblems } = require('./config/production');
-const { ApiError, isDatabaseUnavailable } = require('./domain/errors');
-const { version: SERVICE_VERSION } = require('../package.json');
+import express = require('express');
+import cors = require('cors');
+import { pool } from './config/pool';
+import { productionProblems } from './config/production';
+import { ApiError, isDatabaseUnavailable } from './domain/errors';
+import { version as SERVICE_VERSION } from '../package.json';
+import bootstrapRoutes = require('./routes/bootstrap');
+import authRoutes = require('./routes/auth');
+import profileRoutes = require('./routes/profile');
+import exhibitionRoutes = require('./routes/exhibitions');
+import registrationRoutes = require('./routes/registrations');
+import reviewRoutes = require('./routes/review');
+import checkinRoutes = require('./routes/checkin');
+import userRoutes = require('./routes/users');
+import searchRoutes = require('./routes/search');
+import settingsRoutes = require('./routes/settings');
+import statusRoutes = require('./routes/status');
 
 const config = loadProcessConfig();
 const app = express();
@@ -59,16 +70,16 @@ if (LOG_LEVEL !== 'quiet') {
 // ── 路由 ────────────────────────────────────────────────────────
 // 路径与前端 `js/core/api.js` 的 api 域一一对应（见 README「前后端边界」）。
 const routes = {
-  '': require('./routes/bootstrap'),
-  auth: require('./routes/auth'),
-  profile: require('./routes/profile'),
-  exhibitions: require('./routes/exhibitions'),
-  registrations: require('./routes/registrations'),
-  review: require('./routes/review'),
-  checkin: require('./routes/checkin'),
-  users: require('./routes/users'),
-  search: require('./routes/search'),
-  settings: require('./routes/settings'),
+  '': bootstrapRoutes,
+  auth: authRoutes,
+  profile: profileRoutes,
+  exhibitions: exhibitionRoutes,
+  registrations: registrationRoutes,
+  review: reviewRoutes,
+  checkin: checkinRoutes,
+  users: userRoutes,
+  search: searchRoutes,
+  settings: settingsRoutes,
 };
 
 for (const [prefix, router] of Object.entries(routes)) {
@@ -82,12 +93,11 @@ for (const [prefix, router] of Object.entries(routes)) {
 // **生产环境默认关闭**：这两个接口会暴露迁移清单、各表行数、接口清单，失败时还带 pg 的
 // 错误原文，属于运维排查入口而不是公开接口。需要时用 `ENABLE_STATUS_PAGE=true` 显式打开，
 // 并由反向代理做来源限制（见 `docs/deployment.md` 的「上线部署清单与开销」）。
-const statusRoutes = require('./routes/status');
 if (runtime.statusPageEnabled) {
   app.use('/api/v1/status', statusRoutes);
   app.use('/status', statusRoutes);
 } else {
-  const disabled = (req, res) =>
+  const disabled = (_req: express.Request, res: express.Response) =>
     res.status(404).json({
       error: '状态页在生产环境已关闭（需要时设 ENABLE_STATUS_PAGE=true 再启动）',
     });
@@ -120,12 +130,20 @@ const MIDDLEWARE_MESSAGES = {
   'request.aborted': '请求被中断',
 };
 
+interface RaisedError {
+  status?: number;
+  statusCode?: number;
+  type?: string;
+  message?: string;
+}
+
 /** 错误 → HTTP 状态码：ApiError 自带 > 中间件自带的 4xx > 数据库不可用 503 > 500。 */
-function statusFor(err) {
+function statusFor(err: unknown): number {
   if (err instanceof ApiError) {
     return err.status;
   }
-  const declared = Number(err.status || err.statusCode);
+  const record = err as RaisedError;
+  const declared = Number(record.status || record.statusCode);
   if (Number.isInteger(declared) && declared >= 400 && declared < 500) {
     return declared;
   }
@@ -139,12 +157,14 @@ function statusFor(err) {
  * pg 的连接错误里有内网 host:port、解析错误里有请求体片段，都不该回给调用方
  * （排查用的原文与堆栈只进服务端日志）。
  */
-function clientMessage(err, status) {
+function clientMessage(err: unknown, status: number): string {
   if (err instanceof ApiError) {
     return err.message || '请求失败';
   }
-  if (MIDDLEWARE_MESSAGES[err.type]) {
-    return MIDDLEWARE_MESSAGES[err.type];
+  const record = err as RaisedError;
+  const message = record.type ? MIDDLEWARE_MESSAGES[record.type as keyof typeof MIDDLEWARE_MESSAGES] : undefined;
+  if (message) {
+    return message;
   }
   if (status === 503) {
     return '数据库暂时不可用，请稍后重试';
@@ -153,7 +173,7 @@ function clientMessage(err, status) {
 }
 
 // 统一错误处理：状态码按上面的优先级，正文只有 `{ error }`，堆栈始终只进日志。
-app.use((err, req, res, _next) => {
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const status = statusFor(err);
   console.error(`请求失败（${status}）：`, err);
   res.status(status).json({ error: clientMessage(err, status) });
@@ -196,12 +216,12 @@ async function start() {
     const client = await pool.connect();
     client.release();
     console.log('数据库连接成功');
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(
       runtime.statusPageEnabled
         ? '数据库暂时不可用，服务仍会启动；打开 /status 查看原因：'
         : '数据库暂时不可用，服务仍会启动（生产环境状态页已关闭，请看日志）：',
-      error.message,
+      (error as { message?: string }).message,
     );
   }
   return app.listen(PORT, () => {
@@ -214,7 +234,7 @@ async function start() {
   });
 }
 
-async function shutdown(signal) {
+async function shutdown(signal: string) {
   console.log(`收到 ${signal} 信号，正在关闭服务器...`);
   await pool.end();
   process.exit(0);
@@ -226,4 +246,4 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, start, routes };
+export { app, start, routes };

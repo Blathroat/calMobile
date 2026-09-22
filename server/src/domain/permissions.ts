@@ -26,7 +26,7 @@ export interface Actor {
 }
 
 export interface AuthedRequest {
-  user?: Actor;
+  user?: Actor | null;
 }
 
 export interface ExhibitionOwner {
@@ -87,7 +87,7 @@ export const LIMITED_ACTIONS: Record<string, string> = {
 };
 
 /** 受限账号执行被禁操作时抛出 403；返回当前用户便于串起来用。 */
-export function assertNotLimited(user: Actor, action: string): Actor {
+export function assertNotLimited(user: Actor | null | undefined, action: string): Actor | null | undefined {
   if (!isLimited(user)) {
     return user;
   }

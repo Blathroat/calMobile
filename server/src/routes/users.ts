@@ -8,17 +8,23 @@
  * 字段一律取 `queries.js` 的 `USER_COLUMNS`，它不含 `password_hash`。
  */
 
-const express = require('express');
-const { query } = require('../config/pool');
-const { USER_COLUMNS, USER_FROM, REGISTRATION_COLUMNS, REGISTRATION_FROM } = require('../domain/queries');
-const { adminUserPayload, publicRegistrationPayload } = require('../domain/payloads');
-const labels = require('../domain/labels');
-const { requireAdmin } = require('../domain/permissions');
-const { normalizeUserStatus } = require('../domain/settings');
-const { mutate } = require('../domain/respond');
-const { badRequest, notFound } = require('../domain/errors');
-const { revokeAllForUser } = require('../domain/session');
-const { authenticate, optionalAuth } = require('../middleware/auth');
+import express = require('express');
+import { query } from '../config/pool';
+import { USER_COLUMNS, USER_FROM, REGISTRATION_COLUMNS, REGISTRATION_FROM } from '../domain/queries';
+import {
+  adminUserPayload,
+  publicRegistrationPayload,
+  type AdminUserRow,
+  type RegistrationRow,
+  type UserRow,
+} from '../domain/payloads';
+import * as labels from '../domain/labels';
+import { requireAdmin } from '../domain/permissions';
+import { normalizeUserStatus } from '../domain/settings';
+import { mutate } from '../domain/respond';
+import { badRequest, notFound } from '../domain/errors';
+import { revokeAllForUser } from '../domain/session';
+import { authenticate, optionalAuth } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -26,24 +32,24 @@ const router = express.Router();
 const USER_ORDER = 'ORDER BY u.registration_time, u.id';
 
 /** ILIKE 的转义：把 % _ \ 变成字面量，避免用户输入被当成通配符。 */
-function likePattern(keyword) {
+function likePattern(keyword: string) {
   return `%${keyword.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 }
 
 /** 读一行用户（对外字段，不带密码哈希）；不存在返回 null。 */
-async function findUserById(id) {
-  const result = await query(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id]);
+async function findUserById(id: string) {
+  const result = await query<UserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id]);
   return result.rows[0] || null;
 }
 
 /** 改状态后回给页面的用户摘要（`role` / `status` 都是中文标签）。 */
-function statusPayload(row) {
+function statusPayload(row: UserRow) {
   return {
     id: row.id,
     nickname: row.nickname,
     role: labels.ROLE_LABEL[row.role] || row.role,
     roleCode: row.role,
-    status: labels.USER_STATUS[row.status] || labels.USER_STATUS.active,
+    status: labels.USER_STATUS[row.status as string] || labels.USER_STATUS.active,
   };
 }
 
@@ -56,7 +62,7 @@ router.get('/', authenticate, async (req, res, next) => {
     requireAdmin(req, '只有管理员可以查看用户列表');
     const keyword = String(req.query.query === undefined ? '' : req.query.query).trim();
     const result = keyword
-      ? await query(
+      ? await query<AdminUserRow>(
           `
                 SELECT ${USER_COLUMNS} ${USER_FROM}
                 WHERE u.nickname ILIKE $1 ESCAPE '\\'
@@ -66,9 +72,9 @@ router.get('/', authenticate, async (req, res, next) => {
             `,
           [likePattern(keyword)],
         )
-      : await query(`SELECT ${USER_COLUMNS} ${USER_FROM} ${USER_ORDER}`);
+      : await query<AdminUserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} ${USER_ORDER}`);
     res.json(result.rows.map((row, index) => adminUserPayload(row, index)));
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -90,7 +96,7 @@ router.get('/public', optionalAuth, async (req, res, next) => {
     const id = String(req.query.userId === undefined ? '' : req.query.userId).trim();
     const nickname = String(req.query.nickname === undefined ? '' : req.query.nickname).trim();
     res.json(await publicProfile(req, await findPublicTarget({ id, nickname })));
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -115,7 +121,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
           }
         : { found: false, user: null },
     );
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -130,7 +136,7 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
     requireAdmin(req, '只有管理员可以修改账号状态');
     await mutate(res, next, async () => {
       const status = normalizeUserStatus((req.body || {}).status);
-      if (req.params.id === req.user.userId) {
+      if (req.params.id === req.user!.userId) {
         throw badRequest('不能修改自己的账号状态');
       }
       const row = await findUserById(req.params.id);
@@ -144,7 +150,7 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
       const updated = await findUserById(req.params.id);
       return { user: statusPayload(updated || row) };
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -171,7 +177,7 @@ router.put('/:id/two-factor', authenticate, async (req, res, next) => {
       await query('UPDATE users SET two_factor_enabled = false, updated_at = now() WHERE id = $1', [req.params.id]);
       return { user: statusPayload(row), twoFactorEnabled: false };
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -179,12 +185,15 @@ router.put('/:id/two-factor', authenticate, async (req, res, next) => {
 /** 公开页的查询目标：按 id 精确匹配，昵称兜底（昵称没有唯一约束，取最早注册的一个）。 */ async function findPublicTarget({
   id,
   nickname,
+}: {
+  id: string;
+  nickname: string;
 }) {
   if (id) {
     return findUserById(id);
   }
   if (nickname) {
-    const result = await query(
+    const result = await query<UserRow>(
       `
             SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.nickname = $1 ${USER_ORDER} LIMIT 1
         `,
@@ -196,20 +205,20 @@ router.put('/:id/two-factor', authenticate, async (req, res, next) => {
 }
 
 /** 组装公开页响应：资料 + 按隐私规则过滤后的报名记录。 */
-async function publicProfile(req, target) {
+async function publicProfile(req: express.Request, target: UserRow | null) {
   if (!target) {
     return { found: false, error: '用户不存在或未公开' };
   }
   const viewer = req.user;
   const viewedAsAdmin = viewer?.role === 'admin';
-  const isSelf = Boolean(viewer) && viewer.userId === target.id;
+  const isSelf = Boolean(viewer) && viewer!.userId === target.id;
   const showRegistrations = target.show_registrations === true;
 
   // 只有已通过 / 已参加的报名对外展示，待审核与已拒绝属于内部流转状态。
   // 公开页对访客开放，因此映射用 publicRegistrationPayload：去掉现场核销用的报名码。
-  let registrations = [];
+  let registrations: ReturnType<typeof publicRegistrationPayload>[] = [];
   if (viewedAsAdmin || isSelf || showRegistrations) {
-    const result = await query(
+    const result = await query<RegistrationRow>(
       `
             SELECT ${REGISTRATION_COLUMNS} ${REGISTRATION_FROM}
             WHERE r.visitor_id = $1 AND r.status IN ('approved', 'attended')
@@ -241,4 +250,4 @@ async function publicProfile(req, target) {
   };
 }
 
-module.exports = router;
+export = router;

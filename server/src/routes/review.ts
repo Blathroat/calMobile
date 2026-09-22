@@ -10,14 +10,14 @@
  * `id / exhibitionId / visitorName / registrationTime / answers / summary / status`。
  */
 
-const express = require('express');
-const { query } = require('../config/pool');
-const { authenticate } = require('../middleware/auth');
-const { requireExhibitor, canManageExhibition } = require('../domain/permissions');
-const { badRequest, forbidden, notFound } = require('../domain/errors');
-const { mutate } = require('../domain/respond');
-const { readSection } = require('../domain/settings');
-const labels = require('../domain/labels');
+import express = require('express');
+import { query } from '../config/pool';
+import { authenticate } from '../middleware/auth';
+import { requireExhibitor, canManageExhibition, type Actor } from '../domain/permissions';
+import { badRequest, forbidden, notFound } from '../domain/errors';
+import { mutate } from '../domain/respond';
+import { readSection } from '../domain/settings';
+import * as labels from '../domain/labels';
 
 const router = express.Router();
 
@@ -34,13 +34,33 @@ const router = express.Router();
  * 管理员与展商共用这张表；「展商能不能改已审核的记录」是另一条策略，
  * 由下面的 `canReviseByExhibitor()` 读管理员配置后判定。
  */
-const REGISTRATION_TRANSITIONS = {
+const REGISTRATION_TRANSITIONS: Record<string, readonly string[]> = {
   pending: ['approved', 'rejected', 'cancelled'],
   approved: ['attended', 'rejected', 'cancelled'],
   rejected: ['approved', 'cancelled'],
   attended: [],
   cancelled: ['pending', 'approved'],
 };
+
+interface ReviewRecordRow {
+  id: string;
+  exhibition_id: string;
+  visitor_name: string;
+  answers: string | null;
+  status: string;
+  registration_time: string | null;
+  exhibition_exhibitor_id: string | null;
+}
+
+interface StatusCountRow {
+  status: string;
+  total: number;
+}
+
+interface ExhibitionScopeRow {
+  id: string;
+  exhibitor_id: string | null;
+}
 
 /** 管理员配置的审核策略：`canRevise` 为 true 才允许展商改动已审核的报名。 */
 async function canReviseByExhibitor() {
@@ -61,14 +81,14 @@ const REVIEW_FROM = `
 `;
 
 /** 报名内容摘要：换行折成空格再截断（`answers` 是各收集项拼成的多行文本）。 */
-function summaryOf(answers) {
+function summaryOf(answers: unknown) {
   return String(answers || '')
     .replace(/\n/g, ' ')
     .slice(0, 46);
 }
 
 /** 报名行 → 审核记录（含核销结果里的报名摘要，两边字段一致）。 */
-function reviewPayload(row) {
+function reviewPayload(row: ReviewRecordRow) {
   return {
     id: row.id,
     exhibitionId: row.exhibition_id,
@@ -89,8 +109,10 @@ function statusHint() {
  * 校验 `exhibitionId` 指向的展会能不能管；返回展会行。
  * 不存在给 404，别人的展会给 403（管理员不限）。
  */
-async function assertExhibitionScope(exhibitionId, user) {
-  const result = await query('SELECT id, exhibitor_id FROM exhibitions WHERE id = $1', [exhibitionId]);
+async function assertExhibitionScope(exhibitionId: string, user: Actor) {
+  const result = await query<ExhibitionScopeRow>('SELECT id, exhibitor_id FROM exhibitions WHERE id = $1', [
+    exhibitionId,
+  ]);
   const exhibition = result.rows[0];
   if (!exhibition) {
     throw notFound('展会不存在或已删除');
@@ -131,11 +153,11 @@ router.get('/', authenticate, async (req, res, next) => {
     }
     const scopeSql = scope.length > 0 ? `WHERE ${scope.join(' AND ')}` : '';
 
-    const counts = { total: 0 };
+    const counts: { total: number; [label: string]: number } = { total: 0 };
     for (const label of Object.values(labels.REGISTRATION_STATUS)) {
       counts[label] = 0;
     }
-    const grouped = await query(
+    const grouped = await query<StatusCountRow>(
       `
             SELECT r.status, count(*)::int AS total
             ${REVIEW_FROM}
@@ -159,7 +181,7 @@ router.get('/', authenticate, async (req, res, next) => {
       recordParams.push(statusCode);
       recordsSql = `${scopeSql ? `${scopeSql} AND` : 'WHERE'} r.status = $${recordParams.length}`;
     }
-    const records = await query(
+    const records = await query<ReviewRecordRow>(
       `
             SELECT ${REVIEW_COLUMNS}
             ${REVIEW_FROM}
@@ -175,7 +197,7 @@ router.get('/', authenticate, async (req, res, next) => {
       records: records.rows.map(reviewPayload),
       counts,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -187,14 +209,16 @@ router.get('/', authenticate, async (req, res, next) => {
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
     const user = requireExhibitor(req);
-    const result = await query(`SELECT ${REVIEW_COLUMNS} ${REVIEW_FROM} WHERE r.id = $1`, [req.params.id]);
+    const result = await query<ReviewRecordRow>(`SELECT ${REVIEW_COLUMNS} ${REVIEW_FROM} WHERE r.id = $1`, [
+      req.params.id,
+    ]);
     const row = result.rows[0];
     if (!row || !canManageExhibition(user, { exhibitor_id: row.exhibition_exhibitor_id })) {
       res.json({ found: false, error: '报名记录不存在' });
       return;
     }
     res.json({ found: true, record: reviewPayload(row) });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -213,7 +237,9 @@ router.get('/:id', authenticate, async (req, res, next) => {
 router.put('/:id/status', authenticate, async (req, res, next) => {
   try {
     const user = requireExhibitor(req);
-    const result = await query(`SELECT ${REVIEW_COLUMNS} ${REVIEW_FROM} WHERE r.id = $1`, [req.params.id]);
+    const result = await query<ReviewRecordRow>(`SELECT ${REVIEW_COLUMNS} ${REVIEW_FROM} WHERE r.id = $1`, [
+      req.params.id,
+    ]);
     const row = result.rows[0];
     if (row && !canManageExhibition(user, { exhibitor_id: row.exhibition_exhibitor_id })) {
       throw forbidden('只能管理自己举办的展会的报名');
@@ -249,19 +275,19 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
 
       try {
         await query('UPDATE registrations SET status = $2, updated_at = now() WHERE id = $1', [row.id, status]);
-      } catch (error) {
+      } catch (error: unknown) {
         // 23505：把一条「已撤销」的报名改回有效状态，而这个人在这场展会上已经有别的
         // 未撤销报名（由部分唯一索引兜底）。给业务提示，不要变成 500。
-        if (error.code === '23505') {
+        if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505') {
           throw badRequest('该用户在这场展会上已有未撤销的报名，不能把这条改成此状态');
         }
         throw error;
       }
       return { record: { ...reviewPayload(row), status: labels.REGISTRATION_STATUS[status] } };
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
 
-module.exports = router;
+export = router;

@@ -122,7 +122,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 
 | 项 | 做法 | 成本 |
 | --- | --- | --- |
-| 进程守护 | systemd 单元或 `pm2`，配自动重启；`src/index.js` 已处理 `SIGTERM` / `SIGINT` | ¥0 |
+| 进程守护 | systemd 单元或 `pm2`，配自动重启；`src/index.ts` 已处理 `SIGTERM` / `SIGINT` | ¥0 |
 | 数据库 | 继续用 Docker（`calmobile-pg` + `--restart unless-stopped`）；**时区必须是 `Asia/Shanghai`**，报名窗口与日历落点依赖数据库的 `CURRENT_DATE` | 见下 |
 | 备份 | `pg_dump` 每日导出 + 卷快照保留 7 天，并**演练一次恢复**（没演练过的备份不算备份） | ¥0 |
 | 日志 | 请求日志交给 journald / Docker 日志轮转，避免把磁盘写满 | ¥0 |

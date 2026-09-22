@@ -11,45 +11,81 @@
  * 不能顺带把昵称、简介或另一个开关改回默认值。
  */
 
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const { query } = require('../config/pool');
-const { USER_COLUMNS, USER_FROM } = require('../domain/queries');
-const { userPayload } = require('../domain/payloads');
-const { capabilities, assertNotLimited } = require('../domain/permissions');
-const { limits, bool } = require('../domain/validation');
-const { mutate } = require('../domain/respond');
-const { badRequest, notFound } = require('../domain/errors');
-const { issueCode, consumeCode, isCodeRejected, maskEmail } = require('../domain/otp');
-const {
+import express = require('express');
+const bcrypt = require('bcryptjs') as {
+  hash(data: string, saltOrRounds: number): Promise<string>;
+  hashSync(data: string, saltOrRounds: number): string;
+  compare(data: string, encrypted: string): Promise<boolean>;
+};
+import { query } from '../config/pool';
+import { USER_COLUMNS, USER_FROM } from '../domain/queries';
+import { userPayload, type UserRow } from '../domain/payloads';
+import { capabilities, assertNotLimited } from '../domain/permissions';
+import { limits, bool } from '../domain/validation';
+import { mutate } from '../domain/respond';
+import { badRequest, notFound } from '../domain/errors';
+import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp';
+import {
   secondFactorState,
   beginTotpSetup,
   confirmTotpSetup,
   regenerateBackupCodes,
   clearSecondFactors,
-} = require('../domain/two-factor');
-const { readNotificationPreferences, saveNotificationPreferences, readServerSettings } = require('../domain/settings');
-const { revokeAllForUser } = require('../domain/session');
-const { authenticate } = require('../middleware/auth');
+} from '../domain/two-factor';
+import { readNotificationPreferences, saveNotificationPreferences, readServerSettings } from '../domain/settings';
+import { revokeAllForUser } from '../domain/session';
+import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
 
 /** 邮箱格式与 auth.js 的注册校验保持一致。 */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+interface PasswordHashRow {
+  password_hash: string;
+}
+
+interface PasswordFactorRow {
+  password_hash: string;
+  two_factor_enabled?: boolean | null;
+}
+
+interface VerifiedAtRow {
+  email_verified_at?: string | Date | null;
+}
+
+interface FactorToggleRow {
+  email: string;
+  email_verified?: boolean | null;
+  two_factor_enabled?: boolean | null;
+}
+
+interface EmailOnlyRow {
+  email: string;
+}
+
+interface TotpAccountRow {
+  id: string;
+  username: string;
+  email: string;
+}
+
 /** 请求体里是否真的带了某个字段（`{bio: ''}` 与「没传」是两件事）。 */
-function has(body, key) {
+function has(body: object | null | undefined, key: string) {
   return Object.prototype.hasOwnProperty.call(body || {}, key);
 }
 
 /** 读取一个用户行并拼成前端要的用户态（页面直接拿它刷新界面）。 */
-async function loadUser(id) {
-  const result = await query(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id]);
+async function loadUser(id: string) {
+  const result = await query<UserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id]);
   if (result.rows.length === 0) {
     throw notFound('用户不存在或已删除');
   }
   const row = result.rows[0];
-  return userPayload(row, capabilities(row.role, row.status));
+  if (!row) {
+    throw notFound('用户不存在或已删除');
+  }
+  return userPayload(row, capabilities(row.role, row.status as string | undefined));
 }
 
 /**
@@ -58,8 +94,8 @@ async function loadUser(id) {
  */
 router.get('/', authenticate, async (req, res, next) => {
   try {
-    res.json(await loadUser(req.user.userId));
-  } catch (error) {
+    res.json(await loadUser(req.user!.userId));
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -75,7 +111,7 @@ router.get('/', authenticate, async (req, res, next) => {
 router.put('/', authenticate, async (req, res, next) => {
   try {
     assertNotLimited(req.user, 'profile');
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
     return;
   }
@@ -83,10 +119,10 @@ router.put('/', authenticate, async (req, res, next) => {
     await mutate(res, next, async () => {
       const body = req.body || {};
       const bounds = await limits();
-      const assignments = [];
-      const values = [];
+      const assignments: string[] = [];
+      const values: unknown[] = [];
       /** 追加一列赋值，参数按顺序占位，SQL 全程参数化。 */
-      const set = (column, value) => {
+      const set = (column: string, value: unknown) => {
         values.push(value);
         assignments.push(`${column} = $${values.length}`);
       };
@@ -132,7 +168,7 @@ router.put('/', authenticate, async (req, res, next) => {
       }
 
       if (assignments.length > 0) {
-        values.push(req.user.userId);
+        values.push(req.user!.userId);
         await query(
           `
                     UPDATE users SET ${assignments.join(', ')}, updated_at = now()
@@ -141,9 +177,9 @@ router.put('/', authenticate, async (req, res, next) => {
           values,
         );
       }
-      return { user: await loadUser(req.user.userId) };
+      return { user: await loadUser(req.user!.userId) };
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -175,20 +211,21 @@ router.post('/password', authenticate, async (req, res, next) => {
         throw badRequest(`密码最多 ${bounds.passwordMax} 个字符`);
       }
 
-      const found = await query('SELECT password_hash FROM users WHERE id = $1', [req.user.userId]);
-      const matched = found.rows.length > 0 && (await bcrypt.compare(current, found.rows[0].password_hash));
+      const found = await query<PasswordHashRow>('SELECT password_hash FROM users WHERE id = $1', [req.user!.userId]);
+      const row = found.rows[0];
+      const matched = row && (await bcrypt.compare(current, row.password_hash));
       if (!matched) {
         throw badRequest('当前密码不正确');
       }
 
       await query('UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1', [
-        req.user.userId,
+        req.user!.userId,
         await bcrypt.hash(nextPassword, 10),
       ]);
-      await revokeAllForUser(req.user.userId);
+      await revokeAllForUser(req.user!.userId);
       return {};
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -201,14 +238,14 @@ router.post('/password', authenticate, async (req, res, next) => {
  */
 router.get('/security', authenticate, async (req, res, next) => {
   try {
-    const factors = await secondFactorState(req.user.userId);
+    const factors = await secondFactorState(req.user!.userId);
     if (!factors) {
       throw notFound('用户不存在或已删除');
     }
     res.json({
       email: factors.email,
       emailVerified: factors.emailVerified,
-      emailVerifiedAt: await verifiedAt(req.user.userId),
+      emailVerifiedAt: await verifiedAt(req.user!.userId),
       twoFactorEnabled: factors.enabled,
       // 绑定过验证器 ≠ 开关打开；这两个字段分开，页面才画得对
       totpEnabled: factors.totpBound,
@@ -216,14 +253,14 @@ router.get('/security', authenticate, async (req, res, next) => {
       // 两步验证只支持邮箱方式：没有已验证邮箱就不该让开关亮起来
       canEnable: factors.emailVerified && factors.email !== '',
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
 
 /** 邮箱验证时间（`secondFactorState` 不带它，这里单独取一次，只用于展示）。 */
-async function verifiedAt(userId) {
-  const result = await query('SELECT email_verified_at FROM users WHERE id = $1', [userId]);
+async function verifiedAt(userId: string) {
+  const result = await query<VerifiedAtRow>('SELECT email_verified_at FROM users WHERE id = $1', [userId]);
   const row = result.rows[0];
   return row && row.email_verified_at ? new Date(row.email_verified_at).toISOString() : '';
 }
@@ -237,9 +274,10 @@ async function verifiedAt(userId) {
  */
 router.post('/2fa/enable', authenticate, async (req, res, next) => {
   try {
-    const found = await query('SELECT email, email_verified, two_factor_enabled FROM users WHERE id = $1', [
-      req.user.userId,
-    ]);
+    const found = await query<FactorToggleRow>(
+      'SELECT email, email_verified, two_factor_enabled FROM users WHERE id = $1',
+      [req.user!.userId],
+    );
     const row = found.rows[0];
     if (!row) {
       throw notFound('用户不存在或已删除');
@@ -254,11 +292,11 @@ router.post('/2fa/enable', authenticate, async (req, res, next) => {
     const sent = await issueCode({
       purpose: 'enable2fa',
       email: row.email,
-      userId: req.user.userId,
+      userId: req.user!.userId,
       ip: req.ip || '',
     });
     res.json({ ok: true, error: '', ...sent, maskedEmail: maskEmail(row.email) });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -270,14 +308,18 @@ router.post('/2fa/enable', authenticate, async (req, res, next) => {
 router.post('/2fa/enable/verify', authenticate, async (req, res, next) => {
   try {
     const code = String((req.body || {}).code || '').trim();
-    const found = await query('SELECT email FROM users WHERE id = $1', [req.user.userId]);
+    const found = await query<EmailOnlyRow>('SELECT email FROM users WHERE id = $1', [req.user!.userId]);
     if (found.rows.length === 0) {
+      throw notFound('用户不存在或已删除');
+    }
+    const emailRow = found.rows[0];
+    if (!emailRow) {
       throw notFound('用户不存在或已删除');
     }
     let consumed;
     try {
-      consumed = await consumeCode({ purpose: 'enable2fa', email: found.rows[0].email, code });
-    } catch (error) {
+      consumed = await consumeCode({ purpose: 'enable2fa', email: emailRow.email, code });
+    } catch (error: unknown) {
       if (isCodeRejected(error)) {
         res.json({ ok: false, error: error.message });
         return;
@@ -285,19 +327,19 @@ router.post('/2fa/enable/verify', authenticate, async (req, res, next) => {
       throw error;
     }
     // 这枚码必须是为当前账号签发的（邮箱可能在这期间被改过）
-    if (consumed.userId !== req.user.userId) {
+    if (consumed.userId !== req.user!.userId) {
       res.json({ ok: false, error: '验证码不正确或已失效' });
       return;
     }
-    await query('UPDATE users SET two_factor_enabled = true, updated_at = now() WHERE id = $1', [req.user.userId]);
+    await query('UPDATE users SET two_factor_enabled = true, updated_at = now() WHERE id = $1', [req.user!.userId]);
     // 开启成功就给一批备用码：它和「用哪种方式验证」无关，是手机与邮箱都用不了时的最后一道
     res.json({
       ok: true,
       error: '',
       twoFactorEnabled: true,
-      backupCodes: await regenerateBackupCodes(req.user.userId),
+      backupCodes: await regenerateBackupCodes(req.user!.userId),
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -311,7 +353,9 @@ router.post('/2fa/enable/verify', authenticate, async (req, res, next) => {
  */
 router.post('/2fa/totp/setup', authenticate, async (req, res, next) => {
   try {
-    const found = await query('SELECT id, username, email FROM users WHERE id = $1', [req.user.userId]);
+    const found = await query<TotpAccountRow>('SELECT id, username, email FROM users WHERE id = $1', [
+      req.user!.userId,
+    ]);
     const user = found.rows[0];
     if (!user) {
       throw notFound('用户不存在或已删除');
@@ -320,7 +364,7 @@ router.post('/2fa/totp/setup', authenticate, async (req, res, next) => {
     const issuer = String((settings.brand && (settings.brand.zh || settings.brand.en)) || 'calMobile');
     const setup = await beginTotpSetup({ id: user.id, username: user.username, email: user.email }, issuer);
     res.json({ ok: true, error: '', issuer, ...setup });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -332,9 +376,9 @@ router.post('/2fa/totp/setup', authenticate, async (req, res, next) => {
 router.post('/2fa/totp/enable', authenticate, async (req, res, next) => {
   try {
     const code = String((req.body || {}).code || '').trim();
-    const result = await confirmTotpSetup(req.user.userId, code);
+    const result = await confirmTotpSetup(req.user!.userId, code);
     res.json({ ok: true, error: '', twoFactorEnabled: true, ...result });
-  } catch (error) {
+  } catch (error: unknown) {
     if (isCodeRejected(error)) {
       res.json({ ok: false, error: error.message });
       return;
@@ -356,7 +400,10 @@ router.post('/2fa/backup-codes', authenticate, async (req, res, next) => {
       if (!password) {
         throw badRequest('请输入当前密码');
       }
-      const found = await query('SELECT password_hash, two_factor_enabled FROM users WHERE id = $1', [req.user.userId]);
+      const found = await query<PasswordFactorRow>(
+        'SELECT password_hash, two_factor_enabled FROM users WHERE id = $1',
+        [req.user!.userId],
+      );
       const row = found.rows[0];
       const matched = row && (await bcrypt.compare(password, row.password_hash));
       if (!matched) {
@@ -365,9 +412,9 @@ router.post('/2fa/backup-codes', authenticate, async (req, res, next) => {
       if (row.two_factor_enabled !== true) {
         throw badRequest('请先开启两步验证，再生成备用码');
       }
-      return { backupCodes: await regenerateBackupCodes(req.user.userId) };
+      return { backupCodes: await regenerateBackupCodes(req.user!.userId) };
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -383,16 +430,17 @@ router.post('/2fa/disable', authenticate, async (req, res, next) => {
       if (!password) {
         throw badRequest('请输入当前密码');
       }
-      const found = await query('SELECT password_hash FROM users WHERE id = $1', [req.user.userId]);
-      const matched = found.rows.length > 0 && (await bcrypt.compare(password, found.rows[0].password_hash));
+      const found = await query<PasswordHashRow>('SELECT password_hash FROM users WHERE id = $1', [req.user!.userId]);
+      const row = found.rows[0];
+      const matched = row && (await bcrypt.compare(password, row.password_hash));
       if (!matched) {
         throw badRequest('当前密码不正确');
       }
       // 关闭要把验证器绑定与备用码一起清掉：只翻开关的话，下次开启会静默沿用旧密钥与旧备用码。
-      await clearSecondFactors(req.user.userId);
+      await clearSecondFactors(req.user!.userId);
       return { twoFactorEnabled: false };
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -410,8 +458,9 @@ router.post('/email', authenticate, async (req, res, next) => {
     if (!EMAIL_PATTERN.test(email) || email.length > 120) {
       throw badRequest('邮箱格式不正确');
     }
-    const current = await query('SELECT email FROM users WHERE id = $1', [req.user.userId]);
-    if (String(current.rows[0] ? current.rows[0].email : '').toLowerCase() === email.toLowerCase()) {
+    const current = await query<EmailOnlyRow>('SELECT email FROM users WHERE id = $1', [req.user!.userId]);
+    const currentRow = current.rows[0];
+    if (String(currentRow ? currentRow.email : '').toLowerCase() === email.toLowerCase()) {
       throw badRequest('新邮箱与当前邮箱相同');
     }
     const taken = await query('SELECT id FROM users WHERE lower(email) = lower($1)', [email]);
@@ -422,11 +471,11 @@ router.post('/email', authenticate, async (req, res, next) => {
     const sent = await issueCode({
       purpose: 'email',
       email,
-      userId: req.user.userId,
+      userId: req.user!.userId,
       ip: req.ip || '',
     });
     res.json({ ok: true, error: '', ...sent });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -442,7 +491,7 @@ router.post('/email/verify', authenticate, async (req, res, next) => {
     let consumed;
     try {
       consumed = await consumeCode({ purpose: 'email', email, code });
-    } catch (error) {
+    } catch (error: unknown) {
       if (isCodeRejected(error)) {
         res.json({ ok: false, error: error.message });
         return;
@@ -450,7 +499,7 @@ router.post('/email/verify', authenticate, async (req, res, next) => {
       throw error;
     }
     // 这枚码必须是为**当前登录用户**签发的，否则别人用自己账号发的改邮箱码也能拿来改你的账号
-    if (consumed.userId !== req.user.userId) {
+    if (consumed.userId !== req.user!.userId) {
       res.json({ ok: false, error: '验证码不正确或已失效' });
       return;
     }
@@ -461,18 +510,18 @@ router.post('/email/verify', authenticate, async (req, res, next) => {
                    SET email = $2, email_verified = true, email_verified_at = now(), updated_at = now()
                  WHERE id = $1
             `,
-        [req.user.userId, consumed.email],
+        [req.user!.userId, consumed.email],
       );
-    } catch (error) {
+    } catch (error: unknown) {
       // 唯一索引冲突：这期间被别的账号占用了
-      if (error && error.code === '23505') {
+      if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505') {
         res.json({ ok: false, error: '该邮箱已被其他账号使用' });
         return;
       }
       throw error;
     }
-    res.json({ ok: true, error: '', user: await loadUser(req.user.userId) });
-  } catch (error) {
+    res.json({ ok: true, error: '', user: await loadUser(req.user!.userId) });
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -484,8 +533,8 @@ router.post('/email/verify', authenticate, async (req, res, next) => {
  */
 router.get('/notifications', authenticate, async (req, res, next) => {
   try {
-    res.json(await readNotificationPreferences(req.user.userId));
-  } catch (error) {
+    res.json(await readNotificationPreferences(req.user!.userId));
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -497,11 +546,11 @@ router.get('/notifications', authenticate, async (req, res, next) => {
 router.put('/notifications', authenticate, async (req, res, next) => {
   try {
     await mutate(res, next, async () => ({
-      notify: await saveNotificationPreferences(req.user.userId, req.body || {}),
+      notify: await saveNotificationPreferences(req.user!.userId, req.body || {}),
     }));
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
 
-module.exports = router;
+export = router;

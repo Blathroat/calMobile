@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    // 已转 TS 的文件按 strict 检查；剩余 JS 仍 allowJs、不 checkJs。
+    // 已转 TS 的文件按 strict 检查；剩余 JS（状态页模板）仍 allowJs、不 checkJs。
     // verbatimModuleSyntax / module nodenext 等 ESM 收紧项等全部源码转完后再开。
     "target": "ES2022",
     "lib": ["ES2022"],
@@ -13,6 +13,7 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "resolveJsonModule": true,
     "sourceMap": true,
     "rootDir": "src",
     "outDir": "dist",

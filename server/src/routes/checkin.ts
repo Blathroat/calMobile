@@ -13,12 +13,13 @@
  * 之前 —— 受限的普通用户两条规则都不满足，「账号已被限制」才是准确的原因。
  */
 
-const express = require('express');
-const { query } = require('../config/pool');
-const { REGISTRATION_COLUMNS, REGISTRATION_FROM } = require('../domain/queries');
-const { authenticate } = require('../middleware/auth');
-const { requireExhibitor, canManageExhibition, assertNotLimited } = require('../domain/permissions');
-const labels = require('../domain/labels');
+import express = require('express');
+import { query } from '../config/pool';
+import { REGISTRATION_COLUMNS, REGISTRATION_FROM } from '../domain/queries';
+import type { RegistrationRow } from '../domain/payloads';
+import { authenticate } from '../middleware/auth';
+import { requireExhibitor, canManageExhibition, assertNotLimited } from '../domain/permissions';
+import * as labels from '../domain/labels';
 
 const router = express.Router();
 
@@ -28,14 +29,18 @@ const CHECKIN_COLUMNS = `
     to_char(r.created_at, 'MM-DD HH24:MI')  AS registration_time
 `;
 
+interface CheckInRow extends RegistrationRow {
+  registration_time?: string | null;
+}
+
 /** 报名内容摘要：换行折成空格再截断。 */
-function summaryOf(answers) {
+function summaryOf(answers: unknown) {
   return String(answers || '')
     .replace(/\n/g, ' ')
     .slice(0, 46);
 }
 
-function checkInRecord(row) {
+function checkInRecord(row: CheckInRow) {
   return {
     recordId: row.id,
     visitorName: row.visitor_name,
@@ -62,7 +67,7 @@ router.post('/', authenticate, async (req, res, next) => {
       return;
     }
 
-    const result = await query(`SELECT ${CHECKIN_COLUMNS} ${REGISTRATION_FROM} WHERE r.id = $1`, [
+    const result = await query<CheckInRow>(`SELECT ${CHECKIN_COLUMNS} ${REGISTRATION_FROM} WHERE r.id = $1`, [
       parsed.registrationId,
     ]);
     const row = result.rows[0];
@@ -131,9 +136,9 @@ router.post('/', authenticate, async (req, res, next) => {
       error: '',
       record,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
 
-module.exports = router;
+export = router;

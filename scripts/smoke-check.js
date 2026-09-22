@@ -462,7 +462,7 @@ const checks = [
   },
   {
     id: 'profile-store',
-    file: 'server/src/routes/profile.js',
+    file: 'server/src/routes/profile.ts',
     contains: ['showRegistrations', 'show_registrations']
   },
   {
@@ -491,7 +491,7 @@ const checks = [
   {
     id: 'review-optional-auto-approve',
     // 「无需审核」提交即通过的规则现在在服务端兜住
-    file: 'server/src/routes/registrations.js',
+    file: 'server/src/routes/registrations.ts',
     contains: ['autoApproved', "=== 'optional'", "'approved' : 'pending'"]
   },
   {
@@ -501,7 +501,7 @@ const checks = [
   },
   {
     id: 'description-format-persisted',
-    file: 'server/src/routes/exhibitions.js',
+    file: 'server/src/routes/exhibitions.ts',
     contains: ['descriptionFormat', 'qrEnabled']
   },
   {
@@ -512,7 +512,7 @@ const checks = [
   },
   {
     id: 'attended-status-defined',
-    file: 'server/src/routes/checkin.js',
+    file: 'server/src/routes/checkin.ts',
     contains: ['parseCheckInCode', "'attended'", 'duplicated']
   },
   {
@@ -528,12 +528,12 @@ const checks = [
   {
     id: 'admin-can-always-review',
     // 展商与管理员都能审核；展商只能碰自己举办的展会
-    file: 'server/src/routes/review.js',
+    file: 'server/src/routes/review.ts',
     contains: ['requireExhibitor', 'canManageExhibition']
   },
   {
     id: 'admin-public-profile-unrestricted',
-    file: 'server/src/routes/users.js',
+    file: 'server/src/routes/users.ts',
     contains: ['viewedAsAdmin', 'showRegistrations']
   },
   {
@@ -783,7 +783,7 @@ const checks = [
   {
     id: 'backend-status-page',
     // 健康状态页：服务与数据库都能一眼看到
-    file: 'server/src/routes/status.js',
+    file: 'server/src/routes/status.ts',
     contains: ['migrations', 'pool', 'endpoints'],
   },
   {
@@ -826,7 +826,7 @@ const checks = [
   {
     id: 'backend-register-two-stage',
     // 注册是两步的：第一步只发码不建号 —— 库里不该存在「注册了但邮箱没验证」的账号
-    file: 'server/src/routes/auth.js',
+    file: 'server/src/routes/auth.ts',
     contains: ["router.post('/register'", "router.post('/register/verify'", 'isCodeRejected',
       'email_verified', 'issueCode', 'consumeCode'],
   },
@@ -840,7 +840,7 @@ const checks = [
   {
     id: 'backend-two-factor-ticket',
     // 两步验证：密码对了也只发预认证票（「密码对」≠「登录成功」），票单次使用、只存哈希
-    file: 'server/src/routes/auth.js',
+    file: 'server/src/routes/auth.ts',
     contains: ['twoFactorRequired', 'issueTicket', 'consumeTicket', 'maskEmail'],
   },
   {
@@ -851,14 +851,14 @@ const checks = [
   {
     id: 'backend-email-is-identity',
     // 邮箱是身份：改邮箱只能走「验证新地址」，PUT /profile 不再写 email
-    file: 'server/src/routes/profile.js',
+    file: 'server/src/routes/profile.ts',
     contains: ["邮箱需要通过「验证新邮箱」修改", 'two_factor_enabled', 'security'],
   },
   {
     id: 'backend-start-is-production',
     // pnpm start 必须进生产模式：状态页会关、启动自检会跑
     file: 'server/package.json',
-    contains: ['"start": "node dist/index.js --production"', '"dev": "tsx watch src/index.js"',
+    contains: ['"start": "node dist/index.js --production"', '"dev": "tsx watch src/index.ts"',
       '"db:migrate:prod"'],
   },
   {
@@ -869,7 +869,7 @@ const checks = [
   {
     id: 'backend-status-page-gated',
     // 生产默认关掉状态页；生产启动前必须做配置自检
-    file: 'server/src/index.js',
+    file: 'server/src/index.ts',
     contains: ['runtime.statusPageEnabled', 'productionProblems', '状态页在生产环境已关闭',
       "app.disable('x-powered-by')"],
   },
@@ -896,7 +896,7 @@ const checks = [
   {
     id: 'backend-login-totp-invisible-until-verified',
     // 绑了验证器就不自动发邮件码（省一封多半用不上的信，也避开 60 秒冷却）
-    file: 'server/src/routes/auth.js',
+    file: 'server/src/routes/auth.ts',
     contains: ['emailSent', 'methods: {', 'twoFactorRequired'],
   },
   {

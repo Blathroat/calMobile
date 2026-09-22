@@ -5,20 +5,25 @@
  * HTTP 状态码只用于传输与认证问题：401 / 403 会被前端 api.js 当作错误抛出并就地提示。
  */
 
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const { query } = require('../config/pool');
-const { USER_COLUMNS, USER_FROM } = require('../domain/queries');
-const { userPayload, guestPayload } = require('../domain/payloads');
-const { capabilities } = require('../domain/permissions');
-const { limits } = require('../domain/validation');
-const { issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser } = require('../domain/session');
-const { issueCode, consumeCode, isCodeRejected, maskEmail } = require('../domain/otp');
-const { secondFactorState, verifySecondFactor } = require('../domain/two-factor');
-const { issueTicket, findTicket, consumeTicket, countTicketFailure } = require('../domain/preauth');
-const { badRequest } = require('../domain/errors');
-const { authenticate } = require('../middleware/auth');
-const { rateLimit } = require('../middleware/rate-limit');
+import express = require('express');
+const bcrypt = require('bcryptjs') as {
+  hash(data: string, saltOrRounds: number): Promise<string>;
+  hashSync(data: string, saltOrRounds: number): string;
+  compare(data: string, encrypted: string): Promise<boolean>;
+};
+import { query } from '../config/pool';
+import { USER_COLUMNS, USER_FROM } from '../domain/queries';
+import { userPayload, guestPayload, type UserRow } from '../domain/payloads';
+import { capabilities } from '../domain/permissions';
+import { limits } from '../domain/validation';
+import { issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser } from '../domain/session';
+import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp';
+import { secondFactorState, verifySecondFactor, type SecondFactorUser } from '../domain/two-factor';
+import { issueTicket, findTicket, consumeTicket, countTicketFailure } from '../domain/preauth';
+import { badRequest } from '../domain/errors';
+import { authenticate } from '../middleware/auth';
+import type { RequestHandler } from 'express';
+import { rateLimit } from '../middleware/rate-limit';
 
 const router = express.Router();
 
@@ -30,7 +35,7 @@ const authLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 10,
   message: '尝试过于频繁，请稍后再试',
-});
+}) as RequestHandler;
 
 /**
  * 账号不存在时用来「陪着比一次」的哈希（明文是随机的，永远比不中）。
@@ -43,19 +48,64 @@ const DUMMY_PASSWORD_HASH = bcrypt.hashSync(`missing-${Date.now()}`, 10);
 /** 邮箱格式：与 `routes/profile.js` 的校验保持一致（注册与找回密码共用）。 */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** 登录查询行。SQL 不取 role，交给 issueSession 时再按会话用户断言。 */
+interface LoginAccountRow {
+  id: string;
+  username: string;
+  email: string | null;
+  email_verified: boolean | null;
+  two_factor_enabled: boolean | null;
+  password_hash: string;
+  status: string;
+}
+
+interface LoginFactorRow {
+  id: string;
+  username: string;
+  role: string;
+  email: string | null;
+  email_verified: boolean | null;
+  totp_secret: string | null;
+  status: string;
+}
+
+interface LoginCodeRow {
+  id: string;
+  email: string | null;
+  email_verified: boolean | null;
+}
+
+interface RegistrationNameRow {
+  username: string | null;
+  email: string | null;
+}
+
+interface RegisterPayload {
+  username?: string;
+  passwordHash?: string;
+  nickname?: string;
+}
+
+interface IdRow {
+  id: string;
+}
+
 /** 响应统一信封：成功时 ok=true 且 error 为空串。 */
-function failure(message) {
+function failure(message: string) {
   return { ok: false, error: message };
 }
 
 /** 读取一个用户行并拼成前端要的用户态。 */
-async function loadUser(id) {
-  const result = await query(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id]);
+async function loadUser(id: string) {
+  const result = await query<UserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id]);
   if (result.rows.length === 0) {
     return null;
   }
   const row = result.rows[0];
-  return userPayload(row, capabilities(row.role, row.status));
+  if (!row) {
+    return null;
+  }
+  return userPayload(row, capabilities(row.role, row.status ?? undefined));
 }
 
 /**
@@ -73,7 +123,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
       res.json(failure('请输入账号与密码'));
       return;
     }
-    const result = await query(
+    const result = await query<LoginAccountRow>(
       `
             SELECT id, username, email, email_verified, two_factor_enabled, password_hash, status
               FROM users
@@ -112,7 +162,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
       // **绑了验证器就不再自动发邮件码**：那封邮件多半用不上，还会撞上同一邮箱
       // 60 秒一条的冷却（用户输错一次验证器码、想重新登录就会拿到 429）。
       // 需要邮箱验证码时，页面用 POST /auth/login/code 主动要一条。
-      const sendEmail = emailUsable && !factors.totpBound;
+      const sendEmail = emailUsable && !factors!.totpBound;
       const sent = sendEmail
         ? await issueCode({
             purpose: 'login',
@@ -142,9 +192,9 @@ router.post('/login', authLimiter, async (req, res, next) => {
     }
 
     await query('UPDATE users SET last_login_time = now() WHERE id = $1', [account.id]);
-    const session = await issueSession(account);
+    const session = await issueSession(account as unknown as Parameters<typeof issueSession>[0]);
     res.json({ ok: true, error: '', ...session, user: await loadUser(account.id) });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -169,7 +219,7 @@ router.post('/login/verify', authLimiter, async (req, res, next) => {
       res.json(failure('验证已过期，请重新登录'));
       return;
     }
-    const account = await query(
+    const account = await query<LoginFactorRow>(
       'SELECT id, username, role, email, email_verified, totp_secret, status FROM users WHERE id = $1',
       [found.userId],
     );
@@ -182,8 +232,8 @@ router.post('/login/verify', authLimiter, async (req, res, next) => {
     // 第二因子三选一：验证器 → 邮箱验证码 → 备用码（见 domain/two-factor.js）。
     // 顺序在那边定义，这里只管把失败记到票据上：拿到票也不能慢慢地猜。
     try {
-      await verifySecondFactor(row, code);
-    } catch (error) {
+      await verifySecondFactor(row as SecondFactorUser, code);
+    } catch (error: unknown) {
       if (isCodeRejected(error)) {
         await countTicketFailure(found.id, found.attempts);
         res.json(failure(error.message));
@@ -199,7 +249,7 @@ router.post('/login/verify', authLimiter, async (req, res, next) => {
     await query('UPDATE users SET last_login_time = now() WHERE id = $1', [row.id]);
     const session = await issueSession(row);
     res.json({ ok: true, error: '', ...session, user: await loadUser(row.id) });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -216,7 +266,9 @@ router.post('/login/code', authLimiter, async (req, res, next) => {
       res.json(failure('验证已过期，请重新登录'));
       return;
     }
-    const account = await query('SELECT id, email, email_verified FROM users WHERE id = $1', [found.userId]);
+    const account = await query<LoginCodeRow>('SELECT id, email, email_verified FROM users WHERE id = $1', [
+      found.userId,
+    ]);
     const row = account.rows[0];
     if (!row || row.email_verified !== true || !row.email) {
       res.json(failure('两步验证邮箱不可用，请联系管理员关闭两步验证'));
@@ -229,7 +281,7 @@ router.post('/login/code', authLimiter, async (req, res, next) => {
       ip: req.ip || '',
     });
     res.json({ ok: true, error: '', ...sent, maskedEmail: maskEmail(row.email) });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -243,11 +295,11 @@ router.post('/login/code', authLimiter, async (req, res, next) => {
  *
  * @returns {string} 给用户看的文案；没有冲突就是空串。
  */
-async function registrationConflict(username, email) {
+async function registrationConflict(username: string, email: string) {
   if (!email) {
     return '请输入有效的邮箱地址';
   }
-  const existing = await query(
+  const existing = await query<RegistrationNameRow>(
     `
         SELECT lower(username) AS username, lower(email) AS email
           FROM users
@@ -312,7 +364,7 @@ router.post('/register', authLimiter, async (req, res, next) => {
       ip: req.ip || '',
     });
     res.json({ ok: true, error: '', ...ticket });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -330,7 +382,7 @@ router.post('/register/verify', authLimiter, async (req, res, next) => {
     let consumed;
     try {
       consumed = await consumeCode({ purpose: 'register', email, code });
-    } catch (error) {
+    } catch (error: unknown) {
       // 码不对 / 过期 / 次数用尽都是**可预期的规则失败**：200 + ok:false，页面就地提示，
       // 与「账号或密码不正确」同一套处理；限流（429）等另走 4xx。
       if (isCodeRejected(error)) {
@@ -339,7 +391,7 @@ router.post('/register/verify', authLimiter, async (req, res, next) => {
       }
       throw error;
     }
-    const pending = consumed.payload || {};
+    const pending = (consumed.payload || {}) as RegisterPayload;
     const username = String(pending.username || '').trim();
     if (!username || !pending.passwordHash) {
       res.json(failure('注册信息已失效，请重新填写'));
@@ -363,9 +415,9 @@ router.post('/register/verify', authLimiter, async (req, res, next) => {
             `,
         [id, username, pending.passwordHash, consumed.email, pending.nickname || username],
       );
-    } catch (error) {
+    } catch (error: unknown) {
       // 唯一索引冲突：两个请求几乎同时验证同一个用户名或邮箱。
-      if (error && error.code === '23505') {
+      if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505') {
         res.json(failure('该用户名或邮箱已被注册'));
         return;
       }
@@ -373,7 +425,7 @@ router.post('/register/verify', authLimiter, async (req, res, next) => {
     }
     const session = await issueSession({ id, username, role: 'user' });
     res.json({ ok: true, error: '', ...session, user: await loadUser(id) });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -395,7 +447,7 @@ router.post('/password/forgot', authLimiter, async (req, res, next) => {
       res.json(failure('请输入有效的邮箱地址'));
       return;
     }
-    const found = await query(
+    const found = await query<IdRow>(
       `
             SELECT id FROM users
              WHERE lower(email) = lower($1) AND email_verified = true AND status <> 'banned'
@@ -411,7 +463,7 @@ router.post('/password/forgot', authLimiter, async (req, res, next) => {
       ip: req.ip || '',
     });
     res.json({ ok: true, error: '', ...ticket });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -444,7 +496,7 @@ router.post('/password/reset', authLimiter, async (req, res, next) => {
     let consumed;
     try {
       consumed = await consumeCode({ purpose: 'reset', email, code });
-    } catch (error) {
+    } catch (error: unknown) {
       if (isCodeRejected(error)) {
         res.json(failure(error.message));
         return;
@@ -452,7 +504,7 @@ router.post('/password/reset', authLimiter, async (req, res, next) => {
       throw error;
     }
 
-    const found = await query('SELECT id FROM users WHERE lower(email) = lower($1) AND status <> $2', [
+    const found = await query<IdRow>('SELECT id FROM users WHERE lower(email) = lower($1) AND status <> $2', [
       consumed.email,
       'banned',
     ]);
@@ -461,14 +513,19 @@ router.post('/password/reset', authLimiter, async (req, res, next) => {
       res.json(failure('账号不存在或已停用，请联系管理员'));
       return;
     }
-    const userId = found.rows[0].id;
+    const userRow = found.rows[0];
+    if (!userRow) {
+      res.json(failure('账号不存在或已停用，请联系管理员'));
+      return;
+    }
+    const userId = userRow.id;
     await query('UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1', [
       userId,
       await bcrypt.hash(newPassword, 10),
     ]);
     await revokeAllForUser(userId);
     res.json({ ok: true, error: '' });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -489,7 +546,7 @@ router.post('/logout', async (req, res, next) => {
   try {
     await revokeRefreshToken(String(req.body.refreshToken || ''));
     res.json({ ok: true, error: '' });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -512,7 +569,7 @@ router.post('/refresh', async (req, res, next) => {
       refreshToken: rotated.refreshToken,
       user: await loadUser(rotated.user.id),
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -523,11 +580,11 @@ router.post('/refresh', async (req, res, next) => {
  */
 router.post('/logout-all', authenticate, async (req, res, next) => {
   try {
-    await revokeAllForUser(req.user.userId);
+    await revokeAllForUser(req.user!.userId);
     res.json({ ok: true, error: '' });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
 
-module.exports = router;
+export = router;

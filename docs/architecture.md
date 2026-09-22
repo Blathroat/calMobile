@@ -67,9 +67,9 @@ app/src/main/
 
 | 组件 | 职责 |
 | --- | --- |
-| `server/src/routes/*.js` | REST 路由：`bootstrap`、`auth`、`profile`、`exhibitions`、`registrations`、`review`、`checkin`、`users`、`search`、`settings`、`status` |
-| `server/src/domain/` | 业务层：状态词汇表（`labels.js`）、SQL 片段（`queries.js`）、响应映射（`payloads.js`）、权限（`permissions.js`）、校验（`validation.js`）、设置（`settings.js`）、会话与令牌（`session.js`）、错误与信封（`errors.js` / `respond.js`） |
-| `server/src/config/migrate.js` | 表结构与示例数据，按编号记录迁移、可反复执行 |
+| `server/src/routes/*.ts` | REST 路由：`bootstrap`、`auth`、`profile`、`exhibitions`、`registrations`、`review`、`checkin`、`users`、`search`、`settings`、`status` |
+| `server/src/domain/` | 业务层：状态词汇表（`labels.ts`）、SQL 片段（`queries.ts`）、响应映射（`payloads.ts`）、权限（`permissions.ts`）、校验（`validation.ts`）、设置（`settings.ts`）、会话与令牌（`session.ts`）、错误与信封（`errors.ts` / `respond.ts`） |
+| `server/src/config/migrate.ts` | 表结构与示例数据，按编号记录迁移、可反复执行 |
 | `js/core/api.js` | 前端唯一取数入口：动作名 → REST 路径的映射表 + 401 自动续期 |
 | `js/core/bridge.js` | 只负责启动、文案注入、外观应用与 `ui.sync` 设备镜像 |
 | `WebAppActions` + `SystemActions` / `MediaActions` | 10 个系统动作的原生实现：日历、通知与摄像头权限、媒体选择与落盘、分享、CSV 导出、设备镜像 |
@@ -184,7 +184,7 @@ pnpm dev                         # 开发模式（nodemon），http://127.0.0.1:
 adb reverse tcp:3000 tcp:3000
 ```
 
-**`pnpm dev` 与 `pnpm start` 是两种模式**：`dev` 走开发模式（状态页开着、不做启动自检）；`start` 自动进**生产模式**（`node src/index.js --production`）——关掉 `/status` 与 `/api/v1/status`、对配置做启动前自检（开发密钥、默认库密码、验证码只写日志这类致命项直接拒绝启动），对生产库迁移用 `pnpm db:migrate:prod`。判定集中在 `server/src/config/runtime.js`，细节见 `server/README.md`。
+**`pnpm dev` 与 `pnpm start` 是两种模式**：`dev` 走开发模式（状态页开着、不做启动自检）；`start` 自动进**生产模式**（`node dist/index.js --production`）——关掉 `/status` 与 `/api/v1/status`、对配置做启动前自检（开发密钥、默认库密码、验证码只写日志这类致命项直接拒绝启动），对生产库迁移用 `pnpm db:migrate:prod`。判定集中在 `server/src/config/runtime.ts`，细节见 `server/README.md`。
 
 示例账号 `demo` / `exhibitor` / `user`，密码都是 `password`（角色分别是管理员、展商、普通用户）。
 

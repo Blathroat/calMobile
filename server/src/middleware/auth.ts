@@ -27,6 +27,14 @@ export interface AuthedUser {
   can: Capabilities;
 }
 
+declare global {
+  namespace Express {
+    interface Request {
+      user?: AuthedUser | null;
+    }
+  }
+}
+
 export interface AuthRequest {
   headers?: { authorization?: unknown };
   user?: AuthedUser | null;

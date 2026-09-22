@@ -6,19 +6,24 @@
  * 与 `profile.js` 的通知偏好分工保持一致。
  */
 
-const express = require('express');
-const { query } = require('../config/pool');
-const { optionalAuth } = require('../middleware/auth');
-const { readServerSettings, readUiMode } = require('../domain/settings');
-const { USER_COLUMNS, USER_FROM } = require('../domain/queries');
-const { userPayload, guestPayload } = require('../domain/payloads');
-const { capabilities } = require('../domain/permissions');
+import express = require('express');
+import { query } from '../config/pool';
+import { optionalAuth } from '../middleware/auth';
+import { readServerSettings, readUiMode } from '../domain/settings';
+import { USER_COLUMNS, USER_FROM } from '../domain/queries';
+import { userPayload, guestPayload, type UserRow } from '../domain/payloads';
+import { capabilities } from '../domain/permissions';
 
 const router = express.Router();
 
+interface LandingMonthRow {
+  year: number;
+  month: number;
+}
+
 /** 首页日历的落点月份：最早一个有展会的月份；没有展会时用当前月。 */
 async function landingMonth() {
-  const result = await query(`
+  const result = await query<LandingMonthRow>(`
         SELECT EXTRACT(YEAR FROM exhibition_date)::int  AS year,
                EXTRACT(MONTH FROM exhibition_date)::int AS month
         FROM exhibitions
@@ -26,7 +31,10 @@ async function landingMonth() {
         LIMIT 1
     `);
   if (result.rows.length > 0) {
-    return { year: result.rows[0].year, month: result.rows[0].month };
+    const row = result.rows[0];
+    if (row) {
+      return { year: row.year, month: row.month };
+    }
   }
   const now = new Date();
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
@@ -40,10 +48,12 @@ router.get('/bootstrap', optionalAuth, async (req, res, next) => {
 
     let user = guestPayload();
     if (req.user) {
-      const result = await query(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [req.user.userId]);
+      const result = await query<UserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [req.user.userId]);
       if (result.rows.length > 0) {
         const row = result.rows[0];
-        user = userPayload(row, capabilities(row.role, row.status));
+        if (row) {
+          user = userPayload(row, capabilities(row.role, row.status ?? undefined));
+        }
       }
     }
 
@@ -63,9 +73,9 @@ router.get('/bootstrap', optionalAuth, async (req, res, next) => {
       server: settings.upload,
       calendar: { available: false, landing: await landingMonth() },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
 
-module.exports = router;
+export = router;

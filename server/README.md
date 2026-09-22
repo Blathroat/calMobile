@@ -4,13 +4,13 @@
 
 | 目录 | 说明 |
 | --- | --- |
-| `src/index.js` | 入口：中间件、路由挂载、统一错误处理 |
+| `src/index.ts` | 入口：中间件、路由挂载、统一错误处理 |
 | `src/routes/` | 按资源分的路由（认证、资料、展会、报名、审核、核销、用户、搜索、设置、启动数据） |
 | `src/domain/` | 业务层：状态词汇、SQL 片段、响应映射、权限、校验、设置、会话 |
 | `src/config/` | 连接池、迁移与示例数据、JWT 与邮件通道配置 |
-| `src/services/` | 邮件发送适配层与验证码邮件文案（`mailer.js` / `mail-templates.js`） |
-| `src/middleware/auth.js` | JWT 认证中间件 |
-| `src/routes/status.js` + `src/status-page.js` | 健康状态页：JSON 报告 + 单文件中文 HTML |
+| `src/services/` | 邮件发送适配层与验证码邮件文案（`mailer.ts` / `mail-templates.ts`） |
+| `src/middleware/auth.ts` | JWT 认证中间件 |
+| `src/routes/status.ts` + `src/status-page.js` | 健康状态页：JSON 报告 + 单文件中文 HTML |
 
 ## 快速开始
 
@@ -35,7 +35,7 @@ pnpm dev                      # 开发模式（nodemon），默认 http://127.0.
 
 ### 开发模式与生产模式
 
-`pnpm start` 会自动进**生产模式**（脚本里就是 `node src/index.js --production`），`pnpm dev` 留在开发模式：
+`pnpm start` 会自动进**生产模式**（脚本里就是 `node dist/index.js --production`），`pnpm dev` 留在开发模式：
 
 | | `pnpm dev` | `pnpm start` |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ pnpm dev                      # 开发模式（nodemon），默认 http://127.0.
 | 迁移目标 | `pnpm db:migrate`（开发库） | `pnpm db:migrate:prod`（会先打印 `[production] 目标库 host:port/db`） |
 | 存活探针 | `/ping`、`/health` | 同左（**这两个不受影响**，编排的探针用它们） |
 
-判定集中在 `src/config/runtime.js`（纯函数 `resolveRuntime(argv, env)`，有用例钉住优先级），启动自检在 `src/config/production.js`。`node src/index.js` 直接跑、不带参数时是**开发模式**——生产请用 `pnpm start` 或显式 `NODE_ENV=production`，别用裸命令，否则状态页会开着。
+判定集中在 `src/config/runtime.ts`（纯函数 `resolveRuntime(argv, env)`，有用例钉住优先级），启动自检在 `src/config/production.ts`。`tsx src/index.ts` 直接跑、不带参数时是**开发模式**——生产请用 `pnpm start` 或显式 `NODE_ENV=production`，别用裸命令，否则状态页会开着。
 
 示例账号：`demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`。
 
@@ -136,7 +136,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 
 也就是说 **HTTP 状态码表达认证、授权、可用性与内部故障，业务规则的失败一律 200 + `ok:false`**。写路由统一用 `domain/respond.js` 的 `mutate()` 收尾，它只把 400 / 409 收成信封，401 / 403 / 404 继续上抛。
 
-两条纪律（`src/index.js` 的 `statusFor()` / `clientMessage()` 是唯一实现处）：
+两条纪律（`src/index.ts` 的 `statusFor()` / `clientMessage()` 是唯一实现处）：
 
 - **不把内部细节回给调用方**：只有 `ApiError` 的文案是写给用户看的，pg 的连接错误（含内网 `host:port`）、SQL 片段、文件路径与堆栈一律只出现在服务端日志里；
 - **库故障不是 500 而是 503**：判定在 `domain/errors.js` 的 `isDatabaseUnavailable()`（连接类 errno、PostgreSQL 的 `08xxx` / `57P0x` / `53300` / `3D000` / `28P01`，以及驱动的池等待超时文案），SQL 语法错、唯一约束冲突这类**不算**不可用，仍按 500 / 409 走。
@@ -231,11 +231,11 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `GET /api/v1/status` | — | 可匿名。JSON 健康报告：`ok` / `service` / `database` / `migrations` / `data` / `endpoints` / `checks`。服务活着**且**数据库答得上时 200，否则 503 + `ok:false`，探活脚本按状态码判断 |
 | `GET /status` | — | 可匿名。同一份报告的中文状态页（单文件 HTML，样式与脚本内联，不用构建、不引 CDN）；数据库挂掉时仍返回 200 并把失败原因显示出来 |
 
-两个路径由同一个路由器提供（`src/routes/status.js` + `src/status-page.js`），因此页面与 JSON 永远不会说两套话。几条约定：
+两个路径由同一个路由器提供（`src/routes/status.ts` + `src/status-page.js`），因此页面与 JSON 永远不会说两套话。几条约定：
 
 - **`ok` 只表达「服务活着 + 数据库答得上」**，迁移没跑完、自检项失败都只体现在 `checks` 与 `migrations` 里，不混进状态码 —— 否则探活脚本分不清「数据库没了」和「只是有一步迁移没跑」。
 - **每一项都是真测出来的**：`database.latencyMs` 是 `select version()` + `select 1` 的往返时间，`data` 是逐表 `count(*)`，`checks` 里失败的那条一定指得到出处；数据库连不上时 `data` 是 `null`（不是 0）、迁移按「全部未应用」处理、并带上错误原文，绝不抛 500。
-- **`endpoints` 就是真实路由表**：它遍历 `src/index.js` 导出的 `routes`（与 `test/api.test.js` 的 `backendRoutes()` 同一套走法），新增路由不会漏登记。这两个状态接口本身不进 `routes` 动作表 —— 那张表是「前端动作 ↔ 后端路由」的对照，它们没有对应的前端动作。
+- **`endpoints` 就是真实路由表**：它遍历 `src/index.ts` 导出的 `routes`（与 `test/api.test.js` 的 `backendRoutes()` 同一套走法），新增路由不会漏登记。这两个状态接口本身不进 `routes` 动作表 —— 那张表是「前端动作 ↔ 后端路由」的对照，它们没有对应的前端动作。
 - 两个路径都带 `Cache-Control: no-store`，不会拿到缓存的旧结果。
 - 服务**先起、数据库后挂**与**数据库先挂、服务后起**都能看到状态页：`start()` 在连不上库时只记一条警告，不再让进程退出。
 - **探测不会把连接池占满**：状态页 5 秒自刷新一次，每次要跑 9 条查询，因此 `reportOnce()` 把并发请求合并成同一次探测（不做 TTL 缓存，拿到的仍是刚测出来的数据），探测查询用 `pool.connect()` + 超时 `release(true)` **销毁**那条连接（`Promise.race` 只放弃 promise，连接会一直被占着），连接池另有 `statement_timeout: 10s` 兜慢查询。
@@ -339,7 +339,7 @@ pnpm format               # oxfmt
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 
-**数据库不可用这条路径要在真机上验证**：用假端口起一个实例（`DB_PORT=6543 PORT=3011 node src/index.js`），断言业务接口 503 + `{ error:'数据库暂时不可用，请稍后重试' }`（不含内网地址与堆栈）、`/api/v1/status` 503、`/status` 200、`/ping` 200。只跑测试库的话，这条路径没有机器证据。
+**数据库不可用这条路径要在真机上验证**：用假端口起一个实例（`DB_PORT=6543 PORT=3011 npx tsx src/index.ts`），断言业务接口 503 + `{ error:'数据库暂时不可用，请稍后重试' }`（不含内网地址与堆栈）、`/api/v1/status` 503、`/status` 200、`/ping` 200。只跑测试库的话，这条路径没有机器证据。
 
 ## 上线前必须处理
 

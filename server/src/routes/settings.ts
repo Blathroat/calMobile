@@ -10,11 +10,11 @@
  *   服务器级默认外观只存在 `app_settings.ui` 里作为未登录时的读默认值，不对外提供写入口。
  */
 
-const express = require('express');
-const { authenticate, optionalAuth } = require('../middleware/auth');
-const { requireAdmin } = require('../domain/permissions');
-const { mutate } = require('../domain/respond');
-const {
+import express = require('express');
+import { authenticate, optionalAuth } from '../middleware/auth';
+import { requireAdmin } from '../domain/permissions';
+import { mutate } from '../domain/respond';
+import {
   applyServerPatch,
   readNotificationPreferences,
   readServerSettings,
@@ -22,12 +22,12 @@ const {
   saveNotificationPreferences,
   saveServerSettings,
   saveUiMode,
-} = require('../domain/settings');
+} from '../domain/settings';
 
 const router = express.Router();
 
 /** 请求体里是否真的带了某个字段。 */
-function has(body, key) {
+function has(body: object | null | undefined, key: string) {
   return Object.prototype.hasOwnProperty.call(body || {}, key);
 }
 
@@ -37,7 +37,7 @@ function has(body, key) {
  * GET 与 PUT 返回同一份结构：页面保存后立刻用它刷新界面（`applySettings`），
  * 少一个键就会回落到旧值，因此两处共用这一个函数。
  */
-async function settingsPayload(userId) {
+async function settingsPayload(userId: string | null | undefined) {
   const settings = await readServerSettings();
   return {
     theme: settings.theme,
@@ -61,7 +61,7 @@ async function settingsPayload(userId) {
 router.get('/', optionalAuth, async (req, res, next) => {
   try {
     res.json(await settingsPayload(req.user?.userId));
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -80,11 +80,11 @@ router.put('/', authenticate, async (req, res, next) => {
       const next = applyServerPatch(current, body);
       await saveServerSettings(current, next);
       if (has(body, 'notify')) {
-        await saveNotificationPreferences(req.user.userId, body.notify || {});
+        await saveNotificationPreferences(req.user!.userId, body.notify || {});
       }
-      return { settings: await settingsPayload(req.user.userId) };
+      return { settings: await settingsPayload(req.user!.userId) };
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -100,11 +100,11 @@ router.put('/ui-mode', authenticate, async (req, res, next) => {
   try {
     await mutate(res, next, async () => {
       const body = req.body || {};
-      return { mode: await saveUiMode(req.user.userId, String(body.mode === undefined ? '' : body.mode)) };
+      return { mode: await saveUiMode(req.user!.userId, String(body.mode === undefined ? '' : body.mode)) };
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
 
-module.exports = router;
+export = router;

@@ -12,17 +12,19 @@
  * （`to_char` + `EXTRACT`），路由里不要对日期做 `new Date(...)` 的本地时区换算。
  */
 
-const express = require('express');
-const { query, transaction } = require('../config/pool');
-const { EXHIBITION_COLUMNS, EXHIBITION_FROM } = require('../domain/queries');
-const { exhibitionPayload, fieldPayload } = require('../domain/payloads');
-const labels = require('../domain/labels');
-const { requireExhibitor, assertCanManageExhibition, assertNotLimited } = require('../domain/permissions');
-const { readSection } = require('../domain/settings');
-const { limits, text, int, bool, isoDate, timeRange, stringList } = require('../domain/validation');
-const { badRequest, notFound } = require('../domain/errors');
-const { mutate } = require('../domain/respond');
-const { authenticate, optionalAuth } = require('../middleware/auth');
+import express = require('express');
+import type { NextFunction, Request, Response } from 'express';
+import type { PoolClient } from 'pg';
+import { query, transaction } from '../config/pool';
+import { EXHIBITION_COLUMNS, EXHIBITION_FROM } from '../domain/queries';
+import { exhibitionPayload, fieldPayload, type ExhibitionRow, type FieldRow } from '../domain/payloads';
+import * as labels from '../domain/labels';
+import { requireExhibitor, assertCanManageExhibition, assertNotLimited } from '../domain/permissions';
+import { readSection } from '../domain/settings';
+import { limits, text, int, bool, isoDate, timeRange, stringList } from '../domain/validation';
+import { badRequest, notFound } from '../domain/errors';
+import { mutate } from '../domain/respond';
+import { authenticate, optionalAuth } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -41,16 +43,16 @@ const NOT_FOUND_TEXT = '展会不存在或已删除';
 // ── 工具 ────────────────────────────────────────────────────────
 
 /** 新建主键：与 auth.js 的 `usr-…` 同一种风格，避免自增序列互相打架。 */
-function newId(prefix) {
+function newId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
 /** 展商 / 管理员专用写接口的前置检查：401 / 403 是 HTTP 状态码，不被 mutate 收成信封。 */
-function exhibitorOnly(req, res, next) {
+function exhibitorOnly<P>(req: Request<P>, res: Response, next: NextFunction): void {
   try {
     requireExhibitor(req);
     next();
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 }
@@ -66,25 +68,25 @@ function exhibitorOnly(req, res, next) {
  * 编辑 / 删除 / 改状态 / 改收集项全都要拦：受限账号连自己已有的展会也不能再动，
  * 只保留「看」的部分（列表、月视图、详情、收集项读取）与报名审核。
  */
-function notLimited(action) {
-  return (req, res, next) => {
+function notLimited(action: string) {
+  return <P>(req: Request<P>, res: Response, next: NextFunction): void => {
     try {
       assertNotLimited(req.user, action);
       next();
-    } catch (error) {
+    } catch (error: unknown) {
       next(error);
     }
   };
 }
 
 /** 读取一场展会的原始行（含 `exhibitor_id`，权限判定要用它）。 */
-async function findRow(id) {
-  const result = await query(`SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM} WHERE e.id = $1`, [id]);
+async function findRow(id: string) {
+  const result = await query<ExhibitionRow>(`SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM} WHERE e.id = $1`, [id]);
   return result.rows[0] || null;
 }
 
 /** 取展会行并校验当前用户可以管理它：不存在 404，不是自己办的 403。 */
-async function manageableRow(req, id) {
+async function manageableRow(req: Request, id: string) {
   const row = await findRow(id);
   if (!row) {
     throw notFound(NOT_FOUND_TEXT);
@@ -94,38 +96,43 @@ async function manageableRow(req, id) {
 }
 
 /** `?query=` 的模糊匹配串：用户输入的 % 和 _ 按字面匹配，不当通配符。 */
-function likePattern(keyword) {
+function likePattern(keyword: string) {
   return `%${keyword.replace(/([\\%_])/g, '\\$1')}%`;
 }
 
 /** 请求体里是否显式给了这个键：给了就整体替换，没给就沿用原值。 */
-function given(body, key) {
-  return Boolean(body) && Object.prototype.hasOwnProperty.call(body, key) && body[key] !== undefined;
+function given(body: Record<string, unknown> | null | undefined, key: string) {
+  return (
+    Boolean(body) &&
+    Object.prototype.hasOwnProperty.call(body, key) &&
+    (body as Record<string, unknown>)[key] !== undefined
+  );
 }
 
 /** 简介正文是不是 HTML：按开头的块级标签嗅探，写入与读取用同一套规则。 */
-function looksLikeHtml(value) {
+function looksLikeHtml(value: unknown) {
   return /^\s*<(p|div|h[1-6]|ul|ol|blockquote|br|strong|em)\b/.test(String(value || ''));
 }
 
 /** 首页日历的落点月份：最早一个有展会的月份；没有展会时用当前月（与 bootstrap 一致）。 */
 async function landingMonth() {
-  const result = await query(`
+  const result = await query<{ year: number; month: number }>(`
         SELECT EXTRACT(YEAR FROM exhibition_date)::int  AS year,
                EXTRACT(MONTH FROM exhibition_date)::int AS month
         FROM exhibitions
         ORDER BY exhibition_date
         LIMIT 1
     `);
-  if (result.rows.length > 0) {
-    return { year: result.rows[0].year, month: result.rows[0].month };
+  const row = result.rows[0];
+  if (row) {
+    return { year: row.year, month: row.month };
   }
   const now = new Date();
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
 /** 月视图 / 列表共用的精简卡片：只保留日历与卡片渲染要用的字段。 */
-function monthSummary(item) {
+function monthSummary(item: ReturnType<typeof exhibitionPayload>) {
   return {
     id: item.id,
     day: item.day,
@@ -148,8 +155,8 @@ function monthSummary(item) {
  * **没有配置过就是空的**：不塞默认项。展商新建展会时若不填收集项，报名页就只有提交按钮；
  * 提交时 `registrations.js` 用同一份（空的）收集项校验，因此「没有收集项」＝「没有要校验的答案」。
  */
-async function loadFields(exhibitionId) {
-  const result = await query(
+async function loadFields(exhibitionId: string) {
+  const result = await query<FieldRow>(
     `
         SELECT id, title, type, required, options
         FROM exhibition_fields
@@ -162,15 +169,22 @@ async function loadFields(exhibitionId) {
 }
 
 /** 校验请求体里的收集项：非法抛 400，返回按数组顺序规整好的结果。 */
-function normalizeFields(raw, config) {
+interface NormalizedField {
+  title: string;
+  type: string;
+  required: boolean;
+  options: string[];
+}
+
+function normalizeFields(raw: unknown, config: Awaited<ReturnType<typeof limits>>): NormalizedField[] {
   if (!Array.isArray(raw)) {
     throw badRequest('收集项需为数组');
   }
   if (raw.length > MAX_FIELDS) {
     throw badRequest(`收集项最多 ${MAX_FIELDS} 项`);
   }
-  return raw.map((item) => {
-    const source = item && typeof item === 'object' ? item : {};
+  return raw.map((item: unknown) => {
+    const source = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
     const type = String(source.type === undefined || source.type === null ? '文本' : source.type).trim();
     if (!FIELD_TYPES.includes(type)) {
       throw badRequest('收集项类型只能是 文本 / 单选 / 多选');
@@ -186,7 +200,7 @@ function normalizeFields(raw, config) {
 }
 
 /** 覆盖收集项：删掉旧的，再按数组顺序写新的（由调用方决定事务边界）。 */
-async function replaceFields(client, exhibitionId, fields) {
+async function replaceFields(client: PoolClient, exhibitionId: string, fields: NormalizedField[]) {
   await client.query('DELETE FROM exhibition_fields WHERE exhibition_id = $1', [exhibitionId]);
   for (const [index, item] of fields.entries()) {
     await client.query(
@@ -210,10 +224,10 @@ async function replaceFields(client, exhibitionId, fields) {
  *
  * `existing` 为空表示新建：这时日期、时间必填，状态默认「需审核」。
  */
-async function exhibitionInput(body, existing) {
+async function exhibitionInput(body: Record<string, unknown> | null | undefined, existing?: ExhibitionRow | null) {
   const config = await limits();
   const source = body || {};
-  const current = existing || {};
+  const current: Partial<ExhibitionRow> = existing || {};
   const creating = !existing;
 
   const title = text(source.title, { label: '展会名称', max: config.exhibitionTitle, required: false });
@@ -238,10 +252,11 @@ async function exhibitionInput(body, existing) {
 
   let status = current.status || 'review';
   if (given(source, 'status') && String(source.status).trim() !== '') {
-    status = labels.toExhibitionStatus(source.status);
-    if (!status) {
+    const mapped = labels.toExhibitionStatus(source.status);
+    if (!mapped) {
       throw badRequest(STATUS_HINT);
     }
+    status = mapped;
   }
 
   const registrationStart =
@@ -312,7 +327,7 @@ router.get('/', optionalAuth, async (req, res, next) => {
       params.push(likePattern(keyword));
       where = 'WHERE e.title ILIKE $1 OR e.venue ILIKE $1 OR e.category ILIKE $1 OR e.description ILIKE $1';
     }
-    const result = await query(
+    const result = await query<ExhibitionRow>(
       `
             SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM}
             ${where}
@@ -321,7 +336,7 @@ router.get('/', optionalAuth, async (req, res, next) => {
       params,
     );
     res.json(result.rows.map(exhibitionPayload));
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -337,8 +352,8 @@ router.get('/', optionalAuth, async (req, res, next) => {
  */
 router.get('/month', optionalAuth, async (req, res, next) => {
   try {
-    let requestedYear = req.query.year;
-    let requestedMonth = req.query.month;
+    let requestedYear: unknown = req.query.year;
+    let requestedMonth: unknown = req.query.month;
     if (!requestedYear || !requestedMonth) {
       const landing = await landingMonth();
       requestedYear = requestedYear || landing.year;
@@ -348,7 +363,7 @@ router.get('/month', optionalAuth, async (req, res, next) => {
     const month = int(requestedMonth, { label: '月份', min: 1, max: 12 });
     let day = int(req.query.day, { label: '日期', min: 0, max: 31, fallback: 0 });
 
-    const result = await query(
+    const result = await query<ExhibitionRow>(
       `
             SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM}
             WHERE EXTRACT(YEAR FROM e.exhibition_date)::int = $1
@@ -359,7 +374,7 @@ router.get('/month', optionalAuth, async (req, res, next) => {
     );
 
     const items = result.rows.map(exhibitionPayload);
-    const eventDays = [...new Set(items.map((item) => item.day))].sort((a, b) => a - b);
+    const eventDays = [...new Set(items.map((item) => item.day))].sort((a, b) => (a as number) - (b as number));
     if (day <= 0) {
       day = eventDays[0] || 0;
     }
@@ -372,7 +387,7 @@ router.get('/month', optionalAuth, async (req, res, next) => {
       exhibitions: items.map(monthSummary),
       selected: items.filter((item) => item.day === day).map(monthSummary),
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -385,7 +400,7 @@ router.get('/categories', optionalAuth, async (req, res, next) => {
   try {
     const categories = await readSection('categories');
     res.json(Array.isArray(categories) ? categories : []);
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -406,7 +421,7 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
       exhibition: exhibitionPayload(row),
       fields: await loadFields(row.id),
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -446,14 +461,14 @@ router.post('/', authenticate, notLimited('exhibition'), exhibitorOnly, (req, re
           input.registrationStart || null,
           input.registrationEnd || null,
           input.qrEnabled,
-          req.user.userId,
+          req.user!.userId,
         ],
       );
       if (input.fields) {
         await replaceFields(client, id, input.fields);
       }
     });
-    return { exhibition: exhibitionPayload(await findRow(id)) };
+    return { exhibition: exhibitionPayload((await findRow(id))!) };
   });
 });
 
@@ -498,9 +513,9 @@ router.put('/:id', authenticate, notLimited('exhibitionUpdate'), exhibitorOnly, 
           await replaceFields(client, existing.id, input.fields);
         }
       });
-      return { exhibition: exhibitionPayload(await findRow(existing.id)) };
+      return { exhibition: exhibitionPayload((await findRow(existing.id))!) };
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -517,7 +532,7 @@ router.delete('/:id', authenticate, notLimited('exhibitionDelete'), exhibitorOnl
       await query('DELETE FROM exhibitions WHERE id = $1', [existing.id]);
       return {};
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -536,9 +551,9 @@ router.put('/:id/status', authenticate, notLimited('exhibitionStatus'), exhibito
         throw badRequest(STATUS_HINT);
       }
       await query('UPDATE exhibitions SET status = $2, updated_at = now() WHERE id = $1', [existing.id, status]);
-      return { exhibition: exhibitionPayload(await findRow(existing.id)) };
+      return { exhibition: exhibitionPayload((await findRow(existing.id))!) };
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -550,7 +565,7 @@ router.put('/:id/status', authenticate, notLimited('exhibitionStatus'), exhibito
 router.get('/:id/fields', optionalAuth, async (req, res, next) => {
   try {
     res.json(await loadFields(req.params.id));
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
@@ -567,12 +582,11 @@ router.put('/:id/fields', authenticate, notLimited('exhibitionFields'), exhibito
       await transaction((client) => replaceFields(client, existing.id, fields));
       return { fields: await loadFields(existing.id) };
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 });
 
-module.exports = router;
-// 报名提交时的必填 / 选项校验要用同一份收集项，因此把取数函数导出给 registrations.js 复用，
+// 报名提交时的必填 / 选项校验要用同一份收集项，因此把取数函数挂在路由器上给 registrations.ts 复用，
 // 免得两处各写一遍「这场展会要填什么」。
-module.exports.loadFields = loadFields;
+export = Object.assign(router, { loadFields });
