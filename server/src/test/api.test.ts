@@ -25,7 +25,7 @@ import { migrate, seed, DEFAULT_SETTINGS, STEPS } from '../config/migrate.js';
 import { resetRateLimits } from '../middleware/rate-limit.js';
 import { outbox } from '../services/mailer.js';
 import type { StoredMail } from '../services/mailer.js';
-import { app, routes } from '../index.js';
+import { listen, routes } from '../index.js';
 import { codeFor } from '../domain/totp.js';
 import { renderStatusPage } from '../status-page.js';
 import bcrypt from 'bcryptjs';
@@ -34,12 +34,15 @@ import bcrypt from 'bcryptjs';
 interface HttpResponse {
   status: number;
   body: any;
+  /** 需要断言响应头的用例才看这个字段（公共 request() 一律带上）。 */
+  headers?: http.IncomingHttpHeaders;
 }
 
-/** `request()` 的可选参数：鉴权令牌与请求体。 */
+/** `request()` 的可选参数：鉴权令牌、请求体与额外请求头。 */
 interface RequestOptions {
   token?: string;
   body?: unknown;
+  headers?: Record<string, string>;
 }
 
 /** 前端 `api.js` 里 `ENDPOINTS` 的一个动作：求值后得到 { method, path }。 */
@@ -63,7 +66,19 @@ interface RouterLayer {
   route?: { path: string; methods: Record<string, boolean> };
 }
 
-let server: http.Server | undefined;
+let server: ReturnType<typeof listen> | undefined;
+
+/**
+ * 起测试服务。
+ *
+ * 骨架是 Hono + `@hono/node-server`：`listen()` 返回的就是 Node 的 http.Server，
+ * 因此随机端口、取端口号、`close()` 的用法与迁移前完全一致。
+ */
+function startServer(): Promise<void> {
+  return new Promise((resolve) => {
+    server = listen(0, '127.0.0.1', resolve);
+  });
+}
 
 /** 服务的监听端口（beforeAll 起好服务后才能取到；Unix 域套接字不在测试场景内）。 */
 function serverPort(): number {
@@ -77,7 +92,7 @@ function serverPort(): number {
 // ── HTTP 小工具 ──────────────────────────────────────────────────
 
 /** 发一次请求；返回 { status, body }，body 已解析成对象（解析失败给原始文本）。 */
-function request(method: string, path: string, { token, body }: RequestOptions = {}): Promise<HttpResponse> {
+function request(method: string, path: string, { token, body, headers }: RequestOptions = {}): Promise<HttpResponse> {
   const payload = body === undefined ? null : JSON.stringify(body);
   return new Promise((resolve, reject) => {
     const req = http.request(
@@ -89,6 +104,7 @@ function request(method: string, path: string, { token, body }: RequestOptions =
         path: encodeURI(path),
         method,
         headers: {
+          ...headers,
           ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
@@ -105,7 +121,7 @@ function request(method: string, path: string, { token, body }: RequestOptions =
           } catch {
             // 保持原始文本，便于断言失败时看清返回了什么
           }
-          resolve({ status: res.statusCode ?? 0, body: parsed });
+          resolve({ status: res.statusCode ?? 0, body: parsed, headers: res.headers });
         });
       },
     );
@@ -161,6 +177,12 @@ function otherCode(code: string): string {
   return code === '000000' ? '111111' : '000000';
 }
 
+/**
+ * 契约环境里由 `test/setup-contract.ts` 的 `vi.stubEnv` 注入的 CORS_ORIGIN。
+ * 与业务无关，只看骨架的 CORS 行为；写死字面量，不读 process.env。
+ */
+const CORS_ORIGIN_FOR_TESTS = 'https://appassets.androidplatform.net';
+
 const tokens: Record<string, any> = {};
 
 /**
@@ -206,9 +228,7 @@ beforeAll(async () => {
   await migrate();
   await seed();
 
-  await new Promise((resolve) => {
-    server = app.listen(0, '127.0.0.1', resolve);
-  });
+  await startServer();
 
   tokens.admin = await login('demo');
   tokens.exhibitor = await login('exhibitor');
@@ -2383,6 +2403,46 @@ test('未知路径返回 404 而不是 500', async () => {
   const response = await get('/api/v1/not-an-endpoint');
   assert.strictEqual(response.status, 404);
   assert.ok(response.body.error);
+  // 404 也要带统一的安全响应头与 CORS 头：公共层不挑响应
+  assert.strictEqual(response.headers?.['x-content-type-options'], 'nosniff');
+  assert.strictEqual(response.headers?.['access-control-allow-origin'], CORS_ORIGIN_FOR_TESTS);
+});
+
+/**
+ * 骨架公共层在真服务上的样子：安全响应头、CORS、请求日志。
+ *
+ * 这些断言放在契约测试里，是因为它们必须对**尚未迁移的 Express 路由**也成立
+ * （迁移期路由仍由 Express 代答，见 src/server/express-bridge.ts）。
+ */
+test('骨架公共层：安全响应头与 CORS 头在业务响应上一并生效', async () => {
+  const response = await get('/api/v1/bootstrap');
+  assert.strictEqual(response.status, 200);
+  const headers = response.headers ?? {};
+  // 业务响应（由 Express 代答）也带着骨架的安全头
+  assert.strictEqual(headers['x-content-type-options'], 'nosniff');
+  assert.strictEqual(headers['x-frame-options'], 'SAMEORIGIN');
+  assert.strictEqual(headers['referrer-policy'], 'no-referrer');
+  assert.ok(headers['strict-transport-security'], '缺少 HSTS 头');
+  // 不广播技术栈
+  assert.strictEqual(headers['x-powered-by'], undefined);
+  // CORS：固定来源 + Vary
+  assert.strictEqual(headers['access-control-allow-origin'], CORS_ORIGIN_FOR_TESTS);
+  assert.strictEqual(headers.vary, 'Origin');
+});
+
+test('骨架公共层：预检在到达路由之前就被答掉', async () => {
+  const response = await request('OPTIONS', '/api/v1/auth/login', {
+    headers: {
+      origin: CORS_ORIGIN_FOR_TESTS,
+      'access-control-request-method': 'POST',
+      'access-control-request-headers': 'authorization,content-type',
+    },
+  });
+  assert.strictEqual(response.status, 204);
+  assert.ok(response.body === '' || response.body === null, '预检不应当有正文');
+  assert.strictEqual(response.headers?.['access-control-allow-origin'], CORS_ORIGIN_FOR_TESTS);
+  assert.strictEqual(response.headers?.['access-control-allow-methods'], 'GET,HEAD,PUT,PATCH,POST,DELETE');
+  assert.strictEqual(response.headers?.['access-control-allow-headers'], 'authorization,content-type');
 });
 
 // ── 与前端映射表的交叉校验 ───────────────────────────────────────

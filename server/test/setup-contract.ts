@@ -11,3 +11,6 @@ vi.stubEnv('LOG_LEVEL', 'quiet');
 vi.stubEnv('MAIL_TRANSPORT', 'memory');
 vi.stubEnv('JWT_SECRET', process.env.JWT_SECRET || 'calmobile-test-access-secret-32-characters');
 vi.stubEnv('JWT_REFRESH_SECRET', process.env.JWT_REFRESH_SECRET || 'calmobile-test-refresh-secret-32-chars');
+// 骨架的 CORS 断言要固定来源：本机 .env 里的 CORS_ORIGIN 只影响开发机，
+// 契约测试不该依赖它（否则 CI 上默认 `*`，断言就全红了）。
+vi.stubEnv('CORS_ORIGIN', 'https://appassets.androidplatform.net');

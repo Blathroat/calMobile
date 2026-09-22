@@ -168,7 +168,7 @@ await registrations.submit(payload);
 
 ## 后端与连通性
 
-后端是 `server/` 里的 Express + PostgreSQL 服务，接口按 REST 组织，路径与前端 `api.js` 的动作一一对应（映射表在 `js/core/api.js` 的 `ENDPOINTS`）。
+后端是 `server/` 里的 Hono + PostgreSQL 服务，接口按 REST 组织，路径与前端 `api.js` 的动作一一对应（映射表在 `js/core/api.js` 的 `ENDPOINTS`）。服务骨架（公共层、探针、统一错误处理）在 `src/server/`；业务路由正在逐批迁到 Hono，尚未迁完的部分仍由 `src/server/express-app.ts` 的 Express 应用代答，迁移计划见 `docs/roadmap.md`，取舍见 `docs/adr/0001-server-hono-typescript.md`。
 
 ```bash
 # 1. 起数据库与本地收件箱（Docker 容器 calmobile-pg / calmobile-mail）

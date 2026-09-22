@@ -868,10 +868,21 @@ const checks = [
   },
   {
     id: 'backend-status-page-gated',
-    // 生产默认关掉状态页；生产启动前必须做配置自检
+    // 生产默认关掉状态页；关着时 /status 与 /api/v1/status 回同一句话
+    file: 'server/src/server/hono-app.ts',
+    contains: ['statusPageEnabled', '状态页在生产环境已关闭'],
+  },
+  {
+    id: 'backend-production-selfcheck',
+    // 生产启动前必须做配置自检：致命项拒绝启动，可疑项只警告
     file: 'server/src/index.ts',
-    contains: ['runtime.statusPageEnabled', 'productionProblems', '状态页在生产环境已关闭',
-      "app.disable('x-powered-by')"],
+    contains: ['productionProblems', '拒绝启动'],
+  },
+  {
+    id: 'backend-delegated-app-headers',
+    // 尚未迁移的 Express 应用也不该广播技术栈；代理信任按 TRUST_PROXY 三态显式声明
+    file: 'server/src/server/express-app.ts',
+    contains: ["app.disable('x-powered-by')", "app.set('trust proxy'"],
   },
   {
     id: 'backend-production-guards',

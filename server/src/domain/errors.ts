@@ -10,10 +10,19 @@
 export class ApiError extends Error {
   status: number;
 
-  constructor(status: number, message: string) {
+  /**
+   * 是否按「写操作信封」收尾（HTTP 200 + `{ ok:false, error }`）。
+   *
+   * 默认 true。请求体解析失败之类的**HTTP 形状错误**传 false，让它保留 4xx 状态码
+   * ——那类错误不是业务规则失败，回 200 会把「请求发错了」伪装成「规则不允许」。
+   */
+  readonly envelope: boolean;
+
+  constructor(status: number, message: string, envelope = true) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.envelope = envelope;
   }
 }
 

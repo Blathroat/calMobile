@@ -39,7 +39,7 @@ pnpm format              # oxfmt
 
 - `app/`：Android 客户端，**Java 25**（toolchain + `compileOptions`）。唯一入口是 `WebShellActivity`（WebView 容器）。页面在 `app/src/main/assets/web/`。纯 Java 工程必须关 `android.builtInKotlin`：AGP 9 仍会建 Kotlin 编译任务，而 Kotlin JVM 目标最高 24。
 - 原生只做设备能力：日历、通知、摄像头、媒体、分享、导出、系统栏。权威动作表是 `WebAppActions.handle()` 的 switch，**不要往原生加数据实现**。
-- `server/`：Express + PostgreSQL，独立 Node 工程（pnpm），不是 Gradle 模块。数据只在后端。
+- `server/`：Hono + PostgreSQL，独立 Node 工程（pnpm），不是 Gradle 模块。数据只在后端。骨架在 `src/server/`（公共层、探针、统一错误处理），业务路由正在逐批迁到 Hono；尚未迁完的由 `src/server/express-app.ts` 的 Express 应用代答，改骨架前先读 `server/README.md` 的「服务骨架与被承接的路由」。
 - `docs/`：产品与技术文档；设计交付件（线框 `index.html` / `remaining-ui.html`、`ui-spec.md`、`DESIGN-HANDOFF.md`）在 `docs/newUI/`，是界面标准的来源，改界面以它为准。
 - 旧 Room / Retrofit / 本机 SQLite / legacy 页面已删除，不要重新引入。
 
@@ -65,8 +65,10 @@ pnpm format              # oxfmt
 - 状态在库里存英文代码，中文标签只在 `server/src/domain/labels.ts` 映射一次。
 - 写入接口返回 `{ ok, error, ... }`（页面看 `.ok`）；读取直接返回数据。规则失败用 200 + `ok:false`，认证授权 4xx，**数据库不可用 503**。正文不回传 pg 原文、SQL 或堆栈。
 - 新接口同时补：`api.js` 的 `ENDPOINTS`、后端路由、`server/src/test/api.test.ts`（那里交叉校验前后端路由）。
+- 错误分类只有一处实现：`server/src/http/error-response.ts`（Hono 的 `onError` 与尚未迁移的 Express 错误中间件共用）。写操作信封在 `domain/respond.ts`（Express）与 `http/respond.ts`（Hono），共用同一个 `runEnveloped()`。
 - 公开接口不要下发 `checkInCode` 这类凭据。
 - **运行模式**读 `server/src/config/runtime.ts`。`index.ts` 与 `config/migrate.ts` 的第一行 import 必须是它。`pnpm dev` 开发，`pnpm start` 生产（关 `/status`、启动自检）。生产库迁移用 `pnpm db:migrate:prod`。改了 `server/src` 源码要重启进程。
+- **骨架的三个坑**：起服务必须传 `overrideGlobalObjects: false`（否则 Express 代答会被适配器重复写一次）；安全头 / CORS / 请求日志要落在 Node socket 上（Express 直接写响应，Hono 的壳响应会被丢掉）；体积守卫只能看 `content-length`，正文仍由 Express 读。理由与替代方案见 `server/README.md` 与 ADR 0001。
 - **邮件**：`server/src/services/mailer.ts` 的 console / smtp / memory。不要在应用服务器上自建 SMTP。发码先落库、立刻回包、后台发信（前端超时 3 秒）。邮件文案在 `services/mail-templates.ts`，不进 `strings_frontend.xml`。
 - **邮箱是身份**：唯一且必须验证过。改邮箱只能「验证码发到新地址、通过才落库」。`PUT /profile` 不接受 `email`。
 - **两步验证**：密码对了而码没过时**不得下发任何令牌**。判定集中在 `domain/two-factor.ts`。验证码 / 票据失败走 200 + `ok:false`，限流才是 429。
