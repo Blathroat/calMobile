@@ -10,14 +10,14 @@
  * `id / exhibitionId / visitorName / registrationTime / answers / summary / status`。
  */
 
-import express = require('express');
-import { query } from '../config/pool';
-import { authenticate } from '../middleware/auth';
-import { requireExhibitor, canManageExhibition, type Actor } from '../domain/permissions';
-import { badRequest, forbidden, notFound } from '../domain/errors';
-import { mutate } from '../domain/respond';
-import { readSection } from '../domain/settings';
-import * as labels from '../domain/labels';
+import express from 'express';
+import { query } from '../config/pool.js';
+import { authenticate } from '../middleware/auth.js';
+import { requireExhibitor, canManageExhibition, type Actor } from '../domain/permissions.js';
+import { badRequest, forbidden, notFound } from '../domain/errors.js';
+import { mutate } from '../domain/respond.js';
+import { readSection } from '../domain/settings.js';
+import * as labels from '../domain/labels.js';
 
 const router = express.Router();
 
@@ -290,4 +290,4 @@ router.put('/:id/status', authenticate, async (req, res, next) => {
   }
 });
 
-export = router;
+export default router;

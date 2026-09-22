@@ -6,7 +6,7 @@
  * 当前「应用唯一客户端 + 本机部署」的形态；将来多实例部署时再换共享存储。
  */
 
-import { ApiError } from '../domain/errors';
+import { ApiError } from '../domain/errors.js';
 
 const buckets = new Map<string, number[]>();
 

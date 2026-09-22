@@ -6,8 +6,8 @@
  */
 
 import assert from 'node:assert/strict';
-import { ApiError } from '../domain/errors';
-import { isAuthFailure, isEnvelopeFailure, rateLimit, resetRateLimits } from './rate-limit';
+import { ApiError } from '../domain/errors.js';
+import { isAuthFailure, isEnvelopeFailure, rateLimit, resetRateLimits } from './rate-limit.js';
 
 function fakeReq(username: string, ip = '10.0.0.1') {
   return { path: '/login', ip, body: { username } };

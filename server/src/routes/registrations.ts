@@ -9,19 +9,17 @@
  * 只有权限（403）与服务器问题才走 `index.js` 的错误中间件。
  */
 
-import express = require('express');
-import { query } from '../config/pool';
-import { REGISTRATION_COLUMNS, REGISTRATION_FROM, EXHIBITION_COLUMNS, EXHIBITION_FROM } from '../domain/queries';
-import { registrationPayload, type ExhibitionRow, type RegistrationRow } from '../domain/payloads';
-import exhibitions = require('./exhibitions');
-import { authenticate } from '../middleware/auth';
-import { requireUser, assertNotLimited } from '../domain/permissions';
-import { badRequest, forbidden } from '../domain/errors';
-import { mutate } from '../domain/respond';
-import { limits as readLimits, text } from '../domain/validation';
-import * as labels from '../domain/labels';
-
-const { loadFields } = exhibitions;
+import express from 'express';
+import { query } from '../config/pool.js';
+import { REGISTRATION_COLUMNS, REGISTRATION_FROM, EXHIBITION_COLUMNS, EXHIBITION_FROM } from '../domain/queries.js';
+import { registrationPayload, type ExhibitionRow, type RegistrationRow } from '../domain/payloads.js';
+import { loadFields } from './exhibitions.js';
+import { authenticate } from '../middleware/auth.js';
+import { requireUser, assertNotLimited } from '../domain/permissions.js';
+import { badRequest, forbidden } from '../domain/errors.js';
+import { mutate } from '../domain/respond.js';
+import { limits as readLimits, text } from '../domain/validation.js';
+import * as labels from '../domain/labels.js';
 
 const router = express.Router();
 
@@ -312,4 +310,4 @@ router.delete('/:id', authenticate, async (req, res, next) => {
   });
 });
 
-export = router;
+export default router;

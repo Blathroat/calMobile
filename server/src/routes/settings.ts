@@ -10,10 +10,10 @@
  *   服务器级默认外观只存在 `app_settings.ui` 里作为未登录时的读默认值，不对外提供写入口。
  */
 
-import express = require('express');
-import { authenticate, optionalAuth } from '../middleware/auth';
-import { requireAdmin } from '../domain/permissions';
-import { mutate } from '../domain/respond';
+import express from 'express';
+import { authenticate, optionalAuth } from '../middleware/auth.js';
+import { requireAdmin } from '../domain/permissions.js';
+import { mutate } from '../domain/respond.js';
 import {
   applyServerPatch,
   readNotificationPreferences,
@@ -22,7 +22,7 @@ import {
   saveNotificationPreferences,
   saveServerSettings,
   saveUiMode,
-} from '../domain/settings';
+} from '../domain/settings.js';
 
 const router = express.Router();
 
@@ -107,4 +107,4 @@ router.put('/ui-mode', authenticate, async (req, res, next) => {
   }
 });
 
-export = router;
+export default router;

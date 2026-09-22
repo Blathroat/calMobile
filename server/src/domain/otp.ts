@@ -21,11 +21,11 @@
  */
 
 import crypto from 'node:crypto';
-import { query } from '../config/pool';
-import { ApiError, badRequest } from './errors';
-import { readSection } from './settings';
-import { send } from '../services/mailer';
-import { verificationMail, PURPOSE_KEYS } from '../services/mail-templates';
+import { query } from '../config/pool.js';
+import { ApiError, badRequest } from './errors.js';
+import { readSection } from './settings.js';
+import { send } from '../services/mailer.js';
+import { verificationMail, PURPOSE_KEYS } from '../services/mail-templates.js';
 
 /** 验证码有效期（分钟）。前端要显示的「10 分钟内有效」跟着它走。 */
 export const CODE_TTL_MIN = 10;

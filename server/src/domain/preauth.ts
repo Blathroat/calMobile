@@ -10,7 +10,7 @@
  */
 
 import crypto from 'node:crypto';
-import { query } from '../config/pool';
+import { query } from '../config/pool.js';
 
 /** 票据有效期（分钟）。 */
 export const TICKET_TTL_MIN = 5;

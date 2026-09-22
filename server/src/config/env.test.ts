@@ -6,9 +6,9 @@
  */
 
 import assert from 'node:assert/strict';
-import { parseEnv } from './env';
-import { resolveMailConfig } from './mail';
-import { resolveRuntime } from './runtime';
+import { parseEnv } from './env.js';
+import { resolveMailConfig } from './mail.js';
+import { resolveRuntime } from './runtime.js';
 
 const ACCESS = 'test-access-secret-012345678901234567890';
 const REFRESH = 'test-refresh-secret-012345678901234567890';

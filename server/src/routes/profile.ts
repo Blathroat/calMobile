@@ -11,30 +11,26 @@
  * 不能顺带把昵称、简介或另一个开关改回默认值。
  */
 
-import express = require('express');
-const bcrypt = require('bcryptjs') as {
-  hash(data: string, saltOrRounds: number): Promise<string>;
-  hashSync(data: string, saltOrRounds: number): string;
-  compare(data: string, encrypted: string): Promise<boolean>;
-};
-import { query } from '../config/pool';
-import { USER_COLUMNS, USER_FROM } from '../domain/queries';
-import { userPayload, type UserRow } from '../domain/payloads';
-import { capabilities, assertNotLimited } from '../domain/permissions';
-import { limits, bool } from '../domain/validation';
-import { mutate } from '../domain/respond';
-import { badRequest, notFound } from '../domain/errors';
-import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp';
+import bcrypt from 'bcryptjs';
+import express from 'express';
+import { query } from '../config/pool.js';
+import { USER_COLUMNS, USER_FROM } from '../domain/queries.js';
+import { userPayload, type UserRow } from '../domain/payloads.js';
+import { capabilities, assertNotLimited } from '../domain/permissions.js';
+import { limits, bool } from '../domain/validation.js';
+import { mutate } from '../domain/respond.js';
+import { badRequest, notFound } from '../domain/errors.js';
+import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp.js';
 import {
   secondFactorState,
   beginTotpSetup,
   confirmTotpSetup,
   regenerateBackupCodes,
   clearSecondFactors,
-} from '../domain/two-factor';
-import { readNotificationPreferences, saveNotificationPreferences, readServerSettings } from '../domain/settings';
-import { revokeAllForUser } from '../domain/session';
-import { authenticate } from '../middleware/auth';
+} from '../domain/two-factor.js';
+import { readNotificationPreferences, saveNotificationPreferences, readServerSettings } from '../domain/settings.js';
+import { revokeAllForUser } from '../domain/session.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -553,4 +549,4 @@ router.put('/notifications', authenticate, async (req, res, next) => {
   }
 });
 
-export = router;
+export default router;

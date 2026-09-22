@@ -6,7 +6,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { productionProblems } from './production';
+import { productionProblems } from './production.js';
 
 /** 一份「配齐了」的生产环境，用例按需覆盖其中某一项。 */
 function readyEnv(override = {}) {

@@ -7,10 +7,10 @@
  * 密钥校验（非空、≥32 字符、禁占位符）与 `config/auth.ts` 相同：缺 key 在解析时就失败。
  */
 
-import { resolveRuntime, type Runtime } from './runtime';
-import auth = require('./auth');
-import { resolveDatabaseConfig, type DatabaseConfig } from './database';
-import { resolveMailConfig, type MailConfig } from './mail';
+import { resolveRuntime, type Runtime } from './runtime.js';
+import { resolveAuthConfig } from './auth.js';
+import { resolveDatabaseConfig, type DatabaseConfig } from './database.js';
+import { resolveMailConfig, type MailConfig } from './mail.js';
 
 export type EnvLike = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
@@ -23,7 +23,7 @@ export interface ProcessSettings {
 export interface ProcessConfig {
   env: EnvLike;
   runtime: Runtime;
-  auth: ReturnType<typeof auth.resolveAuthConfig>;
+  auth: ReturnType<typeof resolveAuthConfig>;
   mail: MailConfig;
   database: DatabaseConfig;
   totpSecretKey: string;
@@ -49,7 +49,7 @@ export function resolveProcessSettings(env: EnvLike = {}): ProcessSettings {
  */
 export function parseEnv(env: EnvLike = {}, argv: string[] = []): ProcessConfig {
   const runtime = resolveRuntime(argv, env);
-  const resolvedAuth = auth.resolveAuthConfig(env);
+  const resolvedAuth = resolveAuthConfig(env);
   const settings = resolveProcessSettings(env);
   return {
     env,

@@ -6,13 +6,13 @@
  * 与 `profile.js` 的通知偏好分工保持一致。
  */
 
-import express = require('express');
-import { query } from '../config/pool';
-import { optionalAuth } from '../middleware/auth';
-import { readServerSettings, readUiMode } from '../domain/settings';
-import { USER_COLUMNS, USER_FROM } from '../domain/queries';
-import { userPayload, guestPayload, type UserRow } from '../domain/payloads';
-import { capabilities } from '../domain/permissions';
+import express from 'express';
+import { query } from '../config/pool.js';
+import { optionalAuth } from '../middleware/auth.js';
+import { readServerSettings, readUiMode } from '../domain/settings.js';
+import { USER_COLUMNS, USER_FROM } from '../domain/queries.js';
+import { userPayload, guestPayload, type UserRow } from '../domain/payloads.js';
+import { capabilities } from '../domain/permissions.js';
 
 const router = express.Router();
 
@@ -78,4 +78,4 @@ router.get('/bootstrap', optionalAuth, async (req, res, next) => {
   }
 });
 
-export = router;
+export default router;

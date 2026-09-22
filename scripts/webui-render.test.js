@@ -448,7 +448,7 @@ const BOOTSTRAP = {
         status: '正常',
         statusCode: 'active',
         // 与后端 `capabilities(role, status)` 的五个键一致：受限账号 register / profile 为 false，
-        // 且 `limited` 为 true（见 server/src/domain/permissions.js）。
+        // 且 `limited` 为 true（见 server/src/domain/permissions.ts）。
         can: { register: true, profile: true, exhibitor: true, admin: true, limited: false },
     },
     theme: { index: 0, colors: ['#C05621', '#48515D'] },

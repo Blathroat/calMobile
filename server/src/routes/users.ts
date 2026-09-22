@@ -8,23 +8,23 @@
  * 字段一律取 `queries.js` 的 `USER_COLUMNS`，它不含 `password_hash`。
  */
 
-import express = require('express');
-import { query } from '../config/pool';
-import { USER_COLUMNS, USER_FROM, REGISTRATION_COLUMNS, REGISTRATION_FROM } from '../domain/queries';
+import express from 'express';
+import { query } from '../config/pool.js';
+import { USER_COLUMNS, USER_FROM, REGISTRATION_COLUMNS, REGISTRATION_FROM } from '../domain/queries.js';
 import {
   adminUserPayload,
   publicRegistrationPayload,
   type AdminUserRow,
   type RegistrationRow,
   type UserRow,
-} from '../domain/payloads';
-import * as labels from '../domain/labels';
-import { requireAdmin } from '../domain/permissions';
-import { normalizeUserStatus } from '../domain/settings';
-import { mutate } from '../domain/respond';
-import { badRequest, notFound } from '../domain/errors';
-import { revokeAllForUser } from '../domain/session';
-import { authenticate, optionalAuth } from '../middleware/auth';
+} from '../domain/payloads.js';
+import * as labels from '../domain/labels.js';
+import { requireAdmin } from '../domain/permissions.js';
+import { normalizeUserStatus } from '../domain/settings.js';
+import { mutate } from '../domain/respond.js';
+import { badRequest, notFound } from '../domain/errors.js';
+import { revokeAllForUser } from '../domain/session.js';
+import { authenticate, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -250,4 +250,4 @@ async function publicProfile(req: express.Request, target: UserRow | null) {
   };
 }
 
-export = router;
+export default router;

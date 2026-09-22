@@ -7,8 +7,8 @@
  */
 
 import assert from 'node:assert/strict';
-import { resolveMailConfig } from '../config/mail';
-import { send, outbox, lastMail, resetMailer, closeTransporter, buildMessage, formatFrom } from './mailer';
+import { resolveMailConfig } from '../config/mail.js';
+import { send, outbox, lastMail, resetMailer, closeTransporter, buildMessage, formatFrom } from './mailer.js';
 
 /** 内存收件箱配置：只有测试会用它。 */
 const memoryConfig = (extra: Record<string, string> = {}) =>

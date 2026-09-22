@@ -10,7 +10,19 @@
 | `src/config/` | 连接池、迁移与示例数据、JWT 与邮件通道配置 |
 | `src/services/` | 邮件发送适配层与验证码邮件文案（`mailer.ts` / `mail-templates.ts`） |
 | `src/middleware/auth.ts` | JWT 认证中间件 |
-| `src/routes/status.ts` + `src/status-page.js` | 健康状态页：JSON 报告 + 单文件中文 HTML |
+| `src/routes/status.ts` + `src/status-page.ts` | 健康状态页：JSON 报告 + 单文件中文 HTML |
+
+## 工程结构
+
+`package.json` 里是 `"type": "module"`：源码与构建产物都是 ES Module。由此定下三条硬约束：
+
+- **相对导入必须写扩展名**：`./config/pool.js` 这样写（源文件是 `.ts`、产物是 `.js`）。`tsconfig.json` 用 `moduleResolution: nodenext`，与 Node 的解析规则一致，不会出现「源码能跑、产物找不到模块」；
+- **读 JSON 要带 `with { type: 'json' }`**：服务版本号就是这么从 `package.json` 取的；
+- **没有 `require()`，也没有 `require.main`**：入口判断在 `src/entry.ts` 的 `isEntry(import.meta.url)`；路由注册表独立成 `src/routes/registry.ts` —— 它既是 `index.ts` 的挂载来源，也是 `routes/status.ts` 接口清单的来源，两者互不依赖。
+
+`allowJs` 关闭：源码一律 `.ts`，没有 JS 逃生口。未自带类型声明的 CommonJS 依赖（`jsonwebtoken`、`nodemailer`）在 `src/types/packages.d.ts` 里只按实际用到的签名声明，够用即可。
+
+`src/` 的模块图是**无环**的：`config/auth.ts` 只导纯函数，进程级的那份配置由 `config/env.ts` 统一解析（`loadProcessConfig()`），要用密钥的模块自己去取，谁也不依赖谁。
 
 ## 快速开始
 
@@ -30,7 +42,7 @@ pnpm db:seed                  # 示例账号与展会（可反复执行）
 
 # 不想开收件箱容器也行：把 .env 的 MAIL_TRANSPORT 改成 console，整封邮件（含验证码）进后端日志
 
-pnpm dev                      # 开发模式（nodemon），默认 http://127.0.0.1:3000
+pnpm dev                      # 开发模式（tsx watch，改源码自动重启），默认 http://127.0.0.1:3000
 ```
 
 ### 开发模式与生产模式
@@ -92,7 +104,7 @@ adb reverse tcp:3000 tcp:3000
 #    usesCleartextTraffic 与 INTERNET 权限说明
 ```
 
-改了 `src/*.js` 之后**必须重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
+改了 `src/*.ts` 之后**必须重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
 
 ### 邮件：验证码与两步验证的通道
 
@@ -117,7 +129,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 1. **发码接口先落库、立刻回包，后台发信**：前端 `api.js` 的请求超时是 3 秒，同步等一次 SMTP 往返（本机 Mailpit 实测约 1.3 秒，跨境中继更久）会把注册页卡成超时错误。发信结果只写 `mail_log`，页面不等它。
 2. **发信失败要让用户看见**：`send()` 不抛异常，返回 `{ ok:false, error }`；`/status` 的「邮件通道」自检项显示通道配置与最近 24 小时的失败数。「发信成功但用户收不到」是最难查的一类故障，留痕与自检比日志翻滚有用得多。
 
-邮件文案在 `src/services/mail-templates.js`，那是**唯一允许写死后端用户可见中文的地方**（前端文案才走 `res/values/strings_frontend.xml`）：中英双语同封，不放链接（带链接既是钓鱼邮件的典型特征、会拉低送达率，也养成用户点邮件里链接的坏习惯），品牌名进 HTML 前转义、进主题前清换行（品牌名来自管理员设置，不清就是邮件头注入）。
+邮件文案在 `src/services/mail-templates.ts`，那是**唯一允许写死后端用户可见中文的地方**（前端文案才走 `res/values/strings_frontend.xml`）：中英双语同封，不放链接（带链接既是钓鱼邮件的典型特征、会拉低送达率，也养成用户点邮件里链接的坏习惯），品牌名进 HTML 前转义、进主题前清换行（品牌名来自管理员设置，不清就是邮件头注入）。
 
 ## 响应约定
 
@@ -134,12 +146,12 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | **数据库暂时不可用**（没起、连接被拒、握手超时、连接数打满、管理员关库、库或密码不存在） | 503 | `{ error:'数据库暂时不可用，请稍后重试' }` | 抛 `TransportError`，页面提示可重试 |
 | 其它服务器内部错误 | 500 | `{ error:'服务器内部错误' }` | 抛错；原因（含堆栈）只进服务端日志 |
 
-也就是说 **HTTP 状态码表达认证、授权、可用性与内部故障，业务规则的失败一律 200 + `ok:false`**。写路由统一用 `domain/respond.js` 的 `mutate()` 收尾，它只把 400 / 409 收成信封，401 / 403 / 404 继续上抛。
+也就是说 **HTTP 状态码表达认证、授权、可用性与内部故障，业务规则的失败一律 200 + `ok:false`**。写路由统一用 `domain/respond.ts` 的 `mutate()` 收尾，它只把 400 / 409 收成信封，401 / 403 / 404 继续上抛。
 
 两条纪律（`src/index.ts` 的 `statusFor()` / `clientMessage()` 是唯一实现处）：
 
 - **不把内部细节回给调用方**：只有 `ApiError` 的文案是写给用户看的，pg 的连接错误（含内网 `host:port`）、SQL 片段、文件路径与堆栈一律只出现在服务端日志里；
-- **库故障不是 500 而是 503**：判定在 `domain/errors.js` 的 `isDatabaseUnavailable()`（连接类 errno、PostgreSQL 的 `08xxx` / `57P0x` / `53300` / `3D000` / `28P01`，以及驱动的池等待超时文案），SQL 语法错、唯一约束冲突这类**不算**不可用，仍按 500 / 409 走。
+- **库故障不是 500 而是 503**：判定在 `domain/errors.ts` 的 `isDatabaseUnavailable()`（连接类 errno、PostgreSQL 的 `08xxx` / `57P0x` / `53300` / `3D000` / `28P01`，以及驱动的池等待超时文案），SQL 语法错、唯一约束冲突这类**不算**不可用，仍按 500 / 409 走。
 
 存活探针与健康检查不是一回事：`GET /ping` 与 `GET /health` 只回答「HTTP 进程还在不在」（**不看数据库**，库挂了照样 200）；要连数据库一起判断用 `GET /api/v1/status`（库答不上就 503）。编排里做就绪探针请用后者。
 
@@ -231,7 +243,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `GET /api/v1/status` | — | 可匿名。JSON 健康报告：`ok` / `service` / `database` / `migrations` / `data` / `endpoints` / `checks`。服务活着**且**数据库答得上时 200，否则 503 + `ok:false`，探活脚本按状态码判断 |
 | `GET /status` | — | 可匿名。同一份报告的中文状态页（单文件 HTML，样式与脚本内联，不用构建、不引 CDN）；数据库挂掉时仍返回 200 并把失败原因显示出来 |
 
-两个路径由同一个路由器提供（`src/routes/status.ts` + `src/status-page.js`），因此页面与 JSON 永远不会说两套话。几条约定：
+两个路径由同一个路由器提供（`src/routes/status.ts` + `src/status-page.ts`），因此页面与 JSON 永远不会说两套话。几条约定：
 
 - **`ok` 只表达「服务活着 + 数据库答得上」**，迁移没跑完、自检项失败都只体现在 `checks` 与 `migrations` 里，不混进状态码 —— 否则探活脚本分不清「数据库没了」和「只是有一步迁移没跑」。
 - **每一项都是真测出来的**：`database.latencyMs` 是 `select version()` + `select 1` 的往返时间，`data` 是逐表 `count(*)`，`checks` 里失败的那条一定指得到出处；数据库连不上时 `data` 是 `null`（不是 0）、迁移按「全部未应用」处理、并带上错误原文，绝不抛 500。
@@ -243,7 +255,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 
 ## 媒体与上传限制
 
-`app_settings.media` / `app_settings.upload` 是管理员在「管理-设置」里维护的容量与格式上限，**同一个 payload 同时供 `GET /bootstrap`（`media` 块）与 `GET /settings`（`media` + `upload`）使用**（`domain/settings.js` 的 `readServerSettings()`），两处字段不会漂移：
+`app_settings.media` / `app_settings.upload` 是管理员在「管理-设置」里维护的容量与格式上限，**同一个 payload 同时供 `GET /bootstrap`（`media` 块）与 `GET /settings`（`media` + `upload`）使用**（`domain/settings.ts` 的 `readServerSettings()`），两处字段不会漂移：
 
 | 键 | 默认值 | 取值范围 | 消费方 |
 | --- | --- | --- | --- |
@@ -255,7 +267,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `upload.imageFormats` | `jpg,jpeg,png,webp` | 非空列表 | 允许的图片格式 |
 | `upload.videoFormats` | `mp4,mov,webm` | 非空列表 | 允许的视频格式 |
 
-越界值由 `domain/settings.js` 的 `applyServerPatch()` **收敛到范围内**（不是拒绝请求），例如 `videoSizeMb: 9999` 保存后读回 500、`0` 读回 1。这几个键都是 `app_settings` 里那一项 JSON 的成员，**不是数据库列**，因此新增上限不需要迁移步骤：`readServerSettings()` 以 `DEFAULT_SETTINGS` 为底、用库里的值覆盖，老库里没有 `videoSizeMb` 时会自动拿到默认值 50，不会给出 `undefined`。
+越界值由 `domain/settings.ts` 的 `applyServerPatch()` **收敛到范围内**（不是拒绝请求），例如 `videoSizeMb: 9999` 保存后读回 500、`0` 读回 1。这几个键都是 `app_settings` 里那一项 JSON 的成员，**不是数据库列**，因此新增上限不需要迁移步骤：`readServerSettings()` 以 `DEFAULT_SETTINGS` 为底、用库里的值覆盖，老库里没有 `videoSizeMb` 时会自动拿到默认值 50，不会给出 `undefined`。
 
 ## 业务规则（服务端兜住的部分）
 
@@ -275,12 +287,12 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 - **登录限流**：`/auth/login` 与 `/auth/register` 按「IP + 用户名」内存滑动窗口限速——**只统计失败**（4xx 或 200 + `ok:false`），5 分钟内失败 10 次之后给 429，挡住脚本化撞库；成功登录不计数，否则连着登录十来次就会把自己关在门外。单进程内存实现，多实例部署时换共享存储。
 - **刷新令牌轮换**：撤销与校验合成一条条件更新（`UPDATE … WHERE revoked_at IS NULL` 并检查 `rowCount`），同一个刷新令牌并发用两次时只有一个能换到新令牌，另一个按「登录状态已失效」处理。
 - **权限**：访客不能报名与编辑；普通用户不能碰展会配置与用户管理；展商只能管理自己举办的展会；服务器设置与个人外观模式都要登录（服务器设置还要求管理员）。
-- **受限账号**（`users.status = 'limited'`）：管理员在「用户管理」里设置受限后，被判定的操作各给 403 + 一句可展示的文案 —— **不能报名**（`POST /registrations` →「账号已被限制，不能报名」）、**不能发布展会**（`POST /exhibitions` →「账号已被限制，不能发布展会」）、**不能编辑 / 删除展会**（`PUT` / `DELETE /exhibitions/:id` →「账号已被限制，不能修改展会」/「账号已被限制，不能删除展会」，自己举办的展会也不行）、**不能改报名设置**（`PUT /exhibitions/:id/status` 暂停恢复报名与 `PUT /exhibitions/:id/fields` 报名收集项 →「账号已被限制，不能修改报名设置」）、**不能核销**（`POST /checkin` →「账号已被限制，不能核销」）、**不能编辑个人信息**（`PUT /profile` →「账号已被限制，不能编辑个人信息」）。**仍然可用**：登录、浏览与查询（展会列表 / 月视图 / 详情 / 收集项读取）、审核报名（`PUT /review/:id/status` 照常可用）、`PUT /profile/notifications`（通知偏好不是个人信息）、`POST /profile/password`（改密码属于账号安全）、撤销自己的报名。**管理员不受限**（否则没人能解除限制），判定集中在 `domain/permissions.js` 的 `isLimited()` / `assertNotLimited()`（文案表 `LIMITED_ACTIONS`）；受限拦截一律挂在 `mutate()` 之外、并排在角色检查之前，因此受限的普通用户拿到的是「账号已被限制」，而不是「只有展商或管理员可以执行此操作」。`capabilities(role, status)` 同步给出 `can.register = false`、`can.profile = false`、`can.limited = true`，前端据此置灰按钮并说明原因。封禁（`banned`）行为不变，仍然在认证层就拒绝。
+- **受限账号**（`users.status = 'limited'`）：管理员在「用户管理」里设置受限后，被判定的操作各给 403 + 一句可展示的文案 —— **不能报名**（`POST /registrations` →「账号已被限制，不能报名」）、**不能发布展会**（`POST /exhibitions` →「账号已被限制，不能发布展会」）、**不能编辑 / 删除展会**（`PUT` / `DELETE /exhibitions/:id` →「账号已被限制，不能修改展会」/「账号已被限制，不能删除展会」，自己举办的展会也不行）、**不能改报名设置**（`PUT /exhibitions/:id/status` 暂停恢复报名与 `PUT /exhibitions/:id/fields` 报名收集项 →「账号已被限制，不能修改报名设置」）、**不能核销**（`POST /checkin` →「账号已被限制，不能核销」）、**不能编辑个人信息**（`PUT /profile` →「账号已被限制，不能编辑个人信息」）。**仍然可用**：登录、浏览与查询（展会列表 / 月视图 / 详情 / 收集项读取）、审核报名（`PUT /review/:id/status` 照常可用）、`PUT /profile/notifications`（通知偏好不是个人信息）、`POST /profile/password`（改密码属于账号安全）、撤销自己的报名。**管理员不受限**（否则没人能解除限制），判定集中在 `domain/permissions.ts` 的 `isLimited()` / `assertNotLimited()`（文案表 `LIMITED_ACTIONS`）；受限拦截一律挂在 `mutate()` 之外、并排在角色检查之前，因此受限的普通用户拿到的是「账号已被限制」，而不是「只有展商或管理员可以执行此操作」。`capabilities(role, status)` 同步给出 `can.register = false`、`can.profile = false`、`can.limited = true`，前端据此置灰按钮并说明原因。封禁（`banned`）行为不变，仍然在认证层就拒绝。
 
 ## 数据模型
 
-- **状态存英文代码**（`pending/approved/rejected/cancelled/attended`、`review/optional/display/closed/ended`、`active/limited/banned`），中文标签只在 `src/domain/labels.js` 映射一次 —— 那里是与前端 `core/status.js` 约定的同一批字符串，改动要两处同时改。
-- **展会日期只存 `exhibition_date`**，年 / 月 / 日由 SQL 派生（`src/domain/queries.js` 的 `EXHIBITION_COLUMNS`），不会出现三者互相漂移；日期一律用 `to_char` 取成字符串，避免时区把日期挪一天。
+- **状态存英文代码**（`pending/approved/rejected/cancelled/attended`、`review/optional/display/closed/ended`、`active/limited/banned`），中文标签只在 `src/domain/labels.ts` 映射一次 —— 那里是与前端 `core/status.js` 约定的同一批字符串，改动要两处同时改。
+- **展会日期只存 `exhibition_date`**，年 / 月 / 日由 SQL 派生（`src/domain/queries.ts` 的 `EXHIBITION_COLUMNS`），不会出现三者互相漂移；日期一律用 `to_char` 取成字符串，避免时区把日期挪一天。
 - **报名记录不冗余展会标题 / 时间 / 地点**，读取时 JOIN 展会表，展会改期后不会两边不一致。
 - 迁移按编号记录在 `schema_migrations`，只跑没跑过的步骤；新增字段请追加新步骤，不要改已发布的那一步。
 - **邮箱是身份，不只是联系方式**：`users.email` 大小写无关唯一（只有空串例外，允许留空的老数据并存），`email_verified` / `email_verified_at` 记验证状态，`two_factor_enabled` 是两步验证开关。验证码只存哈希；注册用途的待建账号暂存在 `email_codes.payload`（密码存哈希）——「先验证邮箱、通过后才建账号」因此不会往 `users` 里留下未验证的半成品。两步验证的预认证票在 `preauth_tickets`，发信留痕在 `mail_log`。
@@ -317,6 +329,8 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 ## 测试
 
 ```bash
+pnpm build                # tsc 编译到 dist（生产跑的就是这份产物）
+pnpm typecheck            # 只做类型检查，把类型错误与测试失败分开定位
 pnpm test:contract        # vitest contract project —— 逐接口的契约与规则测试（需要数据库）
 pnpm test                 # vitest unit project：不依赖数据库的纯函数单测
 pnpm lint                 # oxlint
@@ -329,13 +343,13 @@ pnpm format               # oxfmt
 - 权限确实拦得住（访客 / 普通用户 / 展商越权访问、受限账号在报名 / 发布 / 编辑 / 删除展会 / 改报名设置 / 核销 / 改资料上的 403 文案与仍然可用的操作、管理员即便被标成受限也不受限）；
 - 业务规则确实生效（报名窗口、收集项必填与选项、重复报名、自动通过、审核状态机与 `canRevise` 策略、核销状态流转、隐私开关、媒体上限收敛与缺键兜底）；
 - **注册两步流程与验证码规则**：第一步只发码、不建号、不发令牌，账号在验证通过前登不进去；错码不建号；同一枚码只能用一次；同一邮箱 60 秒内不能重复发码（429）；错够 5 次这枚码即作废（连正确的码也不再认）；发码与验证之间用户名被抢注时给「已被注册」而不是 500。
-- **TOTP 与备用码**：绑定验证器要先把生成的密钥输对一次才算成功（生成密钥这一步不生效）；登录时 6 位码按「验证器 → 邮箱验证码」试，`XXXXX-XXXXX`（或丢掉横线的 10 位）按备用码试；备用码一次一枚、用过的立即失效，重新生成会让旧码全部作废，关闭两步验证会把验证器绑定与备用码一起清掉。TOTP 实现对着 RFC 6238 官方向量测（`domain/totp.test.js`），密钥在库里是 AES-256-GCM 密文。
+- **TOTP 与备用码**：绑定验证器要先把生成的密钥输对一次才算成功（生成密钥这一步不生效）；登录时 6 位码按「验证器 → 邮箱验证码」试，`XXXXX-XXXXX`（或丢掉横线的 10 位）按备用码试；备用码一次一枚、用过的立即失效，重新生成会让旧码全部作废，关闭两步验证会把验证器绑定与备用码一起清掉。TOTP 实现对着 RFC 6238 官方向量测（`domain/totp.test.ts`），密钥在库里是 AES-256-GCM 密文。
 - **找回密码与两步验证**：找回密码对已注册与未注册邮箱的响应字段完全一致（不泄露账号是否存在），但只有已注册的会真的收到邮件；改密码后旧刷新令牌失效、一码一用；两步验证开启后 `POST /auth/login` 只回票不发令牌、错码仍然没令牌、过码才发令牌、同一张票只能用一次、关闭要当前密码；改邮箱必须把码发到新地址、通过才落库，且别人账号的改邮箱验证码用不了；验证码的明文只存在于邮件里，用例从内存收件箱的正文里把它读出来 —— 走的是用户实际收到的那条路径，后端没有、也不该有「读出明文码」的接口；
 - 刷新令牌并发重放只会换到一套新令牌（轮换的撤销是原子条件更新）；
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
 - 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、带上错误原文，不抛 500）。
 
-`src/**/*.test.js`（vitest unit project，104 项）跑不依赖数据库的部分：JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.js` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.js` —— 503 的分类是状态码来源，判错会把库故障伪装成 500），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.js`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.js`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.js`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.js`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `pnpm test` 的前置条件——测试不该依赖一个容器。
+`src/**/*.test.ts`（vitest unit project，112 项）跑不依赖数据库的部分：入口判定（`entry.test.ts` —— ESM 下取代 `require.main` 的那次比对）、JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.ts` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.ts` —— 503 的分类是状态码来源，判错会把库故障伪装成 500），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.ts`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.ts`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.ts`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.ts`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `pnpm test` 的前置条件——测试不该依赖一个容器。
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 

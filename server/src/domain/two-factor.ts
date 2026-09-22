@@ -13,12 +13,12 @@
  */
 
 import crypto from 'node:crypto';
-import auth = require('../config/auth');
-import { query, transaction } from '../config/pool';
-import { CodeRejected, isCodeRejected, consumeCode } from './otp';
-import * as totp from './totp';
+import { loadProcessConfig } from '../config/env.js';
+import { query, transaction } from '../config/pool.js';
+import { CodeRejected, isCodeRejected, consumeCode } from './otp.js';
+import * as totp from './totp.js';
 
-const { totpSecretKey } = auth;
+const { totpSecretKey } = loadProcessConfig().auth;
 
 function totpKey(): Buffer {
   return totp.encryptionKey(totpSecretKey);

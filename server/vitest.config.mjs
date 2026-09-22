@@ -20,12 +20,12 @@ export default defineConfig({
       {
         test: {
           name: 'unit',
-          include: ['src/**/*.test.js', 'src/**/*.test.ts'],
+          include: ['src/**/*.test.ts'],
           exclude: ['dist/**', 'node_modules/**', 'src/test/**'],
           environment: 'node',
           globals: true,
           execArgv: ['--import', 'tsx'],
-          setupFiles: ['./test/setup-unit.js'],
+          setupFiles: ['./test/setup-unit.ts'],
         },
       },
       {
@@ -35,7 +35,7 @@ export default defineConfig({
           environment: 'node',
           globals: true,
           execArgv: ['--import', 'tsx'],
-          setupFiles: ['./test/setup-contract.js'],
+          setupFiles: ['./test/setup-contract.ts'],
           fileParallelism: false,
           testTimeout: 30000,
           hookTimeout: 60000,

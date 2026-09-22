@@ -6,7 +6,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { resolveRuntime } from './runtime';
+import { resolveRuntime } from './runtime.js';
 
 /** 造一个 argv：第一个元素是 node，第二个是脚本路径，其余是脚本参数。 */
 const argv = (...args: string[]) => ['node', 'src/index.js', ...args];

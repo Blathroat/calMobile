@@ -9,10 +9,10 @@
  * `applyServerPatch()` 是纯函数：只做「校验 + 合并」，方便单测；落库由 `saveServerSettings()` 完成。
  */
 
-import { query } from '../config/pool';
-import { DEFAULT_SETTINGS, type ServerSettings } from '../config/migrate';
-import { badRequest } from './errors';
-import { toUserStatus } from './labels';
+import { query } from '../config/pool.js';
+import { DEFAULT_SETTINGS, type ServerSettings } from '../config/migrate.js';
+import { badRequest } from './errors.js';
+import { toUserStatus } from './labels.js';
 
 /** 表单字符数上限的取值范围：前端 `core/validate.js` 的 `limit()` 按同一批键取值。 */
 export const LIMIT_BOUNDS: Record<keyof ServerSettings['limits'], [number, number]> = {

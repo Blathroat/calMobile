@@ -17,7 +17,7 @@
  * - 管理员永远不受限 —— 否则没有任何人能解除限制。
  */
 
-import { forbidden, unauthorized } from './errors';
+import { forbidden, unauthorized } from './errors.js';
 
 export interface Actor {
   userId: string;

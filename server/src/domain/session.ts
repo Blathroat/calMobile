@@ -8,15 +8,12 @@
  */
 
 import crypto from 'node:crypto';
-import { query } from '../config/pool';
-import auth = require('../config/auth');
-import { unauthorized } from './errors';
+import { query } from '../config/pool.js';
+import { loadProcessConfig } from '../config/env.js';
+import { unauthorized } from './errors.js';
+import jwt from 'jsonwebtoken';
 
-const jwt = require('jsonwebtoken') as {
-  sign(payload: object, secret: string, options: { expiresIn: string }): string;
-};
-
-const { accessSecret, refreshSecret, accessExpiresIn, refreshExpiresIn } = auth;
+const { accessSecret, refreshSecret, accessExpiresIn, refreshExpiresIn } = loadProcessConfig().auth;
 
 interface SessionUser {
   id: string;

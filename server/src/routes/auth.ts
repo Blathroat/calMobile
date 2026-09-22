@@ -5,25 +5,21 @@
  * HTTP 状态码只用于传输与认证问题：401 / 403 会被前端 api.js 当作错误抛出并就地提示。
  */
 
-import express = require('express');
-const bcrypt = require('bcryptjs') as {
-  hash(data: string, saltOrRounds: number): Promise<string>;
-  hashSync(data: string, saltOrRounds: number): string;
-  compare(data: string, encrypted: string): Promise<boolean>;
-};
-import { query } from '../config/pool';
-import { USER_COLUMNS, USER_FROM } from '../domain/queries';
-import { userPayload, guestPayload, type UserRow } from '../domain/payloads';
-import { capabilities } from '../domain/permissions';
-import { limits } from '../domain/validation';
-import { issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser } from '../domain/session';
-import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp';
-import { secondFactorState, verifySecondFactor, type SecondFactorUser } from '../domain/two-factor';
-import { issueTicket, findTicket, consumeTicket, countTicketFailure } from '../domain/preauth';
-import { badRequest } from '../domain/errors';
-import { authenticate } from '../middleware/auth';
+import bcrypt from 'bcryptjs';
+import express from 'express';
+import { query } from '../config/pool.js';
+import { USER_COLUMNS, USER_FROM } from '../domain/queries.js';
+import { userPayload, guestPayload, type UserRow } from '../domain/payloads.js';
+import { capabilities } from '../domain/permissions.js';
+import { limits } from '../domain/validation.js';
+import { issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser } from '../domain/session.js';
+import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp.js';
+import { secondFactorState, verifySecondFactor, type SecondFactorUser } from '../domain/two-factor.js';
+import { issueTicket, findTicket, consumeTicket, countTicketFailure } from '../domain/preauth.js';
+import { badRequest } from '../domain/errors.js';
+import { authenticate } from '../middleware/auth.js';
 import type { RequestHandler } from 'express';
-import { rateLimit } from '../middleware/rate-limit';
+import { rateLimit } from '../middleware/rate-limit.js';
 
 const router = express.Router();
 
@@ -587,4 +583,4 @@ router.post('/logout-all', authenticate, async (req, res, next) => {
   }
 });
 
-export = router;
+export default router;

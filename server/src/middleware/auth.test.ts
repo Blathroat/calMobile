@@ -6,17 +6,14 @@
  */
 
 import assert from 'node:assert/strict';
-import { query } from '../config/pool';
-import { ApiError } from '../domain/errors';
-import { authenticate, authorize, optionalAuth, tokenFrom, resolveUser, type AuthRequest } from './auth';
+import { query } from '../config/pool.js';
+import { ApiError } from '../domain/errors.js';
+import { authenticate, authorize, optionalAuth, tokenFrom, resolveUser, type AuthRequest } from './auth.js';
+import jwt from 'jsonwebtoken';
 
 vi.mock('../config/pool', () => ({
   query: vi.fn(),
 }));
-
-const jwt = require('jsonwebtoken') as {
-  sign(payload: object, secret: string | undefined, options?: { expiresIn?: string }): string;
-};
 
 const USER_ROW = {
   id: 'user-1',
@@ -45,7 +42,7 @@ function tokenFor(
   secret: string | undefined = process.env.JWT_SECRET,
   options: { expiresIn?: string } = {},
 ) {
-  return jwt.sign(payload, secret, options);
+  return jwt.sign(payload, secret || '', options);
 }
 
 test('tokenFrom 只认 Bearer 前缀', () => {

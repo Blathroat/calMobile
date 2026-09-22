@@ -22,7 +22,7 @@ import {
   normalizeBackupCode,
   isBackupCodeShape,
   hashBackupCode,
-} from './totp';
+} from './totp.js';
 
 /** RFC 6238 附录 B 的种子（ASCII 的 "12345678901234567890"）。 */
 const RFC_SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';

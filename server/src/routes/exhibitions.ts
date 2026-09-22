@@ -12,19 +12,19 @@
  * （`to_char` + `EXTRACT`），路由里不要对日期做 `new Date(...)` 的本地时区换算。
  */
 
-import express = require('express');
+import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import type { PoolClient } from 'pg';
-import { query, transaction } from '../config/pool';
-import { EXHIBITION_COLUMNS, EXHIBITION_FROM } from '../domain/queries';
-import { exhibitionPayload, fieldPayload, type ExhibitionRow, type FieldRow } from '../domain/payloads';
-import * as labels from '../domain/labels';
-import { requireExhibitor, assertCanManageExhibition, assertNotLimited } from '../domain/permissions';
-import { readSection } from '../domain/settings';
-import { limits, text, int, bool, isoDate, timeRange, stringList } from '../domain/validation';
-import { badRequest, notFound } from '../domain/errors';
-import { mutate } from '../domain/respond';
-import { authenticate, optionalAuth } from '../middleware/auth';
+import { query, transaction } from '../config/pool.js';
+import { EXHIBITION_COLUMNS, EXHIBITION_FROM } from '../domain/queries.js';
+import { exhibitionPayload, fieldPayload, type ExhibitionRow, type FieldRow } from '../domain/payloads.js';
+import * as labels from '../domain/labels.js';
+import { requireExhibitor, assertCanManageExhibition, assertNotLimited } from '../domain/permissions.js';
+import { readSection } from '../domain/settings.js';
+import { limits, text, int, bool, isoDate, timeRange, stringList } from '../domain/validation.js';
+import { badRequest, notFound } from '../domain/errors.js';
+import { mutate } from '../domain/respond.js';
+import { authenticate, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -589,4 +589,5 @@ router.put('/:id/fields', authenticate, notLimited('exhibitionFields'), exhibito
 
 // 报名提交时的必填 / 选项校验要用同一份收集项，因此把取数函数挂在路由器上给 registrations.ts 复用，
 // 免得两处各写一遍「这场展会要填什么」。
-export = Object.assign(router, { loadFields });
+export { loadFields };
+export default router;

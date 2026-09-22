@@ -7,8 +7,8 @@
  * 校验失败抛 `ApiError(400)`：写路由会把它转成 `{ ok:false, error }` 信封返回给页面。
  */
 
-import { badRequest } from './errors';
-import { readSection } from './settings';
+import { badRequest } from './errors.js';
+import { readSection } from './settings.js';
 
 interface TextOptions {
   label?: string;

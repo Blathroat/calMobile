@@ -4,16 +4,13 @@
  * 错误一律 `next(new ApiError(...))` 交给 index.js 的错误中间件统一序列化。
  */
 
-import { query } from '../config/pool';
-import auth = require('../config/auth');
-import { ApiError } from '../domain/errors';
-import { capabilities, type Capabilities } from '../domain/permissions';
+import { query } from '../config/pool.js';
+import { loadProcessConfig } from '../config/env.js';
+import { ApiError } from '../domain/errors.js';
+import { capabilities, type Capabilities } from '../domain/permissions.js';
+import jwt from 'jsonwebtoken';
 
-const jwt = require('jsonwebtoken') as {
-  verify(token: string, secret: string): { userId?: unknown };
-};
-
-const { accessSecret } = auth;
+const { accessSecret } = loadProcessConfig().auth;
 
 const USER_FIELDS = 'id, username, email, nickname, role, status';
 
@@ -67,7 +64,7 @@ export async function resolveUser(token: string): Promise<AuthedUser | null> {
   }
   let decoded: { userId?: unknown };
   try {
-    decoded = jwt.verify(token, accessSecret);
+    decoded = jwt.verify<{ userId?: unknown }>(token, accessSecret);
   } catch {
     return null;
   }

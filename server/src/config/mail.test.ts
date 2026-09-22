@@ -6,7 +6,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { resolveMailConfig, describeMailConfig, TRANSPORTS } from './mail';
+import { resolveMailConfig, describeMailConfig, TRANSPORTS } from './mail.js';
 
 test('开发环境不配通道时走 console：不需要任何邮件配置就能开发', () => {
   const config = resolveMailConfig({ NODE_ENV: 'development' });

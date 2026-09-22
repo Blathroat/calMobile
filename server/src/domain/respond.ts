@@ -11,7 +11,7 @@
  *   catch 展示；也避免把「无权访问」伪装成 200 成功。
  */
 
-import { ApiError } from './errors';
+import { ApiError } from './errors.js';
 
 /** 会被转成应用层信封的状态码。 */
 export const ENVELOPE_STATUS = new Set([400, 409]);

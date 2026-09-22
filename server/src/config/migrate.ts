@@ -14,10 +14,12 @@
 
 // 运行环境要先定下来：迁移脚本也要能对着生产库跑（`pnpm db:migrate:prod`），
 // 而 pool 在 require 的那一刻就按 NODE_ENV 选好库了（见 config/runtime.ts）。
-import * as runtime from './runtime';
-import { pool } from './pool';
+import * as runtime from './runtime.js';
+import { pool } from './pool.js';
+import bcrypt from 'bcryptjs';
 import type { PoolClient } from 'pg';
-import * as dbConfig from './database';
+import * as dbConfig from './database.js';
+import { isEntry } from '../entry.js';
 
 export interface MigrationStep {
   id: string;
@@ -360,7 +362,6 @@ export async function migrate(): Promise<void> {
 
 /** 示例数据：账号、展会（含收集项）、报名、服务器设置。可重复执行。 */
 export async function seed(): Promise<void> {
-  const bcrypt = require('bcryptjs') as { hash(value: string, rounds: number): Promise<string> };
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -582,7 +583,9 @@ export async function seed(): Promise<void> {
   }
 }
 
-if (require.main === module) {
+// 只在直接执行本文件时跑迁移（`tsx src/config/migrate.ts` / `node dist/config/migrate.js`）；
+// 被别的模块 import（`routes/status.ts` 读 STEPS、`domain/settings.ts` 读 DEFAULT_SETTINGS）时不动。
+if (isEntry(import.meta.url)) {
   const command = process.argv[2];
   const run = command === 'seed' ? seed : command === 'migrate' ? migrate : null;
   if (!run) {

@@ -19,7 +19,7 @@ import {
   hashCode,
   sameHash,
   generateCode,
-} from './otp';
+} from './otp.js';
 
 test('验证码是 6 位数字，含前导零', () => {
   for (let i = 0; i < 500; i += 1) {

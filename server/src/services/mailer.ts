@@ -12,11 +12,13 @@
  * 2. **调用方不等发信**：SMTP 往返轻易超过前端 `api.js` 的 `REQUEST_TIMEOUT = 3000`，
  *    所以发码接口一律「先落库、立刻回包、后台发信」（见 `domain/otp.ts`）。
  *
- * `nodemailer` 在 `smtp` 分支里**延迟 require**：console / memory 通道与单测都不必加载它。
+ * `nodemailer` 只是被 import 一次，真正的 SMTP 连接池仍然按需懒建（见 `smtpTransport`）：
+ * console / memory 通道与单测都不会碰它。
  */
 
-import { mailConfig, type MailConfig } from '../config/mail';
-import { sanitizeHeader } from './mail-templates';
+import nodemailer from 'nodemailer';
+import { mailConfig, type MailConfig } from '../config/mail.js';
+import { sanitizeHeader } from './mail-templates.js';
 
 /** 与 `routes/auth.js` 的注册校验、`routes/profile.js` 的邮箱校验保持一致。 */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -124,18 +126,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise.finally(() => clearTimeout(timer)), timeout]);
 }
 
-/** 延迟创建（并复用）SMTP 连接池；配置变了就重建。 */
+/** 延迟创建（并复用）SMTP 连接池；配置变了就重建。走 console / memory 时不会被调用。 */
 function smtpTransport(config: MailConfig): SmtpTransport {
   const key = [config.smtp.host, config.smtp.port, config.smtp.secure, config.smtp.user].join('|');
   if (transporter && transporterKey === key) {
     return transporter;
   }
   closeTransporter();
-  // 延迟 require：走 console / memory 时完全不需要这个依赖。
-  const nodemailer = require('nodemailer') as {
-    createTransport(options: unknown): SmtpTransport;
-  };
-  transporter = nodemailer.createTransport({
+  // 连接池选项本仓库只用得到的这几个；其余按 nodemailer 的默认值。
+  const created = nodemailer.createTransport({
     host: config.smtp.host,
     port: config.smtp.port,
     secure: config.smtp.secure,
@@ -147,7 +146,8 @@ function smtpTransport(config: MailConfig): SmtpTransport {
     greetingTimeout: config.sendTimeoutMs,
     socketTimeout: config.sendTimeoutMs,
     tls: { rejectUnauthorized: config.smtp.rejectUnauthorized },
-  });
+  }) as SmtpTransport;
+  transporter = created;
   transporterKey = key;
   return transporter;
 }

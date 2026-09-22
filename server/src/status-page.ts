@@ -14,10 +14,26 @@
  *
  * 约定：下面的 `renderXxx`（服务端首屏）与页面脚本里的同名函数产出**同一套 DOM 结构**，
  * 改动其中一个就要同步另一个；页面脚本里不能用模板字符串（外层就是模板字符串）。
+ *
+ * 报告是外部输入（字段可能缺、类型可能杂），所有取值都按「空值降级渲染，绝不抛错」处理 ——
+ * 页面必须打得开。因此入参统一用宽松类型，在函数内部再收窄。
  */
 
+/** 报告的一层：字段可能缺，取值一律当「可能有也可能没有」。 */
+type UnknownNode = Record<string, unknown>;
+
+interface StatusReport {
+  ok?: unknown;
+  service?: UnknownNode;
+  database?: UnknownNode;
+  migrations?: UnknownNode;
+  data?: UnknownNode;
+  checks?: unknown[];
+  endpoints?: unknown[];
+}
+
 /** 数据量卡片里的表名与中文名。 */
-const COUNT_FIELDS = [
+const COUNT_FIELDS: ReadonlyArray<readonly [string, string]> = [
   ['users', '用户'],
   ['exhibitions', '展会'],
   ['registrations', '报名'],
@@ -26,9 +42,9 @@ const COUNT_FIELDS = [
 ];
 
 /** 自检项状态 → 中文标签。 */
-const CHECK_LABELS = { ok: '通过', fail: '失败' };
+const CHECK_LABELS: Record<string, string> = { ok: '通过', fail: '失败' };
 
-function escapeHtml(value) {
+function escapeHtml(value: unknown): string {
   return String(value === null || value === undefined ? '' : value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -37,12 +53,12 @@ function escapeHtml(value) {
 }
 
 /** 秒数 → 「1 天 2 小时 3 分 4 秒」。 */
-function formatDuration(seconds) {
+function formatDuration(seconds: unknown): string {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
   const days = Math.floor(total / 86400);
   const hours = Math.floor((total % 86400) / 3600);
   const minutes = Math.floor((total % 3600) / 60);
-  const parts = [];
+  const parts: string[] = [];
   if (days > 0) {
     parts.push(`${days} 天`);
   }
@@ -57,7 +73,7 @@ function formatDuration(seconds) {
 }
 
 /** 毫秒 → 「12.4 ms」；没有测量值时给破折号。 */
-function formatMs(ms) {
+function formatMs(ms: unknown): string {
   if (ms === null || ms === undefined || !Number.isFinite(Number(ms))) {
     return '—';
   }
@@ -66,19 +82,19 @@ function formatMs(ms) {
 }
 
 /** 行数：数据库不可用时是 null，显示破折号而不是 0 ——「0 行」和「没量到」是两回事。 */
-function formatCount(value) {
+function formatCount(value: unknown): string {
   return value === null || value === undefined ? '—' : String(value);
 }
 
 /** 时间戳按**服务时区**显示成「2026-06-08 14:03:05」。 */
-function formatTime(iso, timeZone) {
-  const date = new Date(iso);
+function formatTime(iso: unknown, timeZone: unknown): string {
+  const date = new Date(iso as string | number | Date);
   if (Number.isNaN(date.getTime())) {
     return '—';
   }
   try {
     return new Intl.DateTimeFormat('zh-CN', {
-      timeZone: timeZone || 'UTC',
+      timeZone: (timeZone as string) || 'UTC',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -93,38 +109,45 @@ function formatTime(iso, timeZone) {
 }
 
 /** `version()` 的头一段（PostgreSQL 16.4）：后面的编译信息对排查没用。 */
-function shortVersion(version) {
+function shortVersion(version: unknown): string {
   const text = String(version || '');
   if (!text) {
     return '—';
   }
-  const head = text.split(' on ')[0].trim();
+  const head = String(text.split(' on ')[0]).trim();
   return head || text;
 }
 
+interface EndpointGroup {
+  prefix: string;
+  items: UnknownNode[];
+}
+
 /** 接口清单按前缀分组：`/api/v1/x/y` 归到 `/api/v1/x`，直接挂在一级下的归到 `/api/v1`。 */
-function groupEndpoints(endpoints) {
-  const groups = [];
-  const index = new Map();
+function groupEndpoints(endpoints: unknown[]): EndpointGroup[] {
+  const groups: EndpointGroup[] = [];
+  const index = new Map<string, EndpointGroup>();
   for (const item of endpoints || []) {
-    const rest = String(item.path || '').replace(/^\/api\/v1\/?/, '');
-    const segment = rest.split('/')[0];
-    if (!index.has(segment)) {
-      const group = { prefix: segment ? `/api/v1/${segment}` : '/api/v1', items: [] };
+    const node = (item || {}) as UnknownNode;
+    const rest = String(node.path || '').replace(/^\/api\/v1\/?/, '');
+    const segment = String(rest.split('/')[0]);
+    let group = index.get(segment);
+    if (!group) {
+      group = { prefix: segment ? `/api/v1/${segment}` : '/api/v1', items: [] };
       index.set(segment, group);
       groups.push(group);
     }
-    index.get(segment).items.push(item);
+    group.items.push(node);
   }
   return groups;
 }
 
-function chip(text, tone) {
+function chip(text: unknown, tone?: string): string {
   return `<span class="chip${tone ? ` ${tone}` : ''}">${escapeHtml(text)}</span>`;
 }
 
 /** 自检项列表。 */
-function renderChecks(checks) {
+function renderChecks(checks: unknown): string {
   if (!Array.isArray(checks) || checks.length === 0) {
     return (
       '<div class="check fail"><span class="state">失败</span>' +
@@ -133,7 +156,8 @@ function renderChecks(checks) {
     );
   }
   return checks
-    .map((check) => {
+    .map((raw) => {
+      const check = (raw || {}) as UnknownNode;
       const status = check.status === 'ok' ? 'ok' : 'fail';
       return (
         `<div class="check ${status}">` +
@@ -148,8 +172,8 @@ function renderChecks(checks) {
 }
 
 /** 接口清单：按前缀分组，方法用等宽小标签。 */
-function renderEndpoints(endpoints) {
-  const groups = groupEndpoints(endpoints);
+function renderEndpoints(endpoints: unknown): string {
+  const groups = groupEndpoints(Array.isArray(endpoints) ? endpoints : []);
   if (groups.length === 0) {
     return '<p class="muted">没有读到任何路由</p>';
   }
@@ -169,19 +193,27 @@ function renderEndpoints(endpoints) {
     .join('');
 }
 
+interface MigrationViews {
+  summary: string;
+  applied: string;
+  pending: string;
+  appliedCount: number;
+  pendingCount: number;
+}
+
 /** 迁移卡片里的两串标签；未应用的用高亮色。 */
-function renderMigrations(migrations) {
-  const applied = migrations.applied || [];
-  const pending = migrations.pending || [];
+function renderMigrations(migrations: UnknownNode): MigrationViews {
+  const applied = (migrations.applied || []) as UnknownNode[];
+  const pending = (migrations.pending || []) as unknown[];
   const appliedChips =
     applied.length > 0
-      ? applied.map((item) => chip(`${item.id} · ${formatTime(item.appliedAt, migrations.timeZone)}`)).join('')
+      ? applied.map((item) => chip(`${String(item.id)} · ${formatTime(item.appliedAt, migrations.timeZone)}`)).join('')
       : '<span class="muted">无</span>';
   const pendingChips =
     pending.length > 0 ? pending.map((id) => chip(id, 'warn')).join('') : '<span class="muted">无</span>';
   let summary = `已应用 ${applied.length} 项，没有遗漏`;
   if (migrations.error && applied.length === 0) {
-    summary = `读不到迁移记录：${migrations.error}`;
+    summary = `读不到迁移记录：${String(migrations.error)}`;
   } else if (pending.length > 0) {
     summary = `已应用 ${applied.length} 项，还有 ${pending.length} 项未应用`;
   }
@@ -198,16 +230,16 @@ function renderMigrations(migrations) {
  * 渲染整页。`report` 就是 `/api/v1/status` 的那份报告，
  * 字段缺失时按空值降级渲染，绝不抛错 —— 页面必须打得开。
  */
-function renderStatusPage(report) {
-  const source = report || {};
-  const service = source.service || {};
-  const database = source.database || {};
-  const migrations = { ...source.migrations, timeZone: service.timeZone };
-  const counts = source.data || {};
+export function renderStatusPage(report: StatusReport | unknown): string {
+  const source: StatusReport = report || {};
+  const service = (source.service || {}) as UnknownNode;
+  const database = (source.database || {}) as UnknownNode;
+  const migrations: UnknownNode = { ...source.migrations, timeZone: service.timeZone };
+  const counts = (source.data || {}) as UnknownNode;
   const checks = source.checks || [];
   const endpoints = source.endpoints || [];
   const ok = Boolean(source.ok);
-  const pool = database.pool || {};
+  const pool = (database.pool || {}) as UnknownNode;
 
   // 报告进页面时转义 `<`，避免任何字段里出现 `</script>` 把脚本提前截断。
   const payload = JSON.stringify(source).replace(/</g, '\\u003c');
@@ -611,5 +643,3 @@ h1{margin:0;font-size:26px;font-weight:600;word-break:break-all}
 </html>
 `;
 }
-
-module.exports = { renderStatusPage };

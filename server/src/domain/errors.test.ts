@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { ApiError, serviceUnavailable, isDatabaseUnavailable } from './errors';
+import { ApiError, serviceUnavailable, isDatabaseUnavailable } from './errors.js';
 
 /**
  * 数据库不可用的判定。

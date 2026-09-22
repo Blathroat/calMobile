@@ -4,7 +4,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { verificationMail, PURPOSE_KEYS, PURPOSES, escapeHtml, sanitizeHeader } from './mail-templates';
+import { verificationMail, PURPOSE_KEYS, PURPOSES, escapeHtml, sanitizeHeader } from './mail-templates.js';
 
 const BRAND = { zh: '发现展会', en: 'ExpoHub' };
 

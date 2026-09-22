@@ -1,9 +1,17 @@
+/**
+ * 认证配置的解析：纯函数，用例直接喂环境对象。
+ *
+ * 进程级的那份值由 `config/env.ts` 统一解析（`loadProcessConfig()`），
+ * 这里**不反向依赖它** —— 所以 `env.ts → auth.ts` 是一条单向边，模块图里没有环。
+ * 要读「当前进程实际在用的密钥」的调用方，自己去 `loadProcessConfig().auth` 取。
+ */
+
 type EnvLike = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
-const PLACEHOLDER_SECRET = /^(your_|replace-with|change-me)/i;
-const MIN_SECRET_LENGTH = 32;
+export const PLACEHOLDER_SECRET = /^(your_|replace-with|change-me)/i;
+export const MIN_SECRET_LENGTH = 32;
 
-interface AuthConfig {
+export interface AuthConfig {
   accessSecret: string;
   refreshSecret: string;
   accessExpiresIn: string;
@@ -23,11 +31,11 @@ function readSecret(env: EnvLike, name: string): string {
 }
 
 /**
- * 解析认证相关配置。纯函数：用例直接喂环境对象。
+ * 解析认证相关配置。纯函数：用例与 `parseEnv` 直接喂环境对象。
  *
  * @param env 形如 `process.env`。
  */
-function resolveAuthConfig(env: EnvLike = {}): AuthConfig {
+export function resolveAuthConfig(env: EnvLike = {}): AuthConfig {
   const accessSecret = readSecret(env, 'JWT_SECRET');
   const refreshSecret = readSecret(env, 'JWT_REFRESH_SECRET');
   return {
@@ -38,32 +46,3 @@ function resolveAuthConfig(env: EnvLike = {}): AuthConfig {
     totpSecretKey: String(env.TOTP_SECRET_KEY || '').trim() || refreshSecret,
   };
 }
-
-function processAuth(): AuthConfig {
-  // 延迟加载，避免与 env.ts 的循环依赖在模块初始化时炸掉。
-  const { loadProcessConfig } = require('./env') as typeof import('./env');
-  return loadProcessConfig().auth;
-}
-
-const auth = {
-  resolveAuthConfig,
-  PLACEHOLDER_SECRET,
-  MIN_SECRET_LENGTH,
-  get accessSecret(): string {
-    return processAuth().accessSecret;
-  },
-  get refreshSecret(): string {
-    return processAuth().refreshSecret;
-  },
-  get accessExpiresIn(): string {
-    return processAuth().accessExpiresIn;
-  },
-  get refreshExpiresIn(): string {
-    return processAuth().refreshExpiresIn;
-  },
-  get totpSecretKey(): string {
-    return processAuth().totpSecretKey;
-  },
-};
-
-export = auth;

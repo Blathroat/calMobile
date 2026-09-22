@@ -10,7 +10,7 @@
  * 导出变成 undefined —— 那样会在建连接池时报一句看不懂的错。
  */
 
-import { bool } from './runtime';
+import { bool } from './runtime.js';
 
 type EnvLike = NodeJS.ProcessEnv | Record<string, string | undefined>;
 

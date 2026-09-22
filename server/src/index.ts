@@ -5,37 +5,31 @@
  * - 读取类接口直接返回数据本身（数组或对象）；
  * - 写入类接口返回应用层信封 `{ ok, error, ... }`，业务失败也是 200，页面按 `.ok` 判断；
  * - 认证 / 授权 / 服务器错误用 4xx / 5xx + `{ error }`，前端会当作异常处理；
- * - **数据库连不上/用不了**统一 503（`domain/errors.js` 的 `isDatabaseUnavailable()`），
+ * - **数据库连不上/用不了**统一 503（`domain/errors.ts` 的 `isDatabaseUnavailable()`），
  *   不是 500 —— 这是「暂时不可用、可以重试」，也能避免把 pg 的错误原文回给调用方。
  */
 
-// 运行环境必须在**任何**读取 NODE_ENV 的模块之前定下来（见 config/runtime.js：
+// 运行环境必须在**任何**读取 NODE_ENV 的模块之前定下来（见 config/runtime.ts：
 // pnpm start 走生产、pnpm dev 走开发，状态页与启动自检都按它决定）。
-import * as runtime from './config/runtime';
-import { loadProcessConfig } from './config/env';
+import * as runtime from './config/runtime.js';
+import { loadProcessConfig } from './config/env.js';
+import { isEntry } from './entry.js';
 
-import express = require('express');
-import cors = require('cors');
-import { pool } from './config/pool';
-import { productionProblems } from './config/production';
-import { ApiError, isDatabaseUnavailable } from './domain/errors';
-import { version as SERVICE_VERSION } from '../package.json';
-import bootstrapRoutes = require('./routes/bootstrap');
-import authRoutes = require('./routes/auth');
-import profileRoutes = require('./routes/profile');
-import exhibitionRoutes = require('./routes/exhibitions');
-import registrationRoutes = require('./routes/registrations');
-import reviewRoutes = require('./routes/review');
-import checkinRoutes = require('./routes/checkin');
-import userRoutes = require('./routes/users');
-import searchRoutes = require('./routes/search');
-import settingsRoutes = require('./routes/settings');
-import statusRoutes = require('./routes/status');
+import express from 'express';
+import type { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import { pool } from './config/pool.js';
+import { productionProblems } from './config/production.js';
+import { ApiError, isDatabaseUnavailable } from './domain/errors.js';
+import packageJson from '../package.json' with { type: 'json' };
+import { routes } from './routes/registry.js';
+import statusRoutes from './routes/status.js';
 
 const config = loadProcessConfig();
 const app = express();
 const PORT = config.port;
 const LOG_LEVEL = config.logLevel;
+const SERVICE_VERSION = packageJson.version;
 
 // 不广播技术栈（一行成本的信息收敛）。
 app.disable('x-powered-by');
@@ -58,7 +52,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // 请求日志：LOG_LEVEL=quiet 可关掉，测试与联调时更清爽。
 if (LOG_LEVEL !== 'quiet') {
-  app.use((req, res, next) => {
+  app.use((req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
     res.on('finish', () => {
       console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
@@ -69,19 +63,6 @@ if (LOG_LEVEL !== 'quiet') {
 
 // ── 路由 ────────────────────────────────────────────────────────
 // 路径与前端 `js/core/api.js` 的 api 域一一对应（见 README「前后端边界」）。
-const routes = {
-  '': bootstrapRoutes,
-  auth: authRoutes,
-  profile: profileRoutes,
-  exhibitions: exhibitionRoutes,
-  registrations: registrationRoutes,
-  review: reviewRoutes,
-  checkin: checkinRoutes,
-  users: userRoutes,
-  search: searchRoutes,
-  settings: settingsRoutes,
-};
-
 for (const [prefix, router] of Object.entries(routes)) {
   app.use(`/api/v1${prefix ? `/${prefix}` : ''}`, router);
 }
@@ -97,7 +78,7 @@ if (runtime.statusPageEnabled) {
   app.use('/api/v1/status', statusRoutes);
   app.use('/status', statusRoutes);
 } else {
-  const disabled = (_req: express.Request, res: express.Response) =>
+  const disabled = (_req: Request, res: Response) =>
     res.status(404).json({
       error: '状态页在生产环境已关闭（需要时设 ENABLE_STATUS_PAGE=true 再启动）',
     });
@@ -108,22 +89,22 @@ if (runtime.statusPageEnabled) {
  * 进程存活探针（**不代表数据库可用**）：只回答「HTTP 服务还在不在」。
  * 想连库一起看用 `/api/v1/status`（库挂时 503）。
  */
-app.get(['/ping', '/api/v1/ping'], (req, res) => {
+app.get(['/ping', '/api/v1/ping'], (_req: Request, res: Response) => {
   res.json({ ok: true, service: 'calmobile-server', version: SERVICE_VERSION });
 });
 
 /** 与 /ping 同义的存活探针；数据库连通性看 /api/v1/status。 */
-app.get('/health', (req, res) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime() });
 });
 
 // 404：路径不存在（不是「资源不存在」，那种情况由各路由给 404 + error）
-app.use((req, res) => {
+app.use((req: Request, res: Response) => {
   res.status(404).json({ error: `路径 ${req.originalUrl} 不存在` });
 });
 
 /** body-parser 之类中间件的错误自带 4xx 状态码；这里给出对外文案，不回显原文。 */
-const MIDDLEWARE_MESSAGES = {
+const MIDDLEWARE_MESSAGES: Record<string, string> = {
   'entity.parse.failed': '请求体不是合法的 JSON',
   'entity.too.large': '请求体超过大小上限',
   'encoding.unsupported': '不支持的请求体编码',
@@ -162,7 +143,7 @@ function clientMessage(err: unknown, status: number): string {
     return err.message || '请求失败';
   }
   const record = err as RaisedError;
-  const message = record.type ? MIDDLEWARE_MESSAGES[record.type as keyof typeof MIDDLEWARE_MESSAGES] : undefined;
+  const message = record.type ? MIDDLEWARE_MESSAGES[record.type] : undefined;
   if (message) {
     return message;
   }
@@ -173,7 +154,7 @@ function clientMessage(err: unknown, status: number): string {
 }
 
 // 统一错误处理：状态码按上面的优先级，正文只有 `{ error }`，堆栈始终只进日志。
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   const status = statusFor(err);
   console.error(`请求失败（${status}）：`, err);
   res.status(status).json({ error: clientMessage(err, status) });
@@ -242,7 +223,7 @@ async function shutdown(signal: string) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-if (require.main === module) {
+if (isEntry(import.meta.url)) {
   start();
 }
 

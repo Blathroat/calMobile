@@ -4,8 +4,8 @@
  */
 
 import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
-import * as databaseConfig from './database';
-import { resolveProcessSettings } from './env';
+import * as databaseConfig from './database.js';
+import { resolveProcessSettings } from './env.js';
 
 const logLevel = resolveProcessSettings(process.env).logLevel;
 

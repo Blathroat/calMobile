@@ -5,8 +5,8 @@
  * 保持一致，因此换实现不需要改页面。映射集中在这里，路由只负责取数与校验。
  */
 
-import * as labels from './labels';
-import type { Capabilities } from './permissions';
+import * as labels from './labels.js';
+import type { Capabilities } from './permissions.js';
 
 export interface ExhibitionRow {
   id: string;

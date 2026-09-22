@@ -7,12 +7,12 @@
  * 关键词为空时直接返回空结果，而不是把整库数据当成「搜索结果」下发。
  */
 
-import express = require('express');
-import { query } from '../config/pool';
-import { EXHIBITION_COLUMNS, EXHIBITION_FROM, USER_COLUMNS, USER_FROM } from '../domain/queries';
-import { exhibitionPayload, type ExhibitionRow, type UserRow } from '../domain/payloads';
-import * as labels from '../domain/labels';
-import { optionalAuth } from '../middleware/auth';
+import express from 'express';
+import { query } from '../config/pool.js';
+import { EXHIBITION_COLUMNS, EXHIBITION_FROM, USER_COLUMNS, USER_FROM } from '../domain/queries.js';
+import { exhibitionPayload, type ExhibitionRow, type UserRow } from '../domain/payloads.js';
+import * as labels from '../domain/labels.js';
+import { optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -91,4 +91,4 @@ router.get('/', optionalAuth, async (req, res, next) => {
   }
 });
 
-export = router;
+export default router;

@@ -2,6 +2,7 @@
   "name": "calmobile-server",
   "version": "1.0.0",
   "description": "展会排期助手后端服务器",
+  "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "start": "node dist/index.js --production",

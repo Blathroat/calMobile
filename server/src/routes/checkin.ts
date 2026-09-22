@@ -13,13 +13,13 @@
  * 之前 —— 受限的普通用户两条规则都不满足，「账号已被限制」才是准确的原因。
  */
 
-import express = require('express');
-import { query } from '../config/pool';
-import { REGISTRATION_COLUMNS, REGISTRATION_FROM } from '../domain/queries';
-import type { RegistrationRow } from '../domain/payloads';
-import { authenticate } from '../middleware/auth';
-import { requireExhibitor, canManageExhibition, assertNotLimited } from '../domain/permissions';
-import * as labels from '../domain/labels';
+import express from 'express';
+import { query } from '../config/pool.js';
+import { REGISTRATION_COLUMNS, REGISTRATION_FROM } from '../domain/queries.js';
+import type { RegistrationRow } from '../domain/payloads.js';
+import { authenticate } from '../middleware/auth.js';
+import { requireExhibitor, canManageExhibition, assertNotLimited } from '../domain/permissions.js';
+import * as labels from '../domain/labels.js';
 
 const router = express.Router();
 
@@ -141,4 +141,4 @@ router.post('/', authenticate, async (req, res, next) => {
   }
 });
 
-export = router;
+export default router;

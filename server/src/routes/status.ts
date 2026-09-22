@@ -3,30 +3,33 @@
  *
  * 同一个路由器挂两次，共用这份探测逻辑：
  * - `GET /api/v1/status` → 机器读的 JSON：`ok` 为真给 200，否则 503（探活脚本按状态码判断）；
- * - `GET /status`        → 人读的 HTML（见 `src/status-page.js`）：永远 200，
+ * - `GET /status`        → 人读的 HTML（见 `src/status-page.ts`）：永远 200，
  *   数据库挂了也必须打得开并把失败原因写在页面上。
  *
  * 三条自我约束：
  * 1. **不抛异常**：数据库挂了要给 `ok:false` + 错误原文，而不是 500 —— 探针自己炸了就没法排查；
  * 2. **不编数据**：每一项都来自真实测量（SQL、进程信息、环境变量），自检项失败必须指得到出处；
- * 3. **不固化清单**：`endpoints` 直接遍历 `index.js` 导出的 `routes`（与 `src/test/api.test.ts`
- *    的 `backendRoutes()` 同一套走法），新增路由不会漏登记。
+ * 3. **不固化清单**：`endpoints` 直接遍历 `routes/registry.ts` 的路由注册表
+ *    （与 `src/test/api.test.ts` 的 `backendRoutes()` 同一套走法），新增路由不会漏登记。
  */
 
-import express = require('express');
-import { pool } from '../config/pool';
-import { STEPS } from '../config/migrate';
-import * as databaseConfig from '../config/database';
-import auth = require('../config/auth');
-import { renderStatusPage } from '../status-page';
-import { version as SERVICE_VERSION } from '../../package.json';
-
-const { MIN_SECRET_LENGTH, PLACEHOLDER_SECRET } = auth;
+import express from 'express';
+import type { Request, Response, NextFunction, Router } from 'express';
+import { pool } from '../config/pool.js';
+import { STEPS } from '../config/migrate.js';
+import * as databaseConfig from '../config/database.js';
+import { loadProcessConfig } from '../config/env.js';
+import { MIN_SECRET_LENGTH, PLACEHOLDER_SECRET } from '../config/auth.js';
+import { mailConfig, describeMailConfig } from '../config/mail.js';
+import { renderStatusPage } from '../status-page.js';
+import { routes } from './registry.js';
+import packageJson from '../../package.json' with { type: 'json' };
 
 const router = express.Router();
 
 /** 服务标识与 `/ping` 保持一致。 */
 const SERVICE_NAME = 'calmobile-server';
+const SERVICE_VERSION = packageJson.version;
 
 /** 数据量卡片统计的表，固定白名单（表名直接拼进 SQL，不接受外部输入）。 */
 const COUNT_TABLES = ['users', 'exhibitions', 'registrations', 'exhibition_fields', 'app_settings'];
@@ -81,6 +84,16 @@ interface ServiceStatus {
 interface Endpoint {
   method: string;
   path: string;
+}
+
+/** express 的 `stack` 是内部结构，`@types/express` 没导出它（`IRoute` 也不带 `methods`）。 */
+interface RouteLayer {
+  route?: { path: string; methods: Record<string, boolean> };
+}
+
+/** `router.stack`：只读一条路由的 path 与其方法表（见 `routeInventory`）。 */
+function routerLayers(router: Router): RouteLayer[] {
+  return (router as unknown as { stack?: RouteLayer[] }).stack || [];
 }
 
 interface Report {
@@ -287,20 +300,17 @@ async function probeCounts(database: DatabaseStatus): Promise<{ counts: Record<s
 }
 
 /**
- * 接口清单：遍历 `index.js` 导出的 `routes`，把每个 router 的 `stack` 拼上挂载前缀，
+ * 接口清单：遍历路由注册表 `routes/registry.ts`，把每个 router 的 `stack` 拼上挂载前缀，
  * 与 `src/test/api.test.ts` 的 `backendRoutes()` 完全同源，因此清单不会和真实路由漂移。
  *
- * 这里**延迟 require**：`index.js` 加载时会 require 本模块，顶层 require 会拿到半成品 exports；
- * 请求到来时 index.js 早已加载完毕，拿到的就是完整的 `routes`。
+ * 注册表是独立模块，所以这里能直接静态 import：从前要靠「延迟 require 入口」绕开的
+ * 循环依赖（入口要装载状态路由，状态路由又要读入口的路由表）已经不存在。
  */
 function routeInventory(): Endpoint[] {
-  const { routes } = require('../index') as {
-    routes: Record<string, { stack: Array<{ route?: { path: string; methods: Record<string, boolean> } }> }>;
-  };
   const endpoints: Endpoint[] = [];
   for (const [prefix, mountedRouter] of Object.entries(routes)) {
     const base = `/api/v1${prefix ? `/${prefix}` : ''}`;
-    for (const layer of mountedRouter.stack) {
+    for (const layer of routerLayers(mountedRouter)) {
       if (!layer.route) {
         continue;
       }
@@ -348,15 +358,18 @@ async function runChecks({
     }
   };
 
+  // 进程配置在入口处解析过一次（`loadProcessConfig` 缺密钥时就炸），这里只读它的结果。
+  const processAuth = loadProcessConfig().auth;
+
   await run('认证密钥', () => {
-    // config/auth.js 在加载时就会校验：两个密钥都要存在、够长、且不是占位值。
-    return `JWT_SECRET / JWT_REFRESH_SECRET 均已配置（≥ ${MIN_SECRET_LENGTH} 字符，access ${auth.accessExpiresIn} / refresh ${auth.refreshExpiresIn}）`;
+    // 两个密钥都要存在、够长、且不是占位值 —— 这些在解析配置时就校验过了。
+    return `JWT_SECRET / JWT_REFRESH_SECRET 均已配置（≥ ${MIN_SECRET_LENGTH} 字符，access ${processAuth.accessExpiresIn} / refresh ${processAuth.refreshExpiresIn}）`;
   });
 
   await run('JWT 密钥不是占位值', () => {
     const placeholders = [
-      PLACEHOLDER_SECRET.test(auth.accessSecret) ? 'JWT_SECRET' : '',
-      PLACEHOLDER_SECRET.test(auth.refreshSecret) ? 'JWT_REFRESH_SECRET' : '',
+      PLACEHOLDER_SECRET.test(processAuth.accessSecret) ? 'JWT_SECRET' : '',
+      PLACEHOLDER_SECRET.test(processAuth.refreshSecret) ? 'JWT_REFRESH_SECRET' : '',
     ].filter(Boolean);
     if (placeholders.length > 0) {
       throw new Error(`${placeholders.join(' / ')} 还是 your_ / replace-with / change-me 之类的占位值`);
@@ -372,7 +385,6 @@ async function runChecks({
    * 「最近 24 小时的发信失败数」（读 `mail_log`），既真实又不会把状态页拖住。
    */
   await run('邮件通道', async () => {
-    const { mailConfig, describeMailConfig } = require('../config/mail') as typeof import('../config/mail');
     const mail = describeMailConfig(mailConfig);
     if (!mail.configured) {
       throw new Error(mail.problems.join('；'));
@@ -566,7 +578,7 @@ function fallbackHtml(error: unknown): string {
 }
 
 // 状态数据永远要新鲜：探活脚本和页面都不能拿到缓存的旧结果（并发合并见 reportOnce）。
-router.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+router.use((req: Request, res: Response, next: NextFunction) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
@@ -575,7 +587,7 @@ router.use((req: express.Request, res: express.Response, next: express.NextFunct
  * `GET /api/v1/status` → JSON（200 / 503）；`GET /status` → HTML（200）。
  * 用 `req.baseUrl` 区分两个挂载点，避免把探测逻辑写两遍。
  */
-router.get('/', async (req: express.Request, res: express.Response) => {
+router.get('/', async (req: Request, res: Response) => {
   let report: Report;
   try {
     report = await reportOnce();
@@ -596,4 +608,4 @@ router.get('/', async (req: express.Request, res: express.Response) => {
   res.status(report.ok ? 200 : 503).json(report);
 });
 
-export = router;
+export default router;

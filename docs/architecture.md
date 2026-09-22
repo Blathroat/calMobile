@@ -76,7 +76,7 @@ app/src/main/
 | `CalendarHelper` / `NotificationHelper` / `ExportManager` | 系统日历读写、通知渠道与权限、CSV 生成 |
 | `AppSettings` | 设备侧镜像（外观模式、配色下标、媒体上限、系统栏颜色），权威值在后端 |
 
-数据只有一处来源：后端 PostgreSQL（表结构见 `server/src/config/migrate.js`）。原生不再持有任何业务数据实现，后端连不上时应用直接报错并给出排查提示，不做本地降级。
+数据只有一处来源：后端 PostgreSQL（表结构见 `server/src/config/migrate.ts`）。原生不再持有任何业务数据实现，后端连不上时应用直接报错并给出排查提示，不做本地降级。
 
 逻辑对象包括：
 
@@ -178,7 +178,7 @@ docker compose up -d
 cd server && pnpm install
 cp .env.example .env                # 按需改数据库连接与 JWT 密钥
 pnpm db:migrate && pnpm db:seed
-pnpm dev                         # 开发模式（nodemon），http://127.0.0.1:3000
+pnpm dev                         # 开发模式（tsx watch），http://127.0.0.1:3000
 
 # 3. 真机 / 模拟器访问本机后端
 adb reverse tcp:3000 tcp:3000
@@ -190,7 +190,7 @@ adb reverse tcp:3000 tcp:3000
 
 后端**启动时不要求数据库可用**：连不上库时会在日志里给出警告并照常监听端口，`/status` 健康页会把这些检查项标红，方便先排查连接再处理业务。数据库跑在 Docker 里（根目录 `docker-compose.yml` 的 `db` 服务：容器 `calmobile-pg` + 命名卷 `calmobile-pgdata`），`server/.env` 不用改；容器**必须带时区参数**（compose 里已配 `Asia/Shanghai`）：镜像默认 UTC，而数据库的 `CURRENT_DATE` 决定报名窗口与日历落点，不设的话本机凌晨那段时间会莫名差一天。
 
-**改了 `server/src/*.js` 要重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
+**改了 `server/src/*.ts` 要重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
 
 细节见 `server/README.md`；`server/src/test/api.test.ts` 是前后端契约与接口测试，逐接口断言页面真正用到的字段都在、权限与业务规则都拦得住，字段漂移会在这里失败而不是静默渲染成空。
 
@@ -213,7 +213,7 @@ adb reverse tcp:3000 tcp:3000
 
 ### 数据落在哪
 
-业务数据只有一处来源：后端 PostgreSQL，表结构在 `server/src/config/migrate.js`（迁移按编号记录，可反复执行）——`users` / `exhibitions` / `exhibition_fields` / `registrations` / `app_settings` / `notification_preferences` / `refresh_tokens` / `notifications` / `email_codes` / `preauth_tickets` / `mail_log` / `schema_migrations`。展会扩展字段、收集项、审核状态与核销时间都有正式的列。
+业务数据只有一处来源：后端 PostgreSQL，表结构在 `server/src/config/migrate.ts`（迁移按编号记录，可反复执行）——`users` / `exhibitions` / `exhibition_fields` / `registrations` / `app_settings` / `notification_preferences` / `refresh_tokens` / `notifications` / `email_codes` / `preauth_tickets` / `mail_log` / `schema_migrations`。展会扩展字段、收集项、审核状态与核销时间都有正式的列。
 
 **仍然只在客户端**的只有两类：
 

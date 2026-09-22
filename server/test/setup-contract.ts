@@ -1,10 +1,10 @@
 /**
  * 契约测试环境：在加载 src 之前注入。
  * database / mail 都是加载时读环境变量。
+ *
+ * 这里只负责设变量：ESM 下没有 CJS 的 `tsx/cjs/api` 注册表可挂，
+ * .ts 的加载由 vitest 的 `execArgv: ['--import', 'tsx']` 统一负责。
  */
-const { register } = require('tsx/cjs/api');
-register();
-
 vi.stubEnv('NODE_ENV', 'test');
 vi.stubEnv('DB_NAME', process.env.TEST_DB_NAME || 'calmobile_test');
 vi.stubEnv('LOG_LEVEL', 'quiet');

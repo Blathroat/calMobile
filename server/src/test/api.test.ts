@@ -19,23 +19,16 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Client } from 'pg';
-import type { StoredMail } from '../services/mailer';
-
-// 源码模块用 require 载入，与 app（index.ts → routes → otp → mailer）保持**同一个 tsx CJS 模块实例**：
-// 契约用例跑在 Vite 的 SSR module runner 里，静态 `import` 会落进 Vite 的模块注册表；而 app 的处理栈
-// （index.ts 的 `import x = require(...)` 把路由树一整套拉进 tsx CJS）住在 tsx CJS 注册表。用 `import`
-// 会得到两份副本——mailer 的内存收件箱、rate-limit 计数等进程级状态就此分裂（实测 mailer 被求值两次）。
-// 只有 `require()` 才能和被测代码同表；`as typeof import(...)` 只取类型（运行期擦除），不改变载入路径。
-const database = require('../config/database') as typeof import('../config/database');
-const { pool } = require('../config/pool') as typeof import('../config/pool');
-const { migrate, seed, DEFAULT_SETTINGS, STEPS } = require('../config/migrate') as typeof import('../config/migrate');
-const { resetRateLimits } = require('../middleware/rate-limit') as typeof import('../middleware/rate-limit');
-const { outbox } = require('../services/mailer') as typeof import('../services/mailer');
-const { app, routes } = require('../index') as typeof import('../index');
-const { codeFor } = require('../domain/totp') as typeof import('../domain/totp');
-
-// require() 一律返回 any，这里用字面签名把 hash 类型补回来（与 routes/auth.ts 同一约定）。
-const bcrypt = require('bcryptjs') as { hash(value: string, rounds: number): Promise<string> };
+import { host, port, user, password, database as databaseName } from '../config/database.js';
+import { pool } from '../config/pool.js';
+import { migrate, seed, DEFAULT_SETTINGS, STEPS } from '../config/migrate.js';
+import { resetRateLimits } from '../middleware/rate-limit.js';
+import { outbox } from '../services/mailer.js';
+import type { StoredMail } from '../services/mailer.js';
+import { app, routes } from '../index.js';
+import { codeFor } from '../domain/totp.js';
+import { renderStatusPage } from '../status-page.js';
+import bcrypt from 'bcryptjs';
 
 /** 响应体：逐接口字段差异极大，契约断言直接探属性，故用宽松类型承载。 */
 interface HttpResponse {
@@ -199,15 +192,15 @@ async function createVerifiedAccount(
 beforeAll(async () => {
   // 每次运行都重建测试库：连接维护库（postgres）后 drop/create。
   const admin = new Client({
-    host: database.host,
-    port: Number(database.port),
-    user: database.user,
-    password: database.password,
+    host,
+    port: Number(port),
+    user,
+    password,
     database: 'postgres',
   });
   await admin.connect();
-  await admin.query(`DROP DATABASE IF EXISTS ${database.database} WITH (FORCE)`);
-  await admin.query(`CREATE DATABASE ${database.database}`);
+  await admin.query(`DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`);
+  await admin.query(`CREATE DATABASE ${databaseName}`);
   await admin.end();
 
   await migrate();
@@ -2728,7 +2721,6 @@ test('状态页返回可直接打开的中文 HTML', async () => {
 test('数据库不可用时状态页仍能渲染出失败原因', async () => {
   // 真的把数据库停掉属于运维动作，这里用一份真实的失败报告走一遍模板：
   // 页面渲染不碰数据库，因此这条断言能稳定复现「降级时页面照样打得开」。
-  const { renderStatusPage } = require('../status-page') as { renderStatusPage(report: any): string };
   const { body } = await get('/api/v1/status');
   const broken = {
     ...body,

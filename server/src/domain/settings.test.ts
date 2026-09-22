@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS } from '../config/migrate';
-import { applyServerPatch } from './settings';
+import { DEFAULT_SETTINGS } from '../config/migrate.js';
+import { applyServerPatch } from './settings.js';
 
 /**
  * `applyServerPatch()` 是纯函数（只做「校验 + 合并」），因此不连数据库就能测。
