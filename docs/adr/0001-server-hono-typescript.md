@@ -27,7 +27,7 @@
 ## Consequences
 
 - **env 改名（对旧部署是破坏性的）**：删 `JWT_REFRESH_SECRET`（刷新令牌本就不是 JWT，它唯一真实用途是 TOTP 密钥兜底）；`TOTP_SECRET_KEY` 从选配扶正为必填；`JWT_REFRESH_EXPIRES_IN` 改名 `REFRESH_TOKEN_TTL`。缺 key 的旧部署启动即失败——响亮但不友好，这是选定直接改名的既定代价。
-- **目录结构**：契约测试从 `test/api.test.js` 移入 `src/test/api.test.ts`，`rootDir: "src"` 使 dist 干净镜像；约 15 处文档与脚本引用（含 `scripts/smoke-check.js` 对该文件的内容断言）随迁。
+- **目录结构**：契约测试从 `test/api.test.js` 移入 `src/test/api.test.ts`，`rootDir: "src"` 使 dist 干净镜像；约 15 处文档与脚本引用随迁。
 - **契约测试改写**：状态页契约保留完整 SSR 首屏与内嵌报告断言；降级渲染测试覆盖数据库不可用时的通用错误提示与可读页面。
 - **限流记账**：不再猴补丁 `res.json`，改为中间件 `await next()` 后 `c.res.clone()` 读信封 `ok === false`——行为保持，且只涉及 7 个低流量认证路由。
 - **部署要求**：Node ≥ 22.12；上线多一步 `pnpm build`；状态页由服务端输出完整首屏，浏览器脚本只做后续局部刷新，禁用 JS 时仍能阅读首屏报告。

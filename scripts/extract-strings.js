@@ -34,7 +34,7 @@ const PROTOCOL_VALUES = new Set([
  *
  * 单/双引号与括号内的多余空格都要认：只认 `t('s_xxx')` 这一种写法时，
  * `t("s_xxx")` 与 `t( 's_xxx' )` 会被当成新文案再迁移一遍（或让既有资源变成死资源）。
- * `scripts/check-strings.js` 与 `scripts/smoke-check.js` 用的是同一条正则。
+ * `scripts/check-strings.js` 用的是同一条正则。
  */
 const T_CALL = /\bt\(\s*(['"])(s_[a-z0-9]+)\1\s*\)/g;
 

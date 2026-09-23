@@ -7,9 +7,6 @@
 仓库根目录：
 
 ```bash
-node scripts/smoke-check.js
-node scripts/webui-check.js
-node --test scripts/smoke-check.test.js
 node --test scripts/webui-render.test.js
 node scripts/check-strings.js
 pnpm --dir server test
@@ -35,6 +32,12 @@ pnpm format              # oxfmt
 
 改了前端文案源码后跑 `node scripts/extract-strings.js --write`。
 
+## 测试
+
+测试只断言运行结果：函数返回值、HTTP 响应、渲染后的页面。要证明一个行为，就调用它并检查结果。新行为补在 `scripts/webui-render.test.js`、`server/src/test/api.test.ts` 或对应单测里。
+
+读源码文本、用某段字符串在不在文件里来判定对错的测试不写。扫文件的 `includes` / `contains`、正则抠 `case` / `defineRoute` / 文档句子，都算这种测试。文案 key 是否与 `strings_frontend.xml`、`FrontendStrings.NAMES` 对齐，只由 `node scripts/check-strings.js` 做。
+
 ## 布局
 
 - `app/`：Android 客户端，**Java 25**（toolchain + `compileOptions`）。唯一入口是 `WebShellActivity`（WebView 容器）。页面在 `app/src/main/assets/web/`。纯 Java 工程必须关 `android.builtInKotlin`：AGP 9 仍会建 Kotlin 编译任务，而 Kotlin JVM 目标最高 24。
@@ -51,7 +54,7 @@ pnpm format              # oxfmt
 - 用户可见文案：`res/values/strings_frontend.xml` + `t('key')`。资源**不得首尾空白**（Android 会裁掉，JS 不会，间隔会粘在一起）。间隔用标点或代码拼接。
 - 颜色 / 字号 / 间距 / 圆角只在 `styles/tokens.css`；动效只在 `styles/motion.css`。强调色只用 `--accent*`，不要写死色值。
 - Markdown / HTML 先经 `js/core/sanitize.js`；渲染用 `core/markdown.js` 的 `renderMarkdown`。第三方库内置到 `assets/web/vendor/`，不引用 CDN。
-- 新页面同时改：`js/app.js` 路由、`docs/architecture.md` 的屏幕对照表、`scripts/smoke-check.js` 与 `scripts/webui-check.js` 的页面清单。管理功能优先内联，不新开二级页。
+- 新页面同时改：`js/app.js` 路由、`docs/architecture.md` 的屏幕对照表、`scripts/webui-render.test.js` 的 `ROUTES`。管理功能优先内联，不新开二级页。
 - 表单校验走 `js/core/validate.js`，上限取 `state.limits`。
 
 ## 原生
@@ -82,7 +85,7 @@ pnpm format              # oxfmt
 
 ## 文档
 
-新增或更新需求按主题改 `docs/` 下对应的那一份（`features.md` 功能与验收、`architecture.md` 架构与前后端边界、`ui-standards.md` 界面与动效、`deployment.md` 构建与上线、`roadmap.md` 限制与未决项），不要再创建重复的需求、架构或 Review 文档；`README.md` 只保留简介、快速开始、项目结构、常用命令与文档索引。**所有文档只描述当前状态**：不写「变更记录」、不写迁移过程、不写「以前是怎样的」，历史看 `git log`；已解决的问题从清单里删掉而不是标注「已完成」。设计稿与实现的冲突只记录在 `docs/roadmap.md` 的「待裁决清单（未决项）」，未确认前不要擅自扩大数据模型。代码行为、依赖或命令变化后同步更新对应说明，并运行 `node scripts/smoke-check.js` 与 `node scripts/webui-check.js`。
+新增或更新需求按主题改 `docs/` 下对应的那一份（`features.md` 功能与验收、`architecture.md` 架构与前后端边界、`ui-standards.md` 界面与动效、`deployment.md` 构建与上线、`roadmap.md` 限制与未决项），不要再创建重复的需求、架构或 Review 文档；`README.md` 只保留简介、快速开始、项目结构、常用命令与文档索引。**所有文档只描述当前状态**：不写「变更记录」、不写迁移过程、不写「以前是怎样的」，历史看 `git log`；已解决的问题从清单里删掉而不是标注「已完成」。设计稿与实现的冲突只记录在 `docs/roadmap.md` 的「待裁决清单（未决项）」，未确认前不要擅自扩大数据模型。代码行为、依赖或命令变化后同步更新对应说明，并跑上面命令里受影响的那几项。
 
 ## Agent skills
 

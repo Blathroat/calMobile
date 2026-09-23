@@ -61,7 +61,7 @@ app/src/main/
 
 设计稿中的 16「展会管理」与 17「系统设置」不再作为独立页面：搜索、暂停报名与导出 CSV 内联在管理后台的展会分区；启动公告、展会分类、审核策略、媒体与上传限制、字符数上限归入管理后台的「设置」分区（服务器设置，保存后对所有用户生效）；应用配色因为属于个人偏好，保留在个人页的「设置」栏。核销报名码同理，作为展商后台顶部入口的现场工具存在，没有对应的线框屏。
 
-新增页面时同时更新 `assets/web/js/app.js` 的路由注册、本文件的对照表与 `scripts/smoke-check.js`、`scripts/webui-check.js` 的页面清单；管理类功能优先内联到现有页面，不新增二级页面。
+新增页面时同时更新 `assets/web/js/app.js` 的路由注册、本文件的对照表与 `scripts/webui-render.test.js` 的 `ROUTES`；管理类功能优先内联到现有页面，不新增二级页面。
 
 ## 架构与数据边界
 
@@ -130,7 +130,7 @@ const one = await exhibitions.get(id);
 await registrations.submit(payload);
 ```
 
-`api.js` 内部是一张**动作名 → REST 请求**的映射表（`ENDPOINTS`）：按表把动作翻成 `GET/POST/PUT/DELETE /api/v1/...`，带 `Authorization: Bearer`；访问令牌过期（401）时自动用刷新令牌换一次再重试。**没有第二条路径**，原生不再有数据实现，5xx 与连不上都会如实抛出 `TransportError`，由页面把原因（后端地址、`pnpm dev`、`adb reverse` 提示）显示出来。`scripts/webui-check.js` 会拦住绕过 `api.js` 直接调数据类动作的写法。
+`api.js` 内部是一张**动作名 → REST 请求**的映射表（`ENDPOINTS`）：按表把动作翻成 `GET/POST/PUT/DELETE /api/v1/...`，带 `Authorization: Bearer`；访问令牌过期（401）时自动用刷新令牌换一次再重试。**没有第二条路径**，原生不再有数据实现，5xx 与连不上都会如实抛出 `TransportError`，由页面把原因（后端地址、`pnpm dev`、`adb reverse` 提示）显示出来。渲染测试里，页面把数据动作交给原生桥接会直接失败。
 
 响应约定：**读取类直接返回数据**（列表、对象）；**写入类返回 `{ ok, error, ... }` 信封**，页面按 `.ok` 判断。状态码只有三种含义：**4xx 是业务/权限问题**（抛出错误由页面提示），**400/409 这类可预期的规则失败**由后端包成 HTTP 200 + `{ ok:false, error }`，**5xx 与连不上**是传输层失败。
 
@@ -196,7 +196,7 @@ adb reverse tcp:3000 tcp:3000
 
 ### 原生只剩 10 个系统动作
 
-`WebAppActions.handle()` 的 switch 就是权威清单，数据动作一律不在其中（`scripts/smoke-check.js` 的 `native-actions-whitelist` 与 `scripts/webui-check.js` 双重看守）：
+`WebAppActions.handle()` 的 switch 就是权威清单，数据动作一律不在其中：
 
 | 动作 | 用途 |
 | --- | --- |

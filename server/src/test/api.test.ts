@@ -16,8 +16,6 @@
 
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { Client } from 'pg';
 import { host, port, user, password, database as databaseName } from '../config/database.js';
 import { pool } from '../config/pool.js';
@@ -67,6 +65,29 @@ interface RouterLayer {
 }
 
 let server: ReturnType<typeof listen> | undefined;
+
+/** 前端 `api.js` 导出的 `ENDPOINTS`。在 beforeAll 里导入，用例里直接调用。 */
+let frontendEndpointMap!: EndpointMap;
+
+/**
+ * 带 id 的完整参数与空参数各算一次。
+ * `exhibitions.save` 这类按有没有 id 分派 POST / PUT 的映射，两个分支都要能对上路由。
+ */
+const ENDPOINT_SAMPLES: Record<string, unknown>[] = [
+  {},
+  {
+    id: 'sample-id',
+    userId: 'sample-id',
+    exhibitionId: 'sample-id',
+    nickname: 'n',
+    query: 'q',
+    year: 2026,
+    month: 6,
+    day: 1,
+    status: '待审核',
+    code: 'c',
+  },
+];
 
 /**
  * 起测试服务。
@@ -229,6 +250,9 @@ beforeAll(async () => {
   await seed();
 
   await startServer();
+
+  const apiModule = await import(new URL('../../../app/src/main/assets/web/js/core/api.js', import.meta.url).href);
+  frontendEndpointMap = apiModule.ENDPOINTS as EndpointMap;
 
   tokens.admin = await login('demo');
   tokens.exhibitor = await login('exhibitor');
@@ -2447,51 +2471,6 @@ test('骨架公共层：预检在到达路由之前就被答掉', async () => {
 
 // ── 与前端映射表的交叉校验 ───────────────────────────────────────
 
-/**
- * 把前端 `api.js` 里的 `ENDPOINTS` 对象取出来求值。
- *
- * 这段代码是纯字面量 + 箭头函数，因此在 Node 里可以直接算；用花括号配平（跳过字符串）
- * 而不是正则在对象里找结尾，避免被值里的 `{ ... }` 骗到。
- */
-function frontendEndpoints(): EndpointMap {
-  // 契约测试本身是 ESM，不能依赖 CommonJS 的全局 `__dirname`。
-  const file = fileURLToPath(new URL('../../../app/src/main/assets/web/js/core/api.js', import.meta.url));
-  const source = fs.readFileSync(file, 'utf8');
-  const start = source.indexOf('const ENDPOINTS = {');
-  assert.ok(start > 0, 'api.js 里找不到 ENDPOINTS');
-  const open = source.indexOf('{', start);
-  let depth = 0;
-  let quote = '';
-  let end = -1;
-  for (let index = open; index < source.length; index += 1) {
-    const char = source[index];
-    if (quote) {
-      if (char === '\\') {
-        index += 1;
-      } else if (char === quote) {
-        quote = '';
-      }
-      continue;
-    }
-    if (char === "'" || char === '"' || char === '`') {
-      quote = char;
-      continue;
-    }
-    if (char === '{') {
-      depth += 1;
-    } else if (char === '}') {
-      depth -= 1;
-      if (depth === 0) {
-        end = index;
-        break;
-      }
-    }
-  }
-  assert.ok(end > open, 'ENDPOINTS 对象没有配平');
-  // oxlint-disable-next-line no-new-func -- 从 api.js 源码抽出 ENDPOINTS 对象做契约交叉校验
-  return new Function(`return ${source.slice(open, end + 1)};`)() as EndpointMap;
-}
-
 /** 把 `/exhibitions/:id/status` 这样的声明转成匹配用的正则。 */
 function routePattern(full: string): RegExp {
   const segments = full
@@ -2525,7 +2504,7 @@ function backendRoutes(): DeclaredRoute[] {
  * 同步 `ENDPOINTS`，都会在这里失败，而不是等到某个页面在真机上静默报错。
  */
 test('前端每个数据动作都对应后端已注册的路由', () => {
-  const endpoints = frontendEndpoints();
+  const endpoints = frontendEndpointMap;
   const actions = Object.keys(endpoints);
   assert.strictEqual(
     actions.length,
@@ -2534,27 +2513,10 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
   );
 
   const declared = backendRoutes();
-  // 用「带 id 的完整参数」和「空参数」各算一次：像 exhibitions.save 这种
-  // 按有没有 id 分派到 POST / PUT 的映射，两个分支都要能对上路由。
-  const payloads = [
-    {},
-    {
-      id: 'sample-id',
-      userId: 'sample-id',
-      exhibitionId: 'sample-id',
-      nickname: 'n',
-      query: 'q',
-      year: 2026,
-      month: 6,
-      day: 1,
-      status: '待审核',
-      code: 'c',
-    },
-  ];
 
   const missing = [];
   for (const action of actions) {
-    for (const payload of payloads) {
+    for (const payload of ENDPOINT_SAMPLES) {
       const request = endpoints[action]?.(payload);
       assert.ok(request && request.method && request.path, `${action} 的映射没返回 method/path`);
       // 前端映射里的 path 是 BASE_URL（…/api/v1）之后的相对路径。
@@ -2571,25 +2533,10 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
 
 test('后端没有前端用不到的孤立路由', () => {
   const declared = backendRoutes();
-  const endpoints = frontendEndpoints();
-  const payloads = [
-    {},
-    {
-      id: 'sample-id',
-      userId: 'sample-id',
-      exhibitionId: 'sample-id',
-      nickname: 'n',
-      query: 'q',
-      year: 2026,
-      month: 6,
-      day: 1,
-      status: '待审核',
-      code: 'c',
-    },
-  ];
+  const endpoints = frontendEndpointMap;
   const used = new Set();
   for (const [, map] of Object.entries(endpoints)) {
-    for (const payload of payloads) {
+    for (const payload of ENDPOINT_SAMPLES) {
       const request = map(payload);
       const full = `/api/v1${request.path}`;
       for (const route of declared) {
@@ -2701,18 +2648,16 @@ test('状态接口给出一份完整的健康报告', async () => {
   assert.ok(endpoints.includes('POST /api/v1/checkin'), '接口清单缺少 POST /api/v1/checkin');
 });
 
-test('状态报告的接口清单与后端注册路由、前端动作覆盖一致', async () => {
+test('状态报告的接口清单与后端注册路由一致', async () => {
   const { body } = await get('/api/v1/status');
   assert.ok(body.endpoints.length > 0, '接口清单不能为空');
 
-  // 1) 与后端实际注册的路由逐条对齐（清单与 backendRoutes() 同源，漂移就会失败）
   const declared = backendRoutes()
     .map((route) => `${route.method} ${route.path}`)
     .sort();
   const reported = body.endpoints.map((item: any) => `${item.method} ${item.path}`).sort();
   assert.deepStrictEqual(reported, declared, '接口清单与后端注册的路由对不上');
 
-  // 2) 路径要么在 /api/v1 下，要么是文档里写明的非前缀路由
   const documentedPlain = new Set(['/ping', '/health', '/status']);
   for (const item of body.endpoints) {
     assert.ok(item.method && item.path, '接口清单每一项都要有 method 与 path');
@@ -2721,39 +2666,6 @@ test('状态报告的接口清单与后端注册路由、前端动作覆盖一�
       `接口清单里出现未登记的路径：${item.path}`,
     );
   }
-
-  // 3) 前端每个数据动作都能在清单里找到落点（与契约测试同一套映射）
-  const endpoints = frontendEndpoints();
-  const patterns = body.endpoints.map((item: any) => ({
-    method: item.method,
-    pattern: routePattern(item.path),
-  }));
-  const payloads = [
-    {},
-    {
-      id: 'sample-id',
-      userId: 'sample-id',
-      exhibitionId: 'sample-id',
-      nickname: 'n',
-      query: 'q',
-      year: 2026,
-      month: 6,
-      day: 1,
-      status: '待审核',
-      code: 'c',
-    },
-  ];
-  const missing = [];
-  for (const [action, map] of Object.entries(endpoints)) {
-    for (const payload of payloads) {
-      const mapped = map(payload);
-      const full = `/api/v1${mapped.path}`;
-      if (!patterns.some((route: any) => route.method === mapped.method && route.pattern.test(full))) {
-        missing.push(`${action} → ${mapped.method} ${full}`);
-      }
-    }
-  }
-  assert.deepStrictEqual(missing, [], `以下前端动作在接口清单里没有落点：\n  ${missing.join('\n  ')}`);
 });
 
 test('状态页返回可直接打开的中文 HTML', async () => {

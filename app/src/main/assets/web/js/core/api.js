@@ -72,8 +72,9 @@ export class TransportError extends Error {
  * 页面只认 `api.exhibitions.list()` 这样的**动作名**，HTTP 长什么样只在这个文件里：
  * 后端从演示服务换成 Express + PostgreSQL 时，页面一行都没改。
  * 每一项接收动作参数，返回 `{ method, path, body }`；`path` 以 `BASE_URL` 为前缀。
+ * 契约测试直接调用这张表。页面仍只使用下面导出的方法。
  */
-const ENDPOINTS = {
+export const ENDPOINTS = {
     bootstrap: () => ({ method: 'GET', path: '/bootstrap' }),
 
     'auth.login': () => ({ method: 'POST', path: '/auth/login' }),

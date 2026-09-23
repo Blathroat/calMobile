@@ -47,14 +47,11 @@ adb reverse tcp:3000 tcp:3000
 ## 常用命令
 
 ```bash
-# 结构与前端静态检查（改动文档、页面或依赖后都要跑）
-node scripts/smoke-check.js
-node scripts/webui-check.js
+# 前端文案 key 与资源、原生清单是否对齐
 node scripts/check-strings.js
 
 # 测试
-node --test scripts/smoke-check.test.js
-node --test scripts/webui-render.test.js     # 前端逐页渲染冒烟
+node --test scripts/webui-render.test.js     # 前端逐页渲染
 pnpm --dir server test:contract              # 前后端契约（需要数据库）
 gradlew.bat :app:testDebugUnitTest
 ```
