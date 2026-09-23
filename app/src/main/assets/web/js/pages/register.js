@@ -10,7 +10,7 @@ import { t } from '../core/strings.js';
  *
  * 校验规则来自「管理-设置」里的服务器设置（bootstrap 下发的 `state.limits`）：用户名与
  * 密码的长度区间由 `usernameRule()` / `passwordRule()` 读取，前端即时提示；
- * 保存前后端会再校验一次（server/src/routes/auth.js），绕过页面直接调接口同样被拦。
+ * 保存前后端会再校验一次（server/src/routes/auth-hono.ts），绕过页面直接调接口同样被拦。
  */
 
 import { state } from '../core/bridge.js';

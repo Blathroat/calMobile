@@ -58,16 +58,15 @@ export async function issueTicket(userId: string): Promise<{ ticket: string; exp
 interface TicketRow {
   id: string;
   user_id: string;
-  attempts: number;
 }
 
 /**
  * 读一张**仍然可用**的票据（不改状态）：验证码不对时票据要留着让用户重试。
  */
-export async function findTicket(ticket: string): Promise<{ id: string; userId: string; attempts: number } | null> {
+export async function findTicket(ticket: string): Promise<{ id: string; userId: string } | null> {
   const result = await query<TicketRow>(
     `
-        SELECT id, user_id, attempts
+        SELECT id, user_id
           FROM preauth_tickets
          WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > now()
     `,
@@ -80,22 +79,23 @@ export async function findTicket(ticket: string): Promise<{ id: string; userId: 
   if (!row) {
     return null;
   }
-  return { id: row.id, userId: row.user_id, attempts: Number(row.attempts) };
+  return { id: row.id, userId: row.user_id };
 }
 
-/** 记一次失败的验证；到上限就把票据作废。返回是否还能继续用。 */
-export async function countTicketFailure(id: string, attempts: number): Promise<boolean> {
-  const next = Number(attempts) + 1;
-  await query(
+/** 记一次失败的验证；到上限就把票据作废。递增在数据库内完成，避免并发覆盖。 */
+export async function countTicketFailure(id: string): Promise<boolean> {
+  const result = await query<{ attempts: number }>(
     `
         UPDATE preauth_tickets
-           SET attempts = $2::int,
-               consumed_at = CASE WHEN $2::int >= $3::int THEN now() ELSE consumed_at END
-         WHERE id = $1
+           SET attempts = attempts + 1,
+               consumed_at = CASE WHEN attempts + 1 >= $2::int THEN now() ELSE consumed_at END
+         WHERE id = $1 AND consumed_at IS NULL
+         RETURNING attempts
     `,
-    [id, next, MAX_TICKET_ATTEMPTS],
+    [id, MAX_TICKET_ATTEMPTS],
   );
-  return next < MAX_TICKET_ATTEMPTS;
+  const next = Number(result.rows[0]?.attempts);
+  return Number.isFinite(next) && next < MAX_TICKET_ATTEMPTS;
 }
 
 /**

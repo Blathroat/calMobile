@@ -8,9 +8,9 @@
  * - **数据库连不上/用不了**统一 503（`domain/errors.ts` 的 `isDatabaseUnavailable()`），
  *   不是 500 —— 这是「暂时不可用、可以重试」，也能避免把 pg 的错误原文回给调用方。
  *
- * 服务骨架是 Hono（`src/server/hono-app.ts`）；第 12–15 单把业务路由一批批搬过来，
- * 在那之前 `/api/v1/*` 与 `/status` 由 `src/server/express-app.ts` 的 Express 应用代答
- * （承接机制见 `src/server/express-bridge.ts`）。因此本文件只做三件事：
+ * 服务骨架是 Hono（`src/server/hono-app.ts`）；认证路由已经在 Hono 上运行，其余尚未迁移的
+ * `/api/v1/*` 与 `/status` 由 `src/server/express-app.ts` 的 Express 应用代答（承接机制见
+ * `src/server/express-bridge.ts`）。因此本文件只做三件事：
  * 解析运行环境、把两个应用接起来、把服务起起来。
  */
 
@@ -38,7 +38,7 @@ const PORT = config.port;
 /**
  * 尚未迁移的 Express 应用。
  *
- * 现在只承载业务路由与请求体解析；骨架每搬走一批路由，这里就小一圈，
+ * 现在只承载尚未迁移的业务路由与请求体解析；骨架每搬走一批路由，这里就小一圈，
  * 第 15 单之后整个模块连同 Express 依赖一起退役。
  */
 const delegatedApp = createDelegatedApp(statusRoutes, { statusPageEnabled: runtime.statusPageEnabled });

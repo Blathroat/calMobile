@@ -2,7 +2,7 @@
 
 CalMobile 是展会排期助手：按月历浏览展会、查看详情、在线报名、审核与现场核销。
 
-界面由 WebView 承载 `docs/newUI/` 的设计交付件（页面资源在 `app/src/main/assets/web/`），业务数据全部来自 `server/` 的 Express + PostgreSQL 后端，Android 原生只保留「只有设备能做」的系统能力：系统日历、通知与摄像头权限、媒体选择与落盘、分享、CSV 导出、系统栏配色。后端连不上时应用直接报错并给出排查提示，没有本地降级路径。
+界面由 WebView 承载 `docs/newUI/` 的设计交付件（页面资源在 `app/src/main/assets/web/`），业务数据全部来自 `server/` 的 Hono + PostgreSQL 后端，Android 原生只保留「只有设备能做」的系统能力：系统日历、通知与摄像头权限、媒体选择与落盘、分享、CSV 导出、系统栏配色。后端连不上时应用直接报错并给出排查提示，没有本地降级路径。
 
 ## 快速开始
 
@@ -33,7 +33,7 @@ adb reverse tcp:3000 tcp:3000
 | `app/src/main/assets/web/` | 前端页面、样式与 ES 模块（一屏一文件，共 17 个页面） |
 | `app/src/main/java/com/example/calmobile/` | WebView 容器与 10 个系统动作的原生实现 |
 | `app/src/main/res/values/strings_frontend.xml` | 前端用户可见文案（由 `scripts/extract-strings.js` 生成） |
-| `server/` | Express + PostgreSQL 后端，独立的 Node.js 服务，不属于 Gradle 模块 |
+| `server/` | Hono + PostgreSQL 后端，独立的 Node.js 服务，不属于 Gradle 模块 |
 | `scripts/` | 检查脚本、模拟器与数据库辅助脚本 |
 | `docs/` | 架构、功能、界面规范、构建与上线、路线图 |
 | `docs/newUI/` | 设计交付件（线框、设计规范与交付说明），界面标准的来源 |
@@ -42,7 +42,7 @@ adb reverse tcp:3000 tcp:3000
 
 - **客户端**：Java 25 + Android SDK（`compileSdk 36.1`、`targetSdk 36.1`，Gradle 9.7.1 + AGP 9.4.1）。界面是 WebView 承载的原生 HTML/CSS/ES 模块，没有打包器与构建步骤；运行时依赖只有 Gson（桥接层 JSON）与 JUnit（单元测试）。
 - **前端**：设计令牌集中在 `styles/tokens.css`，动效集中在 `styles/motion.css`；第三方库内置在 `assets/web/vendor/`，不引用 CDN 或图标字体；数据一律走 `js/core/api.js` 这一个入口。
-- **后端**：Node.js + Express + PostgreSQL，JWT 认证，REST 接口按资源分路由；写操作返回 `{ ok, error, ... }` 信封，状态存英文代码、中文标签只映射一次。
+- **后端**：Node.js + Hono + PostgreSQL，JWT 认证，REST 接口按资源分路由；写操作返回 `{ ok, error, ... }` 信封，状态存英文代码、中文标签只映射一次。
 
 ## 常用命令
 

@@ -7,6 +7,7 @@
  */
 
 import { ApiError } from '../domain/errors.js';
+import type { Context, MiddlewareHandler } from 'hono';
 
 const buckets = new Map<string, number[]>();
 
@@ -125,4 +126,47 @@ function record(key: string, at: number): void {
 export function resetRateLimits(): void {
   buckets.clear();
   lastSweep = 0;
+}
+
+/** Hono 路由使用的同一套失败限流。 */
+export function honoRateLimit({
+  windowMs,
+  max,
+  message,
+  identity,
+  ip,
+}: RateLimitOptions & {
+  identity: (c: Context) => string | Promise<string>;
+  ip?: (c: Context) => string;
+}): MiddlewareHandler {
+  return async (c, next) => {
+    const now = Date.now();
+    sweep(now);
+    const key = `${c.req.path}|${ip ? ip(c) : ''}|${String(await identity(c)).toLowerCase()}`;
+    const hits = (buckets.get(key) || []).filter((at) => now - at < windowMs);
+    if (hits.length >= max) {
+      throw new ApiError(429, message);
+    }
+
+    try {
+      await next();
+    } catch (error: unknown) {
+      // Hono 的统一错误出口在中间件外层处理；这里先记下与 Express
+      // `finish` + statusCode >= 400 相同的失败，再把错误交回统一出口。
+      const status = error instanceof ApiError ? error.status : 500;
+      if (isAuthFailure(status, undefined)) {
+        record(key, Date.now());
+      }
+      throw error;
+    }
+    let body: unknown = null;
+    try {
+      body = await c.res.clone().json();
+    } catch {
+      // 非 JSON 响应不属于认证信封；状态码仍会计入失败。
+    }
+    if (isAuthFailure(c.res.status, body)) {
+      record(key, Date.now());
+    }
+  };
 }

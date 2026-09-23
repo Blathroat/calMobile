@@ -42,7 +42,7 @@ const NOT_FOUND_TEXT = '展会不存在或已删除';
 
 // ── 工具 ────────────────────────────────────────────────────────
 
-/** 新建主键：与 auth.js 的 `usr-…` 同一种风格，避免自增序列互相打架。 */
+/** 新建主键：与 auth-hono.ts 的 `usr-…` 同一种风格，避免自增序列互相打架。 */
 function newId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }

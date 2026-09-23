@@ -1,8 +1,9 @@
 /**
  * 把尚未迁移的 Express 应用挂到 Hono 骨架下面。
  *
- * 第 12–15 单会把路由一批批搬到 Hono；在那之前，`/api/v1/*` 与 `/status` 的请求必须
- * 还能被 Express 原样接住——同一份响应、同一个状态码、同一句中文文案。
+ * 业务路由会一批批搬到 Hono；在此期间，尚未迁移的 `/api/v1/*` 与 `/status` 请求仍由
+ * Express 原样接住——同一份响应、同一个状态码、同一句中文文案。认证路由已在承接点之前
+ * 由 Hono 直接处理。
  *
  * 做法：把 Node 原始的 `incoming` / `outgoing` 直接交给 Express 应用，等它把响应写完，
  * 再返回一个**空正文 + `x-hono-already-sent`** 的标记响应，`@hono/node-server` 见到
@@ -43,7 +44,7 @@ function once(fn: () => void): () => void {
 /**
  * 生成「交给 Express 代答」的处理器。
  *
- * @param expressApp 尚未迁移的 Express 应用（`express-app.ts` 建出来的那个）
+ * @param expressApp 尚未迁移业务的 Express 应用（`express-app.ts` 建出来的那个）
  */
 export function delegateTo(expressApp: RequestListener): MiddlewareHandler {
   return async function delegateTo(c) {

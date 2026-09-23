@@ -20,7 +20,7 @@ import nodemailer from 'nodemailer';
 import { mailConfig, type MailConfig } from '../config/mail.js';
 import { sanitizeHeader } from './mail-templates.js';
 
-/** 与 `routes/auth.js` 的注册校验、`routes/profile.js` 的邮箱校验保持一致。 */
+/** 与 `routes/auth-hono.ts` 的注册校验、`routes/profile.ts` 的邮箱校验保持一致。 */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export interface MailMessage {

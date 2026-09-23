@@ -9,7 +9,7 @@
  * Node 的 `writeHead()` 会把 `setHeader()` 设过的值与适配器写进来的头合并，
  * 两条路径（Hono 自己答、Express 代答）就都能带上。
  *
- * 路由全部迁完（第 12–15 单）之后，这三个会回到 `c.res` 上——那时 Express 已删，
+ * 路由全部迁完之后，这三个会回到 `c.res` 上——那时 Express 已删，
  * 本文件随之删除。第四个 `headContentLength()` 与 socket 无关（适配器对 HEAD 不算
  * `Content-Length`），是常驻中间件，迁移完成后仍然留下。
  */

@@ -402,3 +402,20 @@ test('没有 socket 的场景（app.request）中间件也不能炸', async () =
   assert.equal(missing.status, 404);
   assert.equal(missing.headers.get('x-content-type-options'), 'nosniff');
 });
+
+test('认证路由由 Hono 直接处理，不依赖 Express socket 承接', async () => {
+  const app = createApp({
+    expressApp: miniExpress(),
+    corsOrigin: ORIGIN,
+    logLevel: 'quiet',
+    trustProxy: false,
+    statusPageEnabled: false,
+    serviceVersion: VERSION,
+  });
+  const response = await app.request('/api/v1/auth/guest', { method: 'POST' });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { ok: boolean; error: string; user: { guest: boolean } };
+  assert.equal(body.ok, true);
+  assert.equal(body.error, '');
+  assert.equal(body.user.guest, true);
+});

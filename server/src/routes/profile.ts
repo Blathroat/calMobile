@@ -34,7 +34,7 @@ import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
-/** 邮箱格式与 auth.js 的注册校验保持一致。 */
+/** 邮箱格式与 auth-hono.ts 的注册校验保持一致。 */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface PasswordHashRow {

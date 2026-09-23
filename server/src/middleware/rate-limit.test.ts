@@ -6,8 +6,9 @@
  */
 
 import assert from 'node:assert/strict';
+import { Hono } from 'hono';
 import { ApiError } from '../domain/errors.js';
-import { isAuthFailure, isEnvelopeFailure, rateLimit, resetRateLimits } from './rate-limit.js';
+import { honoRateLimit, isAuthFailure, isEnvelopeFailure, rateLimit, resetRateLimits } from './rate-limit.js';
 
 function fakeReq(username: string, ip = '10.0.0.1') {
   return { path: '/login', ip, body: { username } };
@@ -136,4 +137,30 @@ test('不同 IP 各自计数', () => {
   assert.equal(run(limiter, fakeReq('demo', '10.0.0.1'), 1), null);
   assert.equal(run(limiter, fakeReq('demo', '10.0.0.2'), 1), null);
   assert.equal(run(limiter, fakeReq('demo', '10.0.0.1'), 1)?.status, 429);
+});
+
+test('Hono 失败信封与抛出的 4xx 都计数，成功不计数', async () => {
+  const app = new Hono();
+  const limiter = honoRateLimit({
+    windowMs: 60 * 1000,
+    max: 2,
+    message: '太频繁',
+    identity: (c) => c.req.header('x-account') || '',
+    ip: (c) => c.req.header('x-ip') || '',
+  });
+  app.post('/login', limiter, (c) => {
+    if (c.req.header('x-result') === 'success') return c.json({ ok: true, error: '' });
+    if (c.req.header('x-result') === 'unauthorized') throw new ApiError(401, '未登录');
+    return c.json({ ok: false, error: '账号或密码不正确' });
+  });
+  app.onError((error, c) => c.json({ error: error.message }, (error as ApiError).status as 401 | 429));
+  const hit = (account: string, result: string, ip = '1.2.3.4') =>
+    app.request('/login', { method: 'POST', headers: { 'x-account': account, 'x-result': result, 'x-ip': ip } });
+
+  for (let i = 0; i < 4; i += 1) assert.equal((await hit('success', 'success')).status, 200);
+  assert.equal((await hit('alice', 'unauthorized')).status, 401);
+  assert.equal((await hit('alice', 'failure')).status, 200);
+  assert.equal((await hit('alice', 'success')).status, 429);
+  assert.equal((await hit('bob', 'success')).status, 200);
+  assert.equal((await hit('alice', 'success', '4.3.2.1')).status, 200);
 });

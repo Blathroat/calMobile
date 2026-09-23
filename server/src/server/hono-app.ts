@@ -1,11 +1,11 @@
 /**
- * Hono 骨架：中间件、探针、统一错误处理，以及「还没迁移的路由交给 Express」的承接点。
+ * Hono 骨架：公共中间件、探针、认证路由、统一错误处理，以及其余业务路由的承接点。
  *
- * 这一份是**结构**，不含业务：业务仍按资源分在 `src/routes/`（第 12–15 单逐批搬到
- * Hono），本文件只决定请求流过哪些公共层、怎么答错、404 长什么样。
+ * 认证路由在这里直接挂载；其余业务仍按资源分在 `src/routes/`，由 Express 承接，
+ * 本文件决定请求流过哪些公共层、怎么答错、404 长什么样。
  *
  * 骨架的公共层依次是：安全响应头 → CORS → 请求日志 → JSON 体积守卫 → 路由。
- * 前三层必须落在 Node socket 上（迁移期 Express 直接写响应，理由见
+ * 前三层必须落在 Node socket 上（承接中的 Express 直接写响应，理由见
  * `node-middleware.ts` 的文件头），后两类是 Hono 自己的。
  */
 
@@ -18,12 +18,13 @@ import { delegateTo } from './express-bridge.js';
 import { errorResponse } from '../http/error-response.js';
 import { jsonResponse } from '../http/respond.js';
 import { jsonBodySizeGuard } from '../http/body-limit.js';
+import { createAuthRoutes } from '../routes/auth-hono.js';
 
 /** 与 `/api/v1/status` 的服务标识一致。 */
 const SERVICE_NAME = 'calmobile-server';
 
 export interface AppOptions {
-  /** 尚未迁移的 Express 应用（`express-app.ts` 负责建它）。 */
+  /** 尚未迁移业务的 Express 应用（`express-app.ts` 负责建它）。 */
   readonly expressApp: RequestListener;
   /** `CORS_ORIGIN`：固定来源或 `*`。 */
   readonly corsOrigin: string;
@@ -58,8 +59,7 @@ export function createApp(options: AppOptions): Hono {
    * JSON 体积守卫：声明体积超过 2MB 直接 413。
    *
    * 放在所有路由（含 Express 承接点）之前，超限请求既不会进 Hono 也不会进 Express。
-   * 正文本身的解析仍由 Express 的 `express.json()` 做（它带的 limit 是同一数值），
-   * 守卫因此只看 `content-length` 不碰字节流，免得把流读走（见 express-bridge.ts）。
+   * 认证正文由 Hono 读取，其余正文仍由 Express 的 `express.json()` 做（两者上限相同）。
    * 实现只有一份：`http/body-limit.ts`。
    */
   app.use('*', jsonBodySizeGuard());
@@ -79,7 +79,7 @@ export function createApp(options: AppOptions): Hono {
 
   // ── 状态页开关 ────────────────────────────────────────────
   // 生产默认关：它暴露迁移清单、各表行数与接口清单，
-  // 属于运维排查入口而不是公开接口。开着时由 Express 的状态路由提供（第 16 单搬到 Hono）。
+  // 属于运维排查入口而不是公开接口。开着时由 Express 的状态路由提供。
   if (!options.statusPageEnabled) {
     const disabled = (c: Context): Response =>
       jsonResponse(c, { error: '状态页在生产环境已关闭（需要时设 ENABLE_STATUS_PAGE=true 再启动）' }, 404);
@@ -87,7 +87,11 @@ export function createApp(options: AppOptions): Hono {
     app.get('/api/v1/status', disabled);
   }
 
-  // ── 其余全部交给尚未迁移的 Express 应用 ─────────────────────
+  // 认证路由已完整迁入 Hono；必须放在 Express 承接点之前，令牌与验证码边界由同一条
+  // Hono 链路处理，测试里的 `app.request()` 也能直接覆盖这些端点。
+  app.route('/api/v1/auth', createAuthRoutes({ trustProxy: options.trustProxy }));
+
+  // ── 其余业务交给尚未迁移的 Express 应用 ─────────────────────
   // Hono 按注册顺序匹配，所以两个探针与状态页开关要注册在兜底之前，
   // 否则 `/api/v1/ping`、`/api/v1/status` 会被这条兜底先接走。
   app.all('/api/v1/*', delegateTo(options.expressApp));
@@ -98,7 +102,7 @@ export function createApp(options: AppOptions): Hono {
   /**
    * 统一错误处理。
    *
-   * 状态码与文案的唯一实现在 `http/error-response.ts`（尚未迁移的 Express 错误
+   * 状态码与文案的唯一实现在 `http/error-response.ts`（承接中的 Express 错误
    * 中间件用的是同一套函数，因此两条路径回出去的东西完全一致）。堆栈只进日志。
    */
   app.onError((err, c) => {

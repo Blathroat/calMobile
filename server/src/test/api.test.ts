@@ -24,6 +24,7 @@ import { resetRateLimits } from '../middleware/rate-limit.js';
 import { outbox } from '../services/mailer.js';
 import type { StoredMail } from '../services/mailer.js';
 import { listen, routes } from '../index.js';
+import { AUTH_ENDPOINTS } from '../routes/auth-hono.js';
 import { codeFor } from '../domain/totp.js';
 import { renderStatusPage } from '../status-page.js';
 import bcrypt from 'bcryptjs';
@@ -59,7 +60,7 @@ interface DeclaredRoute {
   pattern: RegExp;
 }
 
-/** express 未在公共类型里暴露 `stack`，按需要求一层的结构。 */
+/** Express 未在公共类型里暴露 `stack`，按需要求一层的结构；Hono 路由用元数据登记。 */
 interface RouterLayer {
   route?: { path: string; methods: Record<string, boolean> };
 }
@@ -2435,8 +2436,8 @@ test('未知路径返回 404 而不是 500', async () => {
 /**
  * 骨架公共层在真服务上的样子：安全响应头、CORS、请求日志。
  *
- * 这些断言放在契约测试里，是因为它们必须对**尚未迁移的 Express 路由**也成立
- * （迁移期路由仍由 Express 代答，见 src/server/express-bridge.ts）。
+ * 这些断言放在契约测试里，是因为它们必须对 Hono 路由与尚未迁移的 Express 路由都成立
+ * （其余迁移期路由仍由 Express 代答，见 src/server/express-bridge.ts）。
  */
 test('骨架公共层：安全响应头与 CORS 头在业务响应上一并生效', async () => {
   const response = await get('/api/v1/bootstrap');
@@ -2481,7 +2482,11 @@ function routePattern(full: string): RegExp {
 
 /** 后端实际注册的路由表：[方法, 匹配用的正则]。 */
 function backendRoutes(): DeclaredRoute[] {
-  const declared: DeclaredRoute[] = [];
+  const declared: DeclaredRoute[] = AUTH_ENDPOINTS.map(([method, path]) => ({
+    method,
+    path,
+    pattern: routePattern(path),
+  }));
   for (const [prefix, router] of Object.entries(routes)) {
     const base = `/api/v1${prefix ? `/${prefix}` : ''}`;
     for (const layer of (router as unknown as { stack?: RouterLayer[] }).stack ?? []) {

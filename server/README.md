@@ -7,7 +7,7 @@
 | `src/index.ts` | 入口：解析运行环境、把骨架与被承接的应用接起来、起服务 |
 | `src/server/` | 服务骨架（Hono）：公共层、探针、统一错误处理；`express-app.ts` 是尚未迁完的 Express 应用，`express-bridge.ts` 负责把它接到骨架下面 |
 | `src/http/` | HTTP 层的公共件：错误分类、客户端 IP、JSON 体积上限、写操作信封 |
-| `src/routes/` | 按资源分的路由（认证、资料、展会、报名、审核、核销、用户、搜索、设置、启动数据） |
+| `src/routes/` | 按资源分的路由（Hono 认证、资料、展会、报名、审核、核销、用户、搜索、设置、启动数据） |
 | `src/domain/` | 业务层：状态词汇、SQL 片段、响应映射、权限、校验、设置、会话 |
 | `src/config/` | 连接池、迁移与示例数据、JWT 与邮件通道配置 |
 | `src/services/` | 邮件发送适配层与验证码邮件文案（`mailer.ts` / `mail-templates.ts`） |
@@ -28,11 +28,11 @@
 
 骨架在 `src/server/`（Hono + `@hono/node-server`）：一层层是 **安全响应头 → CORS → 请求日志 → JSON 体积守卫 → 路由 → 统一错误处理 / 404**，探针 `/ping`、`/api/v1/ping`、`/health` 由它直接回答。
 
-业务路由正在一批批搬到 Hono（见 `docs/roadmap.md` 的迁移计划）。**尚未搬完的部分仍由 Express 应用代答**：`src/server/express-app.ts` 建那个应用（只留业务路由与请求体解析），`src/server/express-bridge.ts` 在 Hono 的路由表末尾把 `/api/v1/*` 与 `/status` 交给它。三条由此而来的硬约束，改骨架前必须先读：
+认证路由已经由 `src/routes/auth-hono.ts` 直接挂在 Hono 上；其余尚未搬完的业务仍由 Express 应用代答：`src/server/express-app.ts` 建那个应用（只留业务路由与请求体解析），`src/server/express-bridge.ts` 在 Hono 的路由表末尾把 `/api/v1/*` 与 `/status` 交给它。三条由此而来的硬约束，改骨架前必须先读：
 
 - **起服务必须传 `overrideGlobalObjects: false`**。默认会把全局 `Response` 换成带缓存的子类，空响走「缓存分支」、不看代答标记，于是 Express 写完 Hono 再写一次，报 `ERR_HTTP_HEADERS_SENT`；
 - **公共层要落在 Node 的 socket 上**（安全头、CORS、请求日志）。Express 把响应直接写进 socket，Hono 那个壳响应会被整份丢掉，所以这些头必须在把请求交出去**之前**写到 `ServerResponse` 上——Node 的 `writeHead()` 会把它们与适配器写进来的头合并，两条路径就都带上；
-- **不能有中间件提前读走请求体**。体积守卫只看 `content-length`，正文仍由 Express 的 `express.json()` 读。
+- **不能有中间件提前读走待承接请求体**。体积守卫只看 `content-length`；认证路由由 Hono 自己读取正文，其他路由仍由 Express 的 `express.json()` 读取。
 
 响应一律带一套安全头（`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: no-referrer`、`Strict-Transport-Security`、`Cross-Origin-Opener-Policy`、`Cross-Origin-Resource-Policy`、`Origin-Agent-Cluster`、`X-DNS-Prefetch-Control`、`X-Download-Options`、`X-Permitted-Cross-Domain-Policies`、`X-XSS-Protection`），取值与 Hono 自带的 `secureHeaders` 默认集一致；`X-Powered-By` 两侧都不发。
 
