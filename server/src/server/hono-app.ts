@@ -78,7 +78,7 @@ export function createApp(options: AppOptions): Hono {
   );
 
   // ── 状态页开关 ────────────────────────────────────────────
-  // 生产默认关：它暴露迁移清单、各表行数与接口清单，失败时还带 pg 错误原文，
+  // 生产默认关：它暴露迁移清单、各表行数与接口清单，
   // 属于运维排查入口而不是公开接口。开着时由 Express 的状态路由提供（第 16 单搬到 Hono）。
   if (!options.statusPageEnabled) {
     const disabled = (c: Context): Response =>

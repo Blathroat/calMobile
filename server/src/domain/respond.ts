@@ -25,6 +25,11 @@ interface EnvelopeResponse {
 
 type NextFn = (error?: unknown) => void;
 
+/** 成功信封：`{ ok:true, error:'', ...payload }`。 */
+export function successEnvelope(payload: unknown = {}): Record<string, unknown> {
+  return { ok: true, error: '', ...(payload as Record<string, unknown>) };
+}
+
 /**
  * 跑一段写操作并收成信封。
  *
@@ -34,7 +39,7 @@ type NextFn = (error?: unknown) => void;
 export async function runEnveloped(run: () => unknown | Promise<unknown>): Promise<Record<string, unknown>> {
   try {
     const payload = await run();
-    return { ok: true, error: '', ...(payload as Record<string, unknown>) };
+    return successEnvelope(payload);
   } catch (error: unknown) {
     if (error instanceof ApiError && error.envelope && ENVELOPE_STATUS.has(error.status)) {
       return { ok: false, error: error.message };

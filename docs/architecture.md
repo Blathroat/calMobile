@@ -224,7 +224,7 @@ adb reverse tcp:3000 tcp:3000
 
 ### `server/` 端点与前端动作的对应
 
-健康与状态页：`GET /ping`、`GET /health`，以及给人看的 `GET /status` 与机器读的 `GET /api/v1/status`（这两个**在生产模式下默认关闭**，见 `deployment.md` 的「上线部署清单与开销」）；其余都在 `/api/v1` 下。完整清单（含请求参数、权限与响应形状）见 `server/README.md` 的「接口清单」，这里只列骨架：
+健康与状态页：`GET /ping`、`GET /health`，以及给人看的 `GET /status` 与机器读的 `GET /api/v1/status`（这两个**在生产模式下默认关闭**，见 `deployment.md` 的「上线部署清单与开销」）。`/status` 首屏由服务端直接渲染，浏览器脚本每 5 秒局部刷新；两条路径共用探测报告，服务端对紧邻请求做 1.5 秒短缓存。其余都在 `/api/v1` 下。完整清单（含请求参数、权限与响应形状）见 `server/README.md` 的「接口清单」，这里只列骨架：
 
 | 已有路由 | 对应前端动作 |
 | --- | --- |

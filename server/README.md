@@ -257,16 +257,16 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | 方法与路径 | 动作 | 权限与说明 |
 | --- | --- | --- |
 | `GET /api/v1/status` | — | 可匿名。JSON 健康报告：`ok` / `service` / `database` / `migrations` / `data` / `endpoints` / `checks`。服务活着**且**数据库答得上时 200，否则 503 + `ok:false`，探活脚本按状态码判断 |
-| `GET /status` | — | 可匿名。同一份报告的中文状态页（单文件 HTML，样式与脚本内联，不用构建、不引 CDN）；数据库挂掉时仍返回 200 并把失败原因显示出来 |
+| `GET /status` | — | 可匿名。同一份报告的中文状态页（单文件 HTML，样式与脚本内联，不用构建、不引 CDN）；数据库挂掉时仍返回 200 并显示通用失败提示 |
 
 两个路径由同一个路由器提供（`src/routes/status.ts` + `src/status-page.ts`），因此页面与 JSON 永远不会说两套话。几条约定：
 
 - **`ok` 只表达「服务活着 + 数据库答得上」**，迁移没跑完、自检项失败都只体现在 `checks` 与 `migrations` 里，不混进状态码 —— 否则探活脚本分不清「数据库没了」和「只是有一步迁移没跑」。
-- **每一项都是真测出来的**：`database.latencyMs` 是 `select version()` + `select 1` 的往返时间，`data` 是逐表 `count(*)`，`checks` 里失败的那条一定指得到出处；数据库连不上时 `data` 是 `null`（不是 0）、迁移按「全部未应用」处理、并带上错误原文，绝不抛 500。
+- **每一项都是真测出来的**：`database.latencyMs` 是 `select version()` + `select 1` 的往返时间，`data` 是逐表 `count(*)`，`checks` 里失败的那条一定指得到出处；数据库连不上时 `data` 是 `null`（不是 0）、迁移按「全部未应用」处理、错误详情只写服务端日志，响应使用通用提示，绝不抛 500。
 - **`endpoints` 就是真实路由表**：它遍历 `src/index.ts` 导出的 `routes`（与 `src/test/api.test.ts` 的 `backendRoutes()` 同一套走法），新增路由不会漏登记。这两个状态接口本身不进 `routes` 动作表 —— 那张表是「前端动作 ↔ 后端路由」的对照，它们没有对应的前端动作。
-- 两个路径都带 `Cache-Control: no-store`，不会拿到缓存的旧结果。
+- 两个路径都带 `Cache-Control: no-store`，客户端不会缓存；服务端只在 1.5 秒内复用报告，页面每 5 秒刷新仍能避免紧邻请求重复查询。
 - 服务**先起、数据库后挂**与**数据库先挂、服务后起**都能看到状态页：`start()` 在连不上库时只记一条警告，不再让进程退出。
-- **探测不会把连接池占满**：状态页 5 秒自刷新一次，每次要跑 9 条查询，因此 `reportOnce()` 把并发请求合并成同一次探测（不做 TTL 缓存，拿到的仍是刚测出来的数据），探测查询用 `pool.connect()` + 超时 `release(true)` **销毁**那条连接（`Promise.race` 只放弃 promise，连接会一直被占着），连接池另有 `statement_timeout: 10s` 兜慢查询。
+- **探测不会把连接池占满**：状态页 5 秒自刷新一次，每次要跑 9 条查询，因此 `reportOnce()` 把并发请求合并成同一次探测，并在 1.5 秒内复用报告；探测查询用 `pool.connect()` + 超时 `release(true)` **销毁**那条连接（`Promise.race` 只放弃 promise，连接会一直被占着），连接池另有 `statement_timeout: 10s` 兜慢查询。
 - 已知边界：探针自己出错时给 `{ ok:false }` + `checks` 里一条失败项（`fallbackReport()`），不会 500 —— 唯一的排查入口不能跟着坏掉。
 
 ## 媒体与上传限制
@@ -364,7 +364,7 @@ pnpm format               # oxfmt
 - 刷新令牌并发重放只会换到一套新令牌（轮换的撤销是原子条件更新）；
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
 - **骨架公共层**：安全响应头、CORS（含预检 204）与 404 的文案在业务响应上一并生效（迁移期路由由 Express 代答，这条断言盯住「承接没有吃掉公共层」）；
-- 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、带上错误原文，不抛 500）。
+- 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、响应不带 pg/SQL/堆栈原文，不抛 500）。
 
 `src/**/*.test.ts`（vitest unit project，152 项）跑不依赖数据库的部分：入口判定（`entry.test.ts` —— ESM 下取代 `require.main` 的那次比对）、JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.ts` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.ts` 与 `http/error-response.test.ts` —— 503 的分类是状态码来源，判错会把库故障伪装成 500）、**客户端 IP 的代理信任三态**（`http/client-ip.test.ts`：不信任/跳数/来源三种取值下取址正确，跳数错一位限流就会退化成全局额度）、**JSON 体积上限与写操作信封**（`http/body-limit.test.ts`：超限 413、坏 JSON 400、业务失败 200 + `ok:false`）、**骨架自身的行为**（`server/hono-app.test.ts`：探针、404、安全头、CORS、请求日志，以及「尚未迁移的路由仍由 Express 代答」这条链路），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.ts`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.ts`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.ts`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.ts`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `pnpm test` 的前置条件——测试不该依赖一个容器。
 
@@ -378,7 +378,7 @@ pnpm format               # oxfmt
 
 - `pnpm start`（生产模式）已经**默认关闭 `/status` 与 `/api/v1/status`**，并会对配置做启动前自检；只需要用 `TRUST_PROXY`、`ENABLE_STATUS_PAGE`、`DB_SSL` 按部署形态配一下，详见上面的「开发模式与生产模式」；
 - 更换两个 JWT 密钥与数据库密码、限制 `CORS_ORIGIN`、启用 TLS，并去掉客户端侧的明文放行（`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`）——第一项与库密码会被启动自检拦住，`CORS_ORIGIN` 目前只是警告；
-- **不要把状态页对公网打开**：它给出迁移清单、各表行数与接口清单，失败时还带 pg 的错误原文；`/ping` 才是给外部探活用的事实源；
+- **不要把状态页对公网打开**：它给出迁移清单、各表行数与接口清单；需要启用时仍应由反代加 Basic Auth / IP 白名单，`/ping` 才是给外部探活用的事实源；
 - **不要在服务器上跑 Mailpit**：`docker-compose.yml` 的 `mailpit` 服务与 `MAIL_SMTP_HOST=127.0.0.1` 只用于本地开发；生产要指向托管中继，并用专用子域配好 SPF / DKIM / DMARC（启动自检对 127.0.0.1 / 1025 会警告）；
 - 生产环境不要把 `MAIL_TRANSPORT` 配成 `console`：那样验证码只写日志，用户永远收不到（`resolveMailConfig` 会拦截 `memory`，但 `console` 是合法通道，只能靠部署时确认）；
 - 上传的媒体目前仍在客户端私有目录（`files/media`），需要补对象存储与上传接口；

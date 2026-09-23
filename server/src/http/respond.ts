@@ -14,12 +14,9 @@
 
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import { runEnveloped } from '../domain/respond.js';
+import { runEnveloped, successEnvelope } from '../domain/respond.js';
 
-/** 成功信封：`{ ok:true, error:'', ...payload }`。 */
-export function successEnvelope(payload: unknown = {}): Record<string, unknown> {
-  return { ok: true, error: '', ...(payload as Record<string, unknown>) };
-}
+export { successEnvelope };
 
 /** 失败信封：`{ ok:false, error }`（HTTP 200）。 */
 export function failureEnvelope(message: string): Record<string, unknown> {

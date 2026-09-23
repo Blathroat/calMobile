@@ -17,7 +17,7 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import fs from 'node:fs';
-import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Client } from 'pg';
 import { host, port, user, password, database as databaseName } from '../config/database.js';
 import { pool } from '../config/pool.js';
@@ -2454,7 +2454,8 @@ test('骨架公共层：预检在到达路由之前就被答掉', async () => {
  * 而不是正则在对象里找结尾，避免被值里的 `{ ... }` 骗到。
  */
 function frontendEndpoints(): EndpointMap {
-  const file = path.join(__dirname, '..', '..', '..', 'app', 'src', 'main', 'assets', 'web', 'js', 'core', 'api.js');
+  // 契约测试本身是 ESM，不能依赖 CommonJS 的全局 `__dirname`。
+  const file = fileURLToPath(new URL('../../../app/src/main/assets/web/js/core/api.js', import.meta.url));
   const source = fs.readFileSync(file, 'utf8');
   const start = source.indexOf('const ENDPOINTS = {');
   assert.ok(start > 0, 'api.js 里找不到 ENDPOINTS');
@@ -2778,7 +2779,7 @@ test('状态页返回可直接打开的中文 HTML', async () => {
   assert.strictEqual(/<(link|img)\b/.test(html), false, '状态页不能引用外部资源');
 });
 
-test('数据库不可用时状态页仍能渲染出失败原因', async () => {
+test('数据库不可用时状态页仍能渲染出通用失败提示', async () => {
   // 真的把数据库停掉属于运维动作，这里用一份真实的失败报告走一遍模板：
   // 页面渲染不碰数据库，因此这条断言能稳定复现「降级时页面照样打得开」。
   const { body } = await get('/api/v1/status');
@@ -2791,18 +2792,20 @@ test('数据库不可用时状态页仍能渲染出失败原因', async () => {
       latencyMs: null,
       version: '',
       database: '',
-      error: 'connect ECONNREFUSED 127.0.0.1:5432',
+      host: '',
+      error: '数据库暂时不可用，请查看服务端日志',
     },
-    migrations: { applied: [], pending: ['0001-core'], error: '数据库不可用：connect ECONNREFUSED 127.0.0.1:5432' },
+    migrations: { applied: [], pending: ['0001-core'], error: '数据库暂时不可用，请查看服务端日志' },
     data: { users: null, exhibitions: null, registrations: null, exhibition_fields: null, app_settings: null },
     checks: [
-      { name: '数据库连通', status: 'fail', detail: 'connect ECONNREFUSED 127.0.0.1:5432', ms: 2000 },
+      { name: '数据库连通', status: 'fail', detail: '数据库暂时不可用，请查看服务端日志', ms: 2000 },
       { name: '至少一场展会', status: 'fail', detail: '数据库不可用，统计不了展会', ms: 0 },
     ],
   };
   const html = renderStatusPage(broken);
   assert.ok(html.includes('异常'), '徽章要变成「异常」');
-  assert.ok(html.includes('ECONNREFUSED'), '页面要显示数据库的报错原文');
+  assert.ok(html.includes('数据库暂时不可用，请查看服务端日志'), '页面要显示通用错误提示');
+  assert.strictEqual(html.includes('ECONNREFUSED'), false, '页面不能显示数据库的报错原文');
   assert.ok(html.includes('未连接'), '连通状态要显示「未连接」');
   assert.ok(html.includes('失败'), '自检项要能显示失败');
   assert.ok(html.includes('0001-core'), '未应用的迁移要列出来');

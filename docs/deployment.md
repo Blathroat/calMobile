@@ -3,7 +3,7 @@
 ## 环境要求
 
 - Android Studio、JDK 25、Android SDK 36.1（`compileSdk`）、Gradle Wrapper 9.7.1（Android Gradle Plugin 9.4.1）；Windows 用 `gradlew.bat`，Linux/macOS 用 `./gradlew`。
-- Node.js 20.19+（或 22.12+）与 pnpm（后端 `server/`），PostgreSQL 与本地收件箱跑在 Docker 里（根目录 `docker-compose.yml`，`docker compose up -d` 起两个服务）。下限由工具链决定：`nodemailer` 10 要 Node 20+，`oxlint` / `oxfmt` 要 `^20.19 || >=22.12`。
+- Node.js 22.12+ 与 pnpm（后端 `server/`），PostgreSQL 与本地收件箱跑在 Docker 里（根目录 `docker-compose.yml`，`docker compose up -d` 起两个服务）。Node 20 不再列为支持版本，避免同一套依赖和运行时在两个主版本线上分叉。
 
 ## 构建、测试与运行
 
@@ -114,7 +114,7 @@ adb logcat -s WebShellActivity | Select-String "web timing"
 | 客户端改回严格模式 | `WebShellActivity` 的 `MIXED_CONTENT_ALWAYS_ALLOW` 改回 `NEVER_ALLOW`；`js/core/api.js` 的 `BASE_URL` 指向 `https://api.<域名>/api/v1`；顺手清掉 manifest 里不再需要的明文放行 | ¥0，但要重新出包 |
 | 收紧 CORS | `CORS_ORIGIN` 从 `*` 改为 WebView 的起源（`https://appassets.androidplatform.net`），`credentials` 保持 false | ¥0 |
 | 换掉示例密钥 | `JWT_SECRET` / `JWT_REFRESH_SECRET` 换成随机值（`openssl rand -hex 32`），数据库密码别再是 `postgres/postgres`；**再配一个 `TOTP_SECRET_KEY`** 并长期保管（验证器密钥用它加密，换掉它用户得重新绑定） | ¥0 |
-| **保护 `/status` 与 `/api/v1/status`** | **已内置**：`pnpm start` 进生产模式后这两个接口直接 404（它们会暴露迁移清单、各表行数与接口清单，失败时还带 pg 的错误原文）。确实需要时用 `ENABLE_STATUS_PAGE=true` 打开，并靠反代加 Basic Auth / IP 白名单；对外探活只留 `/ping` | ¥0 |
+| **保护 `/status` 与 `/api/v1/status`** | **已内置**：`pnpm start` 进生产模式后这两个接口直接 404（它们会暴露迁移清单、各表行数与接口清单；故障详情只写服务端日志，响应只给通用错误）。确实需要时用 `ENABLE_STATUS_PAGE=true` 打开，并靠反代加 Basic Auth / IP 白名单；对外探活只留 `/ping` | ¥0 |
 | 发信域名 | 用**专用子域**（如 `mail.<域名>`）而不是主域，并配好 SPF / DKIM / DMARC —— 验证码邮件的信誉问题不该污染主域 | ¥0 |
 | 不要部署 Mailpit | `scripts/mail.ps1` 与 `MAIL_SMTP_HOST=127.0.0.1:1025` 只用于本地开发；生产必须指向托管中继 | ¥0 |
 

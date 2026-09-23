@@ -4,10 +4,10 @@
  * 同一个路由器挂两次，共用这份探测逻辑：
  * - `GET /api/v1/status` → 机器读的 JSON：`ok` 为真给 200，否则 503（探活脚本按状态码判断）；
  * - `GET /status`        → 人读的 HTML（见 `src/status-page.ts`）：永远 200，
- *   数据库挂了也必须打得开并把失败原因写在页面上。
+ *   数据库挂了也必须打得开并显示通用失败提示。
  *
  * 三条自我约束：
- * 1. **不抛异常**：数据库挂了要给 `ok:false` + 错误原文，而不是 500 —— 探针自己炸了就没法排查；
+ * 1. **不抛异常**：数据库挂了要给 `ok:false` + 通用错误提示，而不是 500 —— 探针自己炸了就没法排查；
  * 2. **不编数据**：每一项都来自真实测量（SQL、进程信息、环境变量），自检项失败必须指得到出处；
  * 3. **不固化清单**：`endpoints` 直接遍历 `routes/registry.ts` 的路由注册表
  *    （与 `src/test/api.test.ts` 的 `backendRoutes()` 同一套走法），新增路由不会漏登记。
@@ -17,7 +17,6 @@ import express from 'express';
 import type { Request, Response, NextFunction, Router } from 'express';
 import { pool } from '../config/pool.js';
 import { STEPS } from '../config/migrate.js';
-import * as databaseConfig from '../config/database.js';
 import { loadProcessConfig } from '../config/env.js';
 import { MIN_SECRET_LENGTH, PLACEHOLDER_SECRET } from '../config/auth.js';
 import { mailConfig, describeMailConfig } from '../config/mail.js';
@@ -36,6 +35,15 @@ const COUNT_TABLES = ['users', 'exhibitions', 'registrations', 'exhibition_field
 
 /** 自检项的通用超时（毫秒）：探测不能把状态页拖住。 */
 const PROBE_TIMEOUT_MS = 4000;
+
+/** 紧邻的状态请求共用一份报告，避免多个标签页同时打满连接池。 */
+const STATUS_REPORT_TTL_MS = 1500;
+
+/** 对外状态响应不携带 pg、SQL 或堆栈原文；详细原因只写服务端日志。 */
+const DATABASE_ERROR_MESSAGE = '数据库暂时不可用，请查看服务端日志';
+const MIGRATION_ERROR_MESSAGE = '迁移状态暂时不可用，请查看服务端日志';
+const CHECK_ERROR_MESSAGE = '检查失败，请查看服务端日志';
+const RENDER_ERROR_MESSAGE = '状态页渲染失败，请查看服务端日志';
 
 interface PoolSnapshot {
   total: number;
@@ -124,6 +132,13 @@ function safeMessage(error: unknown): string {
   return String((error as { message?: unknown }).message || error);
 }
 
+/** 自检主动发现的业务问题可以展示；未知异常一律改成通用提示。 */
+class PublicCheckFailure extends Error {}
+
+function checkFailure(message: string): PublicCheckFailure {
+  return new PublicCheckFailure(message);
+}
+
 /** 高精度计时，结果保留两位小数。 */
 function elapsedMs(startedAt: bigint): number {
   return Math.round(Number(process.hrtime.bigint() - startedAt) / 1e4) / 100;
@@ -201,13 +216,14 @@ function emptyCounts(): Record<string, number | null> {
 }
 
 /**
- * 数据库探测：两条真查询（`select version()` + `select 1`），失败时把错误原文带出去。
+ * 数据库探测：两条真查询（`select version()` + `select 1`），失败时记录原始错误，
+ * 对外只返回通用提示。
  *
  * 返回 `{ info, ms }`：`info.latencyMs` 只在连通时才有（真实往返时间），
  * `ms` 是这次探测本身花掉的时间（失败时也算，自检项要显示「等了多久才失败」）。
  *
- * 连接地址连上时用服务端自报的（`inet_server_addr()`），连不上时用配置里的目标地址 ——
- * 排查时要知道刚才连的是哪儿。
+ * 连接成功时用服务端自报的（`inet_server_addr()`）；连接失败时不回传配置里的目标地址，
+ * 避免状态页泄露内网 host:port。
  */
 async function probeDatabase(): Promise<{ info: DatabaseStatus; ms: number }> {
   const startedAt = process.hrtime.bigint();
@@ -238,8 +254,10 @@ async function probeDatabase(): Promise<{ info: DatabaseStatus; ms: number }> {
     info.database = String(row.database || '');
     info.host = row.port ? `${row.host}:${row.port}` : String(row.host || '');
   } catch (error: unknown) {
-    info.error = safeMessage(error);
-    info.host = `${databaseConfig.host}:${databaseConfig.port}`;
+    console.error('数据库探测失败：', error);
+    info.error = DATABASE_ERROR_MESSAGE;
+    // 连接失败时不把配置里的内网 host:port 回传给状态页。
+    info.host = '';
   }
   // 连接池计数放在探测之后读：正好反映这次探测留下的连接状况。
   info.pool = poolStats();
@@ -254,7 +272,7 @@ async function probeMigrations(database: DatabaseStatus): Promise<{ report: Migr
   const all = STEPS.map((step) => step.id);
   if (!database.connected) {
     return {
-      report: { applied: [], pending: all, error: `数据库不可用：${database.error || '未连接'}` },
+      report: { applied: [], pending: all, error: DATABASE_ERROR_MESSAGE },
       ms: 0,
     };
   }
@@ -274,8 +292,9 @@ async function probeMigrations(database: DatabaseStatus): Promise<{ report: Migr
     };
   } catch (error: unknown) {
     // 表还不存在时错误是 `relation "schema_migrations" does not exist`，正好说明一步都没跑。
+    console.error('迁移探测失败：', error);
     return {
-      report: { applied: [], pending: all, error: safeMessage(error) },
+      report: { applied: [], pending: all, error: MIGRATION_ERROR_MESSAGE },
       ms: elapsedMs(startedAt),
     };
   }
@@ -349,10 +368,13 @@ async function runChecks({
       const detail = await probe();
       checks.push({ name, status: 'ok', detail, ms: measured === null ? elapsedMs(startedAt) : measured });
     } catch (error: unknown) {
+      if (!(error instanceof PublicCheckFailure)) {
+        console.error(`状态检查失败（${name}）：`, error);
+      }
       checks.push({
         name,
         status: 'fail',
-        detail: safeMessage(error),
+        detail: error instanceof PublicCheckFailure ? error.message : CHECK_ERROR_MESSAGE,
         ms: measured === null ? elapsedMs(startedAt) : measured,
       });
     }
@@ -372,7 +394,7 @@ async function runChecks({
       PLACEHOLDER_SECRET.test(processAuth.refreshSecret) ? 'JWT_REFRESH_SECRET' : '',
     ].filter(Boolean);
     if (placeholders.length > 0) {
-      throw new Error(`${placeholders.join(' / ')} 还是 your_ / replace-with / change-me 之类的占位值`);
+      throw checkFailure(`${placeholders.join(' / ')} 还是 your_ / replace-with / change-me 之类的占位值`);
     }
     return '两个密钥都不是模板里的占位值';
   });
@@ -387,7 +409,7 @@ async function runChecks({
   await run('邮件通道', async () => {
     const mail = describeMailConfig(mailConfig);
     if (!mail.configured) {
-      throw new Error(mail.problems.join('；'));
+      throw checkFailure(mail.problems.join('；'));
     }
     const where =
       mail.transport === 'smtp'
@@ -412,7 +434,7 @@ async function runChecks({
       throw new Error(`${where}；mail_log 读不到（迁移 0004 没跑？）：${safeMessage(error)}`);
     }
     if (failed > 0) {
-      throw new Error(`${where}；最近 24 小时有 ${failed} 封发送失败，明细见 mail_log`);
+      throw checkFailure(`${where}；最近 24 小时有 ${failed} 封发送失败，明细见 mail_log`);
     }
     return `${where}；最近 24 小时无发送失败`;
   });
@@ -421,7 +443,7 @@ async function runChecks({
     '数据库连通',
     () => {
       if (!database.connected) {
-        throw new Error(database.error || '数据库没有应答');
+        throw checkFailure(DATABASE_ERROR_MESSAGE);
       }
       const version = (String(database.version || '').split(' on ')[0] || '').trim();
       return `${version || 'PostgreSQL'} 应答正常，往返 ${database.latencyMs} ms`;
@@ -433,10 +455,10 @@ async function runChecks({
     '迁移无遗漏',
     () => {
       if (migrations.error) {
-        throw new Error(migrations.error);
+        throw checkFailure(migrations.error);
       }
       if (migrations.pending.length > 0) {
-        throw new Error(`还有 ${migrations.pending.length} 项未应用：${migrations.pending.join('、')}`);
+        throw checkFailure(`还有 ${migrations.pending.length} 项未应用：${migrations.pending.join('、')}`);
       }
       return `${migrations.applied.length} 项迁移全部已应用`;
     },
@@ -445,12 +467,12 @@ async function runChecks({
 
   await run('至少一个可登录账号', async () => {
     if (!database.connected) {
-      throw new Error(`数据库不可用，统计不了账号：${database.error || '未连接'}`);
+      throw checkFailure(DATABASE_ERROR_MESSAGE);
     }
     const result = await probeQuery('账号统计', "SELECT count(*)::int AS total FROM users WHERE status = 'active'");
     const total = Number(result.rows[0]!.total);
     if (total < 1) {
-      throw new Error("没有 status='active' 的账号，谁都登录不了");
+      throw checkFailure("没有 status='active' 的账号，谁都登录不了");
     }
     return `status='active' 的账号 ${total} 个`;
   });
@@ -460,10 +482,10 @@ async function runChecks({
     () => {
       const total = counts.exhibitions;
       if (total === null || total === undefined) {
-        throw new Error(`数据库不可用，统计不了展会：${database.error || '未连接'}`);
+        throw checkFailure(DATABASE_ERROR_MESSAGE);
       }
       if (total < 1) {
-        throw new Error('一场展会都没有，前端列表会是空的');
+        throw checkFailure('一场展会都没有，前端列表会是空的');
       }
       return `展会 ${total} 场`;
     },
@@ -526,24 +548,31 @@ async function buildReport(): Promise<Report> {
 
 /**
  * 同一时刻只跑一次探测：多个标签页、探活脚本与 HTML 页面并发时共用同一份结果。
- *
- * 这里**不做 TTL 缓存**（每个请求拿到的都是刚测出来的数据），只是把「同时发生的
- * 多次探测」合并成一次，避免并发请求把库和连接池一起打满。
+ * 紧邻请求再复用一份 1.5 秒报告，避免页面每 5 秒刷新时被多个客户端同时触发重复查询。
  */
 let inFlightReport: Promise<Report> | null = null;
+let cachedReport: { report: Report; expiresAt: number } | null = null;
 
 function reportOnce(): Promise<Report> {
+  const now = Date.now();
+  if (cachedReport && cachedReport.expiresAt > now) {
+    return Promise.resolve(cachedReport.report);
+  }
   if (!inFlightReport) {
-    inFlightReport = buildReport().finally(() => {
-      inFlightReport = null;
-    });
+    inFlightReport = buildReport()
+      .then((report) => {
+        cachedReport = { report, expiresAt: Date.now() + STATUS_REPORT_TTL_MS };
+        return report;
+      })
+      .finally(() => {
+        inFlightReport = null;
+      });
   }
   return inFlightReport;
 }
 
 /** 最后的兜底：连探测本身都炸了，也要给出一份结构完整的报告，页面才渲染得出来。 */
-function fallbackReport(error: unknown): Report {
-  const message = safeMessage(error);
+function fallbackReport(): Report {
   return {
     ok: false,
     service: serviceBlock(),
@@ -554,30 +583,30 @@ function fallbackReport(error: unknown): Report {
       database: '',
       host: '',
       pool: poolStats(),
-      error: message,
+      error: DATABASE_ERROR_MESSAGE,
     },
-    migrations: { applied: [], pending: STEPS.map((step) => step.id), error: message },
+    migrations: { applied: [], pending: STEPS.map((step) => step.id), error: MIGRATION_ERROR_MESSAGE },
     data: emptyCounts(),
     endpoints: [],
-    checks: [{ name: '健康报告', status: 'fail', detail: message, ms: 0 }],
+    checks: [{ name: '健康报告', status: 'fail', detail: CHECK_ERROR_MESSAGE, ms: 0 }],
   };
 }
 
 /**
  * 状态页渲染失败的兜底：宁可给一页纯文本，也不要让唯一的排查入口变成 500。
  */
-function fallbackHtml(error: unknown): string {
+function fallbackHtml(): string {
   return (
     '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">' +
     '<title>状态页渲染失败</title></head>' +
     '<body style="font:16px/1.6 system-ui,sans-serif;padding:24px">' +
     '<h1>状态页渲染失败</h1><p>后端进程还活着，但状态页自身的模板出错了。</p>' +
-    `<pre style="white-space:pre-wrap">${String(safeMessage(error)).replace(/[<>&]/g, '')}</pre>` +
+    `<pre style="white-space:pre-wrap">${RENDER_ERROR_MESSAGE}</pre>` +
     '<p><a href="/api/v1/status">查看 JSON 报告</a></p></body></html>'
   );
 }
 
-// 状态数据永远要新鲜：探活脚本和页面都不能拿到缓存的旧结果（并发合并见 reportOnce）。
+// 客户端不缓存响应；服务端只在 1.5 秒内复用报告，避免紧邻请求重复打探数据库。
 router.use((req: Request, res: Response, next: NextFunction) => {
   res.set('Cache-Control', 'no-store');
   next();
@@ -593,7 +622,7 @@ router.get('/', async (req: Request, res: Response) => {
     report = await reportOnce();
   } catch (error: unknown) {
     console.error('健康报告生成失败：', error);
-    report = fallbackReport(error);
+    report = fallbackReport();
   }
 
   if (req.baseUrl === '/status') {
@@ -601,7 +630,7 @@ router.get('/', async (req: Request, res: Response) => {
       res.type('html').send(renderStatusPage(report));
     } catch (error: unknown) {
       console.error('状态页渲染失败：', error);
-      res.type('html').send(fallbackHtml(error));
+      res.type('html').send(fallbackHtml());
     }
     return;
   }
