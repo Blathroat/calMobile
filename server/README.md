@@ -22,7 +22,7 @@
 - **读 JSON 要带 `with { type: 'json' }`**：服务版本号就是这么从 `package.json` 取的；
 - **没有 `require()`，也没有 `require.main`**：入口判断在 `src/entry.ts` 的 `isEntry(import.meta.url)`；路由注册表独立成 `src/routes/registry.ts` —— 它既是 `index.ts` 的挂载来源，也是 `routes/status.ts` 接口清单的来源，两者互不依赖。
 
-`allowJs` 关闭：源码一律 `.ts`，没有 JS 逃生口。未自带类型声明的 CommonJS 依赖（`jsonwebtoken`、`nodemailer`）在 `src/types/packages.d.ts` 里只按实际用到的签名声明，够用即可。
+`allowJs` 关闭：源码一律 `.ts`，没有 JS 逃生口。未自带类型声明的 CommonJS 依赖（`nodemailer`）在 `src/types/packages.d.ts` 里只按实际用到的签名声明，够用即可。访问令牌使用 `jose`，刷新令牌仍是随机串并只存哈希。
 
 ### 服务骨架与被承接的路由
 

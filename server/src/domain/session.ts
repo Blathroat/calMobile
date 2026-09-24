@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { query } from '../config/pool.js';
 import { loadProcessConfig } from '../config/env.js';
 import { unauthorized } from './errors.js';
-import jwt from 'jsonwebtoken';
+import { SignJWT } from 'jose';
 
 const { accessSecret, refreshSecret, accessExpiresIn, refreshExpiresIn } = loadProcessConfig().auth;
 
@@ -43,11 +43,13 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** 签发访问令牌。 */
-export function signAccessToken(user: Pick<SessionUser, 'id' | 'username' | 'role'>): string {
-  return jwt.sign({ userId: user.id, username: user.username, role: user.role }, accessSecret, {
-    expiresIn: accessExpiresIn,
-  });
+/** 签发访问令牌；访问令牌只允许 HS256。 */
+export async function signAccessToken(user: Pick<SessionUser, 'id' | 'username' | 'role'>): Promise<string> {
+  return new SignJWT({ userId: user.id, username: user.username, role: user.role })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuedAt()
+    .setExpirationTime(accessExpiresIn)
+    .sign(new TextEncoder().encode(accessSecret));
 }
 
 /**
@@ -82,7 +84,7 @@ export function purgeStaleTokens(): Promise<unknown> {
 /** 登录成功后一次性签发两个令牌。 */
 export async function issueSession(user: SessionUser): Promise<{ token: string; refreshToken: string }> {
   return {
-    token: signAccessToken(user),
+    token: await signAccessToken(user),
     refreshToken: await issueRefreshToken(user.id),
   };
 }
@@ -136,7 +138,7 @@ export async function rotateRefreshToken(token: string): Promise<{
   }
   return {
     user: account,
-    token: signAccessToken(account),
+    token: await signAccessToken(account),
     refreshToken: await issueRefreshToken(account.id),
   };
 }

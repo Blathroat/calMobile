@@ -2,7 +2,7 @@
 
 **Status**: accepted
 
-`server/` 使用 Hono 4 + TypeScript：`tsc` 编译到 `dist/`（镜像 `src/`），生产跑 `node dist/index.js`，开发用 `tsx watch src/index.ts`，测试统一到 vitest 双 project（单测 / 契约）。Node 运行时最低支持 22.12；Node 20 不列为支持版本。状态页仍由 Express 兼容桥承接，认证会话仍使用 `jsonwebtoken`，因此当前依赖集合保留 `express`、`cors`、`express-validator` 与 `jsonwebtoken`。
+`server/` 使用 Hono 4 + TypeScript：`tsc` 编译到 `dist/`（镜像 `src/`），生产跑 `node dist/index.js`，开发用 `tsx watch src/index.ts`，测试统一到 vitest 双 project（单测 / 契约）。Node 运行时最低支持 22.12；Node 20 不列为支持版本。状态页仍由 Express 兼容桥承接，访问令牌使用 `jose` 并固定 HS256，刷新令牌仍是随机串并只存哈希。
 
 ## Considered Options
 
@@ -21,7 +21,7 @@
 | `express.urlencoded` | 删 | 全库无调用方；JSON 2mb 上限改为自写 size-guard 中间件（Hono 无内置体积上限） |
 | `hono/compress` | 仅挂 `/status` | 状态页 HTML 收益大；JSON 响应全局压缩是负收益 |
 | 状态页渲染 | 保留服务端首屏 + 浏览器增量刷新 | 首屏直接给出完整报告，禁用 JavaScript 仍可读；浏览器每 5 秒局部刷新，服务端用约 1.5 秒短缓存合并紧邻请求；故障详情不回传，完整原因只写服务端日志 |
-| `jsonwebtoken` | 留用 | 会话模块统一封装 JWT 签发与校验；刷新令牌仍是随机串并只存哈希 |
+| `jose` | 留用 | 会话模块统一封装访问令牌签发与校验，并固定 HS256；刷新令牌仍是随机串并只存哈希 |
 | 校验 | 手写 `validation.ts` | 共享原语集中 + 路由组合，避免为当前接口引入额外 schema 运行时 |
 
 ## Consequences

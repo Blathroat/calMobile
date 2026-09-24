@@ -8,7 +8,7 @@ import { query } from '../config/pool.js';
 import { loadProcessConfig } from '../config/env.js';
 import { ApiError } from '../domain/errors.js';
 import { capabilities, type Capabilities } from '../domain/permissions.js';
-import jwt from 'jsonwebtoken';
+import { jwtVerify } from 'jose';
 
 const { accessSecret } = loadProcessConfig().auth;
 
@@ -64,7 +64,10 @@ export async function resolveUser(token: string): Promise<AuthedUser | null> {
   }
   let decoded: { userId?: unknown };
   try {
-    decoded = jwt.verify<{ userId?: unknown }>(token, accessSecret);
+    const verified = await jwtVerify<{ userId?: unknown }>(token, new TextEncoder().encode(accessSecret), {
+      algorithms: ['HS256'],
+    });
+    decoded = verified.payload;
   } catch {
     return null;
   }
