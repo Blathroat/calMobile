@@ -27,6 +27,10 @@ import { REGISTRATION_ENDPOINTS } from './registrations-hono.js';
 import { REVIEW_ENDPOINTS } from './review-hono.js';
 import { CHECKIN_ENDPOINTS } from './checkin-hono.js';
 import { PROFILE_ENDPOINTS } from './profile-hono.js';
+import { BOOTSTRAP_ENDPOINTS } from './bootstrap-hono.js';
+import { USERS_ENDPOINTS } from './users-hono.js';
+import { SEARCH_ENDPOINTS } from './search-hono.js';
+import { SETTINGS_ENDPOINTS } from './settings-hono.js';
 import { routes } from './registry.js';
 import packageJson from '../../package.json' with { type: 'json' };
 
@@ -335,6 +339,10 @@ async function probeCounts(database: DatabaseStatus): Promise<{ counts: Record<s
 function routeInventory(): Endpoint[] {
   const honoEndpoints = [
     ...AUTH_ENDPOINTS,
+    ...BOOTSTRAP_ENDPOINTS.map(([method, path]) => [method, `/api/v1${path === '/' ? '' : path}`] as const),
+    ...USERS_ENDPOINTS.map(([method, path]) => [method, `/api/v1/users${path === '/' ? '' : path}`] as const),
+    ...SEARCH_ENDPOINTS.map(([method, path]) => [method, `/api/v1/search${path === '/' ? '' : path}`] as const),
+    ...SETTINGS_ENDPOINTS.map(([method, path]) => [method, `/api/v1/settings${path === '/' ? '' : path}`] as const),
     ...PROFILE_ENDPOINTS.map(([method, path]) => [method, `/api/v1/profile${path === '/' ? '' : path}`] as const),
     ...EXHIBITION_ENDPOINTS.map(
       ([method, path]) => [method, `/api/v1/exhibitions${path === '/' ? '' : path}`] as const,

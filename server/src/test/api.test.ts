@@ -30,6 +30,10 @@ import { REGISTRATION_ENDPOINTS } from '../routes/registrations-hono.js';
 import { REVIEW_ENDPOINTS } from '../routes/review-hono.js';
 import { CHECKIN_ENDPOINTS } from '../routes/checkin-hono.js';
 import { PROFILE_ENDPOINTS } from '../routes/profile-hono.js';
+import { BOOTSTRAP_ENDPOINTS } from '../routes/bootstrap-hono.js';
+import { USERS_ENDPOINTS } from '../routes/users-hono.js';
+import { SEARCH_ENDPOINTS } from '../routes/search-hono.js';
+import { SETTINGS_ENDPOINTS } from '../routes/settings-hono.js';
 import { codeFor } from '../domain/totp.js';
 import { renderStatusPage } from '../status-page.js';
 import bcrypt from 'bcryptjs';
@@ -309,6 +313,8 @@ test('bootstrap 下发前端启动所需的全部配置块', async () => {
     admin: false,
     limited: false,
   });
+  assert.deepStrictEqual(Object.keys(body.media).sort(), ['imageCount', 'imageSizeMb', 'videoCount', 'videoSizeMb']);
+  assert.deepStrictEqual(Object.keys(body.server).sort(), ['avatarSizeMb', 'imageFormats', 'videoFormats']);
 });
 
 test('带令牌的 bootstrap 返回真实用户态与个人外观模式', async () => {
@@ -1659,8 +1665,12 @@ test('核销把已通过推进为已参加，重复核销与非法码都有明�
 // ── 用户、隐私与设置 ────────────────────────────────────────────
 
 test('用户列表与账号状态只有管理员能操作', async () => {
+  const guestList = await get('/api/v1/users');
+  assert.strictEqual(guestList.status, 401);
   const asUser = await get('/api/v1/users', { token: tokens.user.token });
   assert.strictEqual(asUser.status, 403);
+  const exhibitorProfile = await get('/api/v1/users/usr-3', { token: tokens.exhibitor.token });
+  assert.strictEqual(exhibitorProfile.status, 403);
 
   const list = await get('/api/v1/users?query=demo', { token: tokens.admin.token });
   assert.ok(Array.isArray(list.body) && list.body.length > 0, '管理员应当能查到用户');
@@ -2489,6 +2499,10 @@ function routePattern(full: string): RegExp {
 function backendRoutes(): DeclaredRoute[] {
   const honoEndpoints = [
     ...AUTH_ENDPOINTS,
+    ...BOOTSTRAP_ENDPOINTS.map(([method, path]) => [method, `/api/v1${path === '/' ? '' : path}`] as const),
+    ...USERS_ENDPOINTS.map(([method, path]) => [method, `/api/v1/users${path === '/' ? '' : path}`] as const),
+    ...SEARCH_ENDPOINTS.map(([method, path]) => [method, `/api/v1/search${path === '/' ? '' : path}`] as const),
+    ...SETTINGS_ENDPOINTS.map(([method, path]) => [method, `/api/v1/settings${path === '/' ? '' : path}`] as const),
     ...PROFILE_ENDPOINTS.map(([method, path]) => [method, `/api/v1/profile${path === '/' ? '' : path}`] as const),
     ...EXHIBITION_ENDPOINTS.map(
       ([method, path]) => [method, `/api/v1/exhibitions${path === '/' ? '' : path}`] as const,

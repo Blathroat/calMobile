@@ -28,7 +28,7 @@
 
 骨架在 `src/server/`（Hono + `@hono/node-server`）：一层层是 **安全响应头 → CORS → 请求日志 → JSON 体积守卫 → 路由 → 统一错误处理 / 404**，探针 `/ping`、`/api/v1/ping`、`/health` 由它直接回答。
 
-认证、资料与安全、展会、报名、审核和核销路由已经直接挂在 Hono 上；其余尚未搬完的业务仍由 Express 应用代答：`src/server/express-app.ts` 建那个应用（只留业务路由与请求体解析），`src/server/express-bridge.ts` 在 Hono 的路由表末尾把 `/api/v1/*` 与 `/status` 交给它。三条由此而来的硬约束，改骨架前必须先读：
+认证、资料与安全、启动数据、用户管理、搜索、设置、展会、报名、审核和核销路由已经直接挂在 Hono 上；Express 应用目前只代答状态页：`src/server/express-app.ts` 建那个应用（保留状态页与请求体解析），`src/server/express-bridge.ts` 在 Hono 的路由表末尾把 `/api/v1/*` 与 `/status` 交给它。三条由此而来的硬约束，改骨架前必须先读：
 
 - **起服务必须传 `overrideGlobalObjects: false`**。默认会把全局 `Response` 换成带缓存的子类，空响走「缓存分支」、不看代答标记，于是 Express 写完 Hono 再写一次，报 `ERR_HTTP_HEADERS_SENT`；
 - **公共层要落在 Node 的 socket 上**（安全头、CORS、请求日志）。Express 把响应直接写进 socket，Hono 那个壳响应会被整份丢掉，所以这些头必须在把请求交出去**之前**写到 `ServerResponse` 上——Node 的 `writeHead()` 会把它们与适配器写进来的头合并，两条路径就都带上；
