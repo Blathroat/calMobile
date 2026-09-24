@@ -8,7 +8,18 @@ import { query } from '../config/pool.js';
 import { USER_COLUMNS, USER_FROM } from '../domain/queries.js';
 import { userPayload, guestPayload, type UserRow } from '../domain/payloads.js';
 import { capabilities } from '../domain/permissions.js';
-import { limits } from '../domain/validation.js';
+import { limits, parseSchema, safeParseSchema } from '../domain/validation.js';
+import {
+  loginSchema,
+  loginVerifySchema,
+  registerSchema,
+  registerVerifySchema,
+  resetPasswordSchema,
+  ticketSchema,
+  emailSchema,
+  refreshSchema,
+  logoutSchema,
+} from '../domain/schemas.js';
 import { issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser } from '../domain/session.js';
 import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp.js';
 import { secondFactorState, verifySecondFactor, type SecondFactorUser } from '../domain/two-factor.js';
@@ -19,7 +30,6 @@ import { clientIp } from '../http/client-ip.js';
 import { honoRateLimit } from '../middleware/rate-limit.js';
 import type { NodeEnv } from '../server/node-middleware.js';
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync(`missing-${Date.now()}`, 10);
 
 interface LoginAccountRow {
@@ -68,7 +78,7 @@ async function bodyOf(c: Context): Promise<Record<string, any>> {
     if (bodyError(c)) {
       throw bodyError(c);
     }
-    return (cached && typeof cached === 'object' ? cached : {}) as Record<string, any>;
+    return (cached && typeof cached === 'object' && !Array.isArray(cached) ? cached : {}) as Record<string, any>;
   }
   const contentType = c.req.header('content-type') || '';
   if (c.req.method === 'GET' || c.req.method === 'HEAD' || (!contentType && !c.req.header('content-length'))) {
@@ -79,7 +89,7 @@ async function bodyOf(c: Context): Promise<Record<string, any>> {
     const raw = await c.req.text();
     const parsed = raw.trim() ? JSON.parse(raw) : {};
     c.set('authBody', parsed);
-    return (parsed && typeof parsed === 'object' ? parsed : {}) as Record<string, any>;
+    return (parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}) as Record<string, any>;
   } catch {
     c.set('authBodyError', badRequest('请求体不是合法的 JSON'));
     throw c.get('authBodyError');
@@ -144,10 +154,9 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   const limited = authLimiter(options.trustProxy);
 
   app.post('/login', limited, async (c) => {
-    const body = await bodyOf(c);
-    const username = String(body.username || '').trim();
-    const password = String(body.password || '');
-    if (!username || !password) return failureResponse(c, '请输入账号与密码');
+    const parsed = safeParseSchema(loginSchema, await bodyOf(c));
+    if (!parsed.success) return failureResponse(c, parsed.error);
+    const { username, password } = parsed.data;
     const result = await query<LoginAccountRow>(
       `SELECT id, username, email, email_verified, two_factor_enabled, password_hash, status
          FROM users WHERE lower(username) = lower($1) OR lower(email) = lower($1)
@@ -196,10 +205,9 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   });
 
   app.post('/login/verify', limited, async (c) => {
-    const body = await bodyOf(c);
-    const ticket = String(body.ticket || '').trim();
-    const code = String(body.code || '').trim();
-    if (!ticket || !code) return failureResponse(c, '请填写验证码');
+    const parsed = safeParseSchema(loginVerifySchema, await bodyOf(c));
+    if (!parsed.success) return failureResponse(c, parsed.error);
+    const { ticket, code } = parsed.data;
     const found = await findTicket(ticket);
     if (!found) return failureResponse(c, '验证已过期，请重新登录');
     const account = await query<LoginFactorRow>(
@@ -224,8 +232,10 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   });
 
   app.post('/login/code', limited, async (c) => {
-    const body = await bodyOf(c);
-    const found = await findTicket(String(body.ticket || '').trim());
+    const parsed = safeParseSchema(ticketSchema, await bodyOf(c));
+    if (!parsed.success) return failureResponse(c, parsed.error);
+    const { ticket } = parsed.data;
+    const found = await findTicket(ticket);
     if (!found) return failureResponse(c, '验证已过期，请重新登录');
     const account = await query<LoginCodeRow>('SELECT id, email, email_verified FROM users WHERE id = $1', [
       found.userId,
@@ -243,17 +253,10 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   });
 
   app.post('/register', limited, async (c) => {
-    const body = await bodyOf(c);
     const textLimits = await limits();
-    const username = String(body.username || '').trim();
-    const password = String(body.password || '');
-    const email = String(body.email || '').trim();
-    if (username.length < textLimits.usernameMin || username.length > textLimits.usernameMax)
-      return failureResponse(c, `用户名长度需在 ${textLimits.usernameMin}-${textLimits.usernameMax} 个字符之间`);
-    if (!/^[A-Za-z0-9_.-]+$/.test(username)) return failureResponse(c, '用户名只能包含字母、数字、下划线、点或横线');
-    if (password.length < textLimits.passwordMin || password.length > textLimits.passwordMax)
-      return failureResponse(c, `密码长度需在 ${textLimits.passwordMin}-${textLimits.passwordMax} 个字符之间`);
-    if (!email || !EMAIL_PATTERN.test(email) || email.length > 120) return failureResponse(c, '请输入有效的邮箱地址');
+    const parsed = safeParseSchema(registerSchema(textLimits), await bodyOf(c));
+    if (!parsed.success) return failureResponse(c, parsed.error);
+    const { username, password, email } = parsed.data;
     const conflict = await registrationConflict(username, email);
     if (conflict) return failureResponse(c, conflict);
     const ticket = await issueCode({
@@ -266,13 +269,15 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   });
 
   app.post('/register/verify', limited, async (c) => {
-    const body = await bodyOf(c);
+    const parsed = safeParseSchema(registerVerifySchema, await bodyOf(c));
+    if (!parsed.success) return failureResponse(c, parsed.error);
+    const { email, code } = parsed.data;
     let consumed;
     try {
       consumed = await consumeCode({
         purpose: 'register',
-        email: String(body.email || '').trim(),
-        code: String(body.code || '').trim(),
+        email,
+        code,
       });
     } catch (error: unknown) {
       if (isCodeRejected(error)) return failureResponse(c, error.message);
@@ -300,9 +305,9 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   });
 
   app.post('/password/forgot', limited, async (c) => {
-    const body = await bodyOf(c);
-    const email = String(body.email || '').trim();
-    if (!email || !EMAIL_PATTERN.test(email) || email.length > 120) return failureResponse(c, '请输入有效的邮箱地址');
+    const parsed = safeParseSchema(emailSchema, await bodyOf(c));
+    if (!parsed.success) return failureResponse(c, '请输入有效的邮箱地址');
+    const { email } = parsed.data;
     const found = await query<IdRow>(
       `SELECT id FROM users WHERE lower(email) = lower($1) AND email_verified = true AND status <> 'banned'`,
       [email],
@@ -319,14 +324,10 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   });
 
   app.post('/password/reset', limited, async (c) => {
-    const body = await bodyOf(c);
-    const email = String(body.email || '').trim();
-    const code = String(body.code || '').trim();
-    const newPassword = String(body.newPassword || '');
-    if (newPassword !== String(body.confirmPassword || '')) return failureResponse(c, '两次输入的新密码不一致');
     const bounds = await limits();
-    if (newPassword.length < bounds.passwordMin || newPassword.length > bounds.passwordMax)
-      return failureResponse(c, `密码长度需在 ${bounds.passwordMin}-${bounds.passwordMax} 个字符之间`);
+    const parsed = safeParseSchema(resetPasswordSchema(bounds), await bodyOf(c));
+    if (!parsed.success) return failureResponse(c, parsed.error);
+    const { email, code, newPassword } = parsed.data;
     let consumed;
     try {
       consumed = await consumeCode({ purpose: 'reset', email, code });
@@ -351,14 +352,15 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   app.post('/guest', async (c) => jsonResponse(c, { ok: true, error: '', user: guestPayload() }));
 
   app.post('/logout', async (c) => {
-    const body = await bodyOf(c);
-    await revokeRefreshToken(String(body.refreshToken || ''));
+    const parsed = safeParseSchema(logoutSchema, await bodyOf(c));
+    if (!parsed.success) return failureResponse(c, parsed.error);
+    const { refreshToken } = parsed.data;
+    await revokeRefreshToken(refreshToken);
     return okResponse(c);
   });
 
   app.post('/refresh', async (c) => {
-    const body = await bodyOf(c);
-    const token = String(body.refreshToken || '');
+    const { refreshToken: token } = parseSchema(refreshSchema, await bodyOf(c));
     if (!token) throw badRequest('缺少刷新令牌');
     const rotated = await rotateRefreshToken(token);
     return jsonResponse(c, {

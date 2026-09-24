@@ -3,19 +3,22 @@ import type { PoolClient } from 'pg';
 import { query, transaction } from '../config/pool.js';
 import { EXHIBITION_COLUMNS, EXHIBITION_FROM } from '../domain/queries.js';
 import { exhibitionPayload, fieldPayload, type ExhibitionRow, type FieldRow } from '../domain/payloads.js';
-import * as labels from '../domain/labels.js';
 import { requireExhibitor, assertCanManageExhibition, assertNotLimited } from '../domain/permissions.js';
 import { readSection } from '../domain/settings.js';
-import { limits, text, int, bool, isoDate, timeRange, stringList } from '../domain/validation.js';
-import { badRequest, notFound } from '../domain/errors.js';
+import { limits, parseSchema } from '../domain/validation.js';
+import {
+  exhibitionInputSchema,
+  fieldsSchema,
+  monthQuerySchema,
+  exhibitionStatusSchema,
+  type ExhibitionInput,
+} from '../domain/schemas.js';
+import { notFound } from '../domain/errors.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { authenticateHono, optionalAuthHono, userOf, type HonoContext, type HonoEnv } from './hono-utils.js';
 
 const app = new Hono<HonoEnv>();
-const FIELD_TYPES = ['文本', '单选', '多选'];
-const MAX_FIELDS = 50;
-const STATUS_HINT = '报名方式只能是 需审核 / 无需审核 / 仅展示 / 截止报名 / 已结束';
 const NOT_FOUND_TEXT = '展会不存在或已删除';
 
 function newId(prefix: string) {
@@ -23,12 +26,6 @@ function newId(prefix: string) {
 }
 function likePattern(keyword: string) {
   return `%${keyword.replace(/([\\%_])/g, '\\$1')}%`;
-}
-function given(body: Record<string, unknown> | null | undefined, key: string) {
-  return Boolean(body) && Object.prototype.hasOwnProperty.call(body, key) && body![key] !== undefined;
-}
-function looksLikeHtml(value: unknown) {
-  return /^\s*<(p|div|h[1-6]|ul|ol|blockquote|br|strong|em)\b/.test(String(value || ''));
 }
 async function findRow(id: string) {
   const result = await query<ExhibitionRow>(`SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM} WHERE e.id = $1`, [id]);
@@ -64,27 +61,7 @@ export async function loadFields(exhibitionId: string) {
   );
   return result.rows.map(fieldPayload);
 }
-interface NormalizedField {
-  title: string;
-  type: string;
-  required: boolean;
-  options: string[];
-}
-function normalizeFields(raw: unknown, config: Awaited<ReturnType<typeof limits>>): NormalizedField[] {
-  if (!Array.isArray(raw)) throw badRequest('收集项需为数组');
-  if (raw.length > MAX_FIELDS) throw badRequest(`收集项最多 ${MAX_FIELDS} 项`);
-  return raw.map((item: unknown) => {
-    const source = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
-    const type = String(source.type ?? '文本').trim();
-    if (!FIELD_TYPES.includes(type)) throw badRequest('收集项类型只能是 文本 / 单选 / 多选');
-    return {
-      title: text(source.title, { label: '收集项标题', max: config.fieldTitle }),
-      type,
-      required: bool(source.required, false),
-      options: type === '文本' ? [] : stringList(source.options, { label: '选项' }),
-    };
-  });
-}
+type NormalizedField = NonNullable<ExhibitionInput['fields']>[number];
 async function replaceFields(client: PoolClient, exhibitionId: string, fields: NormalizedField[]) {
   await client.query('DELETE FROM exhibition_fields WHERE exhibition_id = $1', [exhibitionId]);
   for (const [index, item] of fields.entries()) {
@@ -97,73 +74,7 @@ async function replaceFields(client: PoolClient, exhibitionId: string, fields: N
 }
 async function exhibitionInput(body: Record<string, unknown> | null | undefined, existing?: ExhibitionRow | null) {
   const config = await limits();
-  const source = body || {};
-  const current: Partial<ExhibitionRow> = existing || {};
-  const creating = !existing;
-  const title = text(source.title, { label: '展会名称', max: config.exhibitionTitle, required: false });
-  if (!title) throw badRequest('展会名称不能为空');
-  const venue =
-    given(source, 'venue') || creating
-      ? text(source.venue, { label: '展会地点', max: config.exhibitionVenue, required: false })
-      : current.venue || '';
-  const category =
-    given(source, 'category') || creating
-      ? text(source.category, { label: '展会分类', max: config.category, required: false })
-      : current.category || '';
-  const date =
-    given(source, 'date') || creating
-      ? isoDate(source.date, { label: '展会日期', required: true })
-      : current.exhibition_date;
-  const time =
-    given(source, 'time') || creating ? timeRange(source.time, { label: '展会时间', required: true }) : current.time;
-  let status = current.status || 'review';
-  if (given(source, 'status') && String(source.status).trim() !== '') {
-    const mapped = labels.toExhibitionStatus(source.status);
-    if (!mapped) throw badRequest(STATUS_HINT);
-    status = mapped;
-  }
-  const registrationStart =
-    given(source, 'registrationStart') || creating
-      ? isoDate(source.registrationStart, { label: '报名开始日期' })
-      : current.registration_start || '';
-  const registrationEnd =
-    given(source, 'registrationEnd') || creating
-      ? isoDate(source.registrationEnd, { label: '报名截止日期' })
-      : current.registration_end || '';
-  if (registrationStart && registrationEnd && registrationEnd < registrationStart)
-    throw badRequest('报名截止日期不能早于开始日期');
-  const description = given(source, 'description') ? String(source.description ?? '') : current.description || '';
-  const requestedFormat = given(source, 'descriptionFormat')
-    ? source.descriptionFormat === 'html'
-      ? 'html'
-      : 'md'
-    : current.description_format || 'md';
-  const descriptionFormat = requestedFormat === 'html' || looksLikeHtml(description) ? 'html' : 'md';
-  return {
-    title,
-    venue,
-    category,
-    date,
-    time,
-    status,
-    registrationStart,
-    registrationEnd,
-    description,
-    descriptionFormat,
-    highlights: given(source, 'highlights')
-      ? stringList(source.highlights, { label: '展会亮点' })
-      : Array.isArray(current.highlights)
-        ? current.highlights
-        : [],
-    imageUri: given(source, 'imageUri') ? String(source.imageUri || '') : current.image_uri || '',
-    exhibitorNote: given(source, 'exhibitorNote')
-      ? String(source.exhibitorNote || '')
-      : creating
-        ? '主办方公开信息'
-        : current.exhibitor_note || '',
-    qrEnabled: given(source, 'qrEnabled') ? bool(source.qrEnabled, false) : Boolean(current.qr_enabled),
-    fields: Array.isArray(source.fields) && source.fields.length > 0 ? normalizeFields(source.fields, config) : null,
-  };
+  return parseSchema(exhibitionInputSchema(config, existing || undefined), body || {});
 }
 function bodyRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -203,22 +114,27 @@ app.get('/month', optionalAuthHono, async (c) => {
     requestedYear ||= landing.year;
     requestedMonth ||= landing.month;
   }
-  const year = int(requestedYear, { label: '年份', min: 1970, max: 9999 });
-  const month = int(requestedMonth, { label: '月份', min: 1, max: 12 });
-  let day = int(c.req.query('day'), { label: '日期', min: 0, max: 31, fallback: 0 });
+  const month = parseSchema(monthQuerySchema, {
+    year: requestedYear,
+    month: requestedMonth,
+    day: c.req.query('day'),
+  });
+  const year = month.year;
+  const monthNumber = month.month;
+  let day = month.day;
   const result = await query<ExhibitionRow>(
     `SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM}
     WHERE EXTRACT(YEAR FROM e.exhibition_date)::int = $1 AND EXTRACT(MONTH FROM e.exhibition_date)::int = $2 ORDER BY e.exhibition_date, e.id`,
-    [year, month],
+    [year, monthNumber],
   );
   const items = result.rows.map(exhibitionPayload);
   const eventDays = [...new Set(items.map((item) => item.day))].sort((a, b) => Number(a) - Number(b));
   if (day <= 0) day = eventDays[0] || 0;
   return jsonResponse(c, {
     year,
-    month,
+    month: monthNumber,
     day,
-    monthLabel: `${year} 年 ${month} 月`,
+    monthLabel: `${year} 年 ${monthNumber} 月`,
     eventDays,
     exhibitions: items.map(monthSummary),
     selected: items.filter((item) => item.day === day).map(monthSummary),
@@ -317,8 +233,7 @@ app.put('/:id/status', authenticateHono, async (c) => {
   const existing = await manageableRow(c, c.req.param('id'));
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
-    const status = labels.toExhibitionStatus(body.status);
-    if (!status) throw badRequest(STATUS_HINT);
+    const { status } = parseSchema(exhibitionStatusSchema, body);
     await query('UPDATE exhibitions SET status = $2, updated_at = now() WHERE id = $1', [existing.id, status]);
     return { exhibition: exhibitionPayload((await findRow(existing.id))!) };
   });
@@ -329,7 +244,7 @@ app.put('/:id/fields', authenticateHono, async (c) => {
   const existing = await manageableRow(c, c.req.param('id'));
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
-    const fields = normalizeFields(body.fields, await limits());
+    const fields = parseSchema(fieldsSchema(await limits()), body.fields);
     await transaction((client) => replaceFields(client, existing.id, fields));
     return { fields: await loadFields(existing.id) };
   });

@@ -17,6 +17,10 @@ export const EXHIBITION_STATUS: Record<string, string> = {
   ended: '已结束',
 };
 
+/** 展会收集项类型：数据库约束与前端表单都使用这三种中文值。 */
+export const EXHIBITION_FIELD_TYPES = ['文本', '单选', '多选'] as const;
+export const EXHIBITION_STATUS_HINT = `报名方式只能是 ${Object.values(EXHIBITION_STATUS).join(' / ')}`;
+
 /** 报名审核状态：code ↔ 中文标签。 */
 export const REGISTRATION_STATUS: Record<string, string> = {
   pending: '待审核',
@@ -25,6 +29,7 @@ export const REGISTRATION_STATUS: Record<string, string> = {
   cancelled: '已撤销',
   attended: '已参加',
 };
+export const REGISTRATION_STATUS_HINT = `报名状态只能是 ${Object.values(REGISTRATION_STATUS).join(' / ')}`;
 
 /** 账号状态：code ↔ 中文标签。 */
 export const USER_STATUS: Record<string, string> = {
@@ -32,6 +37,7 @@ export const USER_STATUS: Record<string, string> = {
   limited: '受限',
   banned: '封禁',
 };
+export const USER_STATUS_HINT = `账号状态只能是 ${Object.values(USER_STATUS).join(' / ')}`;
 
 /** 角色：code ↔ 中文标签。 */
 export const ROLE_LABEL: Record<string, string> = {

@@ -9,7 +9,8 @@ import { jsonResponse, mutate } from '../http/respond.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { authenticateHono, userOf, type HonoEnv } from './hono-utils.js';
 import * as labels from '../domain/labels.js';
-import { limits as readLimits, text } from '../domain/validation.js';
+import { limits as readLimits, parseSchema } from '../domain/validation.js';
+import { registrationSchema, registrationTargetSchema } from '../domain/schemas.js';
 
 const app = new Hono<HonoEnv>();
 const DUPLICATE_MESSAGE = '已提交过该展会的报名';
@@ -92,7 +93,7 @@ app.post('/', authenticateHono, async (c) => {
   assertNotLimited(user, 'register');
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
-    const exhibitionId = String(body.exhibitionId || '').trim();
+    const { exhibitionId } = parseSchema(registrationTargetSchema, body);
     if (!exhibitionId) throw badRequest('请选择要报名的展会');
     const exhibition = await loadExhibition(exhibitionId);
     if (!exhibition) throw badRequest('展会不存在或已删除');
@@ -104,11 +105,8 @@ app.post('/', authenticateHono, async (c) => {
     if (existing.rows.length > 0) throw badRequest(DUPLICATE_MESSAGE);
     if (exhibition.before_start) throw badRequest('报名尚未开始');
     if (exhibition.after_end) throw badRequest('报名已截止');
-    const visitorName = text(body.visitorName, { label: '姓名' });
-    const visitorType = text(body.visitorType, { label: '参观身份' });
-    const answers = String(body.answers ?? '');
-    const maxAnswer = Number((await readLimits()).answer) || 0;
-    if (maxAnswer > 0 && answers.length > maxAnswer) throw badRequest(`报名填写内容最多 ${maxAnswer} 个字符`);
+    const answerMax = Number((await readLimits()).answer) || 0;
+    const { visitorName, visitorType, answers } = parseSchema(registrationSchema(answerMax), body);
     validateAnswers(await loadFields(exhibitionId), answers);
     const autoApproved = exhibition.status === 'optional';
     const status = autoApproved ? 'approved' : 'pending';

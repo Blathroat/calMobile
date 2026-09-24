@@ -10,12 +10,13 @@ import {
 } from '../domain/payloads.js';
 import * as labels from '../domain/labels.js';
 import { requireAdmin, type Actor } from '../domain/permissions.js';
-import { normalizeUserStatus } from '../domain/settings.js';
 import { badRequest, notFound } from '../domain/errors.js';
 import { revokeAllForUser } from '../domain/session.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { authenticateHono, optionalAuthHono, userOf, type HonoEnv } from './hono-utils.js';
 import { readJsonBody } from '../http/body-limit.js';
+import { parseSchema } from '../domain/validation.js';
+import { adminTwoFactorSchema, userStatusSchema } from '../domain/schemas.js';
 
 const app = new Hono<HonoEnv>();
 const USER_ORDER = 'ORDER BY u.registration_time, u.id';
@@ -107,11 +108,12 @@ app.get('/:id', authenticateHono, async (c) => {
 });
 app.put('/:id/status', authenticateHono, async (c) => {
   const actor = requireAdmin({ user: userOf(c) });
-  const body = bodyRecord(await readJsonBody(c));
+  const rawBody = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
     const id = c.req.param('id');
     if (id === actor.userId) throw badRequest('不能修改自己的账号状态');
-    const status = normalizeUserStatus(body.status);
+    const body = parseSchema(userStatusSchema, rawBody);
+    const status = body.status;
     const row = await findUserById(id);
     if (!row) throw notFound('用户不存在或已删除');
     await query('UPDATE users SET status = $2, updated_at = now() WHERE id = $1', [id, status]);
@@ -121,10 +123,10 @@ app.put('/:id/status', authenticateHono, async (c) => {
 });
 app.put('/:id/two-factor', authenticateHono, async (c) => {
   requireAdmin({ user: userOf(c) });
-  const body = bodyRecord(await readJsonBody(c));
+  const rawBody = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
+    parseSchema(adminTwoFactorSchema, rawBody);
     const id = c.req.param('id');
-    if (body.enabled !== false) throw badRequest('两步验证只能由本人开启（需要验证码）');
     const row = await findUserById(id);
     if (!row) throw notFound('用户不存在或已删除');
     await query('UPDATE users SET two_factor_enabled = false, updated_at = now() WHERE id = $1', [id]);

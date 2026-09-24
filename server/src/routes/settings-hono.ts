@@ -12,6 +12,8 @@ import {
 } from '../domain/settings.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { readJsonBody } from '../http/body-limit.js';
+import { parseSchema } from '../domain/validation.js';
+import { notifySchema, serverSettingsPatchSchema, uiModeSchema } from '../domain/schemas.js';
 
 const app = new Hono<HonoEnv>();
 function bodyRecord(value: unknown): Record<string, unknown> {
@@ -38,20 +40,21 @@ async function settingsPayload(userId: string | null | undefined) {
 app.get('/', optionalAuthHono, async (c) => jsonResponse(c, await settingsPayload(userOf(c)?.userId)));
 app.put('/', authenticateHono, async (c) => {
   const user = requireAdmin({ user: userOf(c) });
-  const body = bodyRecord(await readJsonBody(c));
+  const rawBody = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
+    const body = parseSchema(serverSettingsPatchSchema, rawBody);
     const current = await readServerSettings();
     const next = applyServerPatch(current, body);
     await saveServerSettings(current, next);
-    if (has(body, 'notify')) await saveNotificationPreferences(user.userId, body.notify as Record<string, unknown>);
+    if (has(body, 'notify')) await saveNotificationPreferences(user.userId, parseSchema(notifySchema, body.notify));
     return { settings: await settingsPayload(user.userId) };
   });
 });
 app.put('/ui-mode', authenticateHono, async (c) => {
   const user = requireUser({ user: userOf(c) });
-  const body = bodyRecord(await readJsonBody(c));
+  const body = parseSchema(uiModeSchema, bodyRecord(await readJsonBody(c)));
   return mutate(c, async () => ({
-    mode: await saveUiMode(user.userId, String(body.mode === undefined ? '' : body.mode)),
+    mode: await saveUiMode(user.userId, body.mode),
   }));
 });
 export function createSettingsRoutes() {

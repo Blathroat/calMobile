@@ -7,6 +7,8 @@ import { readSection } from '../domain/settings.js';
 import * as labels from '../domain/labels.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { readJsonBody } from '../http/body-limit.js';
+import { parseSchema } from '../domain/validation.js';
+import { reviewQuerySchema, reviewStatusSchema } from '../domain/schemas.js';
 
 const app = new Hono<HonoEnv>();
 const REGISTRATION_TRANSITIONS: Record<string, readonly string[]> = {
@@ -55,9 +57,6 @@ function reviewPayload(row: ReviewRecordRow) {
     status: labels.REGISTRATION_STATUS[row.status] || '',
   };
 }
-function statusHint() {
-  return Object.values(labels.REGISTRATION_STATUS).join(' / ');
-}
 async function assertExhibitionScope(exhibitionId: string, user: { userId: string; role: string }) {
   const result = await query<ExhibitionScopeRow>('SELECT id, exhibitor_id FROM exhibitions WHERE id = $1', [
     exhibitionId,
@@ -74,9 +73,7 @@ function bodyRecord(value: unknown): Record<string, unknown> {
 app.get('/', authenticateHono, async (c) => {
   const user = requireExhibitor({ user: userOf(c) });
   const exhibitionId = String(c.req.query('exhibitionId') || '').trim();
-  const statusLabel = String(c.req.query('status') || '').trim() || '全部';
-  const statusCode = statusLabel === '全部' ? '' : labels.toRegistrationStatus(statusLabel);
-  if (statusLabel !== '全部' && !statusCode) throw badRequest(`报名状态只能是 ${statusHint()}`);
+  const { statusLabel, statusCode } = parseSchema(reviewQuerySchema, { status: c.req.query('status') || '' });
   const scopeParams: unknown[] = [];
   const scope: string[] = [];
   if (exhibitionId) {
@@ -131,8 +128,7 @@ app.put('/:id/status', authenticateHono, async (c) => {
     throw forbidden('只能管理自己举办的展会的报名');
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
-    const status = labels.toRegistrationStatus(body.status);
-    if (!status) throw badRequest(`报名状态只能是 ${statusHint()}`);
+    const { status } = parseSchema(reviewStatusSchema, body);
     if (!row) throw badRequest('报名记录不存在');
     const allowed = REGISTRATION_TRANSITIONS[row.status] || [];
     if (!allowed.includes(status))

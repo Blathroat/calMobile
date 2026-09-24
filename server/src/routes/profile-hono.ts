@@ -12,7 +12,16 @@ import { query } from '../config/pool.js';
 import { USER_COLUMNS, USER_FROM } from '../domain/queries.js';
 import { userPayload, type UserRow } from '../domain/payloads.js';
 import { capabilities, assertNotLimited, requireUser } from '../domain/permissions.js';
-import { limits, bool } from '../domain/validation.js';
+import { limits, parseSchema } from '../domain/validation.js';
+import {
+  profilePatchSchema,
+  passwordChangeSchema,
+  passwordOnlySchema,
+  emailSchema,
+  codeSchema,
+  emailVerifyLooseSchema,
+  notifySchema,
+} from '../domain/schemas.js';
 import { badRequest, notFound } from '../domain/errors.js';
 import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp.js';
 import {
@@ -29,8 +38,6 @@ import { clientIp } from '../http/client-ip.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import type { NodeEnv } from '../server/node-middleware.js';
 import { authenticateHono, userOf, type HonoContext, type HonoEnv } from './hono-utils.js';
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface PasswordHashRow {
   password_hash: string;
@@ -105,6 +112,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const body = bodyRecord(await readJsonBody(c));
     return mutate(c, async () => {
       const bounds = await limits();
+      const parsed = parseSchema(profilePatchSchema(bounds), body);
       const assignments: string[] = [];
       const values: unknown[] = [];
       const set = (column: string, value: unknown) => {
@@ -112,28 +120,19 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
         assignments.push(`${column} = $${values.length}`);
       };
 
-      if (has(body, 'nickname')) {
-        const nickname = String(body.nickname === undefined ? '' : body.nickname).trim();
-        if (!nickname) throw badRequest('昵称不能为空');
-        if (bounds.nickname && nickname.length > bounds.nickname)
-          throw badRequest(`昵称最多 ${bounds.nickname} 个字符`);
-        set('nickname', nickname);
+      if (has(parsed, 'nickname')) {
+        set('nickname', parsed.nickname);
       }
-      if (has(body, 'email')) throw badRequest('邮箱需要通过「验证新邮箱」修改');
-      if (has(body, 'bio')) {
-        const bio = String(body.bio === undefined ? '' : body.bio).trim();
-        if (bounds.bio && bio.length > bounds.bio) throw badRequest(`个人简介最多 ${bounds.bio} 个字符`);
-        set('bio', bio);
+      if (has(parsed, 'email')) throw badRequest('邮箱需要通过「验证新邮箱」修改');
+      if (has(parsed, 'bio')) {
+        set('bio', parsed.bio);
       }
-      if (has(body, 'region')) {
-        const region = String(body.region === undefined ? '' : body.region).trim();
-        if (bounds.region && region.length > bounds.region) throw badRequest(`地区最多 ${bounds.region} 个字符`);
-        set('region', region);
+      if (has(parsed, 'region')) {
+        set('region', parsed.region);
       }
-      if (has(body, 'socialMedia'))
-        set('social_media', String(body.socialMedia === undefined ? '' : body.socialMedia).trim());
-      if (has(body, 'avatar')) set('avatar', String(body.avatar === undefined ? '' : body.avatar).trim());
-      if (has(body, 'showRegistrations')) set('show_registrations', bool(body.showRegistrations, false));
+      if (has(parsed, 'socialMedia')) set('social_media', parsed.socialMedia);
+      if (has(parsed, 'avatar')) set('avatar', parsed.avatar);
+      if (has(parsed, 'showRegistrations')) set('show_registrations', parsed.showRegistrations);
 
       if (assignments.length > 0) {
         values.push(user.userId);
@@ -150,16 +149,8 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const user = requireUser({ user: userOf(c) });
     const body = bodyRecord(await readJsonBody(c));
     return mutate(c, async () => {
-      const current = String(body.currentPassword === undefined ? '' : body.currentPassword);
-      const nextPassword = String(body.newPassword === undefined ? '' : body.newPassword);
-      const confirm = String(body.confirmPassword === undefined ? '' : body.confirmPassword);
-      if (!current || !nextPassword) throw badRequest('请填写完整密码');
-      if (nextPassword !== confirm) throw badRequest('两次输入的新密码不一致');
       const bounds = await limits();
-      if (bounds.passwordMin && nextPassword.length < bounds.passwordMin)
-        throw badRequest(`密码至少需要 ${bounds.passwordMin} 个字符`);
-      if (bounds.passwordMax && nextPassword.length > bounds.passwordMax)
-        throw badRequest(`密码最多 ${bounds.passwordMax} 个字符`);
+      const { currentPassword: current, newPassword: nextPassword } = parseSchema(passwordChangeSchema(bounds), body);
       const found = await query<PasswordHashRow>('SELECT password_hash FROM users WHERE id = $1', [user.userId]);
       const row = found.rows[0];
       if (!row || !(await bcrypt.compare(current, row.password_hash))) throw badRequest('当前密码不正确');
@@ -209,6 +200,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
   app.post('/2fa/enable/verify', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
     const body = bodyRecord(await readJsonBody(c));
+    const { code } = parseSchema(codeSchema, body);
     const found = await query<EmailOnlyRow>('SELECT email FROM users WHERE id = $1', [user.userId]);
     const emailRow = found.rows[0];
     if (!emailRow) throw notFound('用户不存在或已删除');
@@ -217,7 +209,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       consumed = await consumeCode({
         purpose: 'enable2fa',
         email: emailRow.email,
-        code: String(body.code || '').trim(),
+        code,
       });
     } catch (error: unknown) {
       if (isCodeRejected(error)) return jsonResponse(c, { ok: false, error: error.message });
@@ -247,8 +239,9 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
   app.post('/2fa/totp/enable', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
     const body = bodyRecord(await readJsonBody(c));
+    const { code } = parseSchema(codeSchema, body);
     try {
-      const result = await confirmTotpSetup(user.userId, String(body.code || '').trim());
+      const result = await confirmTotpSetup(user.userId, code);
       return jsonResponse(c, { ok: true, error: '', twoFactorEnabled: true, ...result });
     } catch (error: unknown) {
       if (isCodeRejected(error)) return jsonResponse(c, { ok: false, error: error.message });
@@ -260,8 +253,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const user = requireUser({ user: userOf(c) });
     const body = bodyRecord(await readJsonBody(c));
     return mutate(c, async () => {
-      const password = String(body.password || '');
-      if (!password) throw badRequest('请输入当前密码');
+      const { password } = parseSchema(passwordOnlySchema, body);
       const found = await query<PasswordFactorRow>(
         'SELECT password_hash, two_factor_enabled FROM users WHERE id = $1',
         [user.userId],
@@ -277,8 +269,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const user = requireUser({ user: userOf(c) });
     const body = bodyRecord(await readJsonBody(c));
     return mutate(c, async () => {
-      const password = String(body.password || '');
-      if (!password) throw badRequest('请输入当前密码');
+      const { password } = parseSchema(passwordOnlySchema, body);
       const found = await query<PasswordHashRow>('SELECT password_hash FROM users WHERE id = $1', [user.userId]);
       const row = found.rows[0];
       if (!row || !(await bcrypt.compare(password, row.password_hash))) throw badRequest('当前密码不正确');
@@ -290,8 +281,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
   app.post('/email', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
     const body = bodyRecord(await readJsonBody(c));
-    const email = String(body.email || '').trim();
-    if (!EMAIL_PATTERN.test(email) || email.length > 120) throw badRequest('邮箱格式不正确');
+    const { email } = parseSchema(emailSchema, body);
     const current = await query<EmailOnlyRow>('SELECT email FROM users WHERE id = $1', [user.userId]);
     if (String(current.rows[0]?.email || '').toLowerCase() === email.toLowerCase())
       throw badRequest('新邮箱与当前邮箱相同');
@@ -309,8 +299,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
   app.post('/email/verify', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
     const body = bodyRecord(await readJsonBody(c));
-    const email = String(body.email || '').trim();
-    const code = String(body.code || '').trim();
+    const { email, code } = parseSchema(emailVerifyLooseSchema, body);
     let consumed;
     try {
       consumed = await consumeCode({ purpose: 'email', email, code });
@@ -339,8 +328,10 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
 
   app.put('/notifications', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
-    const body = bodyRecord(await readJsonBody(c));
-    return mutate(c, async () => ({ notify: await saveNotificationPreferences(user.userId, body) }));
+    const rawBody = bodyRecord(await readJsonBody(c));
+    return mutate(c, async () => ({
+      notify: await saveNotificationPreferences(user.userId, parseSchema(notifySchema, rawBody)),
+    }));
   });
 
   return app;

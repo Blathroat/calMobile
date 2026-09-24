@@ -7,6 +7,8 @@ import * as labels from '../domain/labels.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { jsonResponse } from '../http/respond.js';
 import { authenticateHono, userOf, type HonoEnv } from './hono-utils.js';
+import { parseSchema } from '../domain/validation.js';
+import { checkinSchema } from '../domain/schemas.js';
 
 const app = new Hono<HonoEnv>();
 const CHECKIN_COLUMNS = `${REGISTRATION_COLUMNS}, to_char(r.created_at, 'MM-DD HH24:MI') AS registration_time`;
@@ -37,7 +39,8 @@ app.post('/', authenticateHono, async (c) => {
   assertNotLimited(user, 'checkin');
   const exhibitor = requireExhibitor({ user });
   const body = bodyRecord(await readJsonBody(c));
-  const parsed = labels.parseCheckInCode(String(body.code || '').trim());
+  const { code } = parseSchema(checkinSchema, body);
+  const parsed = labels.parseCheckInCode(code);
   if (!parsed) return jsonResponse(c, { ok: false, error: '无法识别的报名码，请扫描报名详情里的二维码' });
   const result = await query<CheckInRow>(`SELECT ${CHECKIN_COLUMNS} ${REGISTRATION_FROM} WHERE r.id = $1`, [
     parsed.registrationId,
