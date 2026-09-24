@@ -29,6 +29,7 @@ import { EXHIBITION_ENDPOINTS } from '../routes/exhibitions-hono.js';
 import { REGISTRATION_ENDPOINTS } from '../routes/registrations-hono.js';
 import { REVIEW_ENDPOINTS } from '../routes/review-hono.js';
 import { CHECKIN_ENDPOINTS } from '../routes/checkin-hono.js';
+import { PROFILE_ENDPOINTS } from '../routes/profile-hono.js';
 import { codeFor } from '../domain/totp.js';
 import { renderStatusPage } from '../status-page.js';
 import bcrypt from 'bcryptjs';
@@ -2488,6 +2489,7 @@ function routePattern(full: string): RegExp {
 function backendRoutes(): DeclaredRoute[] {
   const honoEndpoints = [
     ...AUTH_ENDPOINTS,
+    ...PROFILE_ENDPOINTS.map(([method, path]) => [method, `/api/v1/profile${path === '/' ? '' : path}`] as const),
     ...EXHIBITION_ENDPOINTS.map(
       ([method, path]) => [method, `/api/v1/exhibitions${path === '/' ? '' : path}`] as const,
     ),

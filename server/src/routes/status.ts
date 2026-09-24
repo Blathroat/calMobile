@@ -26,6 +26,7 @@ import { EXHIBITION_ENDPOINTS } from './exhibitions-hono.js';
 import { REGISTRATION_ENDPOINTS } from './registrations-hono.js';
 import { REVIEW_ENDPOINTS } from './review-hono.js';
 import { CHECKIN_ENDPOINTS } from './checkin-hono.js';
+import { PROFILE_ENDPOINTS } from './profile-hono.js';
 import { routes } from './registry.js';
 import packageJson from '../../package.json' with { type: 'json' };
 
@@ -334,6 +335,7 @@ async function probeCounts(database: DatabaseStatus): Promise<{ counts: Record<s
 function routeInventory(): Endpoint[] {
   const honoEndpoints = [
     ...AUTH_ENDPOINTS,
+    ...PROFILE_ENDPOINTS.map(([method, path]) => [method, `/api/v1/profile${path === '/' ? '' : path}`] as const),
     ...EXHIBITION_ENDPOINTS.map(
       ([method, path]) => [method, `/api/v1/exhibitions${path === '/' ? '' : path}`] as const,
     ),

@@ -23,6 +23,7 @@ import { createExhibitionsRoutes } from '../routes/exhibitions-hono.js';
 import { createRegistrationsRoutes } from '../routes/registrations-hono.js';
 import { createReviewRoutes } from '../routes/review-hono.js';
 import { createCheckinRoutes } from '../routes/checkin-hono.js';
+import { createProfileRoutes } from '../routes/profile-hono.js';
 
 /** 与 `/api/v1/status` 的服务标识一致。 */
 const SERVICE_NAME = 'calmobile-server';
@@ -94,6 +95,7 @@ export function createApp(options: AppOptions): Hono {
   // 认证路由已完整迁入 Hono；必须放在 Express 承接点之前，令牌与验证码边界由同一条
   // Hono 链路处理，测试里的 `app.request()` 也能直接覆盖这些端点。
   app.route('/api/v1/auth', createAuthRoutes({ trustProxy: options.trustProxy }));
+  app.route('/api/v1/profile', createProfileRoutes({ trustProxy: options.trustProxy }));
 
   // 展会、报名、审核、核销已迁入 Hono；Express 只承接仍未迁移的资源。
   app.route('/api/v1/exhibitions', createExhibitionsRoutes());

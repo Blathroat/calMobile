@@ -6,7 +6,7 @@
  * ESM 下延迟 require 无处安放，于是把注册表本身独立出来 —— `index.ts` 负责挂载，
  * `status.ts` 只读这张表，谁都不依赖谁。
  *
- * 认证路由已由 `auth-hono.ts` 自己注册并导出清单；这里登记其余 Express 承接路由。
+ * 认证与资料路由已由各自的 Hono 模块注册并导出清单；这里登记其余 Express 承接路由。
  *
  * 约定：新承接接口同时登记到这里、`api.js` 的 `ENDPOINTS`、`server/src/test/api.test.ts`
  * （那里交叉校验前后端路由）；Hono 路由在自己的模块导出清单，状态接口没有对应的前端动作，
@@ -15,14 +15,12 @@
 
 import type { Router } from 'express';
 import bootstrapRoutes from './bootstrap.js';
-import profileRoutes from './profile.js';
 import userRoutes from './users.js';
 import searchRoutes from './search.js';
 import settingsRoutes from './settings.js';
 
 export const routes: Record<string, Router> = {
   '': bootstrapRoutes,
-  profile: profileRoutes,
   users: userRoutes,
   search: searchRoutes,
   settings: settingsRoutes,
