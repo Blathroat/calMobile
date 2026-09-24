@@ -28,7 +28,7 @@
 
 骨架在 `src/server/`（Hono + `@hono/node-server`）：一层层是 **安全响应头 → CORS → 请求日志 → JSON 体积守卫 → 路由 → 统一错误处理 / 404**，探针 `/ping`、`/api/v1/ping`、`/health` 由它直接回答。
 
-认证路由已经由 `src/routes/auth-hono.ts` 直接挂在 Hono 上；其余尚未搬完的业务仍由 Express 应用代答：`src/server/express-app.ts` 建那个应用（只留业务路由与请求体解析），`src/server/express-bridge.ts` 在 Hono 的路由表末尾把 `/api/v1/*` 与 `/status` 交给它。三条由此而来的硬约束，改骨架前必须先读：
+认证、展会、报名、审核和核销路由已经直接挂在 Hono 上；其余尚未搬完的业务仍由 Express 应用代答：`src/server/express-app.ts` 建那个应用（只留业务路由与请求体解析），`src/server/express-bridge.ts` 在 Hono 的路由表末尾把 `/api/v1/*` 与 `/status` 交给它。三条由此而来的硬约束，改骨架前必须先读：
 
 - **起服务必须传 `overrideGlobalObjects: false`**。默认会把全局 `Response` 换成带缓存的子类，空响走「缓存分支」、不看代答标记，于是 Express 写完 Hono 再写一次，报 `ERR_HTTP_HEADERS_SENT`；
 - **公共层要落在 Node 的 socket 上**（安全头、CORS、请求日志）。Express 把响应直接写进 socket，Hono 那个壳响应会被整份丢掉，所以这些头必须在把请求交出去**之前**写到 `ServerResponse` 上——Node 的 `writeHead()` 会把它们与适配器写进来的头合并，两条路径就都带上；
@@ -363,10 +363,10 @@ pnpm format               # oxfmt
 - **找回密码与两步验证**：找回密码对已注册与未注册邮箱的响应字段完全一致（不泄露账号是否存在），但只有已注册的会真的收到邮件；改密码后旧刷新令牌失效、一码一用；两步验证开启后 `POST /auth/login` 只回票不发令牌、错码仍然没令牌、过码才发令牌、同一张票只能用一次、关闭要当前密码；改邮箱必须把码发到新地址、通过才落库，且别人账号的改邮箱验证码用不了；验证码的明文只存在于邮件里，用例从内存收件箱的正文里把它读出来 —— 走的是用户实际收到的那条路径，后端没有、也不该有「读出明文码」的接口；
 - 刷新令牌并发重放只会换到一套新令牌（轮换的撤销是原子条件更新）；
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
-- **骨架公共层**：安全响应头、CORS（含预检 204）与 404 的文案在业务响应上一并生效（迁移期路由由 Express 代答，这条断言盯住「承接没有吃掉公共层」）；
+- **骨架公共层**：安全响应头、CORS（含预检 204）与 404 的文案在业务响应上一并生效（尚未迁移的路由仍由 Express 代答，这条断言盯住「承接没有吃掉公共层」）；
 - 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、响应不带 pg/SQL/堆栈原文，不抛 500）。
 
-`src/**/*.test.ts`（vitest unit project，152 项）跑不依赖数据库的部分：入口判定（`entry.test.ts` —— ESM 下取代 `require.main` 的那次比对）、JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.ts` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.ts` 与 `http/error-response.test.ts` —— 503 的分类是状态码来源，判错会把库故障伪装成 500）、**客户端 IP 的代理信任三态**（`http/client-ip.test.ts`：不信任/跳数/来源三种取值下取址正确，跳数错一位限流就会退化成全局额度）、**JSON 体积上限与写操作信封**（`http/body-limit.test.ts`：超限 413、坏 JSON 400、业务失败 200 + `ok:false`）、**骨架自身的行为**（`server/hono-app.test.ts`：探针、404、安全头、CORS、请求日志，以及「尚未迁移的路由仍由 Express 代答」这条链路），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.ts`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.ts`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.ts`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.ts`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `pnpm test` 的前置条件——测试不该依赖一个容器。
+`src/**/*.test.ts`（vitest unit project，152 项）跑不依赖数据库的部分：入口判定（`entry.test.ts` —— ESM 下取代 `require.main` 的那次比对）、JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.ts` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.ts` 与 `http/error-response.test.ts` —— 503 的分类是状态码来源，判错会把库故障伪装成 500）、**客户端 IP 的代理信任三态**（`http/client-ip.test.ts`：不信任/跳数/来源三种取值下取址正确，跳数错一位限流就会退化成全局额度）、**JSON 体积上限与写操作信封**（`http/body-limit.test.ts`：超限 413、坏 JSON 400、业务失败 200 + `ok:false`）、**骨架自身的行为**（`server/hono-app.test.ts`：探针、404、安全头、CORS、请求日志，以及「尚未迁移的路由仍由 Express 代答」这条链路），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.ts`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.ts`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.ts`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.ts`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `pnpm test` 的前置条件。
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 

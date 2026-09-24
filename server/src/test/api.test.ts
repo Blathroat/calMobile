@@ -25,6 +25,10 @@ import { outbox } from '../services/mailer.js';
 import type { StoredMail } from '../services/mailer.js';
 import { listen, routes } from '../index.js';
 import { AUTH_ENDPOINTS } from '../routes/auth-hono.js';
+import { EXHIBITION_ENDPOINTS } from '../routes/exhibitions-hono.js';
+import { REGISTRATION_ENDPOINTS } from '../routes/registrations-hono.js';
+import { REVIEW_ENDPOINTS } from '../routes/review-hono.js';
+import { CHECKIN_ENDPOINTS } from '../routes/checkin-hono.js';
 import { codeFor } from '../domain/totp.js';
 import { renderStatusPage } from '../status-page.js';
 import bcrypt from 'bcryptjs';
@@ -2482,7 +2486,18 @@ function routePattern(full: string): RegExp {
 
 /** 后端实际注册的路由表：[方法, 匹配用的正则]。 */
 function backendRoutes(): DeclaredRoute[] {
-  const declared: DeclaredRoute[] = AUTH_ENDPOINTS.map(([method, path]) => ({
+  const honoEndpoints = [
+    ...AUTH_ENDPOINTS,
+    ...EXHIBITION_ENDPOINTS.map(
+      ([method, path]) => [method, `/api/v1/exhibitions${path === '/' ? '' : path}`] as const,
+    ),
+    ...REGISTRATION_ENDPOINTS.map(
+      ([method, path]) => [method, `/api/v1/registrations${path === '/' ? '' : path}`] as const,
+    ),
+    ...REVIEW_ENDPOINTS.map(([method, path]) => [method, `/api/v1/review${path === '/' ? '' : path}`] as const),
+    ...CHECKIN_ENDPOINTS.map(([method, path]) => [method, `/api/v1/checkin${path === '/' ? '' : path}`] as const),
+  ];
+  const declared: DeclaredRoute[] = honoEndpoints.map(([method, path]) => ({
     method,
     path,
     pattern: routePattern(path),

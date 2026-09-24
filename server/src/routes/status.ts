@@ -22,6 +22,10 @@ import { MIN_SECRET_LENGTH, PLACEHOLDER_SECRET } from '../config/auth.js';
 import { mailConfig, describeMailConfig } from '../config/mail.js';
 import { renderStatusPage } from '../status-page.js';
 import { AUTH_ENDPOINTS } from './auth-hono.js';
+import { EXHIBITION_ENDPOINTS } from './exhibitions-hono.js';
+import { REGISTRATION_ENDPOINTS } from './registrations-hono.js';
+import { REVIEW_ENDPOINTS } from './review-hono.js';
+import { CHECKIN_ENDPOINTS } from './checkin-hono.js';
 import { routes } from './registry.js';
 import packageJson from '../../package.json' with { type: 'json' };
 
@@ -320,14 +324,26 @@ async function probeCounts(database: DatabaseStatus): Promise<{ counts: Record<s
 }
 
 /**
- * 接口清单：遍历路由注册表 `routes/registry.ts`，把每个 router 的 `stack` 拼上挂载前缀，
- * 与 `src/test/api.test.ts` 的 `backendRoutes()` 完全同源，因此清单不会和真实路由漂移。
+ * 接口清单：合并 Hono 路由声明与 Express 注册表 `routes/registry.ts`，把每个 router 的
+ * `stack` 拼上挂载前缀；与 `src/test/api.test.ts` 的 `backendRoutes()` 完全同源，因此清单
+ * 不会和真实路由漂移。
  *
- * Express 注册表与 Hono 认证清单都独立于入口，所以这里能直接静态 import：从前要靠
+ * Express 注册表与 Hono 路由清单都独立于入口，所以这里能直接静态 import：从前要靠
  * 「延迟 require 入口」绕开的循环依赖（入口要装载状态路由，状态路由又要读入口的路由表）已经不存在。
  */
 function routeInventory(): Endpoint[] {
-  const endpoints: Endpoint[] = AUTH_ENDPOINTS.map(([method, path]) => ({ method, path }));
+  const honoEndpoints = [
+    ...AUTH_ENDPOINTS,
+    ...EXHIBITION_ENDPOINTS.map(
+      ([method, path]) => [method, `/api/v1/exhibitions${path === '/' ? '' : path}`] as const,
+    ),
+    ...REGISTRATION_ENDPOINTS.map(
+      ([method, path]) => [method, `/api/v1/registrations${path === '/' ? '' : path}`] as const,
+    ),
+    ...REVIEW_ENDPOINTS.map(([method, path]) => [method, `/api/v1/review${path === '/' ? '' : path}`] as const),
+    ...CHECKIN_ENDPOINTS.map(([method, path]) => [method, `/api/v1/checkin${path === '/' ? '' : path}`] as const),
+  ];
+  const endpoints: Endpoint[] = honoEndpoints.map(([method, path]) => ({ method, path }));
   for (const [prefix, mountedRouter] of Object.entries(routes)) {
     const base = `/api/v1${prefix ? `/${prefix}` : ''}`;
     for (const layer of routerLayers(mountedRouter)) {

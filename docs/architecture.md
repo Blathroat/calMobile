@@ -67,7 +67,7 @@ app/src/main/
 
 | 组件 | 职责 |
 | --- | --- |
-| `server/src/routes/*.ts` | REST 路由：Hono 的 `auth`，以及由承接层提供的 `bootstrap`、`profile`、`exhibitions`、`registrations`、`review`、`checkin`、`users`、`search`、`settings`、`status` |
+| `server/src/routes/*.ts` | REST 路由：Hono 的 `auth`、`exhibitions`、`registrations`、`review`、`checkin`，以及由承接层提供的 `bootstrap`、`profile`、`users`、`search`、`settings`、`status` |
 | `server/src/domain/` | 业务层：状态词汇表（`labels.ts`）、SQL 片段（`queries.ts`）、响应映射（`payloads.ts`）、权限（`permissions.ts`）、校验（`validation.ts`）、设置（`settings.ts`）、会话与令牌（`session.ts`）、错误与信封（`errors.ts` / `respond.ts`） |
 | `server/src/config/migrate.ts` | 表结构与示例数据，按编号记录迁移、可反复执行 |
 | `js/core/api.js` | 前端唯一取数入口：动作名 → REST 路径的映射表 + 401 自动续期 |

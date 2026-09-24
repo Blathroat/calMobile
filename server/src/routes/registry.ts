@@ -16,10 +16,6 @@
 import type { Router } from 'express';
 import bootstrapRoutes from './bootstrap.js';
 import profileRoutes from './profile.js';
-import exhibitionRoutes from './exhibitions.js';
-import registrationRoutes from './registrations.js';
-import reviewRoutes from './review.js';
-import checkinRoutes from './checkin.js';
 import userRoutes from './users.js';
 import searchRoutes from './search.js';
 import settingsRoutes from './settings.js';
@@ -27,10 +23,6 @@ import settingsRoutes from './settings.js';
 export const routes: Record<string, Router> = {
   '': bootstrapRoutes,
   profile: profileRoutes,
-  exhibitions: exhibitionRoutes,
-  registrations: registrationRoutes,
-  review: reviewRoutes,
-  checkin: checkinRoutes,
   users: userRoutes,
   search: searchRoutes,
   settings: settingsRoutes,

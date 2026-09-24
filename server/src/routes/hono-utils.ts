@@ -1,0 +1,26 @@
+import type { Context, MiddlewareHandler } from 'hono';
+import { ApiError } from '../domain/errors.js';
+import { resolveUser, tokenFrom, type AuthedUser } from '../middleware/auth.js';
+
+export type HonoEnv = { Variables: { user: AuthedUser | null } };
+export type HonoContext = Context<HonoEnv>;
+
+/** Hono 版认证中间件：与 Express 的 authenticate/optionalAuth 使用同一解析器。 */
+export const authenticateHono: MiddlewareHandler<HonoEnv> = async (c, next) => {
+  const user = await resolveUser(tokenFrom({ headers: { authorization: c.req.header('authorization') } }));
+  if (!user) {
+    throw new ApiError(401, '登录状态已失效，请重新登录');
+  }
+  c.set('user', user);
+  await next();
+};
+
+export const optionalAuthHono: MiddlewareHandler<HonoEnv> = async (c, next) => {
+  const user = await resolveUser(tokenFrom({ headers: { authorization: c.req.header('authorization') } }));
+  c.set('user', user);
+  await next();
+};
+
+export function userOf(c: HonoContext): AuthedUser | null {
+  return c.get('user');
+}
