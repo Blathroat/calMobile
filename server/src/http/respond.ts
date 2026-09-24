@@ -1,5 +1,5 @@
 /**
- * 写操作信封的 Hono 版出口（Express 版在 `domain/respond.ts`）。
+ * 写操作信封的 Hono 出口。
  *
  * Hono 里没有 `next(error)` 这类漏斗：handler 里抛出的异常由 `app.onError()` 统一
  * 序列化（见 `src/server/hono-app.ts`）。因此这里只做一件事——把业务规则失败
@@ -8,13 +8,13 @@
  * 用法（迁移后的写接口）：
  *
  * ```ts
- * app.post('/exhibitions', authenticate, (c) => mutate(c, async () => { ... }));
+ * app.post('/exhibitions', authenticateHono, (c) => mutate(c, async () => { ... }));
  * ```
  */
 
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import { runEnveloped, successEnvelope } from '../domain/respond.js';
+import { runEnveloped, successEnvelope } from './envelope.js';
 
 export { successEnvelope };
 
@@ -31,7 +31,7 @@ function statusCode(status: number): ContentfulStatusCode {
   return status as ContentfulStatusCode;
 }
 
-/** JSON 响应：与 Express 的 `res.json()` 一样带 charset。 */
+/** JSON 响应统一带 charset，保持既有客户端解析约定。 */
 export function jsonResponse(c: Context, body: unknown, status = 200): Response {
   return c.json(body, statusCode(status), JSON_HEADERS);
 }

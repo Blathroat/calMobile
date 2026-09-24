@@ -1,17 +1,14 @@
 /**
- * 迁移期的 Node 响应头中间件：安全响应头、CORS、请求日志；外加一个 HTTP 语义补丁。
+ * Node 响应头中间件：安全响应头、CORS、请求日志；外加一个 HTTP 语义补丁。
  *
  * 前三个为什么落在 Node 的 `ServerResponse` 上，而不是 Hono 的 `c.res.headers`：
  *
- * 骨架刚换过来时，`/api/v1/*` 与 `/status` 的路由还跑在 Express 里，Express 把响应
- * **直接写进 socket**（见 `express-bridge.ts`），Hono 那个「壳」响应会被整份丢掉。
- * 因此凡是「每个响应都要有」的头，必须在把请求交出去**之前**写到 socket 上：
+ * `@hono/node-server` 在真服务中直接写 Node socket，因此凡是「每个响应都要有」的头，
+ * 都要在处理器前写到 socket 上：
  * Node 的 `writeHead()` 会把 `setHeader()` 设过的值与适配器写进来的头合并，
- * 两条路径（Hono 自己答、Express 代答）就都能带上。
+ * 真服务与 `app.request()` 都能带上。
  *
- * 路由全部迁完之后，这三个会回到 `c.res` 上——那时 Express 已删，
- * 本文件随之删除。第四个 `headContentLength()` 与 socket 无关（适配器对 HEAD 不算
- * `Content-Length`），是常驻中间件，迁移完成后仍然留下。
+ * `headContentLength()` 与 socket 无关（适配器对 HEAD 不算 `Content-Length`），是常驻中间件。
  */
 
 import type { Context, MiddlewareHandler } from 'hono';
@@ -39,7 +36,7 @@ const DEFAULT_ALLOW_METHODS = 'GET,HEAD,PUT,PATCH,POST,DELETE';
  *
  * 值取自 Hono 自带的 `secureHeaders` 默认集（`hono/secure-headers` 的 DEFAULT_OPTIONS），
  * 一份静态表两个出口都用它，不会出现「API 有头、页面没头」。
- * `X-Powered-By` 交给 Express 的 `disable('x-powered-by')`（Hono 本来就不发它）。
+ * Hono 本身不发送 `X-Powered-By`。
  */
 export const SECURITY_HEADERS: readonly (readonly [string, string])[] = [
   ['Cross-Origin-Resource-Policy', 'same-origin'],
@@ -87,13 +84,13 @@ export function securityHeaders(): MiddlewareHandler {
 }
 
 /**
- * CORS：把迁移前 `cors` 包的行为搬过来。
+ * CORS：保持原有响应头和预检行为。
  *
  * - 固定来源（`CORS_ORIGIN` 是具体值）：无论请求带不带 Origin 都回同一个
  *   `Access-Control-Allow-Origin` + `Vary: Origin`，与 `cors` 包一致；
  * - `*`：回 `Access-Control-Allow-Origin: *`；
  * - 预检（OPTIONS）：204，回方法表并回显客户端请求的 `Access-Control-Request-Headers`，
- *   与 `cors` 包逐字一致；预检在**交给 Express 之前**就答掉，Express 那边不再看见它。
+ *   与标准 CORS 客户端预期一致；预检在业务路由之前就答掉。
  */
 export function corsHeaders(origin: string): MiddlewareHandler {
   const allowAll = origin.trim() === '*';
@@ -128,8 +125,8 @@ export function corsHeaders(origin: string): MiddlewareHandler {
 /**
  * 请求日志：`LOG_LEVEL=quiet` 关掉（测试与联调时更清爽）。
  *
- * 监听的是 socket 的 `finish`，不是 Hono 的 Response —— 迁移期 Express 直接写响应，
- * 只有 socket 的 `finish` 对两条路径都准确（状态码与耗时都以真实写出去的那份为准）。
+ * 监听的是 socket 的 `finish`，不是 Hono 的 Response —— 只有 socket 的 `finish`
+ * 对真实服务准确（状态码与耗时都以真实写出去的那份为准）。
  * 行首是 `clientIp()` 解析出来的客户端地址：不信任代理时记 socket 对端，
  * 不会把伪造的 X-Forwarded-For 写进日志。
  */
@@ -162,7 +159,7 @@ export function requestLogger(options: { logLevel: string; trustProxy: TrustProx
  * HEAD 响应补 `Content-Length`。
  *
  * `@hono/node-server` 只对带正文的响应算这个头，HEAD 会被 Node 丢掉正文却不补长度，
- * 于是 `HEAD /ping` 少一个 Express 会给的头。探针脚本（`curl -I`）会看它，
+ * 因此 `HEAD /ping` 需要显式补齐长度。探针脚本（`curl -I`）会看它，
  * 因此在骨架里补上：正文照常生成，只是客户端收不到。
  */
 export function headContentLength(): MiddlewareHandler {

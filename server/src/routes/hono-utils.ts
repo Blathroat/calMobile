@@ -5,7 +5,7 @@ import { resolveUser, tokenFrom, type AuthedUser } from '../middleware/auth.js';
 export type HonoEnv = { Variables: { user: AuthedUser | null } };
 export type HonoContext = Context<HonoEnv>;
 
-/** Hono 版认证中间件：与 Express 的 authenticate/optionalAuth 使用同一解析器。 */
+/** Hono 认证中间件：统一复用令牌解析器。 */
 export const authenticateHono: MiddlewareHandler<HonoEnv> = async (c, next) => {
   const user = await resolveUser(tokenFrom({ headers: { authorization: c.req.header('authorization') } }));
   if (!user) {

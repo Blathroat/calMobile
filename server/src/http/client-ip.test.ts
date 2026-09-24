@@ -1,7 +1,7 @@
 /**
  * 客户端 IP 的三态取址。
  *
- * 用例全部对着 proxy-addr / express 的行为钉死：反代跳数错一位，按 IP 的验证码限流
+ * 用例全部对着 proxy-addr 的行为钉死：反代跳数错一位，按 IP 的验证码限流
  * 就会退化成「全体用户共用一个额度」；反过来在直连场景信任过头，客户端就能伪造
  * X-Forwarded-For 绕过限流。这两头都靠这里的断言看着。
  *
@@ -63,7 +63,7 @@ test('按来源信任：IPv6 掩码、linklocal 与掩码记法都能用', () =>
   assert.equal(clientIp({ remoteAddress: 'fd12:3456::1', forwardedFor: '203.0.113.7' }, 'fd00::/8'), '203.0.113.7');
   // linklocal 覆盖 169.254.0.0/16
   assert.equal(clientIp({ remoteAddress: '169.254.20.5', forwardedFor: '203.0.113.7' }, 'linklocal'), '203.0.113.7');
-  // 掩码记法：10.0.0.0/255.0.0.0 与 10.0.0.0/8 等价（Express 也支持）
+  // 掩码记法：10.0.0.0/255.0.0.0 与 10.0.0.0/8 等价。
   assert.equal(
     clientIp({ remoteAddress: '10.0.0.1', forwardedFor: '203.0.113.7' }, '10.0.0.0/255.0.0.0'),
     '203.0.113.7',

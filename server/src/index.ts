@@ -8,10 +8,8 @@
  * - **数据库连不上/用不了**统一 503（`domain/errors.ts` 的 `isDatabaseUnavailable()`），
  *   不是 500 —— 这是「暂时不可用、可以重试」，也能避免把 pg 的错误原文回给调用方。
  *
- * 服务骨架是 Hono（`src/server/hono-app.ts`）；认证路由已经在 Hono 上运行，其余尚未迁移的
- * `/api/v1/*` 与 `/status` 由 `src/server/express-app.ts` 的 Express 应用代答（承接机制见
- * `src/server/express-bridge.ts`）。因此本文件只做三件事：
- * 解析运行环境、把两个应用接起来、把服务起起来。
+ * 服务骨架和全部业务路由都运行在 Hono（`src/server/hono-app.ts`）。因此本文件只做三件事：
+ * 解析运行环境、创建 Hono 应用并把服务起起来。
  */
 
 // 运行环境必须在**任何**读取 NODE_ENV 的模块之前定下来（见 config/runtime.ts：
@@ -22,9 +20,6 @@ import { isEntry } from './entry.js';
 
 import { createAdaptorServer } from '@hono/node-server';
 import { createApp } from './server/hono-app.js';
-import { createDelegatedApp } from './server/express-app.js';
-import statusRoutes from './routes/status.js';
-import { routes } from './routes/registry.js';
 import { productionProblems } from './config/production.js';
 import { pool } from './config/pool.js';
 import packageJson from '../package.json' with { type: 'json' };
@@ -35,17 +30,8 @@ type NodeServer = ReturnType<typeof createAdaptorServer>;
 const config = loadProcessConfig();
 const PORT = config.port;
 
-/**
- * 尚未迁移的 Express 应用。
- *
- * 现在只承载尚未迁移的业务路由与请求体解析；骨架每搬走一批路由，这里就小一圈，
- * 第 15 单之后整个模块连同 Express 依赖一起退役。
- */
-const delegatedApp = createDelegatedApp(statusRoutes, { statusPageEnabled: runtime.statusPageEnabled });
-
-/** 骨架：公共层 + 探针 + 统一错误处理 + 「其余交给 Express」的承接点。 */
+/** 骨架：公共层、探针、状态页、业务路由和统一错误处理。 */
 const app = createApp({
-  expressApp: delegatedApp,
   corsOrigin: config.corsOrigin,
   logLevel: config.logLevel,
   trustProxy: runtime.trustProxy,
@@ -55,10 +41,6 @@ const app = createApp({
 
 /**
  * 起一个 Node 服务跑给定的 `fetch`（`Hono.fetch`）。
- *
- * `overrideGlobalObjects: false` 是硬要求：它让适配器保留 Node 原生的 `Response`，
- * Express 代答才能用 `x-hono-already-sent` 标记跳过「再写一次」
- * （详见 `src/server/express-bridge.ts` 的文件头）。
  *
  * 不给 hostname 时绑全部网卡（与迁移前 `app.listen(PORT)` 一致）；测试与脚本传
  * `127.0.0.1` 更稳。
@@ -136,4 +118,4 @@ if (isEntry(import.meta.url)) {
   start();
 }
 
-export { app, listen, routes };
+export { app, listen, start };

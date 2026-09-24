@@ -1,8 +1,4 @@
-/**
- * 认证中间件：校验 JWT 并把用户挂到 `req.user`。
- *
- * 错误一律 `next(new ApiError(...))` 交给 index.js 的错误中间件统一序列化。
- */
+/** JWT 认证共享解析器；Hono 中间件负责把结果写入 Context。 */
 
 import { query } from '../config/pool.js';
 import { loadProcessConfig } from '../config/env.js';
@@ -24,20 +20,9 @@ export interface AuthedUser {
   can: Capabilities;
 }
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: AuthedUser | null;
-    }
-  }
-}
-
 export interface AuthRequest {
   headers?: { authorization?: unknown };
-  user?: AuthedUser | null;
 }
-
-type NextFn = (error?: unknown) => void;
 
 interface UserRow {
   id: string;
@@ -90,47 +75,5 @@ export async function resolveUser(token: string): Promise<AuthedUser | null> {
     role: row.role,
     status: row.status,
     can: capabilities(row.role, row.status),
-  };
-}
-
-/** 必须登录。 */
-export async function authenticate(req: AuthRequest, _res: unknown, next: NextFn): Promise<void> {
-  try {
-    const user = await resolveUser(tokenFrom(req));
-    if (!user) {
-      throw new ApiError(401, '登录状态已失效，请重新登录');
-    }
-    req.user = user;
-    next();
-  } catch (error: unknown) {
-    next(error);
-  }
-}
-
-/**
- * 可选登录：带了令牌就解析，没带或无效也继续（页面在访客状态下也会调这些接口）。
- * 只有一种情况会中断：账号被封禁——那不该继续按访客处理。
- */
-export async function optionalAuth(req: AuthRequest, _res: unknown, next: NextFn): Promise<void> {
-  try {
-    req.user = await resolveUser(tokenFrom(req));
-    next();
-  } catch (error: unknown) {
-    next(error);
-  }
-}
-
-/** 角色白名单；配合 authenticate 使用。 */
-export function authorize(roles: string[]) {
-  return (req: AuthRequest, _res: unknown, next: NextFn): void => {
-    if (!req.user) {
-      next(new ApiError(401, '请先登录'));
-      return;
-    }
-    if (!roles.includes(req.user.role)) {
-      next(new ApiError(403, '无权执行此操作'));
-      return;
-    }
-    next();
   };
 }

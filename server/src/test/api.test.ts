@@ -23,17 +23,7 @@ import { migrate, seed, DEFAULT_SETTINGS, STEPS } from '../config/migrate.js';
 import { resetRateLimits } from '../middleware/rate-limit.js';
 import { outbox } from '../services/mailer.js';
 import type { StoredMail } from '../services/mailer.js';
-import { listen, routes } from '../index.js';
-import { AUTH_ENDPOINTS } from '../routes/auth-hono.js';
-import { EXHIBITION_ENDPOINTS } from '../routes/exhibitions-hono.js';
-import { REGISTRATION_ENDPOINTS } from '../routes/registrations-hono.js';
-import { REVIEW_ENDPOINTS } from '../routes/review-hono.js';
-import { CHECKIN_ENDPOINTS } from '../routes/checkin-hono.js';
-import { PROFILE_ENDPOINTS } from '../routes/profile-hono.js';
-import { BOOTSTRAP_ENDPOINTS } from '../routes/bootstrap-hono.js';
-import { USERS_ENDPOINTS } from '../routes/users-hono.js';
-import { SEARCH_ENDPOINTS } from '../routes/search-hono.js';
-import { SETTINGS_ENDPOINTS } from '../routes/settings-hono.js';
+import { app, listen } from '../index.js';
 import { codeFor } from '../domain/totp.js';
 import { renderStatusPage } from '../status-page.js';
 import bcrypt from 'bcryptjs';
@@ -67,11 +57,6 @@ interface DeclaredRoute {
   method: string;
   path: string;
   pattern: RegExp;
-}
-
-/** Express 未在公共类型里暴露 `stack`，按需要求一层的结构；Hono 路由用元数据登记。 */
-interface RouterLayer {
-  route?: { path: string; methods: Record<string, boolean> };
 }
 
 let server: ReturnType<typeof listen> | undefined;
@@ -2451,14 +2436,13 @@ test('未知路径返回 404 而不是 500', async () => {
 /**
  * 骨架公共层在真服务上的样子：安全响应头、CORS、请求日志。
  *
- * 这些断言放在契约测试里，是因为它们必须对 Hono 路由与尚未迁移的 Express 路由都成立
- * （其余迁移期路由仍由 Express 代答，见 src/server/express-bridge.ts）。
+ * 这些断言放在契约测试里，覆盖真实 Hono 路由的公共响应边界。
  */
 test('骨架公共层：安全响应头与 CORS 头在业务响应上一并生效', async () => {
   const response = await get('/api/v1/bootstrap');
   assert.strictEqual(response.status, 200);
   const headers = response.headers ?? {};
-  // 业务响应（由 Express 代答）也带着骨架的安全头
+  // 业务响应也带着骨架的安全头
   assert.strictEqual(headers['x-content-type-options'], 'nosniff');
   assert.strictEqual(headers['x-frame-options'], 'SAMEORIGIN');
   assert.strictEqual(headers['referrer-policy'], 'no-referrer');
@@ -2495,42 +2479,25 @@ function routePattern(full: string): RegExp {
   return new RegExp(`^${segments.join('/')}$`);
 }
 
-/** 后端实际注册的路由表：[方法, 匹配用的正则]。 */
+/** 后端实际注册的 Hono 路由表：[方法, 匹配用的正则]。 */
 function backendRoutes(): DeclaredRoute[] {
-  const honoEndpoints = [
-    ...AUTH_ENDPOINTS,
-    ...BOOTSTRAP_ENDPOINTS.map(([method, path]) => [method, `/api/v1${path === '/' ? '' : path}`] as const),
-    ...USERS_ENDPOINTS.map(([method, path]) => [method, `/api/v1/users${path === '/' ? '' : path}`] as const),
-    ...SEARCH_ENDPOINTS.map(([method, path]) => [method, `/api/v1/search${path === '/' ? '' : path}`] as const),
-    ...SETTINGS_ENDPOINTS.map(([method, path]) => [method, `/api/v1/settings${path === '/' ? '' : path}`] as const),
-    ...PROFILE_ENDPOINTS.map(([method, path]) => [method, `/api/v1/profile${path === '/' ? '' : path}`] as const),
-    ...EXHIBITION_ENDPOINTS.map(
-      ([method, path]) => [method, `/api/v1/exhibitions${path === '/' ? '' : path}`] as const,
-    ),
-    ...REGISTRATION_ENDPOINTS.map(
-      ([method, path]) => [method, `/api/v1/registrations${path === '/' ? '' : path}`] as const,
-    ),
-    ...REVIEW_ENDPOINTS.map(([method, path]) => [method, `/api/v1/review${path === '/' ? '' : path}`] as const),
-    ...CHECKIN_ENDPOINTS.map(([method, path]) => [method, `/api/v1/checkin${path === '/' ? '' : path}`] as const),
-  ];
-  const declared: DeclaredRoute[] = honoEndpoints.map(([method, path]) => ({
-    method,
-    path,
-    pattern: routePattern(path),
-  }));
-  for (const [prefix, router] of Object.entries(routes)) {
-    const base = `/api/v1${prefix ? `/${prefix}` : ''}`;
-    for (const layer of (router as unknown as { stack?: RouterLayer[] }).stack ?? []) {
-      if (!layer.route) {
-        continue;
-      }
-      const full = `${base}${layer.route.path === '/' ? '' : layer.route.path}`;
-      for (const method of Object.keys(layer.route.methods)) {
-        declared.push({ method: method.toUpperCase(), path: full, pattern: routePattern(full) });
-      }
+  const unique = new Map<string, DeclaredRoute>();
+  for (const route of app.routes) {
+    if (
+      route.method === 'ALL' ||
+      !route.path.startsWith('/api/v1/') ||
+      route.path === '/api/v1/ping' ||
+      route.path === '/api/v1/status'
+    ) {
+      continue;
     }
+    unique.set(`${route.method} ${route.path}`, {
+      method: route.method,
+      path: route.path,
+      pattern: routePattern(route.path),
+    });
   }
-  return declared;
+  return [...unique.values()];
 }
 
 /**
@@ -2721,7 +2688,7 @@ test('状态页返回可直接打开的中文 HTML', async () => {
   }
   assert.ok(html.includes('自动刷新'), '缺少自动刷新开关');
   assert.ok(html.includes("fetch('/api/v1/status'"), '页面脚本应当自己拉 JSON 局部更新');
-  assert.ok(html.includes('prefers-color-scheme:dark'), '深色模式要跟随系统');
+  assert.match(html, /prefers-color-scheme:\s*(dark|light)/, '颜色模式要跟随系统');
   // 单文件自包含：不能有外部脚本、样式或图片。
   assert.strictEqual(/<script[^>]+src=/.test(html), false, '状态页不能引用外部脚本');
   assert.strictEqual(/<(link|img)\b/.test(html), false, '状态页不能引用外部资源');

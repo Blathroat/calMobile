@@ -177,28 +177,3 @@ export function stringListSchema({ label, max = 40, itemMax = 60 }: StringListOp
     }),
   );
 }
-
-/** 旧 helper 的 schema-backed 兼容入口，供尚未迁移的 Express 文件使用。 */
-export function text(value: unknown, options: TextOptions = {}): string {
-  return parseSchema(textSchema(options), value);
-}
-
-export function int(value: unknown, options: IntOptions = {}): number {
-  return parseSchema(intSchema(options), value);
-}
-
-export function bool(value: unknown, fallback = false): boolean {
-  return parseSchema(boolSchema(fallback), value);
-}
-
-export function isoDate(value: unknown, options: IsoDateOptions = {}): string {
-  return parseSchema(isoDateSchema(options), value);
-}
-
-export function timeRange(value: unknown, options: TimeRangeOptions = {}): string {
-  return parseSchema(timeRangeSchema(options), value);
-}
-
-export function stringList(value: unknown, options: StringListOptions = {}): string[] {
-  return parseSchema(stringListSchema(options), value);
-}

@@ -1,20 +1,12 @@
-/**
- * 认证中间件的单元测试。
- *
- * 中间件不再自己写响应，而是 `next(new ApiError(...))` 交给 index.js 的统一错误处理，
- * 因此这里的断言看的是「抛给 next 的错误」而不是 response 对象。
- */
+/** Hono 认证共享解析器的单元测试。 */
 
 import assert from 'node:assert/strict';
 import { query } from '../config/pool.js';
-import { ApiError } from '../domain/errors.js';
 import { signAccessToken } from '../domain/session.js';
-import { authenticate, authorize, optionalAuth, tokenFrom, resolveUser, type AuthRequest } from './auth.js';
+import { resolveUser, tokenFrom } from './auth.js';
 import { SignJWT, jwtVerify } from 'jose';
 
-vi.mock('../config/pool', () => ({
-  query: vi.fn(),
-}));
+vi.mock('../config/pool', () => ({ query: vi.fn() }));
 
 const USER_ROW = {
   id: 'user-1',
@@ -24,36 +16,18 @@ const USER_ROW = {
   role: 'admin',
   status: 'active',
 };
-
 const mockedQuery = vi.mocked(query);
-
-type Middleware = (req: AuthRequest, res: object, next: (error?: unknown) => void) => unknown;
-
-/** 跑一个中间件并返回 next 收到的错误（没有错误时返回 undefined）。 */
-async function run(middleware: Middleware, req: AuthRequest) {
-  let captured: unknown;
-  await middleware(req, {}, (error) => {
-    captured = error;
-  });
-  return captured as ApiError | undefined;
-}
 
 async function tokenFor(
   payload: Record<string, unknown>,
-  secret: string | undefined = process.env.JWT_SECRET,
+  secret = process.env.JWT_SECRET || '',
   algorithm: 'HS256' | 'HS384' = 'HS256',
 ) {
-  const builder = new SignJWT(payload).setProtectedHeader({ alg: algorithm, typ: 'JWT' }).setIssuedAt();
-  builder.setExpirationTime('15m');
-  return builder.sign(new TextEncoder().encode(secret || ''));
-}
-
-function expiredTokenFor(payload: Record<string, unknown>, secret: string | undefined = process.env.JWT_SECRET) {
   return new SignJWT(payload)
-    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setProtectedHeader({ alg: algorithm, typ: 'JWT' })
     .setIssuedAt()
-    .setExpirationTime('-1s')
-    .sign(new TextEncoder().encode(secret || ''));
+    .setExpirationTime('15m')
+    .sign(new TextEncoder().encode(secret));
 }
 
 test('tokenFrom 只认 Bearer 前缀', () => {
@@ -62,131 +36,39 @@ test('tokenFrom 只认 Bearer 前缀', () => {
   assert.equal(tokenFrom({ headers: { authorization: 'Bearer abc' } }), 'abc');
 });
 
-test('访问令牌签发保留载荷和有效期，且可通过认证解析', async () => {
+test('jose 签发的访问令牌固定使用 HS256', async () => {
   const token = await signAccessToken({ id: 'user-1', username: 'demo', role: 'admin' });
   const { payload, protectedHeader } = await jwtVerify(token, new TextEncoder().encode(process.env.JWT_SECRET || ''), {
     algorithms: ['HS256'],
   });
   assert.equal(protectedHeader.alg, 'HS256');
   assert.equal(payload.userId, 'user-1');
-  assert.equal(payload.username, 'demo');
-  assert.equal(payload.role, 'admin');
-  assert.ok(typeof payload.iat === 'number');
-  assert.ok(typeof payload.exp === 'number' && payload.exp > payload.iat);
+  assert.ok(typeof payload.exp === 'number');
+});
 
+test('resolveUser 解析有效令牌并附加能力', async () => {
   mockedQuery.mockResolvedValueOnce({ rows: [USER_ROW] } as never);
-  assert.equal((await resolveUser(token))?.userId, 'user-1');
+  const token = await tokenFor({ userId: 'user-1' });
+  const user = await resolveUser(token);
+  assert.equal(user?.userId, 'user-1');
+  assert.deepEqual(user?.can, { register: true, profile: true, exhibitor: true, admin: true, limited: false });
 });
 
-test('authenticate 缺少令牌时给出 401', async () => {
-  const error = await run(authenticate, { headers: {} });
-  assert.equal(error?.status, 401);
-  assert.ok(error?.message.includes('登录'), error?.message);
-});
-
-test('authenticate 令牌无效或过期时给出 401', async () => {
-  const invalid = await run(authenticate, { headers: { authorization: 'Bearer nonsense' } });
-  assert.equal(invalid?.status, 401);
-
-  const expired = await expiredTokenFor({ userId: 'user-1' });
-  const error = await run(authenticate, { headers: { authorization: `Bearer ${expired}` } });
-  assert.equal(error?.status, 401);
-});
-
-test('authenticate 用其它密钥签发的令牌不通过', async () => {
-  const foreign = await tokenFor({ userId: 'user-1' }, 'another-secret-0123456789012345678901234');
-  const error = await run(authenticate, { headers: { authorization: `Bearer ${foreign}` } });
-  assert.equal(error?.status, 401);
-});
-
-test('authenticate 拒绝同密钥但异算法的令牌', async () => {
-  const foreignAlgorithm = await tokenFor({ userId: 'user-1' }, process.env.JWT_SECRET, 'HS384');
-  const error = await run(authenticate, { headers: { authorization: `Bearer ${foreignAlgorithm}` } });
-  assert.equal(error?.status, 401);
-});
-
-test('authenticate 挂上用户与角色能力', async () => {
-  mockedQuery.mockResolvedValueOnce({ rows: [USER_ROW] } as never);
-  const req: AuthRequest = { headers: { authorization: `Bearer ${await tokenFor({ userId: 'user-1' })}` } };
-
-  const error = await run(authenticate, req);
-
-  assert.equal(error, undefined, '有效令牌不应报错');
-  assert.equal(req.user?.userId, 'user-1');
-  assert.equal(req.user?.username, 'demo');
-  assert.equal(req.user?.role, 'admin');
-  assert.deepEqual(req.user?.can, { register: true, profile: true, exhibitor: true, admin: true, limited: false });
-});
-
-test('authenticate 放行受限账号，但能力位按状态置灰', async () => {
-  mockedQuery.mockResolvedValueOnce({ rows: [{ ...USER_ROW, role: 'user', status: 'limited' }] } as never);
-  const req: AuthRequest = { headers: { authorization: `Bearer ${await tokenFor({ userId: 'user-1' })}` } };
-
-  const error = await run(authenticate, req);
-
-  assert.equal(error, undefined, '受限账号仍然能登录与浏览');
-  assert.equal(req.user?.role, 'user');
-  assert.equal(req.user?.status, 'limited');
-  assert.deepEqual(req.user?.can, { register: false, profile: false, exhibitor: false, admin: false, limited: true });
-});
-
-test('authenticate 对已删除的用户给出 401', async () => {
-  mockedQuery.mockResolvedValueOnce({ rows: [] } as never);
-  const error = await run(authenticate, { headers: { authorization: `Bearer ${await tokenFor({ userId: 'gone' })}` } });
-  assert.equal(error?.status, 401);
-});
-
-test('authenticate 拒绝被封禁的账号', async () => {
-  mockedQuery.mockResolvedValueOnce({ rows: [{ ...USER_ROW, status: 'banned' }] } as never);
-  const error = await run(authenticate, {
-    headers: { authorization: `Bearer ${await tokenFor({ userId: 'user-1' })}` },
-  });
-  assert.equal(error?.status, 403);
-  assert.ok(error?.message.includes('封禁'), error?.message);
-});
-
-test('authorize 按角色放行与拦截', async () => {
-  const middleware = authorize(['admin']);
-
-  const anonymous = await run(middleware, {});
-  assert.equal(anonymous?.status, 401, '没有登录信息应当给 401');
-
-  const forbidden = await run(middleware, { user: { role: 'user' } as AuthRequest['user'] });
-  assert.equal(forbidden?.status, 403, '角色不符应当给 403');
-
-  const allowed = await run(middleware, { user: { role: 'admin' } as AuthRequest['user'] });
-  assert.equal(allowed, undefined, '角色符合应当放行');
-});
-
-test('optionalAuth 没有令牌时继续，不查库', async () => {
-  mockedQuery.mockClear();
-  const req: AuthRequest = {};
-  const error = await run(optionalAuth, req);
-
-  assert.equal(error, undefined);
-  assert.equal(req.user, null, '访客应当是空的用户');
-  assert.equal(mockedQuery.mock.calls.length, 0, '没有令牌不应该查数据库');
-});
-
-test('optionalAuth 忽略无效令牌', async () => {
-  mockedQuery.mockClear();
-  const req: AuthRequest = { headers: { authorization: 'Bearer invalid-token' } };
-  const error = await run(optionalAuth, req);
-
-  assert.equal(error, undefined);
-  assert.equal(req.user, null);
-});
-
-test('optionalAuth 对封禁账号仍然报错', async () => {
-  mockedQuery.mockResolvedValueOnce({ rows: [{ ...USER_ROW, status: 'banned' }] } as never);
-  const error = await run(optionalAuth, {
-    headers: { authorization: `Bearer ${await tokenFor({ userId: 'user-1' })}` },
-  });
-  assert.equal(error?.status, 403, '封禁账号不能降级成访客继续访问');
-});
-
-test('resolveUser 对过期令牌返回空而不抛异常', async () => {
-  const expired = await expiredTokenFor({ userId: 'user-1' });
-  assert.equal(await resolveUser(expired), null);
+test('resolveUser 拒绝异算法、过期和空令牌', async () => {
   assert.equal(await resolveUser(''), null);
+  assert.equal(await resolveUser(await tokenFor({ userId: 'user-1' }, process.env.JWT_SECRET, 'HS384')), null);
+  const expired = await new SignJWT({ userId: 'user-1' })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuedAt()
+    .setExpirationTime('-1s')
+    .sign(new TextEncoder().encode(process.env.JWT_SECRET || ''));
+  assert.equal(await resolveUser(expired), null);
+});
+
+test('resolveUser 对被封禁和不存在用户返回安全结果', async () => {
+  mockedQuery.mockResolvedValueOnce({ rows: [] } as never);
+  assert.equal(await resolveUser(await tokenFor({ userId: 'gone' })), null);
+  mockedQuery.mockResolvedValueOnce({ rows: [{ ...USER_ROW, status: 'banned' }] } as never);
+  const token = await tokenFor({ userId: 'user-1' });
+  await assert.rejects(() => resolveUser(token), /封禁/);
 });

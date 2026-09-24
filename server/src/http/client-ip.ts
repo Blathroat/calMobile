@@ -1,8 +1,8 @@
 /**
- * 客户端 IP 解析：复刻 Express `req.ip` 在 `TRUST_PROXY` 三态下的取址语义。
+ * 客户端 IP 解析：在 `TRUST_PROXY` 三态下保持稳定的取址语义。
  *
- * 骨架换到 Hono 之后，反代信任这件事不能再靠 Express 的 `req.ip`，因此这里把
- * `trust proxy` 的三种取值**逐字复刻**过来（算法与 proxy-addr / express.utils.compileTrust 一致）：
+ * 反代信任不能依赖框架上下文，因此这里把 `trust proxy` 的三种取值集中实现
+ * （算法与 proxy-addr 的常见语义一致）：
  *
  * - `false`（不信任）：只认 socket 对端地址，X-Forwarded-For 一律不读；
  * - 数字（跳数）：从左起信任前 n 个地址（socket 算第 0 跳），取第一个不受信地址；
@@ -213,7 +213,7 @@ function parseSubnet(note: string): Subnet {
  * 在启动时编译一次：写错的 `TRUST_PROXY` 应当让进程起不来，而不是让之后每个请求
  * 全都 500（算 IP 在请求路径上，出错没有第二次机会）。
  *
- * 语义与 `express/lib/utils.js` 的 `compileTrust` 逐分支对齐：
+ * 语义按常见反代信任规则逐分支对齐：
  * 数字 → 跳数；字符串 → 逗号分隔的来源列表；其余（含空串）→ 谁也不信。
  */
 export function ensureTrustProxy(trust: TrustProxy): TrustFunction {

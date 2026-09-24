@@ -54,7 +54,7 @@ test('trust proxy 默认关闭，只有显式声明才打开', () => {
   assert.equal(resolveRuntime(argv(), {}).trustProxy, false);
   assert.equal(resolveRuntime(argv(), { TRUST_PROXY: 'false' }).trustProxy, false);
   assert.equal(resolveRuntime(argv(), { TRUST_PROXY: '1' }).trustProxy, 1, '一跳反代用数字');
-  assert.equal(resolveRuntime(argv(), { TRUST_PROXY: 'loopback' }).trustProxy, 'loopback', '也接受 express 的写法');
+  assert.equal(resolveRuntime(argv(), { TRUST_PROXY: 'loopback' }).trustProxy, 'loopback', '也接受常见的来源写法');
 });
 
 test('--prod 是 --production 的简写，npm_lifecycle_event 只用于日志', () => {

@@ -1,7 +1,7 @@
 /**
  * status：后端与数据库的健康报告。
  *
- * 同一个路由器挂两次，共用这份探测逻辑：
+ * 同一份报告逻辑服务两个 Hono 路径：
  * - `GET /api/v1/status` → 机器读的 JSON：`ok` 为真给 200，否则 503（探活脚本按状态码判断）；
  * - `GET /status`        → 人读的 HTML（见 `src/status-page.ts`）：永远 200，
  *   数据库挂了也必须打得开并显示通用失败提示。
@@ -9,32 +9,16 @@
  * 三条自我约束：
  * 1. **不抛异常**：数据库挂了要给 `ok:false` + 通用错误提示，而不是 500 —— 探针自己炸了就没法排查；
  * 2. **不编数据**：每一项都来自真实测量（SQL、进程信息、环境变量），自检项失败必须指得到出处；
- * 3. **不固化清单**：`endpoints` 直接遍历 `routes/registry.ts` 的路由注册表
- *    （与 `src/test/api.test.ts` 的 `backendRoutes()` 同一套走法），新增路由不会漏登记。
+ * 3. **不固化清单**：`endpoints` 直接读取 Hono 应用的真实注册表
+ *    （与 `src/test/api.test.ts` 的 `backendRoutes()` 同一套来源），新增路由不会漏登记。
  */
 
-import express from 'express';
-import type { Request, Response, NextFunction, Router } from 'express';
 import { pool } from '../config/pool.js';
 import { STEPS } from '../config/migrate.js';
 import { loadProcessConfig } from '../config/env.js';
 import { MIN_SECRET_LENGTH, PLACEHOLDER_SECRET } from '../config/auth.js';
 import { mailConfig, describeMailConfig } from '../config/mail.js';
-import { renderStatusPage } from '../status-page.js';
-import { AUTH_ENDPOINTS } from './auth-hono.js';
-import { EXHIBITION_ENDPOINTS } from './exhibitions-hono.js';
-import { REGISTRATION_ENDPOINTS } from './registrations-hono.js';
-import { REVIEW_ENDPOINTS } from './review-hono.js';
-import { CHECKIN_ENDPOINTS } from './checkin-hono.js';
-import { PROFILE_ENDPOINTS } from './profile-hono.js';
-import { BOOTSTRAP_ENDPOINTS } from './bootstrap-hono.js';
-import { USERS_ENDPOINTS } from './users-hono.js';
-import { SEARCH_ENDPOINTS } from './search-hono.js';
-import { SETTINGS_ENDPOINTS } from './settings-hono.js';
-import { routes } from './registry.js';
 import packageJson from '../../package.json' with { type: 'json' };
-
-const router = express.Router();
 
 /** 服务标识与 `/ping` 保持一致。 */
 const SERVICE_NAME = 'calmobile-server';
@@ -53,7 +37,6 @@ const STATUS_REPORT_TTL_MS = 1500;
 const DATABASE_ERROR_MESSAGE = '数据库暂时不可用，请查看服务端日志';
 const MIGRATION_ERROR_MESSAGE = '迁移状态暂时不可用，请查看服务端日志';
 const CHECK_ERROR_MESSAGE = '检查失败，请查看服务端日志';
-const RENDER_ERROR_MESSAGE = '状态页渲染失败，请查看服务端日志';
 
 interface PoolSnapshot {
   total: number;
@@ -104,14 +87,9 @@ interface Endpoint {
   path: string;
 }
 
-/** express 的 `stack` 是内部结构，`@types/express` 没导出它（`IRoute` 也不带 `methods`）。 */
-interface RouteLayer {
-  route?: { path: string; methods: Record<string, boolean> };
-}
-
-/** `router.stack`：只读一条路由的 path 与其方法表（见 `routeInventory`）。 */
-function routerLayers(router: Router): RouteLayer[] {
-  return (router as unknown as { stack?: RouteLayer[] }).stack || [];
+interface RegisteredRoute {
+  method: string;
+  path: string;
 }
 
 interface Report {
@@ -134,13 +112,6 @@ interface CheckInput {
 }
 
 type ProbeRow = { [column: string]: unknown };
-
-function safeMessage(error: unknown): string {
-  if (!error) {
-    return '未知错误';
-  }
-  return String((error as { message?: unknown }).message || error);
-}
 
 /** 自检主动发现的业务问题可以展示；未知异常一律改成通用提示。 */
 class PublicCheckFailure extends Error {}
@@ -328,45 +299,16 @@ async function probeCounts(database: DatabaseStatus): Promise<{ counts: Record<s
   return { counts, ms: elapsedMs(startedAt) };
 }
 
-/**
- * 接口清单：合并 Hono 路由声明与 Express 注册表 `routes/registry.ts`，把每个 router 的
- * `stack` 拼上挂载前缀；与 `src/test/api.test.ts` 的 `backendRoutes()` 完全同源，因此清单
- * 不会和真实路由漂移。
- *
- * Express 注册表与 Hono 路由清单都独立于入口，所以这里能直接静态 import：从前要靠
- * 「延迟 require 入口」绕开的循环依赖（入口要装载状态路由，状态路由又要读入口的路由表）已经不存在。
- */
-function routeInventory(): Endpoint[] {
-  const honoEndpoints = [
-    ...AUTH_ENDPOINTS,
-    ...BOOTSTRAP_ENDPOINTS.map(([method, path]) => [method, `/api/v1${path === '/' ? '' : path}`] as const),
-    ...USERS_ENDPOINTS.map(([method, path]) => [method, `/api/v1/users${path === '/' ? '' : path}`] as const),
-    ...SEARCH_ENDPOINTS.map(([method, path]) => [method, `/api/v1/search${path === '/' ? '' : path}`] as const),
-    ...SETTINGS_ENDPOINTS.map(([method, path]) => [method, `/api/v1/settings${path === '/' ? '' : path}`] as const),
-    ...PROFILE_ENDPOINTS.map(([method, path]) => [method, `/api/v1/profile${path === '/' ? '' : path}`] as const),
-    ...EXHIBITION_ENDPOINTS.map(
-      ([method, path]) => [method, `/api/v1/exhibitions${path === '/' ? '' : path}`] as const,
-    ),
-    ...REGISTRATION_ENDPOINTS.map(
-      ([method, path]) => [method, `/api/v1/registrations${path === '/' ? '' : path}`] as const,
-    ),
-    ...REVIEW_ENDPOINTS.map(([method, path]) => [method, `/api/v1/review${path === '/' ? '' : path}`] as const),
-    ...CHECKIN_ENDPOINTS.map(([method, path]) => [method, `/api/v1/checkin${path === '/' ? '' : path}`] as const),
-  ];
-  const endpoints: Endpoint[] = honoEndpoints.map(([method, path]) => ({ method, path }));
-  for (const [prefix, mountedRouter] of Object.entries(routes)) {
-    const base = `/api/v1${prefix ? `/${prefix}` : ''}`;
-    for (const layer of routerLayers(mountedRouter)) {
-      if (!layer.route) {
-        continue;
-      }
-      const full = `${base}${layer.route.path === '/' ? '' : layer.route.path}`;
-      for (const method of Object.keys(layer.route.methods)) {
-        endpoints.push({ method: method.toUpperCase(), path: full });
-      }
-    }
-  }
-  return endpoints.sort((a, b) =>
+/** 接口清单直接从 Hono 实际注册表读取，契约测试也使用同一份注册表。 */
+function routeInventory(routes: readonly RegisteredRoute[]): Endpoint[] {
+  const endpoints = routes
+    .filter(
+      ({ method, path }) =>
+        method !== 'ALL' && path.startsWith('/api/v1/') && path !== '/api/v1/ping' && path !== '/api/v1/status',
+    )
+    .map(({ method, path }) => ({ method, path }));
+  const unique = new Map(endpoints.map((endpoint) => [`${endpoint.method} ${endpoint.path}`, endpoint]));
+  return [...unique.values()].sort((a, b) =>
     a.path === b.path ? a.method.localeCompare(b.method) : a.path.localeCompare(b.path),
   );
 }
@@ -458,7 +400,8 @@ async function runChecks({
       );
       failed = Number(result.rows[0]!.total);
     } catch (error: unknown) {
-      throw new Error(`${where}；mail_log 读不到（迁移 0004 没跑？）：${safeMessage(error)}`);
+      console.error('发信失败统计读取失败：', error);
+      throw checkFailure(`${where}；最近 24 小时的发信失败统计暂时不可用`);
     }
     if (failed > 0) {
       throw checkFailure(`${where}；最近 24 小时有 ${failed} 封发送失败，明细见 mail_log`);
@@ -540,7 +483,7 @@ function serviceBlock(): ServiceStatus {
  * 组装报告。`ok` 只表达「服务活着 + 数据库答得上」——迁移与自检的问题在 `checks` 里逐项说明，
  * 不混进状态码，否则探活脚本分不清「数据库没了」和「只是有一步迁移没跑」。
  */
-async function buildReport(): Promise<Report> {
+async function buildReport(routes: readonly RegisteredRoute[]): Promise<Report> {
   const service = serviceBlock();
   const { info: database, ms: databaseMs } = await probeDatabase();
   const { counts, ms: countsMs } = await probeCounts(database);
@@ -556,7 +499,7 @@ async function buildReport(): Promise<Report> {
 
   let endpoints: Endpoint[] = [];
   try {
-    endpoints = routeInventory();
+    endpoints = routeInventory(routes);
   } catch (error: unknown) {
     // 清单读不到不该让整份报告失败，但要在日志里留下痕迹。
     console.error('接口清单读取失败：', error);
@@ -580,13 +523,13 @@ async function buildReport(): Promise<Report> {
 let inFlightReport: Promise<Report> | null = null;
 let cachedReport: { report: Report; expiresAt: number } | null = null;
 
-function reportOnce(): Promise<Report> {
+function reportOnce(routes: readonly RegisteredRoute[]): Promise<Report> {
   const now = Date.now();
   if (cachedReport && cachedReport.expiresAt > now) {
     return Promise.resolve(cachedReport.report);
   }
   if (!inFlightReport) {
-    inFlightReport = buildReport()
+    inFlightReport = buildReport(routes)
       .then((report) => {
         cachedReport = { report, expiresAt: Date.now() + STATUS_REPORT_TTL_MS };
         return report;
@@ -596,6 +539,16 @@ function reportOnce(): Promise<Report> {
       });
   }
   return inFlightReport;
+}
+
+/** 状态页 HTML 与 JSON 共用同一份报告生成逻辑。 */
+export async function readStatusReport(routes: readonly RegisteredRoute[]): Promise<Report> {
+  try {
+    return await reportOnce(routes);
+  } catch (error: unknown) {
+    console.error('健康报告生成失败：', error);
+    return fallbackReport();
+  }
 }
 
 /** 最后的兜底：连探测本身都炸了，也要给出一份结构完整的报告，页面才渲染得出来。 */
@@ -618,50 +571,3 @@ function fallbackReport(): Report {
     checks: [{ name: '健康报告', status: 'fail', detail: CHECK_ERROR_MESSAGE, ms: 0 }],
   };
 }
-
-/**
- * 状态页渲染失败的兜底：宁可给一页纯文本，也不要让唯一的排查入口变成 500。
- */
-function fallbackHtml(): string {
-  return (
-    '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">' +
-    '<title>状态页渲染失败</title></head>' +
-    '<body style="font:16px/1.6 system-ui,sans-serif;padding:24px">' +
-    '<h1>状态页渲染失败</h1><p>后端进程还活着，但状态页自身的模板出错了。</p>' +
-    `<pre style="white-space:pre-wrap">${RENDER_ERROR_MESSAGE}</pre>` +
-    '<p><a href="/api/v1/status">查看 JSON 报告</a></p></body></html>'
-  );
-}
-
-// 客户端不缓存响应；服务端只在 1.5 秒内复用报告，避免紧邻请求重复打探数据库。
-router.use((req: Request, res: Response, next: NextFunction) => {
-  res.set('Cache-Control', 'no-store');
-  next();
-});
-
-/**
- * `GET /api/v1/status` → JSON（200 / 503）；`GET /status` → HTML（200）。
- * 用 `req.baseUrl` 区分两个挂载点，避免把探测逻辑写两遍。
- */
-router.get('/', async (req: Request, res: Response) => {
-  let report: Report;
-  try {
-    report = await reportOnce();
-  } catch (error: unknown) {
-    console.error('健康报告生成失败：', error);
-    report = fallbackReport();
-  }
-
-  if (req.baseUrl === '/status') {
-    try {
-      res.type('html').send(renderStatusPage(report));
-    } catch (error: unknown) {
-      console.error('状态页渲染失败：', error);
-      res.type('html').send(fallbackHtml());
-    }
-    return;
-  }
-  res.status(report.ok ? 200 : 503).json(report);
-});
-
-export default router;

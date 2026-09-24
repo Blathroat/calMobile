@@ -4,15 +4,16 @@
 
 | 目录 | 说明 |
 | --- | --- |
-| `src/index.ts` | 入口：解析运行环境、把骨架与被承接的应用接起来、起服务 |
-| `src/server/` | 服务骨架（Hono）：公共层、探针、统一错误处理；`express-app.ts` 是尚未迁完的 Express 应用，`express-bridge.ts` 负责把它接到骨架下面 |
+| `src/index.ts` | 入口：解析运行环境、创建 Hono 应用、起服务 |
+| `src/server/` | 服务骨架（Hono）：公共层、探针、状态页、业务路由和统一错误处理 |
 | `src/http/` | HTTP 层的公共件：错误分类、客户端 IP、JSON 体积上限、写操作信封 |
 | `src/routes/` | 按资源分的路由（Hono 认证、资料、展会、报名、审核、核销、用户、搜索、设置、启动数据） |
 | `src/domain/` | 业务层：状态词汇、SQL 片段、响应映射、权限、校验、设置、会话 |
 | `src/config/` | 连接池、迁移与示例数据、JWT 与邮件通道配置 |
 | `src/services/` | 邮件发送适配层与验证码邮件文案（`mailer.ts` / `mail-templates.ts`） |
 | `src/middleware/auth.ts` | JWT 认证中间件 |
-| `src/routes/status.ts` + `src/status-page.ts` | 健康状态页：JSON 报告 + 单文件中文 HTML |
+| `src/routes/status.ts` + `src/status-page.ts` | 健康状态页：JSON 报告 + 单文件中文 HTML 组装器 |
+| `status-page/` + `scripts/build-status-page.ts` | 状态页可读源码与构建期内联资源；运行时输出仍是单文件 HTML |
 
 ## 工程结构
 
@@ -20,21 +21,17 @@
 
 - **相对导入必须写扩展名**：`./config/pool.js` 这样写（源文件是 `.ts`、产物是 `.js`）。`tsconfig.json` 用 `moduleResolution: nodenext`，与 Node 的解析规则一致，不会出现「源码能跑、产物找不到模块」；
 - **读 JSON 要带 `with { type: 'json' }`**：服务版本号就是这么从 `package.json` 取的；
-- **没有 `require()`，也没有 `require.main`**：入口判断在 `src/entry.ts` 的 `isEntry(import.meta.url)`；路由注册表独立成 `src/routes/registry.ts` —— 它既是 `index.ts` 的挂载来源，也是 `routes/status.ts` 接口清单的来源，两者互不依赖。
+- **没有 `require()`，也没有 `require.main`**：入口判断在 `src/entry.ts` 的 `isEntry(import.meta.url)`；接口清单直接来自各 Hono 路由模块导出的注册表。
 
 `allowJs` 关闭：源码一律 `.ts`，没有 JS 逃生口。未自带类型声明的 CommonJS 依赖（`nodemailer`）在 `src/types/packages.d.ts` 里只按实际用到的签名声明，够用即可。访问令牌使用 `jose`，刷新令牌仍是随机串并只存哈希。
 
-### 服务骨架与被承接的路由
+### 服务骨架与路由
 
 骨架在 `src/server/`（Hono + `@hono/node-server`）：一层层是 **安全响应头 → CORS → 请求日志 → JSON 体积守卫 → 路由 → 统一错误处理 / 404**，探针 `/ping`、`/api/v1/ping`、`/health` 由它直接回答。
 
-认证、资料与安全、启动数据、用户管理、搜索、设置、展会、报名、审核和核销路由已经直接挂在 Hono 上；Express 应用目前只代答状态页：`src/server/express-app.ts` 建那个应用（保留状态页与请求体解析），`src/server/express-bridge.ts` 在 Hono 的路由表末尾把 `/api/v1/*` 与 `/status` 交给它。三条由此而来的硬约束，改骨架前必须先读：
+认证、资料与安全、启动数据、用户管理、搜索、设置、展会、报名、审核、核销和状态页都直接挂在 Hono 上。所有正文由 Hono 路由读取，公共层统一处理安全头、CORS、日志和体积上限。
 
-- **起服务必须传 `overrideGlobalObjects: false`**。默认会把全局 `Response` 换成带缓存的子类，空响走「缓存分支」、不看代答标记，于是 Express 写完 Hono 再写一次，报 `ERR_HTTP_HEADERS_SENT`；
-- **公共层要落在 Node 的 socket 上**（安全头、CORS、请求日志）。Express 把响应直接写进 socket，Hono 那个壳响应会被整份丢掉，所以这些头必须在把请求交出去**之前**写到 `ServerResponse` 上——Node 的 `writeHead()` 会把它们与适配器写进来的头合并，两条路径就都带上；
-- **不能有中间件提前读走待承接请求体**。体积守卫只看 `content-length`；认证路由由 Hono 自己读取正文，其他路由仍由 Express 的 `express.json()` 读取。
-
-响应一律带一套安全头（`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: no-referrer`、`Strict-Transport-Security`、`Cross-Origin-Opener-Policy`、`Cross-Origin-Resource-Policy`、`Origin-Agent-Cluster`、`X-DNS-Prefetch-Control`、`X-Download-Options`、`X-Permitted-Cross-Domain-Policies`、`X-XSS-Protection`），取值与 Hono 自带的 `secureHeaders` 默认集一致；`X-Powered-By` 两侧都不发。
+响应一律带一套安全头（`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: no-referrer`、`Strict-Transport-Security`、`Cross-Origin-Opener-Policy`、`Cross-Origin-Resource-Policy`、`Origin-Agent-Cluster`、`X-DNS-Prefetch-Control`、`X-Download-Options`、`X-Permitted-Cross-Domain-Policies`、`X-XSS-Protection`），取值与 Hono 自带的 `secureHeaders` 默认集一致；服务不广播 `X-Powered-By`。
 
 每一步的取舍与替代方案记在 `docs/adr/0001-server-hono-typescript.md`。
 
@@ -78,7 +75,7 @@ pnpm dev                      # 开发模式（tsx watch，改源码自动重启
 
 示例账号：`demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`。
 
-起好之后浏览器打开 **http://127.0.0.1:3000/status** 就是后端与数据库的状态页（开发模式默认打开；`pnpm start` 的生产模式默认关闭，见下面的「开发模式与生产模式」）：徽章一眼看出「正常 / 异常」，下面按卡片列出服务信息、数据库（连通、延迟、版本、连接池）、迁移、各表数据量、自检项与接口清单，默认每 5 秒自动刷新一次。**后端在数据库不可用时也照常启动**（日志里给警告，不再直接退出），因此库挂了页面照样打得开，并把失败原因与修复命令写在页面上。探活脚本读同一份数据的 JSON 版：`GET /api/v1/status`（正常 200，异常 503）。
+起好之后浏览器打开 **http://127.0.0.1:3000/status** 就是后端与数据库的状态页（开发模式默认打开；`pnpm start` 的生产模式默认关闭，见下面的「开发模式与生产模式」）：徽章一眼看出「正常 / 异常」，下面按卡片列出服务信息、数据库（连通、延迟、版本、连接池）、迁移、各表数据量、自检项与接口清单，默认每 5 秒自动刷新一次。页面源码拆在 `status-page/template.html`、`styles.css`、`client.ts`，`pnpm build` 会把它们编译成 `src/status-page-assets.ts`，响应时仍输出单文件、自包含 HTML。开发时 `pnpm dev` 由单一 `tsx watch` 入口监视 `src/` 与 `status-page/`，改动后重建内联资源并重启服务。**后端在数据库不可用时也照常启动**（日志里给警告，不再直接退出），因此库挂了页面照样打得开，并显示通用失败提示。探活脚本读同一份数据的 JSON 版：`GET /api/v1/status`（正常 200，异常 503）。
 
 ### 数据库：Docker Compose
 
@@ -162,9 +159,9 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | **数据库暂时不可用**（没起、连接被拒、握手超时、连接数打满、管理员关库、库或密码不存在） | 503 | `{ error:'数据库暂时不可用，请稍后重试' }` | 抛 `TransportError`，页面提示可重试 |
 | 其它服务器内部错误 | 500 | `{ error:'服务器内部错误' }` | 抛错；原因（含堆栈）只进服务端日志 |
 
-也就是说 **HTTP 状态码表达认证、授权、可用性与内部故障，业务规则的失败一律 200 + `ok:false`**。写路由统一用 `mutate()` 收尾（Express 路由在 `domain/respond.ts`，Hono 路由在 `http/respond.ts`，共用同一个 `runEnveloped()`），它只把 400 / 409 收成信封，401 / 403 / 404 继续上抛。
+也就是说 **HTTP 状态码表达认证、授权、可用性与内部故障，业务规则的失败一律 200 + `ok:false`**。写路由统一用 `mutate()` 收尾（实现位于 `http/respond.ts`，信封逻辑位于 `http/envelope.ts`），它只把 400 / 409 收成信封，401 / 403 / 404 继续上抛。
 
-两条纪律（`src/http/error-response.ts` 的 `statusFor()` / `clientMessage()` 是唯一实现处，Hono 的 `onError` 与尚未迁移的 Express 错误中间件共用它）：
+两条纪律（`src/http/error-response.ts` 的 `statusFor()` / `clientMessage()` 是唯一实现处，Hono 的 `onError` 统一使用它）：
 
 - **不把内部细节回给调用方**：只有 `ApiError` 的文案是写给用户看的，pg 的连接错误（含内网 `host:port`）、SQL 片段、文件路径与堆栈一律只出现在服务端日志里；
 - **库故障不是 500 而是 503**：判定在 `domain/errors.ts` 的 `isDatabaseUnavailable()`（连接类 errno、PostgreSQL 的 `08xxx` / `57P0x` / `53300` / `3D000` / `28P01`，以及驱动的池等待超时文案），SQL 语法错、唯一约束冲突这类**不算**不可用，仍按 500 / 409 走。
@@ -257,13 +254,13 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | 方法与路径 | 动作 | 权限与说明 |
 | --- | --- | --- |
 | `GET /api/v1/status` | — | 可匿名。JSON 健康报告：`ok` / `service` / `database` / `migrations` / `data` / `endpoints` / `checks`。服务活着**且**数据库答得上时 200，否则 503 + `ok:false`，探活脚本按状态码判断 |
-| `GET /status` | — | 可匿名。同一份报告的中文状态页（单文件 HTML，样式与脚本内联，不用构建、不引 CDN）；数据库挂掉时仍返回 200 并显示通用失败提示 |
+| `GET /status` | — | 可匿名。同一份报告的中文状态页（构建后单文件 HTML，样式与脚本内联，不引 CDN）；数据库挂掉时仍返回 200 并显示通用失败提示 |
 
-两个路径由同一个路由器提供（`src/routes/status.ts` + `src/status-page.ts`），因此页面与 JSON 永远不会说两套话。几条约定：
+两个路径由 Hono 提供并共享 `src/routes/status.ts` 的报告；状态页源码位于 `status-page/`，构建后由 `src/status-page.ts` 注入清洗后的 `INITIAL`。几条约定：
 
 - **`ok` 只表达「服务活着 + 数据库答得上」**，迁移没跑完、自检项失败都只体现在 `checks` 与 `migrations` 里，不混进状态码 —— 否则探活脚本分不清「数据库没了」和「只是有一步迁移没跑」。
 - **每一项都是真测出来的**：`database.latencyMs` 是 `select version()` + `select 1` 的往返时间，`data` 是逐表 `count(*)`，`checks` 里失败的那条一定指得到出处；数据库连不上时 `data` 是 `null`（不是 0）、迁移按「全部未应用」处理、错误详情只写服务端日志，响应使用通用提示，绝不抛 500。
-- **`endpoints` 就是真实路由表**：它遍历 `src/index.ts` 导出的 `routes`（与 `src/test/api.test.ts` 的 `backendRoutes()` 同一套走法），新增路由不会漏登记。这两个状态接口本身不进 `routes` 动作表 —— 那张表是「前端动作 ↔ 后端路由」的对照，它们没有对应的前端动作。
+- **`endpoints` 就是真实路由表**：它读取各 Hono 路由模块导出的注册表（与 `src/test/api.test.ts` 的 `backendRoutes()` 同一套来源），新增路由不会漏登记。这两个状态接口本身不进前端动作表。
 - 两个路径都带 `Cache-Control: no-store`，客户端不会缓存；服务端只在 1.5 秒内复用报告，页面每 5 秒刷新仍能避免紧邻请求重复查询。
 - 服务**先起、数据库后挂**与**数据库先挂、服务后起**都能看到状态页：`start()` 在连不上库时只记一条警告，不再让进程退出。
 - **探测不会把连接池占满**：状态页 5 秒自刷新一次，每次要跑 9 条查询，因此 `reportOnce()` 把并发请求合并成同一次探测，并在 1.5 秒内复用报告；探测查询用 `pool.connect()` + 超时 `release(true)` **销毁**那条连接（`Promise.race` 只放弃 promise，连接会一直被占着），连接池另有 `statement_timeout: 10s` 兜慢查询。
@@ -363,10 +360,10 @@ pnpm format               # oxfmt
 - **找回密码与两步验证**：找回密码对已注册与未注册邮箱的响应字段完全一致（不泄露账号是否存在），但只有已注册的会真的收到邮件；改密码后旧刷新令牌失效、一码一用；两步验证开启后 `POST /auth/login` 只回票不发令牌、错码仍然没令牌、过码才发令牌、同一张票只能用一次、关闭要当前密码；改邮箱必须把码发到新地址、通过才落库，且别人账号的改邮箱验证码用不了；验证码的明文只存在于邮件里，用例从内存收件箱的正文里把它读出来 —— 走的是用户实际收到的那条路径，后端没有、也不该有「读出明文码」的接口；
 - 刷新令牌并发重放只会换到一套新令牌（轮换的撤销是原子条件更新）；
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
-- **骨架公共层**：安全响应头、CORS（含预检 204）与 404 的文案在业务响应上一并生效（尚未迁移的路由仍由 Express 代答，这条断言盯住「承接没有吃掉公共层」）；
+- **骨架公共层**：安全响应头、CORS（含预检 204）与 404 的文案在所有 Hono 业务响应上一并生效；
 - 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、响应不带 pg/SQL/堆栈原文，不抛 500）。
 
-`src/**/*.test.ts`（vitest unit project，161 项）跑不依赖数据库的部分：入口判定（`entry.test.ts` —— ESM 下取代 `require.main` 的那次比对）、JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.ts` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.ts` 与 `http/error-response.test.ts` —— 503 的分类是状态码来源，判错会把库故障伪装成 500）、**客户端 IP 的代理信任三态**（`http/client-ip.test.ts`：不信任/跳数/来源三种取值下取址正确，跳数错一位限流就会退化成全局额度）、**JSON 体积上限与写操作信封**（`http/body-limit.test.ts`：超限 413、坏 JSON 400、业务失败 200 + `ok:false`）、**骨架自身的行为**（`server/hono-app.test.ts`：探针、404、安全头、CORS、请求日志，以及「尚未迁移的路由仍由 Express 代答」这条链路），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.ts`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.ts`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.ts`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.ts`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `pnpm test` 的前置条件。
+`src/**/*.test.ts`（vitest unit project，150 项）跑不依赖数据库的部分：入口判定（`entry.test.ts` —— ESM 下取代 `require.main` 的那次比对）、JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.ts` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.ts` 与 `http/error-response.test.ts` —— 503 的分类是状态码来源，判错会把库故障伪装成 500）、**客户端 IP 的代理信任三态**（`http/client-ip.test.ts`：不信任/跳数/来源三种取值下取址正确，跳数错一位限流就会退化成全局额度）、**JSON 体积上限与写操作信封**（`http/body-limit.test.ts`：超限 413、坏 JSON 400、业务失败 200 + `ok:false`）、**骨架自身的行为**（`server/hono-app.test.ts`：探针、404、安全头、CORS、请求日志），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.ts`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.ts`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.ts`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.ts`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `pnpm test` 的前置条件。
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 

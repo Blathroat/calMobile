@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>服务状态</title>
+<style>__STYLES__</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="top">
+    <div class="brand">
+      <p class="eyebrow">CalMobile / Service Status</p>
+      <h1 id="service-name">加载中<span class="version" id="service-version"></span></h1>
+    </div>
+    <div class="controls">
+      <span class="updated" id="updated">加载中</span>
+      <button class="btn" id="refresh" type="button">刷新</button>
+      <label class="toggle"><input id="auto" type="checkbox" checked> 自动刷新（5 秒）</label>
+      <span class="badge fail" id="badge">加载中</span>
+    </div>
+  </header>
+  <p class="alert" id="alert" hidden></p>
+  <div class="cards">
+    <section class="card"><h2>服务信息</h2><dl class="kv"><div><dt>Node 版本</dt><dd class="mono" id="svc-node">—</dd></div><div><dt>运行时长</dt><dd id="svc-uptime">—</dd></div><div><dt>时区</dt><dd class="mono" id="svc-tz">—</dd></div><div><dt>当前时间</dt><dd class="mono" id="svc-now">—</dd></div><div><dt>启动时间</dt><dd class="mono" id="svc-started">—</dd></div></dl></section>
+    <section class="card"><h2>数据库</h2><dl class="kv"><div><dt>连通状态</dt><dd id="db-state">—</dd></div><div><dt>查询延迟</dt><dd class="mono" id="db-latency">—</dd></div><div><dt>版本</dt><dd class="mono" id="db-version">—</dd></div><div><dt>数据库</dt><dd class="mono" id="db-name">—</dd></div><div><dt>地址</dt><dd class="mono" id="db-host">—</dd></div><div><dt>连接池</dt><dd class="mono" id="db-pool">—</dd></div></dl><p class="alert inline" id="db-error" hidden></p></section>
+    <section class="card"><h2>迁移</h2><p class="muted" id="migrations-summary">加载中</p><div class="group"><p class="group-title">已应用（<span id="migrations-applied-count">0</span>）</p><div class="chips" id="migrations-applied"></div></div><div class="group"><p class="group-title">未应用（<span id="migrations-pending-count">0</span>）</p><div class="chips" id="migrations-pending"></div></div></section>
+    <section class="card"><h2>数据量</h2><dl class="kv">__COUNT_FIELDS__</dl></section>
+    <section class="card"><h2>自检项 <span class="muted" id="checks-count">0 项</span></h2><div class="checks" id="checks"></div></section>
+    <section class="card"><h2>接口清单 <span class="muted" id="endpoints-count">0 条</span></h2><div class="endpoints" id="endpoints"></div></section>
+  </div>
+  <p class="footer">数据来自 GET /api/v1/status · 每 5 秒自动刷新一次 · 深色模式跟随系统</p>
+</main>
+<noscript><p>请启用 JavaScript 查看状态数据。</p></noscript>
+<script>__CLIENT_SCRIPT__</script>
+</body>
+</html>
