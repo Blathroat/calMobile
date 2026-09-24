@@ -737,7 +737,7 @@ function createBackend() {
 /**
  * 原生侧保留的动作 → 返回值。
  *
- * 这份清单就是 `WebAppActions` 的全部 `case`（见 `docs/architecture.md` 的「前后端边界」）。
+ * 这份清单就是 `WebAppActions` 的全部 `case`（见 `docs/engineering.md` 的「原生桥接」）。
  * 数据动作已经删除：任何不在清单里的动作都会被 {@link installBridge} 当场拒绝，
  * 因为那意味着页面绕过了 `core/api.js`。
  */
