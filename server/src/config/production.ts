@@ -37,8 +37,8 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
   const fatal: string[] = [];
   const warnings: string[] = [];
 
-  // ── 会让攻击者直接伪造身份 / 进数据库的 ──────────────────────────
-  for (const name of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
+  // ── 认证与验证器加密密钥：缺失或弱密钥都不能上线 ───────────────────
+  for (const name of ['JWT_SECRET', 'TOTP_SECRET_KEY']) {
     const value = String(env[name] || '');
     if (!value) {
       fatal.push(`${name} 没有配置`);

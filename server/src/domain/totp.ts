@@ -162,17 +162,16 @@ export function otpauthUri({ secret, account, issuer }: { secret: string; accoun
 /**
  * 加密密钥：把配置里的密钥材料派生成 AES-256 密钥。
  *
- * 密钥材料由 `parseEnv` / `resolveAuthConfig` 解析：优先 `TOTP_SECRET_KEY`，
- * 否则借用 `JWT_REFRESH_SECRET`。**换掉这个值会让已绑定的验证器解不开**
- * （路由会把这种情况变成「请重新绑定」而不是 500），所以生产环境建议单独配
- * `TOTP_SECRET_KEY` 并把它当长期密钥保管。
+ * 密钥材料由 `parseEnv` / `resolveAuthConfig` 从必填的 `TOTP_SECRET_KEY` 解析。
+ * **换掉这个值会让已绑定的验证器解不开**（路由会把这种情况变成「请重新绑定」而不是 500），
+ * 所以生产环境应把它当长期密钥保管；从旧配置迁移时，若曾用刷新密钥兜底，须把原值复制到此变量。
  *
  * @param raw 已解析的密钥材料，不要在这里再读环境变量。
  */
 export function encryptionKey(raw?: string | null): Buffer {
   const material = String(raw === undefined || raw === null ? '' : raw).trim();
   if (!material) {
-    throw new Error('缺少 TOTP 加密密钥：请配置 TOTP_SECRET_KEY（或至少保证 JWT_REFRESH_SECRET 存在）');
+    throw new Error('缺少 TOTP 加密密钥：请配置 TOTP_SECRET_KEY（至少 32 个字符）');
   }
   return crypto.createHash('sha256').update(`calmobile-totp:${material}`).digest();
 }

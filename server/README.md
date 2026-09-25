@@ -323,9 +323,8 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` | 数据库凭据 | 仅本地配置 |
 | `DB_SSL` | 数据库 TLS；同机 Docker 不需要，托管库一般要 | `true` |
 | `JWT_SECRET` | 访问令牌密钥 | 至少 32 个随机字符 |
-| `JWT_REFRESH_SECRET` | 刷新令牌密钥 | 至少 32 个随机字符 |
-| `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | 令牌有效期 | `15m` / `7d` |
-| `TOTP_SECRET_KEY` | 验证器密钥的加密密钥；不配则借用 `JWT_REFRESH_SECRET` 派生。**换掉它用户需要重新绑定验证器**，生产建议单独配并长期保管 | 至少 32 个随机字符 |
+| `TOTP_SECRET_KEY` | 验证器密钥的加密密钥，必填且长期保管；更换后用户需要重新绑定验证器 | 至少 32 个随机字符 |
+| `JWT_EXPIRES_IN` / `REFRESH_TOKEN_TTL` | 访问令牌 / 刷新令牌有效期 | `15m` / `7d` |
 | `CORS_ORIGIN` | 允许的来源 | `https://appassets.androidplatform.net`（页面所在的 WebView 源；配成 `http://localhost:3000` 只在浏览器直开前端时成立，真机 / 模拟器连不上） |
 | `MAIL_TRANSPORT` | 邮件通道：`console` / `smtp` / `memory`（生产禁用） | 开发 `smtp`（Mailpit），或 `console` |
 | `MAIL_SMTP_HOST` / `MAIL_SMTP_PORT` | SMTP 地址与端口 | `127.0.0.1` / `1025`（Mailpit）、`465`（隐式 TLS） |
@@ -338,6 +337,8 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `LOG_LEVEL` | `quiet` 可关掉请求日志；开着时每行是 `客户端IP 方法 路径 状态码 耗时ms` | `info` |
 
 真实 `.env` 不得提交；`.env.example` 里放占位值。
+
+迁移旧部署时，若之前没有单独配置 `TOTP_SECRET_KEY`，请将原 `JWT_REFRESH_SECRET` 的值原样复制到 `TOTP_SECRET_KEY`，以保持已绑定验证器的解密密钥不变；刷新令牌有效期配置改用 `REFRESH_TOKEN_TTL`。
 
 ## 测试
 

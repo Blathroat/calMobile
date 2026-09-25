@@ -13,7 +13,7 @@ function readyEnv(override = {}) {
   return {
     NODE_ENV: 'production',
     JWT_SECRET: 'a'.repeat(40),
-    JWT_REFRESH_SECRET: 'b'.repeat(40),
+    TOTP_SECRET_KEY: 'b'.repeat(40),
     DB_PASSWORD: 'not-the-default-password',
     MAIL_TRANSPORT: 'smtp',
     MAIL_SMTP_HOST: 'smtp.example.com',
@@ -34,11 +34,16 @@ test('配齐的生产环境没有任何致命项', () => {
   assert.deepEqual(fatal, [], `不该有致命项：${fatal.join('；')}`);
 });
 
-test('开发用的 JWT 密钥会被拒绝启动', () => {
+test('开发用的访问令牌与 TOTP 密钥会被拒绝启动', () => {
   assert.match(fatalOf(readyEnv({ JWT_SECRET: 'calmobile-local-dev-access-secret-please-change-32' })), /JWT_SECRET/);
   assert.match(fatalOf(readyEnv({ JWT_SECRET: 'your_access_secret_here_replace_me_now' })), /JWT_SECRET/);
   assert.match(fatalOf(readyEnv({ JWT_SECRET: 'short' })), /少于 32/);
-  assert.match(fatalOf(readyEnv({ JWT_REFRESH_SECRET: '' })), /JWT_REFRESH_SECRET 没有配置/);
+  assert.match(fatalOf(readyEnv({ TOTP_SECRET_KEY: '' })), /TOTP_SECRET_KEY 没有配置/);
+  assert.match(fatalOf(readyEnv({ TOTP_SECRET_KEY: 'short' })), /TOTP_SECRET_KEY 少于 32/);
+  assert.match(
+    fatalOf(readyEnv({ TOTP_SECRET_KEY: 'replace-with-a-totp-secret-0123456789012345' })),
+    /TOTP_SECRET_KEY 还是开发用的值/,
+  );
 });
 
 test('数据库密码还是 postgres 会很直白地被拦下', () => {

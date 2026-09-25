@@ -9,15 +9,16 @@ import assert from 'node:assert/strict';
 import { parseEnv } from './env.js';
 import { resolveMailConfig } from './mail.js';
 import { resolveRuntime } from './runtime.js';
+import { decryptSecret, encryptSecret, encryptionKey } from '../domain/totp.js';
 
 const ACCESS = 'test-access-secret-012345678901234567890';
-const REFRESH = 'test-refresh-secret-012345678901234567890';
+const TOTP = 'test-totp-secret-012345678901234567890';
 
 /** 一份能通过密钥门槛的环境，用例按需覆盖其中某一项。 */
 function validEnv(override = {}) {
   return {
     JWT_SECRET: ACCESS,
-    JWT_REFRESH_SECRET: REFRESH,
+    TOTP_SECRET_KEY: TOTP,
     ...override,
   };
 }
@@ -41,30 +42,30 @@ test('注入的环境对象不会去读或改 process.env', () => {
   }
 });
 
-test('缺密钥、过短、占位值都会在解析时失败，文案与现在一致', () => {
-  const message = /JWT_SECRET must be a non-placeholder secret of at least 32 characters/;
+test('缺密钥、过短、占位值都会在解析时失败，并指明配置名', () => {
+  const message = /JWT_SECRET 必须配置至少 32 个字符的非占位密钥/;
   assert.throws(() => parseEnv(validEnv({ JWT_SECRET: '' })), message);
   assert.throws(() => parseEnv(validEnv({ JWT_SECRET: 'short' })), message);
   assert.throws(
     () => parseEnv(validEnv({ JWT_SECRET: 'replace-with-a-random-access-secret-at-least-32-characters' })),
     message,
   );
-  assert.throws(
-    () => parseEnv(validEnv({ JWT_REFRESH_SECRET: 'change-me-refresh-secret-at-least-32-chars' })),
-    /JWT_REFRESH_SECRET must be a non-placeholder secret of at least 32 characters/,
-  );
+  const totpMessage = /TOTP_SECRET_KEY 必须配置至少 32 个字符的非占位密钥/;
+  assert.throws(() => parseEnv(validEnv({ TOTP_SECRET_KEY: undefined })), totpMessage);
+  assert.throws(() => parseEnv(validEnv({ TOTP_SECRET_KEY: 'short' })), totpMessage);
+  assert.throws(() => parseEnv(validEnv({ TOTP_SECRET_KEY: 'change-me-totp-secret-at-least-32-chars' })), totpMessage);
 });
 
 test('合法的非占位密钥会被收下，过期时间有默认值也可覆盖', () => {
   const defaults = parseEnv(validEnv());
   assert.equal(defaults.auth.accessSecret, ACCESS);
-  assert.equal(defaults.auth.refreshSecret, REFRESH);
+  assert.equal(defaults.auth.totpSecretKey, TOTP);
   assert.equal(defaults.auth.accessExpiresIn, '15m');
-  assert.equal(defaults.auth.refreshExpiresIn, '7d');
+  assert.equal(defaults.auth.refreshTokenTtl, '7d');
 
-  const overridden = parseEnv(validEnv({ JWT_EXPIRES_IN: '30m', JWT_REFRESH_EXPIRES_IN: '14d' }));
+  const overridden = parseEnv(validEnv({ JWT_EXPIRES_IN: '30m', REFRESH_TOKEN_TTL: '14d' }));
   assert.equal(overridden.auth.accessExpiresIn, '30m');
-  assert.equal(overridden.auth.refreshExpiresIn, '14d');
+  assert.equal(overridden.auth.refreshTokenTtl, '14d');
 });
 
 test('pnpm start 传 --production：进生产模式；pnpm dev 不带参数：留在开发模式', () => {
@@ -94,15 +95,13 @@ test('邮件通道解析结果与 resolveMailConfig 一致', () => {
   assert.equal(parseEnv(production).mail.transport, 'smtp');
 });
 
-test('TOTP 加密密钥优先 TOTP_SECRET_KEY，缺省借用 JWT_REFRESH_SECRET', () => {
-  const dedicated = parseEnv(validEnv({ TOTP_SECRET_KEY: 'dedicated-totp-key' }));
-  assert.equal(dedicated.totpSecretKey, 'dedicated-totp-key');
+test('旧刷新密钥原样迁入 TOTP_SECRET_KEY 后可解密已有验证器密文', () => {
+  const legacyKeyMaterial = 'legacy-refresh-secret-012345678901234567890';
+  const plaintext = 'JBSWY3DPEHPK3PXP';
+  const ciphertext = encryptSecret(plaintext, encryptionKey(legacyKeyMaterial));
+  const migrated = parseEnv(validEnv({ TOTP_SECRET_KEY: legacyKeyMaterial }));
 
-  const borrowed = parseEnv(validEnv());
-  assert.equal(borrowed.totpSecretKey, REFRESH);
-
-  const blank = parseEnv(validEnv({ TOTP_SECRET_KEY: '   ' }));
-  assert.equal(blank.totpSecretKey, REFRESH, '空白专用密钥视作未配置');
+  assert.equal(decryptSecret(ciphertext, encryptionKey(migrated.auth.totpSecretKey)), plaintext);
 });
 
 test('端口、日志、CORS 有默认值，显式配置优先', () => {

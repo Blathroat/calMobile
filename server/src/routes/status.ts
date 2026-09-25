@@ -354,18 +354,18 @@ async function runChecks({
 
   await run('认证密钥', () => {
     // 两个密钥都要存在、够长、且不是占位值 —— 这些在解析配置时就校验过了。
-    return `JWT_SECRET / JWT_REFRESH_SECRET 均已配置（≥ ${MIN_SECRET_LENGTH} 字符，access ${processAuth.accessExpiresIn} / refresh ${processAuth.refreshExpiresIn}）`;
+    return `JWT_SECRET / TOTP_SECRET_KEY 均已配置（≥ ${MIN_SECRET_LENGTH} 字符，access ${processAuth.accessExpiresIn} / refresh ${processAuth.refreshTokenTtl}）`;
   });
 
-  await run('JWT 密钥不是占位值', () => {
+  await run('认证密钥不是占位值', () => {
     const placeholders = [
       PLACEHOLDER_SECRET.test(processAuth.accessSecret) ? 'JWT_SECRET' : '',
-      PLACEHOLDER_SECRET.test(processAuth.refreshSecret) ? 'JWT_REFRESH_SECRET' : '',
+      PLACEHOLDER_SECRET.test(processAuth.totpSecretKey) ? 'TOTP_SECRET_KEY' : '',
     ].filter(Boolean);
     if (placeholders.length > 0) {
       throw checkFailure(`${placeholders.join(' / ')} 还是 your_ / replace-with / change-me 之类的占位值`);
     }
-    return '两个密钥都不是模板里的占位值';
+    return 'JWT_SECRET 与 TOTP_SECRET_KEY 都不是模板里的占位值';
   });
 
   /**

@@ -6,4 +6,4 @@
  * .ts 的加载由 vitest 的 `execArgv: ['--import', 'tsx']` 统一负责。
  */
 vi.stubEnv('JWT_SECRET', 'test-access-secret-012345678901234567890');
-vi.stubEnv('JWT_REFRESH_SECRET', 'test-refresh-secret-012345678901234567890');
+vi.stubEnv('TOTP_SECRET_KEY', 'test-totp-secret-012345678901234567890');

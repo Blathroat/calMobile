@@ -13,9 +13,8 @@ export const MIN_SECRET_LENGTH = 32;
 
 export interface AuthConfig {
   accessSecret: string;
-  refreshSecret: string;
   accessExpiresIn: string;
-  refreshExpiresIn: string;
+  refreshTokenTtl: string;
   totpSecretKey: string;
 }
 
@@ -23,9 +22,9 @@ export interface AuthConfig {
  * 读一个密钥：必须存在、不少于 32 个字符、且不能是模板里的占位值。
  */
 function readSecret(env: EnvLike, name: string): string {
-  const value = env[name];
-  if (!value || value.length < MIN_SECRET_LENGTH || PLACEHOLDER_SECRET.test(value)) {
-    throw new Error(`${name} must be a non-placeholder secret of at least ${MIN_SECRET_LENGTH} characters`);
+  const value = String(env[name] ?? '').trim();
+  if (value.length < MIN_SECRET_LENGTH || PLACEHOLDER_SECRET.test(value)) {
+    throw new Error(`${name} 必须配置至少 ${MIN_SECRET_LENGTH} 个字符的非占位密钥`);
   }
   return value;
 }
@@ -37,12 +36,11 @@ function readSecret(env: EnvLike, name: string): string {
  */
 export function resolveAuthConfig(env: EnvLike = {}): AuthConfig {
   const accessSecret = readSecret(env, 'JWT_SECRET');
-  const refreshSecret = readSecret(env, 'JWT_REFRESH_SECRET');
+  const totpSecretKey = readSecret(env, 'TOTP_SECRET_KEY');
   return {
     accessSecret,
-    refreshSecret,
     accessExpiresIn: env.JWT_EXPIRES_IN || '15m',
-    refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN || '7d',
-    totpSecretKey: String(env.TOTP_SECRET_KEY || '').trim() || refreshSecret,
+    refreshTokenTtl: env.REFRESH_TOKEN_TTL || '7d',
+    totpSecretKey,
   };
 }

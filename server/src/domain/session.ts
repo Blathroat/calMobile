@@ -13,7 +13,7 @@ import { loadProcessConfig } from '../config/env.js';
 import { unauthorized } from './errors.js';
 import { SignJWT } from 'jose';
 
-const { accessSecret, refreshSecret, accessExpiresIn, refreshExpiresIn } = loadProcessConfig().auth;
+const { accessSecret, accessExpiresIn, refreshTokenTtl } = loadProcessConfig().auth;
 
 interface SessionUser {
   id: string;
@@ -29,9 +29,9 @@ interface RefreshTokenRow {
   revoked_at: string | Date | null;
 }
 
-/** 刷新令牌的有效期（天）：从 JWT_REFRESH_EXPIRES_IN（如 7d）解析。 */
+/** 刷新令牌的有效期（天）：从 REFRESH_TOKEN_TTL（如 7d）解析。 */
 function refreshDays(): number {
-  const match = /^(\d+)d$/.exec(String(refreshExpiresIn));
+  const match = /^(\d+)d$/.exec(String(refreshTokenTtl));
   return match ? Number(match[1]) : 7;
 }
 
@@ -159,5 +159,3 @@ export async function revokeRefreshToken(token: unknown): Promise<boolean> {
 export async function revokeAllForUser(userId: string): Promise<void> {
   await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
 }
-
-export { refreshSecret };

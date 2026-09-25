@@ -26,7 +26,7 @@
 
 ## Consequences
 
-- **认证环境变量**：`JWT_SECRET` 与 `JWT_REFRESH_SECRET` 都必须是至少 32 个字符的非占位值；`TOTP_SECRET_KEY` 可单独配置，未配置时由刷新密钥派生；刷新令牌有效期读取 `JWT_REFRESH_EXPIRES_IN`。
+- **认证环境变量**：`JWT_SECRET` 与 `TOTP_SECRET_KEY` 都必须是至少 32 个字符的非占位值；刷新令牌是数据库中可撤销的不透明随机串，不需要第二个 JWT 密钥；刷新令牌有效期读取 `REFRESH_TOKEN_TTL`。若旧部署曾用 `JWT_REFRESH_SECRET` 兜底加密验证器密钥，迁移时须将其原值复制到 `TOTP_SECRET_KEY`。
 - **目录结构**：契约测试从 `test/api.test.js` 移入 `src/test/api.test.ts`，`rootDir: "src"` 使 dist 干净镜像；约 15 处文档与脚本引用随迁。
 - **契约测试改写**：状态页测试在 VM 中执行构建后的内联脚本，覆盖 INITIAL、数据库不可用、迁移待应用和通用错误提示；不再要求完整 SSR 首屏。
 - **限流记账**：不再猴补丁 `res.json`，改为中间件 `await next()` 后 `c.res.clone()` 读信封 `ok === false`——行为保持，且只涉及 7 个低流量认证路由。
