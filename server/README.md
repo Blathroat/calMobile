@@ -2,6 +2,8 @@
 
 `server/` 是与 Android 客户端并列的 Node.js 服务：**Hono + PostgreSQL**，提供客户端全部数据接口。前端只认 `app/src/main/assets/web/js/core/api.js` 里的动作名，HTTP 形状由该文件的 `ENDPOINTS` 表翻译，因此后端换实现不影响页面。
 
+后端要求 Node.js ≥ 24.0.0。依赖通过 `pnpm-lock.yaml` 锁定；在受支持的 Node 版本下使用 `pnpm install --frozen-lockfile`。
+
 | 目录 | 说明 |
 | --- | --- |
 | `src/index.ts` | 入口：解析运行环境、创建 Hono 应用、起服务 |
@@ -41,8 +43,9 @@
 
 ```bash
 cd server
-pnpm install
-cp .env.example .env          # 本地数据库与两个 JWT 密钥
+pnpm install --frozen-lockfile
+cp .env.example .env
+# 将 JWT_SECRET 与必填的 TOTP_SECRET_KEY 换成各自独立、至少 32 个字符的随机密钥
 
 # 起数据库与本地收件箱（在仓库根目录；幂等，已起过就直接返回状态）
 docker compose up -d
@@ -323,7 +326,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` | 数据库凭据 | 仅本地配置 |
 | `DB_SSL` | 数据库 TLS；同机 Docker 不需要，托管库一般要 | `true` |
 | `JWT_SECRET` | 访问令牌密钥 | 至少 32 个随机字符 |
-| `TOTP_SECRET_KEY` | 验证器密钥的加密密钥，必填且长期保管；更换后用户需要重新绑定验证器 | 至少 32 个随机字符 |
+| `TOTP_SECRET_KEY` | 必填的验证器密钥加密密钥，须长期保管；更换后用户需要重新绑定验证器 | 至少 32 个随机字符 |
 | `JWT_EXPIRES_IN` / `REFRESH_TOKEN_TTL` | 访问令牌 / 刷新令牌有效期 | `15m` / `7d` |
 | `CORS_ORIGIN` | 允许的来源 | `https://appassets.androidplatform.net`（页面所在的 WebView 源；配成 `http://localhost:3000` 只在浏览器直开前端时成立，真机 / 模拟器连不上） |
 | `MAIL_TRANSPORT` | 邮件通道：`console` / `smtp` / `memory`（生产禁用） | 开发 `smtp`（Mailpit），或 `console` |
@@ -338,7 +341,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 
 真实 `.env` 不得提交；`.env.example` 里放占位值。
 
-迁移旧部署时，若之前没有单独配置 `TOTP_SECRET_KEY`，请将原 `JWT_REFRESH_SECRET` 的值原样复制到 `TOTP_SECRET_KEY`，以保持已绑定验证器的解密密钥不变；刷新令牌有效期配置改用 `REFRESH_TOKEN_TTL`。
+迁移旧部署时，若之前没有单独配置 `TOTP_SECRET_KEY`，请将旧版 `JWT_REFRESH_SECRET` 的值原样复制到 `TOTP_SECRET_KEY`，以保持已绑定验证器的解密密钥不变；刷新令牌有效期配置使用 `REFRESH_TOKEN_TTL`。
 
 ## 测试
 
@@ -375,7 +378,7 @@ pnpm format               # oxfmt
 跨模块的发布清单见 `docs/operations.md`。与服务端直接相关的几条：
 
 - `pnpm start`（生产模式）已经**默认关闭 `/status` 与 `/api/v1/status`**，并会对配置做启动前自检；只需要用 `TRUST_PROXY`、`ENABLE_STATUS_PAGE`、`DB_SSL` 按部署形态配一下，详见上面的「开发模式与生产模式」；
-- 更换两个 JWT 密钥与数据库密码、限制 `CORS_ORIGIN`、启用 TLS，并去掉客户端侧的明文放行（`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`）——第一项与库密码会被启动自检拦住，`CORS_ORIGIN` 目前只是警告；
+- 配置访问令牌密钥 `JWT_SECRET`、必填 TOTP 加密密钥 `TOTP_SECRET_KEY` 与数据库密码，限制 `CORS_ORIGIN`，启用 TLS，并去掉客户端侧的明文放行（`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`）——密钥与库密码会被启动自检拦住，`CORS_ORIGIN` 目前只是警告；
 - **不要把状态页对公网打开**：它给出迁移清单、各表行数与接口清单；需要启用时仍应由反代加 Basic Auth / IP 白名单，`/ping` 才是给外部探活用的事实源；
 - **不要在服务器上跑 Mailpit**：`docker-compose.yml` 的 `mailpit` 服务与 `MAIL_SMTP_HOST=127.0.0.1` 只用于本地开发；生产要指向托管中继，并用专用子域配好 SPF / DKIM / DMARC（启动自检对 127.0.0.1 / 1025 会警告）；
 - 生产环境不要把 `MAIL_TRANSPORT` 配成 `console`：那样验证码只写日志，用户永远收不到（`resolveMailConfig` 会拦截 `memory`，但 `console` 是合法通道，只能靠部署时确认）；

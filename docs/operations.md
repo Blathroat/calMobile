@@ -2,13 +2,16 @@
 
 本文件只保留跨模块的操作流程。后端命令、环境变量、迁移和状态页细节见 [`server/README.md`](../server/README.md)。
 
+后端要求 Node.js ≥ 24.0.0。部署与本地开发使用仓库提交的 `server/pnpm-lock.yaml`，安装依赖时启用冻结锁文件。
+
 ## 本地运行
 
 ```bash
 docker compose up -d
 cd server
-pnpm install
+pnpm install --frozen-lockfile
 cp .env.example .env
+# 将 JWT_SECRET 与必填的 TOTP_SECRET_KEY 分别换成独立的随机密钥（至少 32 个字符）
 pnpm db:migrate && pnpm db:seed
 pnpm dev
 ```
@@ -18,8 +21,12 @@ pnpm dev
 ## 验证顺序
 
 ```bash
+node scripts/smoke-check.js
+node scripts/webui-check.js
 node --test scripts/webui-render.test.js
 node scripts/check-strings.js
+pnpm --dir server build
+pnpm --dir server typecheck
 pnpm --dir server test
 pnpm --dir server test:contract
 gradlew.bat :app:testDebugUnitTest
@@ -56,9 +63,9 @@ pwsh -File scripts\emu.ps1 motion
 发布前确认：
 
 - 生产使用 HTTPS 和反向代理，`CORS_ORIGIN` 只允许 WebView 来源；客户端关闭明文放行。
-- 更换 JWT、数据库和 TOTP 密钥，生产显式配置 `MAIL_FROM_ADDRESS`；邮件使用托管 SMTP，不部署 Mailpit，不使用 `memory` 或仅写日志的通道。
+- 分别配置访问令牌密钥 `JWT_SECRET` 与必填的验证器加密密钥 `TOTP_SECRET_KEY`（各自至少 32 个随机字符），更换数据库凭据，并显式配置 `MAIL_FROM_ADDRESS`；邮件使用托管 SMTP，不部署 Mailpit，不使用 `memory` 或仅写日志的通道。
 - 生产状态页默认关闭；临时打开时用反代 Basic Auth 或 IP 白名单，公网探活只使用 `/ping`。
-- 运行 `pnpm install --frozen-lockfile`、`pnpm db:migrate:prod`，再重启生产进程；迁移完成后才切流量。
+- 使用 Node.js ≥ 24.0.0，在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，再执行 `pnpm db:migrate:prod` 并重启生产进程；迁移完成后才切流量。
 - 数据库启用 `Asia/Shanghai` 时区，配置备份、恢复演练和日志轮转。
 - 上传媒体仍在客户端私有目录；上线前确认这符合产品范围，或先完成对象存储和上传接口。
 - 注册和安全邮件涉及个人信息，注册页需要隐私告知；营销或提醒邮件需要退订机制。
