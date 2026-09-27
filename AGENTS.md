@@ -10,7 +10,7 @@
 
 ## 边界
 
-- `app/` 是 Java 25 的 WebView 容器；页面在 `app/src/main/assets/web/`。原生只实现设备能力，数据和业务规则留在后端。
+- `app/` 是 Java 25 的 WebView 容器；页面源码在 `web/`，构建后由 Gradle 同步到 generated assets。原生只实现设备能力，数据和业务规则留在后端。
 - `server/` 是独立的 Hono + PostgreSQL Node 服务，不是 Gradle 模块。数据库是唯一业务数据源；旧 Room、Retrofit、本机 SQLite 和 legacy 页面不再引入。
 - `docs/newUI/` 的 HTML、JSON、`ui-spec.md` 和 `DESIGN-HANDOFF.md` 是界面来源；实现与设计冲突时，把未决项记入 [`docs/product.md`](docs/product.md)。
 

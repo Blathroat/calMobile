@@ -1400,7 +1400,7 @@ test('报名收集项的必填与选项由服务端校验', async () => {
     assert.strictEqual(accepted.body.ok, true, `合规提交应当成功：${JSON.stringify(accepted.body)}`);
     assert.strictEqual(accepted.body.registration.statusLabel, '已通过');
 
-    // 选填项没填：页面会写「未填写」占位（见 pages/registration-form.js），
+    // 选填项没填：页面会写「未填写」占位（见 web/src/pages/RegistrationFormPage.vue），
     // 服务端要把它当成空值，而不是一个不在选项里的多选值。
     const blank = await post(
       '/api/v1/registrations',

@@ -8,9 +8,9 @@
 
 | 层 | 责任 | 权威入口 |
 | --- | --- | --- |
-| WebView 页面 | 路由、渲染、表单和用户交互 | `app/src/main/assets/web/` |
+| WebView 页面 | 路由、渲染、表单和用户交互 | `web/src/`（构建后同步到 generated assets） |
 | 前端数据 | 类型化 REST client、令牌续期、缓存 | `web/src/api/client.ts`；契约表为 `web/api-endpoints.mjs` |
-| 前端加载 | 缓存首屏、后台刷新、错误呈现 | `js/core/loadable.js` 的 `loadInto()` |
+| 前端加载 | 缓存首屏、后台刷新、错误呈现 | Vue composable 与 `web/src/services/query-cache.ts` |
 | 原生桥接 | 日历、通知权限、摄像头、媒体、分享、CSV、设备镜像 | `WebAppActions.handle()` 的固定动作表 |
 | 后端 | 认证、业务规则、持久化、邮件和接口 | `server/src/` |
 
@@ -33,29 +33,29 @@ web/
 
 | 编号 | 页面模块 | 主要用途 |
 | --- | --- | --- |
-| 01 | `pages/login.js` | 登录或访客入口 |
-| 02 | `pages/home.js` | 月视图与当天展会 |
-| 03 | `pages/detail.js` | 详情、报名、日历、分享 |
-| 04 | `pages/registration-form.js` | 填写报名 |
-| 05 | `pages/register.js` | 两步注册 |
-| — | `pages/forgot-password.js` | 找回密码 |
-| 06 | `pages/search.js` | 搜索展会、地点和用户 |
-| 07 | `pages/my-registrations.js` | 我的报名 |
-| 08 | `pages/registration-detail.js` | 报名详情与撤销 |
-| 09 | `pages/profile.js` | 个人资料、安全和外观 |
-| 10 | `pages/exhibitor.js` | 展商后台 |
-| 11 | `pages/exhibition-form.js` | 展会编辑 |
-| 12 | `pages/rich-editor.js` | Markdown 简介与媒体 |
-| 13 | `pages/review.js` | 报名审核 |
-| 14 | `pages/user-public.js` | 用户公开页 |
-| 15 | `pages/admin.js` | 管理后台 |
-| — | `pages/checkin.js` | 现场核销工具 |
+| 01 | `web/src/pages/LoginPage.vue` | 登录或访客入口 |
+| 02 | `web/src/pages/HomePage.vue` | 月视图与当天展会 |
+| 03 | `web/src/pages/DetailPage.vue` | 详情、报名、日历、分享 |
+| 04 | `web/src/pages/RegistrationFormPage.vue` | 填写报名 |
+| 05 | `web/src/pages/RegisterPage.vue` | 两步注册 |
+| — | `web/src/pages/ForgotPasswordPage.vue` | 找回密码 |
+| 06 | `web/src/pages/SearchPage.vue` | 搜索展会、地点和用户 |
+| 07 | `web/src/pages/MyRegistrationsPage.vue` | 我的报名 |
+| 08 | `web/src/pages/RegistrationDetailPage.vue` | 报名详情与撤销 |
+| 09 | `web/src/pages/ProfilePage.vue` | 个人资料、安全和外观 |
+| 10 | `web/src/pages/ExhibitorPage.vue` | 展商后台 |
+| 11 | `web/src/pages/ExhibitionFormPage.vue` | 展会编辑 |
+| 12 | `web/src/pages/RichEditorPage.vue` | Markdown 简介与媒体 |
+| 13 | `web/src/pages/ReviewPage.vue` | 报名审核 |
+| 14 | `web/src/pages/UserPublicPage.vue` | 用户公开页 |
+| 15 | `web/src/pages/AdminPage.vue` | 管理后台 |
+| — | `web/src/pages/CheckinPage.vue` | 现场核销工具 |
 
 设计稿的 16、17 屏已内联到管理后台和个人页设置；核销也属于展商后台入口，不新增二级页面。新增页面必须同时更新 `app.js` 路由、本表和 `scripts/webui-render.test.js` 的 `ROUTES`。
 
 ## 数据加载规则
 
-- `loadInto()` 负责加载、缓存首屏、后台刷新和错误块；不要用 `Promise.allSettled` 吞掉失败，也不要把未知状态显示成成功。
+- 查询 composable 负责加载、缓存首屏、后台刷新和错误块；不要用 `Promise.allSettled` 吞掉失败，也不要把未知状态显示成成功。
 - 查询缓存集中在 `web/src/services/query-cache.ts`；缓存键包含稳定序列化后的参数，并对相同请求去重。月视图一次取整月，点日期在本地完成，不重复请求。
 - 页面已有内容时刷新只标记忙碌，不清空旧内容；过期响应丢弃，避免慢请求覆盖新视图。
 
@@ -70,7 +70,7 @@ web/
 - `docs/newUI/` 是视觉来源；生产样式集中在 `styles/tokens.css` 和 `styles/motion.css`，页面不重复写颜色、字号、间距或圆角。
 - 触控命中区域至少 44px；状态同时使用文字与颜色或描边；空、加载、错误、成功和禁用状态在原位置给出下一步。
 - 顶栏使用 `--topbar-h`；展会图保持 9:16；并排字段使用等高布局；日期、时间和状态使用选择器、分段控件或面板。
-- 强调色使用 `--accent*`；二维码保持白底黑点；Markdown / HTML 渲染前经过 `js/core/sanitize.js`。
+- 强调色使用 `--accent*`；二维码保持白底黑点；Markdown / HTML 渲染前经过 `web/src/services/markdown.ts`。
 - 动效只动画 `transform` 与 `opacity`，并遵守 `prefers-reduced-motion`。动效全失时先检查设备 `animator_duration_scale`，再改代码。
 - 第三方库必须内置到 `web/public/vendor/` 并记录版本和许可证，不引用 CDN 或图标字体。
 
