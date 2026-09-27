@@ -96,7 +96,13 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
     return result;
   };
   const afterAuth = (result: AuthResult): AuthResult => {
-    if (result.token) session.setTokens({ token: result.token, refreshToken: result.refreshToken });
+    if (result.token) {
+      const user = (result.user ?? {}) as JsonObject;
+      session.setTokens(
+        { token: result.token, refreshToken: result.refreshToken },
+        String(user.username ?? ''),
+      );
+    }
     cache.clear();
     return result;
   };

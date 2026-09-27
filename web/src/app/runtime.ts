@@ -12,12 +12,19 @@ let bootPromise: Promise<void> | undefined;
 
 export function bootApp(): Promise<void> {
   if (bootPromise) return bootPromise;
-  bootPromise = api.bootstrap().then((data) => {
-    applyRuntimeBootstrap(data);
-  }).catch((error) => {
-    bootPromise = undefined;
-    throw error;
-  });
+  bootPromise = api.session
+    // 先从设备存储恢复会话（有刷新令牌就换一张访问令牌），再取启动数据：
+    // 顺序反了的话 bootstrap 会以匿名身份回答，页面首帧会停在登录页。
+    .restore()
+    .catch(() => false)
+    .then(() => api.bootstrap())
+    .then((data) => {
+      applyRuntimeBootstrap(data);
+    })
+    .catch((error) => {
+      bootPromise = undefined;
+      throw error;
+    });
   return bootPromise;
 }
 

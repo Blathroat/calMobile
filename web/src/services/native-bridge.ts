@@ -10,7 +10,10 @@ export type NativeAction =
   | 'media.import'
   | 'media.store'
   | 'share.text'
-  | 'export.csv';
+  | 'export.csv'
+  | 'session.save'
+  | 'session.load'
+  | 'session.clear';
 
 export type NativeErrorCode = 'cancelled' | 'timeout';
 
@@ -27,6 +30,10 @@ export interface NativeActionPayloads {
   'media.store': { dataUrl: string; kind: 'avatar' | 'image' | 'video' };
   'share.text': { title: string; text: string };
   'export.csv': { filename: string; content: string };
+  // 刷新令牌存在设备私有存储里（`SessionStore.java`）；空 token 等价于清除。
+  'session.save': { refreshToken: string; username?: string };
+  'session.load': Record<string, never>;
+  'session.clear': Record<string, never>;
 }
 
 export interface NativeActionResults {
@@ -40,6 +47,9 @@ export interface NativeActionResults {
   'media.store': { url: string };
   'share.text': { shared: boolean };
   'export.csv': { exported: boolean };
+  'session.save': { ok: boolean; refreshToken: string; username: string };
+  'session.load': { refreshToken: string; username: string };
+  'session.clear': { ok: boolean };
 }
 
 export class NativeBridgeError extends Error {
