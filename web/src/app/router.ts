@@ -10,6 +10,7 @@ import ExhibitionFormPage from '@/pages/ExhibitionFormPage.vue';
 import ReviewPage from '@/pages/ReviewPage.vue';
 import AdminPage from '@/pages/AdminPage.vue';
 import CheckinPage from '@/pages/CheckinPage.vue';
+import RichEditorPage from '@/pages/RichEditorPage.vue';
 import DetailPage from '@/pages/DetailPage.vue';
 import RegistrationDetailPage from '@/pages/RegistrationDetailPage.vue';
 import RegistrationFormPage from '@/pages/RegistrationFormPage.vue';
@@ -45,6 +46,7 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
       { path: '/exhibition-form/:id', component: ExhibitionFormPage, meta: { requiresAuth: true, roles: ['exhibitor', 'admin'] } },
       { path: '/review', component: ReviewPage, meta: { requiresAuth: true, roles: ['exhibitor', 'admin'] } },
       { path: '/checkin', component: CheckinPage, meta: { requiresAuth: true, roles: ['exhibitor', 'admin'] } },
+      { path: '/rich-editor', component: RichEditorPage, meta: { requiresAuth: true, roles: ['exhibitor', 'admin'] } },
       { path: '/admin', component: AdminPage, meta: { requiresAuth: true, roles: ['admin'] } },
     ],
   });

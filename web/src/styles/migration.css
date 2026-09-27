@@ -17,4 +17,5 @@
 .error { color: var(--danger-ink); }
 .muted, .eyebrow { color: var(--ink-2); }
 .state { padding: 24px 0; text-align: center; }
+.markdown-editor { width: 100%; min-height: 320px; border: 1px solid var(--stroke); border-radius: var(--r-input); padding: var(--s3); font: 1rem/1.6 ui-monospace, monospace; }
 button:disabled { opacity: .5; }

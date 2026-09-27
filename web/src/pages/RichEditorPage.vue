@@ -1,0 +1,6 @@
+<script setup lang="ts">
+import { ref } from 'vue'; import { useRouter } from 'vue-router'; import { device } from '@/services/device-services';
+const router = useRouter(); const markdown = ref(''); const preview = ref(false); const error = ref('');
+async function addImage() { error.value = ''; try { const picked = await device.importMedia('image'); markdown.value += `\n![图片](${picked.url})\n`; } catch (reason) { error.value = reason instanceof Error ? reason.message : String(reason); } }
+</script>
+<template><section class="page"><button class="text-action" @click="router.back()">返回</button><header class="page-heading"><h1>Markdown 简介</h1></header><div class="cluster"><button class="cta ghost" @click="preview = !preview">{{ preview ? '编辑' : '预览' }}</button><button class="cta ghost" @click="addImage">插入图片</button></div><textarea v-if="!preview" v-model="markdown" class="markdown-editor" rows="16" aria-label="Markdown 简介"></textarea><article v-else class="card rich-content"><pre>{{ markdown }}</pre></article><p v-if="error" class="error">{{ error }}</p></section></template>
