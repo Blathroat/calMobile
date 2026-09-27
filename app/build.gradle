@@ -20,6 +20,19 @@ android {
     }
 }
 
+// Vue 前端独立构建到 web/dist；迁移完成前不覆盖现有 assets/web。
+def webDir = file("../web")
+def pnpmCommand = System.getProperty("os.name").toLowerCase().contains("windows") ? "pnpm.cmd" : "pnpm"
+tasks.register("buildWeb", Exec) {
+    workingDir webDir
+    commandLine pnpmCommand, "build"
+}
+
+tasks.register("typecheckWeb", Exec) {
+    workingDir webDir
+    commandLine pnpmCommand, "typecheck"
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
