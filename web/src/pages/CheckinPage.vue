@@ -10,14 +10,16 @@
  * 这条降级链路，核销功能仍然可用；识别库按需加载，不拖慢启动，也只在真正进本页才拉取。
  * 离开页面一定要释放摄像头，否则后台会一直占用相机。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
 import { device } from '@/services/device-services';
 import { loadQrDecoder } from '@/services/vendor';
+import { openSheet } from '@/services/sheet';
 import { toast } from '@/services/toast';
 import { REGISTRATION_STATUS } from '@/services/status';
+import ManualCodePanel from '@/components/ManualCodePanel.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
@@ -29,9 +31,6 @@ const CODE_PREFIX = 'CALMOBILE-CHECKIN|';
 const DECODE_WIDTH = 640;
 /** 识别节流：约每 120ms 解一帧，既跟得上手势又不占满 CPU。 */
 const DECODE_INTERVAL = 120;
-/** 底部面板退场动画时长，与 `services/sheet` 的取值一致。 */
-const SHEET_LEAVE_MS = 220;
-
 interface JsQrResult { data?: string }
 type JsQrDecoder = (data: Uint8ClampedArray, width: number, height: number, options?: { inversionAttempts?: string }) => JsQrResult | null;
 
@@ -74,18 +73,14 @@ const submitting = ref(false);
 const decoderReady = ref(false);
 const decoderFailed = ref(false);
 
-/** 手动输入面板：识别库或摄像头不可用时的降级入口。 */
-const manualOpen = ref(false);
-const manualClosing = ref(false);
-const manualCode = ref('');
-const manualError = ref('');
+/** 手动输入面板的数据：输入值与原位错误都放在这个响应式对象里（面板组件按引用读写）。 */
+const manual = reactive({ code: '', error: '' });
 
 let stream: MediaStream | null = null;
 let frameHandle = 0;
 let lastDecodeAt = 0;
 /** 页面被替换后置为 false：异步步骤（权限、getUserMedia）回来时据此放弃取景。 */
 let alive = true;
-let manualTimer: number | undefined;
 
 onMounted(() => {
   if (limited.value) return;
@@ -101,7 +96,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   alive = false;
   releaseCamera();
-  if (manualTimer !== undefined) window.clearTimeout(manualTimer);
 });
 
 function prefersReducedMotion(): boolean {
@@ -345,35 +339,36 @@ async function restart(): Promise<void> {
 
 // ── 手动输入（摄像头 / 识别库不可用时的降级入口） ───────────────
 
+/**
+ * 手动输入面板走共享底部面板（`ManualCodePanel` 提供输入框）：
+ * 校验失败就把错误写回 `manual.error` 并留在面板里，成功才关闭。
+ */
 function openManual(): void {
-  if (manualTimer !== undefined) {
-    window.clearTimeout(manualTimer);
-    manualTimer = undefined;
-  }
-  manualCode.value = '';
-  manualError.value = '';
-  manualClosing.value = false;
-  manualOpen.value = true;
-  void nextTick(() => document.getElementById('checkin-code')?.focus());
+  manual.code = '';
+  manual.error = '';
+  openSheet({
+    title: t('s_11elgkf'),
+    component: ManualCodePanel,
+    props: {
+      model: manual,
+      hint: t('s_189gp0e'),
+    },
+    size: 'full',
+    actions: [
+      { label: t('s_1589w37'), onClick: (close) => close() },
+      { label: t('s_guqe2t'), variant: 'primary', onClick: (close) => { void submitManual(close); } },
+    ],
+  });
 }
 
-function closeManual(): void {
-  if (manualClosing.value) return;
-  manualClosing.value = true;
-  manualTimer = window.setTimeout(() => {
-    manualTimer = undefined;
-    manualOpen.value = false;
-    manualClosing.value = false;
-  }, prefersReducedMotion() ? 0 : SHEET_LEAVE_MS);
-}
-
-async function submitManual(): Promise<void> {
-  const code = manualCode.value.trim();
+async function submitManual(close: () => void): Promise<void> {
+  const code = manual.code.trim();
   if (!code) {
-    manualError.value = t('s_33a4b3');
+    // 留在面板里，让用户就地补上
+    manual.error = t('s_33a4b3');
     return;
   }
-  closeManual();
+  close();
   outcome.value = null;
   setStage('detected', t('s_1yxjgeu'), previewOf(code));
   await verify(code);
@@ -480,40 +475,6 @@ async function submitManual(): Promise<void> {
       <div class="grid-cols-2">
         <button class="cta ghost" type="button" @click="restart">{{ t('s_emjfb1') }}</button>
         <button class="cta" type="button" @click="openReview">{{ t('s_j8kyoz') }}</button>
-      </div>
-    </div>
-
-    <!-- 手动输入报名码：面板结构直接写在这里，`services/sheet` 只承载一句话加按钮的确认框 -->
-    <div
-      v-if="manualOpen"
-      class="sheet"
-      role="dialog"
-      aria-modal="true"
-      :data-closing="manualClosing ? 'true' : 'false'"
-      @click.self="closeManual()"
-      @keydown.escape="closeManual()"
-    >
-      <div class="sheet-panel" data-size="full">
-        <h2 class="sheet-title">{{ t('s_11elgkf') }}</h2>
-        <div class="form">
-          <div class="field" :data-invalid="manualError ? 'true' : undefined">
-            <label for="checkin-code">{{ t('s_zienpw') }}</label>
-            <input
-              id="checkin-code"
-              v-model="manualCode"
-              class="input"
-              type="text"
-              autocomplete="off"
-              :placeholder="t('s_hdawan')"
-            >
-            <p class="field-hint">{{ t('s_189gp0e') }}</p>
-            <p v-if="manualError" class="field-error" role="alert">{{ manualError }}</p>
-          </div>
-        </div>
-        <div class="sheet-actions">
-          <button class="cta ghost" type="button" @click="closeManual()">{{ t('s_1589w37') }}</button>
-          <button class="cta" type="button" @click="submitManual">{{ t('s_guqe2t') }}</button>
-        </div>
       </div>
     </div>
   </template>

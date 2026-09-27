@@ -1,11 +1,15 @@
 /**
  * 底部面板（弹层）状态。
  *
- * 二次确认、拒绝理由、选择项这三类操作共用同一个面板：内容是一句话加一组按钮，
- * 所以状态放在服务里，由 `App.vue` 挂载的 `AppSheet` 统一渲染。
- * 需要表单或富内容的弹层请在页面内直接写 `.sheet` 结构，不要往这里塞任意节点。
+ * 面板内容分两种：
+ * - **一句话 + 一组按钮**（确认、选择项）：直接用 `title / message / actions`；
+ * - **带输入框或列表的富内容**：传 `component` + `props`，由 `AppSheet` 渲染。
+ *   面板组件只负责内容与取值，关闭与动作仍由这里统一管，三处重复的 `.sheet` 结构
+ *   因此收回到一个组件里（核销手动输入、富文本粘贴都是这么接的）。
+ *
+ * `layout: 'stack'` 把按钮竖着排（选项多、文字长短不一时比并排更好读）。
  */
-import { reactive, readonly } from 'vue';
+import { reactive, readonly, type Component } from 'vue';
 import { t } from '@/i18n';
 
 export interface SheetAction {
@@ -18,6 +22,10 @@ export interface SheetState {
   title: string;
   message: string;
   actions: SheetAction[];
+  /** 自定义内容组件；与 `message` 二选一，通常只用其中一个 */
+  component: Component | null;
+  props: Record<string, unknown>;
+  layout: 'row' | 'stack';
   size: 'auto' | 'full';
   closing: boolean;
 }
@@ -32,17 +40,23 @@ function prefersReducedMotion(): boolean {
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-/** 打开面板：`content` 用一句话说明，`actions` 给出可选动作。 */
+/** 打开面板：`message` 是一句话说明，`component` 用于带输入框的富内容。 */
 export function openSheet(options: {
   title?: string;
   message?: string;
   actions?: SheetAction[];
+  component?: Component;
+  props?: Record<string, unknown>;
+  layout?: 'row' | 'stack';
   size?: 'auto' | 'full';
 }): void {
   state.current = {
     title: options.title ?? '',
     message: options.message ?? '',
     actions: options.actions ?? [],
+    component: options.component ?? null,
+    props: options.props ?? {},
+    layout: options.layout ?? 'row',
     size: options.size ?? 'auto',
     closing: false,
   };

@@ -1707,6 +1707,17 @@ label {
     min-width: 112px;
 }
 
+/* 选项多、文案长短不一的面板（例如用户状态、报名方式列表）竖着排更好读 */
+.sheet-actions[data-layout="stack"] {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.sheet-actions[data-layout="stack"] .cta {
+    width: 100%;
+    min-width: 0;
+}
+
 @keyframes fade-in {
     from {
         opacity: 0;

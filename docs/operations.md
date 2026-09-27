@@ -53,6 +53,29 @@ pwsh -File scripts\emu.ps1 motion check
 
 安装 APK 后用 `adb reverse tcp:3000 tcp:3000` 连接本机后端。WebView 文字不一定出现在无障碍树中，点击回归用坐标并保留截图证据；扫码回归可用 `node scripts/decode-shot.js` 检查真实截图像素。
 
+## 浏览器逐屏回归（CDP）
+
+模拟器里点坐标很脆（软键盘会改变布局、WebView 文案不一定进无障碍树），界面回归优先用 CDP 跑真实 Chromium：
+
+```bash
+pnpm --dir web build
+pnpm --dir web exec vite preview --port 5173 --strictPort   # 另开一个终端
+node scripts/ui-shot.mjs --out .omo/evidence/ui --account user --routes settings,profile
+node scripts/ui-shot.mjs --stub-native --routes settings      # 桩掉原生桥，跑通选图/裁剪等设备流程
+node scripts/ui-shot.mjs --account demo --routes admin --click 展会
+```
+
+脚本自己拉起 headless Chrome 并在结束时关掉它；需要后端在 `127.0.0.1:3000`，开发期把 `CORS_ORIGIN` 设为 `*`。
+
+改动页面文案后，用它对照重构前的实现看有没有整块丢失：
+
+```bash
+node scripts/ui-parity.mjs          # 与 master 的页面模块对照 t('s_xxx') 覆盖
+node scripts/ui-parity.mjs --full   # 连「搬到了别处」的 key 一起打印
+```
+
+`→ 无` 才是真缺口；`→ web/src/...` 说明那条文案搬到了路由 meta、共享服务或共享组件里。
+
 动效全部静止时，先确认三个动画 scale 都为 1：
 
 ```powershell

@@ -40,6 +40,8 @@ web/
 - 页面级顶栏操作也写在 `meta.topAction`（`{ icon, to, label }`），外壳据此渲染右上角图标按钮（个人页的「设置」入口就是这么来的）。
 - 页面需要固定操作区时用 `<Teleport defer to="#app-foot">` 投递 `.page-foot`，它落在网格第三行；`defer` 让目标元素与页面在同一次渲染里创建时也能找到。
 - 页面不要自建 `.page` / `.topbar` / `.app-body` / `.tabbar`，也不要声明颜色、字号、间距与圆角。
+- 底部面板统一走 `web/src/services/sheet.ts`：一句话加按钮用 `title / message / actions`；带输入框或列表的用 `component` + `props`（面板组件只负责内容，关闭与动作仍由服务管，例如手动输入报名码与粘贴 Markdown）；选项多于两个时 `layout: 'stack'` 竖排。页面不再自建 `.sheet` 结构。
+- 列表型页面的分区/筛选写进地址栏（`?tab=`），从二级页返回时才能回到同一分区。
 - 切换方向由 `web/src/app/navigation.ts` 按路径深度算出，写进 `.app[data-direction]`，`motion.css` 据此选择前进/后退/原地替换的过渡。
 - 明暗模式与管理员强调色在 `web/src/app/theme.ts` 落到 `<html data-mode>` 与 `--accent*`；首帧由 `index.html` 的内联脚本按本机缓存落一次，避免闪白。用户自己的明暗模式与强调色是**账号偏好**（`users.ui_mode` / `users.ui_theme`，经 `PUT /settings/ui-mode`、`PUT /settings/ui-theme` 保存），本机只缓存一份供首帧使用，切换走 `web/src/app/preferences.ts`（本地先生效、落库失败回滚）。`app_settings.theme` 只提供默认色板与全局默认下标。
 
@@ -78,7 +80,7 @@ web/
 
 ## 原生桥接
 
-原生只处理以下设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享和 CSV 导出。`AppSettings` 是后端设置的设备镜像；日历用后端下发的 ISO 日期定位，失败必须回调失败。
+原生只处理以下设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出，以及会话刷新令牌的设备内存储（`session.save` / `session.load` / `session.clear`，见 `SessionStore.java`）。`AppSettings` 是后端设置的设备镜像；日历用后端下发的 ISO 日期定位，失败必须回调失败。
 
 媒体落在应用私有目录 `files/media`，前端只保存短 URL；资源路径只允许单层文件名。业务数据动作不加入原生动作表。
 

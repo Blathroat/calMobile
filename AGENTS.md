@@ -5,7 +5,7 @@
 ## 开始与验证
 
 - 先读与任务对应的文档：产品行为看 [`docs/product.md`](docs/product.md)，边界与界面看 [`docs/engineering.md`](docs/engineering.md)，构建与上线看 [`docs/operations.md`](docs/operations.md)。修改后端骨架前先读 [`server/README.md`](server/README.md) 的服务骨架部分。
-- 后端要求 Node.js ≥ 24.0.0。按影响范围验证：`node scripts/smoke-check.js`、`node scripts/webui-check.js`、`node --test scripts/webui-render.test.js`、`node scripts/check-strings.js`、`pnpm --dir server build`、`pnpm --dir server typecheck`、`pnpm --dir server test`、`pnpm --dir server test:contract`、`gradlew.bat :app:testDebugUnitTest`、`gradlew.bat :app:assembleDebug`。
+- 后端要求 Node.js ≥ 24.0.0。按影响范围验证：`node scripts/smoke-check.js`、`node scripts/webui-check.js`、`node --test scripts/webui-render.test.js`、`node scripts/check-strings.js`、`node scripts/ui-parity.mjs`、`pnpm --dir server build`、`pnpm --dir server typecheck`、`pnpm --dir server test`、`pnpm --dir server test:contract`、`gradlew.bat :app:testDebugUnitTest`、`gradlew.bat :app:assembleDebug`。界面改动另外用 `node scripts/ui-shot.mjs` 逐屏留截图证据（用法见 [`docs/operations.md`](docs/operations.md)）。
 - 前端文案源码变更后运行 `node scripts/extract-strings.js --write`；服务端源码变更后重启进程。
 
 ## 边界

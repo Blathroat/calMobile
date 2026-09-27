@@ -7,7 +7,7 @@
  * 的渲染入口（与详情页同一套清洗），不自行拼 HTML。
  * 图片与视频先由原生落盘换成短 URL 再写进正文，正文不会因为内联 base64 变长。
  */
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
@@ -18,6 +18,7 @@ import { allowedFormats, uploadCountLimit, uploadSizeLimitMb, uploadSizeError } 
 import { device } from '@/services/device-services';
 import { markdownToHtml, plainText, sanitizeHtml } from '@/services/markdown';
 import AppIcon from '@/components/AppIcon.vue';
+import PasteTextPanel from '@/components/PasteTextPanel.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import type { ExhibitionDetail, JsonObject } from '@/api/types';
@@ -233,39 +234,31 @@ function removeMedia(tile: MediaTile): void {
 // ── 粘贴 / 清空 / 保存 ───────────────────────────────────────────
 
 /**
- * 直接粘贴 Markdown：面板里给一个输入框，整段替换或追加到末尾。
+ * 直接粘贴 Markdown：共享底部面板承载输入框（`PasteTextPanel`），按钮仍由面板服务管。
  *
- * 不走 `services/sheet`：那里只承载「一句话 + 按钮」，而这里的面板要带输入框。
- * 也不读系统剪贴板 —— WebView 读剪贴板需要额外权限与安全上下文，长按粘贴才是可靠路径。
+ * 不读系统剪贴板 —— WebView 读剪贴板需要额外权限与安全上下文，长按粘贴才是可靠路径。
  */
-const pasteOpen = ref(false);
-const pasteClosing = ref(false);
-const pasteText = ref('');
-let pasteTimer: number | undefined;
+const paste = reactive({ text: '' });
 
 function openPasteSheet(): void {
-  if (pasteTimer !== undefined) {
-    window.clearTimeout(pasteTimer);
-    pasteTimer = undefined;
-  }
-  pasteText.value = '';
-  pasteClosing.value = false;
-  pasteOpen.value = true;
-  void nextTick(() => document.getElementById('paste-markdown')?.focus());
-}
-
-function closePasteSheet(): void {
-  if (pasteClosing.value) return;
-  pasteClosing.value = true;
-  pasteTimer = window.setTimeout(() => {
-    pasteTimer = undefined;
-    pasteOpen.value = false;
-    pasteClosing.value = false;
-  }, 220);
+  paste.text = '';
+  openSheet({
+    title: t('s_7zi2sm'),
+    component: PasteTextPanel,
+    props: {
+      model: paste,
+      hint: t('s_wo4aqm'),
+    },
+    actions: [
+      { label: t('s_1589w37'), onClick: (close) => close() },
+      { label: t('s_booftk'), onClick: (close) => { applyPaste(false); close(); } },
+      { label: t('s_ekbz2c'), variant: 'primary', onClick: (close) => { applyPaste(true); close(); } },
+    ],
+  });
 }
 
 function applyPaste(replaceAll: boolean): void {
-  const value = pasteText.value.trim();
+  const value = paste.text.trim();
   if (!value) {
     toast(t('s_ijdxmv'), 'error');
     return;
@@ -273,7 +266,6 @@ function applyPaste(replaceAll: boolean): void {
   const current = content.value;
   content.value = replaceAll || !current.trim() ? value : `${current.trimEnd()}\n\n${value}`;
   toast(replaceAll ? t('s_17pstxc') : t('s_1oas91y'), 'success');
-  closePasteSheet();
 }
 
 function clearAll(): void {
@@ -473,32 +465,4 @@ function escapeRegExp(value: string): string {
       </div>
     </div>
   </Teleport>
-
-  <!-- 粘贴 Markdown：面板结构写在这里，因为它比 `services/sheet` 的「一句话 + 按钮」多一个输入框 -->
-  <div
-    v-if="pasteOpen"
-    class="sheet"
-    role="dialog"
-    aria-modal="true"
-    :data-closing="pasteClosing ? 'true' : 'false'"
-    @click.self="closePasteSheet()"
-    @keydown.escape="closePasteSheet()"
-  >
-    <div class="sheet-panel" data-size="full">
-      <h2 class="sheet-title">{{ t('s_7zi2sm') }}</h2>
-      <p class="row-meta">{{ t('s_wo4aqm') }}</p>
-      <textarea
-        id="paste-markdown"
-        v-model="pasteText"
-        class="textarea"
-        rows="8"
-        :placeholder="t('s_3ppp7q')"
-      />
-      <div class="sheet-actions">
-        <button class="cta ghost" type="button" @click="closePasteSheet()">{{ t('s_1589w37') }}</button>
-        <button class="cta ghost" type="button" @click="applyPaste(false)">{{ t('s_booftk') }}</button>
-        <button class="cta" type="button" @click="applyPaste(true)">{{ t('s_ekbz2c') }}</button>
-      </div>
-    </div>
-  </div>
 </template>

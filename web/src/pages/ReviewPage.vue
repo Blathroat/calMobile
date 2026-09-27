@@ -170,6 +170,8 @@ function openActions(record: Registration): void {
   openSheet({
     title: t('s_1r4txyl'),
     message: `当前：${record.status}`,
+    // 与用户状态面板同一套排布：选项竖排，选中/主推动作一眼可辨。
+    layout: 'stack',
     actions: targets.map((target): SheetAction => ({
       label: targetLabel(target),
       variant: target === REGISTRATION_STATUS.APPROVED ? 'primary' : 'ghost',

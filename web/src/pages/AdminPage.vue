@@ -10,8 +10,8 @@
  * 分段只切本地状态：切分区复用已取到的数据，不整页重建；
  * 搜索框带防抖，避免每次按键都触发一次取数。
  */
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { api, applyRuntimeBootstrap } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
 import { useBootstrapStore } from '@/stores/bootstrap';
@@ -34,11 +34,17 @@ import { t } from '@/i18n';
 
 const USER_STATUSES = [t('s_tt5vxa'), t('s_1am6dte'), t('s_1j1q2yf')];
 
+/**
+ * 分区用稳定的英文 id 做值（`value` 会写进 URL 的 `?tab=`），标签才是给用户看的文案：
+ * 用中文当值会让地址栏里出现百分号转义，也不便于以后改文案。
+ */
 const TABS = [
-  { value: t('s_1in002o'), label: t('s_1in002o') },
-  { value: t('s_11cd4ta'), label: t('s_11cd4ta') },
-  { value: t('s_1vmubx9'), label: t('s_1vmubx9') },
+  { value: 'users', label: t('s_1in002o') },
+  { value: 'exhibitions', label: t('s_11cd4ta') },
+  { value: 'settings', label: t('s_1vmubx9') },
 ];
+
+const tabIds = new Set(TABS.map((item) => item.value));
 
 /**
  * 字符数上限的唯一清单：控件的键、提交的字段名与后端 `app_settings.limits` 的键名
@@ -60,10 +66,12 @@ const TEXT_LIMITS: Array<{ key: string; label: string; hint: string }> = [
 ];
 
 const router = useRouter();
+const route = useRoute();
 const bootstrap = useBootstrapStore();
 const session = useSessionStore();
 
-const tab = ref(TABS[0]?.value ?? '');
+/** 当前分区来自 URL：从「查看报名」这类二级页返回时，仍停在进入前的分区。 */
+const tab = ref(tabFromQuery());
 const query = ref('');
 const users = useAsync<User[]>();
 const exhibitions = useAsync<Exhibition[]>();
@@ -125,11 +133,12 @@ function loadExhibitions(): Promise<unknown> {
 }
 
 function loadPanel(): void {
-  if (tab.value === t('s_1in002o')) {
+  // 与 TABS 的 id 比较（不是中文标签）：标签是用来显示的，改文案不该影响取数分支。
+  if (tab.value === 'users') {
     void loadUsers();
     return;
   }
-  if (tab.value === t('s_11cd4ta')) {
+  if (tab.value === 'exhibitions') {
     void loadExhibitions();
     return;
   }
@@ -137,26 +146,43 @@ function loadPanel(): void {
 }
 
 function changeTab(value: string): void {
+  if (value === tab.value) return;
   tab.value = value;
   // 搜索词跟着分区走：换分区后旧的筛选不再适用。
   query.value = '';
+  // 把分区写进地址栏（替换历史，不留下一条只换过 tab 的记录）：
+  // 从二级页返回时才能回到同一个分区。
+  void router.replace({ query: { ...route.query, tab: value } });
   loadPanel();
 }
+
+/** URL 里的分区 id；非法或缺省时回到第一个分区。 */
+function tabFromQuery(): string {
+  const value = String(route.query.tab ?? '');
+  return tabIds.has(value) ? value : (TABS[0]?.value ?? '');
+}
+
+// 从二级页返回、或用户直接改地址栏时，让分区跟着 URL 走。
+watch(() => route.query.tab, () => {
+  const next = tabFromQuery();
+  if (next === tab.value) return;
+  tab.value = next;
+  query.value = '';
+  loadPanel();
+});
 
 onMounted(loadPanel);
 onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
 // ── 用户管理 ─────────────────────────────────────────────────────
 
-function statusHint(status: string): string {
-  if (status === t('s_tt5vxa')) return t('s_o85tde');
-  if (status === t('s_1am6dte')) return t('s_184s1di');
-  return t('s_nsh78a');
-}
-
+/**
+ * 状态面板只列出状态名，不再附「· 说明」：说明属于顶部那条账号状态提示，
+ * 塞进按钮里会让每个选项都变成一句话，选起来反而更慢。
+ */
 function manageUser(user: User): void {
   const actions: SheetAction[] = USER_STATUSES.map((status) => ({
-    label: `${status} · ${statusHint(status)}`,
+    label: status,
     variant: user.status === status ? 'primary' : 'ghost',
     onClick: async (close) => {
       close();
@@ -168,6 +194,7 @@ function manageUser(user: User): void {
     title: `管理 ${user.nickname}`,
     message: `${user.role} · 注册于 ${user.registrationTime || t('s_1lpnuh4')}`,
     actions,
+    layout: 'stack',
   });
 }
 
@@ -386,7 +413,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
   <SegControl :model-value="tab" :items="TABS" :label="t('s_y9zw6u')" @update:model-value="changeTab" />
 
   <!-- ── 用户管理 ─────────────────────────────────────────────── -->
-  <template v-if="tab === t('s_1in002o')">
+  <template v-if="tab === 'users'">
     <SkeletonBlock v-if="users.loading.value && users.data.value === undefined" :rows="3" />
     <StateBlock
       v-else-if="users.error.value && users.data.value === undefined"
@@ -466,7 +493,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
   </template>
 
   <!-- ── 展会管理 ─────────────────────────────────────────────── -->
-  <template v-else-if="tab === t('s_11cd4ta')">
+  <template v-else-if="tab === 'exhibitions'">
     <SkeletonBlock v-if="exhibitions.loading.value && exhibitions.data.value === undefined" :rows="3" />
     <StateBlock
       v-else-if="exhibitions.error.value && exhibitions.data.value === undefined"

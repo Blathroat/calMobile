@@ -70,7 +70,6 @@
     <string name="s_17yba4l">报名时间</string>
     <string name="s_17zufsn">管理员可以随时切换报名人状态，不受“允许修改已通过或已拒绝的报名”开关影响。</string>
     <string name="s_17zyr1e">返回首页</string>
-    <string name="s_184s1di">保留登录，但不能报名、发布展会或编辑个人信息</string>
     <string name="s_185tvls">邮箱</string>
     <string name="s_189gp0e">可以让用户在报名详情页长按报名码复制，或直接输入二维码下方的文本。</string>
     <string name="s_18ko8bk">报</string>
@@ -491,11 +490,9 @@
     <string name="s_n6lkn3">创建账号</string>
     <string name="s_n6zeza">提交前确认展会名称与报名方式。</string>
     <string name="s_nrshpm">访客可以浏览详情，报名前需要先登录。</string>
-    <string name="s_nsh78a">禁止登录与报名</string>
     <string name="s_nsnwn6">导出内容为当前展会列表，文件通过系统保存对话框写入。</string>
     <string name="s_nynzo5">立即报名</string>
     <string name="s_o51o77">正在识别，请把报名码放进取景框。</string>
-    <string name="s_o85tde">可正常浏览与报名</string>
     <string name="s_ocmice">确认密码</string>
     <string name="s_omytgn">返回</string>
     <string name="s_onix0y">上传头像</string>
