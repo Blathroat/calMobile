@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { defineStore } from 'pinia';
 import type { User } from '@/api/types';
 
@@ -7,7 +8,7 @@ export interface SessionState {
   user: User;
 }
 
-const emptyUser = (): User => ({ role: 'guest', roleLabel: '访客', can: {} });
+const emptyUser = (): User => ({ role: 'guest', roleLabel: t('s_h6o1xg'), can: {} });
 
 export const useSessionStore = defineStore('session', {
   state: (): SessionState => ({ loggedIn: false, guest: true, user: emptyUser() }),

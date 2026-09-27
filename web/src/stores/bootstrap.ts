@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { defineStore } from 'pinia';
 import type { Bootstrap, JsonObject } from '@/api/types';
 
@@ -18,7 +19,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
     booted: false,
     categories: [],
     limits: {},
-    brand: { zh: '发现展会', en: 'calMobile' },
+    brand: { zh: t('s_1x7q517'), en: 'calMobile' },
     announcement: {},
     calendar: {},
     media: {},

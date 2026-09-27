@@ -625,5 +625,16 @@ final class FrontendStrings {
             "s_1sdwe6p",
             "s_gluzjf",
             "s_390cng",
+            "s_1y4m9v0",
+            "s_1uy3d7n",
+            "s_3s1sxj",
+            "s_jtetbl",
+            "s_18ma3qp",
+            "s_gpskv",
+            "s_aenf1z",
+            "s_1pwh7dy",
+            "s_crhxaz",
+            "s_jyzd1p",
+            "s_1x7q517",
     };
 }

@@ -618,4 +618,15 @@
     <string name="s_1sdwe6p">展会不存在或已删除</string>
     <string name="s_gluzjf">填写报名</string>
     <string name="s_390cng">请选择</string>
+    <string name="s_1y4m9v0">保存设置</string>
+    <string name="s_1uy3d7n">年</string>
+    <string name="s_3s1sxj">月</string>
+    <string name="s_jtetbl">外观</string>
+    <string name="s_18ma3qp">两步验证：</string>
+    <string name="s_gpskv">管理安全设置</string>
+    <string name="s_aenf1z">报名人：</string>
+    <string name="s_1pwh7dy">状态：</string>
+    <string name="s_crhxaz">搜索展会、地点或用户</string>
+    <string name="s_jyzd1p">验证码</string>
+    <string name="s_1x7q517">发现展会</string>
 </resources>
