@@ -17,11 +17,12 @@
 ## 前端硬约束
 
 - 数据只走 `web/src/api/client.ts`；页面取数统一用 feature composable，失败必须可见。
-- 查询缓存只放 `web/src/services/query-cache.ts`，缓存键包含解析后的参数；不以原生桥接承载业务数据，也不做本地降级。
+- 查询缓存只放 `web/src/services/query-cache.ts`，缓存键包含解析后的参数；不以原生桥接承载业务数据，也不做本地降级。写接口的失效前缀要与读接口的缓存键前缀同族（`registrations` ↔ `registrations.record`），否则改完再读会命中旧值。
 - 用户可见文案写入 `strings_frontend.xml` 并用 `t('key')` 读取；资源首尾不留空白。颜色、字号、间距、圆角只写入 `styles/tokens.css`，动效只写入 `styles/motion.css`。
-- Markdown / HTML 先经 Vue service 的 sanitize 入口；第三方库内置在 `web/public/vendor/`，不引用 CDN。
-- 新页面同时更新 `js/app.js`、[`docs/engineering.md`](docs/engineering.md) 的屏幕表和 `scripts/webui-render.test.js` 的 `ROUTES`；管理功能优先内联。
-- 表单校验走 `js/core/validate.js`，上限取 `state.limits`；后端仍需再次校验。
+- 页面只提供内容：外壳（`src/app/App.vue` 的顶栏 + 滚动内容区 + 底部导航 + 页脚槽）与 `src/app/shell.ts` 的导航项是唯一容器，页面不再自建 `.page` / `.topbar` / `.app-body`；固定操作区用 `<Teleport defer to="#app-foot">` 投递。
+- Markdown / HTML 先经 Vue service 的 sanitize 入口；第三方库内置在 `web/public/vendor/`，不引用 CDN，并只在用到的那一屏按需注入（`src/services/vendor.ts`）。
+- 新页面在 `web/src/app/router.ts` 注册（含 `meta.title / back / tab`），同时更新 [`docs/engineering.md`](docs/engineering.md) 的屏幕表和 `web/src/app/shell.test.ts` 的 `ROUTES`；管理功能优先内联。
+- 表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`；后端仍需再次校验。
 
 ## 原生硬约束
 
@@ -33,7 +34,7 @@
 
 - 数据库存英文代码，中文标签只在 `server/src/domain/labels.ts` 映射。
 - 写接口返回 `{ ok, error, ... }`；规则失败用 200 + `ok:false`，认证授权用 4xx，数据库不可用用 503。响应不暴露 pg 原文、SQL 或堆栈。
-- 新接口同时更新 `api.js` 的 `ENDPOINTS`、后端路由和 `server/src/test/api.test.ts`；错误分类集中在 `server/src/http/error-response.ts`。
+- 新接口同时更新 `web/api-endpoints.mjs` 的契约表、后端路由和 `server/src/test/api.test.ts`；错误分类集中在 `server/src/http/error-response.ts`。
 - 公开接口不下发 `checkInCode` 等凭据；两步验证未通过时不发任何令牌。邮箱是唯一且已验证的身份，改邮箱必须先验证新地址。
 - 运行模式读 `server/src/config/runtime.ts`；`pnpm dev` 用于开发，`pnpm start` 用于生产自检。服务骨架的适配器、安全头、CORS、请求日志和体积守卫规则见 `server/README.md`。
 - 邮件由 `server/src/services/mailer.ts` 发送；发码先落库、立即回包、后台发信，不在应用服务器自建 SMTP。

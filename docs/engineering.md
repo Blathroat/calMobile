@@ -19,15 +19,28 @@
 ```text
 web/
 ├── index.html
-├── src/app/                启动、路由、运行时
+├── public/vendor/          内置第三方库（jsQR / qrcode-generator，按需注入）
+├── src/app/                外壳、启动、路由、导航方向、外观（明暗与强调色）
 ├── src/api/                类型化领域 API
-├── src/services/           HTTP、缓存、原生桥接、设备能力
+├── src/components/         共享界面件（图标、顶栏、底部导航、状态块、分段控件、二维码…）
+├── src/composables/        页面取数 composable
+├── src/services/           HTTP、缓存、校验、格式化、状态词汇、Markdown/清洗、原生桥接
 ├── src/stores/             Pinia 跨页面状态
-├── src/pages/              Vue 页面
+├── src/pages/              Vue 页面（只提供内容，不搭外壳）
 └── src/styles/             设计令牌与动效
 ```
 
 页面不直接 `fetch`，也不通过原生桥接取业务数据。读取接口直接返回数据；写接口返回 `{ ok, error, ... }`。接口规则和前端动作必须在 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由、契约测试四处同时更新。
+
+## 应用外壳
+
+外壳在 `web/src/app/App.vue`：`.app` 网格 = 顶栏 + 可滚动的内容区 + 底部导航（或页面页脚）。页面只往内容区放内容。
+
+- 顶栏标题、返回键、底部导航项与内容区密度都由路由 `meta` 决定（`title` / `back` / `tab` / `bodyGap` / `bodyPad` / `bodyAlign`），导航项按角色过滤（`web/src/app/shell.ts`）。
+- 页面需要固定操作区时用 `<Teleport defer to="#app-foot">` 投递 `.page-foot`，它落在网格第三行；`defer` 让目标元素与页面在同一次渲染里创建时也能找到。
+- 页面不要自建 `.page` / `.topbar` / `.app-body` / `.tabbar`，也不要声明颜色、字号、间距与圆角。
+- 切换方向由 `web/src/app/navigation.ts` 按路径深度算出，写进 `.app[data-direction]`，`motion.css` 据此选择前进/后退/原地替换的过渡。
+- 明暗模式与管理员强调色在 `web/src/app/theme.ts` 落到 `<html data-mode>` 与 `--accent*`；首帧由 `index.html` 的内联脚本按本机缓存落一次，避免闪白。
 
 ## 屏幕对照
 
@@ -51,12 +64,13 @@ web/
 | 15 | `web/src/pages/AdminPage.vue` | 管理后台 |
 | — | `web/src/pages/CheckinPage.vue` | 现场核销工具 |
 
-设计稿的 16、17 屏已内联到管理后台和个人页设置；核销也属于展商后台入口，不新增二级页面。新增页面必须同时更新 `app.js` 路由、本表和 `scripts/webui-render.test.js` 的 `ROUTES`。
+设计稿的 16、17 屏已内联到管理后台和个人页设置；核销也属于展商后台入口，不新增二级页面。新增页面时在 `web/src/app/router.ts` 注册路由，同时更新本表与 `web/src/app/shell.test.ts` 的 `ROUTES`（该用例逐屏挂载外壳并断言顶栏、内容区、底部导航与页脚槽）。
 
 ## 数据加载规则
 
 - 查询 composable 负责加载、缓存首屏、后台刷新和错误块；不要用 `Promise.allSettled` 吞掉失败，也不要把未知状态显示成成功。
 - 查询缓存集中在 `web/src/services/query-cache.ts`；缓存键包含稳定序列化后的参数，并对相同请求去重。月视图一次取整月，点日期在本地完成，不重复请求。
+- 写接口的失效前缀必须与读接口的缓存键前缀同族（`registrations` ↔ `registrations.record`、`users` ↔ `users.record`），否则改完再读会命中旧值。
 - 页面已有内容时刷新只标记忙碌，不清空旧内容；过期响应丢弃，避免慢请求覆盖新视图。
 
 ## 原生桥接
@@ -76,7 +90,7 @@ web/
 
 ## 文案与资源
 
-用户可见文案写入 `app/src/main/res/values/strings_frontend.xml`，前端用 `t('key')` 读取。源码变更后运行 `node scripts/extract-strings.js --write`，再运行 `node scripts/check-strings.js` 检查源码、资源和 `FrontendStrings.NAMES`。资源首尾不得有空白。
+用户可见文案写入 `app/src/main/res/values/strings_frontend.xml`，前端用 `t('key')` 读取。源码变更后运行 `node scripts/extract-strings.js --write`，再运行 `node scripts/check-strings.js` 检查源码、资源和 `FrontendStrings.NAMES`。资源首尾不得有空白。脚本只替换 `.vue` 的 `<script>` 段与 `.ts` 里的普通字符串字面量（模板里的中文靠 `:placeholder="t('key')"` 这类绑定书写），并跳过测试文件与格式化常量模块。
 
 ## 设计来源
 
