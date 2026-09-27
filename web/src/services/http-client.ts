@@ -43,7 +43,8 @@ export class HttpClient {
   private refreshing: Promise<boolean> | undefined;
 
   constructor(private readonly options: HttpClientOptions) {
-    this.fetcher = options.fetcher ?? fetch;
+    // WebView 对原生 fetch 的 this 绑定严格，保存函数后必须绑定全局对象再调用。
+    this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
     this.timeoutMs = options.timeoutMs ?? 3000;
   }
 

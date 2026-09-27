@@ -19,7 +19,7 @@ onMounted(load);
 <template>
   <section class="page"><header class="topbar"><div><p class="eyebrow">{{ bootstrap.brand.en }}</p><h1>{{ bootstrap.brand.zh }}</h1></div><button class="icon-button" @click="router.push('/profile')">{{ t('s_8ddpxh') }}</button></header>
     <div class="month-nav"><button @click="shift(-1)">‹</button><strong>{{ year }} {{ t('s_1uy3d7n') }} {{ month }} {{ t('s_3s1sxj') }}</strong><button @click="shift(1)">›</button></div>
-    <div v-if="monthData.loading" class="state">{{ t('s_d154o') }}</div><div v-else-if="monthData.error.value" class="state error">{{ loadError }} <button @click="load">{{ t('s_lswd2v') }}</button></div>
+    <div v-if="monthData.loading.value" class="state">{{ t('s_d154o') }}</div><div v-else-if="monthData.error.value" class="state error">{{ loadError }} <button @click="load">{{ t('s_lswd2v') }}</button></div>
     <template v-else><p class="muted">{{ t('s_jw19tl') }} {{ eventDays.length }}</p><div class="day-list"><button v-for="day in eventDays" :key="day" :aria-pressed="selectedDay === day" @click="selectDay(day)">{{ day }} {{ t('s_qsy6ow') }}</button></div><section class="list"><button v-for="item in items" :key="String(item.id)" class="row-card" @click="router.push(`/detail/${item.id}`)"><strong>{{ item.title }}</strong><span>{{ item.venue }}</span><span>{{ item.time }}</span></button><p v-if="items.length === 0" class="state">{{ t('s_2og6o') }}</p></section></template>
   </section>
 </template>
