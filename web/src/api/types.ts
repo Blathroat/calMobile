@@ -11,7 +11,11 @@ export interface User extends JsonObject {
   username?: string;
   nickname?: string;
   role?: string;
+  roleLabel?: string;
   status?: string;
+  loggedIn?: boolean;
+  guest?: boolean;
+  can?: Record<string, boolean>;
 }
 
 export interface Bootstrap extends JsonObject {
