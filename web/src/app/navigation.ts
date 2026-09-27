@@ -1,3 +1,4 @@
+/** 集中处理路由请求的取消与过期响应，页面无需各自维护序号。 */
 export interface NavigationScope {
   id: number;
   signal: AbortSignal;

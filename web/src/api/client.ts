@@ -1,3 +1,4 @@
+/** 业务 API 的唯一入口，页面不直接拼接 URL 或处理令牌。 */
 import { HttpClient } from '@/services/http-client';
 import { QueryCache } from '@/services/query-cache';
 import { SessionClient } from '@/services/session-client';

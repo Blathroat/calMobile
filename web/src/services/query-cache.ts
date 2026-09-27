@@ -1,3 +1,4 @@
+/** 查询缓存与并发请求协调器，避免旧响应覆盖新视图。 */
 interface CacheEntry<T> { value: T; at: number; }
 
 export class QueryCache {

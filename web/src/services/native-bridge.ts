@@ -1,3 +1,4 @@
+/** Android 原生能力的类型化桥接，不承载业务数据或业务规则。 */
 export type NativeAction =
   | 'ui.sync'
   | 'camera.ensurePermission'

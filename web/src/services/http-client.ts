@@ -1,3 +1,4 @@
+/** 统一封装网络请求、超时、错误分类和访问令牌注入。 */
 export class TransportError extends Error {
   override name = 'TransportError';
 }

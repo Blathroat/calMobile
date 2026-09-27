@@ -1,3 +1,4 @@
+/** 保存启动接口下发的品牌、限制、分类和能力信息。 */
 import { t } from '@/i18n';
 import { defineStore } from 'pinia';
 import type { Bootstrap, JsonObject } from '@/api/types';

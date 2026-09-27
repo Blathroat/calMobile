@@ -1,3 +1,4 @@
+/** 管理访问令牌生命周期，刷新令牌不扩散到页面层。 */
 import type { HttpClient } from './http-client';
 
 export interface SessionTokens { token: string; refreshToken?: string; }

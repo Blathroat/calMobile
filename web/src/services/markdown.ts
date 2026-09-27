@@ -1,3 +1,4 @@
+/** Markdown 渲染入口，所有富文本先经过清洗再交给页面展示。 */
 const URL_PATTERN = /^(https?:|mailto:)/i;
 
 export function escapeHtml(value: string): string {

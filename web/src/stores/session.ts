@@ -1,3 +1,4 @@
+/** 跨页面会话状态，服务端仍是身份与权限的最终权威。 */
 import { t } from '@/i18n';
 import { defineStore } from 'pinia';
 import type { User } from '@/api/types';
