@@ -1,0 +1,5 @@
+<script setup lang="ts">
+import { computed, onMounted } from 'vue'; import { useRouter } from 'vue-router'; import { api } from '@/app/runtime'; import { useAsync } from '@/composables/useAsync'; import type { Exhibition } from '@/api/types';
+const router = useRouter(); const query = useAsync<Exhibition[]>(); const items = computed(() => query.data.value ?? []); onMounted(() => query.run(() => api.exhibitions.list()));
+</script>
+<template><section class="page"><header class="topbar"><h1>展商后台</h1><button class="cta" @click="router.push('/exhibition-form')">新建展会</button></header><div class="cluster"><button class="cta ghost" @click="router.push('/review')">报名审核</button><button class="cta ghost" @click="router.push('/checkin')">现场核销</button></div><div v-if="query.loading" class="state">正在加载…</div><p v-else-if="query.error" class="state error">{{ query.error.value?.message }}</p><div v-else class="list"><button v-for="item in items" :key="item.id" class="row-card" @click="router.push(`/exhibition-form/${item.id}`)"><strong>{{ item.title }}</strong><span>{{ item.date }} · {{ item.status }}</span></button></div></section></template>

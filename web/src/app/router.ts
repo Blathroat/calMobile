@@ -3,6 +3,13 @@ import HomePage from '@/pages/HomePage.vue';
 import LoginPage from '@/pages/LoginPage.vue';
 import RegisterPage from '@/pages/RegisterPage.vue';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage.vue';
+import ProfilePage from '@/pages/ProfilePage.vue';
+import SecurityPage from '@/pages/SecurityPage.vue';
+import ExhibitorPage from '@/pages/ExhibitorPage.vue';
+import ExhibitionFormPage from '@/pages/ExhibitionFormPage.vue';
+import ReviewPage from '@/pages/ReviewPage.vue';
+import AdminPage from '@/pages/AdminPage.vue';
+import CheckinPage from '@/pages/CheckinPage.vue';
 import DetailPage from '@/pages/DetailPage.vue';
 import RegistrationDetailPage from '@/pages/RegistrationDetailPage.vue';
 import RegistrationFormPage from '@/pages/RegistrationFormPage.vue';
@@ -31,8 +38,14 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
       { path: '/registration-form/:id', component: RegistrationFormPage, meta: { requiresAuth: true, capability: 'register' } },
       { path: '/my-registrations', component: MyRegistrationsPage, meta: { requiresAuth: true } },
       { path: '/registration-detail/:id', component: RegistrationDetailPage, meta: { requiresAuth: true } },
-      { path: '/profile', component: HomePage, meta: { requiresAuth: true } },
-      { path: '/admin', component: HomePage, meta: { requiresAuth: true, roles: ['admin'] } },
+      { path: '/profile', component: ProfilePage, meta: { requiresAuth: true } },
+      { path: '/security', component: SecurityPage, meta: { requiresAuth: true } },
+      { path: '/exhibitor', component: ExhibitorPage, meta: { requiresAuth: true, roles: ['exhibitor', 'admin'] } },
+      { path: '/exhibition-form', component: ExhibitionFormPage, meta: { requiresAuth: true, roles: ['exhibitor', 'admin'] } },
+      { path: '/exhibition-form/:id', component: ExhibitionFormPage, meta: { requiresAuth: true, roles: ['exhibitor', 'admin'] } },
+      { path: '/review', component: ReviewPage, meta: { requiresAuth: true, roles: ['exhibitor', 'admin'] } },
+      { path: '/checkin', component: CheckinPage, meta: { requiresAuth: true, roles: ['exhibitor', 'admin'] } },
+      { path: '/admin', component: AdminPage, meta: { requiresAuth: true, roles: ['admin'] } },
     ],
   });
 

@@ -31,6 +31,17 @@ export interface ApiClient {
     notifications(): Promise<JsonObject>;
     saveNotifications(payload: JsonObject): Promise<ApiResult>;
   };
+  security: {
+    get(): Promise<JsonObject>;
+    enableTwoFactor(): Promise<JsonObject>;
+    verifyTwoFactor(code: string): Promise<JsonObject>;
+    disableTwoFactor(password: string): Promise<JsonObject>;
+    changeEmail(email: string): Promise<JsonObject>;
+    verifyEmail(email: string, code: string): Promise<JsonObject>;
+    totpSetup(): Promise<JsonObject>;
+    totpEnable(code: string): Promise<JsonObject>;
+    backupCodes(password: string): Promise<JsonObject>;
+  };
   exhibitions: {
     list(query?: JsonObject): Promise<Exhibition[]>;
     month(query: JsonObject): Promise<JsonObject>;
@@ -112,6 +123,17 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
       changePassword: (payload) => http.request<ApiResult>('/profile/password', { method: 'POST', body: payload }),
       notifications: () => read<JsonObject>('notifications', '/profile/notifications'),
       saveNotifications: (payload) => write<ApiResult>('/profile/notifications', { method: 'PUT', body: payload }, ['notifications']),
+    },
+    security: {
+      get: () => http.request<JsonObject>('/profile/security'),
+      enableTwoFactor: () => http.request<JsonObject>('/profile/2fa/enable', { method: 'POST' }),
+      verifyTwoFactor: (code) => http.request<JsonObject>('/profile/2fa/enable/verify', { method: 'POST', body: { code } }),
+      disableTwoFactor: (password) => http.request<JsonObject>('/profile/2fa/disable', { method: 'POST', body: { password } }),
+      changeEmail: (email) => http.request<JsonObject>('/profile/email', { method: 'POST', body: { email } }),
+      verifyEmail: (email, code) => write<JsonObject>('/profile/email/verify', { method: 'POST', body: { email, code } }, ['profile']),
+      totpSetup: () => http.request<JsonObject>('/profile/2fa/totp/setup', { method: 'POST' }),
+      totpEnable: (code) => http.request<JsonObject>('/profile/2fa/totp/enable', { method: 'POST', body: { code } }),
+      backupCodes: (password) => http.request<JsonObject>('/profile/2fa/backup-codes', { method: 'POST', body: { password } }),
     },
     exhibitions: {
       list: (query = {}) => read<Exhibition[]>('exhibitions.list', '/exhibitions', { query }),
