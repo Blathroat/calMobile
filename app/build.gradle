@@ -33,6 +33,14 @@ tasks.register("typecheckWeb", Exec) {
     commandLine pnpmCommand, "typecheck"
 }
 
+// 迁移阶段保持旧 assets/web 默认不变；显式传 -PvueFrontend=true 才把 Vue dist 同步进 APK。
+tasks.register("syncWebAssets", Sync) {
+    dependsOn "buildWeb"
+    onlyIf { project.hasProperty("vueFrontend") }
+    from("${webDir}/dist")
+    into("${projectDir}/src/main/assets/web")
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)

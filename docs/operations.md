@@ -35,6 +35,8 @@ gradlew.bat :app:assembleDebug
 
 按改动范围运行必要项目：
 
+- Vue 前端重构：`node scripts/webui-vue-check.js`；生成 APK 时使用 `gradlew.bat :app:assembleDebug -PvueFrontend=true` 将 `web/dist` 同步进 WebView 资源。
+
 - 前端路由、加载和文案：渲染测试、字符串检查。
 - 后端规则或响应：服务端单测与契约测试；数据库相关测试需要 PostgreSQL。
 - Java 或桥接：`testDebugUnitTest`；出包或资源变更再运行 `assembleDebug`。
