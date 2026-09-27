@@ -13,6 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 逐屏文案对照要跟 master 的历史版本比，浅克隆取不到对照提交
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -29,12 +32,104 @@ jobs:
       - run: node scripts/webui-check.js
       - run: node --test scripts/webui-render.test.js
       - run: node scripts/check-strings.js
+      - name: 取对照分支（逐屏文案对照用）
+        run: git fetch --no-tags origin master:refs/remotes/origin/master || true
+      - name: 逐屏文案对照（与 master 比有没有整块丢失）
+        run: node scripts/ui-parity.mjs --ref origin/master --max-gone 25
       - run: pnpm --dir web typecheck
       - run: pnpm --dir web test
       - run: pnpm --dir web build
       - run: pnpm --dir server typecheck
       - run: pnpm --dir server test
       - run: pnpm --dir server test:contract
+
+  # 浏览器逐屏回归：起库 + 后端 + 前端静态服务，用 CDP 把每一屏截下来留证据。
+  # 它抓的是「结构塌了 / 整块没渲染」这类类型检查与单测看不见的问题。
+  ui-regression:
+    runs-on: ubuntu-latest
+    needs: web-and-server
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: calmobile_dev
+          # 与 docker-compose 一致：容器默认 UTC 会让 00:00–08:00 的「今天」差一天
+          TZ: Asia/Shanghai
+          PGTZ: Asia/Shanghai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d calmobile_dev"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            web/pnpm-lock.yaml
+            server/pnpm-lock.yaml
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - run: pnpm --dir web install --frozen-lockfile
+      - run: pnpm --dir server install --frozen-lockfile
+      - name: 准备后端配置（控制台邮件通道，CORS 放开给本地前端）
+        run: |
+          cp server/.env.example server/.env
+          {
+            echo "MAIL_TRANSPORT=console"
+            echo "CORS_ORIGIN=*"
+            echo "DB_PASSWORD=postgres"
+            echo "JWT_SECRET=ci-access-secret-for-ui-regression-at-least-32-chars"
+            echo "TOTP_SECRET_KEY=ci-totp-secret-for-ui-regression-at-least-32-chars"
+          } >> server/.env
+      - name: 建表与示例数据
+        run: |
+          pnpm --dir server db:migrate
+          pnpm --dir server db:seed
+      - name: 起后端
+        run: |
+          pnpm --dir server dev > /tmp/server.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/v1/ping > /dev/null; then echo "后端就绪"; exit 0; fi
+            sleep 1
+          done
+          echo "后端没起来："; cat /tmp/server.log; exit 1
+      - run: pnpm --dir web build
+      - name: 起前端静态服务
+        run: |
+          pnpm --dir web exec vite preview --port 5173 --strictPort > /tmp/preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:5173/assets/web/ > /dev/null; then echo "前端就绪"; exit 0; fi
+            sleep 1
+          done
+          echo "前端没起来："; cat /tmp/preview.log; exit 1
+      - name: 逐屏截图
+        run: |
+          node scripts/ui-shot.mjs \
+            --out .omo/evidence/ui \
+            --chrome "$(command -v google-chrome)" \
+            --stub-native \
+            --account demo \
+            --routes "home,detail,my-registrations,profile,settings,security,admin,exhibitor,review,search"
+      - name: 失败时打印服务日志
+        if: failure()
+        run: |
+          echo '--- server ---'; cat /tmp/server.log || true
+          echo '--- preview ---'; cat /tmp/preview.log || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-screenshots
+          path: .omo/evidence/ui
+          if-no-files-found: warn
 
   android:
     runs-on: ubuntu-latest

@@ -76,6 +76,10 @@ node scripts/ui-parity.mjs --full   # 连「搬到了别处」的 key 一起打�
 
 `→ 无` 才是真缺口；`→ web/src/...` 说明那条文案搬到了路由 meta、共享服务或共享组件里。
 
+CI 里这两个脚本都在跑：`ui-parity` 在 `web-and-server` 作业（`--ref origin/master --max-gone 25`，超预算说明有整块界面没搬过来），
+`ui-shot` 在 `ui-regression` 作业（自带 PostgreSQL 服务、迁移 + 示例数据、后端与 `vite preview`，截图作为 `ui-screenshots` 工件上传）。
+预算值随有意删除的文案调整；`ui-shot` 登录失败时会直接报错并带出页面上的错误文案，不会静默截下一串登录页。
+
 动效全部静止时，先确认三个动画 scale 都为 1：
 
 ```powershell

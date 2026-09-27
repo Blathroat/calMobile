@@ -43,6 +43,13 @@ const args = process.argv.slice(2);
 const refIndex = args.indexOf('--ref');
 const REF = refIndex >= 0 ? args[refIndex + 1] : 'master';
 const FULL = args.includes('--full');
+/**
+ * 「别处也没有」的 key 数量上限（`--max-gone N`）。
+ * 存量里有二十来条是**有意删除**的（保存配色、报名方式抽屉、账号状态说明、EasyMDE 相关…），
+ * 因此 CI 用它做预算：整块文案消失会让数量跳变并让构建失败，个别调整则在预算内。
+ */
+const maxIndex = args.indexOf('--max-gone');
+const MAX_GONE = maxIndex >= 0 ? Number(args[maxIndex + 1]) : Number.POSITIVE_INFINITY;
 const SHOULD_SHOW = (key) => FULL || FULL_KEYS.has(key);
 
 const T_CALL = /\bt\(\s*(['"])(s_[a-z0-9]+)\1\s*\)/g;
@@ -117,3 +124,15 @@ for (const row of rows) {
 }
 console.log(`\n合计「别处也没有」的 key：${missingTotal} 条。`);
 console.log('提示：`→ 无` 才是真缺口；`→ web/src/...` 表示搬到了路由 meta 或共享服务/组件里。');
+
+const unresolved = rows.filter((row) => row.note).length;
+if (unresolved > 0) {
+  console.warn(`\n注意：${unresolved} 个页面没能取到参考实现（${REF}），对照不完整。`);
+}
+if (unresolved === rows.length) {
+  console.error('FAIL 参考提交完全取不到：先 `git fetch origin master`，或用 --ref 指定可解析的提交。');
+  process.exitCode = 1;
+} else if (missingTotal > MAX_GONE) {
+  console.error(`FAIL 「别处也没有」的文案有 ${missingTotal} 条，超过预算 ${MAX_GONE} 条：可能有整块界面没搬过来。`);
+  process.exitCode = 1;
+}

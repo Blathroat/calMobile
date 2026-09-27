@@ -22,9 +22,32 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DEFAULT_CHROME = process.platform === 'win32'
-  ? 'C:/Program Files/Google/Chrome/Application/chrome.exe'
-  : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const DEFAULT_CHROME = resolveChrome();
+const CHROME_CANDIDATES = [
+  process.env.CHROME_PATH,
+  process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : '',
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  process.platform === 'win32' ? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' : '',
+].filter(Boolean);
+
+/** 找本机可用的 Chromium：CI 上通常是 `/usr/bin/google-chrome`，本地是安装目录。 */
+function resolveChrome() {
+  const candidates = [
+    process.env.CHROME_PATH,
+    process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : '',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    process.platform === 'win32' ? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' : '',
+  ].filter(Boolean);
+  return candidates.find((item) => fs.existsSync(item)) ?? candidates[0];
+}
 
 /** 解析 `--key value` 形式的参数。 */
 function parseArgs(argv) {
@@ -161,12 +184,15 @@ async function main() {
   }
 
   const profileDir = path.resolve('.omo/ui-shot-chrome');
-  const chrome = spawn(options.chrome, [
+  const flags = [
     '--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars',
     `--remote-debugging-port=${options.port}`,
     `--user-data-dir=${profileDir}`,
     'about:blank',
-  ], { detached: true, stdio: 'ignore' });
+  ];
+  // CI（容器里以 root 运行）必须关沙箱，否则 Chrome 起不来。
+  if (process.env.CI || process.getuid?.() === 0) flags.unshift('--no-sandbox');
+  const chrome = spawn(options.chrome, flags, { detached: true, stdio: 'ignore' });
   // 脱离父进程：截图结束时不会被这个子进程拖住命令行。
   chrome.unref();
 
@@ -216,7 +242,7 @@ async function main() {
     } else {
       await goto('/login', 2200);
       await shot('01-login');
-      await evaluate(`(() => {
+      const submitted = await evaluate(`(() => {
         const inputs = document.querySelectorAll('input');
         if (inputs.length < 2) return 'no-inputs';
         const set = (el, value) => { el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); };
@@ -226,6 +252,13 @@ async function main() {
         return 'submitted';
       })()`);
       await sleep(2400);
+      // 登录失败时后面每一屏都会是登录页——那是最难看出原因的一种「截图全绿」。
+      // 这里直接失败，并把页面上的错误文案带出来（多半是后端没起或账号不对）。
+      const hash = await evaluate('location.hash');
+      if (submitted !== 'submitted' || hash.includes('/login')) {
+        const message = await evaluate(`document.querySelector('.field-error')?.textContent?.trim() ?? ''`);
+        throw new Error(`登录没能进入主界面（账号 ${options.account}，hash=${hash}）${message ? `：${message}` : ''}\n检查后端是否在 127.0.0.1:3000 且 CORS 允许 ${options.base}`);
+      }
     }
     await goto('/home', 2200);
     await shot('02-home');
