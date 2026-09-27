@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { query } from '../config/pool.js';
-import { readServerSettings, readUiMode } from '../domain/settings.js';
+import { readServerSettings, readUiMode, readUiTheme } from '../domain/settings.js';
 import { USER_COLUMNS, USER_FROM } from '../domain/queries.js';
 import { userPayload, guestPayload, type UserRow } from '../domain/payloads.js';
 import { capabilities } from '../domain/permissions.js';
@@ -30,6 +30,10 @@ app.get('/bootstrap', optionalAuthHono, async (c) => {
   const userOfRequest = userOf(c);
   const settings = await readServerSettings();
   const mode = await readUiMode(userOfRequest?.userId, settings);
+  // 配色下标是**该用户实际生效**的那个：登录账号选过就用自己那份（`users.ui_theme`），
+  // 没选过或未登录时用全局默认 `app_settings.theme.index`。
+  // 前端因此不用分支，直接按 `theme.colors[theme.index]` 取色。
+  const themeIndex = await readUiTheme(userOfRequest?.userId, settings.theme.index, settings.theme.colors);
   let user = guestPayload();
   if (userOfRequest) {
     const result = await query<UserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [userOfRequest.userId]);
@@ -38,7 +42,7 @@ app.get('/bootstrap', optionalAuthHono, async (c) => {
   }
   return jsonResponse(c, {
     user,
-    theme: settings.theme,
+    theme: { index: themeIndex, colors: settings.theme.colors },
     ui: { mode },
     capabilities: { ...settings.capabilities },
     categories: settings.categories,

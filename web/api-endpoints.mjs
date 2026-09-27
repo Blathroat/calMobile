@@ -56,4 +56,5 @@ export const ENDPOINTS = {
   'settings.get': () => ({ method: 'GET', path: '/settings' }),
   'settings.save': () => ({ method: 'PUT', path: '/settings' }),
   'settings.uiMode': () => ({ method: 'PUT', path: '/settings/ui-mode' }),
+  'settings.uiTheme': () => ({ method: 'PUT', path: '/settings/ui-theme' }),
 };

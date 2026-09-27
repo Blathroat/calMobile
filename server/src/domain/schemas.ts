@@ -141,6 +141,8 @@ export const emailVerifyLooseSchema = z.object({
   code: inputString.transform((value) => value.trim()),
 });
 export const uiModeSchema = z.object({ mode: inputString });
+/** 个人配色：下标是色板上的一个位置，合法范围由路由按补齐后的色板长度判定。 */
+export const uiThemeSchema = z.object({ themeIndex: z.unknown() });
 export const notifySchema = z
   .object({
     exhibitionReminder: boolSchema(),

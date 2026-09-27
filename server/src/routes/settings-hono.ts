@@ -6,14 +6,16 @@ import {
   readNotificationPreferences,
   readServerSettings,
   readUiMode,
+  readUiTheme,
   saveNotificationPreferences,
   saveServerSettings,
   saveUiMode,
+  saveUiTheme,
 } from '../domain/settings.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { parseSchema } from '../domain/validation.js';
-import { notifySchema, serverSettingsPatchSchema, uiModeSchema } from '../domain/schemas.js';
+import { notifySchema, serverSettingsPatchSchema, uiModeSchema, uiThemeSchema } from '../domain/schemas.js';
 
 const app = new Hono<HonoEnv>();
 function bodyRecord(value: unknown): Record<string, unknown> {
@@ -24,8 +26,11 @@ function has(body: object | null | undefined, key: string) {
 }
 async function settingsPayload(userId: string | null | undefined) {
   const settings = await readServerSettings();
+  // `theme.index` 下发的是**调用者实际生效**的下标（个人选择优先于全局默认）：
+  // 页面据此画选中环，不必自己判断「我有没有单独选过配色」。
+  const themeIndex = await readUiTheme(userId, settings.theme.index, settings.theme.colors);
   return {
-    theme: settings.theme,
+    theme: { index: themeIndex, colors: settings.theme.colors },
     ui: { mode: await readUiMode(userId, settings) },
     announcement: settings.announcement,
     brand: settings.brand,
@@ -57,6 +62,16 @@ app.put('/ui-mode', authenticateHono, async (c) => {
     mode: await saveUiMode(user.userId, body.mode),
   }));
 });
+// 个人配色：与 `/ui-mode` 对称，只写调用者自己的 users.ui_theme。
+// 「管理-设置」里改的是全局默认 `app_settings.theme.index`，两者互不覆盖。
+app.put('/ui-theme', authenticateHono, async (c) => {
+  const user = requireUser({ user: userOf(c) });
+  const body = parseSchema(uiThemeSchema, bodyRecord(await readJsonBody(c)));
+  return mutate(c, async () => {
+    const settings = await readServerSettings();
+    return { themeIndex: await saveUiTheme(user.userId, body.themeIndex, settings.theme.colors) };
+  });
+});
 export function createSettingsRoutes() {
   return app;
 }
@@ -64,4 +79,5 @@ export const SETTINGS_ENDPOINTS: readonly [string, string][] = [
   ['GET', '/'],
   ['PUT', '/'],
   ['PUT', '/ui-mode'],
+  ['PUT', '/ui-theme'],
 ];

@@ -50,20 +50,20 @@ public final class AppSettings {
     public static final String DEFAULT_IMAGE_FORMATS = "jpg,jpeg,png,webp,gif";
     public static final String DEFAULT_VIDEO_FORMATS = "mp4,mov,webm,m4v";
 
-    // 预设色号与 newUI 的橙色强调保持协调，前端 settings 里的 theme.index 指的是这里的下标。
+    // 预设色号与后端 `server/src/config/migrate.ts` 的 `THEME_COLORS` **逐位对应**：
+    // 前端 settings 里的 `theme.index` 就是这个数组的下标，两边一旦错位，
+    // 页面强调色与状态栏颜色就对不上。后端 8 色，这里必须也是 8 色、顺序一致。
     // 直接写 0xAARRGGBB 字面量而不是 Color.rgb(...)：静态初始化不碰 Android API，
     // 这两个归一化函数才能在普通 JVM 单测里跑。
     private static final int[] ACCENTS = {
-            0xFFC05621,   // #C05621 焦糖橙
-            0xFF48515D,   // #48515D 石墨
-            0xFF245D3C,   // #245D3C 森林绿
-            0xFF2F6F8F,   // #2F6F8F 海湾蓝
-            0xFF8A5A44,   // #8A5A44 赤陶
-            0xFF6B5B95,   // #6B5B95 紫灰
-            0xFF2F6B5A,   // #2F6B5A 松针
-            0xFF7A4F5A,   // #7A4F5A 酒红
-            0xFFB17D2C,   // #B17D2C 琥珀
-            0xFF566774    // #566774 雾蓝灰
+            0xFFC05621,   // 0 #C05621 焦糖橙（默认）
+            0xFF48515D,   // 1 #48515D 石墨蓝灰
+            0xFF245D3C,   // 2 #245D3C 森林绿
+            0xFF2F6F8F,   // 3 #2F6F8F 海湾青蓝
+            0xFF334E7D,   // 4 #334E7D 靛蓝
+            0xFF0E6E62,   // 5 #0E6E62 墨绿
+            0xFF6B3FA0,   // 6 #6B3FA0 紫
+            0xFFA32C5E    // 7 #A32C5E 玫红
     };
 
     private AppSettings() { }
@@ -80,7 +80,16 @@ public final class AppSettings {
     }
 
     public static int getAccentColor(Context context) {
-        return ACCENTS[getThemeIndex(context)];
+        return accentColorAt(getThemeIndex(context));
+    }
+
+    /**
+     * 按下标取强调色；越界回落到 0（默认的焦糖橙）。
+     *
+     * 纯函数：不读 Android API，因此可以在普通 JVM 单测里断言「下标与色板逐位对齐」。
+     */
+    static int accentColorAt(int index) {
+        return index >= 0 && index < ACCENTS.length ? ACCENTS[index] : ACCENTS[0];
     }
 
     public static void setThemeIndex(Context context, int index) {

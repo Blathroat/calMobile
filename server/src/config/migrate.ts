@@ -24,6 +24,15 @@ import { isEntry } from '../entry.js';
 export interface MigrationStep {
   id: string;
   sql: string;
+  /**
+   * 可选：SQL 的绑定参数（按 `THEME_COLORS` 这类「只在代码里维护一份」的常量生成）。
+   *
+   * 用参数而不是把值拼进 SQL 有两条理由：一是色板只在 `THEME_COLORS` 里写一次，
+   * 不会和迁移步骤里手抄的列表漂移；二是 pg 驱动在**简单查询**协议下会在发送前
+   * 扫描 `$` 找占位符，SQL 文本里出现美元引用之类的字面量会被截断成语法错误，
+   * 走参数即改用扩展协议，不再有这类坑。
+   */
+  params?: (palette: readonly string[]) => readonly unknown[];
 }
 
 export interface ServerSettings {
@@ -51,6 +60,31 @@ export interface ServerSettings {
   announcement: { enabled: boolean; text: string };
   brand: { zh: string; en: string };
 }
+
+/**
+ * 应用配色的默认色板（8 种）。
+ *
+ * 契约：**index 与语义稳定，位置一旦发布不得改动**。
+ * `theme.index` 是存下来的用户选择，前端 `applyTheme()` 与原生 `ui.sync` 都按下标取色，
+ * 换位置等于换掉所有老用户当前的强调色，因此新色只能往后追加。
+ *
+ * 每个色都能同时充当「实心按钮底色 + 白字」：与白色的对比度均 ≥ 4.5:1
+ * （最浅的 #2F6F8F 约 5.5:1），与深色模式页面底色（#171A1F）的对比度均 ≥ 2.6:1，
+ * 因此深色模式下也认得出是「有彩色」而不是糊成一块深灰。
+ *
+ * 定义放在 `STEPS` 之前：迁移 `0006` 的 `params` 读它，位置在后会踩到 TDZ。
+ * 色板一旦发布只能追加，因此**不要**为了好看重排这个数组。
+ */
+export const THEME_COLORS: readonly string[] = [
+  '#C05621', // 0 焦糖橙（默认）：现在的强调色，老用户不动它
+  '#48515D', // 1 石墨蓝灰：中性冷色，用于沉稳、少彩的界面临时切换
+  '#245D3C', // 2 森林绿：成功、环保与健康类主题
+  '#2F6F8F', // 3 海湾青蓝：信息、科技与数据类主题
+  '#334E7D', // 4 靛蓝：偏正式的商务蓝，比 3 更深更冷
+  '#0E6E62', // 5 墨绿（偏青）：介于绿与蓝之间，区分度落在 2 与 3 之间
+  '#6B3FA0', // 6 紫：活动、创意与展演类主题
+  '#A32C5E', // 7 玫红：促销、节庆等强情绪主题
+];
 
 /** 迁移步骤：id 一旦发布就不要改内容，只能追加新步骤。 */
 export const STEPS: MigrationStep[] = [
@@ -288,10 +322,69 @@ export const STEPS: MigrationStep[] = [
             ON backup_codes (user_id, code_hash) WHERE used_at IS NULL;
         `,
   },
+  {
+    // 配色从 4 种扩到 8 种。
+    //
+    // **只改 DEFAULT_SETTINGS 是不够的**：`app_settings` 的默认值是「缺项才写」
+    // （seed 里是 `ON CONFLICT DO NOTHING`），老库那一行早就存在，seed 不会再动它，
+    // 于是老用户的配色面板永远只有 4 个色块 —— 老库、新库行为不一致。
+    // 这一步把已存的 theme.colors 补齐：保留原有前几项、按默认色板追加缺的新色。
+    //
+    // 幂等：色板补齐后 WHERE 不匹配，一行都不更新；重复执行也不会重复追加。
+    // `theme.index` 完全不动，所以老库选中的强调色保持不变。
+    //
+    // 色板色值走 **参数**（`$1::jsonb`）而不是写死在 SQL 里：迁移语句用简单查询协议发送，
+    // 而 pg 驱动会在发送前扫描 `$` 找占位符，SQL 文本里出现 `$tag$` 之类的字面量
+    // （哪怕是注释里）都会被它截断，报成 `syntax error at or near "true"` 这种离谱错误。
+    id: '0006-theme-palette-8',
+    sql: `
+        WITH palette AS (
+            -- $1 是默认色板（JSON 数组），position 是它在色板里的 1 基下标。
+            SELECT color, position
+              FROM jsonb_array_elements_text($1::jsonb) WITH ORDINALITY AS item(color, position)
+        ),
+        current AS (
+            SELECT COALESCE(value -> 'colors', '[]'::jsonb) AS colors
+              FROM app_settings WHERE key = 'theme'
+        ),
+        missing AS (
+            -- 只追加「默认色板里位置在已存长度之后、且库里还没有」的新色：既有项原样保留，
+            -- 因此 index 0..3 的语义与旧版一致，也不会出现重复色。
+            SELECT color FROM palette, current
+             WHERE position > jsonb_array_length(colors)
+               AND NOT colors ? color
+        )
+        UPDATE app_settings AS s
+           SET value = jsonb_set(
+                   s.value,
+                   '{colors}',
+                   COALESCE(s.value -> 'colors', '[]'::jsonb)
+                       || COALESCE((SELECT jsonb_agg(color) FROM missing), '[]'::jsonb),
+                   -- create_if_missing：老库的 theme 即使没有 colors 键也能补上
+                   true)
+         WHERE s.key = 'theme'
+           AND jsonb_array_length(COALESCE(s.value -> 'colors', '[]'::jsonb)) < $2::int;
+        `,
+    // 参数：默认色板 + 目标长度。色板只在 THEME_COLORS 里写一次，避免两处漂移。
+    params: (palette: readonly string[]) => [JSON.stringify(palette), palette.length],
+  },
+  {
+    // 配色从「服务器级一项」变成「服务器级默认 + 每人一份」。
+    //
+    // `ui_theme` 为 NULL 表示「这个账号还没选过配色」，此时跟随
+    // `app_settings.theme.index` 的全局默认（见 `domain/settings.ts` 的 `readUiTheme`）。
+    // 因此在这次迁移之后，老账号的强调色不变（依旧是全局默认那一色），
+    // 只有真正点过配色的账号才会写进自己的行里。
+    // `ADD COLUMN IF NOT EXISTS` 让这一步可以反复执行。
+    id: '0007-user-ui-theme',
+    sql: `
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS ui_theme INTEGER;
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
-  theme: { index: 0, colors: ['#C05621', '#48515D', '#245D3C', '#2F6F8F'] },
+  theme: { index: 0, colors: [...THEME_COLORS] },
   ui: { mode: 'auto' },
   capabilities: { calendar: false, notifications: false, richText: true, export: true },
   categories: ['智能家居', '物流技术', '医疗健康', '新材料'],
@@ -345,7 +438,12 @@ export async function migrate(): Promise<void> {
     for (const step of pending) {
       await client.query('BEGIN');
       try {
-        await client.query(step.sql);
+        // 带 params 的步骤按扩展协议发送（见 MigrationStep.params 的说明）。
+        if (step.params) {
+          await client.query(step.sql, [...step.params(THEME_COLORS)]);
+        } else {
+          await client.query(step.sql);
+        }
         await client.query('INSERT INTO schema_migrations (id) VALUES ($1)', [step.id]);
         await client.query('COMMIT');
         console.log(`迁移完成：${step.id}`);
