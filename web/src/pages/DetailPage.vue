@@ -203,7 +203,7 @@ onMounted(() => { void load(); });
 
     <div class="stack" data-gap="sm">
       <h2>{{ exhibition.title }}</h2>
-      <p class="muted">{{ exhibition.exhibitor }} · {{ exhibition.exhibitorNote }}</p>
+      <p class="muted">{{ exhibition.exhibitor || t('s_1lsc240') }} · {{ exhibition.exhibitorNote }}</p>
     </div>
 
     <div class="card" data-tone="fill">

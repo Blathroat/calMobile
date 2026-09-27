@@ -14,7 +14,7 @@ import { useAsync } from '@/composables/useAsync';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
-import { uploadCountLimit, uploadSizeLimitMb, uploadSizeError } from '@/services/validate';
+import { allowedFormats, uploadCountLimit, uploadSizeLimitMb, uploadSizeError } from '@/services/validate';
 import { device } from '@/services/device-services';
 import { markdownToHtml, plainText, sanitizeHtml } from '@/services/markdown';
 import AppIcon from '@/components/AppIcon.vue';
@@ -165,6 +165,12 @@ function formatBytes(bytes: unknown): string {
 
 // ── 媒体 ─────────────────────────────────────────────────────────
 
+/** 允许的格式：服务器没配就回落到「常见」，错误提示里因此始终有下一步可走。 */
+function formatsHint(kind: 'image' | 'video'): string {
+  const formats = allowedFormats(kind);
+  return formats.length > 0 ? formats.map((item) => `.${item}`).join('/') : t('s_1ylglbm');
+}
+
 /** 插入图片：交给原生落盘后只写入短 URL。 */
 async function insertImage(): Promise<void> {
   const max = Number(bootstrap.media.imageCount) || 8;
@@ -184,7 +190,7 @@ async function insertImage(): Promise<void> {
     toast(result.compressed ? `图片已压缩为 ${size} 并插入` : `图片已插入（${size}）`, 'success');
   } catch (reason) {
     if (isCancelled(reason)) return;
-    toast(reason instanceof Error ? reason.message : String(reason), 'error');
+    toast(reason instanceof Error ? reason.message : `请选择 ${formatsHint('image')} 格式的图片`, 'error');
   }
 }
 
@@ -212,7 +218,7 @@ async function insertVideo(): Promise<void> {
     toast(`视频已插入（${formatBytes(result.bytes)}）`, 'success');
   } catch (reason) {
     if (isCancelled(reason)) return;
-    toast(reason instanceof Error ? reason.message : String(reason), 'error');
+    toast(reason instanceof Error ? reason.message : `请选择 ${formatsHint('video')} 格式的视频`, 'error');
   }
 }
 
@@ -226,40 +232,40 @@ function removeMedia(tile: MediaTile): void {
 
 // ── 粘贴 / 清空 / 保存 ───────────────────────────────────────────
 
-/** 直接粘贴 Markdown：整段替换或追加到末尾。 */
-function openPasteSheet(): void {
-  openSheet({
-    title: t('s_7zi2sm'),
-    message: t('s_wo4aqm'),
-    actions: [
-      { label: t('s_1589w37'), onClick: (close) => close() },
-      { label: t('s_booftk'), onClick: (close) => { close(); void pasteFromClipboard(false); } },
-      {
-        label: t('s_ekbz2c'),
-        variant: 'primary',
-        onClick: (close) => { close(); void pasteFromClipboard(true); },
-      },
-    ],
-  });
-}
-
 /**
- * 面板里的按钮没有输入框，只能读剪贴板。
- * WebView 里读剪贴板需要安全上下文，读不到时说明改用长按粘贴，不静默失败。
+ * 直接粘贴 Markdown：面板里给一个输入框，整段替换或追加到末尾。
+ *
+ * 不走 `services/sheet`：那里只承载「一句话 + 按钮」，而这里的面板要带输入框。
+ * 也不读系统剪贴板 —— WebView 读剪贴板需要额外权限与安全上下文，长按粘贴才是可靠路径。
  */
-async function pasteFromClipboard(replaceAll: boolean): Promise<void> {
-  let text = '';
-  try {
-    text = await navigator.clipboard.readText();
-  } catch {
-    toast(t('s_ijdxmv'), 'error');
-    return;
+const pasteOpen = ref(false);
+const pasteClosing = ref(false);
+const pasteText = ref('');
+let pasteTimer: number | undefined;
+
+function openPasteSheet(): void {
+  if (pasteTimer !== undefined) {
+    window.clearTimeout(pasteTimer);
+    pasteTimer = undefined;
   }
-  applyPaste(text, replaceAll);
+  pasteText.value = '';
+  pasteClosing.value = false;
+  pasteOpen.value = true;
+  void nextTick(() => document.getElementById('paste-markdown')?.focus());
 }
 
-function applyPaste(text: unknown, replaceAll: boolean): void {
-  const value = String(text ?? '').trim();
+function closePasteSheet(): void {
+  if (pasteClosing.value) return;
+  pasteClosing.value = true;
+  pasteTimer = window.setTimeout(() => {
+    pasteTimer = undefined;
+    pasteOpen.value = false;
+    pasteClosing.value = false;
+  }, 220);
+}
+
+function applyPaste(replaceAll: boolean): void {
+  const value = pasteText.value.trim();
   if (!value) {
     toast(t('s_ijdxmv'), 'error');
     return;
@@ -267,6 +273,7 @@ function applyPaste(text: unknown, replaceAll: boolean): void {
   const current = content.value;
   content.value = replaceAll || !current.trim() ? value : `${current.trimEnd()}\n\n${value}`;
   toast(replaceAll ? t('s_17pstxc') : t('s_1oas91y'), 'success');
+  closePasteSheet();
 }
 
 function clearAll(): void {
@@ -466,4 +473,32 @@ function escapeRegExp(value: string): string {
       </div>
     </div>
   </Teleport>
+
+  <!-- 粘贴 Markdown：面板结构写在这里，因为它比 `services/sheet` 的「一句话 + 按钮」多一个输入框 -->
+  <div
+    v-if="pasteOpen"
+    class="sheet"
+    role="dialog"
+    aria-modal="true"
+    :data-closing="pasteClosing ? 'true' : 'false'"
+    @click.self="closePasteSheet()"
+    @keydown.escape="closePasteSheet()"
+  >
+    <div class="sheet-panel" data-size="full">
+      <h2 class="sheet-title">{{ t('s_7zi2sm') }}</h2>
+      <p class="row-meta">{{ t('s_wo4aqm') }}</p>
+      <textarea
+        id="paste-markdown"
+        v-model="pasteText"
+        class="textarea"
+        rows="8"
+        :placeholder="t('s_3ppp7q')"
+      />
+      <div class="sheet-actions">
+        <button class="cta ghost" type="button" @click="closePasteSheet()">{{ t('s_1589w37') }}</button>
+        <button class="cta ghost" type="button" @click="applyPaste(false)">{{ t('s_booftk') }}</button>
+        <button class="cta" type="button" @click="applyPaste(true)">{{ t('s_ekbz2c') }}</button>
+      </div>
+    </div>
+  </div>
 </template>

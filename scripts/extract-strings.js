@@ -55,6 +55,14 @@ const PROTOCOL_VALUES = new Set([
  */
 const T_CALL = /\bt\(\s*(['"])(s_[a-z0-9]+)\1\s*\)/g;
 
+/**
+ * 直接出现的资源名（例如路由 `meta.title: 's_xxx'`）。
+ *
+ * 它们不写成 `t('s_xxx')`，而是运行时 `t(meta.title)` 取用。收集时要一并算作“在用”，
+ * 否则重新生成资源时会被当死资源删掉，顶栏标题就退化成显示 key。
+ */
+const KEY_LITERAL = /(['"])(s_[a-z0-9]+)\1/g;
+
 function walk(dir) {
     return fs.readdirSync(dir, { withFileTypes: true })
         .flatMap((entry) => (entry.isDirectory()
@@ -156,25 +164,30 @@ const report = [];
 
 for (const file of walk(jsRoot)) {
     const name = path.basename(file);
+    const raw = fs.readFileSync(file, 'utf8');
+
+    // 先收集文件里已经在用的资源名，保证幂等：再跑一次不会丢文案。
+    // 收集要扫**整个文件**（模板与路由 meta 里的 key 都是活资源），也不跳过
+    // SKIP_FILES：格式化常量模块里引用的文案同样在用，只是它们的字面量不参与迁移。
+    for (const pattern of [T_CALL, KEY_LITERAL]) {
+        for (const match of raw.matchAll(pattern)) {
+            rememberExisting(match[2]);
+        }
+    }
+
     if (SKIP_FILES.has(name) || isTestFile(file)) {
         continue;
     }
-    const raw = fs.readFileSync(file, 'utf8');
     const isVue = name.endsWith('.vue');
     const block = isVue ? scriptBlock(raw) : null;
     if (isVue && !block) {
         continue;
     }
+    // `.vue` 只替换 `<script>` 段：模板里的中文靠 `:placeholder="t('key')"` 这类绑定书写，
+    // 直接替换引号里的内容会把 `placeholder="请输入"` 改成 `t('s_xxx')`。
     const source = isVue ? block.text : raw;
     let counter = 0;
     let changed = false;
-
-    // 先收集源码里已迁移的 key，保证幂等：再跑一次不会丢文案。
-    // 收集要扫**整个文件**（模板里的 `t('s_xxx')` 也是活资源），
-    // 替换才只动 `<script>` 段。
-    for (const match of raw.matchAll(T_CALL)) {
-        rememberExisting(match[2]);
-    }
 
     // 只匹配单行、非模板、不含插值的字面量。
     const replaced = source.replace(/(['"])((?:(?!\1)[^\\\n]|\\.)*?)\1/g, (match, quote, body) => {

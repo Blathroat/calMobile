@@ -376,6 +376,14 @@ label {
     gap: var(--s3);
 }
 
+/* 区块保持自然高度：flex 子项默认允许被压缩，长页面里分段控件、提示条、
+   日历这些固定高度的区块会被压成一条细线（文字还在，只是整块塌了）。
+   内容超过一屏时由 `.app-body` 滚动，而不是把区块压扁。 */
+.app-body > .page-surface,
+.app-body > .page-surface > * {
+    flex: none;
+}
+
 /* 内容是纵向滚动的，固定高度区块不允许被压缩：否则日历等区块会被 flex 压扁，
    配合 overflow: hidden 直接裁掉下边框。只对日历容器生效，其它卡片保持默认。 */
 .calendar-swipe {
@@ -1615,6 +1623,12 @@ label {
     background: var(--f3);
     color: var(--ink-2);
     font-size: var(--fs-meta);
+}
+
+/* 提示条开头的标签不被说明文字挤成一字一行 */
+.notice > strong,
+.notice > .section-label {
+    flex: none;
 }
 
 .notice[data-tone="accent"] {

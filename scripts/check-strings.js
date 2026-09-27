@@ -32,6 +32,15 @@ const failures = [];
  */
 const T_CALL = /\bt\(\s*(['"])(s_[a-z0-9]+)\1\s*\)/g;
 
+/**
+ * 直接出现的资源名（例如路由 `meta.title: 's_xxx'`）。
+ *
+ * 这类 key 不经过 `t('s_xxx')` 字面量，而是运行时 `t(meta.title)` 取用：
+ * 只认 `T_CALL` 的话，它们在源码里“看不见”，`extract-strings.js --write`
+ * 会当成死资源清掉，顶栏标题就退化成显示 key。
+ */
+const KEY_LITERAL = /(['"])(s_[a-z0-9]+)\1/g;
+
 function walk(dir) {
     return fs.readdirSync(dir, { withFileTypes: true })
         .flatMap((entry) => (entry.isDirectory()
@@ -53,9 +62,13 @@ for (const match of xml.matchAll(/<string name="(s_[a-z0-9]+)"/g)) {
 const usedKeys = new Map();
 for (const file of walk(jsRoot)) {
     const source = fs.readFileSync(file, 'utf8');
-    for (const match of source.matchAll(T_CALL)) {
-        if (!usedKeys.has(match[2])) {
-            usedKeys.set(match[2], path.relative(root, file));
+    const relative = path.relative(root, file);
+    for (const pattern of [T_CALL, KEY_LITERAL]) {
+        for (const match of source.matchAll(pattern)) {
+            const key = match[2];
+            if (!usedKeys.has(key)) {
+                usedKeys.set(key, relative);
+            }
         }
     }
 }
