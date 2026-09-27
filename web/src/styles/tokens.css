@@ -310,6 +310,7 @@ label {
 
 .app {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr) auto;
     height: 100dvh;
     max-width: var(--app-max);
@@ -323,6 +324,35 @@ label {
     padding-bottom: var(--safe-bottom);
 }
 
+/* 网格的行归属在这里固定，与标记顺序无关：页脚槽在标记里先出现（页面 Teleport 的
+   目标必须已经存在），但它属于第三行，和底部导航同一行。
+   列必须显式写在第 1 列，否则行被占用的元素会被自动排到**第二列**，
+   整个外壳会变成两列并挤成半宽。 */
+.app > .topbar {
+    grid-row: 1;
+    grid-column: 1;
+}
+
+.app > .app-body {
+    grid-row: 2;
+    grid-column: 1;
+}
+
+.app > .app-foot,
+.app > .tabbar {
+    grid-row: 3;
+    grid-column: 1;
+}
+
+/* 页脚槽：页面把 `.page-foot` 投递进来；没有内容时整行不参与布局。 */
+.app-foot {
+    min-width: 0;
+}
+
+.app-foot:empty {
+    display: none;
+}
+
 .app-body {
     min-height: 0;
     display: flex;
@@ -331,6 +361,19 @@ label {
     padding: var(--s4);
     overflow-y: auto;
     overscroll-behavior: contain;
+}
+
+/* 路由容器：内容区的纵向排布由它承担（页面只负责往里放区块），
+   单独一层是为了让 `route-enter` 动画在每次切换时重放。 */
+.app-body > .page-surface {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s4);
+}
+
+.app-body[data-gap="tight"] > .page-surface {
+    gap: var(--s3);
 }
 
 /* 内容是纵向滚动的，固定高度区块不允许被压缩：否则日历等区块会被 flex 压扁，
@@ -409,6 +452,12 @@ label {
 
 .stack[data-gap="lg"] {
     gap: var(--s5);
+}
+
+/* 入口页的居中区块：品牌标记 + 标题 + 一句说明 */
+.stack[data-align="center"] {
+    align-items: center;
+    text-align: center;
 }
 
 .row {
@@ -513,6 +562,11 @@ label {
     font-weight: 700;
 }
 
+/* 需要与所在区块居中对齐的短文案（日历提示、页脚说明） */
+.text-center {
+    text-align: center;
+}
+
 .divider {
     height: var(--hairline);
     background: var(--stroke);
@@ -535,6 +589,20 @@ label {
     height: 14px;
     border-radius: var(--r-pill);
     background: var(--accent);
+}
+
+/* 入口页的品牌标记：线框的 .brand-mark（圆角方底 + 品牌首字） */
+.brand-mark {
+    width: 84px;
+    height: 84px;
+    display: grid;
+    place-items: center;
+    border: var(--hairline) solid var(--stroke);
+    border-radius: var(--r-panel);
+    background: var(--f2);
+    color: var(--frame);
+    font-size: 34px;
+    font-weight: 800;
 }
 
 /* ============================================================================
@@ -1555,6 +1623,13 @@ label {
     color: var(--accent-ink);
 }
 
+/* 权限不足、动作失败这类提示：与成功/强调提示一样要有视觉差异，不能只靠文字 */
+.notice[data-tone="error"] {
+    border-color: var(--danger-ink);
+    background: var(--danger-tint);
+    color: var(--danger-ink);
+}
+
 /* ============================================================================
  * 弹层：底部面板与确认对话框
  * ==========================================================================*/
@@ -1601,6 +1676,12 @@ label {
     display: flex;
     gap: var(--s2);
     justify-content: flex-end;
+}
+
+/* 面板里的按钮不占满整行：并排放在右下角，宽度一致。 */
+.sheet-actions .cta {
+    width: auto;
+    min-width: 112px;
 }
 
 @keyframes fade-in {

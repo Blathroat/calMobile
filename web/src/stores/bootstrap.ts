@@ -13,6 +13,8 @@ export interface BootstrapState {
   media: JsonObject;
   server: JsonObject;
   review: JsonObject;
+  /** 管理员配色：强调色由 `colors[index]` 决定，运行时写进 `--accent*` */
+  theme: JsonObject;
 }
 
 export const useBootstrapStore = defineStore('bootstrap', {
@@ -26,6 +28,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
     media: {},
     server: {},
     review: {},
+    theme: {},
   }),
   actions: {
     apply(data: Bootstrap = {}) {
@@ -38,6 +41,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
       this.media = { ...this.media, ...asObject(data.media) };
       this.server = { ...this.server, ...asObject(data.server) };
       this.review = { ...this.review, ...asObject(data.review) };
+      this.theme = { ...this.theme, ...asObject(data.theme) };
     },
   },
 });

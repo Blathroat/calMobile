@@ -1,40 +1,400 @@
 <script setup lang="ts">
+/**
+ * 屏幕 02 · 首页（月视图 + 当天展会列表）
+ * 线框：docs/newUI/index.html #screen-home、docs/newUI/remaining-ui.html #screen-home
+ *
+ * 日历卡片支持左右滑动切换月份：拖动时卡片跟手位移，松手超过阈值则滑出并载入相邻月份；
+ * 需要六行才能排满的月份会额外多出一行，同时压缩行高（`data-rows`），保证整卡仍可见。
+ *
+ * 点日期**不发请求**：`exhibitions.month` 一次返回整月展会，选中哪一天纯属本地状态，
+ * 因此既不重新取数，也不重建日历 DOM（重建会让卡片闪一下、圆点动画重放）。
+ */
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { api } from '@/app/runtime';
-import { bootApp } from '@/app/runtime';
+import { api, bootApp } from '@/app/runtime';
 import { useBootstrapStore } from '@/stores/bootstrap';
-import { useAsync } from '@/composables/useAsync';
+import { toast } from '@/services/toast';
+import AppIcon from '@/components/AppIcon.vue';
+import StateBlock from '@/components/StateBlock.vue';
+import SkeletonBlock from '@/components/SkeletonBlock.vue';
+import MediaBox from '@/components/MediaBox.vue';
+import StatusTag from '@/components/StatusTag.vue';
+import { addMonths, daysInMonth, firstWeekdayOffset, monthLabel } from '@/services/format';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
-const router = useRouter(); const bootstrap = useBootstrapStore(); const now = new Date();
-const year = ref(now.getFullYear()); const month = ref(now.getMonth() + 1); const selectedDay = ref(0); const monthData = useAsync<JsonObject>();
-const items = computed(() => Array.isArray(monthData.data.value?.selected) ? monthData.data.value.selected as JsonObject[] : []);
-const eventDays = computed(() => Array.isArray(monthData.data.value?.eventDays) ? monthData.data.value.eventDays as number[] : []);
-const loadError = computed(() => monthData.error.value?.message ?? t('s_kvpltc'));
-async function load() { await monthData.run(() => api.exhibitions.month({ year: year.value, month: month.value, day: selectedDay.value || undefined })); }
-function shift(delta: number) { const next = new Date(year.value, month.value - 1 + delta, 1); year.value = next.getFullYear(); month.value = next.getMonth() + 1; selectedDay.value = 0; void load(); }
-function selectDay(day: number) { selectedDay.value = day; void load(); }
-onMounted(async () => {
-  // 先使用后端选定的首月；示例数据可能不在设备当前月份。
-  await bootApp();
-  const landing = bootstrap.calendar.landing;
-  if (landing && typeof landing === 'object') {
-    const landingYear = Number((landing as Record<string, unknown>).year);
-    const landingMonth = Number((landing as Record<string, unknown>).month);
-    if (Number.isInteger(landingYear) && Number.isInteger(landingMonth)
-      && landingMonth >= 1 && landingMonth <= 12) {
-      year.value = landingYear;
-      month.value = landingMonth;
-    }
+
+const WEEK_LABELS = [t('s_1hqqsf'), t('s_12482qz'), t('s_3fnyn8'), t('s_q67h2y'), t('s_14c4war'), t('s_1sgquew'), t('s_qsy6ow')];
+const SWIPE_THRESHOLD = 46;
+
+const router = useRouter();
+const bootstrap = useBootstrapStore();
+
+const view = ref({
+  year: new Date().getFullYear(),
+  month: new Date().getMonth() + 1,
+  // 0 表示「未指定」：落到当月第一个有展会的日期。
+  day: 0,
+});
+/** 落点月份只采用一次：之后切月份、点日期都以用户为准。 */
+const landingApplied = ref(false);
+
+const monthData = ref<JsonObject | null>(null);
+const error = ref('');
+const loading = ref(true);
+const hasContent = computed(() => monthData.value !== null);
+
+const calendarHost = ref<HTMLElement>();
+const swipeHost = ref<HTMLElement>();
+/** 切月时的进出场方向，交给 motion.css 的 `data-leave` / `data-enter`。 */
+const leave = ref('');
+const enter = ref('');
+
+interface Cell { day: number; muted: boolean; hasEvent: boolean; disabled: boolean }
+
+const rows = computed(() => {
+  const total = daysInMonth(view.value.year, view.value.month);
+  return Math.ceil((firstWeekdayOffset(view.value.year, view.value.month) + total) / 7);
+});
+
+/** 日历格子：上下月的补位灰显且不可点，只有本月的日期能选中。 */
+const cells = computed<Cell[]>(() => {
+  const { year, month } = view.value;
+  const total = daysInMonth(year, month);
+  const offset = firstWeekdayOffset(year, month);
+  const previous = addMonths(year, month, -1);
+  const previousTotal = daysInMonth(previous.year, previous.month);
+  const events = new Set(eventDays());
+  const list: Cell[] = [];
+  for (let index = 0; index < offset; index += 1) {
+    list.push({ day: previousTotal - offset + index + 1, muted: true, hasEvent: false, disabled: true });
   }
-  await load();
+  for (let day = 1; day <= total; day += 1) {
+    list.push({ day, muted: false, hasEvent: events.has(day), disabled: false });
+  }
+  const trailing = (rows.value * 7) - offset - total;
+  for (let day = 1; day <= trailing; day += 1) {
+    list.push({ day, muted: true, hasEvent: false, disabled: true });
+  }
+  return list;
+});
+
+const items = computed<JsonObject[]>(() => {
+  const day = view.value.day;
+  if (day <= 0) return [];
+  const all = Array.isArray(monthData.value?.exhibitions) ? monthData.value?.exhibitions as JsonObject[] : [];
+  return all.filter((item) => Number(item.day) === day);
+});
+
+const eventDays = (): number[] => (Array.isArray(monthData.value?.eventDays) ? monthData.value?.eventDays as number[] : []);
+
+const selectedMeta = computed(() => (items.value.length > 0
+  ? `${items.value.length} 场`
+  : t('s_xwhfsg')));
+
+/** 启动公告：只在开关打开且本机未读过时显示一次。 */
+const announcement = ref('');
+
+function dayLabel(cell: Cell): string {
+  const suffix = cell.hasEvent ? t('s_1hzbri3') : '';
+  const selected = cell.day === view.value.day && !cell.muted ? t('s_19g8l4d') : '';
+  return `${view.value.month}月${cell.day}日${suffix}${selected}`;
+}
+
+/** 加载当前 `view` 对应的月份；已有内容时保留旧内容，只标记忙碌。 */
+async function load(): Promise<void> {
+  loading.value = !hasContent.value;
+  error.value = '';
+  try {
+    // 落点月份由后端下发（示例数据集中在 2026 年 6–8 月），首屏必须等它落定。
+    await bootApp();
+    if (!landingApplied.value) {
+      landingApplied.value = true;
+      const landing = (bootstrap.calendar.landing ?? {}) as JsonObject;
+      const year = Number(landing.year);
+      const month = Number(landing.month);
+      if (Number.isInteger(year) && Number.isInteger(month) && month >= 1 && month <= 12) {
+        view.value.year = year;
+        view.value.month = month;
+      }
+    }
+    const data = await api.exhibitions.month({
+      year: view.value.year,
+      month: view.value.month,
+      day: view.value.day || undefined,
+    }) as JsonObject;
+    monthData.value = data;
+    // 只有还没选中日期时才采用后端给的落点，避免刷新覆盖用户的选择。
+    if (!view.value.day) view.value.day = Number(data.day) || 0;
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+    if (!hasContent.value) monthData.value = null;
+  } finally {
+    loading.value = false;
+  }
+}
+
+function selectDay(day: number): void {
+  if (view.value.day === day) return;
+  view.value.day = day;
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/** 切换月份：先让当前卡片滑出，再载入新月份并滑入，让「月份变了」在视觉上连续。 */
+function shiftMonth(delta: number): void {
+  const next = addMonths(view.value.year, view.value.month, delta);
+  const apply = (): void => {
+    view.value.year = next.year;
+    view.value.month = next.month;
+    // 交给新月份自己挑第一个有展会的日期。
+    view.value.day = 0;
+    enter.value = delta > 0 ? 'right' : 'left';
+    void load().then(() => {
+      requestAnimationFrame(() => { enter.value = ''; });
+    });
+  };
+  if (prefersReducedMotion()) {
+    apply();
+    return;
+  }
+  leave.value = delta > 0 ? 'left' : 'right';
+  window.setTimeout(() => {
+    leave.value = '';
+    apply();
+  }, 140);
+}
+
+/**
+ * 左右滑动切换月份。
+ *
+ * 手指刚按下就先预取该展会详情（与列表项的 pointerdown 同理），点进详情时数据已在缓存里。
+ */
+function enableSwipe(): void {
+  const host = swipeHost.value;
+  const card = calendarHost.value;
+  if (!host || !card) return;
+
+  let pointerId: number | null = null;
+  let startX = 0;
+  let startY = 0;
+  let deltaX = 0;
+  let axis = '';
+
+  const reset = (animate: boolean): void => {
+    card.style.transition = animate ? 'transform var(--motion-normal) var(--ease-out)' : 'none';
+    card.style.transform = '';
+    pointerId = null;
+    axis = '';
+    deltaX = 0;
+  };
+
+  host.addEventListener('pointerdown', (event) => {
+    if (pointerId !== null || event.pointerType === 'mouse') return;
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+    deltaX = 0;
+    axis = '';
+  });
+
+  host.addEventListener('pointermove', (event) => {
+    if (event.pointerId !== pointerId) return;
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+    if (axis === '') {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      // 纵向手势交给页面滚动，横向才由日历接管。
+      axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      if (axis === 'x') {
+        card.dataset.drag = 'true';
+        card.style.transition = 'none';
+      }
+    }
+    if (axis !== 'x') return;
+    deltaX = dx;
+    // 拖到边界外时阻尼，给出「到头了」的手感。
+    const damped = Math.sign(deltaX) * Math.min(Math.abs(deltaX), 96);
+    card.style.transform = `translate3d(${damped * 0.6}px, 0, 0)`;
+    event.preventDefault();
+  });
+
+  const finish = (event: PointerEvent): void => {
+    if (event.pointerId !== pointerId) return;
+    const committed = axis === 'x' && Math.abs(deltaX) >= SWIPE_THRESHOLD;
+    const direction = deltaX < 0 ? 1 : -1;
+    card.dataset.drag = 'false';
+    reset(!committed);
+    if (committed) shiftMonth(direction);
+  };
+
+  host.addEventListener('pointerup', finish);
+  host.addEventListener('pointercancel', (event) => {
+    if (event.pointerId === pointerId) {
+      card.dataset.drag = 'false';
+      reset(true);
+    }
+  });
+  host.addEventListener('pointerleave', (event) => {
+    if (event.pointerId === pointerId) {
+      card.dataset.drag = 'false';
+      reset(true);
+    }
+  });
+}
+
+/** 手指按下就预取详情，点进去时不再等首屏。 */
+function warm(id: unknown): void {
+  if (id === undefined || id === null) return;
+  void api.exhibitions.get(String(id)).catch(() => undefined);
+}
+
+/** 启动公告：仅在开关打开且未读时提示一次。 */
+function announce(): void {
+  const info = bootstrap.announcement;
+  if (info.enabled !== true || !info.text) return;
+  const key = `announcement:${String(info.text)}`;
+  try {
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, '1');
+  } catch {
+    // 隐私模式下忽略存储失败，仍然提示一次
+  }
+  announcement.value = String(info.text);
+  toast(announcement.value);
+}
+
+onMounted(() => {
+  enableSwipe();
+  announce();
+  void load();
 });
 </script>
+
 <template>
-  <section class="page"><header class="topbar"><div><p class="eyebrow">{{ bootstrap.brand.en }}</p><h1>{{ bootstrap.brand.zh }}</h1></div><button class="icon-button" @click="router.push('/profile')">{{ t('s_8ddpxh') }}</button></header>
-    <div class="month-nav"><button @click="shift(-1)">‹</button><strong>{{ year }} {{ t('s_1uy3d7n') }} {{ month }} {{ t('s_3s1sxj') }}</strong><button @click="shift(1)">›</button></div>
-    <div v-if="monthData.loading.value" class="state">{{ t('s_d154o') }}</div><div v-else-if="monthData.error.value" class="state error">{{ loadError }} <button @click="load">{{ t('s_lswd2v') }}</button></div>
-    <template v-else><p class="muted">{{ t('s_jw19tl') }} {{ eventDays.length }}</p><div class="day-list"><button v-for="day in eventDays" :key="day" :aria-pressed="selectedDay === day" @click="selectDay(day)">{{ day }} {{ t('s_qsy6ow') }}</button></div><section class="list"><button v-for="item in items" :key="String(item.id)" class="row-card" @click="router.push(`/detail/${item.id}`)"><strong>{{ item.title }}</strong><span>{{ item.venue }}</span><span>{{ item.time }}</span></button><p v-if="items.length === 0" class="state">{{ t('s_2og6o') }}</p></section></template>
-  </section>
+  <header class="row" data-between="true">
+    <div class="stack" data-gap="sm">
+      <span class="eyebrow">{{ bootstrap.brand.en }}</span>
+      <h2>{{ bootstrap.brand.zh }}</h2>
+    </div>
+  </header>
+
+  <div v-if="announcement" class="notice" data-tone="accent" role="status">
+    <strong>{{ t('s_153oaxf') }}</strong>
+    <span>{{ announcement }}</span>
+  </div>
+
+  <div class="row" data-between="true">
+    <strong>{{ monthLabel(view.year, view.month) }}</strong>
+    <div class="row">
+      <button
+        class="icon-button"
+        data-variant="outlined"
+        type="button"
+        :aria-label="t('s_e4jezx')"
+        :title="t('s_e4jezx')"
+        @click="shiftMonth(-1)"
+      >
+        <AppIcon name="chevronLeft" />
+      </button>
+      <button
+        class="icon-button"
+        data-variant="outlined"
+        type="button"
+        :aria-label="t('s_y6u3g')"
+        :title="t('s_y6u3g')"
+        @click="shiftMonth(1)"
+      >
+        <AppIcon name="chevronRight" />
+      </button>
+    </div>
+  </div>
+
+  <div ref="swipeHost" class="calendar-swipe">
+    <div
+      ref="calendarHost"
+      class="calendar"
+      :data-rows="rows"
+      :data-leave="leave || undefined"
+      :data-enter="enter || undefined"
+      :data-busy="loading && hasContent ? 'true' : undefined"
+    >
+      <SkeletonBlock v-if="loading && !hasContent" :rows="1" />
+      <StateBlock
+        v-else-if="error && !hasContent"
+        tone="error"
+        :title="t('s_1tbhtoh')"
+        :description="error"
+        :action-label="t('s_lswd2v')"
+        @action="load"
+      />
+      <template v-else>
+        <div class="week-row" aria-hidden="true">
+          <span v-for="label in WEEK_LABELS" :key="label">{{ label }}</span>
+        </div>
+        <div class="calendar-grid">
+          <button
+            v-for="(cell, index) in cells"
+            :key="`${cell.muted ? 'p' : 'c'}-${cell.day}-${index}`"
+            class="cal-day"
+            type="button"
+            :data-day="cell.day"
+            :data-muted="cell.muted ? 'true' : 'false'"
+            :data-has-event="cell.hasEvent ? 'true' : 'false'"
+            :aria-pressed="!cell.muted && cell.day === view.day ? 'true' : 'false'"
+            :aria-label="dayLabel(cell)"
+            :disabled="cell.disabled"
+            @click="selectDay(cell.day)"
+          >
+            <span class="cal-day-num">{{ cell.day }}</span>
+          </button>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <p class="field-hint text-center">{{ t('s_15hmwa0') }}</p>
+
+  <div class="row" data-between="true">
+    <strong>{{ view.day > 0 ? `${view.month} 月 ${view.day} 日的展会` : t('s_1e4opb2') }}</strong>
+    <span class="dim">{{ selectedMeta }}</span>
+  </div>
+
+  <div v-if="error && hasContent" class="notice" data-tone="accent">
+    <span>{{ error }}</span>
+  </div>
+
+  <div class="list" data-gap="sm">
+    <SkeletonBlock v-if="loading && !hasContent" :rows="2" />
+    <StateBlock
+      v-else-if="items.length === 0"
+      :title="t('s_1vtk64c')"
+      :description="t('s_1jbzuzw')"
+      :action-label="t('s_50ih74')"
+      @action="router.push('/search')"
+    />
+    <template v-else>
+      <button
+        v-for="item in items"
+        :key="String(item.id)"
+        class="row-card"
+        type="button"
+        data-pressable="true"
+        :aria-label="`查看 ${item.title} 详情`"
+        @pointerdown="warm(item.id)"
+        @click="router.push(`/detail/${item.id}`)"
+      >
+        <MediaBox :src="String(item.imageUri || '')" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
+        <span class="row-copy">
+          <span class="row" data-gap="md">
+            <strong class="row-title truncate">{{ item.title }}</strong>
+            <StatusTag :text="String(item.modeLabel || item.status || '')" />
+          </span>
+          <span class="row-meta">{{ item.time }} · {{ item.venue }}</span>
+          <span class="row-meta truncate">{{ item.category || '' }}</span>
+        </span>
+      </button>
+    </template>
+  </div>
 </template>

@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 /** Android 原生能力的类型化桥接，不承载业务数据或业务规则。 */
 export type NativeAction =
   | 'ui.sync'
@@ -16,8 +17,10 @@ export type NativeErrorCode = 'cancelled' | 'timeout';
 export interface NativeActionPayloads {
   'ui.sync': { mode?: string; themeIndex?: number; media?: Record<string, unknown>; upload?: Record<string, unknown> };
   'camera.ensurePermission': Record<string, never>;
-  'calendar.status': { date: string };
-  'calendar.toggle': { date: string; title?: string; description?: string; location?: string; startTime?: string; endTime?: string };
+  // 键名与 SystemActions.calendarStatus / applyCalendarChange 读取的一致：
+  // 日期用后端下发的 ISO 日期原样传入，缺日期时原生直接失败，不猜月份。
+  'calendar.status': { title?: string; date: string };
+  'calendar.toggle': { title: string; venue?: string; date: string; time?: string; description?: string };
   'notify.requestPermission': Record<string, never>;
   'media.pickImage': Record<string, never>;
   'media.import': { kind: 'image' | 'video' };
@@ -29,8 +32,8 @@ export interface NativeActionPayloads {
 export interface NativeActionResults {
   'ui.sync': { notificationsGranted?: boolean };
   'camera.ensurePermission': boolean;
-  'calendar.status': { saved: boolean };
-  'calendar.toggle': { saved: boolean };
+  'calendar.status': { granted: boolean; inCalendar: boolean };
+  'calendar.toggle': { granted: boolean; inCalendar: boolean; message?: string };
   'notify.requestPermission': { granted: boolean };
   'media.pickImage': { dataUrl: string };
   'media.import': { url: string; kind: string };
@@ -97,7 +100,7 @@ export class NativeBridge {
   }
 
   call<A extends NativeAction>(action: A, payload: NativeActionPayloads[A]): Promise<NativeActionResults[A]> {
-    if (!this.hasNative()) return Promise.reject(new NativeBridgeError('当前环境没有原生桥接，请在 Android 应用中打开'));
+    if (!this.hasNative()) return Promise.reject(new NativeBridgeError(t('s_1adnxmn')));
     const callbackId = `cb-${this.sequence++}`;
     return new Promise<NativeActionResults[A]>((resolve, reject) => {
       const entry = { resolve: resolve as (value: unknown) => void, reject, timer: undefined as ReturnType<typeof setTimeout> | undefined };
@@ -118,7 +121,7 @@ export class NativeBridge {
   }
 
   dispose(): void {
-    const error = new NativeBridgeError('原生桥接已释放');
+    const error = new NativeBridgeError(t('s_2qe8t5'));
     for (const [callbackId, entry] of this.pending) {
       this.finish(callbackId);
       entry.reject(error);
@@ -135,7 +138,7 @@ export class NativeBridge {
         if (!entry) return;
         this.finish(callbackId);
         if (ok) entry.resolve(result);
-        else entry.reject(new NativeBridgeError(error || '操作未完成', code ?? undefined));
+        else entry.reject(new NativeBridgeError(error || t('s_41skpq'), code ?? undefined));
       },
     };
     this.installed = true;

@@ -1,5 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { NativeBridge, NativeBridgeError } from './native-bridge';
+
+// 文案本体在 res/values/strings_frontend.xml，由原生启动时注入；
+// 单测里注入同一条，断言才看得到可读的错误说明而不是 key。
+beforeAll(() => {
+  window.CalMobileStrings = { s_1adnxmn: '当前环境没有原生桥接，请在 Android 应用中打开' };
+});
 
 const bridges: NativeBridge[] = [];
 afterEach(() => { bridges.splice(0).forEach((bridge) => bridge.dispose()); });
@@ -18,9 +24,10 @@ describe('NativeBridge', () => {
     native.invoke = (action, payload, callbackId) => {
       expect(action).toBe('calendar.status');
       expect(JSON.parse(payload)).toEqual({ date: '2026-09-20' });
-      fakeWindow.CalMobileBridge?.onResult(callbackId, true, { saved: true }, null, null);
+      // 原生 calendar.status 回报的就是这两个键（见 SystemActions.calendarStatus）。
+      fakeWindow.CalMobileBridge?.onResult(callbackId, true, { granted: true, inCalendar: false }, null, null);
     };
-    await expect(bridge.call('calendar.status', { date: '2026-09-20' })).resolves.toEqual({ saved: true });
+    await expect(bridge.call('calendar.status', { date: '2026-09-20' })).resolves.toEqual({ granted: true, inCalendar: false });
   });
 
   it('preserves stable error codes and times out synchronous actions', async () => {

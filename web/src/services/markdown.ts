@@ -39,3 +39,79 @@ function inline(value: string): string {
   text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   return text;
 }
+
+// ── HTML 清洗 ─────────────────────────────────────────────────────
+
+const ALLOWED_TAGS = new Set([
+  'p', 'br', 'div', 'span', 'strong', 'b', 'em', 'i', 'u', 's', 'sub', 'sup',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote',
+  'a', 'img', 'video', 'hr', 'figure', 'figcaption', 'table', 'thead', 'tbody', 'tr', 'td', 'th',
+]);
+
+const ALLOWED_ATTRS = new Set(['href', 'src', 'alt', 'title', 'width', 'height', 'colspan', 'rowspan']);
+
+/**
+ * `<video>` 的专用属性白名单。
+ *
+ * 简介里的视频由展商编辑器插入，只放播放所需的这几个：`autoplay` 会在详情页突然出声、
+ * `on*` 是脚本入口、`style` 能盖住整页，因此一律不放。其余标签仍走 {@link ALLOWED_ATTRS}。
+ */
+const VIDEO_ATTRS = new Set(['src', 'controls', 'poster', 'preload', 'class']);
+
+const SAFE_URL = /^(https?:|data:image\/|content:|file:)/i;
+
+/** 清洗 HTML：展商编辑器产出的简介在渲染前统一过滤脚本、事件属性与危险协议。 */
+export function sanitizeHtml(html: unknown): string {
+  const source = String(html ?? '').trim();
+  if (!source || typeof document === 'undefined') return '';
+  const template = document.createElement('template');
+  template.innerHTML = source;
+  clean(template.content);
+  return template.innerHTML;
+}
+
+function clean(root: ParentNode): void {
+  for (const node of Array.from(root.childNodes)) {
+    if (node.nodeType === Node.COMMENT_NODE) {
+      node.remove();
+      continue;
+    }
+    if (node.nodeType === Node.TEXT_NODE) continue;
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      node.remove();
+      continue;
+    }
+    const element = node as Element;
+    const tag = element.tagName.toLowerCase();
+    if (!ALLOWED_TAGS.has(tag)) {
+      // 保留文本内容，丢弃标签本身（script / style 的内容也会被清掉）
+      element.replaceWith(document.createTextNode(element.textContent ?? ''));
+      continue;
+    }
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase();
+      const allowed = tag === 'video' ? VIDEO_ATTRS : ALLOWED_ATTRS;
+      if (!allowed.has(name)) {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+      if ((name === 'href' || name === 'src') && !SAFE_URL.test(attribute.value.trim())) {
+        element.removeAttribute(attribute.name);
+      }
+    }
+    if (tag === 'a') {
+      element.setAttribute('rel', 'noopener noreferrer');
+      element.setAttribute('target', '_blank');
+    }
+    clean(element);
+  }
+}
+
+/** 简介文本摘要：去掉标签后截断，用于列表与卡片。 */
+export function plainText(html: unknown, max = 120): string {
+  if (typeof document === 'undefined') return '';
+  const template = document.createElement('template');
+  template.innerHTML = String(html ?? '');
+  const text = (template.content.textContent ?? '').replace(/\s+/g, ' ').trim();
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}

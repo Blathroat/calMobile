@@ -43,3 +43,11 @@ export interface RegistrationDetail extends JsonObject {
   error?: string;
 }
 export interface ApiResult extends JsonObject { ok?: boolean; error?: string; }
+
+/** 搜索一次返回展会与用户两组结果（见 server/src/routes/search-hono.ts）。 */
+export interface SearchResult extends JsonObject {
+  query: string;
+  exhibitions: Exhibition[];
+  users: User[];
+  count: number;
+}

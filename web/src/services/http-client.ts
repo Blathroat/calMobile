@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 /** 统一封装网络请求、超时、错误分类和访问令牌注入。 */
 export class TransportError extends Error {
   override name = 'TransportError';
@@ -87,7 +88,7 @@ export class HttpClient {
         throw new ApiError(message, response.status);
       }
       if (typeof data === 'object' && data !== null && 'ok' in data && data.ok === false) {
-        throw new ApiError('error' in data ? String(data.error) : '操作失败', response.status);
+        throw new ApiError('error' in data ? String(data.error) : t('s_ydow7a'), response.status);
       }
       return data as T;
     } catch (error) {

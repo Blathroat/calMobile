@@ -3,11 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>calMobile</title>
+    <meta name="color-scheme" content="light dark" />
+    <title>CalMobile · 展会排期助手</title>
+    <script>
+      // 在样式表生效前先落到上次选择的明暗模式，避免首帧闪白。
+      try {
+        var mode = localStorage.getItem('calmobile.mode');
+        if (mode === 'dark' || mode === 'light') {
+          document.documentElement.dataset.mode = mode;
+        }
+      } catch (ignored) {
+        // 隐私模式下忽略存储读取失败，保持跟随系统
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>
-    <script src="/vendor/jsQR.js"></script>
+    <!-- 内置第三方库（jsQR / qrcode-generator）按需注入，见 services/vendor.ts -->
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

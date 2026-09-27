@@ -2,7 +2,7 @@
 import { HttpClient } from '@/services/http-client';
 import { QueryCache } from '@/services/query-cache';
 import { SessionClient } from '@/services/session-client';
-import type { ApiResult, AuthResult, Bootstrap, Exhibition, ExhibitionDetail, Id, JsonObject, Registration, RegistrationDetail, User } from './types';
+import type { ApiResult, AuthResult, Bootstrap, Exhibition, ExhibitionDetail, Id, JsonObject, Registration, RegistrationDetail, SearchResult, User } from './types';
 
 function stableKey(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -73,7 +73,7 @@ export interface ApiClient {
     disableTwoFactor(id: Id): Promise<ApiResult>;
     publicProfile(query: JsonObject): Promise<JsonObject>;
   };
-  search(query: string): Promise<JsonObject[]>;
+  search(query: string): Promise<SearchResult>;
   settings: {
     get(): Promise<JsonObject>;
     save(payload: JsonObject): Promise<ApiResult>;
@@ -149,7 +149,9 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
     },
     registrations: {
       list: () => read<Registration[]>('registrations', '/registrations'),
-      get: (id) => read<RegistrationDetail>('registration', `/registrations/${encodeURIComponent(id)}`),
+      // 缓存键前缀必须与写接口的 invalidates 前缀同一族：撤销报名失效的是
+      // `registrations`，键写成 `registration` 会匹配不上，撤销后再取详情会拿到旧状态。
+      get: (id) => read<RegistrationDetail>('registrations.record', `/registrations/${encodeURIComponent(id)}`),
       submit: (payload) => write<ApiResult>('/registrations', { method: 'POST', body: payload }, ['registrations', 'review', 'exhibitions']),
       cancel: (id) => write<ApiResult>(`/registrations/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['registrations', 'review', 'exhibitions']),
     },
@@ -161,12 +163,14 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
     checkIn: (code) => write<ApiResult>('/checkin', { method: 'POST', body: { code } }, ['review', 'registrations', 'users.public']),
     users: {
       list: (query = {}) => read<User[]>('users', '/users', { query }),
-      get: (id) => read<User>('user', `/users/${encodeURIComponent(id)}`),
+      // 同上：写接口失效的是 `users`，键也要落在同一个前缀下。
+      get: (id) => read<User>('users.record', `/users/${encodeURIComponent(id)}`),
       setStatus: (id, status) => write<ApiResult>(`/users/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { id, status } }, ['users']),
       disableTwoFactor: (id) => write<ApiResult>(`/users/${encodeURIComponent(id)}/two-factor`, { method: 'PUT', body: { id, enabled: false } }, ['users']),
       publicProfile: (query) => read<JsonObject>('users.public', '/users/public', { query }),
     },
-    search: (query) => read<JsonObject[]>('search', '/search', { query: { query } }),
+    // 搜索一次返回展会与用户两组结果，返回体是对象而不是数组。
+    search: (query) => read<SearchResult>('search', '/search', { query: { query } }),
     settings: {
       get: () => read<JsonObject>('settings', '/settings'),
       save: (payload) => write<ApiResult>('/settings', { method: 'PUT', body: payload }, ['settings', 'categories']),
