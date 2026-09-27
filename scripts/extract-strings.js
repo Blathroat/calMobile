@@ -2,7 +2,7 @@
  * 把前端用户可见文案迁移到 res/values/strings.xml。
  *
  * 做法：
- * 1. 扫描 assets/web/js 下页面与 UI 模块里的中文字符串字面量；
+ * 1. 扫描 web/src 下 Vue、TypeScript 与页面模块里的中文字符串字面量；
  * 2. 按「模块 + 语义」生成 string 资源名；
  * 3. 改写源码：字面量换成 `t('key')`，并补上 core/strings.js 的导入；
  * 4. 输出 strings 片段供合并进 strings.xml。
@@ -17,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const jsRoot = path.join(root, 'app', 'src', 'main', 'assets', 'web', 'js');
+const jsRoot = path.join(root, 'web', 'src');
 const write = process.argv.includes('--write');
 
 /** 跳过：纯技术字符串、状态枚举（已由 core/status.js 统一管理）、协议值。 */
@@ -42,7 +42,7 @@ function walk(dir) {
     return fs.readdirSync(dir, { withFileTypes: true })
         .flatMap((entry) => (entry.isDirectory()
             ? walk(path.join(dir, entry.name))
-            : (entry.name.endsWith('.js') ? [path.join(dir, entry.name)] : [])));
+            : (/\.(js|ts|vue)$/.test(entry.name) ? [path.join(dir, entry.name)] : [])));
 }
 
 /**
@@ -199,7 +199,7 @@ if (write) {
     const header = '<?xml version="1.0" encoding="utf-8"?>\n'
         + '<!--\n'
         + '  前端（WebView）用户可见文案。\n'
-        + '  由 scripts/extract-strings.js 从 assets/web/js 生成，不要手改：\n'
+        + '  由 scripts/extract-strings.js 从 web/src 生成，不要手改：\n'
         + '  改文案请改前端源码后重新运行该脚本，再执行 node scripts/check-strings.js 校验。\n'
         + '  key 是文案内容的哈希（稳定、可去重），文案本体在下面。\n'
         + '-->\n'

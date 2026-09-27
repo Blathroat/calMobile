@@ -1,0 +1,6 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'; import { useRouter } from 'vue-router'; import { api } from '@/app/runtime'; import { useAsync } from '@/composables/useAsync'; import type { JsonObject } from '@/api/types';
+const router = useRouter(); const keyword = ref(''); const query = useAsync<JsonObject[]>(); const results = computed(() => query.data.value ?? []);
+async function search() { if (!keyword.value.trim()) return; await query.run(() => api.search(keyword.value.trim())); }
+</script>
+<template><section class="page"><button class="text-action" @click="router.back()">返回</button><h1>搜索</h1><form class="form" @submit.prevent="search"><input v-model="keyword" placeholder="搜索展会、地点或用户" aria-label="搜索关键词"><button class="cta">搜索</button></form><div v-if="query.loading" class="state">正在搜索…</div><p v-else-if="query.error" class="state error">{{ query.error.value?.message }}</p><div v-else class="list"><button v-for="item in results" :key="String(item.id || item.nickname || item.title)" class="row-card" @click="item.id ? router.push(`/detail/${item.id}`) : undefined"><strong>{{ item.title || item.nickname }}</strong><span>{{ item.venue || item.bio || item.category }}</span></button><p v-if="keyword && results.length === 0" class="state">没有找到结果</p></div></section></template>

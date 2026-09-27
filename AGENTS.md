@@ -16,10 +16,10 @@
 
 ## 前端硬约束
 
-- 数据只走 `js/core/api.js` 的 `ENDPOINTS`；页面取数统一用 `js/core/loadable.js` 的 `loadInto()`，失败必须可见。
-- 预加载只放 `js/core/preload.js`，缓存键包含解析后的参数；不以原生桥接承载业务数据，也不做本地降级。
+- 数据只走 `web/src/api/client.ts`；页面取数统一用 feature composable，失败必须可见。
+- 查询缓存只放 `web/src/services/query-cache.ts`，缓存键包含解析后的参数；不以原生桥接承载业务数据，也不做本地降级。
 - 用户可见文案写入 `strings_frontend.xml` 并用 `t('key')` 读取；资源首尾不留空白。颜色、字号、间距、圆角只写入 `styles/tokens.css`，动效只写入 `styles/motion.css`。
-- Markdown / HTML 先经 `js/core/sanitize.js`；第三方库内置在 `assets/web/vendor/`，不引用 CDN。
+- Markdown / HTML 先经 Vue service 的 sanitize 入口；第三方库内置在 `web/public/vendor/`，不引用 CDN。
 - 新页面同时更新 `js/app.js`、[`docs/engineering.md`](docs/engineering.md) 的屏幕表和 `scripts/webui-render.test.js` 的 `ROUTES`；管理功能优先内联。
 - 表单校验走 `js/core/validate.js`，上限取 `state.limits`；后端仍需再次校验。
 

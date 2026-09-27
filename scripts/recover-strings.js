@@ -33,7 +33,7 @@ const PROTOCOL_VALUES = new Set([
 
 /** 列出迁移涉及的文件（当前工作区改动过的 JS，排除新增文件）。 */
 function changedFiles() {
-    const out = execFileSync('git', ['diff', '--name-only', 'HEAD', '--', 'app/src/main/assets/web/js'],
+    const out = execFileSync('git', ['diff', '--name-only', 'HEAD', '--', 'web/src'],
         { cwd: root, encoding: 'utf8' });
     return out.split(/\r?\n/).filter((line) => line.endsWith('.js'));
 }
@@ -108,7 +108,7 @@ fs.writeFileSync(path.join(resDir, 'strings_frontend.xml'),
     '<?xml version="1.0" encoding="utf-8"?>\n'
     + '<!--\n'
     + '  前端（WebView）用户可见文案。\n'
-    + '  由 scripts/extract-strings.js 从 assets/web/js 生成，不要手改：\n'
+    + '  由 scripts/extract-strings.js 从 web/src 生成，不要手改：\n'
     + '  改文案请改前端源码后重新运行该脚本，再执行 node scripts/check-strings.js 校验。\n'
     + '  key 是文案内容的哈希（稳定、可去重），文案本体在下面。\n'
     + '-->\n'

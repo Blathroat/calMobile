@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   前端（WebView）用户可见文案。
-  由 scripts/extract-strings.js 从 assets/web/js 生成，不要手改：
+  由 scripts/extract-strings.js 从 web/src 生成，不要手改：
   改文案请改前端源码后重新运行该脚本，再执行 node scripts/check-strings.js 校验。
   key 是文案内容的哈希（稳定、可去重），文案本体在下面。
 -->

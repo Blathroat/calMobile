@@ -246,7 +246,7 @@ beforeAll(async () => {
 
   await startServer();
 
-  const apiModule = await import(new URL('../../../app/src/main/assets/web/js/core/api.js', import.meta.url).href);
+  const apiModule = await import(new URL('../../../web/api-endpoints.mjs', import.meta.url).href);
   frontendEndpointMap = apiModule.ENDPOINTS as EndpointMap;
 
   tokens.admin = await login('demo');

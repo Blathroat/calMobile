@@ -1,6 +1,6 @@
 # CalMobile 后端服务
 
-`server/` 是与 Android 客户端并列的 Node.js 服务：**Hono + PostgreSQL**，提供客户端全部数据接口。前端只认 `app/src/main/assets/web/js/core/api.js` 里的动作名，HTTP 形状由该文件的 `ENDPOINTS` 表翻译，因此后端换实现不影响页面。
+`server/` 是与 Android 客户端并列的 Node.js 服务：**Hono + PostgreSQL**，提供客户端全部数据接口。前端只认 `web/src/api/client.ts` 的类型化领域 API，契约测试使用 `web/api-endpoints.mjs` 的动作表，因此后端换实现不影响页面。
 
 后端要求 Node.js ≥ 24.0.0。依赖通过 `pnpm-lock.yaml` 锁定；在受支持的 Node 版本下使用 `pnpm install --frozen-lockfile`。
 

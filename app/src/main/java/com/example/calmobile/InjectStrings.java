@@ -11,7 +11,7 @@ import java.util.Map;
 /**
  * 把 res/values/strings_frontend.xml 里的前端文案注入 WebView。
  *
- * 文案本体维护在 Android 资源里（`scripts/extract-strings.js` 从 assets/web/js
+ * 文案本体维护在 Android 资源里（`scripts/extract-strings.js` 从 web/src
  * 生成），页面加载完成后以 {@code window.CalMobileStrings = { key: 文案 }} 注入，
  * 前端 `js/core/strings.js` 的 t() 直接读它，因此文案只有一份来源。
  *

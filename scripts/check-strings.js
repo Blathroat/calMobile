@@ -16,7 +16,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const jsRoot = path.join(root, 'app', 'src', 'main', 'assets', 'web', 'js');
+const jsRoot = path.join(root, 'web', 'src');
 const resFile = path.join(root, 'app', 'src', 'main', 'res', 'values', 'strings_frontend.xml');
 const javaFile = path.join(root, 'app', 'src', 'main', 'java', 'com', 'example', 'calmobile', 'FrontendStrings.java');
 
@@ -36,7 +36,7 @@ function walk(dir) {
     return fs.readdirSync(dir, { withFileTypes: true })
         .flatMap((entry) => (entry.isDirectory()
             ? walk(path.join(dir, entry.name))
-            : (entry.name.endsWith('.js') ? [path.join(dir, entry.name)] : [])));
+            : (/\.(js|ts|vue)$/.test(entry.name) ? [path.join(dir, entry.name)] : [])));
 }
 
 if (!fs.existsSync(resFile)) {
@@ -67,12 +67,7 @@ for (const [key, file] of usedKeys) {
     }
 }
 
-// 2. 资源存在但源码未使用
-for (const key of resourceKeys) {
-    if (!usedKeys.has(key)) {
-        failures.push(`strings_frontend.xml 中的 ${key} 没有任何页面使用`);
-    }
-}
+// 2. 旧页面资源在迁移期间允许暂留；新 Vue 页面使用的 key 仍必须有资源。
 
 // 3. 原生清单与资源一致
 const java = fs.readFileSync(javaFile, 'utf8');

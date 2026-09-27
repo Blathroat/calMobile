@@ -11,6 +11,8 @@ import ReviewPage from '@/pages/ReviewPage.vue';
 import AdminPage from '@/pages/AdminPage.vue';
 import CheckinPage from '@/pages/CheckinPage.vue';
 import RichEditorPage from '@/pages/RichEditorPage.vue';
+import SearchPage from '@/pages/SearchPage.vue';
+import UserPublicPage from '@/pages/UserPublicPage.vue';
 import DetailPage from '@/pages/DetailPage.vue';
 import RegistrationDetailPage from '@/pages/RegistrationDetailPage.vue';
 import RegistrationFormPage from '@/pages/RegistrationFormPage.vue';
@@ -35,6 +37,8 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
       { path: '/register', component: RegisterPage },
       { path: '/forgot-password', component: ForgotPasswordPage },
       { path: '/home', component: HomePage },
+      { path: '/search', component: SearchPage },
+      { path: '/user-public/:nickname', component: UserPublicPage },
       { path: '/detail/:id', component: DetailPage },
       { path: '/registration-form/:id', component: RegistrationFormPage, meta: { requiresAuth: true, capability: 'register' } },
       { path: '/my-registrations', component: MyRegistrationsPage, meta: { requiresAuth: true } },

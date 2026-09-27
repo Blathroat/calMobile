@@ -9,7 +9,7 @@
 | 层 | 责任 | 权威入口 |
 | --- | --- | --- |
 | WebView 页面 | 路由、渲染、表单和用户交互 | `app/src/main/assets/web/` |
-| 前端数据 | 动作到 REST 的映射、令牌续期、缓存 | `js/core/api.js` 的 `ENDPOINTS` |
+| 前端数据 | 类型化 REST client、令牌续期、缓存 | `web/src/api/client.ts`；契约表为 `web/api-endpoints.mjs` |
 | 前端加载 | 缓存首屏、后台刷新、错误呈现 | `js/core/loadable.js` 的 `loadInto()` |
 | 原生桥接 | 日历、通知权限、摄像头、媒体、分享、CSV、设备镜像 | `WebAppActions.handle()` 的固定动作表 |
 | 后端 | 认证、业务规则、持久化、邮件和接口 | `server/src/` |
@@ -17,19 +17,17 @@
 ## 前端结构
 
 ```text
-app/src/main/assets/web/
+web/
 ├── index.html
-├── styles/tokens.css       颜色、字号、间距、圆角
-├── styles/motion.css       交互动效
-├── vendor/                 内置第三方库
-└── js/
-    ├── app.js              路由与启动
-    ├── core/               api、bridge、loadable、preload、sanitize、markdown、validate
-    ├── ui/                 共享组件
-    └── pages/              一屏一模块
+├── src/app/                启动、路由、运行时
+├── src/api/                类型化领域 API
+├── src/services/           HTTP、缓存、原生桥接、设备能力
+├── src/stores/             Pinia 跨页面状态
+├── src/pages/              Vue 页面
+└── src/styles/             设计令牌与动效
 ```
 
-页面不直接 `fetch`，也不通过原生桥接取业务数据。读取接口直接返回数据；写接口返回 `{ ok, error, ... }`。接口规则和前端动作必须在 `api.js`、后端路由、契约测试三处同时更新。
+页面不直接 `fetch`，也不通过原生桥接取业务数据。读取接口直接返回数据；写接口返回 `{ ok, error, ... }`。接口规则和前端动作必须在 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由、契约测试四处同时更新。
 
 ## 屏幕对照
 
@@ -58,7 +56,7 @@ app/src/main/assets/web/
 ## 数据加载规则
 
 - `loadInto()` 负责加载、缓存首屏、后台刷新和错误块；不要用 `Promise.allSettled` 吞掉失败，也不要把未知状态显示成成功。
-- 预加载集中在 `preload.js`；缓存键包含解析后的参数，并对相同请求去重。月视图一次取整月，点日期在本地完成，不重复请求。
+- 查询缓存集中在 `web/src/services/query-cache.ts`；缓存键包含稳定序列化后的参数，并对相同请求去重。月视图一次取整月，点日期在本地完成，不重复请求。
 - 页面已有内容时刷新只标记忙碌，不清空旧内容；过期响应丢弃，避免慢请求覆盖新视图。
 
 ## 原生桥接
@@ -74,7 +72,7 @@ app/src/main/assets/web/
 - 顶栏使用 `--topbar-h`；展会图保持 9:16；并排字段使用等高布局；日期、时间和状态使用选择器、分段控件或面板。
 - 强调色使用 `--accent*`；二维码保持白底黑点；Markdown / HTML 渲染前经过 `js/core/sanitize.js`。
 - 动效只动画 `transform` 与 `opacity`，并遵守 `prefers-reduced-motion`。动效全失时先检查设备 `animator_duration_scale`，再改代码。
-- 第三方库必须内置到 `assets/web/vendor/` 并记录版本和许可证，不引用 CDN 或图标字体。
+- 第三方库必须内置到 `web/public/vendor/` 并记录版本和许可证，不引用 CDN 或图标字体。
 
 ## 文案与资源
 

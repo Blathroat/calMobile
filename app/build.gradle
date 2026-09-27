@@ -20,7 +20,9 @@ android {
     }
 }
 
-// Vue 前端独立构建到 web/dist；迁移完成前不覆盖现有 assets/web。
+android.sourceSets.main.assets.srcDir("${buildDir}/generated/vue-web")
+
+// Vue 前端构建到 generated assets，不修改源码目录。
 def webDir = file("../web")
 def pnpmCommand = System.getProperty("os.name").toLowerCase().contains("windows") ? "pnpm.cmd" : "pnpm"
 tasks.register("buildWeb", Exec) {
@@ -33,13 +35,13 @@ tasks.register("typecheckWeb", Exec) {
     commandLine pnpmCommand, "typecheck"
 }
 
-// 迁移阶段保持旧 assets/web 默认不变；显式传 -PvueFrontend=true 才把 Vue dist 同步进 APK。
 tasks.register("syncWebAssets", Sync) {
     dependsOn "buildWeb"
-    onlyIf { project.hasProperty("vueFrontend") }
     from("${webDir}/dist")
-    into("${projectDir}/src/main/assets/web")
+    into("${buildDir}/generated/vue-web/web")
 }
+
+tasks.named("preBuild").configure { dependsOn("syncWebAssets") }
 
 java {
     toolchain {

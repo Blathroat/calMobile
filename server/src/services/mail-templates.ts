@@ -2,7 +2,7 @@
  * 验证码邮件的文案与结构。
  *
  * 这里是**唯一**允许写死用户可见中文的地方，且不在 `res/values/strings_frontend.xml`：
- * 那套文案由 `scripts/extract-strings.js` 从前端 `assets/web/js` 抽出来喂给 WebView，
+ * 那套文案由 `scripts/extract-strings.js` 从前端 `web/src` 抽出来喂给 WebView，
  * 而验证码邮件由后端渲染、直接进收件箱，跟前端资源没有关系（`check-strings.js` 只覆盖前端）。
  *
  * 三条内容上的讲究：

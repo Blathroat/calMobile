@@ -72,7 +72,7 @@ export interface ApiClient {
     disableTwoFactor(id: Id): Promise<ApiResult>;
     publicProfile(query: JsonObject): Promise<JsonObject>;
   };
-  search(query: string): Promise<JsonObject>;
+  search(query: string): Promise<JsonObject[]>;
   settings: {
     get(): Promise<JsonObject>;
     save(payload: JsonObject): Promise<ApiResult>;
@@ -165,7 +165,7 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
       disableTwoFactor: (id) => write<ApiResult>(`/users/${encodeURIComponent(id)}/two-factor`, { method: 'PUT', body: { id, enabled: false } }, ['users']),
       publicProfile: (query) => read<JsonObject>('users.public', '/users/public', { query }),
     },
-    search: (query) => read<JsonObject>('search', '/search', { query: { query } }),
+    search: (query) => read<JsonObject[]>('search', '/search', { query: { query } }),
     settings: {
       get: () => read<JsonObject>('settings', '/settings'),
       save: (payload) => write<ApiResult>('/settings', { method: 'PUT', body: payload }, ['settings', 'categories']),

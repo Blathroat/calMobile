@@ -12,7 +12,7 @@ const commands = [
 ];
 
 for (const args of commands) {
-  const result = spawnSync(pnpm, args, { cwd: web, stdio: 'inherit' });
+  const result = spawnSync(pnpm, args, { cwd: web, stdio: 'inherit', shell: process.platform === 'win32' });
   if (result.error || result.status !== 0) {
     process.exit(result.status || 1);
   }

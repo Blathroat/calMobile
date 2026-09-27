@@ -10,7 +10,7 @@ import java.util.Map;
  * 桥接动作分发入口。
  *
  * **只保留系统能力**：数据（展会、报名、用户、设置、认证）全部由 `server/` 的
- * Hono + PostgreSQL 后端提供，前端通过 `js/core/api.js` 的 `ENDPOINTS` 走 HTTP，
+ * Hono + PostgreSQL 后端提供，前端通过 Vue 的类型化 API client 走 HTTP，
  * 原生不再持有任何业务数据的实现。
  *
  * 留在原生的是「只有设备能做」的事：
