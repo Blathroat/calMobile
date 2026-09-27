@@ -1,7 +1,7 @@
 import { HttpClient } from '@/services/http-client';
 import { QueryCache } from '@/services/query-cache';
 import { SessionClient } from '@/services/session-client';
-import type { ApiResult, AuthResult, Bootstrap, Exhibition, Id, JsonObject, Registration, User } from './types';
+import type { ApiResult, AuthResult, Bootstrap, Exhibition, ExhibitionDetail, Id, JsonObject, Registration, RegistrationDetail, User } from './types';
 
 function stableKey(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -16,6 +16,7 @@ export interface ApiClient {
   auth: {
     login(username: string, password: string): Promise<AuthResult>;
     loginVerify(payload: JsonObject): Promise<AuthResult>;
+    loginCode(ticket: string): Promise<ApiResult>;
     register(payload: JsonObject): Promise<ApiResult>;
     registerVerify(payload: JsonObject): Promise<AuthResult>;
     forgotPassword(email: string): Promise<ApiResult>;
@@ -33,7 +34,7 @@ export interface ApiClient {
   exhibitions: {
     list(query?: JsonObject): Promise<Exhibition[]>;
     month(query: JsonObject): Promise<JsonObject>;
-    get(id: Id): Promise<Exhibition>;
+    get(id: Id): Promise<ExhibitionDetail>;
     save(payload: JsonObject): Promise<ApiResult>;
     remove(id: Id): Promise<ApiResult>;
     setStatus(id: Id, status: string): Promise<ApiResult>;
@@ -43,7 +44,7 @@ export interface ApiClient {
   };
   registrations: {
     list(): Promise<Registration[]>;
-    get(id: Id): Promise<Registration>;
+    get(id: Id): Promise<RegistrationDetail>;
     submit(payload: JsonObject): Promise<ApiResult>;
     cancel(id: Id): Promise<ApiResult>;
   };
@@ -93,6 +94,7 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
     auth: {
       login: async (username, password) => afterAuth(await http.request<AuthResult>('/auth/login', { method: 'POST', body: { username, password } })),
       loginVerify: async (payload) => afterAuth(await http.request<AuthResult>('/auth/login/verify', { method: 'POST', body: payload })),
+      loginCode: (ticket) => http.request<ApiResult>('/auth/login/code', { method: 'POST', body: { ticket } }),
       register: (payload) => http.request<ApiResult>('/auth/register', { method: 'POST', body: payload }),
       registerVerify: async (payload) => afterAuth(await http.request<AuthResult>('/auth/register/verify', { method: 'POST', body: payload })),
       forgotPassword: (email) => http.request<ApiResult>('/auth/password/forgot', { method: 'POST', body: { email } }),
@@ -114,7 +116,7 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
     exhibitions: {
       list: (query = {}) => read<Exhibition[]>('exhibitions.list', '/exhibitions', { query }),
       month: (query) => read<JsonObject>('exhibitions.month', '/exhibitions/month', { query }),
-      get: (id) => read<Exhibition>('exhibitions.get', `/exhibitions/${encodeURIComponent(id)}`),
+      get: (id) => read<ExhibitionDetail>('exhibitions.get', `/exhibitions/${encodeURIComponent(id)}`),
       save: (payload) => write<ApiResult>(payload.id ? `/exhibitions/${encodeURIComponent(String(payload.id))}` : '/exhibitions', { method: payload.id ? 'PUT' : 'POST', body: payload }, ['exhibitions', 'search']),
       remove: (id) => write<ApiResult>(`/exhibitions/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['exhibitions', 'registrations', 'review', 'search']),
       setStatus: (id, status) => write<ApiResult>(`/exhibitions/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { id, status } }, ['exhibitions', 'registrations', 'review', 'search']),
@@ -124,7 +126,7 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
     },
     registrations: {
       list: () => read<Registration[]>('registrations', '/registrations'),
-      get: (id) => read<Registration>('registration', `/registrations/${encodeURIComponent(id)}`),
+      get: (id) => read<RegistrationDetail>('registration', `/registrations/${encodeURIComponent(id)}`),
       submit: (payload) => write<ApiResult>('/registrations', { method: 'POST', body: payload }, ['registrations', 'review', 'exhibitions']),
       cancel: (id) => write<ApiResult>(`/registrations/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['registrations', 'review', 'exhibitions']),
     },

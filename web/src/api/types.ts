@@ -29,5 +29,17 @@ export interface Exhibition extends JsonObject {
   date?: string;
 }
 
+export interface ExhibitionDetail extends JsonObject {
+  found: boolean;
+  exhibition?: Exhibition;
+  fields?: Array<JsonObject & { title?: string; type?: string; required?: boolean; options?: string[] }>;
+  error?: string;
+}
+
 export interface Registration extends JsonObject { id: Id; status?: string; }
+export interface RegistrationDetail extends JsonObject {
+  found: boolean;
+  registration?: Registration;
+  error?: string;
+}
 export interface ApiResult extends JsonObject { ok?: boolean; error?: string; }

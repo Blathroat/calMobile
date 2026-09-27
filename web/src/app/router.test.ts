@@ -15,7 +15,7 @@ describe('router guards', () => {
     session.applyUser({ id: 'u1', loggedIn: true, guest: false, role: 'user', can: { register: false } });
     await router.push('/admin');
     expect(router.currentRoute.value.path).toBe('/home');
-    await router.push('/registration-form');
+    await router.push('/registration-form/exh-1');
     expect(router.currentRoute.value.path).toBe('/home');
   });
 });

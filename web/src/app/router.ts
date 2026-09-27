@@ -1,6 +1,12 @@
 import { createRouter, createWebHashHistory, type RouterHistory } from 'vue-router';
 import HomePage from '@/pages/HomePage.vue';
 import LoginPage from '@/pages/LoginPage.vue';
+import RegisterPage from '@/pages/RegisterPage.vue';
+import ForgotPasswordPage from '@/pages/ForgotPasswordPage.vue';
+import DetailPage from '@/pages/DetailPage.vue';
+import RegistrationDetailPage from '@/pages/RegistrationDetailPage.vue';
+import RegistrationFormPage from '@/pages/RegistrationFormPage.vue';
+import MyRegistrationsPage from '@/pages/MyRegistrationsPage.vue';
 import { useSessionStore } from '@/stores/session';
 import { navigation } from './navigation';
 
@@ -18,10 +24,15 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
     routes: [
       { path: '/', redirect: '/home' },
       { path: '/login', component: LoginPage },
+      { path: '/register', component: RegisterPage },
+      { path: '/forgot-password', component: ForgotPasswordPage },
       { path: '/home', component: HomePage },
+      { path: '/detail/:id', component: DetailPage },
+      { path: '/registration-form/:id', component: RegistrationFormPage, meta: { requiresAuth: true, capability: 'register' } },
+      { path: '/my-registrations', component: MyRegistrationsPage, meta: { requiresAuth: true } },
+      { path: '/registration-detail/:id', component: RegistrationDetailPage, meta: { requiresAuth: true } },
       { path: '/profile', component: HomePage, meta: { requiresAuth: true } },
       { path: '/admin', component: HomePage, meta: { requiresAuth: true, roles: ['admin'] } },
-      { path: '/registration-form', component: HomePage, meta: { requiresAuth: true, capability: 'register' } },
     ],
   });
 

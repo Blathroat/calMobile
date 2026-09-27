@@ -1,0 +1,5 @@
+<script setup lang="ts">
+import { computed, onMounted } from 'vue'; import { useRouter } from 'vue-router'; import { api } from '@/app/runtime'; import { useAsync } from '@/composables/useAsync'; import type { Registration } from '@/api/types';
+const router = useRouter(); const query = useAsync<Registration[]>(); const records = computed(() => query.data.value ?? []); onMounted(() => query.run(() => api.registrations.list()));
+</script>
+<template><section class="page"><header class="page-heading"><h1>我的报名</h1></header><div v-if="query.loading" class="state">正在加载…</div><div v-else-if="query.error" class="state error">{{ query.error.value?.message }}<button @click="query.run(() => api.registrations.list())">重试</button></div><div v-else-if="records.length" class="list"><button v-for="item in records" :key="item.id" class="row-card" @click="router.push(`/registration-detail/${item.id}`)"><strong>{{ item.exhibitionTitle }}</strong><span>{{ item.statusLabel || item.status }}</span><span>{{ item.exhibitionDate }} {{ item.exhibitionTime }}</span></button></div><p v-else class="state">还没有报名记录</p></section></template>

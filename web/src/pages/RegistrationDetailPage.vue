@@ -1,0 +1,7 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'; import { useRoute, useRouter } from 'vue-router'; import { api } from '@/app/runtime'; import { useAsync } from '@/composables/useAsync'; import type { RegistrationDetail } from '@/api/types';
+const route = useRoute(); const router = useRouter(); const query = useAsync<RegistrationDetail>(); const busy = ref(false); const record = computed(() => query.data.value?.registration);
+onMounted(() => query.run(() => api.registrations.get(String(route.params.id))));
+async function cancel() { if (!record.value || busy.value) return; busy.value = true; try { await api.registrations.cancel(record.value.id); await router.replace('/my-registrations'); } finally { busy.value = false; } }
+</script>
+<template><section class="page"><button class="text-action" @click="router.back()">返回</button><div v-if="query.loading" class="state">正在加载…</div><div v-else-if="query.error" class="state error">{{ query.error.value?.message }}</div><div v-else-if="record" class="stack"><header class="page-heading"><h1>{{ record.exhibitionTitle }}</h1><p class="muted">{{ record.exhibitionDate }} {{ record.exhibitionTime }} · {{ record.exhibitionVenue }}</p></header><article class="card"><p>报名人：{{ record.visitorName }}</p><p>状态：{{ record.statusLabel || record.status }}</p><pre>{{ record.answers || '未填写' }}</pre></article><button class="cta ghost" :disabled="busy || record.status === 'cancelled' || record.status === 'attended'" @click="cancel">撤销报名</button></div><p v-else class="state">报名记录不存在</p></section></template>
