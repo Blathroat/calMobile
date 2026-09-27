@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
+import { bootApp } from '@/app/runtime';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useAsync } from '@/composables/useAsync';
 import type { JsonObject } from '@/api/types';
@@ -14,7 +15,21 @@ const loadError = computed(() => monthData.error.value?.message ?? t('s_kvpltc')
 async function load() { await monthData.run(() => api.exhibitions.month({ year: year.value, month: month.value, day: selectedDay.value || undefined })); }
 function shift(delta: number) { const next = new Date(year.value, month.value - 1 + delta, 1); year.value = next.getFullYear(); month.value = next.getMonth() + 1; selectedDay.value = 0; void load(); }
 function selectDay(day: number) { selectedDay.value = day; void load(); }
-onMounted(load);
+onMounted(async () => {
+  // 先使用后端选定的首月；示例数据可能不在设备当前月份。
+  await bootApp();
+  const landing = bootstrap.calendar.landing;
+  if (landing && typeof landing === 'object') {
+    const landingYear = Number((landing as Record<string, unknown>).year);
+    const landingMonth = Number((landing as Record<string, unknown>).month);
+    if (Number.isInteger(landingYear) && Number.isInteger(landingMonth)
+      && landingMonth >= 1 && landingMonth <= 12) {
+      year.value = landingYear;
+      month.value = landingMonth;
+    }
+  }
+  await load();
+});
 </script>
 <template>
   <section class="page"><header class="topbar"><div><p class="eyebrow">{{ bootstrap.brand.en }}</p><h1>{{ bootstrap.brand.zh }}</h1></div><button class="icon-button" @click="router.push('/profile')">{{ t('s_8ddpxh') }}</button></header>
