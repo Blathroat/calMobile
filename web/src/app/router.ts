@@ -4,6 +4,7 @@ import LoginPage from '@/pages/LoginPage.vue';
 import RegisterPage from '@/pages/RegisterPage.vue';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage.vue';
 import ProfilePage from '@/pages/ProfilePage.vue';
+import UserSettingsPage from '@/pages/UserSettingsPage.vue';
 import SecurityPage from '@/pages/SecurityPage.vue';
 import ExhibitorPage from '@/pages/ExhibitorPage.vue';
 import ExhibitionFormPage from '@/pages/ExhibitionFormPage.vue';
@@ -32,6 +33,8 @@ declare module 'vue-router' {
     back?: boolean;
     /** 底部导航的选中项；存在即显示底部导航 */
     tab?: string;
+    /** 顶栏右侧的页面级操作（例如个人页的「设置」入口） */
+    topAction?: { icon: string; to: string; label: string };
     bodyGap?: BodyGap;
     bodyPad?: 'none';
     bodyAlign?: 'center';
@@ -58,7 +61,18 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
       },
       { path: '/my-registrations', component: MyRegistrationsPage, meta: { title: 's_1m2dh8u', tab: 'my-registrations', requiresAuth: true } },
       { path: '/registration-detail/:id', component: RegistrationDetailPage, meta: { title: 's_1e7myaa', back: true, requiresAuth: true } },
-      { path: '/profile', component: ProfilePage, meta: { title: 's_1kzh3gd', tab: 'profile', requiresAuth: true } },
+      {
+        path: '/profile',
+        component: ProfilePage,
+        meta: {
+          title: 's_1kzh3gd',
+          tab: 'profile',
+          requiresAuth: true,
+          // 账号设置、外观、配色、安全与头像都在「用户设置」里，入口放顶栏右侧。
+          topAction: { icon: 'settings', to: '/settings', label: 's_1vmubx9' },
+        },
+      },
+      { path: '/settings', component: UserSettingsPage, meta: { title: 's_1vmubx9', back: true, requiresAuth: true } },
       { path: '/security', component: SecurityPage, meta: { title: 's_1iiaolc', back: true, requiresAuth: true } },
       { path: '/exhibitor', component: ExhibitorPage, meta: { title: 's_1omalh8', tab: 'exhibitor', bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
       { path: '/exhibition-form', component: ExhibitionFormPage, meta: { title: 's_eutzzb', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },

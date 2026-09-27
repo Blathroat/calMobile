@@ -23,7 +23,6 @@ import { check } from '@/services/validate';
 import { EXHIBITION_STATUS, statusTone } from '@/services/status';
 import { formatDateWithWeekday, truncate } from '@/services/format';
 import { device } from '@/services/device-services';
-import { applyTheme } from '@/app/theme';
 import SegControl from '@/components/SegControl.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import MediaBox from '@/components/MediaBox.vue';
@@ -85,20 +84,11 @@ const form = reactive({
   imageFormats: '',
   videoFormats: '',
   limits: {} as Record<string, number>,
-  themeIndex: 0,
 });
 const settingsError = ref('');
 const settingsSaving = ref(false);
-/** 配色单独保存：与「保存服务器设置」分开，改一次颜色不用连表单一起提交。 */
-const themeSaving = ref(false);
 const loaded = ref(false);
 const panelBusy = computed(() => users.loading.value || exhibitions.loading.value || settingsQuery.loading.value);
-
-/** 配色色板：色值由后端下发（`theme.colors`），选中项是 `theme.index`。 */
-const palette = computed<string[]>(() => {
-  const colors = bootstrap.theme.colors;
-  return Array.isArray(colors) ? colors.map((item) => String(item)) : [];
-});
 
 const userItems = computed<User[]>(() => users.data.value ?? []);
 const exhibitionItems = computed<Exhibition[]>(() => exhibitions.data.value ?? []);
@@ -318,7 +308,6 @@ function fillForm(data: JsonObject): void {
   form.videoFormats = (Array.isArray(upload.videoFormats) ? upload.videoFormats : []).map((item) => String(item)).join(',');
   form.limits = {};
   for (const item of TEXT_LIMITS) form.limits[item.key] = Number(limits[item.key] ?? bootstrap.limits[item.key] ?? 0);
-  form.themeIndex = Number(theme.index ?? bootstrap.theme.index ?? 0) || 0;
 }
 
 /** 上限表单的数值读取：空输入按 0 处理，后端会把 0 夹到合法区间。 */
@@ -363,7 +352,6 @@ async function saveSettings(): Promise<void> {
       avatarSizeMb: Number(form.avatarSizeMb) || 0,
       imageFormats: form.imageFormats.trim(),
       videoFormats: form.videoFormats.trim(),
-      themeIndex: form.themeIndex,
     };
     for (const item of TEXT_LIMITS) payload[item.key] = numberField(item.key);
 
@@ -383,31 +371,6 @@ async function saveSettings(): Promise<void> {
     toast(settingsError.value, 'error');
   } finally {
     settingsSaving.value = false;
-  }
-}
-
-/** 配色保存：只提交 themeIndex，保存后立即把强调色写进 CSS 变量。 */
-async function selectTheme(index: number): Promise<void> {
-  if (themeSaving.value || index === form.themeIndex) return;
-  const previous = form.themeIndex;
-  form.themeIndex = index;
-  themeSaving.value = true;
-  try {
-    const saved = await api.settings.save({ themeIndex: index });
-    if (saved?.ok !== true) {
-      form.themeIndex = previous;
-      toast(String(saved?.error || t('s_19ih5ay')), 'error');
-      return;
-    }
-    const theme = ((saved.settings ?? {}) as JsonObject).theme ?? {};
-    bootstrap.theme = { ...bootstrap.theme, ...(theme as JsonObject) };
-    applyTheme();
-    toast(t('s_145fdbt'), 'success');
-  } catch (reason) {
-    form.themeIndex = previous;
-    toast(reason instanceof Error ? reason.message : String(reason), 'error');
-  } finally {
-    themeSaving.value = false;
   }
 }
 
@@ -636,36 +599,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
           />
           <p class="field-hint">{{ t('s_7sexex') }}</p>
         </div>
-      </div>
-
-      <!-- 配色：管理员选中的强调色写进令牌，导航、分段控件与选中态一起变 -->
-      <div class="card">
-        <span class="section-label">{{ t('s_4odn3m') }}</span>
-        <p class="field-hint">{{ t('s_aky3i4') }}</p>
-        <div class="cluster">
-          <button
-            v-for="(color, index) in palette"
-            :key="color"
-            class="swatch"
-            type="button"
-            :style="{ backgroundColor: color }"
-            :aria-pressed="index === form.themeIndex ? 'true' : 'false'"
-            :aria-label="`配色 ${index + 1}`"
-            :disabled="themeSaving"
-            @click="selectTheme(index)"
-          >
-            {{ index === form.themeIndex ? t('s_1h1tn0d') : '' }}
-          </button>
-        </div>
-        <button
-          class="cta ghost"
-          type="button"
-          :disabled="themeSaving || !canEditSettings"
-          :data-loading="themeSaving ? 'true' : 'false'"
-          @click="selectTheme(form.themeIndex)"
-        >
-          {{ t('s_apw50v') }}
-        </button>
       </div>
 
       <div class="card">

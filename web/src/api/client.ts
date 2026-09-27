@@ -2,7 +2,7 @@
 import { HttpClient } from '@/services/http-client';
 import { QueryCache } from '@/services/query-cache';
 import { SessionClient } from '@/services/session-client';
-import type { ApiResult, AuthResult, Bootstrap, Exhibition, ExhibitionDetail, Id, JsonObject, Registration, RegistrationDetail, SearchResult, User } from './types';
+import type { ApiResult, AuthResult, Bootstrap, Exhibition, ExhibitionDetail, Id, JsonObject, Registration, RegistrationDetail, ReviewList, SearchResult, User } from './types';
 
 function stableKey(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -61,7 +61,7 @@ export interface ApiClient {
     cancel(id: Id): Promise<ApiResult>;
   };
   review: {
-    list(query?: JsonObject): Promise<Registration[]>;
+    list(query?: JsonObject): Promise<ReviewList>;
     get(id: Id): Promise<Registration>;
     updateStatus(id: Id, status: string): Promise<ApiResult>;
   };
@@ -78,6 +78,7 @@ export interface ApiClient {
     get(): Promise<JsonObject>;
     save(payload: JsonObject): Promise<ApiResult>;
     saveUiMode(mode: string): Promise<ApiResult>;
+    saveUiTheme(themeIndex: number): Promise<ApiResult>;
   };
   clearCache(): void;
 }
@@ -156,7 +157,8 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
       cancel: (id) => write<ApiResult>(`/registrations/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['registrations', 'review', 'exhibitions']),
     },
     review: {
-      list: (query = {}) => read<Registration[]>('review', '/review', { query }),
+      // `/review` 一次返回记录与各状态数量（见 server/src/routes/review-hono.ts），不是数组。
+      list: (query = {}) => read<ReviewList>('review', '/review', { query }),
       get: (id) => read<Registration>('review.record', `/review/${encodeURIComponent(id)}`),
       updateStatus: (id, status) => write<ApiResult>(`/review/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { id, status } }, ['review', 'registrations', 'users.public']),
     },
@@ -175,6 +177,8 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
       get: () => read<JsonObject>('settings', '/settings'),
       save: (payload) => write<ApiResult>('/settings', { method: 'PUT', body: payload }, ['settings', 'categories']),
       saveUiMode: (mode) => write<ApiResult>('/settings/ui-mode', { method: 'PUT', body: { mode } }, ['settings']),
+      // 强调色是个人偏好：写调用者自己的 `users.ui_theme`，不动全局默认色板。
+      saveUiTheme: (themeIndex) => write<ApiResult>('/settings/ui-theme', { method: 'PUT', body: { themeIndex } }, ['settings']),
     },
     clearCache: () => cache.clear(),
   };

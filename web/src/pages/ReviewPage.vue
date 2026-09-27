@@ -26,7 +26,7 @@ import AppIcon from '@/components/AppIcon.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
-import type { Exhibition, Registration } from '@/api/types';
+import type { Exhibition, Registration, ReviewList } from '@/api/types';
 import { t } from '@/i18n';
 
 const route = useRoute();
@@ -39,16 +39,19 @@ const exhibitionId = computed(() => String(route.query.exhibitionId ?? route.par
 const isAdmin = computed(() => session.user.can?.admin === true);
 
 const list = useAsync<Exhibition[]>();
-const review = useAsync<Registration[]>();
+const review = useAsync<ReviewList>();
 /** 筛选只改本地状态：数据已经全量取回，切换不重新请求。 */
 const filter = ref<string>(REGISTRATION_STATUS.PENDING);
 
 const exhibitions = computed<Exhibition[]>(() => list.data.value ?? []);
-const records = computed<Registration[]>(() => review.data.value ?? []);
+// `/review` 返回的是 `{ records, counts }`：记录列表与各状态数量都在返回体里，
+// 直接当数组用会让整页渲染时抛错（这正是「查看报名打不开」的原因）。
+const records = computed<Registration[]>(() => review.data.value?.records ?? []);
+const counts = computed<Record<string, number>>(() => review.data.value?.counts ?? {});
 const hasRecords = computed(() => review.data.value !== undefined);
 const reviewLoading = computed(() => review.loading.value && !hasRecords.value);
 
-/** 筛选条顺序沿用 `REVIEW_FILTERS`，数量从已取到的记录里算。 */
+/** 筛选条顺序沿用 `REVIEW_FILTERS`；数量优先用后端统计，缺失时按已取到的记录算。 */
 const filterItems = computed(() => REVIEW_FILTERS.map((value) => ({
   value,
   label: `${value} ${countOf(value)}`,
@@ -59,11 +62,11 @@ const filtered = computed<Registration[]>(() => (
   filter.value === '全部' ? records.value : records.value.filter((item) => item.status === filter.value)
 ));
 
-const pendingCount = computed(() => records.value.filter(
-  (item) => item.status === REGISTRATION_STATUS.PENDING,
-).length);
+const pendingCount = computed(() => countOf(REGISTRATION_STATUS.PENDING));
 
 function countOf(status: string): number {
+  const known = status === '全部' ? counts.value.total : counts.value[status];
+  if (typeof known === 'number') return known;
   if (status === '全部') return records.value.length;
   return records.value.filter((item) => item.status === status).length;
 }

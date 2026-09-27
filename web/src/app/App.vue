@@ -7,25 +7,45 @@
  * - 页面需要固定操作区时用 `Teleport to="#app-foot"`，它落在网格的第三行；
  * - 轻提示与底部面板是全局的，每个页面都不用自己挂载容器。
  */
-import { computed, onMounted } from 'vue';
-import { RouterView, useRoute } from 'vue-router';
+import { computed, onMounted, watch } from 'vue';
+import { RouterView, useRoute, useRouter } from 'vue-router';
 import AppTopBar from '@/components/AppTopBar.vue';
+import AppIcon from '@/components/AppIcon.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
 import AppToasts from '@/components/AppToasts.vue';
 import AppSheet from '@/components/AppSheet.vue';
 import { bodyAttrs, tabItems } from '@/app/shell';
 import { navigation } from '@/app/navigation';
+import { preloadTabs, resetPreload } from '@/app/preload';
 import { watchSystemMode } from '@/app/theme';
+import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { t } from '@/i18n';
 
 const route = useRoute();
+const router = useRouter();
 const session = useSessionStore();
+const bootstrap = useBootstrapStore();
 
 const items = computed(() => tabItems(session.user.can));
 const showTabs = computed(() => route.meta.tab !== undefined);
 const title = computed(() => (typeof route.meta.title === 'string' ? t(route.meta.title) : ''));
+const topAction = computed(() => route.meta.topAction);
 const attrs = computed(() => bodyAttrs(route.meta));
+
+/**
+ * 启动数据落定、以及身份变化（登录 / 退出 / 换号）之后，重新热身底部导航那几个页面。
+ * 放在外壳里而不是每个页面里：缓存被 `afterAuth` 清空的时机只有外壳看得全。
+ */
+watch(
+  () => [bootstrap.booted, session.loggedIn, session.role].join('|'),
+  () => {
+    if (!bootstrap.booted) return;
+    resetPreload();
+    preloadTabs();
+  },
+  { immediate: true },
+);
 
 onMounted(watchSystemMode);
 </script>
@@ -35,7 +55,22 @@ onMounted(watchSystemMode);
     <!-- 页脚槽写在最前面：页面用 Teleport 投递固定操作区，目标必须已经存在。
          它在网格里的位置由 tokens.css 固定到第三行。 -->
     <div id="app-foot" class="app-foot" />
-    <AppTopBar :title="title" :show-back="route.meta.back === true" />
+    <AppTopBar :title="title" :show-back="route.meta.back === true">
+      <template #actions>
+        <!-- 页面级操作由路由 meta 声明（例如个人页右上角的「设置」入口），
+             页面组件不用为了一个图标去改外壳。 -->
+        <button
+          v-if="topAction"
+          class="icon-button"
+          type="button"
+          :aria-label="t(topAction.label)"
+          :title="t(topAction.label)"
+          @click="router.push(topAction.to)"
+        >
+          <AppIcon :name="topAction.icon" />
+        </button>
+      </template>
+    </AppTopBar>
     <main class="app-body" v-bind="attrs">
       <RouterView v-slot="{ Component }">
         <!-- 单独一层承载页面切换动画：`.app-body` 在切换之间是同一个元素，

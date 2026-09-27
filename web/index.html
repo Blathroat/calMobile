@@ -6,11 +6,16 @@
     <meta name="color-scheme" content="light dark" />
     <title>CalMobile · 展会排期助手</title>
     <script>
-      // 在样式表生效前先落到上次选择的明暗模式，避免首帧闪白。
+      // 在样式表生效前先落到上次选择的明暗模式与强调色，避免首帧闪一下默认外观。
+      // 两者都是账号偏好，bootstrap 落定后会用服务端的值再覆盖一次。
       try {
         var mode = localStorage.getItem('calmobile.mode');
         if (mode === 'dark' || mode === 'light') {
           document.documentElement.dataset.mode = mode;
+        }
+        var accent = localStorage.getItem('calmobile.accent');
+        if (accent && /^#[0-9a-fA-F]{6}$/.test(accent)) {
+          document.documentElement.style.setProperty('--accent', accent);
         }
       } catch (ignored) {
         // 隐私模式下忽略存储读取失败，保持跟随系统

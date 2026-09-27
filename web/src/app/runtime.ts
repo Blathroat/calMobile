@@ -1,6 +1,6 @@
 import { createApi } from '@/api/client';
 import type { Bootstrap } from '@/api/types';
-import { applyMode } from '@/app/theme';
+import { applyAccentIndex, applyMode } from '@/app/theme';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useCapabilitiesStore } from '@/stores/capabilities';
 import { useSessionStore } from '@/stores/session';
@@ -37,6 +37,8 @@ export function applyRuntimeBootstrap(data: Bootstrap): void {
   useCapabilitiesStore().apply(asObject(data.capabilities));
   useSettingsStore().apply({ theme: data.theme, ui: data.ui });
   applyMode(String(useSettingsStore().mode || 'auto'));
+  // 强调色也缓存一份到本机：下次冷启动的首帧直接是用户选的颜色。
+  applyAccentIndex(Number(useBootstrapStore().theme.index) || 0);
 }
 
 function asObject(value: unknown): Record<string, unknown> {

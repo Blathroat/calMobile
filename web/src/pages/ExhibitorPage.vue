@@ -84,24 +84,7 @@ onMounted(load);
 </script>
 
 <template>
-  <header class="row" data-between="true">
-    <div class="stack" data-gap="sm">
-      <span class="eyebrow">{{ bootstrap.brand.en }}</span>
-      <h2>{{ t('s_1omalh8') }}</h2>
-    </div>
-    <button
-      class="icon-button"
-      data-variant="outlined"
-      type="button"
-      :aria-label="t('s_zqzoiq')"
-      :title="limited ? t('s_14pxh3f') : t('s_zqzoiq')"
-      :disabled="limited"
-      @click="openCheckin"
-    >
-      <AppIcon name="check" />
-    </button>
-  </header>
-
+  <!-- 顶栏已经写着「展商后台」，正文不再重复中英文品牌行；核销入口在下方按钮里，不放顶栏图标 -->
   <SkeletonBlock v-if="query.loading.value && !hasContent" :rows="3" />
 
   <StateBlock

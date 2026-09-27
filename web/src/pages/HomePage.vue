@@ -12,6 +12,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, bootApp } from '@/app/runtime';
+import { preloadAdjacentMonths } from '@/app/preload';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { toast } from '@/services/toast';
 import AppIcon from '@/components/AppIcon.vue';
@@ -125,6 +126,9 @@ async function load(): Promise<void> {
     monthData.value = data;
     // 只有还没选中日期时才采用后端给的落点，避免刷新覆盖用户的选择。
     if (!view.value.day) view.value.day = Number(data.day) || 0;
+    // 相邻月份与当天首条展会预热：滑到下个月、点进详情都不用等。
+    preloadAdjacentMonths(view.value.year, view.value.month);
+    for (const item of items.value.slice(0, 2)) warm(item.id);
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason);
     if (!hasContent.value) monthData.value = null;

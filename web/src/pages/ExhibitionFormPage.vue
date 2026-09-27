@@ -17,18 +17,17 @@ import { useAsync } from '@/composables/useAsync';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
-import { confirmSheet, openSheet } from '@/services/sheet';
-import type { SheetAction } from '@/services/sheet';
+import { confirmSheet } from '@/services/sheet';
 import {
   PATTERNS, allowedFormats, check, limit, uploadCountLimit, uploadSizeLimitMb, validateAll,
 } from '@/services/validate';
-import { EXHIBITION_STATUS, REGISTRATION_MODES, modeHint, statusTone } from '@/services/status';
+import { EXHIBITION_STATUS, REGISTRATION_MODES } from '@/services/status';
 import { device } from '@/services/device-services';
 import { markdownToHtml, plainText } from '@/services/markdown';
 import AppIcon from '@/components/AppIcon.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
-import StatusTag from '@/components/StatusTag.vue';
+import SegControl from '@/components/SegControl.vue';
 import type { ExhibitionDetail, JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -40,6 +39,8 @@ interface CollectField {
 }
 
 const MODES = REGISTRATION_MODES.map((value) => ({ value, label: value }));
+/** 分类下拉的占位项：清单由管理员维护，这里只提示「还没选」。 */
+const categoryPlaceholder = t('s_ph3tpb');
 const FIELD_TYPES = ['文本', '单选', '多选'];
 
 const route = useRoute();
@@ -50,6 +51,17 @@ const session = useSessionStore();
 const exhibitionId = computed(() => String(route.params.id ?? ''));
 const isCreate = computed(() => exhibitionId.value === '');
 const limited = computed(() => session.user.can?.limited === true);
+
+/**
+ * 分类下拉的选项：管理员配置的清单。
+ * 老数据的分类可能已经不在清单里，仍把它作为一个选项带上，
+ * 否则一进编辑页就会把展会分类悄悄改成空值。
+ */
+const categoryOptions = computed<string[]>(() => {
+  const list = (Array.isArray(bootstrap.categories) ? bootstrap.categories : []).map((item) => String(item));
+  const current = form.category.trim();
+  return current && !list.includes(current) ? [current, ...list] : list;
+});
 
 const detail = useAsync<ExhibitionDetail>();
 const saving = ref(false);
@@ -226,25 +238,17 @@ function removeCover(): void {
 
 // ── 报名方式 / 简介 / 二维码 / 删除 ──────────────────────────────
 
-/** 报名方式面板：三个互斥选项各带一句说明，与旧实现的底部面板一致。 */
-function openModeSheet(): void {
-  const modeActions: SheetAction[] = MODES.map((mode) => ({
-    label: `${mode.label} · ${modeHint(mode.value)}`,
-    variant: mode.value === form.status ? 'primary' : 'ghost',
-    onClick: async (close) => {
-      close();
-      if (mode.value === form.status) return;
-      form.status = mode.value;
-      // 已保存的展会立即写库，回到卡片时状态就是最新的；新建时随保存一起提交。
-      if (!isCreate.value) await saveStatusOnly();
-    },
-  }));
-  modeActions.push({ label: t('s_1589w37'), onClick: (close) => close() });
-  openSheet({
-    title: t('s_1tv04uf'),
-    message: `当前：${form.status}`,
-    actions: modeActions,
-  });
+/**
+ * 切换报名方式。
+ *
+ * 三个选项直接摆在页面里（分段控件），不再弹抽屉：选项本身就是全部信息，
+ * 多一层面板只会让「改一个开关」变成两次点击。已保存的展会立即写库，
+ * 新建时随保存一起提交。
+ */
+async function changeMode(value: string): Promise<void> {
+  if (value === form.status) return;
+  form.status = value;
+  if (!isCreate.value) await saveStatusOnly();
 }
 
 /** 只提交报名方式（状态），保存后停留在当前页，不打断展商的编辑。 */
@@ -477,14 +481,11 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
       </div>
       <div class="field" :data-invalid="isInvalid('category') ? 'true' : 'false'">
         <label for="form-category">{{ t('s_9xu72h') }}</label>
-        <input
-          id="form-category"
-          v-model="form.category"
-          class="input"
-          type="text"
-          placeholder="例如：智能制造 / 工业自动化"
-          :maxlength="limit('category', 20)"
-        />
+        <!-- 分类是管理员在「管理后台-设置」里维护的清单，展商这里只能从清单里选 -->
+        <select id="form-category" v-model="form.category" class="select">
+          <option value="">{{ categoryPlaceholder }}</option>
+          <option v-for="item in categoryOptions" :key="item" :value="item">{{ item }}</option>
+        </select>
         <p v-if="isInvalid('category')" class="field-error" role="alert">{{ formError }}</p>
         <p v-else class="field-hint">{{ t('s_1bem6b7') }}</p>
       </div>
@@ -520,18 +521,12 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
       <p class="field-hint">建议使用 1080×1920（9:16）的竖版图片，当前允许 {{ formatHint }}。</p>
     </div>
 
-    <!-- 报名与简介设置：卡片上的「报名方式」「编辑简介」「删除展会」都收在这一栏 -->
+    <!-- 报名与简介设置：报名方式是三个互斥分段按钮，简介与删除入口都收在这一栏 -->
     <div class="card">
       <span class="section-label">{{ t('s_1ylv0q2') }}</span>
-      <div class="stack" data-gap="sm">
-        <div class="row" data-between="true">
-          <strong>{{ t('s_1vv5l4v') }}</strong>
-          <button class="pill" type="button" @click="openModeSheet">{{ t('s_13fr7ko') }}</button>
-        </div>
-        <div class="row" data-gap="md">
-          <StatusTag :text="form.status" :tone="statusTone(form.status)" />
-          <span class="row-meta fill">{{ modeHint(form.status) }}</span>
-        </div>
+      <div class="field">
+        <span class="field-label">{{ t('s_1vv5l4v') }}</span>
+        <SegControl :model-value="form.status" :items="MODES" :label="t('s_1vv5l4v')" @update:model-value="changeMode" />
       </div>
       <hr class="divider" />
       <div class="stack" data-gap="sm">

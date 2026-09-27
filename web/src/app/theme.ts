@@ -13,6 +13,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { device } from '@/services/device-services';
 
 const MODE_KEY = 'calmobile.mode';
+const ACCENT_KEY = 'calmobile.accent';
 
 export type UiMode = 'auto' | 'light' | 'dark';
 
@@ -25,6 +26,40 @@ export function readStoredMode(): UiMode | '' {
     // 隐私模式下读不到就跟随系统
     return '';
   }
+}
+
+/** 上次选择的强调色，供 `index.html` 首帧使用（避免首帧橙色再跳到用户选择）。 */
+export function readStoredAccent(): string {
+  try {
+    return window.localStorage?.getItem(ACCENT_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+/** 应用配色色板（后端补齐后的 8 色）。 */
+export function palette(): string[] {
+  const colors = useBootstrapStore().theme.colors;
+  return Array.isArray(colors) ? colors.map((item) => String(item)) : [];
+}
+
+/**
+ * 切换强调色：只改本地（令牌 + 本机缓存），落库由 `app/preferences.ts` 负责。
+ * 这样 `applyTheme` 既能被「换色」调用，也能被「跟随系统明暗变化」调用而不触发请求。
+ */
+export function applyAccentIndex(index: number): number {
+  const colors = palette();
+  const max = Math.max(0, colors.length - 1);
+  const next = Math.min(Math.max(0, Math.trunc(Number(index) || 0)), max);
+  const bootstrap = useBootstrapStore();
+  bootstrap.theme = { ...bootstrap.theme, index: next };
+  try {
+    window.localStorage?.setItem(ACCENT_KEY, colors[next] || '');
+  } catch {
+    // 隐私模式下忽略缓存失败，本次会话内仍然生效
+  }
+  applyTheme();
+  return next;
 }
 
 /** 当前实际生效的明暗模式（`auto` 看系统偏好）。 */

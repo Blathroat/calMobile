@@ -27,6 +27,7 @@ const ROUTES = [
   '/my-registrations',
   '/registration-detail/reg-1',
   '/profile',
+  '/settings',
   '/security',
   '/exhibitor',
   '/exhibition-form',

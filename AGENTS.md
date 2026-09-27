@@ -19,7 +19,8 @@
 - 数据只走 `web/src/api/client.ts`；页面取数统一用 feature composable，失败必须可见。
 - 查询缓存只放 `web/src/services/query-cache.ts`，缓存键包含解析后的参数；不以原生桥接承载业务数据，也不做本地降级。写接口的失效前缀要与读接口的缓存键前缀同族（`registrations` ↔ `registrations.record`），否则改完再读会命中旧值。
 - 用户可见文案写入 `strings_frontend.xml` 并用 `t('key')` 读取；资源首尾不留空白。颜色、字号、间距、圆角只写入 `styles/tokens.css`，动效只写入 `styles/motion.css`。
-- 页面只提供内容：外壳（`src/app/App.vue` 的顶栏 + 滚动内容区 + 底部导航 + 页脚槽）与 `src/app/shell.ts` 的导航项是唯一容器，页面不再自建 `.page` / `.topbar` / `.app-body`；固定操作区用 `<Teleport defer to="#app-foot">` 投递。
+- 页面只提供内容：外壳（`src/app/App.vue` 的顶栏 + 滚动内容区 + 底部导航 + 页脚槽）与 `src/app/shell.ts` 的导航项是唯一容器，页面不再自建 `.page` / `.topbar` / `.app-body`；固定操作区用 `<Teleport defer to="#app-foot">` 投递，顶栏右侧操作写在路由 `meta.topAction`。
+- 个人偏好（明暗模式、强调色）按账号保存（`users.ui_mode` / `users.ui_theme`），本机只缓存首帧；切换统一走 `src/app/preferences.ts`（本地先生效、落库失败回滚），不要把偏好写进 `app_settings`。
 - Markdown / HTML 先经 Vue service 的 sanitize 入口；第三方库内置在 `web/public/vendor/`，不引用 CDN，并只在用到的那一屏按需注入（`src/services/vendor.ts`）。
 - 新页面在 `web/src/app/router.ts` 注册（含 `meta.title / back / tab`），同时更新 [`docs/engineering.md`](docs/engineering.md) 的屏幕表和 `web/src/app/shell.test.ts` 的 `ROUTES`；管理功能优先内联。
 - 表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`；后端仍需再次校验。

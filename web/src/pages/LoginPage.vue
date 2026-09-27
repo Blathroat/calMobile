@@ -274,9 +274,9 @@ onBeforeUnmount(stopCountdown);
     <button class="cta ghost" type="button" @click="backToStepOne">{{ t('s_knqdo0') }}</button>
   </form>
 
-  <!-- 入口页脚：注册入口固定在底部，与线框的 auth-footer 一致 -->
+  <!-- 入口页脚：注册入口固定在底部，与线框的 auth-footer 一致；这里不要分割线 -->
   <Teleport v-if="step === 1" defer to="#app-foot">
-    <div class="page-foot">
+    <div class="page-foot" data-variant="plain">
       <div class="row" style="justify-content: center">
         <span class="dim">{{ t('s_und5qj') }}</span>
         <button class="text-action" type="button" @click="router.push('/register')">{{ t('s_1fwr1ko') }}</button>

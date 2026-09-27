@@ -51,3 +51,11 @@ export interface SearchResult extends JsonObject {
   users: User[];
   count: number;
 }
+
+/** 报名管理一次返回记录与各状态数量（见 server/src/routes/review-hono.ts）。 */
+export interface ReviewList extends JsonObject {
+  exhibitionId: string;
+  status: string;
+  records: Registration[];
+  counts: Record<string, number>;
+}
