@@ -11,6 +11,24 @@ permissions:
 jobs:
   web-and-server:
     runs-on: ubuntu-latest
+    # 契约测试连真实 PostgreSQL（它会自己 CREATE DATABASE calmobile_test 再迁移 + 造数据），
+    # 没有这个服务时 beforeAll 直接抛连接错误，66 条用例会全部 skip 并把作业判失败。
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+          TZ: Asia/Shanghai
+          PGTZ: Asia/Shanghai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
     steps:
       - uses: actions/checkout@v4
         with:
