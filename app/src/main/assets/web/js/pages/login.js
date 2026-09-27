@@ -37,7 +37,7 @@ export async function loginPage(context) {
         class: 'input',
         id: 'login-account',
         type: 'text',
-        // 后端支持用户名或**已验证邮箱**登录（routes/auth.js 的 OR 查询），
+        // 后端支持用户名或**已验证邮箱**登录（routes/auth-hono.ts 的 OR 查询），
         // 占位符以前写的是「昵称 / 邮箱」—— 昵称没有唯一约束、根本没法用来登录。
         placeholder: t('s_1sqr282'),
         autocomplete: 'username',

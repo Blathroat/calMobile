@@ -8,7 +8,7 @@
  *
  * ## 传输层
  *
- * 数据只有一个来源：`server/` 的 Express + PostgreSQL 后端（`pnpm dev`，默认 3000）。
+ * 数据只有一个来源：`server/` 的 Hono + PostgreSQL 后端（`pnpm dev`，默认 3000）。
  * 页面只认动作名，HTTP 形状由下面的 `ENDPOINTS` 表翻译，因此后端换实现不影响页面；
  * 后端连不上就直接抛错由页面提示——没有第二个数据源可以退回。
  *
@@ -70,10 +70,11 @@ export class TransportError extends Error {
  * 动作 → REST 端点。
  *
  * 页面只认 `api.exhibitions.list()` 这样的**动作名**，HTTP 长什么样只在这个文件里：
- * 后端从演示服务换成 Express + PostgreSQL 时，页面一行都没改。
+ * 后端由 Hono + PostgreSQL 提供时，页面一行都没改。
  * 每一项接收动作参数，返回 `{ method, path, body }`；`path` 以 `BASE_URL` 为前缀。
+ * 契约测试直接调用这张表。页面仍只使用下面导出的方法。
  */
-const ENDPOINTS = {
+export const ENDPOINTS = {
     bootstrap: () => ({ method: 'GET', path: '/bootstrap' }),
 
     'auth.login': () => ({ method: 'POST', path: '/auth/login' }),

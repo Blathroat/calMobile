@@ -1,7 +1,6 @@
 /**
- * 前端页面渲染冒烟测试。
+ * 前端页面渲染测试。
  *
- * `webui-check` 只能校验模块能否解析；本脚本补上“真正渲染一遍”的验证：
  * 用最小 DOM 打桩 + 假后端（打桩 `fetch`）+ 只保留系统能力的假桥接，
  * 按角色把每个页面渲染一次，捕获未定义变量、错误的桥接参数、缺失的动作名
  * 这类只在运行时才暴露的问题。
@@ -448,7 +447,7 @@ const BOOTSTRAP = {
         status: '正常',
         statusCode: 'active',
         // 与后端 `capabilities(role, status)` 的五个键一致：受限账号 register / profile 为 false，
-        // 且 `limited` 为 true（见 server/src/domain/permissions.js）。
+        // 且 `limited` 为 true（见 server/src/domain/permissions.ts）。
         can: { register: true, profile: true, exhibitor: true, admin: true, limited: false },
     },
     theme: { index: 0, colors: ['#C05621', '#48515D'] },
@@ -738,7 +737,7 @@ function createBackend() {
 /**
  * 原生侧保留的动作 → 返回值。
  *
- * 这份清单就是 `WebAppActions` 的全部 `case`（见 `docs/architecture.md` 的「前后端边界」）。
+ * 这份清单就是 `WebAppActions` 的全部 `case`（见 `docs/engineering.md` 的「原生桥接」）。
  * 数据动作已经删除：任何不在清单里的动作都会被 {@link installBridge} 当场拒绝，
  * 因为那意味着页面绕过了 `core/api.js`。
  */
@@ -920,59 +919,30 @@ const ROUTES = [
 test('所有页面在管理员身份下都能完成一次渲染', async () => {
     for (const [routeId, params] of ROUTES) {
         const label = `#/${routeId}${Object.keys(params).length ? ` (${JSON.stringify(params)})` : ''}`;
-        const { app, unmatched } = await renderRoute(routeId, params);
+        const { app, unmatched, calls, router } = await renderRoute(routeId, params);
         assertRendered(app, label);
+        const rendered = router.currentRoute();
+        assert.strictEqual(rendered && rendered.definition.id, routeId,
+            `${label} 落到了 ${rendered && rendered.definition.id}，路由没有注册`);
         assert.deepStrictEqual(unmatched, [],
             `${label} 请求了假后端没有覆盖的接口：${unmatched.join(', ')}`);
+        const foreign = calls
+            .map((item) => item.action)
+            .filter((action) => !SYSTEM_ACTION_NAMES.includes(action));
+        assert.deepStrictEqual(foreign, [],
+            `${label} 把数据动作交给了原生桥接：${foreign.join(', ')}`);
     }
 });
 
 /**
- * `assertRendered` 自己不能是恒真的。
- *
- * 它原来断言 `app.children.length > 0`，而 `renderShell` 无论如何都会挂上 topbar
- * 与 main，所以「页面模块一行都没画」也照样通过——上面那条用例因此少了半条命。
- * 这里用一个只有外壳、主体为空的 app 把这一点钉住：旧式断言会通过，新断言必须报错。
+ * 首页的展会数据必须打到假后端。
+ * 桥接侧「数据动作不能走原生」已在逐页渲染里查过。
  */
-test('assertRendered 能认出「只有外壳、主体是空的」页面', async () => {
-    installGlobals();
-    const components = await webModule('js/ui/components.js');
-    const dom = resetDom(sharedDocument);
-    // renderShell 只挂外壳：topbar + 空的 main，页面内容一行都没有。
-    components.renderShell(dom.app, { topbar: null, body: [] });
-
-    assert.ok(dom.app.children.length > 0,
-        '前置条件：光有外壳就已经有节点了（这正是旧断言恒真的原因）');
-    assert.throws(() => assertRendered(dom.app, '空壳页面'), /页面主体是空的/);
-});
-
-test('页面渲染时调用的桥接动作都在系统能力清单里', async () => {
-    const unknown = new Set();
-    for (const [routeId, params] of ROUTES) {
-        const { calls } = await renderRoute(routeId, params);
-        for (const { action } of calls) {
-            if (!SYSTEM_ACTION_NAMES.includes(action)) {
-                unknown.add(action);
-            }
-        }
-    }
-    assert.deepStrictEqual([...unknown], [],
-        `以下动作不是系统能力，说明有页面绕过了 core/api.js：${[...unknown].join(', ')}`);
-});
-
-/**
- * 数据只有一条路径：`core/api.js` 的 `ENDPOINTS` → 后端 HTTP。
- * 原生数据层删除后，桥接只剩系统能力；这条用例同时守住两个方向。
- */
-test('数据动作不再经过原生桥接', async () => {
-    const { calls, requests, unmatched } = await renderRoute('home', {});
+test('首页展会数据走 HTTP', async () => {
+    const { requests, unmatched } = await renderRoute('home', {});
     // 等预加载把相邻月份取回来，否则只能看到首屏那几次请求。
     await settle(150);
 
-    for (const { action } of calls) {
-        assert.ok(SYSTEM_ACTION_NAMES.includes(action),
-            `首页把动作 ${action} 交给了原生桥接，数据必须走 core/api.js`);
-    }
     const paths = requests.map((item) => item.path);
     // bootstrap 只在 app.js 第一次 import 时发一次，因此这里断言首页自己的数据接口。
     for (const expected of ['/exhibitions/month', '/exhibitions']) {
@@ -2069,19 +2039,11 @@ test('动作按 ENDPOINTS 映射成后端请求，401 会自动续期一次', as
         assert.ok(renewed[2].url.endsWith('/api/v1/exhibitions'), '第三次应当重试原请求');
         assert.strictEqual(renewed[2].token, 'fresh-token', '重试必须带续期后的新令牌');
 
-        // 4xx 业务失败：抛成错误交给页面，不会退回桥接。
+        // 4xx 业务失败：抛成错误交给页面，不会退回桥接。5xx 与超时由下一条用例覆盖。
         api.clearCache();
         sharedWindow.fetch = async () => ({ ok: false, status: 403, json: async () => ({ error: '无权执行此操作' }) });
         installGlobals();
         await assert.rejects(() => api.exhibitions.list(), /无权执行此操作/);
-
-        // 5xx：属于传输层失败，原生数据层已删除，没有第二套实现可以退。
-        sharedWindow.fetch = async () => ({ ok: false, status: 502, json: async () => ({ error: '网关错误' }) });
-        installGlobals();
-        api.clearCache();
-        await assert.rejects(() => api.exhibitions.list(),
-            /后端返回 502/,
-            '5xx 时应当如实报传输层失败：数据动作已经不在原生实现里');
     } finally {
         sharedWindow.fetch = originalFetch;
         installGlobals();

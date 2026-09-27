@@ -12,19 +12,10 @@
   },
   "overrides": [
     {
-      "files": ["src/**/*.test.js"],
+      "files": ["src/**/*.test.ts", "test/**/*.ts"],
       "env": {
         "node": true,
-        "jest": true
-      }
-    },
-    {
-      "files": ["test/**/*.js"],
-      "env": {
-        "node": true
-      },
-      "globals": {
-        "test": "readonly"
+        "vitest": true
       }
     }
   ]

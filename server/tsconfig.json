@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    // 全部源码都是 .ts：allowJs 关闭，没有 JS 逃生口。
+    // nodenext 让 tsc 与 Node 用同一套模块解析规则：相对导入必须写 .js 后缀
+    // （源是 .ts、产物是 .js，Node 只认产物上的扩展名），ESM 里读 JSON 要带
+    // `with { type: 'json' }`，CommonJS 依赖的默认导入按互操作规则处理。
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowJs": false,
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

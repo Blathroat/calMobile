@@ -1,5 +1,7 @@
-# pnpm 10 的键名是 onlyBuiltDependencies（写 allowBuilds 不会被识别，安装时照样提示
-# 「Ignored build scripts」）。这两个依赖要跑安装脚本才能落好平台二进制。
+# pnpm 10+ 用 allowBuilds 批准安装脚本；onlyBuiltDependencies 限制「允许跑脚本」的包。
+allowBuilds:
+  esbuild: true
 onlyBuiltDependencies:
   - '@parcel/watcher'
+  - esbuild
   - unrs-resolver

@@ -204,6 +204,11 @@ export function whenStarted() {
     return started || Promise.resolve();
 }
 
+/** 最近一次 render 进入的页面。未注册的 id 使用首页的定义。 */
+export function currentRoute() {
+    return current;
+}
+
 // ── 布局辅助 ──────────────────────────────────────────────────────
 
 /** 标准二级页：返回 + 标题 + 可选右侧操作；bodyProps 用于设置内容区密度。 */
