@@ -225,11 +225,17 @@ async function main() {
     };
     let navigation = 0;
     const goto = async (hash, wait = 1500) => {
-      // 每次导航都带一个唯一参数：Chrome 复用固定的 profile 目录，会缓存上一次构建的
-      // index.html，而重建后的 chunk 文件名已经变了——那时页面会静默变成空白，
-      // 后面的点击全部落空，截图却「看起来正常」。
       navigation += 1;
-      await session.send('Page.navigate', { url: `${options.base}?t=${navigation}-${Date.now()}#${hash}` });
+      if (navigation === 1) {
+        // 首次进入用真实导航，并带上唯一参数：Chrome 复用固定的 profile 目录，会缓存上一次
+        // 构建的 index.html，而重建后的 chunk 文件名已经变了——那时页面会静默变成空白，
+        // 后面的点击全部落空，截图却「看起来正常」。
+        await session.send('Page.navigate', { url: `${options.base}?t=${Date.now()}#${hash}` });
+      } else {
+        // 之后一律在站内切哈希：整页重载会丢掉内存里的访问令牌，受登录保护的页面会整批
+        // 变成登录页截图——那时「截图全绿」而每一屏都是同一个页面。
+        await evaluate(`(() => { location.hash = ${JSON.stringify(hash)}; return location.hash; })()`);
+      }
       // 哈希路由的站内切换不一定再触发 load：等一小会儿即可。
       await sleep(wait);
     };
@@ -290,7 +296,13 @@ async function main() {
         await sleep(1400);
       }
       await shot(`${String(index).padStart(2, '0')}-${route.replace(/[/?=&]/g, '_')}`);
-      console.log(`route ${route} → ${await evaluate('location.hash')}`);
+      const landed = await evaluate('location.hash');
+      // 受登录保护的页面落回登录页 = 会话在切换中丢了（或账号没权限）：这是最难发现的
+      // 一种「截图全绿」，直接失败并说清原因。
+      if (!route.includes('login') && String(landed).includes('/login')) {
+        throw new Error(`路由 ${route} 落回了登录页（${landed}）\n会话没有跨页面保留：检查是否有整页重载，或账号 ${options.account} 不存在`);
+      }
+      console.log(`route ${route} → ${landed}`);
       index += 1;
     }
 
