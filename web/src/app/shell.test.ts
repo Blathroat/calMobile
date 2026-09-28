@@ -11,7 +11,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, type Router } from 'vue-router';
 import App from './App.vue';
 import { createAppRouter } from './router';
-import { tabItems } from './shell';
+import { bodyAttrs, tabItems } from './shell';
 import { api } from '@/app/runtime';
 import { openSheet } from '@/services/sheet';
 import { useSessionStore } from '@/stores/session';
@@ -103,52 +103,45 @@ describe('app shell', () => {
       expect(shell?.querySelector(':scope > #app-foot'), `${path} 缺少页脚槽`).not.toBeNull();
       // 旧容器的类名不得再出现（`migration.css` 那套兼容层已删除）。
       expect(container.querySelector('.page')).toBeNull();
-    } finally {
-      unmount(container, app);
-    }
-  });
-
-  it('底部导航只出现在标签页上，条目数与能力一致', async () => {
-    for (const path of ROUTES) {
-      const { container, app } = await mountRoute(path);
-      try {
-        const tabbar = container.querySelector('.tabbar');
-        if (TAB_ROUTES.has(path)) {
-          expect(tabbar, `${path} 缺少底部导航`).not.toBeNull();
-          expect(tabbar?.querySelectorAll('.tab').length).toBe(tabItems(ADMIN.can).length);
-          const current = tabbar?.querySelector('.tab[aria-current="page"]');
-          expect(current, `${path} 没有选中任何标签`).not.toBeNull();
-        } else {
-          expect(tabbar, `${path} 不该有底部导航`).toBeNull();
-        }
-      } finally {
-        unmount(container, app);
+      // 底部导航只长在标签页上，条目数跟着能力走（能力变化时条目要跟着变）。
+      const tabbar = container.querySelector('.tabbar');
+      if (TAB_ROUTES.has(path)) {
+        expect(tabbar, `${path} 缺少底部导航`).not.toBeNull();
+        expect(tabbar?.querySelectorAll('.tab').length).toBe(tabItems(ADMIN.can).length);
+        expect(tabbar?.querySelector('.tab[aria-current="page"]'), `${path} 没有选中任何标签`).not.toBeNull();
+      } else {
+        expect(tabbar, `${path} 不该有底部导航`).toBeNull();
       }
-    }
-  });
-
-  it('顶栏标题取自路由 meta，二级页有返回键', async () => {
-    const { container, app } = await mountRoute('/detail/exh-1');
-    try {
-      expect(container.querySelector('.topbar-title')?.textContent?.trim()).toBe('s_1ve1f4n');
-      expect(container.querySelector('.topbar .icon-button')).not.toBeNull();
     } finally {
       unmount(container, app);
     }
   });
 
-  it('内容区密度由路由 meta 决定', async () => {
+  it('顶栏与内容区由路由 meta 决定', async () => {
+    // 标题 / 返回键走 meta.title 与 meta.back：二级页必须有返回键，否则只能靠系统手势。
+    const detail = await mountRoute('/detail/exh-1');
+    try {
+      expect(detail.container.querySelector('.topbar-title')?.textContent?.trim()).toBe('s_1ve1f4n');
+      expect(detail.container.querySelector('.topbar .icon-button')).not.toBeNull();
+    } finally {
+      unmount(detail.container, detail.app);
+    }
+
+    // 密度映射本身是纯函数：逐个分支断言，不必为每种 meta 各挂一次应用。
+    expect(bodyAttrs({})).toEqual({});
+    expect(bodyAttrs({ bodyGap: 'tight' })).toEqual({ 'data-gap': 'tight' });
+    expect(bodyAttrs({ bodyPad: 'none', bodyAlign: 'center', bodyGap: 'tight' })).toEqual({
+      'data-pad': 'none',
+      'data-align': 'center',
+      'data-gap': 'tight',
+    });
+
+    // 外壳确实把映射写到了 `.app-body` 上（首页是信息密集页，用 tight）。
     const home = await mountRoute('/home');
     try {
       expect(home.container.querySelector('.app-body')?.getAttribute('data-gap')).toBe('tight');
     } finally {
       unmount(home.container, home.app);
-    }
-    const profile = await mountRoute('/profile');
-    try {
-      expect(profile.container.querySelector('.app-body')?.getAttribute('data-gap')).toBeNull();
-    } finally {
-      unmount(profile.container, profile.app);
     }
   });
 

@@ -1,5 +1,6 @@
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { NativeBridge, NativeBridgeError } from './native-bridge';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { NativeBridge, NativeBridgeError, nativeBridge } from './native-bridge';
+import { device } from './device-services';
 
 // 文案本体在 res/values/strings_frontend.xml，由原生启动时注入；
 // 单测里注入同一条，断言才看得到可读的错误说明而不是 key。
@@ -47,5 +48,13 @@ describe('NativeBridge', () => {
     bridges.push(bridge);
     await expect(bridge.call('calendar.status', { date: '2026-09-20' })).rejects.toThrow('没有原生桥接');
     fakeWindow.CalMobileBridge?.onResult('unknown', true, {}, null, null);
+  });
+
+  it('device 服务把动作名固定成原生契约', async () => {
+    // 动作名一旦改动就要同步 `WebAppActions.handle()` 的动作表，这里锁一个代表性动作。
+    const spy = vi.spyOn(nativeBridge, 'call').mockResolvedValue({ saved: true } as never);
+    await device.calendarStatus('2026-09-20');
+    expect(spy).toHaveBeenCalledWith('calendar.status', { date: '2026-09-20' });
+    spy.mockRestore();
   });
 });
