@@ -95,6 +95,38 @@
     animation: route-in var(--motion-normal) var(--ease-out) both;
 }
 
+/* 底部导航之间的切换：只做横向位移，**不淡入**。
+   淡入期间新页面还是透明的，露出来的是外壳背景 —— 浅色模式下就是「切标签页闪一下白」。
+   只位移则始终有内容在场，读起来是「新的一屏从旁边推进来」。
+   这两个规则必须排在 direction 的规则之后：同为 (0,3,0) 的优先级，靠源码顺序决定胜负。 */
+@keyframes tab-in-forward {
+    from {
+        transform: translate3d(40px, 0, 0);
+    }
+
+    to {
+        transform: none;
+    }
+}
+
+@keyframes tab-in-back {
+    from {
+        transform: translate3d(-40px, 0, 0);
+    }
+
+    to {
+        transform: none;
+    }
+}
+
+.app[data-tab-move="forward"] .route-enter {
+    animation: tab-in-forward var(--motion-page) var(--ease-out) both;
+}
+
+.app[data-tab-move="back"] .route-enter {
+    animation: tab-in-back var(--motion-page) var(--ease-out) both;
+}
+
 /* 顶部栏标题随页面轻微上浮，强化“整页切换”的观感 */
 @keyframes title-in {
     from {

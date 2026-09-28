@@ -26,4 +26,21 @@ describe('navigation coordinator', () => {
     navigation.track({ path: '/login' }, { path: '/', matched: [] });
     expect(navigation.direction.value).toBe('none');
   });
+
+  it('标签页之间按底部导航顺序记左右方向，同屏只换 query 时两个信号都不动', () => {
+    navigation.track({ path: '/my-registrations', meta: { tab: 'my-registrations' } }, { path: '/home', meta: { tab: 'home' } });
+    expect(navigation.tabMove.value).toBe('forward');
+    navigation.track({ path: '/home', meta: { tab: 'home' } }, { path: '/profile', meta: { tab: 'profile' } });
+    expect(navigation.tabMove.value).toBe('back');
+    // 标签页之间不做前进 / 后退，避免叠一层淡入
+    expect(navigation.direction.value).toBe('none');
+
+    // 同一屏只换 query（管理页分区）：不动任何信号，元素不重建就不会重放动画
+    navigation.track({ path: '/detail/exh-1', meta: {} }, { path: '/home', meta: {} });
+    expect(navigation.direction.value).toBe('forward');
+    navigation.tabMove.value = 'back';
+    navigation.track({ path: '/detail/exh-1', meta: {} }, { path: '/detail/exh-1', meta: {} });
+    expect(navigation.direction.value).toBe('forward');
+    expect(navigation.tabMove.value).toBe('back');
+  });
 });

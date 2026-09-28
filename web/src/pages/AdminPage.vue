@@ -171,7 +171,23 @@ watch(() => route.query.tab, () => {
   loadPanel();
 });
 
-onMounted(loadPanel);
+/**
+ * 预热另外两个分区：切分区时才第一次取数，会先画一段加载态（整页闪一下）。
+ * 三个分区的读接口都走查询缓存，这里只是把请求提前到当前分区画完之后发，
+ * 切过去时直接命中缓存。失败无所谓：真到那一步会照常报错并给重试。
+ */
+function preloadPanels(): void {
+  window.setTimeout(() => {
+    if (tab.value !== 'users') void loadUsers().catch(() => undefined);
+    if (tab.value !== 'exhibitions') void loadExhibitions().catch(() => undefined);
+    if (tab.value !== 'settings') void loadSettings().catch(() => undefined);
+  }, 0);
+}
+
+onMounted(() => {
+  loadPanel();
+  preloadPanels();
+});
 onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
 // ── 用户管理 ─────────────────────────────────────────────────────
@@ -189,7 +205,7 @@ function manageUser(user: User): void {
       await updateUserStatus(user, status);
     },
   }));
-  actions.push({ label: t('s_1589w37'), onClick: (close) => close() });
+  // 不放「取消」：点遮罩、按返回或 Esc 都能关，面板里多一个取消只会让状态选项更不显眼。
   openSheet({
     title: `管理 ${user.nickname}`,
     message: `${user.role} · 注册于 ${user.registrationTime || t('s_1lpnuh4')}`,

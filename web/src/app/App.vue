@@ -60,7 +60,12 @@ onMounted(watchSystemMode);
 </script>
 
 <template>
-  <div class="app" :data-nav="showTabs ? 'bottom' : 'none'" :data-direction="navigation.direction.value">
+  <div
+    class="app"
+    :data-nav="showTabs ? 'bottom' : 'none'"
+    :data-direction="navigation.direction.value"
+    :data-tab-move="navigation.tabMove.value === 'none' ? undefined : navigation.tabMove.value"
+  >
     <!-- 页脚槽写在最前面：页面用 Teleport 投递固定操作区，目标必须已经存在。
          它在网格里的位置由 tokens.css 固定到第三行。 -->
     <div id="app-foot" class="app-foot" />
@@ -83,8 +88,11 @@ onMounted(watchSystemMode);
     <main class="app-body" v-bind="attrs">
       <RouterView v-slot="{ Component }">
         <!-- 单独一层承载页面切换动画：`.app-body` 在切换之间是同一个元素，
-             动画需要挂在每次都重建的节点上。 -->
-        <div :key="route.fullPath" class="route-enter page-surface">
+             动画需要挂在每次都重建的节点上。
+             键用 `fullPath`，所以换 query（例如管理页的 `?tab=`）也会重建页面；
+             页面自己 watch query 完成切换的（`meta.queryInPlace`）则只认 path，
+             免得为了换一个分区把整页重新挂载、数据重新取一遍。 -->
+        <div :key="route.meta.queryInPlace === true ? route.path : route.fullPath" class="route-enter page-surface">
           <component :is="Component" />
         </div>
       </RouterView>
