@@ -199,9 +199,9 @@ onBeforeUnmount(stopCountdown);
 </script>
 
 <template>
-  <!-- 入口页版式与旧版（master）逐像素一致：内容在内容区里再收一道 16px 内距，
+  <!-- 入口页版式与旧版（master）一致：内容区的两道内距由外壳给（左右各 32px），
        品牌方块靠左、标题与说明居中，注册 / 忘记密码跟在表单后面随内容滚动。 -->
-  <div class="stack page-inset">
+  <div class="stack">
     <div class="stack" data-align="text">
       <span class="brand-mark" aria-hidden="true">{{ t('s_1lsc240') }}</span>
       <h2>{{ bootstrap.brand.zh }}</h2>

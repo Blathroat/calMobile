@@ -38,8 +38,9 @@ web/
 
 - 顶栏标题、返回键、底部导航项与内容区密度都由路由 `meta` 决定（`title` / `back` / `tab` / `bodyGap` / `bodyPad` / `bodyAlign`），导航项按角色过滤（`web/src/app/shell.ts`）。
 - 页面级顶栏操作也写在 `meta.topAction`（`{ icon, to, label }`），外壳据此渲染右上角图标按钮（个人页的「设置」入口就是这么来的）。
-- 页面需要固定操作区时用 `<Teleport defer to="#app-foot">` 投递 `.page-foot`，它落在网格第三行；`defer` 让目标元素与页面在同一次渲染里创建时也能找到。入口页（01）是例外：注册 / 忘记密码两个文字入口按旧版版式跟在表单后面随内容滚动，不占页脚槽，内容另用 `.page-inset` 收一道内距。
+- 页面需要固定操作区时用 `<Teleport defer to="#app-foot">` 投递 `.page-foot`，它落在网格第三行；`defer` 让目标元素与页面在同一次渲染里创建时也能找到。入口页（01）是例外：注册 / 忘记密码两个文字入口按旧版版式跟在表单后面随内容滚动，不占页脚槽。
 - 页面不要自建 `.page` / `.topbar` / `.app-body` / `.tabbar`，也不要声明颜色、字号、间距与圆角。
+- 内容区的左右内距由外壳给两道（`.app-body` 与路由容器 `.page-surface` 各 `var(--s4)`，合计 32px，与旧版实机一致），页面不要再自己加左右内距；确需通栏的页面用路由 `meta.bodyPad: 'none'`，两道一起去掉。
 - 底部面板统一走 `web/src/services/sheet.ts`：一句话加按钮用 `title / message / actions`；带输入框或列表的用 `component` + `props`（面板组件只负责内容，关闭与动作仍由服务管，例如手动输入报名码与粘贴 Markdown）；选项多于两个时 `layout: 'stack'` 竖排。页面不再自建 `.sheet` 结构。
 - 列表型页面的分区/筛选写进地址栏（`?tab=`），从二级页返回时才能回到同一分区。
 - 切换方向由 `web/src/app/navigation.ts` 按路径深度算出，写进 `.app[data-direction]`，`motion.css` 据此选择前进/后退/原地替换的过渡；冷启动的第一次跳转按原地替换处理，首帧静态落地。

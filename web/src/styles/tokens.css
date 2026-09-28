@@ -364,12 +364,15 @@ label {
 }
 
 /* 路由容器：内容区的纵向排布由它承担（页面只负责往里放区块），
-   单独一层是为了让 `route-enter` 动画在每次切换时重放。 */
+   单独一层是为了让 `route-enter` 动画在每次切换时重放。
+   它还负责内容的**第二道内距**：旧版（master）每个页面都被 `scaffold` 多包了一层
+   `.app-body`，两道 `var(--s4)` 叠起来才是实机版式（内容左右各留 32px）。 */
 .app-body > .page-surface {
     min-height: 0;
     display: flex;
     flex-direction: column;
     gap: var(--s4);
+    padding: var(--s4);
 }
 
 .app-body[data-gap="tight"] > .page-surface {
@@ -390,7 +393,12 @@ label {
     flex: none;
 }
 
+/* 通栏页面：内容区的两道内距一起去掉，语义才和路由 `meta.bodyPad: 'none'` 一致。 */
 .app-body[data-pad="none"] {
+    padding: 0;
+}
+
+.app-body[data-pad="none"] > .page-surface {
     padding: 0;
 }
 
@@ -403,17 +411,12 @@ label {
 }
 
 /* 二级页底部固定操作区：detail / registration-detail / exhibition-form /
-   rich-editor / user-public 共用同一种容器，样式只在这里声明一次。 */
+   rich-editor / user-public 共用同一种容器，样式只在这里声明一次。
+   左右内距与内容一致（两道 `var(--s4)`），否则固定按钮比正文宽出一截。 */
 .page-foot {
-    padding: var(--s4);
+    padding: var(--s4) calc(var(--s4) * 2);
     background: var(--screen);
     border-top: var(--hairline) solid var(--stroke);
-}
-
-/* 入口页：旧版外壳在页面内容外还套了一层 `.app-body`，内容因此比其它页面多收一道
-   `var(--s4)` 内距。这里按旧版实机版式复刻，改动会让入口页与旧版截图对不上。 */
-.page-inset {
-    padding: var(--s4);
 }
 
 /* 卡片内的次级按钮：比标准 .cta 矮一档，字号也更小 */
