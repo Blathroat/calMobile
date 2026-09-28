@@ -13,6 +13,7 @@ import { useAsync } from '@/composables/useAsync';
 import { useSessionStore } from '@/stores/session';
 import { device } from '@/services/device-services';
 import { markdownToHtml, plainText, sanitizeHtml } from '@/services/markdown';
+import { coverOf } from '@/services/cover';
 import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
 import AppIcon from '@/components/AppIcon.vue';
@@ -44,6 +45,8 @@ const calendarState = ref<{ inCalendar: boolean; granted: boolean }>({ inCalenda
 const calendarBusy = ref(false);
 /** 大图查看：封面放大到全屏，支持双指缩放。 */
 const viewerOpen = ref(false);
+/** 封面：自己上传的优先，其次管理员设置的缺省封面，都没有就是空串（画占位图）。 */
+const cover = computed(() => coverOf(exhibition.value?.imageUri));
 /** 日历状态只读一次：数据刷新会重画正文，但不该重复请求。 */
 let calendarRequested = false;
 
@@ -199,15 +202,16 @@ onMounted(() => { void load(); });
   />
 
   <template v-else>
-    <!-- 展会封面：设计比例 1080×1920 的竖版海报；点开后可以看大图并双指缩放 -->
+    <!-- 展会封面：设计比例 1080×1920 的竖版海报；点开后可以看大图并双指缩放。
+         展会自己没有封面时用管理员设置的缺省封面，两处都为空才画占位图。 -->
     <button
-      v-if="exhibition.imageUri"
+      v-if="cover"
       class="hero ph-img hero-button"
       type="button"
       :aria-label="COPY.openViewer"
       @click="viewerOpen = true"
     >
-      <img :src="String(exhibition.imageUri)" :alt="`${exhibition.title} 展会图片`" />
+      <img :src="cover" :alt="`${exhibition.title} 展会图片`" />
     </button>
     <div v-else class="hero ph-img" aria-hidden="true" />
 
@@ -294,8 +298,8 @@ onMounted(() => { void load(); });
 
   <!-- 大图查看：只画显示与手势，关闭由本页处理 -->
   <ImageViewer
-    v-if="viewerOpen && exhibition && exhibition.imageUri"
-    :src="String(exhibition.imageUri)"
+    v-if="viewerOpen && exhibition && cover"
+    :src="cover"
     :alt="`${exhibition.title} 展会图片`"
     @close="viewerOpen = false"
   />

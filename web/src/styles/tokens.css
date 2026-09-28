@@ -1810,6 +1810,43 @@ label {
     text-align: center;
 }
 
+/* 一排并排的文字按钮（富文本编辑器的「粘贴 Markdown / 插入图片 / 视频」）：
+   文案必须一行显示。按钮按内容取宽，窄屏放不下时整行横向滚动 ——
+   均分宽度会把「粘贴 Markdown」压成两行，读起来像排版坏了。 */
+.action-row {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.action-row::-webkit-scrollbar {
+    display: none;
+}
+
+.action-row > .cta {
+    flex: 0 0 auto;
+    padding-inline: var(--s2);
+    white-space: nowrap;
+}
+
+/* 一次性提示条：文案占满剩余宽度，右侧关闭入口不换行 */
+.hint-note {
+    align-items: center;
+    justify-content: space-between;
+}
+
+.hint-note > span {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.hint-note > .text-action {
+    flex: none;
+    white-space: nowrap;
+}
+
 .sheet-actions {
     display: flex;
     gap: var(--s2);

@@ -357,7 +357,6 @@ function escapeRegExp(value: string): string {
   <template v-else>
     <div class="card" data-tone="fill">
       <strong>{{ exhibition.title }}</strong>
-      <span class="row-meta">{{ t('s_9dpkko') }}</span>
     </div>
 
     <!-- 工具条：格式按钮作用在光标处，预览按钮就地切换渲染结果 -->
@@ -420,16 +419,17 @@ function escapeRegExp(value: string): string {
       <span class="field-hint">{{ showPreview ? t('s_k2jp4x') : t('s_1jvhwb1') }}</span>
     </div>
 
-    <div class="row" data-gap="md">
-      <button class="cta ghost" data-size="small" type="button" style="flex: 1 1 0" @click="openPasteSheet">
+    <!-- 三个入口并排：文案必须一行显示，窄屏时整行横向滚动而不是把字拆成两行 -->
+    <div class="action-row">
+      <button class="cta ghost" data-size="small" type="button" @click="openPasteSheet">
         <AppIcon name="edit" size="icon icon-sm" />
         {{ t('s_7zi2sm') }}
       </button>
-      <button class="cta ghost" data-size="small" type="button" style="flex: 1 1 0" @click="insertImage">
+      <button class="cta ghost" data-size="small" type="button" @click="insertImage">
         <AppIcon name="image" size="icon icon-sm" />
         {{ t('s_1w5fs53') }}
       </button>
-      <button class="cta ghost" data-size="small" type="button" style="flex: 1 1 0" @click="insertVideo">
+      <button class="cta ghost" data-size="small" type="button" @click="insertVideo">
         <AppIcon name="video" size="icon icon-sm" />
         {{ t('s_1aj4gvd') }}
       </button>

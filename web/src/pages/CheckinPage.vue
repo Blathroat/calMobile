@@ -19,6 +19,7 @@ import { loadQrDecoder } from '@/services/vendor';
 import { openSheet } from '@/services/sheet';
 import { toast } from '@/services/toast';
 import { REGISTRATION_STATUS } from '@/services/status';
+import { useHint } from '@/composables/useHint';
 import ManualCodePanel from '@/components/ManualCodePanel.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -49,10 +50,11 @@ const session = useSessionStore();
 
 /** 受限账号不能核销（后端 `POST /checkin` 直接 403）：整页换成说明，也不去加载识别库。 */
 const limited = computed(() => session.limited === true);
-
 const videoEl = ref<HTMLVideoElement>();
 const canvasEl = ref<HTMLCanvasElement>();
 const startButton = ref<HTMLButtonElement>();
+/** 展商后台那条「怎么核销」的一次性提示：进过这一页就记为已读。 */
+const { dismiss: dismissCheckinHint } = useHint('exhibitor-checkin');
 
 const stageMode = ref<StageMode>('idle');
 const stageTitle = ref(t('s_zkl7t2'));
@@ -83,6 +85,9 @@ let lastDecodeAt = 0;
 let alive = true;
 
 onMounted(() => {
+  // 进到核销页就说明展商后台那条「怎么核销」的提示已经教到位了：不管从哪个入口进来
+  // （后台按钮、深链、返回键回来）都把它记为已读，下次不再显示。
+  void dismissCheckinHint();
   if (limited.value) return;
   void loadQrDecoder()
     .then(() => { decoderReady.value = true; })
@@ -391,8 +396,6 @@ async function submitManual(close: () => void): Promise<void> {
       <span class="section-label">{{ t('s_oozrzl') }}</span>
       <span class="pill">{{ REGISTRATION_STATUS.ATTENDED }}</span>
     </div>
-
-    <p class="row-meta">{{ t('s_1c3qthv') }}</p>
 
     <!-- 取景区：就近显示状态，而不是整页跳转 -->
     <div class="scan-wrap">

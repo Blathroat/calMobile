@@ -21,6 +21,7 @@ import { confirmSheet, openSheet } from '@/services/sheet';
 import type { SheetAction } from '@/services/sheet';
 import { check } from '@/services/validate';
 import { EXHIBITION_STATUS, statusTone } from '@/services/status';
+import { coverOf } from '@/services/cover';
 import { formatDateWithWeekday, truncate } from '@/services/format';
 import { device } from '@/services/device-services';
 import SegControl from '@/components/SegControl.vue';
@@ -92,7 +93,20 @@ const form = reactive({
   imageFormats: '',
   videoFormats: '',
   limits: {} as Record<string, number>,
+  /** 缺省展会封面（媒体短 URL）：展会自己没有封面时用它，空串表示继续用占位图 */
+  defaultCover: '',
+  /** 展商可同时筹备的展会数；0 表示不限 */
+  maxFutureExhibitions: 0,
 });
+
+/** 管理页自己的文案：提示与开关说明放在这里，提取脚本会换成文案 key。 */
+const COPY = {
+  coverTitle: t('s_y0ihlw'),
+  coverHint: t('s_1rgheyl'),
+  exhibitorLimit: t('s_17fthq4'),
+  exhibitorLimitHint: t('s_13he981'),
+};
+const coverBusy = ref(false);
 const settingsError = ref('');
 const settingsSaving = ref(false);
 const loaded = ref(false);
@@ -351,6 +365,32 @@ function fillForm(data: JsonObject): void {
   form.videoFormats = (Array.isArray(upload.videoFormats) ? upload.videoFormats : []).map((item) => String(item)).join(',');
   form.limits = {};
   for (const item of TEXT_LIMITS) form.limits[item.key] = Number(limits[item.key] ?? bootstrap.limits[item.key] ?? 0);
+  const cover = (data.cover ?? {}) as JsonObject;
+  const exhibitor = (data.exhibitor ?? {}) as JsonObject;
+  form.defaultCover = String(cover.defaultCover ?? bootstrap.cover.defaultCover ?? '');
+  form.maxFutureExhibitions = Number(exhibitor.maxFutureExhibitions ?? bootstrap.exhibitor.maxFutureExhibitions ?? 0);
+}
+
+/**
+ * 缺省封面：走与展会封面同一条路径（原生选图 → 落盘 → 存短 URL），
+ * 只改表单里的值，点「保存设置」才落库。
+ */
+async function pickDefaultCover(): Promise<void> {
+  coverBusy.value = true;
+  try {
+    const stored = await device.importMedia('image') as { url?: string };
+    if (!stored?.url) {
+      toast(t('s_1dc9o49'), 'error');
+      return;
+    }
+    form.defaultCover = stored.url;
+  } catch (reason) {
+    // 用户在系统选择器点了取消：按稳定错误码判断，不提示错误。
+    if (reason && typeof reason === 'object' && (reason as { code?: unknown }).code === 'cancelled') return;
+    toast(reason instanceof Error ? reason.message : String(reason), 'error');
+  } finally {
+    coverBusy.value = false;
+  }
 }
 
 /** 上限表单的数值读取：空输入按 0 处理，后端会把 0 夹到合法区间。 */
@@ -395,6 +435,8 @@ async function saveSettings(): Promise<void> {
       avatarSizeMb: Number(form.avatarSizeMb) || 0,
       imageFormats: form.imageFormats.trim(),
       videoFormats: form.videoFormats.trim(),
+      defaultCover: form.defaultCover.trim(),
+      maxFutureExhibitions: Number(form.maxFutureExhibitions) || 0,
     };
     for (const item of TEXT_LIMITS) payload[item.key] = numberField(item.key);
 
@@ -454,10 +496,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
           :placeholder="t('s_1lwkw6n')"
           @input="onSearch(($event.target as HTMLInputElement).value)"
         />
-      </div>
-      <div class="notice">
-        <strong>{{ t('s_7tczm7') }}</strong>
-        <span>{{ t('s_1pdejtj') }}</span>
       </div>
       <div v-if="users.error.value" class="notice" data-tone="accent">
         <span>{{ users.error.value.message }}</span>
@@ -535,10 +573,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
         <span class="section-label">{{ t('s_1h3z4vq') }}</span>
         <span class="pill">{{ `${exhibitionItems.length} 个展会` }}</span>
       </div>
-      <div class="notice">
-        <strong>{{ t('s_19eb37e') }}</strong>
-        <span>{{ t('s_2scj6a') }}</span>
-      </div>
       <div v-if="exhibitions.error.value" class="notice" data-tone="accent">
         <span>{{ exhibitions.error.value.message }}</span>
       </div>
@@ -559,7 +593,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
             :aria-label="`查看 ${item.title} 详情`"
             @click="router.push(`/detail/${item.id}`)"
           >
-            <MediaBox :src="String(item.imageUri || '')" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
+            <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
             <span class="row-copy">
               <strong class="row-title truncate">{{ item.title }}</strong>
               <span class="row-meta">{{ `${formatDateWithWeekday(item.date)} ${item.time}` }}</span>
@@ -595,7 +629,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       <button class="cta ghost" type="button" :disabled="exhibitionItems.length === 0" @click="exportCsv">
         {{ t('s_1ogoh03') }}
       </button>
-      <p class="field-hint text-center">{{ t('s_nsnwn6') }}</p>
     </template>
   </template>
 
@@ -618,7 +651,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
 
       <div class="card">
         <span class="section-label">{{ t('s_vxwprj') }}</span>
-        <p class="field-hint">{{ t('s_l2amry') }}</p>
         <div class="field">
           <label for="settings-title-zh">{{ t('s_1sx8n02') }}</label>
           <input
@@ -640,7 +672,57 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
             maxlength="24"
             :placeholder="t('s_17xmsms')"
           />
-          <p class="field-hint">{{ t('s_7sexex') }}</p>
+        </div>
+      </div>
+
+      <!-- 缺省展会封面：展会自己没有封面时用它替掉占位图；留空即回到占位图 -->
+      <div class="card">
+        <span class="section-label">{{ COPY.coverTitle }}</span>
+        <div class="hero ph-img hero-compact">
+          <img v-if="form.defaultCover" :src="form.defaultCover" :alt="COPY.coverTitle" />
+        </div>
+        <div class="row" data-gap="md">
+          <button
+            class="cta ghost"
+            data-size="small"
+            type="button"
+            style="flex: 1 1 0"
+            :disabled="coverBusy"
+            :data-loading="coverBusy ? 'true' : 'false'"
+            @click="pickDefaultCover"
+          >
+            {{ form.defaultCover ? t('s_xocxb0') : t('s_6piprk') }}
+          </button>
+          <button
+            v-if="form.defaultCover"
+            class="cta ghost"
+            data-size="small"
+            type="button"
+            style="flex: 1 1 0"
+            @click="form.defaultCover = ''"
+          >
+            {{ t('s_eab5ax') }}
+          </button>
+        </div>
+        <p class="field-hint">{{ COPY.coverHint }}</p>
+      </div>
+
+      <!-- 展商端策略：单个展商可同时筹备的展会数 -->
+      <div class="card">
+        <span class="section-label">{{ COPY.exhibitorLimit }}</span>
+        <div class="field">
+          <div class="row" data-gap="md">
+            <input
+              id="settings-max-future-exhibitions"
+              v-model.number="form.maxFutureExhibitions"
+              class="input"
+              type="number"
+              min="0"
+              inputmode="numeric"
+            />
+            <span class="row-meta">{{ t('s_d5a1x9') }}</span>
+          </div>
+          <p class="field-hint">{{ COPY.exhibitorLimitHint }}</p>
         </div>
       </div>
 
@@ -650,7 +732,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
         <div class="switch-row">
           <span class="switch-copy">
             <strong>{{ t('s_5rwrkf') }}</strong>
-            <span class="row-meta">{{ t('s_1jh4uc4') }}</span>
           </span>
           <label class="switch" for="settings-announcement-enabled">
             <input id="settings-announcement-enabled" v-model="form.announcementEnabled" type="checkbox" />
@@ -662,7 +743,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       <div class="card">
         <span class="section-label">{{ t('s_1v7py1m') }}</span>
         <textarea id="settings-categories" v-model="form.categories" class="textarea" rows="4" />
-        <p class="field-hint">{{ t('s_19brgqa') }}</p>
       </div>
 
       <div class="card">
@@ -670,7 +750,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
         <div class="switch-row">
           <span class="switch-copy">
             <strong>{{ t('s_11iu5s7') }}</strong>
-            <span class="row-meta">{{ t('s_qt3xw0') }}</span>
           </span>
           <label class="switch" for="settings-revise">
             <input id="settings-revise" v-model="form.canRevise" type="checkbox" />
@@ -709,7 +788,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
             <span class="row-meta">MB</span>
           </div>
         </div>
-        <p class="field-hint">{{ t('s_8cnkwa') }}</p>
       </div>
 
       <div class="card">
@@ -724,7 +802,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
             maxlength="120"
             placeholder="jpg,jpeg,png,webp"
           />
-          <p class="field-hint">{{ t('s_uwhq7a') }}</p>
         </div>
         <div class="field">
           <label for="settings-video-formats">{{ t('s_injt47') }}</label>
@@ -736,7 +813,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
             maxlength="120"
             placeholder="mp4,mov,webm"
           />
-          <p class="field-hint">{{ t('s_1ezkwzh') }}</p>
         </div>
         <div class="field">
           <label for="settings-avatar-size">{{ t('s_1y26ptk') }}</label>
@@ -749,7 +825,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
 
       <div class="card">
         <span class="section-label">{{ t('s_rlbden') }}</span>
-        <p class="field-hint">{{ t('s_dpoory') }}</p>
         <div v-for="(row, rowIndex) in limitRows" :key="rowIndex" class="grid-cols-2">
           <div v-for="item in row" :key="item.key" class="field">
             <label :for="`limit-${item.key}`">{{ item.label }}</label>
@@ -769,7 +844,6 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       </div>
 
       <p v-if="settingsError" class="field-error" role="alert">{{ settingsError }}</p>
-      <p class="field-hint text-center">{{ t('s_2olj7t') }}</p>
       <button
         class="cta"
         type="button"

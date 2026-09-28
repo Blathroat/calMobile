@@ -462,12 +462,6 @@ const modeItems = computed(() => [
 
 const mode = computed(() => settings.mode);
 
-/** 说明当前模式的实际效果：切换后跟着变，用户不用猜「跟随系统」现在是什么色。 */
-const modeHint = computed(() => {
-  if (mode.value === 'auto') return t('s_1mlidnr');
-  return mode.value === 'dark' ? t('s_1ylfcsc') : t('s_141p70w');
-});
-
 /** 切换明暗模式：本地令牌先变，落库失败由 `saveUiMode` 回滚，这里只提示。 */
 async function changeMode(value: string): Promise<void> {
   if (value === mode.value) return;
@@ -643,7 +637,6 @@ async function changeMode(value: string): Promise<void> {
           >
         </div>
         <p v-if="passwordError" class="field-error" role="alert">{{ passwordError }}</p>
-        <p class="field-hint">{{ t('s_faylcn') }}</p>
       </div>
 
       <!-- 通知设置：两个偏好 + 系统通知权限入口 -->
@@ -652,7 +645,6 @@ async function changeMode(value: string): Promise<void> {
         <div class="switch-row">
           <span class="switch-copy">
             <strong>{{ t('s_1f8zcmv') }}</strong>
-            <span class="row-meta">{{ t('s_kiu9q') }}</span>
           </span>
           <label class="switch" for="notify-reminder">
             <input
@@ -668,7 +660,6 @@ async function changeMode(value: string): Promise<void> {
         <div class="switch-row">
           <span class="switch-copy">
             <strong>{{ t('s_fz8qsa') }}</strong>
-            <span class="row-meta">{{ t('s_1xohyb0') }}</span>
           </span>
           <label class="switch" for="notify-status">
             <input
@@ -715,7 +706,6 @@ async function changeMode(value: string): Promise<void> {
           :label="t('s_1ghvdtm')"
           @update:model-value="changeMode"
         />
-        <p class="field-hint">{{ modeHint }}</p>
       </div>
 
       <!-- 隐私：是否在公开页展示自己的报名记录（原先在个人页，按反馈收进设置） -->
@@ -737,11 +727,7 @@ async function changeMode(value: string): Promise<void> {
             <span />
           </label>
         </div>
-        <p class="field-hint">
-          {{ limited
-            ? limitHint
-            : (profile.showRegistrations === true ? t('s_1kyf8ic') : t('s_413sl5')) }}
-        </p>
+        <p v-if="limited" class="field-hint">{{ limitHint }}</p>
       </div>
 
       <!-- 安全：邮箱与两步验证共用同一套凭据，因此放在同一张卡里 -->

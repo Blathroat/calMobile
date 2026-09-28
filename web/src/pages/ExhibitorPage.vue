@@ -15,11 +15,14 @@ import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { useHint } from '@/composables/useHint';
+import { coverOf } from '@/services/cover';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { statusTone } from '@/services/status';
 import AppIcon from '@/components/AppIcon.vue';
+import HintNote from '@/components/HintNote.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MediaBox from '@/components/MediaBox.vue';
@@ -31,6 +34,8 @@ const router = useRouter();
 const bootstrap = useBootstrapStore();
 const session = useSessionStore();
 const query = useAsync<Exhibition[]>();
+/** 核销提示：与账号绑定的一次性提示，进过一次核销页就不再显示。 */
+const { visible: hintVisible, dismiss: dismissHint } = useHint('exhibitor-checkin');
 
 const items = computed<Exhibition[]>(() => query.data.value ?? []);
 /** 已有内容时刷新只标记忙碌，不清空列表（避免切回本页先闪骨架屏）。 */
@@ -71,6 +76,8 @@ function openCheckin(): void {
     toast(t('s_14pxh3f'), 'error');
     return;
   }
+  // 这条提示教的就是「去核销」，用户走一次这个入口就不必再看到它。
+  void dismissHint();
   void router.push('/checkin');
 }
 
@@ -130,7 +137,8 @@ onMounted(load);
     >
       {{ t('s_zqzoiq') }}
     </button>
-    <p class="field-hint text-center">{{ t('s_1w3gehu') }}</p>
+    <!-- 一次性提示：进过一次核销页（这条提示指的就是那个入口）就不再显示 -->
+    <HintNote v-if="hintVisible" :text="t('s_1w3gehu')" @dismiss="dismissHint" />
 
     <div class="list" data-gap="sm">
       <div v-for="item in items" :key="String(item.id)" class="card">
@@ -143,7 +151,7 @@ onMounted(load);
           @pointerdown="warm(item.id)"
           @click="router.push(`/detail/${item.id}`)"
         >
-          <MediaBox :src="String(item.imageUri || '')" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
+          <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
           <span class="row-copy">
             <strong class="row-title truncate">{{ item.title }}</strong>
             <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>

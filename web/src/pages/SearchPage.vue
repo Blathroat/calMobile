@@ -20,6 +20,7 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { truncate } from '@/services/format';
+import { coverOf } from '@/services/cover';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -187,7 +188,7 @@ onBeforeUnmount(() => {
             @click="openExhibition(item.id)"
           >
             <MediaBox
-              :src="String(item.imageUri || '')"
+              :src="coverOf(item.imageUri)"
               class-name="thumb thumb-sm thumb-cover"
               :alt="String(item.title || '')"
             />

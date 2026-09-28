@@ -411,7 +411,6 @@ function onQrError(message: string): void {
         <div :key="renderKey" class="switch-row">
           <span class="switch-copy">
             <strong>{{ t('s_15msj8x') }}</strong>
-            <span class="row-meta">{{ t('s_k6xen8') }}</span>
           </span>
           <label class="switch" for="security-2fa">
             <input
@@ -439,7 +438,6 @@ function onQrError(message: string): void {
 
       <!-- 选择第二因子的方式：验证器（推荐）或邮箱验证码 -->
       <div v-if="panel === 'choose'" class="stack" data-gap="sm">
-        <p class="field-hint">{{ t('s_16wrqub') }}</p>
         <div class="row" data-gap="sm">
           <button class="cta" data-size="small" type="button" :disabled="busy" @click="startTotp">
             {{ t('s_1mdazxm') }}

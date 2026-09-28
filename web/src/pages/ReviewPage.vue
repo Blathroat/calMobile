@@ -282,7 +282,6 @@ async function exportCsv(): Promise<void> {
       </div>
       <span class="pill">{{ `${exhibitions.length} 个展会` }}</span>
     </header>
-    <p class="row-meta">{{ t('s_1dkg6y4') }}</p>
 
     <SkeletonBlock v-if="list.loading.value && list.data.value === undefined" :rows="2" />
     <StateBlock
@@ -322,8 +321,6 @@ async function exportCsv(): Promise<void> {
       </div>
       <span class="pill">{{ `待审核 ${pendingCount}` }}</span>
     </div>
-    <p class="row-meta">{{ t('s_1dkg6y4') }}</p>
-    <p v-if="isAdmin" class="field-hint">{{ t('s_17zufsn') }}</p>
 
     <SegControl v-model="filter" :items="filterItems" :label="t('s_1r4txyl')" />
 
@@ -391,6 +388,5 @@ async function exportCsv(): Promise<void> {
       <AppIcon name="download" size="icon icon-sm" />
       {{ t('s_1ogoh03') }}
     </button>
-    <p class="field-hint text-center">{{ t('s_nsnwn6') }}</p>
   </template>
 </template>

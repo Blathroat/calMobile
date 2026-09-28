@@ -20,6 +20,7 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { formatRecordDate } from '@/services/format';
+import { coverOf } from '@/services/cover';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -151,7 +152,7 @@ onMounted(load);
           data-pressable="true"
           @click="router.push(`/detail/${encodeURIComponent(String(item.id))}`)"
         >
-          <MediaBox class-name="thumb thumb-cover thumb-sm" :src="String(item.imageUri || '')" />
+          <MediaBox class-name="thumb thumb-cover thumb-sm" :src="coverOf(item.imageUri)" />
           <span class="row-copy">
             <strong class="row-title truncate">{{ item.title }}</strong>
             <span class="row-meta">{{ `${item.dateLabel || item.date} · ${item.venue}` }}</span>

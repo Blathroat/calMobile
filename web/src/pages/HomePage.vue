@@ -19,6 +19,9 @@ import AppIcon from '@/components/AppIcon.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MediaBox from '@/components/MediaBox.vue';
+import HintNote from '@/components/HintNote.vue';
+import { useHint } from '@/composables/useHint';
+import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
 import { addMonths, daysInMonth, firstWeekdayOffset, monthLabel } from '@/services/format';
 import type { JsonObject } from '@/api/types';
@@ -29,6 +32,8 @@ const SWIPE_THRESHOLD = 46;
 
 const router = useRouter();
 const bootstrap = useBootstrapStore();
+/** 日历滑动提示：与账号绑定的一次性提示，真滑过一次就不再显示。 */
+const { visible: hintVisible, dismiss: dismissHint } = useHint('home-calendar-swipe');
 
 const view = ref({
   year: new Date().getFullYear(),
@@ -234,7 +239,11 @@ function enableSwipe(): void {
     const direction = deltaX < 0 ? 1 : -1;
     card.dataset.drag = 'false';
     reset(!committed);
-    if (committed) shiftMonth(direction);
+    if (committed) {
+      shiftMonth(direction);
+      // 真的滑动切过月份了：这条「可以左右滑动」的提示就算教完了
+      void dismissHint();
+    }
   };
 
   host.addEventListener('pointerup', finish);
@@ -361,7 +370,8 @@ onMounted(() => {
     </div>
   </div>
 
-  <p class="field-hint text-center">{{ t('s_15hmwa0') }}</p>
+  <!-- 一次性提示：真滑动切过一次月份（或点「知道了」）就不再显示 -->
+  <HintNote v-if="hintVisible" :text="t('s_15hmwa0')" @dismiss="dismissHint" />
 
   <div class="row" data-between="true">
     <strong>{{ view.day > 0 ? `${view.month} 月 ${view.day} 日的展会` : t('s_1e4opb2') }}</strong>
@@ -392,7 +402,7 @@ onMounted(() => {
         @pointerdown="warm(item.id)"
         @click="router.push(`/detail/${item.id}`)"
       >
-        <MediaBox :src="String(item.imageUri || '')" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
+        <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
         <span class="row-copy">
           <span class="row" data-gap="md">
             <strong class="row-title truncate">{{ item.title }}</strong>

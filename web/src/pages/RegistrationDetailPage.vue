@@ -42,10 +42,6 @@ const canRevise = computed(() => bootstrap.review.canRevise === true || record.v
 const cancelling = ref(false);
 /** 二维码绘制失败的原因：留在二维码旁边说明，同时给出手动输入的退路。 */
 const qrError = ref('');
-const qrHint = computed(() => {
-  if (qrError.value) return `${qrError.value}，可让展商手动输入上方报名码。`;
-  return attended.value ? t('s_132avex') : t('s_aoirc6');
-});
 
 onMounted(() => { void load(); });
 
@@ -181,7 +177,8 @@ function askCancel(): void {
         />
       </div>
       <code class="qr-code-text">{{ record.checkInCode }}</code>
-      <p class="field-hint text-center">{{ qrHint }}</p>
+      <!-- 只在二维码画不出来时说明退路（让展商手动输入上方报名码），正常情况不再堆一句提示 -->
+      <p v-if="qrError" class="field-hint text-center">{{ `${qrError}，可让展商手动输入上方报名码。` }}</p>
     </div>
   </template>
 

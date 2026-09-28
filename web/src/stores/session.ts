@@ -69,5 +69,15 @@ export const useSessionStore = defineStore('session', {
       this.guest = true;
       this.user = emptyUser();
     },
+    /**
+     * 本地记下一条「已看过的一次性提示」（乐观更新）。
+     * 落库由 `composables/useHint.ts` 负责；写失败也不回滚，提示少显示一次比弹错误好。
+     * @param key 提示短码，见 `HintKey`
+     */
+    markHint(key: string) {
+      const seen = Array.isArray(this.user.seenHints) ? this.user.seenHints : [];
+      if (seen.includes(key)) return;
+      this.user = { ...this.user, seenHints: [...seen, key] };
+    },
   },
 });

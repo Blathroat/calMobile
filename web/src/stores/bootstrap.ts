@@ -46,6 +46,10 @@ export interface BootstrapState {
   review: JsonObject;
   /** 管理员配色：强调色由 `colors[index]` 决定，运行时写进 `--accent*`；下标越界由 `app/theme.ts` 夹回范围 */
   theme: JsonObject;
+  /** 缺省展会封面：`defaultCover` 是媒体短 URL，展会自己没有封面时用它（空串表示继续用占位图） */
+  cover: JsonObject;
+  /** 展商端策略：`maxFutureExhibitions` 是单个展商可同时筹备的展会数，0 表示不限 */
+  exhibitor: JsonObject;
 }
 
 /**
@@ -66,6 +70,8 @@ export const useBootstrapStore = defineStore('bootstrap', {
     server: {},
     review: {},
     theme: {},
+    cover: {},
+    exhibitor: {},
   }),
   actions: {
     /**
@@ -86,6 +92,8 @@ export const useBootstrapStore = defineStore('bootstrap', {
       this.server = { ...this.server, ...asObject(data.server) };
       this.review = { ...this.review, ...asObject(data.review) };
       this.theme = { ...this.theme, ...asObject(data.theme) };
+      this.cover = { ...this.cover, ...asObject(data.cover) };
+      this.exhibitor = { ...this.exhibitor, ...asObject(data.exhibitor) };
     },
   },
 });

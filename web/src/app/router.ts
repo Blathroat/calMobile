@@ -126,7 +126,20 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
       { path: '/settings', component: UserSettingsPage, meta: { title: 's_1vmubx9', back: true, requiresAuth: true } },
       { path: '/security', component: SecurityPage, meta: { title: 's_1iiaolc', back: true, requiresAuth: true } },
       // 展商后台与审核 / 核销 / 富文本编辑器同属展商角色，管理员也能进
-      { path: '/exhibitor', component: ExhibitorPage, meta: { title: 's_1omalh8', tab: 'exhibitor', bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
+      {
+        path: '/exhibitor',
+        component: ExhibitorPage,
+        meta: {
+          title: 's_1omalh8',
+          tab: 'exhibitor',
+          bodyGap: 'tight',
+          requiresAuth: true,
+          roles: ['exhibitor', 'admin'],
+          // 顶栏右侧的加号：与页面里的「新建展会」进同一处，展会多起来时不用先滚到底部。
+          // 受限账号点进来也会被那一页的受限态挡住（后端同样 403），这里不额外判断。
+          topAction: { icon: 'plus', to: '/exhibition-form', label: 's_p9fllo' },
+        },
+      },
       { path: '/exhibition-form', component: ExhibitionFormPage, meta: { title: 's_eutzzb', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
       { path: '/exhibition-form/:id', component: ExhibitionFormPage, meta: { title: 's_eutzzb', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
       { path: '/review', component: ReviewPage, meta: { title: 's_7xrrf0', back: true, requiresAuth: true, roles: ['exhibitor', 'admin'] } },

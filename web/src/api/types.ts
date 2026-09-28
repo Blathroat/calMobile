@@ -46,6 +46,8 @@ export interface User extends JsonObject {
   loggedIn?: boolean;
   guest?: boolean;
   can?: Record<string, boolean>;
+  /** 已看过的一次性提示 key（与账号绑定，见 `composables/useHint.ts`）。 */
+  seenHints?: string[];
 }
 
 /**

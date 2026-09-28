@@ -476,7 +476,6 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
           <label for="form-reg-end">{{ t('s_60i0xr') }}</label>
           <input id="form-reg-end" v-model="form.registrationEnd" class="input" type="date" />
           <p v-if="isInvalid('registrationEnd')" class="field-error" role="alert">{{ formError }}</p>
-          <p v-else class="field-hint">{{ t('s_165tsl5') }}</p>
         </div>
       </div>
       <div class="field" :data-invalid="isInvalid('category') ? 'true' : 'false'">
@@ -487,7 +486,6 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
           <option v-for="item in categoryOptions" :key="item" :value="item">{{ item }}</option>
         </select>
         <p v-if="isInvalid('category')" class="field-error" role="alert">{{ formError }}</p>
-        <p v-else class="field-hint">{{ t('s_1bem6b7') }}</p>
       </div>
       <p v-if="formError && !invalidField" class="field-error" role="alert">{{ formError }}</p>
       <p v-if="isInvalid('fields')" class="field-error" role="alert">{{ formError }}</p>
@@ -518,7 +516,6 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
           {{ t('s_eab5ax') }}
         </button>
       </div>
-      <p class="field-hint">建议使用 1080×1920（9:16）的竖版图片，当前允许 {{ formatHint }}。</p>
     </div>
 
     <!-- 报名与简介设置：报名方式是三个互斥分段按钮，简介与删除入口都收在这一栏 -->
@@ -564,7 +561,6 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
         <button class="cta danger" type="button" :disabled="isCreate" @click="askDelete">
           {{ isCreate ? t('s_mj5xsg') : t('s_1u7mlaq') }}
         </button>
-        <p class="field-hint">{{ isCreate ? t('s_utjuhy') : t('s_175wm9u') }}</p>
       </div>
     </div>
 
@@ -574,7 +570,6 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
         <span class="section-label">{{ t('s_s8p5nm') }}</span>
         <span class="pill">{{ `${fields.length} 项` }}</span>
       </div>
-      <p class="field-hint">{{ t('s_1qc3lcl') }}</p>
       <p class="field-hint">{{ mediaHint }}</p>
       <div class="stack" data-gap="sm">
         <div v-for="(item, index) in fields" :key="index" class="card" data-tone="fill">

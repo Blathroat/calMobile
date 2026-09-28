@@ -91,6 +91,11 @@ export interface ApiClient {
     notifications(): Promise<JsonObject>;
     /** 保存通知偏好。 */
     saveNotifications(payload: JsonObject): Promise<ApiResult>;
+    /**
+     * 记下一条「已看过的一次性提示」。
+     * 与账号绑定（`users.seen_hints`），换设备仍是已读；幂等，重复提交同一条不报错。
+     */
+    markHint(hint: string): Promise<JsonObject>;
   };
   /** 安全设置：两步验证与邮箱变更。全部不走缓存（一次性凭据多，缓存无益且有风险）。 */
   security: {
@@ -251,6 +256,8 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
       changePassword: (payload) => http.request<ApiResult>('/profile/password', { method: 'POST', body: payload }),
       notifications: () => read<JsonObject>('notifications', '/profile/notifications'),
       saveNotifications: (payload) => write<ApiResult>('/profile/notifications', { method: 'PUT', body: payload }, ['notifications']),
+      // 提示状态只进用户态（bootstrap 的 user 段），没有对应的读缓存需要失效。
+      markHint: (hint) => http.request<JsonObject>('/profile/hints', { method: 'PUT', body: { hint } }),
     },
     security: {
       // 安全相关全部直连 http：验证码与备用码是一次性的，进缓存既没用也危险。
