@@ -13,6 +13,7 @@ import App from './App.vue';
 import { createAppRouter } from './router';
 import { tabItems } from './shell';
 import { api } from '@/app/runtime';
+import { openSheet } from '@/services/sheet';
 import { useSessionStore } from '@/stores/session';
 import { navigation } from './navigation';
 
@@ -195,6 +196,25 @@ describe('app shell', () => {
       expect(foot?.childElementCount).toBe(0);
     } finally {
       unmount(detail.container, detail.app);
+    }
+  });
+
+  it('换页时收起底部面板', async () => {
+    // 底部面板是全局挂载的：报名详情、状态选择这类面板属于上一屏，
+    // 跟着路由留在新页面上会盖住正文。
+    const { container, app, router } = await mountRoute('/home');
+    try {
+      openSheet({ title: '测试面板' });
+      await nextTick();
+      expect(container.querySelector('.sheet-panel')).not.toBeNull();
+      await router.push('/profile');
+      await nextTick();
+      // 收起会播退场动画，等它结束再断言。
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      await nextTick();
+      expect(container.querySelector('.sheet-panel')).toBeNull();
+    } finally {
+      unmount(container, app);
     }
   });
 

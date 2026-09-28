@@ -17,6 +17,7 @@ import AppSheet from '@/components/AppSheet.vue';
 import { bodyAttrs, tabItems } from '@/app/shell';
 import { navigation } from '@/app/navigation';
 import { preloadTabs, resetPreload } from '@/app/preload';
+import { closeSheet, sheet } from '@/services/sheet';
 import { watchSystemMode } from '@/app/theme';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
@@ -46,6 +47,14 @@ watch(
   },
   { immediate: true },
 );
+
+/**
+ * 换页时收起底部面板：面板属于上一屏（报名详情、状态选择、手动输入报名码），
+ * 跟着路由留在新页面上会盖住正文——底部面板是全局挂载的，只有外壳看得全这次切换。
+ */
+watch(() => route.fullPath, () => {
+  if (sheet.current) closeSheet();
+});
 
 onMounted(watchSystemMode);
 </script>
