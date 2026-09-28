@@ -52,6 +52,10 @@ app.get('/bootstrap', optionalAuthHono, async (c) => {
     brand: settings.brand,
     limits: settings.limits,
     server: settings.upload,
+    // 缺省展会封面（展会自己没有封面时用它兜底）与展商端的「可同时筹备的展会数」上限：
+    // 前者给列表 / 详情做兜底图，后者给展商表单做提示与前端预校验。
+    cover: settings.cover,
+    exhibitor: settings.exhibitor,
     calendar: { available: false, landing: await landingMonth() },
   });
 });

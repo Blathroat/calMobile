@@ -19,6 +19,7 @@ export const ENDPOINTS = {
   'profile.password': () => ({ method: 'POST', path: '/profile/password' }),
   'notify.preferences': () => ({ method: 'GET', path: '/profile/notifications' }),
   'notify.savePreferences': () => ({ method: 'PUT', path: '/profile/notifications' }),
+  'profile.markHint': () => ({ method: 'PUT', path: '/profile/hints' }),
   'security.get': () => ({ method: 'GET', path: '/profile/security' }),
   'security.enable2fa': () => ({ method: 'POST', path: '/profile/2fa/enable' }),
   'security.verify2fa': () => ({ method: 'POST', path: '/profile/2fa/enable/verify' }),

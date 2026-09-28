@@ -76,9 +76,36 @@ export function applyHeaders(c: Context, entries: readonly (readonly [string, st
 }
 
 /** 安全响应头中间件（见文件头说明：必须落在 socket 上）。 */
-export function securityHeaders(): MiddlewareHandler {
+export function securityHeaders(hstsMaxAge = 15_552_000): MiddlewareHandler {
+  // HSTS 单独拼：`HSTS_MAX_AGE=0` 表示不下发（域名还没定、或本地用 http 调试时）。
+  const headers = hstsMaxAge > 0
+    ? SECURITY_HEADERS
+    : SECURITY_HEADERS.filter((header) => header[0] !== 'Strict-Transport-Security');
   return async function securityHeaders(c, next) {
-    applyHeaders(c, SECURITY_HEADERS);
+    applyHeaders(c, headers);
+    await next();
+  };
+}
+
+/**
+ * 明文请求跳到 https（反代已经终止 TLS 的部署用）。
+ *
+ * 只在 `FORCE_HTTPS=1` 时挂上；判断依据是 `X-Forwarded-Proto`（反代设置），
+ * 拿不到这个头时按「已经是 https」处理 —— 直连部署误开这一项时，
+ * 至少不会把请求跳到一个不存在的 https 端口上。
+ */
+export function requireHttps(): MiddlewareHandler {
+  return async function requireHttps(c, next) {
+    const forwarded = c.req.header('x-forwarded-proto');
+    const proto = String(forwarded || '').split(',')[0]?.trim().toLowerCase() ?? '';
+    if (proto === 'http') {
+      const host = String(c.req.header('host') || '').trim();
+      if (host) {
+        // 308 保留方法与请求体：表单 POST 被跳到 https 后不需要客户端重发一次。
+        const url = new URL(c.req.url);
+        return c.redirect(`https://${host}${url.pathname}${url.search}`, 308);
+      }
+    }
     await next();
   };
 }

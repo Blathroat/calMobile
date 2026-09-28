@@ -18,6 +18,54 @@ pnpm dev
 
 开发模式打开 `/status`；生产使用 `pnpm start`，默认关闭状态页并执行配置自检。生产数据库迁移使用 `pnpm db:migrate:prod`。改动 `server/src` 后重启进程。
 
+## 对外部署（域名、TLS 与上传）
+
+服务本身只监听 http，**TLS 由前面的反向代理终止**（证书、续期、HTTP/2 都在那一层）。下面几项都是可选的：不配就是本机开发形态。
+
+| 环境变量 | 作用 | 不配时 |
+| --- | --- | --- |
+| `PUBLIC_BASE_URL` | 对外访问地址（`https://app.example.com`），状态页与 `/ping` 显示它；也是以后邮件里绝对链接的基址 | 状态页只显示端口，不显示域名 |
+| `FORCE_HTTPS` | 反代终止 TLS 时打开：`X-Forwarded-Proto: http` 的请求 308 跳到 https | 不跳转，明文请求照常处理 |
+| `HSTS_MAX_AGE` | `Strict-Transport-Security` 的 max-age（秒），默认 180 天 | 下发默认值；填 `0` 表示不下发 |
+| `TRUST_PROXY` | 反代后面必须打开，否则 `req.ip` 是代理地址，按 IP 的验证码限流退化成全局额度 | 关闭（直连） |
+| `CORS_ORIGIN` | 允许的前端来源。App 页面跑在 WebView 的 `https://appassets.androidplatform.net`，浏览器调试用 `*` | `*`（仅开发） |
+| `ENABLE_STATUS_PAGE` | `/status` 与 `/api/v1/status`：迁移清单、各表行数与接口清单 | 生产关闭、其它环境开启 |
+
+部署检查单：
+
+1. `pnpm start` 的自检会把「会出事」的配置直接拒绝启动（开发密钥、默认库口令、占位发件人……），先让它过。
+2. 反代把域名指向服务端口，只暴露 443；配 `proxy_set_header X-Forwarded-Proto $scheme;` 与 `X-Forwarded-For`，服务端设 `TRUST_PROXY=1`。
+3. 确认 https 全站可用之后再开 `FORCE_HTTPS` 与长 `HSTS_MAX_AGE`（HSTS 一旦下发，浏览器会长期拒绝 http 访问）。
+4. `CORS_ORIGIN` 换成真实来源，不要留 `*`。
+5. 状态页要么关掉，要么在反代上加 Basic Auth 并只允许内网访问。
+
+nginx 最小片段：
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name app.example.com;
+    ssl_certificate     /etc/letsencrypt/live/app.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
+
+    client_max_body_size 12m;              # 与 app_settings.upload / media 的上限对齐
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+server {
+    listen 80;
+    server_name app.example.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+**上传与媒体**：当前媒体（展会封面、头像、简介里的图片与视频）由**设备侧**处理 —— 原生选图、压缩后落在设备私有目录，后端只存一个短 URL，因此换设备看不到旧图。要改成服务端上传，需要在这个仓库里另开一轮工作（上传接口 + 落盘目录 + 静态分发 + 前端改走接口），届时新增的配置建议沿用这几个名字：`UPLOAD_DIR`（落盘目录）、`MEDIA_BASE_URL`（对外访问前缀）、`UPLOAD_MAX_MB`（单文件上限，与 `app_settings.upload` 的校验对齐）。单次请求体上限由 `client_max_body_size` 与服务的 JSON 体积守卫（2MB）分别把关，上传接口要单独放宽前者。
+
 ## 验证顺序
 
 ```bash

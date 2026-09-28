@@ -66,6 +66,8 @@ export interface ServerPatch {
   bio?: unknown;
   region?: unknown;
   answer?: unknown;
+  defaultCover?: unknown;
+  maxFutureExhibitions?: unknown;
 }
 
 interface SettingRow {
@@ -280,6 +282,20 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   }
   next.limits = limits;
 
+  if (Object.prototype.hasOwnProperty.call(source, 'defaultCover')) {
+    // 存的是媒体短 URL（与展会封面同一种值），这里只做长度与协议的形状校验：
+    // 具体怎么存、能否访问由原生 / 部署方的媒体服务负责，后端不解析图片。
+    const cover = String(source.defaultCover ?? '').trim().slice(0, 500);
+    if (cover && !/^(https?:)?\/\//.test(cover) && !cover.startsWith('data:image/')) {
+      throw badRequest('缺省封面需要是一个可访问的图片地址');
+    }
+    next.cover = { defaultCover: cover };
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'maxFutureExhibitions')) {
+    // 0 表示不限；上限 100 是防呆（管理端填错位数不至于把展商全锁死）。
+    next.exhibitor = { ...next.exhibitor, maxFutureExhibitions: clampInt(source.maxFutureExhibitions, next.exhibitor.maxFutureExhibitions, [0, 100]) };
+  }
+
   return next;
 }
 
@@ -473,4 +489,39 @@ export function normalizeUserStatus(value: unknown): string {
     throw badRequest('账号状态只能是 正常 / 受限 / 封禁');
   }
   return status;
+}
+
+/**
+ * 一次性提示的 key 形状。
+ *
+ * 只允许小写字母、数字与短横线：它同时是数据库里存的值与前端的调用参数，
+ * 放开任意字符等于给用户对象塞进一段可以任意增长的自由文本。
+ */
+const HINT_KEY = /^[a-z0-9][a-z0-9-]{2,39}$/;
+
+/** 一个人最多记多少条已读提示：key 是受控的短码，留个上限避免无限增长。 */
+const HINT_LIMIT = 50;
+
+/** 读「看过的提示」列表；没有该用户时返回空数组。 */
+export async function readSeenHints(userId: string | null | undefined): Promise<string[]> {
+  if (!userId) return [];
+  const result = await query<{ seen_hints: string[] | null }>('SELECT seen_hints FROM users WHERE id = $1', [userId]);
+  const stored = result.rows[0]?.seen_hints;
+  return Array.isArray(stored) ? stored.filter((item) => typeof item === 'string') : [];
+}
+
+/**
+ * 记下一条「看过的提示」并返回最新列表。
+ *
+ * 幂等（重复提交同一条不报错，列表也不重复）；只写调用者自己那一行。
+ */
+export async function saveSeenHint(userId: string | null | undefined, hint: unknown): Promise<string[]> {
+  if (!userId) throw badRequest('请先登录后再记录提示状态');
+  const key = String(hint ?? '').trim();
+  if (!HINT_KEY.test(key)) throw badRequest('提示标识不合法');
+  const current = await readSeenHints(userId);
+  if (current.includes(key)) return current;
+  const next = [...current, key].slice(-HINT_LIMIT);
+  await query('UPDATE users SET seen_hints = $2, updated_at = now() WHERE id = $1', [userId, next]);
+  return next;
 }

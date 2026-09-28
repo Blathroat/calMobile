@@ -136,6 +136,32 @@ test('生产关闭状态页时两个路径都返回 404', async () => {
   }
 });
 
+test('HSTS 默认下发，HSTS_MAX_AGE=0 时不下发', async () => {
+  const withHsts = await serve();
+  const normal = await hit(withHsts.port, 'GET', '/ping');
+  assert.match(String(normal.headers['strict-transport-security']), /max-age=\d+/);
+
+  const withoutHsts = await serve({ hstsMaxAge: 0 });
+  const stripped = await hit(withoutHsts.port, 'GET', '/ping');
+  assert.equal(stripped.headers['strict-transport-security'], undefined);
+});
+
+test('FORCE_HTTPS 把明文请求 308 跳到 https，已是 https 的照常处理', async () => {
+  const server = await serve({ forceHttps: true });
+
+  const plain = await hit(server.port, 'GET', '/ping', undefined, { 'x-forwarded-proto': 'http', host: 'app.example.com' });
+  assert.equal(plain.status, 308);
+  assert.equal(plain.headers.location, 'http://app.example.com/ping'.replace('http://', 'https://'));
+
+  // 反代已经终止 TLS：X-Forwarded-Proto 是 https，正常响应
+  const secure = await hit(server.port, 'GET', '/ping', undefined, { 'x-forwarded-proto': 'https' });
+  assert.equal(secure.status, 200);
+
+  // 直连（没有这个头）时不跳转：误开这一项也不会把请求送到不存在的 https 端口
+  const direct = await hit(server.port, 'GET', '/ping');
+  assert.equal(direct.status, 200);
+});
+
 test('Hono 认证路由直接处理请求', async () => {
   const server = await serve();
   const response = await hit(server.port, 'POST', '/api/v1/auth/guest');

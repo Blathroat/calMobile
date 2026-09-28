@@ -71,6 +71,8 @@ export interface UserRow {
   social_media?: string | null;
   avatar?: string | null;
   show_registrations?: boolean | null;
+  /** 已看过的一次性提示 key 列表（见 `domain/settings.ts` 的 `readSeenHints`）。 */
+  seen_hints?: string[] | null;
   status?: string | null;
   email_verified?: boolean | null;
   two_factor_enabled?: boolean | null;
@@ -197,6 +199,8 @@ export function userPayload(row: UserRow, can: Capabilities) {
     socialMedia: row.social_media || '',
     avatar: row.avatar || '',
     showRegistrations: row.show_registrations === true,
+    // 一次性提示的已读列表：与账号绑定，前端据此决定提示是否还显示
+    seenHints: Array.isArray(row.seen_hints) ? row.seen_hints : [],
     status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active || '',
     statusCode: row.status || 'active',
     // 邮箱验证状态与两步验证开关：个人页「安全」区与用户管理都看这两个字段

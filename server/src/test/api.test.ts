@@ -2544,8 +2544,108 @@ test('视频大小上限可配置，bootstrap 与 settings 读回同一个值，
   }
 });
 
-test('老库的 app_settings.media 缺 videoSizeMb 时用默认值兜底', async () => {
-  // 直接写一条「加这个键之前」的 media：只有三个键，没有任何 videoSizeMb
+test('缺省展会封面与展商展会数上限：保存后 bootstrap 与 settings 都能读回', async () => {
+  const before = await get('/api/v1/settings');
+  const coverBefore = String(before.body.cover?.defaultCover ?? '');
+  const limitBefore = Number(before.body.exhibitor?.maxFutureExhibitions ?? 0);
+  try {
+    const saved = await put(
+      '/api/v1/settings',
+      { defaultCover: 'https://cdn.example.com/default-cover.jpg', maxFutureExhibitions: 3 },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+    assert.strictEqual(saved.body.settings.cover.defaultCover, 'https://cdn.example.com/default-cover.jpg');
+    assert.strictEqual(Number(saved.body.settings.exhibitor.maxFutureExhibitions), 3);
+
+    const bootstrap = await get('/api/v1/bootstrap');
+    assert.strictEqual(
+      bootstrap.body.cover.defaultCover,
+      'https://cdn.example.com/default-cover.jpg',
+      'bootstrap 要带上缺省封面（列表与详情据此兜底）',
+    );
+    assert.strictEqual(Number(bootstrap.body.exhibitor.maxFutureExhibitions), 3);
+
+    // 形状不对的封面地址按规则失败（200 + ok:false），空串表示回到占位图
+    const badCover = await put('/api/v1/settings', { defaultCover: 'not-a-url' }, { token: tokens.admin.token });
+    assert.strictEqual(badCover.body.ok, false, '非法封面地址应当被拒绝');
+    const cleared = await put('/api/v1/settings', { defaultCover: '' }, { token: tokens.admin.token });
+    assert.strictEqual(cleared.body.settings.cover.defaultCover, '');
+
+    // 上限夹到 0..100（0 = 不限）
+    const clamped = await put('/api/v1/settings', { maxFutureExhibitions: 999 }, { token: tokens.admin.token });
+    assert.strictEqual(Number(clamped.body.settings.exhibitor.maxFutureExhibitions), 100);
+  } finally {
+    await put(
+      '/api/v1/settings',
+      { defaultCover: coverBefore, maxFutureExhibitions: limitBefore },
+      { token: tokens.admin.token },
+    );
+  }
+});
+
+test('展商可同时筹备的展会数上限：超出后不能再新建，管理员不受限', async () => {
+  const created: string[] = [];
+  const payload = {
+    title: '展会数上限用例',
+    venue: '测试展馆',
+    time: '09:00-17:00',
+    date: isoDateAfter(35),
+    category: '智能家居',
+    status: '无需审核',
+    qrEnabled: false,
+  };
+  try {
+    // 种子里的展商本来就有未来的展会，所以先按现状把额度设成「刚好还能再建一个」，
+    // 不然第一条就会撞额度（失败原因也会是这句，看不出是测试写错还是规则生效）。
+    const listed = await get('/api/v1/exhibitions', { token: tokens.exhibitor.token });
+    const today = new Date().toISOString().slice(0, 10);
+    const mine = (listed.body as { exhibitor: string; date: string }[])
+      .filter((item) => item.exhibitor === 'exhibitor' && item.date >= today).length;
+    await put('/api/v1/settings', { maxFutureExhibitions: mine + 1 }, { token: tokens.admin.token });
+
+    const first = await post('/api/v1/exhibitions', payload, { token: tokens.exhibitor.token });
+    assert.strictEqual(first.body.ok, true, JSON.stringify(first.body));
+    created.push(String(first.body.exhibition.id));
+
+    const second = await post('/api/v1/exhibitions', payload, { token: tokens.exhibitor.token });
+    assert.strictEqual(second.body.ok, false, '超出上限应当按规则失败');
+    assert.match(String(second.body.error), /同时筹备/, `失败原因要说明限额：${second.body.error}`);
+
+    // 管理员不受这条策略限制：额度是管理员自己设的，不该把他锁在门外
+    const asAdmin = await post('/api/v1/exhibitions', payload, { token: tokens.admin.token });
+    assert.strictEqual(asAdmin.body.ok, true, JSON.stringify(asAdmin.body));
+    created.push(String(asAdmin.body.exhibition.id));
+  } finally {
+    for (const id of created) await del(`/api/v1/exhibitions/${id}`, { token: tokens.admin.token });
+    await put('/api/v1/settings', { maxFutureExhibitions: 0 }, { token: tokens.admin.token });
+  }
+});
+
+test('一次性提示与账号绑定：记下之后 bootstrap 会带回来', async () => {
+  const key = 'home-calendar-swipe';
+  const before = await get('/api/v1/bootstrap', { token: tokens.user.token });
+  const hadKey = Array.isArray(before.body.user.seenHints) && before.body.user.seenHints.includes(key);
+  assert.strictEqual(hadKey, false, '这条用例自己造数据，开始时不该已存在');
+
+  const saved = await put('/api/v1/profile/hints', { hint: key }, { token: tokens.user.token });
+  assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+  assert.ok(Array.isArray(saved.body.seenHints) && saved.body.seenHints.includes(key));
+
+  // 幂等：再提交一次不会出现重复项
+  const again = await put('/api/v1/profile/hints', { hint: key }, { token: tokens.user.token });
+  assert.strictEqual(again.body.seenHints.filter((item: string) => item === key).length, 1);
+
+  // 与账号绑定：换一次请求（等同换设备）仍然带着它，前端据此不再显示提示
+  const bootstrap = await get('/api/v1/bootstrap', { token: tokens.user.token });
+  assert.ok(bootstrap.body.user.seenHints.includes(key), 'bootstrap 的用户态要带上已读提示');
+
+  // 提示 key 是受控短码：乱填直接拒绝
+  const bad = await put('/api/v1/profile/hints', { hint: 'A B' }, { token: tokens.user.token });
+  assert.strictEqual(bad.body.ok, false, '非法提示标识应当被拒绝');
+});
+
+test('老库的 app_settings.media 缺 videoSizeMb 时用默认值兜底', async () => {  // 直接写一条「加这个键之前」的 media：只有三个键，没有任何 videoSizeMb
   await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [
     JSON.stringify({ imageCount: 6, imageSizeMb: 4, videoCount: 1 }),
     'media',
@@ -2683,7 +2783,7 @@ function backendRoutes(): DeclaredRoute[] {
 /**
  * 前端每个数据动作都必须能在后端找到对应路由。
  *
- * 这条断言是「51 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
+ * 这条断言是「52 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
  * 同步 `ENDPOINTS`，都会在这里失败，而不是等到某个页面在真机上静默报错。
  */
 test('前端每个数据动作都对应后端已注册的路由', () => {
@@ -2691,8 +2791,8 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
   const actions = Object.keys(endpoints);
   assert.strictEqual(
     actions.length,
-    51,
-    `前端数据动作数量变了（期望 51）：${actions.length} 个 —— ${actions.join(', ')}`,
+    52,
+    `前端数据动作数量变了（期望 52）：${actions.length} 个 —— ${actions.join(', ')}`,
   );
 
   const declared = backendRoutes();

@@ -37,6 +37,8 @@ const app = createApp({
   trustProxy: runtime.trustProxy,
   statusPageEnabled: runtime.statusPageEnabled,
   serviceVersion: packageJson.version,
+  hstsMaxAge: runtime.hstsMaxAge,
+  forceHttps: runtime.forceHttps,
 });
 
 /**

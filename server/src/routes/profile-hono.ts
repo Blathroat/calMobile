@@ -31,7 +31,7 @@ import {
   regenerateBackupCodes,
   clearSecondFactors,
 } from '../domain/two-factor.js';
-import { readNotificationPreferences, saveNotificationPreferences, readServerSettings } from '../domain/settings.js';
+import { readNotificationPreferences, saveNotificationPreferences, readServerSettings, saveSeenHint } from '../domain/settings.js';
 import { revokeAllForUser } from '../domain/session.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { clientIp } from '../http/client-ip.js';
@@ -334,6 +334,18 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     }));
   });
 
+  /**
+   * 记下一条「看过的提示」。
+   *
+   * 一次性提示（首页滑动日历、展商核销说明）看过就与账号绑定：换设备、重装都还在，
+   * 因此落在 `users.seen_hints` 而不是本机存储。幂等，重复提交同一条不会报错。
+   */
+  app.put('/hints', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    const body = bodyRecord(await readJsonBody(c));
+    return mutate(c, async () => ({ seenHints: await saveSeenHint(user.userId, body.hint) }));
+  });
+
   return app;
 }
 
@@ -350,6 +362,7 @@ export const PROFILE_ENDPOINTS: readonly [string, string][] = [
   ['POST', '/2fa/disable'],
   ['POST', '/email'],
   ['POST', '/email/verify'],
+  ['PUT', '/hints'],
   ['GET', '/notifications'],
   ['PUT', '/notifications'],
 ];

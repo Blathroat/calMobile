@@ -177,6 +177,9 @@ export const serverSettingsPatchSchema = z
     bio: z.unknown(),
     region: z.unknown(),
     answer: z.unknown(),
+    // 缺省展会封面（媒体短 URL）与「展商可同时筹备的展会数」上限（0 = 不限）
+    defaultCover: z.unknown(),
+    maxFutureExhibitions: z.unknown(),
     notify: notifySchema,
   })
   .partial()

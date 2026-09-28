@@ -13,7 +13,7 @@ import {
   exhibitionStatusSchema,
   type ExhibitionInput,
 } from '../domain/schemas.js';
-import { notFound } from '../domain/errors.js';
+import { badRequest, notFound } from '../domain/errors.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { authenticateHono, optionalAuthHono, userOf, type HonoContext, type HonoEnv } from './hono-utils.js';
@@ -157,6 +157,19 @@ app.post('/', authenticateHono, async (c) => {
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
     const input = await exhibitionInput(body);
+    // 「展商可同时筹备的展会数」：按展会日期在今天及以后计数（过去的不占额度），
+    // 0 表示不限。管理员不受限：这条策略是管理员自己设的，不该把他锁在门外。
+    const { maxFutureExhibitions } = await readSection('exhibitor');
+    if (maxFutureExhibitions > 0 && user.role !== 'admin') {
+      const counted = await query<{ total: number }>(
+        `SELECT count(*)::int AS total FROM exhibitions WHERE exhibitor_id = $1 AND exhibition_date >= CURRENT_DATE`,
+        [user.userId],
+      );
+      const total = Number(counted.rows[0]?.total ?? 0);
+      if (total >= maxFutureExhibitions) {
+        throw badRequest(`同时筹备的展会最多 ${maxFutureExhibitions} 个，先结束或删除已有展会再新建`);
+      }
+    }
     const id = newId('exh');
     await transaction(async (client) => {
       await client.query(

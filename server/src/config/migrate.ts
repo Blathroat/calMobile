@@ -59,6 +59,10 @@ export interface ServerSettings {
   };
   announcement: { enabled: boolean; text: string };
   brand: { zh: string; en: string };
+  /** 缺省展会封面：展会自己没有封面时用它，空串表示继续用占位图。 */
+  cover: { defaultCover: string };
+  /** 展商端策略：单个展商同时能筹备的展会数上限，0 表示不限。 */
+  exhibitor: { maxFutureExhibitions: number };
 }
 
 /**
@@ -391,6 +395,15 @@ export const STEPS: MigrationStep[] = [
         ALTER TABLE exhibitions DROP COLUMN IF EXISTS highlights;
         `,
   },
+  {
+    // 一次性用户提示（首页「左右滑动日历卡片可以切换月份」这类）看过就记下来，
+    // 与账号绑定：换设备也还在，退出登录不清。存 key 列表，`ADD COLUMN IF NOT EXISTS`
+    // 让这一步可以反复执行。
+    id: '0009-user-seen-hints',
+    sql: `
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS seen_hints TEXT[] NOT NULL DEFAULT '{}';
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
@@ -417,6 +430,10 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   },
   announcement: { enabled: false, text: '' },
   brand: { zh: '发现展会', en: 'ExpoHub' },
+  // 缺省封面默认留空：升级后的老库行为不变（没有封面的展会继续显示占位图）。
+  cover: { defaultCover: '' },
+  // 0 = 不限。演示环境默认放开，部署方按运营策略调小。
+  exhibitor: { maxFutureExhibitions: 0 },
 };
 
 function errorMessage(error: unknown): string {

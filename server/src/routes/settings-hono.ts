@@ -39,6 +39,8 @@ async function settingsPayload(userId: string | null | undefined) {
     media: settings.media,
     upload: settings.upload,
     limits: settings.limits,
+    cover: settings.cover,
+    exhibitor: settings.exhibitor,
     notify: await readNotificationPreferences(userId),
   };
 }
