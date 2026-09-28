@@ -155,6 +155,7 @@
     <string name="s_1j0wkqr">已通过该报名</string>
     <string name="s_1j1q2yf">封禁</string>
     <string name="s_1j51671">搜索关键词</string>
+    <string name="s_1j66bbh">提交信息</string>
     <string name="s_1j77by5">报名填写内容</string>
     <string name="s_1jbzuzw">可以切换到相邻日期，或搜索其它城市与分类的展会。</string>
     <string name="s_1jfbdwq">以访客身份浏览</string>
@@ -230,6 +231,7 @@
     <string name="s_1qhhjx1">我已抄好</string>
     <string name="s_1qj48cz">还没有可用的邮箱，无法开启两步验证。</string>
     <string name="s_1qk0zaw">待核销</string>
+    <string name="s_1qkfbmc">查看大图</string>
     <string name="s_1qksguo">找回密码</string>
     <string name="s_1qnrion">没有新的备用码。</string>
     <string name="s_1qnyx3k">常见图片格式</string>
@@ -237,6 +239,7 @@
     <string name="s_1r4txyl">审核状态</string>
     <string name="s_1rbi8qf">请输入验证器 App 里的 6 位码；也可以点下面的按钮改用邮箱验证码。</string>
     <string name="s_1ro3s85">用注册邮箱收验证码，验证通过后设置新密码。</string>
+    <string name="s_1rt1gs6">报名状态</string>
     <string name="s_1s57su3">0 条结果</string>
     <string name="s_1sd7orv">关键词</string>
     <string name="s_1sfkhdl">展会已保存</string>
@@ -319,7 +322,6 @@
     <string name="s_2qe8t5">原生桥接已释放</string>
     <string name="s_2scj6a">暂停后普通用户不可报名，展商不可自行恢复。</string>
     <string name="s_2vsxvu">已参加的报名不能再撤销。</string>
-    <string name="s_2x5dgj">展会简介</string>
     <string name="s_33a4b3">请输入报名码</string>
     <string name="s_33njx3">报名人</string>
     <string name="s_367f3v">搜索</string>
@@ -335,6 +337,7 @@
     <string name="s_41skpq">操作未完成</string>
     <string name="s_4e7do4">展会列表加载失败</string>
     <string name="s_4hjltm">密码已更新</string>
+    <string name="s_4hlup6">调整审核状态</string>
     <string name="s_4l0yq7">保存后详情页会按 Markdown 渲染。</string>
     <string name="s_4o8ie2">报名开始</string>
     <string name="s_4odn3m">应用配色</string>
@@ -355,6 +358,7 @@
     <string name="s_6osh3w">已参加展会</string>
     <string name="s_6piprk">上传封面</string>
     <string name="s_6w32w9">富文本媒体限制</string>
+    <string name="s_7nmx80">关闭大图</string>
     <string name="s_7qwgro">暂无用户数据</string>
     <string name="s_7sexex">同时显示在首页、我的报名、报名管理等页面的品牌行。</string>
     <string name="s_7tczm7">账号状态</string>
@@ -478,6 +482,7 @@
     <string name="s_kvpltc">加载失败</string>
     <string name="s_kzys7n">开启后每次登录都要输一次邮箱验证码。</string>
     <string name="s_l2amry">中文标题显示在首页上方的“发现展会”位置，英文标题显示在它上方与其他展示应用名称的位置。</string>
+    <string name="s_lcz4jf">编辑资料、修改密码、通知、配色、隐私与安全</string>
     <string name="s_lh9gvq">隐私设置</string>
     <string name="s_lltmb4">已隐藏</string>
     <string name="s_lp789j">已清空编辑器内容</string>
@@ -505,6 +510,8 @@
     <string name="s_p9fllo">新建展会</string>
     <string name="s_pdyp8r">已退出登录</string>
     <string name="s_ph3tpb">请选择分类</string>
+    <string name="s_pkm2s4">报名摘要</string>
+    <string name="s_pur5qm">开办的展会</string>
     <string name="s_pzy8ri">管理</string>
     <string name="s_q3pv0x">公开</string>
     <string name="s_q67h2y">四</string>
@@ -528,6 +535,7 @@
     <string name="s_s61azp">展商还没有补充展会介绍。</string>
     <string name="s_s8p5nm">报名收集项</string>
     <string name="s_s8pbve">邮箱验证码</string>
+    <string name="s_sbw8m5">双指缩放 · 放大后拖动 · 双击复位</string>
     <string name="s_sg8u9h">验证码已发送到：</string>
     <string name="s_shfy40">核销成功</string>
     <string name="s_shrzdv">发送验证码</string>

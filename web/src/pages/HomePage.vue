@@ -3,8 +3,8 @@
  * 屏幕 02 · 首页（月视图 + 当天展会列表）
  * 线框：docs/newUI/index.html #screen-home、docs/newUI/remaining-ui.html #screen-home
  *
- * 日历卡片支持左右滑动切换月份：拖动时卡片跟手位移，松手超过阈值则滑出并载入相邻月份；
- * 需要六行才能排满的月份会额外多出一行，同时压缩行高（`data-rows`），保证整卡仍可见。
+ * 日历卡片支持左右滑动切换月份：拖动时卡片跟手位移，松手超过阈值则滑出并载入相邻月份。
+ * 日历固定 6 行、行高只有一档，月份之间行距一致，卡片高度也不随月份变化。
  *
  * 点日期**不发请求**：`exhibitions.month` 一次返回整月展会，选中哪一天纯属本地状态，
  * 因此既不重新取数，也不重建日历 DOM（重建会让卡片闪一下、圆点动画重放）。
@@ -52,10 +52,14 @@ const enter = ref('');
 
 interface Cell { day: number; muted: boolean; hasEvent: boolean; disabled: boolean }
 
-const rows = computed(() => {
-  const total = daysInMonth(view.value.year, view.value.month);
-  return Math.ceil((firstWeekdayOffset(view.value.year, view.value.month) + total) / 7);
-});
+/**
+ * 日历固定排 6 行。
+ *
+ * 之前按月份实际需要排 5 或 6 行，6 行的月份压缩行高（`data-rows="6"`），于是**不同月份
+ * 的行距、字号都不一样**，左右滑月份时整卡还会跳一下。固定 6 行后行高只有一档，
+ * 卡片高度也不再随月份变化；不足 6 行的月份用下个月的日期补位（灰显不可点）。
+ */
+const CALENDAR_ROWS = 6;
 
 /** 日历格子：上下月的补位灰显且不可点，只有本月的日期能选中。 */
 const cells = computed<Cell[]>(() => {
@@ -72,7 +76,7 @@ const cells = computed<Cell[]>(() => {
   for (let day = 1; day <= total; day += 1) {
     list.push({ day, muted: false, hasEvent: events.has(day), disabled: false });
   }
-  const trailing = (rows.value * 7) - offset - total;
+  const trailing = (CALENDAR_ROWS * 7) - offset - total;
   for (let day = 1; day <= trailing; day += 1) {
     list.push({ day, muted: true, hasEvent: false, disabled: true });
   }
@@ -319,7 +323,6 @@ onMounted(() => {
     <div
       ref="calendarHost"
       class="calendar"
-      :data-rows="rows"
       :data-leave="leave || undefined"
       :data-enter="enter || undefined"
       :data-busy="loading && hasContent ? 'true' : undefined"

@@ -20,6 +20,7 @@ import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
+import ImageViewer from '@/components/ImageViewer.vue';
 import { formatDateWithWeekday } from '@/services/format';
 import type { ExhibitionDetail, JsonObject } from '@/api/types';
 import { t } from '@/i18n';
@@ -29,6 +30,11 @@ const router = useRouter();
 const session = useSessionStore();
 const query = useAsync<ExhibitionDetail>();
 
+const COPY = {
+  /** 封面的 aria-label：点开后看大图。 */
+  openViewer: t('s_1qkfbmc'),
+};
+
 const exhibition = computed(() => query.data.value?.exhibition);
 const fields = computed<JsonObject[]>(() => query.data.value?.fields ?? []);
 const found = computed(() => query.data.value?.found !== false);
@@ -36,6 +42,8 @@ const exhibitionId = computed(() => String(route.params.id ?? ''));
 
 const calendarState = ref<{ inCalendar: boolean; granted: boolean }>({ inCalendar: false, granted: false });
 const calendarBusy = ref(false);
+/** 大图查看：封面放大到全屏，支持双指缩放。 */
+const viewerOpen = ref(false);
 /** 日历状态只读一次：数据刷新会重画正文，但不该重复请求。 */
 let calendarRequested = false;
 
@@ -196,10 +204,17 @@ onMounted(() => { void load(); });
   />
 
   <template v-else>
-    <!-- 展会封面：设计比例 1080×1920 的竖版海报 -->
-    <div class="hero ph-img">
-      <img v-if="exhibition.imageUri" :src="String(exhibition.imageUri)" :alt="`${exhibition.title} 展会图片`" />
-    </div>
+    <!-- 展会封面：设计比例 1080×1920 的竖版海报；点开后可以看大图并双指缩放 -->
+    <button
+      v-if="exhibition.imageUri"
+      class="hero ph-img hero-button"
+      type="button"
+      :aria-label="COPY.openViewer"
+      @click="viewerOpen = true"
+    >
+      <img :src="String(exhibition.imageUri)" :alt="`${exhibition.title} 展会图片`" />
+    </button>
+    <div v-else class="hero ph-img" aria-hidden="true" />
 
     <div class="stack" data-gap="sm">
       <h2>{{ exhibition.title }}</h2>
@@ -288,4 +303,12 @@ onMounted(() => { void load(); });
       </div>
     </div>
   </Teleport>
+
+  <!-- 大图查看：只画显示与手势，关闭由本页处理 -->
+  <ImageViewer
+    v-if="viewerOpen && exhibition && exhibition.imageUri"
+    :src="String(exhibition.imageUri)"
+    :alt="`${exhibition.title} 展会图片`"
+    @close="viewerOpen = false"
+  />
 </template>

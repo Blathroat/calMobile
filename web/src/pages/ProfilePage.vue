@@ -1,17 +1,15 @@
 <script setup lang="ts">
 /**
- * 屏幕 09 · 个人主页（身份卡 + 资料展示 + 隐私开关）
+ * 屏幕 09 · 个人主页（身份卡 + 资料展示 + 设置入口）
  * 线框：docs/newUI/remaining-ui.html #screen-profile
  * 旧实现：app/src/main/assets/web/js/pages/profile.js（`git show 5e3d9ab^`）
  *
- * 这一屏只回答「我是谁、我公开了什么」：身份与资料是只读展示，只有一个隐私开关。
- * 账号维护（编辑资料、修改密码、通知设置、应用配色、明暗模式、安全入口）已按屏幕拆到
- * `UserSettingsPage.vue`，入口是顶栏右侧的设置图标（路由 meta 的 `topAction`，
- * 因此本页不再自己放一个设置按钮）。
+ * 这一屏只回答「我是谁、我公开了什么」：身份与资料是只读展示，底部给一个设置入口。
+ * 账号维护（编辑资料、修改密码、通知设置、应用配色、明暗模式、**隐私开关**、安全入口）
+ * 都在 `UserSettingsPage.vue`，入口有两个：顶栏右侧的设置图标（路由 meta 的 `topAction`）
+ * 与这一屏的设置卡片，两者进的是同一页。
  *
- * 隐私开关写入走 `PUT /profile`，其余字段原样回传：后端把整份资料当成一次覆盖，
- * 少传字段会被当成清空。受限账号（后端明确下发 `can.profile === false`）不能写，
- * 开关先置灰并说明原因，而不是等后端 403。
+ * 退出登录仍走 `POST /auth/logout`，一次调用清掉服务端与本地会话。
  */
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -19,21 +17,23 @@ import { api, bootApp } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
+import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
+const COPY = {
+  /** 设置入口的说明：把设置页里能改的东西列出来，省得点进去才发现。 */
+  settingsMeta: t('s_lcz4jf'),
+};
+
 const router = useRouter();
 const session = useSessionStore();
 
 const user = computed(() => session.user);
 const loggedIn = computed(() => session.loggedIn);
-/** 受限账号：只有后端明确下发 `false` 才算，老后端不下发 `profile` 时行为不变。 */
-const limited = computed(() => user.value.can?.profile === false);
-/** 受限时统一用同一句说明原因，避免每个入口各写一套说法。 */
-const limitHint = computed(() => t('s_1kliyri'));
 
 // ── 取数：本页只用到个人资料 ──────────────────────────────────────
 
@@ -84,44 +84,6 @@ function identityMeta(): string {
 function profileValue(key: string, emptyKey: string): string {
   const value = profile[key];
   return typeof value === 'string' && value !== '' ? value : t(emptyKey);
-}
-
-// ── 隐私开关 ──────────────────────────────────────────────────────
-
-const privacyBusy = ref(false);
-
-/** 受限账号不能写资料：先拦一次，避免置灰开关被聚焦或旧缓存页面点到。 */
-function guardLimited(): boolean {
-  if (!limited.value) return false;
-  toast(limitHint.value, 'error');
-  return true;
-}
-
-/** 开关立即生效：失败时回滚界面状态，避免看起来已保存。 */
-async function savePrivacy(value: boolean): Promise<void> {
-  if (guardLimited()) return;
-  const previous = profile.showRegistrations === true;
-  profile.showRegistrations = value;
-  privacyBusy.value = true;
-  try {
-    const saved = await api.profile.save({
-      nickname: String(user.value.nickname || ''),
-      bio: String(profile.bio || ''),
-      region: String(profile.region || ''),
-      socialMedia: String(profile.socialMedia || ''),
-      avatar: String(user.value.avatar || ''),
-      showRegistrations: value,
-    });
-    const fresh = (saved.user as JsonObject | undefined) ?? {};
-    session.applyUser({ ...user.value, ...fresh });
-    Object.assign(profile, fresh);
-    toast(value ? t('s_92i7f7') : t('s_dn42iy'), 'success');
-  } catch (reason) {
-    profile.showRegistrations = previous;
-    toast(errorText(reason), 'error');
-  } finally {
-    privacyBusy.value = false;
-  }
 }
 
 // ── 退出登录 ──────────────────────────────────────────────────────
@@ -203,30 +165,17 @@ function logout(): void {
         </div>
       </div>
 
-      <!-- 隐私：是否在公开页展示自己的报名记录 -->
+      <!-- 设置入口：与顶栏右侧的设置图标进同一页（编辑资料、隐私、安全都在那里） -->
       <div class="card">
-        <span class="section-label">{{ t('s_lh9gvq') }}</span>
-        <div class="switch-row">
-          <span class="switch-copy">
-            <strong>{{ t('s_1utpn11') }}</strong>
-            <span class="row-meta">{{ t('s_1wgtu4f') }}</span>
+        <span class="section-label">{{ t('s_1vmubx9') }}</span>
+        <button class="row-card" type="button" data-pressable="true" @click="router.push('/settings')">
+          <span class="dim" aria-hidden="true"><AppIcon name="settings" size="icon icon-sm" /></span>
+          <span class="row-copy">
+            <strong class="row-title">{{ t('s_1vmubx9') }}</strong>
+            <span class="row-meta">{{ COPY.settingsMeta }}</span>
           </span>
-          <label class="switch" for="privacy-registrations">
-            <input
-              id="privacy-registrations"
-              type="checkbox"
-              :checked="profile.showRegistrations === true"
-              :disabled="limited || privacyBusy"
-              @change="savePrivacy(($event.target as HTMLInputElement).checked)"
-            >
-            <span />
-          </label>
-        </div>
-        <p class="field-hint">
-          {{ limited
-            ? limitHint
-            : (profile.showRegistrations === true ? t('s_1kyf8ic') : t('s_413sl5')) }}
-        </p>
+          <AppIcon name="chevronRight" />
+        </button>
       </div>
 
       <!-- 退出登录：整页唯一的破坏性动作，放在最底部并走二次确认 -->

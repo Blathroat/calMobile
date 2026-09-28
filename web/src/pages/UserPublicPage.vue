@@ -36,6 +36,8 @@ const adminView = computed(() => profile.value?.viewedAsAdmin === true);
 /** 用户自己的「展示我的报名」策略：关掉时下方只说明「不展示」。 */
 const showRegistrations = computed(() => profile.value?.showRegistrations === true);
 const registrations = computed(() => asList(profile.value?.registrations));
+/** 这个用户自己开办的展会：只有展商 / 管理员有，普通用户是空数组。 */
+const hosted = computed(() => asList(profile.value?.exhibitions));
 const isOwn = computed(() => {
   const nickname = String(route.params.nickname ?? '');
   return nickname !== '' && nickname === String(session.user.nickname ?? '');
@@ -47,6 +49,16 @@ const visibilityLabel = computed(() => {
 const footLabel = computed(() => (isOwn.value
   ? t('s_1u66l1')
   : (adminView.value ? t('s_1m9kuky') : t('s_17zyr1e'))));
+
+const COPY = {
+  /** 展商主页的主区块：这个人自己开办的展会（普通用户没有，整块不渲染）。 */
+  hostedTitle: t('s_pur5qm'),
+};
+
+/** 报名人数的量词放在这里，模板里不出现中文。 */
+function registrationCountLabel(item: JsonObject): string {
+  return `${Number(item.registrationCount ?? 0)} 人报名`;
+}
 
 function asList(value: unknown): JsonObject[] {
   return Array.isArray(value) ? value as JsonObject[] : [];
@@ -121,6 +133,32 @@ onMounted(load);
       <div class="row" data-between="true">
         <span class="row-meta">{{ t('s_1hnvqec') }}</span>
         <span class="strong truncate">{{ profile.socialMedia || t('s_lltmb4') }}</span>
+      </div>
+    </div>
+
+    <!-- 开办的展会：展商主页的主要内容，放在「已参加展会」之前 -->
+    <div v-if="hosted.length > 0" class="card">
+      <div class="row" data-between="true">
+        <span class="section-label">{{ COPY.hostedTitle }}</span>
+        <span class="pill">{{ hosted.length }} 个</span>
+      </div>
+      <div class="list" data-gap="sm">
+        <button
+          v-for="item in hosted"
+          :key="String(item.id)"
+          class="row-card"
+          type="button"
+          data-pressable="true"
+          @click="router.push(`/detail/${encodeURIComponent(String(item.id))}`)"
+        >
+          <MediaBox class-name="thumb thumb-cover thumb-sm" :src="String(item.imageUri || '')" />
+          <span class="row-copy">
+            <strong class="row-title truncate">{{ item.title }}</strong>
+            <span class="row-meta">{{ `${item.dateLabel || item.date} · ${item.venue}` }}</span>
+            <span class="row-meta">{{ registrationCountLabel(item) }}</span>
+          </span>
+          <StatusTag :text="String(item.status || '')" />
+        </button>
       </div>
     </div>
 

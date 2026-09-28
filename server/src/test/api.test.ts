@@ -2116,6 +2116,39 @@ test('公开页支持按昵称查询', async () => {
   assert.ok(byNickname.body.profile.nickname);
 });
 
+test('公开页带上该用户开办的展会', async () => {
+  // 展商主页要展示「开办的展会」：自己造一条、最后删掉，不依赖种子数据。
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '公开页开办展会用例',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: isoDateAfter(21),
+      category: '智能家居',
+      status: '无需审核',
+      qrEnabled: false,
+    },
+    { token: tokens.exhibitor.token },
+  );
+  assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
+  const exhibitionId = created.body.exhibition.id;
+  try {
+    const asVisitor = await get('/api/v1/users/public?nickname=exhibitor', { token: tokens.user.token });
+    assert.strictEqual(asVisitor.body.found, true);
+    const item = asVisitor.body.exhibitions.find((row: { id: string }) => row.id === exhibitionId);
+    assert.ok(item, '公开页应当列出该用户开办的展会');
+    assert.strictEqual(item.title, '公开页开办展会用例');
+    assert.ok(!('checkInCode' in item), '公开页的展会卡片不下发报名码');
+
+    // 普通用户没有开办展会：字段仍然存在，只是空数组（前端据此整块不渲染）
+    const plain = await get('/api/v1/users/public?nickname=user', { token: tokens.exhibitor.token });
+    assert.deepStrictEqual(plain.body.exhibitions, []);
+  } finally {
+    await del(`/api/v1/exhibitions/${exhibitionId}`, { token: tokens.exhibitor.token });
+  }
+});
+
 test('公开页不下发报名码，本人与管理员仍能拿到', async () => {
   // 自己造数据、自己还原：不依赖其它用例执行到哪一步，也不改它们共享的记录。
   const users = await get('/api/v1/users?query=user', { token: tokens.admin.token });

@@ -441,7 +441,6 @@ async function submitManual(close: () => void): Promise<void> {
         {{ t('s_wttsdb') }}
       </button>
       <button class="cta ghost" type="button" @click="openManual">{{ t('s_11elgkf') }}</button>
-      <button class="cta ghost" type="button" @click="router.push('/exhibitor')">{{ t('s_dn4ida') }}</button>
     </div>
 
     <!-- 核销结果：成功与失败都在原位给出报名人信息与下一步 -->

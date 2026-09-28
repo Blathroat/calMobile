@@ -59,8 +59,8 @@ web/
 | 06 | `web/src/pages/SearchPage.vue` | 搜索展会、地点和用户 |
 | 07 | `web/src/pages/MyRegistrationsPage.vue` | 我的报名 |
 | 08 | `web/src/pages/RegistrationDetailPage.vue` | 报名详情、报名码与撤销 |
-| 09 | `web/src/pages/ProfilePage.vue` | 个人资料展示与隐私开关 |
-| — | `web/src/pages/UserSettingsPage.vue` | 用户设置（头像、资料、密码、通知、配色、明暗、安全），入口在个人页顶栏右侧 |
+| 09 | `web/src/pages/ProfilePage.vue` | 个人资料展示与设置卡片（隐私开关在设置页） |
+| — | `web/src/pages/UserSettingsPage.vue` | 用户设置（头像、资料、密码、通知、配色、明暗、隐私、安全），入口在个人页顶栏右侧与设置卡片 |
 | 10 | `web/src/pages/ExhibitorPage.vue` | 展商后台 |
 | 11 | `web/src/pages/ExhibitionFormPage.vue` | 展会编辑 |
 | 12 | `web/src/pages/RichEditorPage.vue` | Markdown 简介与媒体 |

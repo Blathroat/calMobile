@@ -530,8 +530,9 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
       </div>
       <hr class="divider" />
       <div class="stack" data-gap="sm">
-        <div class="row" data-between="true">
-          <strong>{{ t('s_2x5dgj') }}</strong>
+        <!-- 不再重复「展会简介」小标题：这一栏的「报名与简介设置」已经说明了用途，
+             按钮本身就是入口，左边留标题只会让这一行更挤。 -->
+        <div class="row">
           <button
             class="cta ghost"
             data-size="small"

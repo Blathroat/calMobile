@@ -291,6 +291,42 @@ async function saveEditor(): Promise<void> {
   }
 }
 
+// ── 隐私：是否在公开页展示自己的报名记录 ──────────────────────────
+
+const privacyBusy = ref(false);
+
+/**
+ * 开关立即生效：失败时回滚界面状态，避免看起来已保存。
+ *
+ * 写入走 `PUT /profile`（后端把整份资料当成一次覆盖），因此昵称、简介、地区、社交账号与
+ * 头像都要原样回传 —— 少传字段会被当成清空。
+ */
+async function savePrivacy(value: boolean): Promise<void> {
+  if (guardLimited()) return;
+  const previous = profile.showRegistrations === true;
+  profile.showRegistrations = value;
+  privacyBusy.value = true;
+  try {
+    const saved = await api.profile.save({
+      nickname: String(user.value.nickname || ''),
+      bio: String(profile.bio || ''),
+      region: String(profile.region || ''),
+      socialMedia: String(profile.socialMedia || ''),
+      avatar: String(user.value.avatar || ''),
+      showRegistrations: value,
+    });
+    const fresh = (saved.user as JsonObject | undefined) ?? {};
+    session.applyUser({ ...user.value, ...fresh });
+    Object.assign(profile, fresh);
+    toast(value ? t('s_92i7f7') : t('s_dn42iy'), 'success');
+  } catch (reason) {
+    profile.showRegistrations = previous;
+    toast(errorText(reason), 'error');
+  } finally {
+    privacyBusy.value = false;
+  }
+}
+
 // ── 修改密码（演示环境只校验输入格式） ────────────────────────────
 
 const passwordOpen = ref(false);
@@ -680,6 +716,32 @@ async function changeMode(value: string): Promise<void> {
           @update:model-value="changeMode"
         />
         <p class="field-hint">{{ modeHint }}</p>
+      </div>
+
+      <!-- 隐私：是否在公开页展示自己的报名记录（原先在个人页，按反馈收进设置） -->
+      <div class="card">
+        <span class="section-label">{{ t('s_lh9gvq') }}</span>
+        <div class="switch-row">
+          <span class="switch-copy">
+            <strong>{{ t('s_1utpn11') }}</strong>
+            <span class="row-meta">{{ t('s_1wgtu4f') }}</span>
+          </span>
+          <label class="switch" for="settings-privacy-registrations">
+            <input
+              id="settings-privacy-registrations"
+              type="checkbox"
+              :checked="profile.showRegistrations === true"
+              :disabled="limited || privacyBusy"
+              @change="savePrivacy(($event.target as HTMLInputElement).checked)"
+            >
+            <span />
+          </label>
+        </div>
+        <p class="field-hint">
+          {{ limited
+            ? limitHint
+            : (profile.showRegistrations === true ? t('s_1kyf8ic') : t('s_413sl5')) }}
+        </p>
       </div>
 
       <!-- 安全：邮箱与两步验证共用同一套凭据，因此放在同一张卡里 -->

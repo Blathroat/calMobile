@@ -23,11 +23,17 @@ import { REGISTRATION_STATUS, REVIEW_FILTERS, statusTone } from '@/services/stat
 import { answerLines, truncate } from '@/services/format';
 import SegControl from '@/components/SegControl.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import RegistrationDetailSheet from '@/components/RegistrationDetailSheet.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import type { Exhibition, Registration, ReviewList } from '@/api/types';
 import { t } from '@/i18n';
+
+const COPY = {
+  /** 详情面板里的主按钮：详情只读，点它才进状态选择。 */
+  adjustStatus: t('s_4hlup6'),
+};
 
 const route = useRoute();
 const router = useRouter();
@@ -127,9 +133,10 @@ function statusMessage(status: string): string {
 }
 
 /**
- * 报名详情：回答逐条列出，状态动作放在同一面板的按钮里。
- * 面板只支持「一句话 + 一组按钮」，因此详情与动作分成两步：
- * 先看回答，再点「调整状态」打开动作面板——按钮数量随状态机变化，不会挤在一起。
+ * 报名详情：结构化面板（状态 / 时间 / 收集项分组），而不是把内容拼成一段文字。
+ *
+ * 状态动作放在同一面板的按钮里：详情只读，改状态要先点「调整审核状态」——
+ * 动作数量随状态机变化，摆在详情里会让面板忽长忽短。
  */
 function openDetail(record: Registration): void {
   const answers = answerLines(record.answers);
@@ -137,27 +144,36 @@ function openDetail(record: Registration): void {
   const hint = record.status === REGISTRATION_STATUS.ATTENDED
     ? t('s_159zzbg')
     : t('s_1e05tqn');
-  const lines = [
-    `${record.status} · 报名于 ${record.registrationTime}`,
-    ...(answers.length > 0
-      ? answers.map((line) => `${line.label || t('s_otl7kf')}：${line.value || '—'}`)
-      : [t('s_v8pba2')]),
-  ];
   const actions: SheetAction[] = [];
   if (targets.length > 0) {
     actions.push({
-      label: t('s_j666m6'),
+      label: COPY.adjustStatus,
       variant: 'primary',
       onClick: (close) => {
         close();
         openActions(record);
       },
     });
-  } else {
-    lines.push(hint);
   }
   actions.push({ label: t('s_g0fanx'), onClick: (close) => close() });
-  openSheet({ title: String(record.visitorName ?? ''), message: lines.join('\n'), actions });
+  openSheet({
+    title: String(record.visitorName ?? ''),
+    // 收集项可能很多，用高面板并让内容自己滚动。
+    size: 'full',
+    component: RegistrationDetailSheet,
+    props: {
+      status: String(record.status ?? ''),
+      statusTone: statusTone(String(record.status ?? '')),
+      registrationTime: String(record.registrationTime ?? ''),
+      summary: String(record.summary ?? ''),
+      answers: answers.map((line) => ({
+        label: line.label || t('s_otl7kf'),
+        value: line.value || '—',
+      })),
+      hint: targets.length > 0 ? '' : hint,
+    },
+    actions,
+  });
 }
 
 /** 状态动作面板：可选动作与后端状态机一致，拒绝走二次确认。 */

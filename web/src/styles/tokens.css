@@ -884,6 +884,16 @@ label {
     width: min(100%, 168px);
 }
 
+/* 可点开的封面：清掉按钮自带的内边距 / 字体 / 居中，只保留 .hero 的尺寸与描边 */
+.hero-button {
+    display: block;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    appearance: none;
+}
+
 .hero > img {
     width: 100%;
     height: 100%;
@@ -1715,6 +1725,91 @@ label {
     font-weight: 700;
 }
 
+/* 详情型面板里的「标签 / 内容」列表：标签独占一行、内容另起一行自然换行。
+   报名详情原来把标签和值拼成一段文字，多几项就挤成一坨；分开写才读得清。 */
+.detail-list {
+    display: grid;
+    gap: var(--s2);
+}
+
+.detail-item {
+    display: grid;
+    gap: var(--s1);
+    padding: var(--s3);
+    border: var(--hairline) solid var(--stroke);
+    border-radius: var(--r-input);
+    background: var(--f3);
+}
+
+.detail-label {
+    color: var(--ink-3);
+    font-size: var(--fs-tag);
+    font-weight: 600;
+}
+
+.detail-value {
+    color: var(--ink);
+    font-size: var(--fs-body);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+/* ============================================================================
+ * 大图查看：封面点开后铺满屏幕，支持双指缩放
+ * ==========================================================================*/
+
+.viewer {
+    position: fixed;
+    inset: 0;
+    /* 高于底部面板（40），低于 toast（60）：查看大图时提示仍可见。 */
+    z-index: 50;
+    background: rgb(8 10 13 / 92%);
+    touch-action: none;
+    overscroll-behavior: contain;
+}
+
+.viewer-stage {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    touch-action: none;
+}
+
+.viewer-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transform-origin: center center;
+    will-change: transform;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.viewer-close {
+    position: absolute;
+    top: calc(var(--s4) + var(--safe-top));
+    right: var(--s4);
+    width: var(--touch);
+    height: var(--touch);
+    display: grid;
+    place-items: center;
+    border: var(--hairline) solid rgb(255 255 255 / 28%);
+    border-radius: var(--r-pill);
+    background: rgb(0 0 0 / 42%);
+    color: var(--on-dark);
+}
+
+.viewer-hint {
+    position: absolute;
+    inset-inline: 0;
+    bottom: calc(var(--s4) + var(--safe-bottom));
+    color: rgb(255 255 255 / 72%);
+    font-size: var(--fs-meta);
+    text-align: center;
+}
+
 .sheet-actions {
     display: flex;
     gap: var(--s2);
@@ -1985,6 +2080,8 @@ label {
 .cal-day {
     position: relative;
     min-width: 0;
+    /* 行高只有一档：日历固定 6 行，月份之间不再压缩行高（行距、字号因此完全一致）。
+       46px 也保证触控命中区不小于 44px。 */
     min-height: 46px;
     /* 数字与“有展会”圆点共用同一条居中轴：flex 纵向排列 + align-items: center，
        圆点因此始终落在数字正下方，不再因为绝对定位与列宽换算而偏右。 */
@@ -2001,16 +2098,6 @@ label {
     color: var(--ink-2);
     font-size: var(--fs-label);
     transition: color var(--motion-fast) var(--ease);
-}
-
-/* 需要六行才能排满的月份：额外增加一行，同时压缩行高保证整卡仍然可见 */
-.calendar[data-rows="6"] .cal-day {
-    min-height: 38px;
-    font-size: var(--fs-meta);
-}
-
-.calendar[data-rows="6"] .week-row {
-    margin-bottom: 2px;
 }
 
 .cal-day[data-muted="true"] {
