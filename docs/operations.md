@@ -46,12 +46,15 @@ gradlew.bat :app:assembleDebug
 
 ```powershell
 pwsh -File scripts\emu.ps1 install
+pwsh -File scripts\emu.ps1 reverse
 pwsh -File scripts\emu.ps1 shot .omo\evidence\screen
 pwsh -File scripts\emu.ps1 logs
 pwsh -File scripts\emu.ps1 motion check
 ```
 
-安装 APK 后用 `adb reverse tcp:3000 tcp:3000` 连接本机后端。WebView 文字不一定出现在无障碍树中，点击回归用坐标并保留截图证据；扫码回归可用 `node scripts/decode-shot.js` 检查真实截图像素。
+页面里的接口地址写死 `http://127.0.0.1:3000`（WebView 不允许别的写法），模拟器里的 `127.0.0.1` 又是模拟器自己，因此必须把设备的 3000 端口反向映射到本机。`install` 与 `restart` 会自动确保一次，映射丢了（`adb kill-server`、设备重连、机器重启都会丢）就单独跑 `reverse`；症状是应用里每个请求都失败，看起来像「后端没起」。
+
+WebView 文字不一定出现在无障碍树中，点击回归用坐标并保留截图证据；扫码回归可用 `node scripts/decode-shot.js` 检查真实截图像素。
 
 ## 浏览器逐屏回归（CDP）
 
