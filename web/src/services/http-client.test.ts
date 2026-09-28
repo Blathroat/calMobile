@@ -27,4 +27,22 @@ describe('HttpClient', () => {
     await client.request('/x');
     expect(calls).toBe(2);
   });
+
+  it('超时与调用方取消分开报：reason 分别是 timeout / aborted', async () => {
+    /** 永远不回的假请求：只有 abort 时才会 reject。 */
+    const hanging = (_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    });
+
+    // 超时自己触发（超时设 10ms）
+    const timeoutClient = new HttpClient({ baseUrl: 'http://test', timeoutMs: 10, fetcher: hanging as typeof fetch });
+    await expect(timeoutClient.request('/x')).rejects.toMatchObject({ name: 'TransportError', reason: 'timeout' });
+
+    // 调用方主动取消（超时给足，不会先触发）
+    const abortable = new HttpClient({ baseUrl: 'http://test', timeoutMs: 5_000, fetcher: hanging as typeof fetch });
+    const controller = new AbortController();
+    const pending = abortable.request('/x', { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'TransportError', reason: 'aborted' });
+  });
 });

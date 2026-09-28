@@ -57,4 +57,23 @@ describe('NativeBridge', () => {
     expect(spy).toHaveBeenCalledWith('calendar.status', { date: '2026-09-20' });
     spy.mockRestore();
   });
+
+  it('交互动作走兜底超时，普通动作走短超时', async () => {
+    // 原生一声不响时两者都必须有终点：交互动作（选图）给的是长超时。
+    const native = { invoke: (): void => {} };
+    const fakeWindow = { CalMobileNative: native } as unknown as Window;
+    const bridge = new NativeBridge({ windowLike: fakeWindow, timeoutMs: 10, interactiveTimeoutMs: 60 });
+    bridges.push(bridge);
+
+    const plain = await bridge.call('calendar.status', { date: '2026-09-20' }).catch((error) => error);
+    expect(plain.code).toBe('timeout');
+
+    const interactive = bridge.call('media.pickImage', {}).catch((error) => error);
+    // 短超时那一刻不该被判定为超时（交互动作有自己的长超时）
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const early = await Promise.race([interactive, Promise.resolve('still-pending')]);
+    expect(early).toBe('still-pending');
+    const late = await interactive;
+    expect(late.code).toBe('timeout');
+  });
 });

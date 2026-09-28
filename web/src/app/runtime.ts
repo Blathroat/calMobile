@@ -42,7 +42,8 @@ export function applyRuntimeBootstrap(data: Bootstrap): void {
   useSessionStore().applyUser(data.user);
   useBootstrapStore().apply(data);
   useCapabilitiesStore().apply(asObject(data.capabilities));
-  useSettingsStore().apply({ theme: data.theme, ui: data.ui });
+  // 色板与全局默认下标留在 bootstrap store；这里只落明暗模式那一段。
+  useSettingsStore().apply({ ui: data.ui });
   applyMode(String(useSettingsStore().mode || 'auto'));
   // 强调色也缓存一份到本机：下次冷启动的首帧直接是用户选的颜色。
   applyAccentIndex(Number(useBootstrapStore().theme.index) || 0);

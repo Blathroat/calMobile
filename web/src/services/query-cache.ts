@@ -5,12 +5,12 @@
  * 所以读键的前缀与写接口声明的失效前缀必须同族：`registrations.record` 能被 `registrations`
  * 命中，写成 `registration.record` 就永远失效不到。
  *
- * **`invalidate(prefix)` 与 `clear()` 的区别**（最容易踩的一处）：
- * - `invalidate` 只按前缀删掉已缓存的值，**不动在途请求，也不推进代数**。失效之前就发出的那个
- *   读请求回来时仍会把旧值写进缓存 —— 刚写完数据，一个更早发出的读可能把旧值盖回来。
- *   要彻底切断，只能用 `clear()`。
- * - `clear()` 推进代数，让在途请求的结果在落地时被丢弃（不会重新填回缓存），并清空在途表。
- *   身份变化（登录 / 退出 / 切账号）必须走它，否则会把上一个用户的数据给下一个用户。
+ * **`invalidate(prefix)` 与 `clear()` 的区别**：
+ * - `invalidate` 按前缀删值，并且**把同前缀的在途请求一起作废**：这些请求是失效之前发出的，
+ *   回来的是写操作之前的旧数据，写回缓存等于让刚写完的界面又读到旧值。作废后同键的下一次
+ *   读会重新发起（不会搭上那趟旧车）。
+ * - `clear()` 清空一切并推进代数，用于身份变化（登录 / 退出 / 切账号）：在途结果一律丢弃，
+ *   否则会把上一个用户的数据给下一个用户。
  *
  * **并发**：同一个键上的并发读共享同一个 Promise，因此只发一次请求；代价是它们拿到**同一个
  * 对象引用**，调用方不要原地修改返回值，那会改到缓存里的对象。
@@ -30,6 +30,10 @@ export class QueryCache {
   private readonly inflight = new Map<string, Promise<unknown>>();
   // 代数：clear 时自增，用来让 clear 之前发出的请求结果作废。
   private generation = 0;
+  // 每个键的作废次数：invalidate 时自增，让失效之前发出的那次读不再写回。
+  // 用「每键计数」而不是一个共享的集合：否则同一键后来重新发起读会把标记清掉，
+  // 之前那趟旧请求回来时又会被当成有效结果写回。
+  private readonly epochs = new Map<string, number>();
 
   /**
    * @param ttlMs 缓存有效期（毫秒），缺省 20 秒：短到用户不会看到明显过期的数据，
@@ -61,10 +65,12 @@ export class QueryCache {
     const existing = this.inflight.get(key);
     // 已有同键请求就搭车，否则两个组件同时要同一份数据会各发一次请求。
     if (existing) return existing as Promise<T>;
-    // 记下发起时的代数：这期间 clear 过，说明结果属于上一个身份，不能写回。
+    // 记下发起时的代数与这一键的作废次数：期间 clear 过或 invalidate 过，结果都不能写回。
     const generation = this.generation;
+    const epoch = this.epochOf(key);
     const task = read().then((value) => {
-      if (generation === this.generation) this.values.set(key, { value, at: Date.now() });
+      const valid = generation === this.generation && epoch === this.epochOf(key);
+      if (valid) this.values.set(key, { value, at: Date.now() });
       return value;
     }).finally(() => {
       // 只删自己这一条：期间被 clear 掉或已换成新任务时，别误删别人的在途记录。
@@ -76,14 +82,21 @@ export class QueryCache {
   }
 
   /**
-   * 按前缀失效：删掉所有以 `prefix` 开头的缓存键。
-   * 不传前缀等于清空值表（但不推进代数、不清在途，见类注释）。
+   * 按前缀失效：删掉所有以 `prefix` 开头的缓存键，并作废同前缀的在途请求。
+   * 不传前缀等于清空值表（在途请求同样一起作废；身份变化请用 `clear()`）。
    * 写接口成功之后才调用，前缀要和读键的前缀同一族。
    */
   invalidate(prefix?: string): void {
-    if (!prefix) { this.values.clear(); return; }
+    const matches = (key: string) => !prefix || key.startsWith(prefix);
     // 匹配的是拼好的完整键，所以前缀必须落在键的起始处才对得上。
-    for (const key of this.values.keys()) if (key.startsWith(prefix)) this.values.delete(key);
+    for (const key of [...this.values.keys()]) if (matches(key)) this.values.delete(key);
+    for (const key of [...this.inflight.keys()]) {
+      if (!matches(key)) continue;
+      // 从在途表里摘掉：下一次读要重新发起，而不是搭上这趟「写操作之前」的车。
+      this.inflight.delete(key);
+      // 作废计数 +1：这趟旧请求回来时不写回（后发起的读有自己的计数，不受影响）。
+      this.epochs.set(key, this.epochOf(key) + 1);
+    }
   }
 
   /**
@@ -95,5 +108,11 @@ export class QueryCache {
     this.generation += 1;
     this.values.clear();
     this.inflight.clear();
+    this.epochs.clear();
+  }
+
+  /** 这一键当前的作废次数；没有记录就是 0。 */
+  private epochOf(key: string): number {
+    return this.epochs.get(key) ?? 0;
   }
 }

@@ -133,14 +133,24 @@ declare global {
   }
 }
 
-// 会停在系统 UI 上等用户操作的动作：给它们加超时会把正常等待判成失败。
+// 会停在系统 UI 上等用户操作的动作：这类动作的「慢」是正常的，超时只作为
+// 「原生一声不响」的兜底，因此给足时间，不能用普通动作的 30 秒。
 const INTERACTIVE_ACTIONS = new Set<NativeAction>([
   'media.pickImage', 'media.import', 'export.csv', 'camera.ensurePermission', 'notify.requestPermission',
 ]);
 
-/** 构造参数。`timeoutMs` 覆盖默认的 30 秒；`windowLike` 用于测试注入假的 window。 */
+/** 交互动作的兜底超时：5 分钟。选图、保存文件这类操作可能被用户撂在一边很久。 */
+const INTERACTIVE_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * 构造参数。
+ * - `timeoutMs`：普通动作的超时，缺省 30 秒。
+ * - `interactiveTimeoutMs`：交互动作（选图 / 导入 / 导出 / 权限申请）的兜底超时，缺省 5 分钟。
+ * - `windowLike`：注入假的 window 用于测试；缺省用全局 `window`。
+ */
 export interface NativeBridgeOptions {
   timeoutMs?: number;
+  interactiveTimeoutMs?: number;
   windowLike?: Window;
 }
 
@@ -155,6 +165,7 @@ export class NativeBridge {
   // 回调 id 自增，保证同一次会话内不重号。
   private sequence = 1;
   private readonly timeoutMs: number;
+  private readonly interactiveTimeoutMs: number;
   private readonly windowLike: Window | undefined;
   // 是否由本实例安装了回调出口：dispose 时只清自己装的，不误删别人的。
   private installed = false;
@@ -162,6 +173,7 @@ export class NativeBridge {
   constructor(options: NativeBridgeOptions = {}) {
     // 30 秒足够覆盖慢设备上的落盘/导出；再长页面就一直挂着。
     this.timeoutMs = options.timeoutMs ?? 30_000;
+    this.interactiveTimeoutMs = options.interactiveTimeoutMs ?? INTERACTIVE_TIMEOUT_MS;
     // 拿不到 window（SSR / 纯 Node 测试）就退化成「没有原生桥」。
     this.windowLike = options.windowLike ?? (typeof window === 'undefined' ? undefined : window);
     this.installCallback();
@@ -193,13 +205,14 @@ export class NativeBridge {
     const callbackId = `cb-${this.sequence++}`;
     return new Promise<NativeActionResults[A]>((resolve, reject) => {
       const entry = { resolve: resolve as (value: unknown) => void, reject, timer: undefined as ReturnType<typeof setTimeout> | undefined };
-      // 交互动作不加定时器：要等用户操作完，超时会把正常等待判成失败。
-      if (!INTERACTIVE_ACTIONS.has(action)) {
-        entry.timer = setTimeout(() => {
-          this.pending.delete(callbackId);
-          reject(new NativeBridgeError(`原生动作 ${action} 超时未响应`, 'timeout'));
-        }, this.timeoutMs);
-      }
+      // 交互动作给的是兜底超时（默认 5 分钟），不是普通动作的 30 秒：
+      // 用户可能把系统选择器撂在一边很久，但「原生永远不回」也必须有个终点，
+      // 否则这个 Promise 会一直挂着，页面停在「加载中」。
+      const limit = INTERACTIVE_ACTIONS.has(action) ? this.interactiveTimeoutMs : this.timeoutMs;
+      entry.timer = setTimeout(() => {
+        this.pending.delete(callbackId);
+        reject(new NativeBridgeError(`原生动作 ${action} 超时未响应`, 'timeout'));
+      }, limit);
       // 顺序要紧：先登记 pending 再 invoke，原生回调可能同步到达，晚了就认不出 callbackId。
       this.pending.set(callbackId, entry);
       try {

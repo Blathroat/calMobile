@@ -15,17 +15,27 @@ import { t } from '@/i18n';
  * 重放后仍是 401，就把 `ApiError(401)` 交给会话层 —— 刷新接口自己 401 时因此不会无限递归。
  * 并发的多个 401 共用 `refreshing` 同一个 Promise，所以一次会话只会发一次刷新请求。
  *
- * **超时**：默认 3 秒，用 `AbortController` + `setTimeout` 实现。调用方传入的 `signal` 与超时共用
- * 同一个 controller，因此「调用方主动取消」和「超时」在这里都表现为 AbortError、都会报成超时文案；
- * 需要区分取消的页面得自己看 `signal.aborted`。
+ * **超时与取消**：超时默认 3 秒，用 `AbortController` + `setTimeout` 实现；调用方传入的 `signal`
+ * 与超时共用同一个 controller。两者都以 AbortError 结束，靠 `reason` 分开：
+ * `'timeout'` 是自己掐的，`'aborted'` 是调用方取消的（页面切走、重新取数），文案不同也便于排障。
  *
  * 这里不做传输重试（只有 401 刷新后的那次重放）、不缓存、也不解析业务字段：
  * 缓存与失效在 `query-cache.ts` / `api/client.ts`，令牌的存取在 `session-client.ts`。
  */
 
+/** 传输失败的两种可预期原因：自己掐的超时，与调用方取消。其余情况没有码。 */
+export type TransportReason = 'timeout' | 'aborted';
+
 /** 传输层失败：请求没得到可用响应，后端可能根本没收到。调用方按「可以重试」处理。 */
 export class TransportError extends Error {
   override name = 'TransportError';
+  /** 超时 / 取消这类**可预期**的原因；连不上、非 JSON、5xx 没有码。 */
+  readonly reason?: TransportReason;
+
+  constructor(message: string, reason?: TransportReason) {
+    super(message);
+    this.reason = reason;
+  }
 }
 
 /**
@@ -107,7 +117,7 @@ export class HttpClient {
     // 去掉 baseUrl 末尾的斜杠：调用方传不传都不该拼出 `//`。
     const url = `${this.options.baseUrl.replace(/\/$/, '')}${path}${queryString(request.query)}`;
     const controller = new AbortController();
-    // 超时即 abort，fetch 会以 AbortError 结束，再由下面的 catch 归类。
+    // 超时即 abort，fetch 会以 AbortError 结束；reason 用来把它和「调用方取消」分开。
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     // 调用方取消也走同一个 controller，统一在 finally 里解绑。
     const abortFromCaller = () => controller.abort();
@@ -161,8 +171,10 @@ export class HttpClient {
     } catch (error) {
       if (error instanceof ApiError || error instanceof TransportError) throw error;
       if (error instanceof DOMException && error.name === 'AbortError') {
-        // 超时和调用方取消都落到这里；文案是排障用的，不是给用户看的业务提示。
-        throw new TransportError(`后端响应超时（超过 ${this.timeoutMs / 1000} 秒）`);
+        // AbortError 只有两个来源：这里掐的超时，或者调用方传进来的 signal。
+        // 调用方的 signal 上带 aborted 标记，据此分开报：文案是排障用的，不是给用户看的业务提示。
+        if (request.signal?.aborted) throw new TransportError(t('s_1s8cf91'), 'aborted');
+        throw new TransportError(`后端响应超时（超过 ${this.timeoutMs / 1000} 秒）`, 'timeout');
       }
       // 其余都是网络层的原生错误（DNS、证书、连接被拒等），后端状态未知。
       throw new TransportError(`连不上后端服务：${error instanceof Error ? error.message : String(error)}`);
