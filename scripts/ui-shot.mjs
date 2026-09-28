@@ -223,8 +223,13 @@ async function main() {
       }
       return result.result?.value;
     };
+    let navigation = 0;
     const goto = async (hash, wait = 1500) => {
-      await session.send('Page.navigate', { url: `${options.base}#${hash}` });
+      // 每次导航都带一个唯一参数：Chrome 复用固定的 profile 目录，会缓存上一次构建的
+      // index.html，而重建后的 chunk 文件名已经变了——那时页面会静默变成空白，
+      // 后面的点击全部落空，截图却「看起来正常」。
+      navigation += 1;
+      await session.send('Page.navigate', { url: `${options.base}?t=${navigation}-${Date.now()}#${hash}` });
       // 哈希路由的站内切换不一定再触发 load：等一小会儿即可。
       await sleep(wait);
     };
@@ -241,6 +246,11 @@ async function main() {
       console.log('跳过登录：使用注入的刷新令牌验证冷启动免登录');
     } else {
       await goto('/login', 2200);
+      // 外壳没渲染出来时登录按钮点不动（症状是「什么都没发生」）。先单独判一次，
+      // 把「资源没加载」这类原因直接说出来，而不是等下面报一句「登录没进主界面」。
+      if (!await evaluate(`Boolean(document.querySelector('.app'))`)) {
+        throw new Error(`登录页没有渲染出外壳：${options.base}\n多半是 Chrome 缓存了上一次构建的资源，删掉 ${profileDir} 后重试`);
+      }
       await shot('01-login');
       const submitted = await evaluate(`(() => {
         const inputs = document.querySelectorAll('input');

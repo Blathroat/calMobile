@@ -395,6 +395,7 @@
     <string name="s_crec0c">标记为已参加</string>
     <string name="s_crhxaz">搜索展会、地点或用户</string>
     <string name="s_d5a1x9">个</string>
+    <string name="s_d8r5bl">演示账号：demo / exhibitor / user，密码均为 password</string>
     <string name="s_dn42iy">已关闭公开展示</string>
     <string name="s_dn4ida">返回展商后台</string>
     <string name="s_doboo3">6 位数字</string>
@@ -516,6 +517,7 @@
     <string name="s_qt3xw0">开启后展商可以重新审核已处理的报名；无需审核的展会提交后直接通过。</string>
     <string name="s_qtyy0e">危险操作</string>
     <string name="s_rlbden">表单字符数上限</string>
+    <string name="s_rn5blf">登录失败</string>
     <string name="s_rss9j6">提交后可在“我的报名”查看审核状态。</string>
     <string name="s_rvg0ck">验证并登录</string>
     <string name="s_rxiw2v">填写内容</string>

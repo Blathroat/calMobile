@@ -43,7 +43,16 @@ class NavigationCoordinator {
    * 记录这一次切换的方向。
    * 底部导航之间是平级切换，按「原地替换」处理，不做左右滑动的观感。
    */
-  track(to: { path: string; meta?: Record<string, unknown> }, from: { path: string; meta?: Record<string, unknown> }): void {
+  track(
+    to: { path: string; meta?: Record<string, unknown> },
+    from: { path: string; meta?: Record<string, unknown>; matched?: unknown[] },
+  ): void {
+    // 冷启动的第一次跳转：`from` 是路由的起始位置（没有匹配到任何记录），
+    // 这时不该放「进入下一页」的过渡——首帧应当是静态落地的。
+    if (Array.isArray(from.matched) && from.matched.length === 0) {
+      this.direction.value = 'none';
+      return;
+    }
     const tabbed = to.meta?.tab !== undefined && from.meta?.tab !== undefined;
     if (tabbed) {
       this.direction.value = 'none';

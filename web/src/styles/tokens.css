@@ -410,9 +410,10 @@ label {
     border-top: var(--hairline) solid var(--stroke);
 }
 
-/* 只有几个文字入口的页脚（入口页的注册 / 忘记密码）不需要那条分割线 */
-.page-foot[data-variant="plain"] {
-    border-top: 0;
+/* 入口页：旧版外壳在页面内容外还套了一层 `.app-body`，内容因此比其它页面多收一道
+   `var(--s4)` 内距。这里按旧版实机版式复刻，改动会让入口页与旧版截图对不上。 */
+.page-inset {
+    padding: var(--s4);
 }
 
 /* 卡片内的次级按钮：比标准 .cta 矮一档，字号也更小 */
@@ -473,6 +474,11 @@ label {
     text-align: center;
 }
 
+/* 只让文字居中、子项不居中：入口页的品牌方块按旧版版式留在左侧，标题与说明居中。 */
+.stack[data-align="text"] {
+    text-align: center;
+}
+
 .row {
     display: flex;
     align-items: center;
@@ -485,6 +491,17 @@ label {
 
 .row[data-between="true"] {
     justify-content: space-between;
+}
+
+/* 入口页的文字入口行（注册 / 忘记密码）：居中，并保持旧版的上下留白。
+   `data-flush` 是第二行，只留左右内距，避免两行之间被撑开。 */
+.auth-entry {
+    justify-content: center;
+    padding: var(--s3);
+}
+
+.auth-entry[data-flush="true"] {
+    padding: 0 var(--s3);
 }
 
 .row-top {
@@ -604,13 +621,13 @@ label {
     background: var(--accent);
 }
 
-/* 入口页的品牌标记：线框的 .brand-mark（圆角方底 + 品牌首字） */
+/* 入口页的品牌标记：线框的 .brand-mark（圆角方底 + 品牌首字）。
+   旧版的入口 hero 用的是 `.ph-img`（无描边、只填底色），这里保持一致。 */
 .brand-mark {
     width: 84px;
     height: 84px;
     display: grid;
     place-items: center;
-    border: var(--hairline) solid var(--stroke);
     border-radius: var(--r-panel);
     background: var(--f2);
     color: var(--frame);

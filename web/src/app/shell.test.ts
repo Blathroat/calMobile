@@ -12,6 +12,7 @@ import { createMemoryHistory, type Router } from 'vue-router';
 import App from './App.vue';
 import { createAppRouter } from './router';
 import { tabItems } from './shell';
+import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
 import { navigation } from './navigation';
 
@@ -96,6 +97,9 @@ describe('app shell', () => {
       // 内容区的直接子元素是路由容器：它承载页面切换动画与纵向排布。
       const surface = container.querySelector('.app-body > .page-surface');
       expect(surface, `${path} 的内容没有落进 .page-surface`).not.toBeNull();
+      // 页脚槽必须由外壳提供：页面用 `<Teleport defer to="#app-foot">` 投递固定操作区，
+      // 槽位缺失时 Vue 会直接抛「Failed to locate Teleport target」。
+      expect(shell?.querySelector(':scope > #app-foot'), `${path} 缺少页脚槽`).not.toBeNull();
       // 旧容器的类名不得再出现（`migration.css` 那套兼容层已删除）。
       expect(container.querySelector('.page')).toBeNull();
     } finally {
@@ -147,17 +151,40 @@ describe('app shell', () => {
     }
   });
 
-  it('页脚槽承接页面投递的固定操作区', async () => {
-    // 登录页第一步固定投递「注册 / 忘记密码」页脚，这条用例锁住 Teleport 目标可达。
+  it('固定操作区投递到页脚槽，入口页的文字入口随内容滚动', async () => {
+    // 入口页按旧版版式：注册 / 忘记密码跟在表单后面，不占页脚槽。
     const login = await mountRoute('/login');
     try {
       const foot = login.container.querySelector('#app-foot');
       expect(foot).not.toBeNull();
-      expect(foot?.querySelector('.page-foot')).not.toBeNull();
-      // 页脚是外壳网格的第三行，不落在滚动内容区里。
+      expect(foot?.childElementCount).toBe(0);
       expect(login.container.querySelector('.app-body .page-foot')).toBeNull();
+      expect(login.container.querySelectorAll('.page-surface .auth-entry')).toHaveLength(2);
     } finally {
       unmount(login.container, login.app);
+    }
+
+    // 设置页展开「修改密码」后才投递固定操作区：它必须落在页脚槽，不落在滚动内容区里。
+    // 这一页两组取数都失败时只画错误块（没有可展开的分区），所以先让它们成功返回。
+    const profileSpy = vi.spyOn(api.profile, 'get').mockResolvedValue({});
+    const notificationsSpy = vi.spyOn(api.profile, 'notifications').mockResolvedValue({});
+    const settings = await mountRoute('/settings');
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await nextTick();
+      const foot = settings.container.querySelector('#app-foot');
+      expect(foot?.childElementCount).toBe(0);
+      const entry = settings.container.querySelector<HTMLElement>('.page-surface .row-card');
+      expect(entry, '/settings 没有渲染出可展开的分区').not.toBeNull();
+      entry?.click();
+      await nextTick();
+      await nextTick();
+      expect(settings.container.querySelector('#app-foot .page-foot')).not.toBeNull();
+      expect(settings.container.querySelector('.app-body .page-foot')).toBeNull();
+    } finally {
+      unmount(settings.container, settings.app);
+      profileSpy.mockRestore();
+      notificationsSpy.mockRestore();
     }
 
     // 详情页在没有数据时不投递页脚，槽位保持空（CSS 用 :empty 收起整行）。
