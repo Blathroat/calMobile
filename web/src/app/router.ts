@@ -16,6 +16,9 @@
  * 先是登录再是角色 / 能力：未登录时权限表为空而 `can()` 默认放行，若先判能力就会把匿名用户
  * 直接放进需要权限的页面。
  *
+ * **访客（guest）只能待首页**：访客不是登录态（`loggedIn === false`），所以除 `/login`、
+ * `/register`、`/forgot-password`、`/home` 之外的每一屏都写了 `requiresAuth`。
+ *
  * 坑：
  * - `roles` / `capability` 漏写不报错，但等于对所有登录用户开放，记得成对检查；
  * - 越权一律回 `/home`，没有 403 页；`/home` 自身不要求登录，所以不会出现互相弹跳的死循环；
@@ -70,6 +73,12 @@ declare module 'vue-router' {
     bodyPad?: 'none';
     /** 内容区水平居中（空状态、表单页用） */
     bodyAlign?: 'center';
+    /**
+     * 换 query 时不重建页面：外壳平时用 `fullPath` 作键，`?tab=` 这类只改 query 的切换
+     * 会整页重新挂载、数据重取一遍（表现为分区切换闪一下）。声明这一项的页面自己
+     * `watch` query 完成切换，外壳改用 `path` 作键。目前只有管理后台用它。
+     */
+    queryInPlace?: boolean;
   }
 }
 
@@ -90,10 +99,11 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
       { path: '/register', component: RegisterPage, meta: { title: 's_1n008jl', back: true, bodyGap: 'tight' } },
       { path: '/forgot-password', component: ForgotPasswordPage, meta: { title: 's_1qksguo', back: true, bodyGap: 'tight' } },
       { path: '/home', component: HomePage, meta: { title: 's_1ow5v10', tab: 'home', bodyGap: 'tight' } },
-      // 搜索、详情、用户主页不要求登录：访客也要能浏览展会
-      { path: '/search', component: SearchPage, meta: { title: 's_367f3v', back: true } },
-      { path: '/user-public/:nickname', component: UserPublicPage, meta: { title: 's_1g1m28r', back: true } },
-      { path: '/detail/:id', component: DetailPage, meta: { title: 's_1ve1f4n', back: true, bodyGap: 'tight' } },
+      // 首页是访客唯一的去处：日历与当天展会对所有人开放，其余页面一律要求登录
+      // （访客登录页的「以访客身份浏览」落点就是它）。要放开某一屏，去掉 requiresAuth 即可。
+      { path: '/search', component: SearchPage, meta: { title: 's_367f3v', back: true, requiresAuth: true } },
+      { path: '/user-public/:nickname', component: UserPublicPage, meta: { title: 's_1g1m28r', back: true, requiresAuth: true } },
+      { path: '/detail/:id', component: DetailPage, meta: { title: 's_1ve1f4n', back: true, bodyGap: 'tight', requiresAuth: true } },
       {
         path: '/registration-form/:id',
         component: RegistrationFormPage,
@@ -122,8 +132,9 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
       { path: '/review', component: ReviewPage, meta: { title: 's_7xrrf0', back: true, requiresAuth: true, roles: ['exhibitor', 'admin'] } },
       { path: '/checkin', component: CheckinPage, meta: { title: 's_zqzoiq', back: true, requiresAuth: true, roles: ['exhibitor', 'admin'] } },
       { path: '/rich-editor', component: RichEditorPage, meta: { title: 's_28v8q', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
-      // 管理后台只对 admin 开放；`tab: 'admin'` 让底部导航出现管理项
-      { path: '/admin', component: AdminPage, meta: { title: 's_cit5ds', tab: 'admin', bodyGap: 'tight', requiresAuth: true, roles: ['admin'] } },
+      // 管理后台只对 admin 开放；`tab: 'admin'` 让底部导航出现管理项。
+      // `queryInPlace`：三个分区写在同一屏里，切分区不该把整页重新挂载。
+      { path: '/admin', component: AdminPage, meta: { title: 's_cit5ds', tab: 'admin', bodyGap: 'tight', requiresAuth: true, roles: ['admin'], queryInPlace: true } },
     ],
   });
 

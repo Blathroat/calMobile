@@ -241,6 +241,7 @@
     <string name="s_1ro3s85">用注册邮箱收验证码，验证通过后设置新密码。</string>
     <string name="s_1rt1gs6">报名状态</string>
     <string name="s_1s57su3">0 条结果</string>
+    <string name="s_1s8cf91">请求已被取消</string>
     <string name="s_1sd7orv">关键词</string>
     <string name="s_1sfkhdl">展会已保存</string>
     <string name="s_1sgquew">六</string>
@@ -494,7 +495,6 @@
     <string name="s_mu5yl5">已启用：报名通过后展示报名码，核销后状态变为“已参加”。</string>
     <string name="s_n6lkn3">创建账号</string>
     <string name="s_n6zeza">提交前确认展会名称与报名方式。</string>
-    <string name="s_nrshpm">访客可以浏览详情，报名前需要先登录。</string>
     <string name="s_nsnwn6">导出内容为当前展会列表，文件通过系统保存对话框写入。</string>
     <string name="s_nynzo5">立即报名</string>
     <string name="s_o51o77">正在识别，请把报名码放进取景框。</string>

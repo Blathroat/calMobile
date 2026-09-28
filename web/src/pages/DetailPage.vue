@@ -83,7 +83,7 @@ function footerHint(): string {
     return `${item.modeLabel || item.status}：该展会当前不接受报名。`;
   }
   if (registerLimited.value) return t('s_1tanmo5');
-  if (!canRegister.value) return t('s_nrshpm');
+  // 访客进不来这一页（守守卫按「访客只可访问首页」处理），所以这里不再区分「先登录」的引导。
   return t('s_rss9j6');
 }
 
