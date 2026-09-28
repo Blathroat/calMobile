@@ -23,7 +23,6 @@ export interface ExhibitionRow {
   exhibition_date?: string | null;
   exhibitor?: string | null;
   exhibitor_note?: string | null;
-  highlights?: unknown;
   image_uri?: string | null;
   registration_start?: string | null;
   registration_end?: string | null;
@@ -114,7 +113,6 @@ export function exhibitionPayload(row: ExhibitionRow) {
     dateLabel: labels.dateLabel(row.exhibition_date),
     exhibitor: row.exhibitor || '',
     exhibitorNote: row.exhibitor_note || '',
-    highlights: Array.isArray(row.highlights) ? row.highlights : [],
     imageUri: row.image_uri || '',
     registrationStart: row.registration_start || '',
     registrationEnd: row.registration_end || '',

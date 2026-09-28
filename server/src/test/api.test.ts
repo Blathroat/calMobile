@@ -888,7 +888,6 @@ test('展会列表字段覆盖页面渲染所需的全部字段', async () => {
     'dateLabel',
     'exhibitor',
     'exhibitorNote',
-    'highlights',
     'imageUri',
     'registrationStart',
     'registrationEnd',
@@ -982,7 +981,6 @@ test('展会的增删改受角色与归属限制', async () => {
       category: '智能家居',
       status: '需审核',
       description: '契约测试用',
-      highlights: ['测试'],
     },
     { token: tokens.exhibitor.token },
   );

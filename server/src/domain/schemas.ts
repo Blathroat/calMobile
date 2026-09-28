@@ -260,7 +260,6 @@ export function exhibitionInputSchema(
     registration_end?: string | null;
     description?: string | null;
     description_format?: string | null;
-    highlights?: unknown;
     image_uri?: string | null;
     exhibitor_note?: string | null;
     qr_enabled?: boolean | null;
@@ -279,7 +278,6 @@ export function exhibitionInputSchema(
       registrationEnd: isoDateSchema({ label: '报名截止日期' }),
       description: inputString,
       descriptionFormat: descriptionFormatSchema(),
-      highlights: stringListSchema({ label: '展会亮点' }),
       imageUri: inputString,
       exhibitorNote: inputString,
       qrEnabled: boolSchema(false),
@@ -333,7 +331,6 @@ export function exhibitionInputSchema(
         registrationEnd,
         description,
         descriptionFormat,
-        highlights: source.highlights ?? (Array.isArray(existing?.highlights) ? existing?.highlights : []),
         imageUri: source.imageUri ?? existing?.image_uri ?? '',
         exhibitorNote: source.exhibitorNote ?? (creating ? '主办方公开信息' : (existing?.exhibitor_note ?? '')),
         qrEnabled: source.qrEnabled ?? Boolean(existing?.qr_enabled),

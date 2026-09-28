@@ -47,11 +47,6 @@ const viewerOpen = ref(false);
 /** 日历状态只读一次：数据刷新会重画正文，但不该重复请求。 */
 let calendarRequested = false;
 
-const highlights = computed<string[]>(() => {
-  const list = exhibition.value?.highlights;
-  return Array.isArray(list) ? list.map((item) => String(item)) : [];
-});
-
 /** 简介：HTML 走清洗，Markdown 走渲染入口，空简介给出说明而不是空白。 */
 const description = computed(() => {
   const item = exhibition.value;
@@ -256,13 +251,6 @@ onMounted(() => { void load(); });
       <div v-if="description.html" class="rich-content" v-html="description.html" />
       <p v-else-if="description.text" class="row-meta">{{ description.text }}</p>
       <p v-else class="muted">{{ t('s_s61azp') }}</p>
-    </div>
-
-    <div v-if="highlights.length > 0" class="stack" data-gap="sm">
-      <span class="section-label">{{ t('s_4xp7ge') }}</span>
-      <div class="cluster">
-        <StatusTag v-for="item in highlights" :key="item" :text="item" tone="muted" />
-      </div>
     </div>
 
     <div class="stack" data-gap="sm">

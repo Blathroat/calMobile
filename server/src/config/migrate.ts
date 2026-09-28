@@ -381,6 +381,16 @@ export const STEPS: MigrationStep[] = [
         ALTER TABLE users ADD COLUMN IF NOT EXISTS ui_theme INTEGER;
         `,
   },
+  {
+    // 展会亮点整块下线：详情页不再展示，表单也从没有过编辑入口（它一直是示例数据里的摆设），
+    // 于是把列删掉。0001 里仍然建了这列并有示例值——那一步已经发布过，按本文件的约定不回改；
+    // 全新库会先建后删，存量库只执行这里的 DROP。
+    // `IF EXISTS` 让这一步可以反复执行。
+    id: '0008-drop-exhibition-highlights',
+    sql: `
+        ALTER TABLE exhibitions DROP COLUMN IF EXISTS highlights;
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
@@ -506,7 +516,6 @@ export async function seed(): Promise<void> {
         status: 'optional',
         category: '智能家居',
         description: '# 展会亮点\n\n- 智能门锁与全屋方案\n- 节能家电现场体验',
-        highlights: ['智能门锁', '全屋方案', '节能家电'],
         registerFrom: -14,
         registerTo: 3,
         qrEnabled: true,
@@ -522,7 +531,6 @@ export async function seed(): Promise<void> {
         status: 'review',
         category: '物流技术',
         description: 'AGV、仓储机器人与冷链物流方案。',
-        highlights: ['AGV', '仓储机器人'],
         registerFrom: -7,
         registerTo: 10,
         qrEnabled: false,
@@ -538,7 +546,6 @@ export async function seed(): Promise<void> {
         status: 'closed',
         category: '医疗健康',
         description: '医疗 AI、远程诊疗和穿戴设备专题。',
-        highlights: ['医疗 AI', '穿戴设备'],
         registerFrom: -30,
         registerTo: -1,
         qrEnabled: false,
@@ -554,7 +561,6 @@ export async function seed(): Promise<void> {
         status: 'display',
         category: '新材料',
         description: '碳纤维、石墨烯和可降解材料展示。',
-        highlights: ['碳纤维', '石墨烯'],
         registerFrom: null,
         registerTo: null,
         qrEnabled: false,
@@ -566,17 +572,17 @@ export async function seed(): Promise<void> {
       await client.query(
         `
                 INSERT INTO exhibitions (id, title, venue, time, exhibition_date, status, category,
-                    description, description_format, highlights, exhibitor_note,
+                    description, description_format, exhibitor_note,
                     registration_start, registration_end, qr_enabled, exhibitor_id)
-                VALUES ($1, $2, $3, $4, CURRENT_DATE + $5::int, $6, $7, $8, 'md', $9, $10,
+                VALUES ($1, $2, $3, $4, CURRENT_DATE + $5::int, $6, $7, $8, 'md', $9,
+                    CASE WHEN $10::int IS NULL THEN NULL ELSE CURRENT_DATE + $10::int END,
                     CASE WHEN $11::int IS NULL THEN NULL ELSE CURRENT_DATE + $11::int END,
-                    CASE WHEN $12::int IS NULL THEN NULL ELSE CURRENT_DATE + $12::int END,
-                    $13, $14)
+                    $12, $13)
                 ON CONFLICT (id) DO UPDATE SET
                     title = EXCLUDED.title, venue = EXCLUDED.venue, time = EXCLUDED.time,
                     exhibition_date = EXCLUDED.exhibition_date, status = EXCLUDED.status,
                     category = EXCLUDED.category, description = EXCLUDED.description,
-                    highlights = EXCLUDED.highlights, exhibitor_note = EXCLUDED.exhibitor_note,
+                    exhibitor_note = EXCLUDED.exhibitor_note,
                     registration_start = EXCLUDED.registration_start,
                     registration_end = EXCLUDED.registration_end,
                     qr_enabled = EXCLUDED.qr_enabled, exhibitor_id = EXCLUDED.exhibitor_id,
@@ -591,7 +597,6 @@ export async function seed(): Promise<void> {
           item.status,
           item.category,
           item.description,
-          JSON.stringify(item.highlights),
           item.note,
           item.registerFrom,
           item.registerTo,

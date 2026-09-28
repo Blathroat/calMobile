@@ -9,7 +9,7 @@
 /** 展会：字段 + 展商昵称 + 报名数 + 收集项数。 */
 export const EXHIBITION_COLUMNS = `
     e.id, e.title, e.venue, e.time, e.category, e.description, e.description_format,
-    e.highlights, e.image_uri, e.exhibitor_note, e.qr_enabled, e.exhibitor_id, e.status,
+    e.image_uri, e.exhibitor_note, e.qr_enabled, e.exhibitor_id, e.status,
     to_char(e.exhibition_date, 'YYYY-MM-DD')                AS exhibition_date,
     EXTRACT(YEAR FROM e.exhibition_date)::int               AS year,
     EXTRACT(MONTH FROM e.exhibition_date)::int              AS month,

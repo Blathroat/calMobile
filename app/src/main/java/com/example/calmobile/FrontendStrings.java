@@ -350,7 +350,6 @@ final class FrontendStrings {
             "s_4odn3m",
             "s_4okt0a",
             "s_4wwqgm",
-            "s_4xp7ge",
             "s_50ih74",
             "s_533bde",
             "s_5iff2f",
