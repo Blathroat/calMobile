@@ -128,11 +128,13 @@ test('对外部署的三项配置：域名归一化、FORCE_HTTPS 与 HSTS 取�
   assert.equal(defaults.forceHttps, false, '直连部署默认不跳转');
   assert.equal(defaults.hstsMaxAge, 15_552_000, 'HSTS 默认 180 天');
 
-  const configured = parseEnv(validEnv({
-    PUBLIC_BASE_URL: 'https://app.example.com/',
-    FORCE_HTTPS: '1',
-    HSTS_MAX_AGE: '600',
-  })).runtime;
+  const configured = parseEnv(
+    validEnv({
+      PUBLIC_BASE_URL: 'https://app.example.com/',
+      FORCE_HTTPS: '1',
+      HSTS_MAX_AGE: '600',
+    }),
+  ).runtime;
   assert.equal(configured.publicBaseUrl, 'https://app.example.com', '去掉尾斜杠');
   assert.equal(configured.forceHttps, true);
   assert.equal(configured.hstsMaxAge, 600);

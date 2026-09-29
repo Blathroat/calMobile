@@ -31,7 +31,12 @@ import {
   regenerateBackupCodes,
   clearSecondFactors,
 } from '../domain/two-factor.js';
-import { readNotificationPreferences, saveNotificationPreferences, readServerSettings, saveSeenHint } from '../domain/settings.js';
+import {
+  readNotificationPreferences,
+  saveNotificationPreferences,
+  readServerSettings,
+  saveSeenHint,
+} from '../domain/settings.js';
 import { revokeAllForUser } from '../domain/session.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { clientIp } from '../http/client-ip.js';

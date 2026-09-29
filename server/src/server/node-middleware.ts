@@ -78,9 +78,8 @@ export function applyHeaders(c: Context, entries: readonly (readonly [string, st
 /** 安全响应头中间件（见文件头说明：必须落在 socket 上）。 */
 export function securityHeaders(hstsMaxAge = 15_552_000): MiddlewareHandler {
   // HSTS 单独拼：`HSTS_MAX_AGE=0` 表示不下发（域名还没定、或本地用 http 调试时）。
-  const headers = hstsMaxAge > 0
-    ? SECURITY_HEADERS
-    : SECURITY_HEADERS.filter((header) => header[0] !== 'Strict-Transport-Security');
+  const headers =
+    hstsMaxAge > 0 ? SECURITY_HEADERS : SECURITY_HEADERS.filter((header) => header[0] !== 'Strict-Transport-Security');
   return async function securityHeaders(c, next) {
     applyHeaders(c, headers);
     await next();
@@ -97,7 +96,11 @@ export function securityHeaders(hstsMaxAge = 15_552_000): MiddlewareHandler {
 export function requireHttps(): MiddlewareHandler {
   return async function requireHttps(c, next) {
     const forwarded = c.req.header('x-forwarded-proto');
-    const proto = String(forwarded || '').split(',')[0]?.trim().toLowerCase() ?? '';
+    const proto =
+      String(forwarded || '')
+        .split(',')[0]
+        ?.trim()
+        .toLowerCase() ?? '';
     if (proto === 'http') {
       const host = String(c.req.header('host') || '').trim();
       if (host) {

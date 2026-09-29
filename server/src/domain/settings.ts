@@ -285,7 +285,9 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   if (Object.prototype.hasOwnProperty.call(source, 'defaultCover')) {
     // 存的是媒体短 URL（与展会封面同一种值），这里只做长度与协议的形状校验：
     // 具体怎么存、能否访问由原生 / 部署方的媒体服务负责，后端不解析图片。
-    const cover = String(source.defaultCover ?? '').trim().slice(0, 500);
+    const cover = String(source.defaultCover ?? '')
+      .trim()
+      .slice(0, 500);
     if (cover && !/^(https?:)?\/\//.test(cover) && !cover.startsWith('data:image/')) {
       throw badRequest('缺省封面需要是一个可访问的图片地址');
     }
@@ -293,7 +295,10 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   }
   if (Object.prototype.hasOwnProperty.call(source, 'maxFutureExhibitions')) {
     // 0 表示不限；上限 100 是防呆（管理端填错位数不至于把展商全锁死）。
-    next.exhibitor = { ...next.exhibitor, maxFutureExhibitions: clampInt(source.maxFutureExhibitions, next.exhibitor.maxFutureExhibitions, [0, 100]) };
+    next.exhibitor = {
+      ...next.exhibitor,
+      maxFutureExhibitions: clampInt(source.maxFutureExhibitions, next.exhibitor.maxFutureExhibitions, [0, 100]),
+    };
   }
 
   return next;

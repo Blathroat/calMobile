@@ -149,7 +149,10 @@ test('HSTS 默认下发，HSTS_MAX_AGE=0 时不下发', async () => {
 test('FORCE_HTTPS 把明文请求 308 跳到 https，已是 https 的照常处理', async () => {
   const server = await serve({ forceHttps: true });
 
-  const plain = await hit(server.port, 'GET', '/ping', undefined, { 'x-forwarded-proto': 'http', host: 'app.example.com' });
+  const plain = await hit(server.port, 'GET', '/ping', undefined, {
+    'x-forwarded-proto': 'http',
+    host: 'app.example.com',
+  });
   assert.equal(plain.status, 308);
   assert.equal(plain.headers.location, 'http://app.example.com/ping'.replace('http://', 'https://'));
 

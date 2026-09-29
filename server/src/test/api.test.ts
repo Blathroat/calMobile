@@ -2600,8 +2600,9 @@ test('展商可同时筹备的展会数上限：超出后不能再新建，管�
     // 不然第一条就会撞额度（失败原因也会是这句，看不出是测试写错还是规则生效）。
     const listed = await get('/api/v1/exhibitions', { token: tokens.exhibitor.token });
     const today = new Date().toISOString().slice(0, 10);
-    const mine = (listed.body as { exhibitor: string; date: string }[])
-      .filter((item) => item.exhibitor === 'exhibitor' && item.date >= today).length;
+    const mine = (listed.body as { exhibitor: string; date: string }[]).filter(
+      (item) => item.exhibitor === 'exhibitor' && item.date >= today,
+    ).length;
     await put('/api/v1/settings', { maxFutureExhibitions: mine + 1 }, { token: tokens.admin.token });
 
     const first = await post('/api/v1/exhibitions', payload, { token: tokens.exhibitor.token });
@@ -2645,7 +2646,8 @@ test('一次性提示与账号绑定：记下之后 bootstrap 会带回来', asy
   assert.strictEqual(bad.body.ok, false, '非法提示标识应当被拒绝');
 });
 
-test('老库的 app_settings.media 缺 videoSizeMb 时用默认值兜底', async () => {  // 直接写一条「加这个键之前」的 media：只有三个键，没有任何 videoSizeMb
+test('老库的 app_settings.media 缺 videoSizeMb 时用默认值兜底', async () => {
+  // 直接写一条「加这个键之前」的 media：只有三个键，没有任何 videoSizeMb
   await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [
     JSON.stringify({ imageCount: 6, imageSizeMb: 4, videoCount: 1 }),
     'media',

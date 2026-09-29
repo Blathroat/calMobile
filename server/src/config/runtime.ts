@@ -107,14 +107,18 @@ export function resolveRuntime(argv: string[] = [], env: EnvLike = {}): Runtime 
 
 /** 对外地址归一化：去空白与尾斜杠，非法值当没配（宁可不显示，也不要显示半截地址）。 */
 export function normalizeBaseUrl(value: unknown): string {
-  const text = String(value ?? '').trim().replace(/\/+$/, '');
+  const text = String(value ?? '')
+    .trim()
+    .replace(/\/+$/, '');
   if (!text) return '';
   return /^https?:\/\/[^\s]+$/i.test(text) ? text : '';
 }
 
 /** HSTS 秒数：缺省 180 天；`0` / `off` / `false` 表示不下发。 */
 function parseHstsMaxAge(value: unknown): number {
-  const text = String(value ?? '').trim().toLowerCase();
+  const text = String(value ?? '')
+    .trim()
+    .toLowerCase();
   if (text === '') return 15_552_000;
   if (FALSY.includes(text)) return 0;
   const seconds = Number.parseInt(text, 10);
