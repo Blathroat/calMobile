@@ -100,7 +100,9 @@ pwsh -File scripts\emu.ps1 logs
 pwsh -File scripts\emu.ps1 motion check
 ```
 
-页面里的接口地址写死 `http://127.0.0.1:3000`（WebView 不允许别的写法），模拟器里的 `127.0.0.1` 又是模拟器自己，因此必须把设备的 3000 端口反向映射到本机。`install` 与 `restart` 会自动确保一次，映射丢了（`adb kill-server`、设备重连、机器重启都会丢）就单独跑 `reverse`；症状是应用里每个请求都失败，看起来像「后端没起」。
+页面里的接口地址写死 `http://127.0.0.1:3000`（WebView 不允许别的写法），模拟器里的 `127.0.0.1` 又是模拟器自己，因此必须把设备的 3000 端口反向映射到本机。**`pnpm dev` 会自动接好并在运行期间看护**（`src/dev/adb-reverse.ts`：每 5 秒查一次，没设备时降到 15 秒，设备晚启动、adb server 重启后都会补回），所以只跑 `pnpm dev` 就能直接调试；日志里出现「已接通设备 tcp:3000 → 本机 tcp:3000（adb reverse）」就说明通了。`ADB_REVERSE=0` 可关掉自动接通。
+
+`emu.ps1 install` 与 `restart` 也会确保一次，服务不是用 `pnpm dev` 起的（例如 `pnpm start`）就单独跑 `reverse`。症状是应用里每个请求都失败、页面提示「连不上后端服务」，看起来像「后端没起」——先看这句提示，再看映射在不在（`adb reverse --list`）。
 
 WebView 文字不一定出现在无障碍树中，点击回归用坐标并保留截图证据；扫码回归可用 `node scripts/decode-shot.js` 检查真实截图像素。
 

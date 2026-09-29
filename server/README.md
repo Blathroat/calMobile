@@ -113,12 +113,23 @@ pwsh -File ..\scripts\db.ps1 psql       # 直接进 psql
 
 ```bash
 # 1. 端口转发：真机与模拟器都适用
+#    pnpm dev 启动时已经自动接好并在运行期间看护（每 5 秒查一次，没设备时降到 15 秒），
+#    所以「只跑 pnpm dev」也能直接调试；这一行是手动兜底（服务不是用 pnpm dev 起的、
+#    或你把自动接通关了的时候）。
 adb reverse tcp:3000 tcp:3000
 
 # 2. 允许混合内容：WebShellActivity 已设 MIXED_CONTENT_ALWAYS_ALLOW
 #    后端改 HTTPS 后应改回 MIXED_CONTENT_NEVER_ALLOW，并去掉 manifest 的
 #    usesCleartextTraffic 与 INTERNET 权限说明
 ```
+
+映射**不写盘**：adb server 重启、设备重连、换一台设备、机器重启都会丢，丢了以后应用里每个请求都失败（页面提示「连不上后端服务」），看起来像「后端没起」——这是最常见的假故障。自动接通的日志长这样：
+
+```
+已接通设备 tcp:3000 → 本机 tcp:3000（adb reverse）；映射丢了会自动补回来。
+```
+
+`ADB_REVERSE=0` 关掉自动接通（要自己管 adb 时）；adb 不在 PATH 时用 `ADB` 指定路径，接了多台设备时用 `ANDROID_SERIAL` 选设备。判定逻辑在 `src/dev/adb-reverse.ts`，只有开发入口 `scripts/dev.ts` 引入它。
 
 改了 `src/*.ts` 之后**必须重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
 

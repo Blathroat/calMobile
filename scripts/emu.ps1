@@ -30,6 +30,9 @@ function Invoke-Adb {
     而模拟器里的 127.0.0.1 是模拟器自己 —— 因此必须把设备的 3000 端口反向映射到本机。
     这个映射**不是永久的**：adb server 重启（`adb kill-server`、设备重连、机器重启）就会丢，
     症状是应用里每个请求都失败、看起来像「后端没起」，所以安装与重启动作都会先确保一次。
+
+    后端用 `pnpm dev` 起的话，它自己会接好并在运行期间补回（server/src/dev/adb-reverse.ts），
+    这里的动作是安装/重启时确保一次、以及服务不是用 `pnpm dev` 起时的手动兜底。
 #>
 function Initialize-Reverse {
     $device = (& $adb devices) | Select-String -Pattern '\sdevice$'
@@ -89,6 +92,7 @@ switch ($Action) {
         Initialize-Reverse
     }
     # adb server 重启后映射会丢：调试中随时跑一次这条即可恢复，不用重新安装。
+    # （pnpm dev 在跑的话它几秒内自己就补回来了，这条留给服务不是它起的时候。）
     'reverse' {
         Initialize-Reverse
     }
