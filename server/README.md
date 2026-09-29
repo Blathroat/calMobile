@@ -1,6 +1,6 @@
 # CalMobile 后端服务
 
-`server/` 是与 Android 客户端并列的 Node.js 服务：**Hono + PostgreSQL**，提供客户端全部数据接口。前端只认 `app/src/main/assets/web/js/core/api.js` 里的动作名，HTTP 形状由该文件的 `ENDPOINTS` 表翻译，因此后端换实现不影响页面。
+`server/` 是与 Android 客户端并列的 Node.js 服务：**Hono + PostgreSQL**，提供客户端全部数据接口。前端只认 `web/src/api/client.ts` 的类型化领域 API，契约测试使用 `web/api-endpoints.mjs` 的动作表，因此后端换实现不影响页面。
 
 后端要求 Node.js ≥ 24.0.0。依赖通过 `pnpm-lock.yaml` 锁定；在受支持的 Node 版本下使用 `pnpm install --frozen-lockfile`。
 
@@ -113,12 +113,23 @@ pwsh -File ..\scripts\db.ps1 psql       # 直接进 psql
 
 ```bash
 # 1. 端口转发：真机与模拟器都适用
+#    pnpm dev 启动时已经自动接好并在运行期间看护（每 5 秒查一次，没设备时降到 15 秒），
+#    所以「只跑 pnpm dev」也能直接调试；这一行是手动兜底（服务不是用 pnpm dev 起的、
+#    或你把自动接通关了的时候）。
 adb reverse tcp:3000 tcp:3000
 
 # 2. 允许混合内容：WebShellActivity 已设 MIXED_CONTENT_ALWAYS_ALLOW
 #    后端改 HTTPS 后应改回 MIXED_CONTENT_NEVER_ALLOW，并去掉 manifest 的
 #    usesCleartextTraffic 与 INTERNET 权限说明
 ```
+
+映射**不写盘**：adb server 重启、设备重连、换一台设备、机器重启都会丢，丢了以后应用里每个请求都失败（页面提示「连不上后端服务」），看起来像「后端没起」——这是最常见的假故障。自动接通的日志长这样：
+
+```
+已接通设备 tcp:3000 → 本机 tcp:3000（adb reverse）；映射丢了会自动补回来。
+```
+
+`ADB_REVERSE=0` 关掉自动接通（要自己管 adb 时）；adb 不在 PATH 时用 `ADB` 指定路径，接了多台设备时用 `ANDROID_SERIAL` 选设备。判定逻辑在 `src/dev/adb-reverse.ts`，只有开发入口 `scripts/dev.ts` 引入它。
 
 改了 `src/*.ts` 之后**必须重启进程**：Node 会缓存已加载的模块，旧进程会继续按改之前的逻辑应答。
 
@@ -248,9 +259,10 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `PUT /users/:id/two-factor` | `users.disable2fa` | 管理员。`{ enabled:false }` 关闭他人两步验证 —— 用户邮箱用不了时**唯一的兜底出口**（幂等；想开启只能由本人过码，所以传 `enabled:true` 会被拒） |
 | `GET /users/public` | `users.public` | 可匿名。`?userId=` 或 `?nickname=`；按隐私开关决定是否返回报名记录 |
 | `GET /search` | `search.query` | 可匿名。`?query=`，返回 `{ query, exhibitions, users, count }` |
-| `GET /settings` | `settings.get` | 可匿名。服务器设置 + 当前用户通知偏好 + 个人外观模式 |
-| `PUT /settings` | `settings.save` | 管理员。扁平字段补丁，只改出现过的项 |
+| `GET /settings` | `settings.get` | 可匿名。服务器设置 + 当前用户通知偏好 + 个人外观模式与配色（`theme.index` 是调用者**实际生效**的下标） |
+| `PUT /settings` | `settings.save` | 管理员。扁平字段补丁，只改出现过的项（`themeIndex` 改的是**全局默认**） |
 | `PUT /settings/ui-mode` | `settings.uiMode` | **登录**。个人外观模式，只接受 `auto / light / dark`；未登录 401（服务器级默认外观不可以被匿名改写） |
+| `PUT /settings/ui-theme` | `settings.uiTheme` | **登录**。个人配色 `{ themeIndex }`，只写自己的 `users.ui_theme`；下标必须是补齐后色板范围内的整数，越界 / 非整数按规则失败（200 + `ok:false`），未登录 401 |
 
 ### 服务状态（无前端动作）
 
@@ -285,6 +297,16 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 
 越界值由 `domain/settings.ts` 的 `applyServerPatch()` **收敛到范围内**（不是拒绝请求），例如 `videoSizeMb: 9999` 保存后读回 500、`0` 读回 1。这几个键都是 `app_settings` 里那一项 JSON 的成员，**不是数据库列**，因此新增上限不需要迁移步骤：`readServerSettings()` 以 `DEFAULT_SETTINGS` 为底、用库里的值覆盖，老库里没有 `videoSizeMb` 时会自动拿到默认值 50，不会给出 `undefined`。
 
+## 应用配色
+
+色板定义在 `src/config/migrate.ts` 的 `THEME_COLORS`（**8 种**）。`app_settings.theme` = `{ index, colors }` 是**服务器级默认**（管理员在「管理-设置」里改），`users.ui_theme` 是**个人选择**（可空）。`GET /bootstrap`（`theme` 块）与 `GET /settings` 用同一份 payload（`readServerSettings()`），前端 `web/src/app/theme.ts` 按 `colors[index]` 写 `--accent*`。
+
+- **下标语义稳定**：`index 0` 是默认的焦糖橙 `#C05621`，新色只能往后追加 —— 下标是存在库里的用户选择，换位置等于换掉所有老用户当前的强调色。原生 `AppSettings.ACCENTS` 与这里逐位对应（前端用同一个下标推 `ui.sync`）。
+- **取值规则**：下发的 `theme.index` 是该调用者**实际生效**的下标 = `users.ui_theme ?? app_settings.theme.index`（`readUiTheme()`）。没选过（`NULL`）或未登录时跟随全局默认，因此老账号在这次改动后强调色不变；管理员改全局默认只影响没选过的账号。前端不用自己分支。
+- **写入规则**：`PUT /settings/ui-theme` 只写调用者自己的 `users.ui_theme`，与 `PUT /settings/ui-mode` 对称，两者都要求登录。下标按**补齐后**的色板长度判定，越界 / 非整数按规则失败（200 + `ok:false`）而不是静默夹取 —— 配色是色板上的枚举选择，夹到边界会把「点错了」伪装成「保存成功」。（`PUT /settings` 的全局 `themeIndex` 仍是旧的夹取口径。）
+- **老库升级**：`app_settings` 的默认值是「缺项才写」（seed 里 `ON CONFLICT DO NOTHING`），所以只改 `DEFAULT_SETTINGS` 不会影响老库。迁移 `0006-theme-palette-8` 把已存的 `theme.colors` 补齐（保留原有项、按默认色板追加缺的新色），幂等且不动 `index`；`0007-user-ui-theme` 加 `users.ui_theme`（`ADD COLUMN IF NOT EXISTS`，可反复执行）。`readServerSettings()` 还会用 `normalizeThemeColors()` 兜底，库里的色板非法 / 重复 / 缺项时也只会下发完整的 8 色。
+- **越界收敛**：全局 `themeIndex` 按**补齐后**的色板长度夹到 `[0, colors.length - 1]`，不是拒绝请求；老库里被手工改大的 `index` 在读取时同样收敛。
+
 ## 业务规则（服务端兜住的部分）
 
 这些规则以前只在页面里，改接口就能绕过；现在服务端也校验一遍：
@@ -302,7 +324,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 - **密码**：bcrypt 哈希存储；改密码后撤销该用户全部刷新令牌。登录时账号不存在也走一次 bcrypt（对固定的哑哈希比对），避免用「立即返回」与「比对后返回」的耗时差枚举出哪些用户名真实存在。
 - **登录限流**：`/auth/login` 与 `/auth/register` 按「IP + 用户名」内存滑动窗口限速——**只统计失败**（4xx 或 200 + `ok:false`），5 分钟内失败 10 次之后给 429，挡住脚本化撞库；成功登录不计数，否则连着登录十来次就会把自己关在门外。单进程内存实现，多实例部署时换共享存储。
 - **刷新令牌轮换**：撤销与校验合成一条条件更新（`UPDATE … WHERE revoked_at IS NULL` 并检查 `rowCount`），同一个刷新令牌并发用两次时只有一个能换到新令牌，另一个按「登录状态已失效」处理。
-- **权限**：访客不能报名与编辑；普通用户不能碰展会配置与用户管理；展商只能管理自己举办的展会；服务器设置与个人外观模式都要登录（服务器设置还要求管理员）。
+- **权限**：访客不能报名与编辑；普通用户不能碰展会配置与用户管理；展商只能管理自己举办的展会；服务器设置（含全局配色默认值）要管理员，个人外观模式与个人配色都要登录。
 - **受限账号**（`users.status = 'limited'`）：管理员在「用户管理」里设置受限后，被判定的操作各给 403 + 一句可展示的文案 —— **不能报名**（`POST /registrations` →「账号已被限制，不能报名」）、**不能发布展会**（`POST /exhibitions` →「账号已被限制，不能发布展会」）、**不能编辑 / 删除展会**（`PUT` / `DELETE /exhibitions/:id` →「账号已被限制，不能修改展会」/「账号已被限制，不能删除展会」，自己举办的展会也不行）、**不能改报名设置**（`PUT /exhibitions/:id/status` 暂停恢复报名与 `PUT /exhibitions/:id/fields` 报名收集项 →「账号已被限制，不能修改报名设置」）、**不能核销**（`POST /checkin` →「账号已被限制，不能核销」）、**不能编辑个人信息**（`PUT /profile` →「账号已被限制，不能编辑个人信息」）。**仍然可用**：登录、浏览与查询（展会列表 / 月视图 / 详情 / 收集项读取）、审核报名（`PUT /review/:id/status` 照常可用）、`PUT /profile/notifications`（通知偏好不是个人信息）、`POST /profile/password`（改密码属于账号安全）、撤销自己的报名。**管理员不受限**（否则没人能解除限制），判定集中在 `domain/permissions.ts` 的 `isLimited()` / `assertNotLimited()`（文案表 `LIMITED_ACTIONS`）；受限拦截一律挂在 `mutate()` 之外、并排在角色检查之前，因此受限的普通用户拿到的是「账号已被限制」，而不是「只有展商或管理员可以执行此操作」。`capabilities(role, status)` 同步给出 `can.register = false`、`can.profile = false`、`can.limited = true`，前端据此置灰按钮并说明原因。封禁（`banned`）行为不变，仍然在认证层就拒绝。
 
 ## 数据模型

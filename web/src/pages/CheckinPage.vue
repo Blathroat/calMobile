@@ -1,0 +1,483 @@
+<script setup lang="ts">
+/**
+ * 展商 · 核销报名码
+ *
+ * 展会在「编辑展会」里开启「是否启用报名二维码」后，报名审核通过的用户会在报名详情
+ * 看到报名码。展商在本页用摄像头取景，由内置的 jsQR 在画面里实时识别二维码，
+ * 识别成功后调用 `checkin` 把报名状态改为「已参加」。
+ *
+ * 摄像头不可用（未授权、设备没有摄像头、内核不支持 getUserMedia）时保留「手动输入报名码」
+ * 这条降级链路，核销功能仍然可用；识别库按需加载，不拖慢启动，也只在真正进本页才拉取。
+ * 离开页面一定要释放摄像头，否则后台会一直占用相机。
+ */
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { api } from '@/app/runtime';
+import { useSessionStore } from '@/stores/session';
+import { device } from '@/services/device-services';
+import { loadQrDecoder } from '@/services/vendor';
+import { openSheet } from '@/services/sheet';
+import { toast } from '@/services/toast';
+import { REGISTRATION_STATUS } from '@/services/status';
+import { useHint } from '@/composables/useHint';
+import ManualCodePanel from '@/components/ManualCodePanel.vue';
+import StateBlock from '@/components/StateBlock.vue';
+import SkeletonBlock from '@/components/SkeletonBlock.vue';
+import StatusTag from '@/components/StatusTag.vue';
+import type { ApiResult, JsonObject } from '@/api/types';
+import { t } from '@/i18n';
+
+/** 报名码前缀，与原生 WebAppActions.REGISTRATION_CODE_PREFIX 保持一致。 */
+const CODE_PREFIX = 'CALMOBILE-CHECKIN|';
+const DECODE_WIDTH = 640;
+/** 识别节流：约每 120ms 解一帧，既跟得上手势又不占满 CPU。 */
+const DECODE_INTERVAL = 120;
+interface JsQrResult { data?: string }
+type JsQrDecoder = (data: Uint8ClampedArray, width: number, height: number, options?: { inversionAttempts?: string }) => JsQrResult | null;
+
+/** 取景区只表达一件事：当前是取景、识别中，还是某一步失败 / 已停止。 */
+type StageMode = 'idle' | 'live' | 'error' | 'stopped' | 'detected';
+
+interface CheckInOutcome {
+  ok: boolean;
+  statusText: string;
+  message: string;
+  record: JsonObject;
+}
+
+const router = useRouter();
+const session = useSessionStore();
+
+/** 受限账号不能核销（后端 `POST /checkin` 直接 403）：整页换成说明，也不去加载识别库。 */
+const limited = computed(() => session.limited === true);
+const videoEl = ref<HTMLVideoElement>();
+const canvasEl = ref<HTMLCanvasElement>();
+const startButton = ref<HTMLButtonElement>();
+/** 展商后台那条「怎么核销」的一次性提示：进过这一页就记为已读。 */
+const { dismiss: dismissCheckinHint } = useHint('exhibitor-checkin');
+
+const stageMode = ref<StageMode>('idle');
+const stageTitle = ref(t('s_zkl7t2'));
+const stageDescription = ref(t('s_15lwowq'));
+
+/** 状态区：行内提示（notice）、核销请求中的骨架、以及整段失败时的错误块。 */
+const statusText = ref('');
+const statusTone = ref<'neutral' | 'error'>('neutral');
+const statusLoading = ref(false);
+const verifyError = ref<{ title: string; description: string } | null>(null);
+
+const outcome = ref<CheckInOutcome | null>(null);
+const outcomeRecord = computed<JsonObject>(() => outcome.value?.record ?? {});
+
+const starting = ref(false);
+const scanning = ref(false);
+const submitting = ref(false);
+const decoderReady = ref(false);
+const decoderFailed = ref(false);
+
+/** 手动输入面板的数据：输入值与原位错误都放在这个响应式对象里（面板组件按引用读写）。 */
+const manual = reactive({ code: '', error: '' });
+
+let stream: MediaStream | null = null;
+let frameHandle = 0;
+let lastDecodeAt = 0;
+/** 页面被替换后置为 false：异步步骤（权限、getUserMedia）回来时据此放弃取景。 */
+let alive = true;
+
+onMounted(() => {
+  // 进到核销页就说明展商后台那条「怎么核销」的提示已经教到位了：不管从哪个入口进来
+  // （后台按钮、深链、返回键回来）都把它记为已读，下次不再显示。
+  void dismissCheckinHint();
+  if (limited.value) return;
+  void loadQrDecoder()
+    .then(() => { decoderReady.value = true; })
+    .catch((reason: unknown) => {
+      // 取景仍然可用，但解不了码；页面会提示改用手动输入。
+      decoderFailed.value = true;
+      console.warn(`二维码识别组件加载失败：${reason instanceof Error ? reason.message : String(reason)}`);
+    });
+});
+
+onBeforeUnmount(() => {
+  alive = false;
+  releaseCamera();
+});
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function clearStatus(): void {
+  statusText.value = '';
+  statusTone.value = 'neutral';
+  statusLoading.value = false;
+  verifyError.value = null;
+}
+
+function showNotice(text: string, tone: 'neutral' | 'error' = 'neutral'): void {
+  clearStatus();
+  statusText.value = text;
+  statusTone.value = tone;
+}
+
+function showLoadingStatus(): void {
+  clearStatus();
+  statusLoading.value = true;
+}
+
+function showVerifyError(title: string, description: string): void {
+  clearStatus();
+  verifyError.value = { title, description };
+}
+
+function setStage(mode: StageMode, title: string, description: string): void {
+  stageMode.value = mode;
+  stageTitle.value = title;
+  stageDescription.value = description;
+}
+
+function stageIcon(): string {
+  return stageMode.value === 'detected' ? 'check' : 'image';
+}
+
+/** 识别到的内容是不是本应用的报名码：不是也要说清楚，而不是笼统失败。 */
+function previewOf(raw: string): string {
+  return String(raw || '').startsWith(CODE_PREFIX) ? t('s_shtqx3') : t('s_cq6xrf');
+}
+
+// ── 取景与识别 ─────────────────────────────────────────────────
+
+async function toggleScan(): Promise<void> {
+  if (scanning.value) {
+    stopScan();
+    return;
+  }
+  if (decoderFailed.value) {
+    showNotice(t('s_dyicmi'), 'error');
+    return;
+  }
+  const supported = typeof navigator !== 'undefined'
+    && Boolean(navigator.mediaDevices)
+    && typeof navigator.mediaDevices.getUserMedia === 'function';
+  if (!supported) {
+    showNotice(t('s_1n1wiu4'), 'error');
+    return;
+  }
+
+  starting.value = true;
+  try {
+    // 先让原生确认摄像头权限，用户同意后 WebView 的 getUserMedia 才会放行。
+    const granted = await device.ensureCameraPermission();
+    if (granted !== true) {
+      showNotice(t('s_1w8qxkd'), 'error');
+      return;
+    }
+  } catch (reason) {
+    showNotice(reason instanceof Error ? reason.message : String(reason), 'error');
+    return;
+  } finally {
+    starting.value = false;
+  }
+  if (!alive) return;
+
+  setStage('live', '', '');
+  showNotice(t('s_i7g6c4'));
+  await nextTick();
+  if (!alive) return;
+
+  let media: MediaStream;
+  try {
+    media = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+      audio: false,
+    });
+  } catch (reason) {
+    const message = reason instanceof Error ? reason.message : '';
+    setStage('error', t('s_jkwui8'), `${message || t('s_k3ej4k')}。可以改用“手动输入报名码”。`);
+    clearStatus();
+    return;
+  }
+  if (!alive) {
+    media.getTracks().forEach((track) => track.stop());
+    return;
+  }
+
+  const node = videoEl.value;
+  if (!node) {
+    media.getTracks().forEach((track) => track.stop());
+    return;
+  }
+  stream = media;
+  node.srcObject = media;
+  try {
+    await node.play();
+  } catch {
+    // 部分内核要求用户手势才自动播放；播放失败时下面的循环仍会尝试取帧。
+  }
+  scanning.value = true;
+  showNotice(t('s_o51o77'));
+  scheduleFrame();
+}
+
+function stopScan(): void {
+  scanning.value = false;
+  if (frameHandle) {
+    cancelAnimationFrame(frameHandle);
+    frameHandle = 0;
+  }
+  releaseCamera();
+  setStage('stopped', t('s_1nxza37'), t('s_13eo9zy'));
+  clearStatus();
+}
+
+function releaseCamera(): void {
+  scanning.value = false;
+  if (frameHandle) {
+    cancelAnimationFrame(frameHandle);
+    frameHandle = 0;
+  }
+  if (stream) {
+    stream.getTracks().forEach((track) => track.stop());
+    stream = null;
+  }
+  if (videoEl.value) videoEl.value.srcObject = null;
+}
+
+function scheduleFrame(): void {
+  if (!scanning.value) return;
+  frameHandle = requestAnimationFrame((timestamp) => {
+    if (!scanning.value) return;
+    if (timestamp - lastDecodeAt >= DECODE_INTERVAL) {
+      lastDecodeAt = timestamp;
+      decodeFrame();
+    }
+    scheduleFrame();
+  });
+}
+
+/** jsQR 由 `services/vendor` 注入到全局；没加载完就跳过这一帧。 */
+function currentDecoder(): JsQrDecoder | null {
+  const decoder = (window as unknown as { jsQR?: JsQrDecoder }).jsQR;
+  return typeof decoder === 'function' ? decoder : null;
+}
+
+/** 取当前画面中间 4:3 区域解码，兼顾识别率与性能。 */
+function decodeFrame(): void {
+  if (!decoderReady.value) return;
+  const decoder = currentDecoder();
+  const node = videoEl.value;
+  const target = canvasEl.value;
+  if (!decoder || !node || !target) return;
+  const width = node.videoWidth;
+  const height = node.videoHeight;
+  if (!width || !height) return;
+
+  const cropWidth = Math.min(width, Math.round(height * 4 / 3));
+  const cropHeight = Math.min(height, Math.round(cropWidth * 3 / 4));
+  const context = target.getContext('2d', { willReadFrequently: true });
+  if (!context) return;
+  target.width = DECODE_WIDTH;
+  target.height = Math.round(DECODE_WIDTH * cropHeight / cropWidth);
+  context.drawImage(
+    node,
+    (width - cropWidth) / 2, (height - cropHeight) / 2, cropWidth, cropHeight,
+    0, 0, target.width, target.height,
+  );
+  let image: ImageData;
+  try {
+    image = context.getImageData(0, 0, target.width, target.height);
+  } catch {
+    return;
+  }
+  const found = decoder(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
+  if (found?.data) void handleCode(found.data);
+}
+
+/** 识别到内容后先停止取景，避免同一张码被连续提交。 */
+async function handleCode(raw: string): Promise<void> {
+  if (submitting.value) return;
+  releaseCamera();
+  setStage('detected', t('s_jimvs7'), previewOf(raw));
+  await verify(raw);
+}
+
+// ── 核销 ───────────────────────────────────────────────────────
+
+async function verify(raw: string): Promise<void> {
+  submitting.value = true;
+  showLoadingStatus();
+  try {
+    renderResult(await api.checkIn(raw));
+  } catch (reason) {
+    outcome.value = null;
+    showVerifyError(t('s_bctg3f'), reason instanceof Error ? reason.message : String(reason));
+  } finally {
+    submitting.value = false;
+  }
+}
+
+function renderResult(response: ApiResult): void {
+  const ok = response?.ok === true;
+  clearStatus();
+  outcome.value = {
+    ok,
+    statusText: String(response?.status || t('s_1k1usxy')),
+    message: String(response?.message || response?.error || ''),
+    record: (response?.record ?? {}) as JsonObject,
+  };
+  if (ok) toast(String(response?.message || t('s_shfy40')), 'success');
+  else toast(String(response?.error || t('s_1ibqo8o')), 'error');
+}
+
+function openReview(): void {
+  const exhibitionId = String(outcomeRecord.value.exhibitionId ?? '');
+  void router.push(exhibitionId ? { path: '/review', query: { exhibitionId } } : { path: '/review' });
+}
+
+/** 继续核销：清掉上一次的结果与提示，焦点回到扫码按钮。 */
+async function restart(): Promise<void> {
+  outcome.value = null;
+  clearStatus();
+  await nextTick();
+  startButton.value?.focus();
+}
+
+// ── 手动输入（摄像头 / 识别库不可用时的降级入口） ───────────────
+
+/**
+ * 手动输入面板走共享底部面板（`ManualCodePanel` 提供输入框）：
+ * 校验失败就把错误写回 `manual.error` 并留在面板里，成功才关闭。
+ */
+function openManual(): void {
+  manual.code = '';
+  manual.error = '';
+  openSheet({
+    title: t('s_11elgkf'),
+    component: ManualCodePanel,
+    props: {
+      model: manual,
+      hint: t('s_189gp0e'),
+    },
+    size: 'full',
+    actions: [
+      { label: t('s_1589w37'), onClick: (close) => close() },
+      { label: t('s_guqe2t'), variant: 'primary', onClick: (close) => { void submitManual(close); } },
+    ],
+  });
+}
+
+async function submitManual(close: () => void): Promise<void> {
+  const code = manual.code.trim();
+  if (!code) {
+    // 留在面板里，让用户就地补上
+    manual.error = t('s_33a4b3');
+    return;
+  }
+  close();
+  outcome.value = null;
+  setStage('detected', t('s_1yxjgeu'), previewOf(code));
+  await verify(code);
+}
+</script>
+
+<template>
+  <!-- 受限账号：说明原因并给出离开的入口，不渲染扫码与手动输入 -->
+  <StateBlock
+    v-if="limited"
+    icon="info"
+    :title="t('s_14pxh3f')"
+    :description="t('s_1yv1vu0')"
+    :action-label="t('s_dn4ida')"
+    @action="router.push('/exhibitor')"
+  />
+
+  <template v-else>
+    <div class="row" data-between="true">
+      <span class="section-label">{{ t('s_oozrzl') }}</span>
+      <span class="pill">{{ REGISTRATION_STATUS.ATTENDED }}</span>
+    </div>
+
+    <!-- 取景区：就近显示状态，而不是整页跳转 -->
+    <div class="scan-wrap">
+      <div v-if="stageMode === 'live'" class="scan-stage">
+        <video ref="videoEl" class="scan-video" autoplay muted playsinline />
+        <div class="scan-frame" aria-hidden="true" />
+      </div>
+      <canvas ref="canvasEl" class="scan-canvas" aria-hidden="true" />
+      <!-- 解码用的 canvas 夹在中间，这里的条件写全，不用 v-else（v-else 必须紧跟 v-if） -->
+      <StateBlock
+        v-if="stageMode !== 'live'"
+        :tone="stageMode === 'error' ? 'error' : 'neutral'"
+        :icon="stageIcon()"
+        :title="stageTitle"
+        :description="stageDescription"
+      />
+    </div>
+
+    <SkeletonBlock v-if="statusLoading" :rows="1" />
+    <div
+      v-else-if="statusText"
+      class="notice"
+      :data-tone="statusTone === 'error' ? 'error' : undefined"
+      role="status"
+    >
+      <span>{{ statusText }}</span>
+    </div>
+    <StateBlock
+      v-if="verifyError"
+      tone="error"
+      :title="verifyError.title"
+      :description="verifyError.description"
+      :action-label="t('s_emjfb1')"
+      @action="restart"
+    />
+
+    <div class="stack" data-gap="sm">
+      <button
+        ref="startButton"
+        class="cta"
+        type="button"
+        :disabled="starting"
+        :data-loading="starting ? 'true' : 'false'"
+        @click="toggleScan"
+      >
+        {{ t('s_wttsdb') }}
+      </button>
+      <button class="cta ghost" type="button" @click="openManual">{{ t('s_11elgkf') }}</button>
+    </div>
+
+    <!-- 核销结果：成功与失败都在原位给出报名人信息与下一步 -->
+    <div v-if="outcome" class="card">
+      <div class="row" data-between="true">
+        <span class="section-label">{{ outcome.ok ? t('s_shfy40') : t('s_1ibqo8o') }}</span>
+        <StatusTag
+          :text="outcome.ok ? REGISTRATION_STATUS.ATTENDED : outcome.statusText"
+          :tone="outcome.ok ? 'ok' : 'danger'"
+        />
+      </div>
+      <p class="row-meta">{{ outcome.message }}</p>
+      <div class="card" data-tone="fill">
+        <div class="row" data-between="true">
+          <span class="row-meta">{{ t('s_11cd4ta') }}</span>
+          <span class="strong truncate">{{ outcomeRecord.exhibitionTitle || '—' }}</span>
+        </div>
+        <div class="row" data-between="true">
+          <span class="row-meta">{{ t('s_33njx3') }}</span>
+          <span class="strong truncate">{{ outcomeRecord.visitorName || '—' }}</span>
+        </div>
+        <div class="row" data-between="true">
+          <span class="row-meta">{{ t('s_17yba4l') }}</span>
+          <span class="strong truncate">{{ outcomeRecord.registrationTime || '—' }}</span>
+        </div>
+        <div class="row" data-between="true">
+          <span class="row-meta">{{ t('s_vrp4t3') }}</span>
+          <span class="strong">{{ outcomeRecord.answers || t('s_v8pba2') }}</span>
+        </div>
+      </div>
+      <div class="grid-cols-2">
+        <button class="cta ghost" type="button" @click="restart">{{ t('s_emjfb1') }}</button>
+        <button class="cta" type="button" @click="openReview">{{ t('s_j8kyoz') }}</button>
+      </div>
+    </div>
+  </template>
+</template>

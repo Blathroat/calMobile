@@ -2,7 +2,7 @@
  * 把前端用户可见文案迁移到 res/values/strings.xml。
  *
  * 做法：
- * 1. 扫描 assets/web/js 下页面与 UI 模块里的中文字符串字面量；
+ * 1. 扫描 web/src 下 Vue、TypeScript 与页面模块里的中文字符串字面量；
  * 2. 按「模块 + 语义」生成 string 资源名；
  * 3. 改写源码：字面量换成 `t('key')`，并补上 core/strings.js 的导入；
  * 4. 输出 strings 片段供合并进 strings.xml。
@@ -17,11 +17,28 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const jsRoot = path.join(root, 'app', 'src', 'main', 'assets', 'web', 'js');
+const jsRoot = path.join(root, 'web', 'src');
 const write = process.argv.includes('--write');
 
-/** 跳过：纯技术字符串、状态枚举（已由 core/status.js 统一管理）、协议值。 */
-const SKIP_FILES = new Set(['status.js', 'api.js', 'bridge.js', 'vendor.js', 'markdown.js', 'dom.js', 'sanitize.js']);
+/**
+ * 跳过：纯技术字符串、状态枚举、协议值与格式化常量。
+ *
+ * `format.ts` 里的「周日」「年/月」与 `status.ts` 里的报名方式说明是格式化常量与
+ * 界面侧唯一声明的状态词汇（与后端 `labels.ts` 按值对齐），转成资源 key 反而会让
+ * 它们变成死资源；`theme.ts` / `vendor.ts` 里的中文只出现在模板字符串里。
+ */
+const SKIP_FILES = new Set([
+    'status.js', 'api.js', 'bridge.js', 'vendor.js', 'markdown.js', 'dom.js', 'sanitize.js',
+    'format.ts', 'status.ts', 'theme.ts', 'vendor.ts',
+]);
+
+/**
+ * 跳过测试文件：里面的中文是夹具数据（问候语、错误文案），改成 `t('key')` 会让
+ * 断言与被测行为一起变味，资源里也会多出一批永远不会渲染的 key。
+ */
+function isTestFile(file) {
+    return /\.test\.(ts|js)$/.test(file);
+}
 const HAN = /[\u4e00-\u9fa5]/;
 /** 这些是桥接协议里的值，前后端按值比较，不能换成 key。 */
 const PROTOCOL_VALUES = new Set([
@@ -38,11 +55,19 @@ const PROTOCOL_VALUES = new Set([
  */
 const T_CALL = /\bt\(\s*(['"])(s_[a-z0-9]+)\1\s*\)/g;
 
+/**
+ * 直接出现的资源名（例如路由 `meta.title: 's_xxx'`）。
+ *
+ * 它们不写成 `t('s_xxx')`，而是运行时 `t(meta.title)` 取用。收集时要一并算作“在用”，
+ * 否则重新生成资源时会被当死资源删掉，顶栏标题就退化成显示 key。
+ */
+const KEY_LITERAL = /(['"])(s_[a-z0-9]+)\1/g;
+
 function walk(dir) {
     return fs.readdirSync(dir, { withFileTypes: true })
         .flatMap((entry) => (entry.isDirectory()
             ? walk(path.join(dir, entry.name))
-            : (entry.name.endsWith('.js') ? [path.join(dir, entry.name)] : [])));
+            : (/\.(js|ts|vue)$/.test(entry.name) ? [path.join(dir, entry.name)] : [])));
 }
 
 /**
@@ -121,22 +146,48 @@ function escapeXml(text) {
         .replace(/'/g, "\\'");
 }
 
+/**
+ * 取出 `.vue` 的 `<script setup>` 段，返回它在原文件里的位置。
+ * 模板里的中文靠 `:placeholder="t('s_xxx')"` 这类绑定书写，不参与迁移，
+ * 否则 `placeholder="请输入"` 会被改成 `placeholder="t('s_xxx')"`。
+ */
+function scriptBlock(source) {
+    const match = /<script[^>]*>([\s\S]*?)<\/script>/.exec(source);
+    if (!match) {
+        return null;
+    }
+    const start = match.index + match[0].indexOf('>') + 1;
+    return { text: match[1], start, end: start + match[1].length };
+}
+
 const report = [];
 
 for (const file of walk(jsRoot)) {
     const name = path.basename(file);
-    if (SKIP_FILES.has(name)) {
+    const raw = fs.readFileSync(file, 'utf8');
+
+    // 先收集文件里已经在用的资源名，保证幂等：再跑一次不会丢文案。
+    // 收集要扫**整个文件**（模板与路由 meta 里的 key 都是活资源），也不跳过
+    // SKIP_FILES：格式化常量模块里引用的文案同样在用，只是它们的字面量不参与迁移。
+    for (const pattern of [T_CALL, KEY_LITERAL]) {
+        for (const match of raw.matchAll(pattern)) {
+            rememberExisting(match[2]);
+        }
+    }
+
+    if (SKIP_FILES.has(name) || isTestFile(file)) {
         continue;
     }
-    const moduleName = name.replace(/\.js$/, '').replace(/-/g, '_');
-    const source = fs.readFileSync(file, 'utf8');
+    const isVue = name.endsWith('.vue');
+    const block = isVue ? scriptBlock(raw) : null;
+    if (isVue && !block) {
+        continue;
+    }
+    // `.vue` 只替换 `<script>` 段：模板里的中文靠 `:placeholder="t('key')"` 这类绑定书写，
+    // 直接替换引号里的内容会把 `placeholder="请输入"` 改成 `t('s_xxx')`。
+    const source = isVue ? block.text : raw;
     let counter = 0;
     let changed = false;
-
-    // 先收集源码里已迁移的 key，保证幂等：再跑一次不会丢文案。
-    for (const match of source.matchAll(T_CALL)) {
-        rememberExisting(match[2]);
-    }
 
     // 只匹配单行、非模板、不含插值的字面量。
     const replaced = source.replace(/(['"])((?:(?!\1)[^\\\n]|\\.)*?)\1/g, (match, quote, body) => {
@@ -159,24 +210,19 @@ for (const file of walk(jsRoot)) {
     if (!changed) {
         continue;
     }
-    // 补导入：放在第一个 import 之前，保持模块顶部整洁。
-    // 路径按模块所在目录算：`js/core/*.js` 用 './strings.js'，页面用 '../core/strings.js'，
-    // 而 `js/app.js` 这种就在 js/ 下的模块要用 './core/strings.js' —— `path.relative` 对这种
-    // 情况给的是 `core/strings.js`（没有 `./`），那在浏览器里是**裸标识符**、根本解析不了。
-    // 所以：缺 `./` 就补上；判重也按「去掉前缀后同一个文件」来比，避免写出第二行 import
-    // （同一模块里 t 被声明两次 → 整个模块语法错误）。
-    const relative = path.relative(path.dirname(file), path.join(jsRoot, 'core', 'strings.js'))
-        .split(path.sep).join('/');
-    const specifier = relative.startsWith('.') ? relative : `./${relative}`;
-    const importedStrings = [...replaced.matchAll(/from\s+['"]([^'"]*strings\.js)['"]/g)]
-        .map((match) => match[1].replace(/^\.\//, ''));
-    const hasImport = importedStrings.includes(specifier.replace(/^\.\//, ''));
+    // 补导入：Vue 与 TS 模块的 `t` 都在 `@/i18n`（旧 runtime 的 `core/strings.js` 已删除），
+    // 因此按文件类型补不同的说明符；模块名去掉扩展名后重排一下，日志里更接近导入路径。
+    const specifier = '@/i18n';
+    const hasImport = /from\s+['"]@\/i18n['"]/.test(replaced);
     const withImport = hasImport
         ? replaced
         : replaced.replace(/^(?=(?:import|\/\*\*|\/\/))/m, `import { t } from '${specifier}';\n`);
+    const output = isVue
+        ? `${raw.slice(0, block.start)}${withImport}${raw.slice(block.end)}`
+        : withImport;
     report.push({ file: path.relative(root, file), strings: counter });
     if (write) {
-        fs.writeFileSync(file, withImport);
+        fs.writeFileSync(file, output);
     }
 }
 
@@ -199,7 +245,7 @@ if (write) {
     const header = '<?xml version="1.0" encoding="utf-8"?>\n'
         + '<!--\n'
         + '  前端（WebView）用户可见文案。\n'
-        + '  由 scripts/extract-strings.js 从 assets/web/js 生成，不要手改：\n'
+        + '  由 scripts/extract-strings.js 从 web/src 生成，不要手改：\n'
         + '  改文案请改前端源码后重新运行该脚本，再执行 node scripts/check-strings.js 校验。\n'
         + '  key 是文案内容的哈希（稳定、可去重），文案本体在下面。\n'
         + '-->\n'

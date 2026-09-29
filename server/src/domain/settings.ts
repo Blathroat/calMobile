@@ -3,7 +3,8 @@
  *
  * - **服务器级**（主题配色、软件标题、公告、分类、审核策略、媒体与上传限制、表单字符数上限）
  *   存在 `app_settings` 里，保存后对所有用户生效，只有管理员能改；
- * - **个人偏好**（外观模式）存在 `users.ui_mode`，未登录时用 `app_settings.ui` 作为默认值；
+ * - **个人偏好**（外观模式、配色下标）存在 `users.ui_mode` / `users.ui_theme`，
+ *   未登录或没选过时用 `app_settings.ui` / `app_settings.theme.index` 作为默认值；
  * - **通知开关**存在 `notification_preferences`。
  *
  * `applyServerPatch()` 是纯函数：只做「校验 + 合并」，方便单测；落库由 `saveServerSettings()` 完成。
@@ -65,6 +66,8 @@ export interface ServerPatch {
   bio?: unknown;
   region?: unknown;
   answer?: unknown;
+  defaultCover?: unknown;
+  maxFutureExhibitions?: unknown;
 }
 
 interface SettingRow {
@@ -76,13 +79,75 @@ interface UiModeRow {
   ui_mode: string;
 }
 
+interface UiThemeRow {
+  ui_theme: number | null;
+}
+
 interface NotificationRow {
   exhibition_reminder: boolean;
   registration_updates: boolean;
 }
 
+/** 色值必须是 `#RRGGBB`：前端 `applyTheme()` 直接把它写进 CSS 变量。 */
+const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/**
+ * 归一化配色：保证 `theme.colors` 永远是当前的默认色板。
+ *
+ * 数据库里的 `theme` 那一项可能是**旧版本**写入的：色板只有 4 项（甚至被手工改成了
+ * 非法值、重复值）。`theme.colors` 不是可以「缺项补默认」的段（读取时整段覆盖），
+ * 若原样下发，前端配色面板就永远比后端少几个色块，而且 `themeIndex` 的夹取会按一个
+ * 更短的范围收敛 —— 同一份代码在老库和新库上行为不一致。
+ *
+ * 规则：保留库里**合法且不重复**的颜色（顺序不变），再按默认色板顺序补上缺的颜色，
+ * 补不满（或库里的值全部非法）时退回默认色板。下标语义因此与默认色板一致。
+ */
+export function normalizeThemeColors(colors: unknown): string[] {
+  const stored: string[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(colors)) {
+    for (const item of colors) {
+      const color = typeof item === 'string' ? item.trim() : '';
+      // 大小写不敏感地去重：`#c05621` 与 `#C05621` 是同一个色，留两个只会白占一格色板。
+      // 超长（被手工改成多于默认色板）时只取前 N 个，保证下发长度与 index 的取值范围一致。
+      if (stored.length >= DEFAULT_SETTINGS.theme.colors.length) {
+        break;
+      }
+      if (COLOR_PATTERN.test(color) && !seen.has(color.toLowerCase())) {
+        seen.add(color.toLowerCase());
+        stored.push(color);
+      }
+    }
+  }
+  if (stored.length === 0) {
+    return [...DEFAULT_SETTINGS.theme.colors];
+  }
+  for (const color of DEFAULT_SETTINGS.theme.colors) {
+    if (stored.length >= DEFAULT_SETTINGS.theme.colors.length) {
+      break;
+    }
+    if (!seen.has(color.toLowerCase())) {
+      seen.add(color.toLowerCase());
+      stored.push(color);
+    }
+  }
+  return stored;
+}
+
+/**
+ * 归一化整段配色：色板补齐到默认色板，`index` 按**补齐后**的长度夹取。
+ * 读取（老库）与保存（管理端提交）都过这里，两边的合法范围因此永远一致。
+ */
+export function normalizeTheme(
+  theme: { index?: unknown; colors?: unknown } | null | undefined,
+): ServerSettings['theme'] {
+  const colors = normalizeThemeColors(theme?.colors);
+  const index = clampInt(theme?.index, 0, [0, Math.max(0, colors.length - 1)]);
+  return { index, colors };
 }
 
 function clampInt(value: unknown, fallback: number, [min, max]: [number, number]): number {
@@ -108,6 +173,8 @@ function clampNumber(value: unknown, fallback: number, min: number, max: number)
  * 加新键之前写入的：例如老库的 `app_settings.media` 里没有 `videoSizeMb`。
  * 这两段按「默认值为底、库里的键覆盖」补齐，保证 `GET /bootstrap` 与 `GET /settings`
  * （两者都来自这里）永远能读到 `videoSizeMb`，不会给出 undefined。
+ *
+ * `theme.colors` 同理要补齐：老库存的是 4 色色板（见 `normalizeThemeColors`）。
  */
 export async function readServerSettings(): Promise<ServerSettings> {
   const result = await query<SettingRow>('SELECT key, value FROM app_settings');
@@ -119,6 +186,7 @@ export async function readServerSettings(): Promise<ServerSettings> {
   }
   settings.media = { ...DEFAULT_SETTINGS.media, ...settings.media };
   settings.upload = { ...DEFAULT_SETTINGS.upload, ...settings.upload };
+  settings.theme = normalizeTheme(settings.theme);
   return settings;
 }
 
@@ -136,6 +204,9 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   const next = clone(current);
   const source = patch || {};
 
+  // 色板先归一化再夹取 index：老库（4 色）与手改过的色板都按补齐后的长度收敛，
+  // 否则同一段代码在两次读取之间会给出不同的合法范围。
+  next.theme = normalizeTheme(next.theme);
   if (Object.prototype.hasOwnProperty.call(source, 'themeIndex')) {
     next.theme.index = clampInt(source.themeIndex, next.theme.index, [0, Math.max(0, next.theme.colors.length - 1)]);
   }
@@ -211,6 +282,25 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   }
   next.limits = limits;
 
+  if (Object.prototype.hasOwnProperty.call(source, 'defaultCover')) {
+    // 存的是媒体短 URL（与展会封面同一种值），这里只做长度与协议的形状校验：
+    // 具体怎么存、能否访问由原生 / 部署方的媒体服务负责，后端不解析图片。
+    const cover = String(source.defaultCover ?? '')
+      .trim()
+      .slice(0, 500);
+    if (cover && !/^(https?:)?\/\//.test(cover) && !cover.startsWith('data:image/')) {
+      throw badRequest('缺省封面需要是一个可访问的图片地址');
+    }
+    next.cover = { defaultCover: cover };
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'maxFutureExhibitions')) {
+    // 0 表示不限；上限 100 是防呆（管理端填错位数不至于把展商全锁死）。
+    next.exhibitor = {
+      ...next.exhibitor,
+      maxFutureExhibitions: clampInt(source.maxFutureExhibitions, next.exhibitor.maxFutureExhibitions, [0, 100]),
+    };
+  }
+
   return next;
 }
 
@@ -267,6 +357,80 @@ export async function saveUiMode(userId: string | null | undefined, mode: unknow
   const next = typeof mode === 'string' && MODES.includes(mode) ? mode : 'auto';
   await query('UPDATE users SET ui_mode = $2, updated_at = now() WHERE id = $1', [userId, next]);
   return next;
+}
+
+/**
+ * 个人配色下标：登录用户读自己的 `users.ui_theme`，没选过（NULL）或未登录时用
+ * 服务器默认值 `app_settings.theme.index`。
+ *
+ * 下标按**补齐后**的色板长度收敛：色板缩短过或库里的值被手工改大时，
+ * 个人偏好也不该把前端推到 undefined 的颜色上。
+ *
+ * 收敛只发生在**读取**这一侧（`clampInt`），不会顺手把夹过的值写回库：
+ * `saveServerSettings()` 只写 `app_settings`，`users.ui_theme` 只在用户自己提交时改写，
+ * 因此这里不能悄悄产生一次写操作。
+ */
+export async function readUiTheme(
+  userId: string | null | undefined,
+  fallbackIndex: number,
+  colors: readonly string[] = DEFAULT_SETTINGS.theme.colors,
+): Promise<number> {
+  const [min, max] = [0, Math.max(0, colors.length - 1)];
+  const fallback = clampInt(fallbackIndex, 0, [min, max]);
+  if (!userId) {
+    return fallback;
+  }
+  const result = await query<UiThemeRow>('SELECT ui_theme FROM users WHERE id = $1', [userId]);
+  const stored = result.rows[0]?.ui_theme;
+  if (stored === null || stored === undefined) {
+    return fallback;
+  }
+  return clampInt(stored, fallback, [min, max]);
+}
+
+/**
+ * 保存个人配色：只写调用者自己的 `users.ui_theme`。
+ *
+ * 与外观模式不同，这里**不静默回落**：配色是枚举色板上的选择，提交一个越界或非数字的
+ * 下标说明请求本身有问题，夹取到边界会把「点错了」伪装成「保存成功」。
+ * 越界按规则失败（200 + `ok:false`）返回，合法值写库后原样返回。
+ */
+export async function saveUiTheme(
+  userId: string | null | undefined,
+  themeIndex: unknown,
+  colors: readonly string[] = DEFAULT_SETTINGS.theme.colors,
+): Promise<number> {
+  if (!userId) {
+    // 与外观模式同一条边界：没有 userId 就写不了个人偏好，更不能退回改全局默认。
+    throw badRequest('请先登录后再保存配色');
+  }
+  const max = Math.max(0, colors.length - 1);
+  const index = themeIndexToIndex(themeIndex);
+  // 越界与非整数都拒绝：**不夹取**。配色是色板上的枚举选择，把 99 夹成 7 会把
+  // 「点错了 / 前端传错字段」伪装成「保存成功」。
+  if (index === null || index < 0 || index > max) {
+    throw badRequest(`配色下标必须是 0 到 ${max} 之间的整数`);
+  }
+  await query('UPDATE users SET ui_theme = $2, updated_at = now() WHERE id = $1', [userId, index]);
+  return index;
+}
+
+/**
+ * 把请求里的配色下标严格解析成整数，解析不出来返回 `null`。
+ *
+ * 不用 `Number()`：`Number('')` 与 `Number(null)` 都是 0，会把「空字符串」和「没提交」
+ * 静默当成第 0 号色板保存；也不接受 `1.5`、`'2abc'` 这类能靠 parseInt 蒙混过关的值。
+ * 负数原样返回，由调用方按「越界」拒绝。
+ */
+function themeIndexToIndex(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? value : null;
+  }
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    const parsed = Number(value.trim());
+    return Number.isInteger(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 /** 通知偏好：没有记录时返回默认值并顺手建一行。 */
@@ -330,4 +494,39 @@ export function normalizeUserStatus(value: unknown): string {
     throw badRequest('账号状态只能是 正常 / 受限 / 封禁');
   }
   return status;
+}
+
+/**
+ * 一次性提示的 key 形状。
+ *
+ * 只允许小写字母、数字与短横线：它同时是数据库里存的值与前端的调用参数，
+ * 放开任意字符等于给用户对象塞进一段可以任意增长的自由文本。
+ */
+const HINT_KEY = /^[a-z0-9][a-z0-9-]{2,39}$/;
+
+/** 一个人最多记多少条已读提示：key 是受控的短码，留个上限避免无限增长。 */
+const HINT_LIMIT = 50;
+
+/** 读「看过的提示」列表；没有该用户时返回空数组。 */
+export async function readSeenHints(userId: string | null | undefined): Promise<string[]> {
+  if (!userId) return [];
+  const result = await query<{ seen_hints: string[] | null }>('SELECT seen_hints FROM users WHERE id = $1', [userId]);
+  const stored = result.rows[0]?.seen_hints;
+  return Array.isArray(stored) ? stored.filter((item) => typeof item === 'string') : [];
+}
+
+/**
+ * 记下一条「看过的提示」并返回最新列表。
+ *
+ * 幂等（重复提交同一条不报错，列表也不重复）；只写调用者自己那一行。
+ */
+export async function saveSeenHint(userId: string | null | undefined, hint: unknown): Promise<string[]> {
+  if (!userId) throw badRequest('请先登录后再记录提示状态');
+  const key = String(hint ?? '').trim();
+  if (!HINT_KEY.test(key)) throw badRequest('提示标识不合法');
+  const current = await readSeenHints(userId);
+  if (current.includes(key)) return current;
+  const next = [...current, key].slice(-HINT_LIMIT);
+  await query('UPDATE users SET seen_hints = $2, updated_at = now() WHERE id = $1', [userId, next]);
+  return next;
 }

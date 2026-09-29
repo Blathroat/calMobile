@@ -13,7 +13,7 @@ import {
   exhibitionStatusSchema,
   type ExhibitionInput,
 } from '../domain/schemas.js';
-import { notFound } from '../domain/errors.js';
+import { badRequest, notFound } from '../domain/errors.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { authenticateHono, optionalAuthHono, userOf, type HonoContext, type HonoEnv } from './hono-utils.js';
@@ -157,10 +157,23 @@ app.post('/', authenticateHono, async (c) => {
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
     const input = await exhibitionInput(body);
+    // 「展商可同时筹备的展会数」：按展会日期在今天及以后计数（过去的不占额度），
+    // 0 表示不限。管理员不受限：这条策略是管理员自己设的，不该把他锁在门外。
+    const { maxFutureExhibitions } = await readSection('exhibitor');
+    if (maxFutureExhibitions > 0 && user.role !== 'admin') {
+      const counted = await query<{ total: number }>(
+        `SELECT count(*)::int AS total FROM exhibitions WHERE exhibitor_id = $1 AND exhibition_date >= CURRENT_DATE`,
+        [user.userId],
+      );
+      const total = Number(counted.rows[0]?.total ?? 0);
+      if (total >= maxFutureExhibitions) {
+        throw badRequest(`同时筹备的展会最多 ${maxFutureExhibitions} 个，先结束或删除已有展会再新建`);
+      }
+    }
     const id = newId('exh');
     await transaction(async (client) => {
       await client.query(
-        `INSERT INTO exhibitions (id, title, venue, time, exhibition_date, status, category, description, description_format, highlights, image_uri, exhibitor_note, registration_start, registration_end, qr_enabled, exhibitor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        `INSERT INTO exhibitions (id, title, venue, time, exhibition_date, status, category, description, description_format, image_uri, exhibitor_note, registration_start, registration_end, qr_enabled, exhibitor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
         [
           id,
           input.title,
@@ -171,7 +184,6 @@ app.post('/', authenticateHono, async (c) => {
           input.category,
           input.description,
           input.descriptionFormat,
-          JSON.stringify(input.highlights),
           input.imageUri,
           input.exhibitorNote,
           input.registrationStart || null,
@@ -194,7 +206,7 @@ app.put('/:id', authenticateHono, async (c) => {
     const input = await exhibitionInput(body, existing);
     await transaction(async (client) => {
       await client.query(
-        `UPDATE exhibitions SET title=$2, venue=$3, time=$4, exhibition_date=$5, status=$6, category=$7, description=$8, description_format=$9, highlights=$10, image_uri=$11, exhibitor_note=$12, registration_start=$13, registration_end=$14, qr_enabled=$15, updated_at=now() WHERE id=$1`,
+        `UPDATE exhibitions SET title=$2, venue=$3, time=$4, exhibition_date=$5, status=$6, category=$7, description=$8, description_format=$9, image_uri=$10, exhibitor_note=$11, registration_start=$12, registration_end=$13, qr_enabled=$14, updated_at=now() WHERE id=$1`,
         [
           existing.id,
           input.title,
@@ -205,7 +217,6 @@ app.put('/:id', authenticateHono, async (c) => {
           input.category,
           input.description,
           input.descriptionFormat,
-          JSON.stringify(input.highlights),
           input.imageUri,
           input.exhibitorNote,
           input.registrationStart || null,

@@ -20,6 +20,29 @@ android {
     }
 }
 
+android.sourceSets.main.assets.srcDir("${buildDir}/generated/vue-web")
+
+// Vue 前端构建到 generated assets，不修改源码目录。
+def webDir = file("../web")
+def pnpmCommand = System.getProperty("os.name").toLowerCase().contains("windows") ? "pnpm.cmd" : "pnpm"
+tasks.register("buildWeb", Exec) {
+    workingDir webDir
+    commandLine pnpmCommand, "build"
+}
+
+tasks.register("typecheckWeb", Exec) {
+    workingDir webDir
+    commandLine pnpmCommand, "typecheck"
+}
+
+tasks.register("syncWebAssets", Sync) {
+    dependsOn "buildWeb"
+    from("${webDir}/dist")
+    into("${buildDir}/generated/vue-web/web")
+}
+
+tasks.named("preBuild").configure { dependsOn("syncWebAssets") }
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)

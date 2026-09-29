@@ -94,6 +94,23 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
     );
   }
 
+  // 对外地址：状态页与 /ping 靠它显示域名，以后邮件里的绝对链接也用它。
+  const publicBaseUrl = String(env.PUBLIC_BASE_URL || '').trim();
+  if (!publicBaseUrl) {
+    warnings.push(
+      'PUBLIC_BASE_URL 没有配置：对外部署建议填域名（https://app.example.com），状态页与邮件里的地址才明确',
+    );
+  } else if (!/^https:\/\//i.test(publicBaseUrl)) {
+    warnings.push(`PUBLIC_BASE_URL=${publicBaseUrl} 不是 https：对外地址应当是 https`);
+  }
+  // HSTS 显式关掉多半是「域名还没定」，但也可能是漏配，提示一句。
+  const hsts = String(env.HSTS_MAX_AGE || '')
+    .trim()
+    .toLowerCase();
+  if (['0', 'false', 'off'].includes(hsts)) {
+    warnings.push('HSTS_MAX_AGE=0：不下发 Strict-Transport-Security，确认这是有意的');
+  }
+
   if (String(env.LOG_LEVEL || '').toLowerCase() === 'debug') {
     warnings.push('LOG_LEVEL=debug 会打印每个请求，生产建议 info 或 quiet');
   }

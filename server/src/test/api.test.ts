@@ -246,7 +246,7 @@ beforeAll(async () => {
 
   await startServer();
 
-  const apiModule = await import(new URL('../../../app/src/main/assets/web/js/core/api.js', import.meta.url).href);
+  const apiModule = await import(new URL('../../../web/api-endpoints.mjs', import.meta.url).href);
   frontendEndpointMap = apiModule.ENDPOINTS as EndpointMap;
 
   tokens.admin = await login('demo');
@@ -888,7 +888,6 @@ test('展会列表字段覆盖页面渲染所需的全部字段', async () => {
     'dateLabel',
     'exhibitor',
     'exhibitorNote',
-    'highlights',
     'imageUri',
     'registrationStart',
     'registrationEnd',
@@ -982,7 +981,6 @@ test('展会的增删改受角色与归属限制', async () => {
       category: '智能家居',
       status: '需审核',
       description: '契约测试用',
-      highlights: ['测试'],
     },
     { token: tokens.exhibitor.token },
   );
@@ -1400,7 +1398,7 @@ test('报名收集项的必填与选项由服务端校验', async () => {
     assert.strictEqual(accepted.body.ok, true, `合规提交应当成功：${JSON.stringify(accepted.body)}`);
     assert.strictEqual(accepted.body.registration.statusLabel, '已通过');
 
-    // 选填项没填：页面会写「未填写」占位（见 pages/registration-form.js），
+    // 选填项没填：页面会写「未填写」占位（见 web/src/pages/RegistrationFormPage.vue），
     // 服务端要把它当成空值，而不是一个不在选项里的多选值。
     const blank = await post(
       '/api/v1/registrations',
@@ -2116,6 +2114,39 @@ test('公开页支持按昵称查询', async () => {
   assert.ok(byNickname.body.profile.nickname);
 });
 
+test('公开页带上该用户开办的展会', async () => {
+  // 展商主页要展示「开办的展会」：自己造一条、最后删掉，不依赖种子数据。
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '公开页开办展会用例',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: isoDateAfter(21),
+      category: '智能家居',
+      status: '无需审核',
+      qrEnabled: false,
+    },
+    { token: tokens.exhibitor.token },
+  );
+  assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
+  const exhibitionId = created.body.exhibition.id;
+  try {
+    const asVisitor = await get('/api/v1/users/public?nickname=exhibitor', { token: tokens.user.token });
+    assert.strictEqual(asVisitor.body.found, true);
+    const item = asVisitor.body.exhibitions.find((row: { id: string }) => row.id === exhibitionId);
+    assert.ok(item, '公开页应当列出该用户开办的展会');
+    assert.strictEqual(item.title, '公开页开办展会用例');
+    assert.ok(!('checkInCode' in item), '公开页的展会卡片不下发报名码');
+
+    // 普通用户没有开办展会：字段仍然存在，只是空数组（前端据此整块不渲染）
+    const plain = await get('/api/v1/users/public?nickname=user', { token: tokens.exhibitor.token });
+    assert.deepStrictEqual(plain.body.exhibitions, []);
+  } finally {
+    await del(`/api/v1/exhibitions/${exhibitionId}`, { token: tokens.exhibitor.token });
+  }
+});
+
 test('公开页不下发报名码，本人与管理员仍能拿到', async () => {
   // 自己造数据、自己还原：不依赖其它用例执行到哪一步，也不改它们共享的记录。
   const users = await get('/api/v1/users?query=user', { token: tokens.admin.token });
@@ -2284,6 +2315,17 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
   const asUser = await put('/api/v1/settings', { appTitleZh: 'x' }, { token: tokens.user.token });
   assert.strictEqual(asUser.status, 403);
 
+  // 色板是 8 种，且 index 0 仍是默认的焦糖橙（老用户的强调色不能变）
+  const paletteBefore = await get('/api/v1/settings');
+  assert.strictEqual(paletteBefore.body.theme.colors.length, DEFAULT_SETTINGS.theme.colors.length);
+  assert.strictEqual(paletteBefore.body.theme.colors.length, 8, '配色面板要有 8 个色块');
+  assert.strictEqual(paletteBefore.body.theme.colors[0], '#C05621', 'index 0 必须还是默认的焦糖橙');
+  assert.deepStrictEqual(
+    paletteBefore.body.theme.colors,
+    DEFAULT_SETTINGS.theme.colors,
+    'settings 与 bootstrap 下发的色板要一致',
+  );
+
   const saved = await put(
     '/api/v1/settings',
     {
@@ -2299,6 +2341,7 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
   assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
   assert.strictEqual(saved.body.settings.brand.zh, '展会助手');
   assert.strictEqual(saved.body.settings.theme.index, 2);
+  assert.strictEqual(saved.body.settings.theme.colors[2], DEFAULT_SETTINGS.theme.colors[2]);
   assert.strictEqual(saved.body.settings.review.canRevise, true);
   assert.strictEqual(saved.body.settings.limits.exhibitionTitle, 80);
 
@@ -2309,6 +2352,12 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
   // 上限收敛：超界值被夹到范围内，而不是原样写入
   const clamped = await put('/api/v1/settings', { exhibitionTitle: 9999 }, { token: tokens.admin.token });
   assert.strictEqual(clamped.body.settings.limits.exhibitionTitle, 120);
+
+  // 配色下标同理：超出色板长度时夹到最后一个，而不是原样写入
+  const overflow = await put('/api/v1/settings', { themeIndex: 99 }, { token: tokens.admin.token });
+  assert.strictEqual(overflow.body.settings.theme.index, 7, '99 应当被夹到 8 色色板的最后一位');
+  const negative = await put('/api/v1/settings', { themeIndex: -3 }, { token: tokens.admin.token });
+  assert.strictEqual(negative.body.settings.theme.index, 0, '负数应当夹到 0');
 
   // 没提交的段不应被重置
   assert.strictEqual(clamped.body.settings.brand.zh, '展会助手');
@@ -2324,6 +2373,137 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
     },
     { token: tokens.admin.token },
   );
+});
+
+test('老库的 4 色色板：迁移补到 8 色，且已有的 index 不变', async () => {
+  // 模拟老库：迁移 0006 之前写入的 theme 只有 4 个颜色
+  const legacyColors = DEFAULT_SETTINGS.theme.colors.slice(0, 4);
+  const legacy = { index: 3, colors: legacyColors };
+  await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [JSON.stringify(legacy), 'theme']);
+  try {
+    // 迁移是幂等的：再跑一次也应当把色板补到 8 色
+    await migrate();
+
+    const bootstrap = await get('/api/v1/bootstrap');
+    assert.deepStrictEqual(
+      bootstrap.body.theme.colors,
+      DEFAULT_SETTINGS.theme.colors,
+      `迁移后必须是新的 8 色色板：${JSON.stringify(bootstrap.body.theme.colors)}`,
+    );
+    assert.strictEqual(bootstrap.body.theme.index, 3, '已有用户选中的 index 不能被迁移改掉');
+    assert.strictEqual(bootstrap.body.theme.colors[3], legacyColors[3], 'index 3 的色值语义保持不变');
+
+    const settings = await get('/api/v1/settings');
+    assert.deepStrictEqual(settings.body.theme.colors, DEFAULT_SETTINGS.theme.colors);
+    assert.strictEqual(settings.body.theme.index, 3);
+  } finally {
+    await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [
+      JSON.stringify(DEFAULT_SETTINGS.theme),
+      'theme',
+    ]);
+  }
+});
+
+test('老库色板被手工改坏（非法值 / 重复值）时，读取与夹取仍按 8 色色板', async () => {
+  await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [
+    JSON.stringify({ index: 6, colors: ['#C05621', 'not-a-color', '#C05621', null] }),
+    'theme',
+  ]);
+  try {
+    const bootstrap = await get('/api/v1/bootstrap');
+    assert.strictEqual(bootstrap.body.theme.colors.length, 8, '非法与重复的颜色应当被丢掉后补齐');
+    assert.strictEqual(bootstrap.body.theme.colors[0], '#C05621', '库里的合法项要保留');
+    assert.strictEqual(bootstrap.body.theme.index, 6, 'index 落在补齐后的范围里，应当保留');
+    assert.strictEqual(bootstrap.body.theme.colors[6], DEFAULT_SETTINGS.theme.colors[6]);
+
+    // index 超界时按补齐后的长度夹取
+    await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [
+      JSON.stringify({ index: 42, colors: ['#C05621', '#48515D', '#245D3C', '#2F6F8F'] }),
+      'theme',
+    ]);
+    const clamped = await get('/api/v1/settings');
+    assert.strictEqual(clamped.body.theme.index, 7, '老库的越界 index 要夹到 8 色色板的最后一位');
+  } finally {
+    await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [
+      JSON.stringify(DEFAULT_SETTINGS.theme),
+      'theme',
+    ]);
+  }
+});
+
+test('个人配色按账号保存：没有个人选择时跟随全局默认', async () => {
+  await pool.query('UPDATE users SET ui_theme = NULL');
+
+  const anonymous = await put('/api/v1/settings/ui-theme', { themeIndex: 3 });
+  assert.strictEqual(anonymous.status, 401, '未登录不能保存个人配色');
+
+  // 全局默认随服务器设置走，个人没选过就用它
+  const global = (await get('/api/v1/settings')).body.theme.index;
+  const bootstrap = await get('/api/v1/bootstrap', { token: tokens.user.token });
+  assert.strictEqual(bootstrap.body.theme.index, global, '没选过配色时应当跟随全局默认');
+  assert.deepStrictEqual(bootstrap.body.theme.colors, DEFAULT_SETTINGS.theme.colors, '色板仍是补齐后的 8 色');
+});
+
+test('普通用户设置的配色在自己的 bootstrap 生效，且不串到别人身上', async () => {
+  await pool.query('UPDATE users SET ui_theme = NULL');
+
+  const saved = await put('/api/v1/settings/ui-theme', { themeIndex: 5 }, { token: tokens.user.token });
+  assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+  assert.strictEqual(saved.body.themeIndex, 5);
+
+  const mine = await get('/api/v1/bootstrap', { token: tokens.user.token });
+  assert.strictEqual(mine.body.theme.index, 5, '普通用户的个人配色要在 bootstrap 生效');
+  assert.strictEqual(mine.body.theme.colors[5], DEFAULT_SETTINGS.theme.colors[5]);
+  assert.strictEqual((await get('/api/v1/settings', { token: tokens.user.token })).body.theme.index, 5);
+
+  // 别人不受影响（该账号没选过 → 跟随全局默认）
+  const other = await get('/api/v1/bootstrap', { token: tokens.exhibitor.token });
+  assert.notStrictEqual(other.body.theme.index, 5, '个人配色不能串到别的账号');
+
+  // 越界 / 非整数是规则失败（200 + ok:false），不是静默夹取
+  const tooLarge = await put('/api/v1/settings/ui-theme', { themeIndex: 99 }, { token: tokens.user.token });
+  assert.strictEqual(tooLarge.status, 200);
+  assert.strictEqual(tooLarge.body.ok, false, '越界下标应当按规则失败');
+  assert.ok(tooLarge.body.error, '规则失败要给出可展示的原因');
+  const notNumber = await put('/api/v1/settings/ui-theme', { themeIndex: 'abc' }, { token: tokens.user.token });
+  assert.strictEqual(notNumber.body.ok, false);
+  const negative = await put('/api/v1/settings/ui-theme', { themeIndex: -1 }, { token: tokens.user.token });
+  assert.strictEqual(negative.body.ok, false);
+  assert.strictEqual(
+    (await get('/api/v1/bootstrap', { token: tokens.user.token })).body.theme.index,
+    5,
+    '失败的下标不能改写已保存的个人配色',
+  );
+});
+
+test('管理员改全局默认只影响没选过配色的账号', async () => {
+  await pool.query('UPDATE users SET ui_theme = NULL');
+  const global = (await get('/api/v1/settings')).body.theme.index;
+
+  // 普通用户选了自己的配色
+  const saved = await put('/api/v1/settings/ui-theme', { themeIndex: 5 }, { token: tokens.user.token });
+  assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+
+  try {
+    // 管理员改「管理-设置」里的全局默认
+    const changed = await put('/api/v1/settings', { themeIndex: 2 }, { token: tokens.admin.token });
+    assert.strictEqual(changed.body.settings.theme.index, 2, '管理员自己的生效下标要变成新的全局默认');
+
+    const mine = await get('/api/v1/bootstrap', { token: tokens.user.token });
+    assert.strictEqual(mine.body.theme.index, 5, '已选过配色的账号不受全局默认影响');
+
+    // 没选过的账号（exhibitor）跟着全局默认走
+    const follower = await get('/api/v1/bootstrap', { token: tokens.exhibitor.token });
+    assert.strictEqual(follower.body.theme.index, 2, '没选过的账号要跟随新的全局默认');
+
+    // 管理员自己也没选过个人配色 → 读到的就是全局默认
+    const admin = await get('/api/v1/bootstrap', { token: tokens.admin.token });
+    assert.strictEqual(admin.body.theme.index, 2);
+  } finally {
+    await put('/api/v1/settings', { themeIndex: global }, { token: tokens.admin.token });
+    // 个人配色是账号级数据，测试账号之间共用，跑完要清掉，避免影响后续用例
+    await pool.query('UPDATE users SET ui_theme = NULL');
+  }
 });
 
 test('视频大小上限可配置，bootstrap 与 settings 读回同一个值，越界被收敛', async () => {
@@ -2362,6 +2542,108 @@ test('视频大小上限可配置，bootstrap 与 settings 读回同一个值，
   } finally {
     await put('/api/v1/settings', { videoSizeMb: defaultSize }, { token: tokens.admin.token });
   }
+});
+
+test('缺省展会封面与展商展会数上限：保存后 bootstrap 与 settings 都能读回', async () => {
+  const before = await get('/api/v1/settings');
+  const coverBefore = String(before.body.cover?.defaultCover ?? '');
+  const limitBefore = Number(before.body.exhibitor?.maxFutureExhibitions ?? 0);
+  try {
+    const saved = await put(
+      '/api/v1/settings',
+      { defaultCover: 'https://cdn.example.com/default-cover.jpg', maxFutureExhibitions: 3 },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+    assert.strictEqual(saved.body.settings.cover.defaultCover, 'https://cdn.example.com/default-cover.jpg');
+    assert.strictEqual(Number(saved.body.settings.exhibitor.maxFutureExhibitions), 3);
+
+    const bootstrap = await get('/api/v1/bootstrap');
+    assert.strictEqual(
+      bootstrap.body.cover.defaultCover,
+      'https://cdn.example.com/default-cover.jpg',
+      'bootstrap 要带上缺省封面（列表与详情据此兜底）',
+    );
+    assert.strictEqual(Number(bootstrap.body.exhibitor.maxFutureExhibitions), 3);
+
+    // 形状不对的封面地址按规则失败（200 + ok:false），空串表示回到占位图
+    const badCover = await put('/api/v1/settings', { defaultCover: 'not-a-url' }, { token: tokens.admin.token });
+    assert.strictEqual(badCover.body.ok, false, '非法封面地址应当被拒绝');
+    const cleared = await put('/api/v1/settings', { defaultCover: '' }, { token: tokens.admin.token });
+    assert.strictEqual(cleared.body.settings.cover.defaultCover, '');
+
+    // 上限夹到 0..100（0 = 不限）
+    const clamped = await put('/api/v1/settings', { maxFutureExhibitions: 999 }, { token: tokens.admin.token });
+    assert.strictEqual(Number(clamped.body.settings.exhibitor.maxFutureExhibitions), 100);
+  } finally {
+    await put(
+      '/api/v1/settings',
+      { defaultCover: coverBefore, maxFutureExhibitions: limitBefore },
+      { token: tokens.admin.token },
+    );
+  }
+});
+
+test('展商可同时筹备的展会数上限：超出后不能再新建，管理员不受限', async () => {
+  const created: string[] = [];
+  const payload = {
+    title: '展会数上限用例',
+    venue: '测试展馆',
+    time: '09:00-17:00',
+    date: isoDateAfter(35),
+    category: '智能家居',
+    status: '无需审核',
+    qrEnabled: false,
+  };
+  try {
+    // 种子里的展商本来就有未来的展会，所以先按现状把额度设成「刚好还能再建一个」，
+    // 不然第一条就会撞额度（失败原因也会是这句，看不出是测试写错还是规则生效）。
+    const listed = await get('/api/v1/exhibitions', { token: tokens.exhibitor.token });
+    const today = new Date().toISOString().slice(0, 10);
+    const mine = (listed.body as { exhibitor: string; date: string }[]).filter(
+      (item) => item.exhibitor === 'exhibitor' && item.date >= today,
+    ).length;
+    await put('/api/v1/settings', { maxFutureExhibitions: mine + 1 }, { token: tokens.admin.token });
+
+    const first = await post('/api/v1/exhibitions', payload, { token: tokens.exhibitor.token });
+    assert.strictEqual(first.body.ok, true, JSON.stringify(first.body));
+    created.push(String(first.body.exhibition.id));
+
+    const second = await post('/api/v1/exhibitions', payload, { token: tokens.exhibitor.token });
+    assert.strictEqual(second.body.ok, false, '超出上限应当按规则失败');
+    assert.match(String(second.body.error), /同时筹备/, `失败原因要说明限额：${second.body.error}`);
+
+    // 管理员不受这条策略限制：额度是管理员自己设的，不该把他锁在门外
+    const asAdmin = await post('/api/v1/exhibitions', payload, { token: tokens.admin.token });
+    assert.strictEqual(asAdmin.body.ok, true, JSON.stringify(asAdmin.body));
+    created.push(String(asAdmin.body.exhibition.id));
+  } finally {
+    for (const id of created) await del(`/api/v1/exhibitions/${id}`, { token: tokens.admin.token });
+    await put('/api/v1/settings', { maxFutureExhibitions: 0 }, { token: tokens.admin.token });
+  }
+});
+
+test('一次性提示与账号绑定：记下之后 bootstrap 会带回来', async () => {
+  const key = 'home-calendar-swipe';
+  const before = await get('/api/v1/bootstrap', { token: tokens.user.token });
+  const hadKey = Array.isArray(before.body.user.seenHints) && before.body.user.seenHints.includes(key);
+  assert.strictEqual(hadKey, false, '这条用例自己造数据，开始时不该已存在');
+
+  const saved = await put('/api/v1/profile/hints', { hint: key }, { token: tokens.user.token });
+  assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+  assert.ok(Array.isArray(saved.body.seenHints) && saved.body.seenHints.includes(key));
+
+  // 幂等：再提交一次不会出现重复项
+  const again = await put('/api/v1/profile/hints', { hint: key }, { token: tokens.user.token });
+  assert.strictEqual(again.body.seenHints.filter((item: string) => item === key).length, 1);
+
+  // 与账号绑定：换一次请求（等同换设备）仍然带着它，前端据此不再显示提示
+  const bootstrap = await get('/api/v1/bootstrap', { token: tokens.user.token });
+  assert.ok(bootstrap.body.user.seenHints.includes(key), 'bootstrap 的用户态要带上已读提示');
+
+  // 提示 key 是受控短码：乱填直接拒绝
+  const bad = await put('/api/v1/profile/hints', { hint: 'A B' }, { token: tokens.user.token });
+  assert.strictEqual(bad.body.ok, false, '非法提示标识应当被拒绝');
 });
 
 test('老库的 app_settings.media 缺 videoSizeMb 时用默认值兜底', async () => {
@@ -2503,7 +2785,7 @@ function backendRoutes(): DeclaredRoute[] {
 /**
  * 前端每个数据动作都必须能在后端找到对应路由。
  *
- * 这条断言是「50 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
+ * 这条断言是「52 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
  * 同步 `ENDPOINTS`，都会在这里失败，而不是等到某个页面在真机上静默报错。
  */
 test('前端每个数据动作都对应后端已注册的路由', () => {
@@ -2511,8 +2793,8 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
   const actions = Object.keys(endpoints);
   assert.strictEqual(
     actions.length,
-    50,
-    `前端数据动作数量变了（期望 50）：${actions.length} 个 —— ${actions.join(', ')}`,
+    52,
+    `前端数据动作数量变了（期望 52）：${actions.length} 个 —— ${actions.join(', ')}`,
   );
 
   const declared = backendRoutes();
@@ -2549,7 +2831,8 @@ test('后端没有前端用不到的孤立路由', () => {
       }
     }
   }
-  // 这几个是刻意保留、不走前端动作表的：刷新令牌与「撤销全部会话」由 api.js 直接调用。
+  // 这两个是刻意保留、不走前端动作表的：刷新令牌与「撤销全部会话」由 api.js 直接调用；
+  // 个人配色 `PUT /settings/ui-theme` 由前端 `settings.uiTheme` 动作使用，因此不在名单里。
   const intentional = new Set(['POST /api/v1/auth/refresh', 'POST /api/v1/auth/logout-all']);
   const orphans = declared
     .map((route) => `${route.method} ${route.path}`)

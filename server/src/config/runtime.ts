@@ -36,6 +36,12 @@ export interface Runtime {
   statusPageEnabled: boolean;
   trustProxy: TrustProxy;
   startedBy: string;
+  /** 对外访问地址（`PUBLIC_BASE_URL`，已去掉尾斜杠）：域名/端口对外暴露的那一个。 */
+  publicBaseUrl: string;
+  /** 反代已终止 TLS 时，把明文请求跳到 https（`FORCE_HTTPS=1`）。 */
+  forceHttps: boolean;
+  /** HSTS 的 max-age（秒）；0 表示不下发这个头。默认 180 天。 */
+  hstsMaxAge: number;
 }
 
 export function bool(value: unknown): boolean {
@@ -88,7 +94,35 @@ export function resolveRuntime(argv: string[] = [], env: EnvLike = {}): Runtime 
     trustProxy,
     // pnpm / npm 都会设置这个变量：`start` / `dev` / `test` 之一，用于启动日志与排查。
     startedBy: String(env.npm_lifecycle_event || '').trim(),
+    // 对外地址：给状态页与 /ping 显示，也是以后邮件里绝对链接的基址。
+    publicBaseUrl: normalizeBaseUrl(env.PUBLIC_BASE_URL),
+    // 反代终止 TLS 的部署里打开它：明文请求 308 跳到 https（见 node-middleware 的 requireHttps）。
+    // 直连（没有反代）时不要开：那会把所有请求跳到一个并不存在的 https 端口上。
+    forceHttps: bool(env.FORCE_HTTPS),
+    // HSTS：默认 180 天。填 0 表示不下发（例如域名还没定、或本地用 http 调试）。
+    // 只应当在**已确认全站 HTTPS 可用**之后才下发长 max-age，否则浏览器会长期拒绝 http 访问。
+    hstsMaxAge: parseHstsMaxAge(env.HSTS_MAX_AGE),
   };
+}
+
+/** 对外地址归一化：去空白与尾斜杠，非法值当没配（宁可不显示，也不要显示半截地址）。 */
+export function normalizeBaseUrl(value: unknown): string {
+  const text = String(value ?? '')
+    .trim()
+    .replace(/\/+$/, '');
+  if (!text) return '';
+  return /^https?:\/\/[^\s]+$/i.test(text) ? text : '';
+}
+
+/** HSTS 秒数：缺省 180 天；`0` / `off` / `false` 表示不下发。 */
+function parseHstsMaxAge(value: unknown): number {
+  const text = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  if (text === '') return 15_552_000;
+  if (FALSY.includes(text)) return 0;
+  const seconds = Number.parseInt(text, 10);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : 15_552_000;
 }
 
 const resolved = resolveRuntime(process.argv, process.env);
@@ -98,3 +132,6 @@ export const isProduction = resolved.isProduction;
 export const statusPageEnabled = resolved.statusPageEnabled;
 export const trustProxy = resolved.trustProxy;
 export const startedBy = resolved.startedBy;
+export const publicBaseUrl = resolved.publicBaseUrl;
+export const forceHttps = resolved.forceHttps;
+export const hstsMaxAge = resolved.hstsMaxAge;

@@ -31,17 +31,15 @@ function main() {
     return;
   }
 
+  // pnpm 的调用方式按平台分开：Windows 上是 `pnpm.cmd`（需要 shell），
+  // Linux/macOS 上是 `pnpm`。**脚本必须以命令名 + 参数数组的形式传**，
+  // 把整条命令塞进 executable 只在 Windows 的 shell 模式下成立，
+  // 在 CI 的 Linux 上会直接 `spawnSync ... ENOENT`。
+  const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
   const steps = [
     ['前端文案', process.execPath, ['scripts/check-strings.js']],
     ['WebView 前端', process.execPath, ['scripts/webui-check.js']],
-    [
-      '后端类型检查',
-      process.platform === 'win32'
-        ? 'pnpm.cmd --dir server typecheck'
-        : 'pnpm --dir server typecheck',
-      [],
-      { shell: process.platform === 'win32' },
-    ],
+    ['后端类型检查', pnpm, ['--dir', 'server', 'typecheck'], { shell: process.platform === 'win32' }],
   ];
 
   for (const [label, executable, args, options] of steps) {

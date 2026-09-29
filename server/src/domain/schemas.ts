@@ -141,6 +141,8 @@ export const emailVerifyLooseSchema = z.object({
   code: inputString.transform((value) => value.trim()),
 });
 export const uiModeSchema = z.object({ mode: inputString });
+/** 个人配色：下标是色板上的一个位置，合法范围由路由按补齐后的色板长度判定。 */
+export const uiThemeSchema = z.object({ themeIndex: z.unknown() });
 export const notifySchema = z
   .object({
     exhibitionReminder: boolSchema(),
@@ -175,6 +177,9 @@ export const serverSettingsPatchSchema = z
     bio: z.unknown(),
     region: z.unknown(),
     answer: z.unknown(),
+    // 缺省展会封面（媒体短 URL）与「展商可同时筹备的展会数」上限（0 = 不限）
+    defaultCover: z.unknown(),
+    maxFutureExhibitions: z.unknown(),
     notify: notifySchema,
   })
   .partial()
@@ -258,7 +263,6 @@ export function exhibitionInputSchema(
     registration_end?: string | null;
     description?: string | null;
     description_format?: string | null;
-    highlights?: unknown;
     image_uri?: string | null;
     exhibitor_note?: string | null;
     qr_enabled?: boolean | null;
@@ -277,7 +281,6 @@ export function exhibitionInputSchema(
       registrationEnd: isoDateSchema({ label: '报名截止日期' }),
       description: inputString,
       descriptionFormat: descriptionFormatSchema(),
-      highlights: stringListSchema({ label: '展会亮点' }),
       imageUri: inputString,
       exhibitorNote: inputString,
       qrEnabled: boolSchema(false),
@@ -331,7 +334,6 @@ export function exhibitionInputSchema(
         registrationEnd,
         description,
         descriptionFormat,
-        highlights: source.highlights ?? (Array.isArray(existing?.highlights) ? existing?.highlights : []),
         imageUri: source.imageUri ?? existing?.image_uri ?? '',
         exhibitorNote: source.exhibitorNote ?? (creating ? '主办方公开信息' : (existing?.exhibitor_note ?? '')),
         qrEnabled: source.qrEnabled ?? Boolean(existing?.qr_enabled),

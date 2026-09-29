@@ -1,10 +1,19 @@
 import { Hono } from 'hono';
 import { query } from '../config/pool.js';
-import { USER_COLUMNS, USER_FROM, REGISTRATION_COLUMNS, REGISTRATION_FROM } from '../domain/queries.js';
+import {
+  USER_COLUMNS,
+  USER_FROM,
+  REGISTRATION_COLUMNS,
+  REGISTRATION_FROM,
+  EXHIBITION_COLUMNS,
+  EXHIBITION_FROM,
+} from '../domain/queries.js';
 import {
   adminUserPayload,
+  exhibitionPayload,
   publicRegistrationPayload,
   type AdminUserRow,
+  type ExhibitionRow,
   type RegistrationRow,
   type UserRow,
 } from '../domain/payloads.js';
@@ -71,7 +80,21 @@ async function publicProfile(viewer: Actor | null, target: UserRow | null) {
     socialMedia: target.social_media || '',
     registrationTime: target.registration_time || '',
   };
-  return { found: true, ...profile, profile, viewedAsAdmin, showRegistrations, registrations };
+  // 这个用户自己开办的展会（展商公开页要展示）：与 `/exhibitions` 同一份公开字段，
+  // 顺序按举办日期倒序，和「已参加展会」保持一致。普通用户没有展会，返回空数组。
+  const hosted = await query<ExhibitionRow>(
+    `SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM} WHERE e.exhibitor_id = $1 ORDER BY e.exhibition_date DESC, e.id`,
+    [target.id],
+  );
+  return {
+    found: true,
+    ...profile,
+    profile,
+    viewedAsAdmin,
+    showRegistrations,
+    registrations,
+    exhibitions: hosted.rows.map(exhibitionPayload),
+  };
 }
 app.get('/', authenticateHono, async (c) => {
   requireAdmin({ user: userOf(c) });

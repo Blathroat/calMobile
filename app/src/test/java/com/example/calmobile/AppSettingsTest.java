@@ -100,4 +100,23 @@ public class AppSettingsTest {
         assertEquals(500, AppSettings.clampVideoSizeMb(9999));
         assertEquals(50, AppSettings.clampVideoSizeMb(50));
     }
+
+    /**
+     * 强调色下标必须与后端 `THEME_COLORS` 逐位对应：前端下发 `theme.index`，
+     * 原生据此画状态栏；错位会让「页面是紫色、状态栏却是别的颜色」。
+     * 8 色色板的下标 0..7 都要有值，且不能有两种下标撞成同一个颜色。
+     */
+    @Test
+    public void 强调色下标与后端八色色板逐位对应() {
+        int[] expected = {
+                0xFFC05621, 0xFF48515D, 0xFF245D3C, 0xFF2F6F8F,
+                0xFF334E7D, 0xFF0E6E62, 0xFF6B3FA0, 0xFFA32C5E,
+        };
+        for (int index = 0; index < expected.length; index++) {
+            assertEquals("下标 " + index + " 的强调色与后端不一致", expected[index], AppSettings.accentColorAt(index));
+        }
+        // 越界回落到默认的焦糖橙，而不是抛异常或取到别的色
+        assertEquals(0xFFC05621, AppSettings.accentColorAt(-1));
+        assertEquals(0xFFC05621, AppSettings.accentColorAt(expected.length));
+    }
 }

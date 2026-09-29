@@ -1,0 +1,405 @@
+<script setup lang="ts">
+/**
+ * 屏幕 04 · 报名信息
+ * 线框：docs/newUI/index.html #screen-register
+ *
+ * 表单按展商配置的收集项动态生成：文本、单选、多选三种类型。必填与字符上限取
+ * bootstrap 下发的规则（`services/validate`），校验失败落在字段原位（`.field-error`
+ * 加 `.field[data-invalid]`），提交按钮固定在页脚，成功后短暂停留再进「我的报名」。
+ *
+ * 从报名详情带 `?registrationId=` 进来是「修改报名」：按收集项标题回填已有答案，
+ * 提交仍是一次新的报名写入（与旧实现一致）。
+ */
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { api } from '@/app/runtime';
+import { useAsync } from '@/composables/useAsync';
+import { useSessionStore } from '@/stores/session';
+import { toast } from '@/services/toast';
+import { check, limit } from '@/services/validate';
+import { EXHIBITION_STATUS } from '@/services/status';
+import StateBlock from '@/components/StateBlock.vue';
+import SkeletonBlock from '@/components/SkeletonBlock.vue';
+import StatusTag from '@/components/StatusTag.vue';
+import { formatDateWithWeekday } from '@/services/format';
+import type { ExhibitionDetail, Registration } from '@/api/types';
+import { t } from '@/i18n';
+
+/** 收集项：`title` 既是答案行的键，也是本页的字段主键（后端按标题解析答案）。 */
+interface FieldDef {
+  title: string;
+  type?: string;
+  required?: boolean;
+  options?: unknown;
+}
+
+const route = useRoute();
+const router = useRouter();
+const session = useSessionStore();
+
+const query = useAsync<ExhibitionDetail>();
+const exhibition = computed(() => query.data.value?.exhibition);
+const fields = computed<FieldDef[]>(() => (Array.isArray(query.data.value?.fields) ? query.data.value?.fields as FieldDef[] : []));
+const exhibitionId = computed(() => String(route.params.id ?? ''));
+const registrationId = computed(() => String(route.query.registrationId ?? ''));
+
+/**
+ * 受限账号不能报名：后端 `POST /registrations` 直接 403。
+ * 详情页的「立即报名」已经置灰，但深链走得过去，这里整页换成说明，
+ * **不渲染可填写的表单**——否则用户填完一整页答案才在提交时吃 403。
+ */
+const registerLimited = computed(() => session.loggedIn === true && session.user.can?.register === false);
+
+/** 答案：文本与单选存字符串，多选存字符串数组。 */
+const answers = reactive<Record<string, string | string[]>>({});
+/** 行内校验错误，键是收集项标题。 */
+const fieldErrors = reactive<Record<string, string>>({});
+/** 提交级错误（接口失败、展会已关闭）与提交结果，显示在页脚按钮上方。 */
+const error = ref('');
+const success = ref(false);
+const approved = ref(false);
+const busy = ref(false);
+/** 表单只按第一份数据生成：之后刷新不再回填，避免冲掉用户已经填好的答案。 */
+let built = false;
+let redirectTimer: number | undefined;
+
+/** 字符上限由管理员在「管理-设置」里配置，缺省与后端一致。 */
+const answerMax = computed(() => limit('answer', 200));
+const submitLabel = computed(() => {
+  if (!success.value) return t('s_1umrk9v');
+  return approved.value ? t('s_f02bjx') : t('s_1vse82y');
+});
+
+onMounted(() => {
+  if (!registerLimited.value) void load();
+});
+
+// 离开本页时取消尚未触发的跳转，避免把已经返回的用户再拽到「我的报名」。
+onBeforeUnmount(() => {
+  if (redirectTimer !== undefined) {
+    window.clearTimeout(redirectTimer);
+    redirectTimer = undefined;
+  }
+});
+
+async function load(): Promise<void> {
+  await query.run(async () => {
+    const detail = await api.exhibitions.get(exhibitionId.value);
+    // 展会不存在时不再去取报名，保持「找不到展会」这一条提示。
+    let existing: Registration | null = null;
+    if (detail?.found && registrationId.value) {
+      const record = await api.registrations.get(registrationId.value);
+      existing = record?.found ? (record.registration ?? null) : null;
+    }
+    if (detail?.found && !built) {
+      built = true;
+      seed(detail.fields ?? [], existing);
+    }
+    return detail;
+  });
+}
+
+/** 按收集项把已有答案回填到表单；没有已有报名时只给必填单选补上第一项。 */
+function seed(list: unknown[], existing: Registration | null): void {
+  for (const raw of list) {
+    const field = raw as FieldDef;
+    const title = String(field.title ?? '');
+    if (!title) continue;
+    const options = splitOptions(field.options);
+    const stored = existing ? storedValue(existing, title) : '';
+    if (field.type === '单选') {
+      answers[title] = existing
+        ? (options.find((option) => option === stored) ?? '')
+        : (field.required === true ? (options[0] ?? '') : '');
+      continue;
+    }
+    if (field.type === '多选') {
+      const chosen = splitChoices(stored);
+      answers[title] = options.filter((option) => chosen.includes(option));
+      continue;
+    }
+    answers[title] = stored;
+  }
+}
+
+/** 答案行是「标题：值」的多行文本，与后端 `answerValue` 用同一套解析。 */
+function storedValue(record: Registration, title: string): string {
+  for (const line of String(record.answers ?? '').split('\n')) {
+    for (const separator of ['：', ':']) {
+      const prefix = `${title}${separator}`;
+      if (!line.startsWith(prefix)) continue;
+      const value = line.slice(prefix.length).trim();
+      return value === t('s_15h5nhd') ? '' : value;
+    }
+  }
+  return '';
+}
+
+/** 多选答案用顿号分隔（与后端 `splitChoices` 一致）。 */
+function splitChoices(value: string): string[] {
+  return value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean);
+}
+
+/** 选项为空时给一个占位选项，不渲染空白的单选 / 多选。 */
+function splitOptions(options: unknown): string[] {
+  const list = Array.isArray(options)
+    ? options.map((item) => String(item).trim()).filter(Boolean)
+    : String(options ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+  return list.length > 0 ? list : [t('s_q88a0n')];
+}
+
+function fieldId(field: FieldDef): string {
+  return `field-${field.title.replace(/\s+/g, '-')}`;
+}
+
+function textValue(field: FieldDef): string {
+  const value = answers[field.title];
+  return typeof value === 'string' ? value : '';
+}
+
+function multiValue(field: FieldDef): string[] {
+  const value = answers[field.title];
+  return Array.isArray(value) ? value : [];
+}
+
+/** 校验与提交共用的字段值：多选拼成顿号分隔的文本，与旧实现一致。 */
+function valueOf(field: FieldDef): string {
+  return field.type === '多选' ? multiValue(field).join('、') : textValue(field);
+}
+
+function clearFieldError(title: string): void {
+  if (fieldErrors[title] !== undefined) delete fieldErrors[title];
+}
+
+function onTextInput(field: FieldDef, event: Event): void {
+  answers[field.title] = (event.target as HTMLInputElement).value;
+  clearFieldError(field.title);
+}
+
+function onRadioChange(field: FieldDef, option: string): void {
+  answers[field.title] = option;
+  clearFieldError(field.title);
+}
+
+function onMultiChange(field: FieldDef, option: string, event: Event): void {
+  const list = multiValue(field).filter((item) => item !== option);
+  if ((event.target as HTMLInputElement).checked) list.push(option);
+  answers[field.title] = list;
+  clearFieldError(field.title);
+}
+
+/** 校验失败时把焦点移到第一个出错的字段（单选 / 多选落在第一项上）。 */
+async function focusField(title: string): Promise<void> {
+  await nextTick();
+  const id = `field-${title.replace(/\s+/g, '-')}`;
+  const node = document.getElementById(id) ?? document.getElementById(`${id}-0`);
+  node?.focus();
+}
+
+async function submit(): Promise<void> {
+  const item = exhibition.value;
+  if (busy.value || success.value || !item) return;
+  error.value = '';
+  for (const key of Object.keys(fieldErrors)) delete fieldErrors[key];
+
+  let firstInvalid = '';
+  for (const field of fields.value) {
+    const message = check(valueOf(field), {
+      label: field.title,
+      required: field.required === true,
+      // 只有文本项受字符上限约束（与后端 registrationSchema 的答案上限一致）。
+      max: field.type === '文本' ? answerMax.value : 0,
+    });
+    if (!message) continue;
+    fieldErrors[field.title] = message;
+    if (!firstInvalid) firstInvalid = field.title;
+  }
+  if (firstInvalid) {
+    await focusField(firstInvalid);
+    return;
+  }
+  if (item.openForRegistration === false) {
+    error.value = t('s_1b45hrg');
+    return;
+  }
+
+  const profile = session.user;
+  const visitorName = String(profile.nickname || profile.username || t('s_jt5fam'));
+  const visitorType = String(profile.roleLabel || t('s_1cfg610'));
+  const lines = fields.value.map((field) => `${field.title}：${valueOf(field) || t('s_15h5nhd')}`);
+
+  busy.value = true;
+  try {
+    const result = await api.registrations.submit({
+      exhibitionId: item.id,
+      title: item.title,
+      venue: item.venue,
+      time: item.time,
+      day: item.day,
+      visitorName,
+      visitorType,
+      answers: lines.join('\n'),
+    });
+    if (!result?.ok) {
+      error.value = String(result?.error || t('s_f66edb'));
+      return;
+    }
+    approved.value = result.autoApproved === true || item.status === EXHIBITION_STATUS.REVIEW_OPTIONAL;
+    success.value = true;
+    toast(approved.value ? t('s_17txntc') : t('s_gs61uj'), 'success');
+    // 提交成功后的短暂停留：定时器随页面一起取消，用户已经返回时不再被拉回列表。
+    redirectTimer = window.setTimeout(() => {
+      redirectTimer = undefined;
+      void router.replace('/my-registrations');
+    }, 900);
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    busy.value = false;
+  }
+}
+</script>
+
+<template>
+  <!-- 受限账号：说明原因并给出离开的入口，不渲染表单 -->
+  <StateBlock
+    v-if="registerLimited"
+    icon="info"
+    :title="t('s_1tanmo5')"
+    :description="t('s_1yv1vu0')"
+    :action-label="t('s_dn4ida')"
+    @action="router.push('/home')"
+  />
+
+  <template v-else>
+    <SkeletonBlock v-if="query.loading.value && !query.data.value" :rows="3" />
+
+    <StateBlock
+      v-else-if="query.error.value && !query.data.value"
+      tone="error"
+      :title="t('s_kvpltc')"
+      :description="query.error.value.message"
+      :action-label="t('s_lswd2v')"
+      @action="load"
+    />
+
+    <StateBlock
+      v-else-if="query.data.value?.found === false"
+      tone="error"
+      icon="info"
+      :title="t('s_1vim1qp')"
+      :description="String(query.data.value?.error || t('s_1px91rj'))"
+      :action-label="t('s_17zyr1e')"
+      @action="router.push('/home')"
+    />
+
+    <template v-else-if="exhibition">
+      <!-- 展会摘要：提交前确认名称与报名方式 -->
+      <div class="card" data-tone="fill">
+        <strong>{{ exhibition.title }}</strong>
+        <span class="row-meta">{{ formatDateWithWeekday(exhibition.date) }} {{ exhibition.time }} · {{ exhibition.venue }}</span>
+        <StatusTag :text="String(exhibition.modeLabel || exhibition.status || '')" />
+      </div>
+
+      <form id="registration-form" class="form" novalidate @submit.prevent="submit">
+        <template v-for="field in fields" :key="field.title">
+          <!-- 单选：一组互斥选项 -->
+          <fieldset
+            v-if="field.type === '单选'"
+            class="choice-group"
+            :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
+          >
+            <legend>
+              {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
+            </legend>
+            <div class="choice-row">
+              <span v-for="(option, index) in splitOptions(field.options)" :key="option" class="choice">
+                <input
+                  :id="`${fieldId(field)}-${index}`"
+                  type="radio"
+                  :name="fieldId(field)"
+                  :value="option"
+                  :checked="textValue(field) === option"
+                  @change="onRadioChange(field, option)"
+                >
+                <label :for="`${fieldId(field)}-${index}`">{{ option }}</label>
+              </span>
+            </div>
+            <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
+          </fieldset>
+
+          <!-- 多选：可同时勾选多项 -->
+          <fieldset
+            v-else-if="field.type === '多选'"
+            class="choice-group"
+            :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
+          >
+            <legend>
+              {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
+            </legend>
+            <div class="check-row">
+              <label
+                v-for="(option, index) in splitOptions(field.options)"
+                :key="option"
+                class="check-label"
+                :for="`${fieldId(field)}-${index}`"
+              >
+                <input
+                  :id="`${fieldId(field)}-${index}`"
+                  type="checkbox"
+                  :value="option"
+                  :checked="multiValue(field).includes(option)"
+                  @change="onMultiChange(field, option, $event)"
+                >
+                {{ option }}
+              </label>
+            </div>
+            <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
+          </fieldset>
+
+          <!-- 文本：默认类型 -->
+          <div v-else class="field" :data-invalid="fieldErrors[field.title] ? 'true' : undefined">
+            <label :for="fieldId(field)">
+              {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
+            </label>
+            <input
+              :id="fieldId(field)"
+              class="input"
+              type="text"
+              :placeholder="`请输入${field.title}`"
+              :maxlength="answerMax"
+              :value="textValue(field)"
+              @input="onTextInput(field, $event)"
+            >
+            <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
+          </div>
+        </template>
+      </form>
+    </template>
+  </template>
+
+  <!-- 底部固定提交区：按钮用 form 属性关联正文里的表单，回车与点击走同一条提交路径 -->
+  <Teleport v-if="exhibition && query.data.value?.found !== false" defer to="#app-foot">
+    <div class="page-foot">
+      <div class="stack" data-gap="sm">
+        <StateBlock
+          v-if="success"
+          tone="success"
+          :title="approved ? t('s_hiwq5k') : t('s_gs61uj')"
+          :description="approved ? t('s_1d9en33') : t('s_1qd14sn')"
+        />
+        <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+        <button
+          class="cta"
+          type="submit"
+          form="registration-form"
+          :disabled="busy || success"
+          :data-loading="busy ? 'true' : 'false'"
+        >
+          {{ submitLabel }}
+        </button>
+        <p class="field-hint text-center">{{ t('s_n6zeza') }}</p>
+      </div>
+    </div>
+  </Teleport>
+</template>

@@ -122,6 +122,32 @@ test('端口、日志、CORS 有默认值，显式配置优先', () => {
   assert.equal(overridden.corsOrigin, 'https://appassets.androidplatform.net');
 });
 
+test('对外部署的三项配置：域名归一化、FORCE_HTTPS 与 HSTS 取值', () => {
+  const defaults = parseEnv(validEnv()).runtime;
+  assert.equal(defaults.publicBaseUrl, '', '没配就是空串（状态页只显示端口）');
+  assert.equal(defaults.forceHttps, false, '直连部署默认不跳转');
+  assert.equal(defaults.hstsMaxAge, 15_552_000, 'HSTS 默认 180 天');
+
+  const configured = parseEnv(
+    validEnv({
+      PUBLIC_BASE_URL: 'https://app.example.com/',
+      FORCE_HTTPS: '1',
+      HSTS_MAX_AGE: '600',
+    }),
+  ).runtime;
+  assert.equal(configured.publicBaseUrl, 'https://app.example.com', '去掉尾斜杠');
+  assert.equal(configured.forceHttps, true);
+  assert.equal(configured.hstsMaxAge, 600);
+
+  // 非法域名当没配：宁可状态页不显示，也不要显示半截地址
+  assert.equal(parseEnv(validEnv({ PUBLIC_BASE_URL: 'app.example.com' })).runtime.publicBaseUrl, '');
+  // 0 / off 表示不下发 HSTS 头（域名还没定、或本地 http 调试）
+  assert.equal(parseEnv(validEnv({ HSTS_MAX_AGE: '0' })).runtime.hstsMaxAge, 0);
+  assert.equal(parseEnv(validEnv({ HSTS_MAX_AGE: 'off' })).runtime.hstsMaxAge, 0);
+  // 乱填的值回落到默认，而不是 0（不能因为打错一个字就把 HSTS 关掉）
+  assert.equal(parseEnv(validEnv({ HSTS_MAX_AGE: 'abc' })).runtime.hstsMaxAge, 15_552_000);
+});
+
 test('数据库配置从注入的环境取值，未知 NODE_ENV 回退到 development', () => {
   const config = parseEnv(
     validEnv({

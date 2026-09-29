@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { query } from '../config/pool.js';
-import { readServerSettings, readUiMode } from '../domain/settings.js';
+import { readServerSettings, readUiMode, readUiTheme } from '../domain/settings.js';
 import { USER_COLUMNS, USER_FROM } from '../domain/queries.js';
 import { userPayload, guestPayload, type UserRow } from '../domain/payloads.js';
 import { capabilities } from '../domain/permissions.js';
@@ -30,6 +30,10 @@ app.get('/bootstrap', optionalAuthHono, async (c) => {
   const userOfRequest = userOf(c);
   const settings = await readServerSettings();
   const mode = await readUiMode(userOfRequest?.userId, settings);
+  // 配色下标是**该用户实际生效**的那个：登录账号选过就用自己那份（`users.ui_theme`），
+  // 没选过或未登录时用全局默认 `app_settings.theme.index`。
+  // 前端因此不用分支，直接按 `theme.colors[theme.index]` 取色。
+  const themeIndex = await readUiTheme(userOfRequest?.userId, settings.theme.index, settings.theme.colors);
   let user = guestPayload();
   if (userOfRequest) {
     const result = await query<UserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [userOfRequest.userId]);
@@ -38,7 +42,7 @@ app.get('/bootstrap', optionalAuthHono, async (c) => {
   }
   return jsonResponse(c, {
     user,
-    theme: settings.theme,
+    theme: { index: themeIndex, colors: settings.theme.colors },
     ui: { mode },
     capabilities: { ...settings.capabilities },
     categories: settings.categories,
@@ -48,6 +52,10 @@ app.get('/bootstrap', optionalAuthHono, async (c) => {
     brand: settings.brand,
     limits: settings.limits,
     server: settings.upload,
+    // 缺省展会封面（展会自己没有封面时用它兜底）与展商端的「可同时筹备的展会数」上限：
+    // 前者给列表 / 详情做兜底图，后者给展商表单做提示与前端预校验。
+    cover: settings.cover,
+    exhibitor: settings.exhibitor,
     calendar: { available: false, landing: await landingMonth() },
   });
 });

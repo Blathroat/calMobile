@@ -170,7 +170,7 @@ function main() {
     }
     const require_ = require('node:module').createRequire(__filename);
     const jsQR = require_(path.resolve(__dirname, '..',
-        'app/src/main/assets/web/vendor/jsqr/jsQR.js'));
+        'web/public/vendor/jsQR.js'));
 
     const image = decodePng(fs.readFileSync(file));
     console.log(`截图尺寸：${image.width}×${image.height}`);

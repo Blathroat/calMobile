@@ -10,7 +10,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { TrustProxy } from '../config/runtime.js';
-import { corsHeaders, headContentLength, requestLogger, securityHeaders } from './node-middleware.js';
+import { corsHeaders, headContentLength, requestLogger, requireHttps, securityHeaders } from './node-middleware.js';
 import { errorResponse } from '../http/error-response.js';
 import { jsonResponse } from '../http/respond.js';
 import { jsonBodySizeGuard } from '../http/body-limit.js';
@@ -41,6 +41,10 @@ export interface AppOptions {
   readonly statusPageEnabled: boolean;
   /** 服务版本号（`package.json` 的 version），`/ping` 下发它。 */
   readonly serviceVersion: string;
+  /** `HSTS_MAX_AGE`：0 表示不下发 `Strict-Transport-Security`；缺省 180 天。 */
+  readonly hstsMaxAge?: number;
+  /** `FORCE_HTTPS`：反代已终止 TLS 时把明文请求 308 跳到 https。 */
+  readonly forceHttps?: boolean;
 }
 
 /**
@@ -55,7 +59,9 @@ export function createApp(options: AppOptions): Hono {
   // 顺序有讲究：安全头要落在 socket 上（见文件头），HEAD 补长度要包住后面的所有层，
   // CORS 要能在预检上先答 204，日志要能监听整个链路的 finish。
   app.use(headContentLength());
-  app.use(securityHeaders());
+  app.use(securityHeaders(options.hstsMaxAge));
+  // 反代终止 TLS 时先把明文请求跳走：安全头与 CORS 都在它之后，跳转响应本身不需要它们。
+  if (options.forceHttps === true) app.use(requireHttps());
   app.use(corsHeaders(options.corsOrigin));
   app.use(requestLogger({ logLevel: options.logLevel, trustProxy: options.trustProxy }));
 

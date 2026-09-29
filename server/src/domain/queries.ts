@@ -9,7 +9,7 @@
 /** 展会：字段 + 展商昵称 + 报名数 + 收集项数。 */
 export const EXHIBITION_COLUMNS = `
     e.id, e.title, e.venue, e.time, e.category, e.description, e.description_format,
-    e.highlights, e.image_uri, e.exhibitor_note, e.qr_enabled, e.exhibitor_id, e.status,
+    e.image_uri, e.exhibitor_note, e.qr_enabled, e.exhibitor_id, e.status,
     to_char(e.exhibition_date, 'YYYY-MM-DD')                AS exhibition_date,
     EXTRACT(YEAR FROM e.exhibition_date)::int               AS year,
     EXTRACT(MONTH FROM e.exhibition_date)::int              AS month,
@@ -51,7 +51,7 @@ export const REGISTRATION_FROM = `
 /** 用户：对外字段（绝不带 password_hash）。 */
 export const USER_COLUMNS = `
     u.id, u.username, u.email, u.nickname, u.role, u.status, u.bio, u.region,
-    u.avatar, u.social_media, u.show_registrations,
+    u.avatar, u.social_media, u.show_registrations, u.seen_hints,
     u.email_verified, u.two_factor_enabled,
     to_char(u.registration_time, 'YYYY-MM-DD')  AS registration_time,
     to_char(u.last_login_time, 'YYYY-MM-DD')    AS last_login_time

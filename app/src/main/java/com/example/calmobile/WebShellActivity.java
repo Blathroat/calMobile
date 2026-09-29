@@ -33,7 +33,7 @@ import java.util.Map;
 /**
  * WebView 前端容器。
  * <p>
- * 页面资源来自 {@code app/src/main/assets/web/}，映射到 {@code https://appassets.androidplatform.net/assets/web/}，
+ * 页面资源来自 Gradle 生成的 WebView assets，映射到 {@code https://appassets.androidplatform.net/assets/web/}，
  * 保持标准 Web 安全上下文（便于 fetch 与 ES 模块加载）。所有业务调用统一走 {@link WebAppBridge}。
  */
 public class WebShellActivity extends Activity {

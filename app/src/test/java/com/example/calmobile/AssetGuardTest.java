@@ -16,7 +16,7 @@ public class AssetGuardTest {
     @Test
     public void 资源路径只放行web目录() {
         assertEquals("web/index.html", AssetGuard.resolveAssetPath("/assets/web/index.html"));
-        assertEquals("web/js/app.js", AssetGuard.resolveAssetPath("/assets/web/js/app.js"));
+        assertEquals("web/assets/index.js", AssetGuard.resolveAssetPath("/assets/web/assets/index.js"));
         assertNull(AssetGuard.resolveAssetPath("/assets/other/x.html"));
         assertNull(AssetGuard.resolveAssetPath("/assets/web"));
         assertNull(AssetGuard.resolveAssetPath("/assets/web2/x.html"));
