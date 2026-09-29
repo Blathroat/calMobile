@@ -77,6 +77,17 @@ export function firstWeekdayOffset(year: number, month: number): number {
   return (new Date(year, month - 1, 1).getDay() + 6) % 7;
 }
 
+/**
+ * 日历要排几行：放得下就 5 行，放不下才 6 行。
+ *
+ * `offset + 当月天数` 就是占用的格子数：≤35 时 5 行足够（这时第 5 行末尾用下月日期补位），
+ * 36…42 才需要第 6 行。下限取 5 而不是 4：个别 2 月正好 28 格，但让卡片在 4/5/6 三档
+ * 之间跳更难看，所以 4 行的情况也补到 5 行。
+ */
+export function calendarRowCount(year: number, month: number): number {
+  return firstWeekdayOffset(year, month) + daysInMonth(year, month) <= 35 ? 5 : 6;
+}
+
 export function addMonths(year: number, month: number, delta: number): { year: number; month: number } {
   const total = (year * 12) + (month - 1) + delta;
   return { year: Math.floor(total / 12), month: (total % 12) + 1 };

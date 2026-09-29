@@ -374,11 +374,12 @@
     animation: cal-out-right var(--motion-quick) var(--ease-in) both;
 }
 
-.calendar[data-enter="right"] .calendar-grid {
+/* 整卡动画：星期表头与日期格子必须一起滑入，只动 `.calendar-grid` 会让两者在动画期间错位 */
+.calendar[data-enter="right"] {
     animation: cal-in-right var(--motion-normal) var(--ease-out) both;
 }
 
-.calendar[data-enter="left"] .calendar-grid {
+.calendar[data-enter="left"] {
     animation: cal-in-left var(--motion-normal) var(--ease-out) both;
 }
 

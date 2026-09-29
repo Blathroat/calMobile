@@ -4,7 +4,7 @@
  * 线框：docs/newUI/index.html #screen-home、docs/newUI/remaining-ui.html #screen-home
  *
  * 日历卡片支持左右滑动切换月份：拖动时卡片跟手位移，松手超过阈值则滑出并载入相邻月份。
- * 日历固定 6 行、行高只有一档，月份之间行距一致，卡片高度也不随月份变化。
+ * 行数按月份实际需要取 5 或 6 行（放得下就 5 行），行高只有一档，所以同一行里的日期不会跳。
  *
  * 点日期**不发请求**：`exhibitions.month` 一次返回整月展会，选中哪一天纯属本地状态，
  * 因此既不重新取数，也不重建日历 DOM（重建会让卡片闪一下、圆点动画重放）。
@@ -23,7 +23,7 @@ import HintNote from '@/components/HintNote.vue';
 import { useHint } from '@/composables/useHint';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
-import { addMonths, daysInMonth, firstWeekdayOffset, monthLabel } from '@/services/format';
+import { addMonths, calendarRowCount, daysInMonth, firstWeekdayOffset, monthLabel } from '@/services/format';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -55,16 +55,22 @@ const swipeHost = ref<HTMLElement>();
 const leave = ref('');
 const enter = ref('');
 
-interface Cell { day: number; muted: boolean; hasEvent: boolean; disabled: boolean }
+interface Cell {
+  day: number;
+  /** 这一格属于哪个月：补位格子是相邻月份的日期，读屏不能报成当月。 */
+  month: number;
+  muted: boolean;
+  hasEvent: boolean;
+  disabled: boolean;
+}
 
 /**
- * 日历固定排 6 行。
+ * 行数按月份实际需要取 5 或 6 行：放得下就只排 5 行，放不下才加第 6 行。
  *
- * 之前按月份实际需要排 5 或 6 行，6 行的月份压缩行高（`data-rows="6"`），于是**不同月份
- * 的行距、字号都不一样**，左右滑月份时整卡还会跳一下。固定 6 行后行高只有一档，
- * 卡片高度也不再随月份变化；不足 6 行的月份用下个月的日期补位（灰显不可点）。
+ * 行高只有一档（`tokens.css` 的 `.cal-day`），所以同一行内的日期不会上下跳；
+ * 不足整行时用相邻月份的日期补位（灰显不可点），与设计稿一致。
  */
-const CALENDAR_ROWS = 6;
+const rows = computed(() => calendarRowCount(view.value.year, view.value.month));
 
 /** 日历格子：上下月的补位灰显且不可点，只有本月的日期能选中。 */
 const cells = computed<Cell[]>(() => {
@@ -76,14 +82,21 @@ const cells = computed<Cell[]>(() => {
   const events = new Set(eventDays());
   const list: Cell[] = [];
   for (let index = 0; index < offset; index += 1) {
-    list.push({ day: previousTotal - offset + index + 1, muted: true, hasEvent: false, disabled: true });
+    list.push({
+      day: previousTotal - offset + index + 1,
+      month: previous.month,
+      muted: true,
+      hasEvent: false,
+      disabled: true,
+    });
   }
   for (let day = 1; day <= total; day += 1) {
-    list.push({ day, muted: false, hasEvent: events.has(day), disabled: false });
+    list.push({ day, month, muted: false, hasEvent: events.has(day), disabled: false });
   }
-  const trailing = (CALENDAR_ROWS * 7) - offset - total;
+  const trailing = (rows.value * 7) - offset - total;
+  const next = addMonths(year, month, 1);
   for (let day = 1; day <= trailing; day += 1) {
-    list.push({ day, muted: true, hasEvent: false, disabled: true });
+    list.push({ day, month: next.month, muted: true, hasEvent: false, disabled: true });
   }
   return list;
 });
@@ -107,7 +120,8 @@ const announcement = ref('');
 function dayLabel(cell: Cell): string {
   const suffix = cell.hasEvent ? t('s_1hzbri3') : '';
   const selected = cell.day === view.value.day && !cell.muted ? t('s_19g8l4d') : '';
-  return `${view.value.month}月${cell.day}日${suffix}${selected}`;
+  // 用格子自己的月份：补位格子是上/下月的日期，报成当月会让读屏听到错的日期。
+  return `${cell.month}月${cell.day}日${suffix}${selected}`;
 }
 
 /** 加载当前 `view` 对应的月份；已有内容时保留旧内容，只标记忙碌。 */
@@ -349,7 +363,7 @@ onMounted(() => {
         <div class="week-row" aria-hidden="true">
           <span v-for="label in WEEK_LABELS" :key="label">{{ label }}</span>
         </div>
-        <div class="calendar-grid">
+        <div class="calendar-grid" :data-rows="rows">
           <button
             v-for="(cell, index) in cells"
             :key="`${cell.muted ? 'p' : 'c'}-${cell.day}-${index}`"
