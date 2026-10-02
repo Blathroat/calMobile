@@ -69,8 +69,14 @@ const COPY = {
 const profile = reactive<JsonObject>({});
 const notify = reactive({ exhibitionReminder: true, registrationUpdates: true, granted: false });
 const loading = ref(true);
-const loadFailed = ref(false);
-const loadError = ref('');
+const profileLoading = ref(false);
+const profileLoaded = ref(false);
+const profileError = ref('');
+const notifyLoading = ref(false);
+const notifyLoaded = ref(false);
+const notifyError = ref('');
+const profileReady = computed(() => profileLoaded.value && !profileLoading.value && !profileError.value);
+const notifyReady = computed(() => notifyLoaded.value && !notifyLoading.value && !notifyError.value);
 
 const notificationsGranted = computed(() => {
   const value = capabilities.values.notifications;
@@ -83,45 +89,41 @@ function errorText(reason: unknown): string {
   return reason instanceof Error && reason.message ? reason.message : t('s_1q9u8le');
 }
 
-/**
- * 个人资料与通知偏好并行拉取：正好对应本页的两组开关/表单。
- *
- * 两份都失败按加载失败处理（原位错误块 + 重试）：后端没起时页面照常画出来、
- * 开关显示全开，是最容易让人误判「加载成功」的一种假象。只失败一份时保留另一份，
- * 用 toast 说明缺的是哪一块。
- */
+/** 两组数据分别保留错误和重试入口；完整资料到齐前不能提交覆盖写入。 */
 async function load(): Promise<void> {
   await bootApp().catch(() => undefined);
   loading.value = true;
-  const [profileResult, notifyResult] = await Promise.allSettled([
-    api.profile.get(),
-    api.profile.notifications(),
-  ]);
-
-  const warnings: string[] = [];
-  if (profileResult.status === 'fulfilled') {
-    Object.assign(profile, profileResult.value ?? {});
-    session.applyUser({ ...user.value, ...profileResult.value });
-  } else {
-    warnings.push(t('s_1sz2kuw'));
-  }
-  if (notifyResult.status === 'fulfilled') {
-    Object.assign(notify, { exhibitionReminder: true, registrationUpdates: true, granted: false }, notifyResult.value ?? {});
-  } else {
-    warnings.push(t('s_121kyl5'));
-  }
-
-  if (profileResult.status === 'rejected' && notifyResult.status === 'rejected') {
-    loadFailed.value = true;
-    loadError.value = errorText(profileResult.reason) || errorText(notifyResult.reason);
-    loading.value = false;
-    return;
-  }
-
-  loadFailed.value = false;
-  loadError.value = '';
+  await Promise.all([loadProfile(), loadNotifications()]);
   loading.value = false;
-  warnings.forEach((message) => toast(message, 'error'));
+}
+
+async function loadProfile(): Promise<void> {
+  profileLoading.value = true;
+  profileError.value = '';
+  try {
+    const result = await api.profile.get();
+    Object.assign(profile, result);
+    session.applyUser({ ...user.value, ...result });
+    profileLoaded.value = true;
+  } catch (reason) {
+    profileError.value = errorText(reason);
+  } finally {
+    profileLoading.value = false;
+  }
+}
+
+async function loadNotifications(): Promise<void> {
+  notifyLoading.value = true;
+  notifyError.value = '';
+  try {
+    const result = await api.profile.notifications();
+    Object.assign(notify, { exhibitionReminder: true, registrationUpdates: true, granted: false }, result);
+    notifyLoaded.value = true;
+  } catch (reason) {
+    notifyError.value = errorText(reason);
+  } finally {
+    notifyLoading.value = false;
+  }
 }
 
 onMounted(load);
@@ -134,8 +136,12 @@ const avatarError = ref('');
 /** 非空时渲染裁剪面板；组件关闭后由 `@close` 清空，避免下次打开先闪一眼上一张。 */
 const cropSource = ref('');
 
-/** 受限账号不能写资料：先拦一次，避免置灰按钮被聚焦或旧缓存页面点到。 */
-function guardLimited(): boolean {
+/** 资料未读成功或账号受限时不能覆盖写入，动作入口与禁用状态保持一致。 */
+function guardProfileWrite(): boolean {
+  if (!profileReady.value) {
+    toast(profileError.value || t('s_1sz2kuw'), 'error');
+    return true;
+  }
   if (!limited.value) return false;
   toast(limitHint.value, 'error');
   return true;
@@ -143,7 +149,7 @@ function guardLimited(): boolean {
 
 /** 选图只负责拿到 dataUrl；裁剪交给 AvatarCropper，取消选图不做提示（与系统选择器一致）。 */
 async function pickAvatar(): Promise<void> {
-  if (guardLimited()) return;
+  if (guardProfileWrite()) return;
   avatarMessage.value = '';
   avatarError.value = '';
   let picked;
@@ -176,6 +182,7 @@ function onCropError(message: string): void {
 
 /** `@done` 拿到的就是裁剪后的方图 dataUrl；这里落盘换短 URL，再写进资料。 */
 async function storeAvatar(dataUrl: string): Promise<void> {
+  if (guardProfileWrite()) return;
   avatarBusy.value = true;
   try {
     const stored = await device.storeMedia({ dataUrl, kind: 'avatar' });
@@ -195,7 +202,7 @@ async function storeAvatar(dataUrl: string): Promise<void> {
 
 /** 头像与资料同属 `PUT /profile`：写入后把整份用户对象合并回会话。 */
 async function saveAvatar(url: string): Promise<void> {
-  if (guardLimited()) return;
+  if (guardProfileWrite()) return;
   avatarMessage.value = '';
   avatarError.value = '';
   try {
@@ -227,7 +234,7 @@ const editForm = reactive({ nickname: '', bio: '', region: '', socialMedia: '' }
 const editInvalid = reactive({ nickname: false, bio: false, region: false, socialMedia: false });
 
 function openEditor(): void {
-  if (guardLimited()) return;
+  if (guardProfileWrite()) return;
   editForm.nickname = String(user.value.nickname || user.value.username || '');
   editForm.bio = String(profile.bio || '');
   editForm.region = String(profile.region || '');
@@ -266,6 +273,7 @@ function validateEditor(): boolean {
 }
 
 async function saveEditor(): Promise<void> {
+  if (guardProfileWrite()) return;
   if (!validateEditor()) return;
   editBusy.value = true;
   try {
@@ -302,7 +310,7 @@ const privacyBusy = ref(false);
  * 头像都要原样回传 —— 少传字段会被当成清空。
  */
 async function savePrivacy(value: boolean): Promise<void> {
-  if (guardLimited()) return;
+  if (guardProfileWrite()) return;
   const previous = profile.showRegistrations === true;
   profile.showRegistrations = value;
   privacyBusy.value = true;
@@ -394,6 +402,7 @@ async function savePassword(): Promise<void> {
 const savingPreference = ref('');
 
 async function savePreferences(patch: JsonObject): Promise<void> {
+  if (!notifyReady.value) return;
   const key = Object.keys(patch)[0] ?? '';
   savingPreference.value = key;
   try {
@@ -411,7 +420,7 @@ async function savePreferences(patch: JsonObject): Promise<void> {
 async function requestNotification(): Promise<void> {
   try {
     const result = await device.requestNotificationPermission();
-    const granted = result.granted === true;
+    const granted = result === true;
     notify.granted = granted;
     // 拿到结果后同步到设备能力，按钮的显隐以它为准（见 notificationsGranted）。
     capabilities.apply({ notifications: granted });
@@ -487,16 +496,16 @@ async function changeMode(value: string): Promise<void> {
   <template v-else>
     <SkeletonBlock v-if="loading" :rows="4" />
 
-    <StateBlock
-      v-else-if="loadFailed"
-      tone="error"
-      :title="t('s_1sz2kuw')"
-      :description="loadError"
-      :action-label="t('s_lswd2v')"
-      @action="load"
-    />
-
     <template v-else>
+      <SkeletonBlock v-if="profileLoading" :rows="2" />
+      <StateBlock
+        v-else-if="profileError"
+        tone="error"
+        :title="t('s_1sz2kuw')"
+        :description="profileError"
+        :action-label="t('s_lswd2v')"
+        @action="loadProfile"
+      />
       <!-- 头像卡：当前头像 + 编辑资料入口 + 上传 / 移除 -->
       <div class="card">
         <div class="row" data-gap="md">
@@ -510,7 +519,7 @@ async function changeMode(value: string): Promise<void> {
           class="cta ghost"
           data-size="small"
           type="button"
-          :disabled="limited"
+          :disabled="limited || !profileReady"
           :title="limited ? limitHint : undefined"
           @click="openEditor"
         >
@@ -521,7 +530,7 @@ async function changeMode(value: string): Promise<void> {
             class="cta ghost"
             data-size="small"
             type="button"
-            :disabled="limited || avatarBusy"
+            :disabled="limited || !profileReady || avatarBusy"
             :title="limited ? limitHint : undefined"
             @click="pickAvatar"
           >
@@ -532,7 +541,7 @@ async function changeMode(value: string): Promise<void> {
             class="cta ghost"
             data-size="small"
             type="button"
-            :disabled="limited || avatarBusy"
+            :disabled="limited || !profileReady || avatarBusy"
             :title="limited ? limitHint : undefined"
             @click="saveAvatar('')"
           >
@@ -642,6 +651,15 @@ async function changeMode(value: string): Promise<void> {
       <!-- 通知设置：两个偏好 + 系统通知权限入口 -->
       <div class="card">
         <span class="section-label">{{ COPY.notificationsTitle }}</span>
+        <SkeletonBlock v-if="notifyLoading" :rows="2" />
+        <StateBlock
+          v-else-if="notifyError"
+          tone="error"
+          :title="t('s_121kyl5')"
+          :description="notifyError"
+          :action-label="t('s_lswd2v')"
+          @action="loadNotifications"
+        />
         <div class="switch-row">
           <span class="switch-copy">
             <strong>{{ t('s_1f8zcmv') }}</strong>
@@ -651,7 +669,7 @@ async function changeMode(value: string): Promise<void> {
               id="notify-reminder"
               type="checkbox"
               :checked="notify.exhibitionReminder"
-              :disabled="savingPreference === 'exhibitionReminder'"
+              :disabled="!notifyReady || savingPreference === 'exhibitionReminder'"
               @change="savePreferences({ exhibitionReminder: ($event.target as HTMLInputElement).checked })"
             >
             <span />
@@ -666,7 +684,7 @@ async function changeMode(value: string): Promise<void> {
               id="notify-status"
               type="checkbox"
               :checked="notify.registrationUpdates"
-              :disabled="savingPreference === 'registrationUpdates'"
+              :disabled="!notifyReady || savingPreference === 'registrationUpdates'"
               @change="savePreferences({ registrationUpdates: ($event.target as HTMLInputElement).checked })"
             >
             <span />
@@ -721,7 +739,7 @@ async function changeMode(value: string): Promise<void> {
               id="settings-privacy-registrations"
               type="checkbox"
               :checked="profile.showRegistrations === true"
-              :disabled="limited || privacyBusy"
+              :disabled="limited || !profileReady || privacyBusy"
               @change="savePrivacy(($event.target as HTMLInputElement).checked)"
             >
             <span />

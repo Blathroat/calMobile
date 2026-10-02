@@ -74,9 +74,9 @@ export interface ApiClient {
     forgotPassword(email: string): Promise<ApiResult>;
     /** 用邮件里的凭据设置新密码。 */
     resetPassword(payload: JsonObject): Promise<ApiResult>;
-    /** 访客登录：拿到受限令牌，能做什么由后端下发的 `can` 决定。 */
+    /** 访客入口：清掉既有会话，返回后端下发的匿名身份。 */
     guest(): Promise<AuthResult>;
-    /** 退出：先尽力通知后端吊销刷新令牌（失败也无所谓），再清会话与缓存。 */
+    /** 退出：立即清会话与缓存，再尽力通知后端吊销原刷新令牌。 */
     logout(): Promise<void>;
   };
   /** 个人资料与通知偏好。 `publicProfile` 展示的是 `save` 改过的同一份数据。 */
@@ -204,12 +204,22 @@ export interface ApiClient {
 export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
   // 先声明后用：HttpClient 的取令牌与刷新回调都引用 session，构造顺序上只能这样解环。
   let session!: SessionClient;
-  const http = new HttpClient({ baseUrl, getAccessToken: () => session.token, refresh: () => session.refresh() });
+  const http = new HttpClient({
+    baseUrl, getAccessToken: () => session.token, getSessionSignal: () => session.signal,
+    refresh: () => session.refresh(),
+  });
   session = new SessionClient(http);
   const cache = new QueryCache();
+  let cacheSession = session.signal;
   // 读：键统一拼成 前缀:路径:参数，前缀就是写接口失效时用的那个前缀。
-  const read = <T>(key: string, path: string, request: Parameters<HttpClient['request']>[1] = {}) =>
-    cache.get<T>(`${key}:${path}:${stableKey(request.query ?? {})}`, () => http.request<T>(path, request));
+  const read = <T>(key: string, path: string, request: Parameters<HttpClient['request']>[1] = {}) => {
+    // 刷新凭据被撤销也会结束会话，不能只有显式登录/退出才清缓存。
+    if (cacheSession !== session.signal) {
+      cache.clear();
+      cacheSession = session.signal;
+    }
+    return cache.get<T>(`${key}:${path}:${stableKey(request.query ?? {})}`, () => http.request<T>(path, request));
+  };
   // 写：只有请求成功后才失效。失败时保留旧缓存 —— 清掉也拿不到新数据，只会白丢可用的值。
   const write = async <T>(path: string, request: Parameters<HttpClient['request']>[1], invalidates: string[] = []) => {
     const result = await http.request<T>(path, request);
@@ -242,12 +252,18 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
       registerVerify: async (payload) => afterAuth(await http.request<AuthResult>('/auth/register/verify', { method: 'POST', body: payload })),
       forgotPassword: (email) => http.request<ApiResult>('/auth/password/forgot', { method: 'POST', body: { email } }),
       resetPassword: (payload) => http.request<ApiResult>('/auth/password/reset', { method: 'POST', body: payload }),
-      guest: async () => afterAuth(await http.request<AuthResult>('/auth/guest', { method: 'POST' })),
-      logout: async () => {
-        // 吊销失败也要继续：本地会话必须清干净，否则用户以为退了其实没退。
-        try { await http.request('/auth/logout', { method: 'POST', body: { refreshToken: session.refreshTokenValue } }); } catch { /* best effort */ }
+      guest: async () => {
+        const result = await http.request<AuthResult>('/auth/guest', { method: 'POST' });
         session.clear();
         cache.clear();
+        return result;
+      },
+      logout: async () => {
+        const refreshToken = session.refreshTokenValue;
+        session.clear();
+        cache.clear();
+        // 吊销只用原刷新令牌；绝不能续期或等网络回包后才结束本地会话。
+        void http.request('/auth/logout', { method: 'POST', body: { refreshToken } }, false).catch(() => undefined);
       },
     },
     profile: {

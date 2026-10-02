@@ -110,7 +110,8 @@ const coverBusy = ref(false);
 const settingsError = ref('');
 const settingsSaving = ref(false);
 const loaded = ref(false);
-const panelBusy = computed(() => users.loading.value || exhibitions.loading.value || settingsQuery.loading.value);
+const panelBusy = computed(() => tab.value === 'users' ? users.loading.value
+  : tab.value === 'exhibitions' ? exhibitions.loading.value : settingsQuery.loading.value);
 
 const userItems = computed<User[]>(() => users.data.value ?? []);
 const exhibitionItems = computed<Exhibition[]>(() => exhibitions.data.value ?? []);
@@ -128,13 +129,14 @@ const limitRows = computed(() => {
 // ── 分区取数 ─────────────────────────────────────────────────────
 
 let searchTimer: number | undefined;
+let preloadTimer: number | undefined;
 
 /** 搜索框带 220ms 防抖，避免每次按键都触发一次取数。 */
 function onSearch(value: string): void {
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(() => {
     query.value = value.trim();
-    void loadUsers();
+    loadPanel();
   }, 220);
 }
 
@@ -161,13 +163,9 @@ function loadPanel(): void {
 
 function changeTab(value: string): void {
   if (value === tab.value) return;
-  tab.value = value;
-  // 搜索词跟着分区走：换分区后旧的筛选不再适用。
-  query.value = '';
   // 把分区写进地址栏（替换历史，不留下一条只换过 tab 的记录）：
   // 从二级页返回时才能回到同一个分区。
   void router.replace({ query: { ...route.query, tab: value } });
-  loadPanel();
 }
 
 /** URL 里的分区 id；非法或缺省时回到第一个分区。 */
@@ -177,11 +175,15 @@ function tabFromQuery(): string {
 }
 
 // 从二级页返回、或用户直接改地址栏时，让分区跟着 URL 走。
-watch(() => route.query.tab, () => {
+watch(() => route.fullPath, () => {
+  window.clearTimeout(searchTimer);
+  if (route.path !== '/admin') return;
   const next = tabFromQuery();
-  if (next === tab.value) return;
-  tab.value = next;
-  query.value = '';
+  if (next !== tab.value) {
+    tab.value = next;
+    // 搜索词跟着分区走：换分区后旧的筛选不再适用。
+    query.value = '';
+  }
   loadPanel();
 });
 
@@ -191,10 +193,11 @@ watch(() => route.query.tab, () => {
  * 切过去时直接命中缓存。失败无所谓：真到那一步会照常报错并给重试。
  */
 function preloadPanels(): void {
-  window.setTimeout(() => {
-    if (tab.value !== 'users') void loadUsers().catch(() => undefined);
-    if (tab.value !== 'exhibitions') void loadExhibitions().catch(() => undefined);
-    if (tab.value !== 'settings') void loadSettings().catch(() => undefined);
+  preloadTimer = window.setTimeout(() => {
+    // 预热只填查询缓存，不写分区状态或尚未打开的设置表单。
+    if (tab.value !== 'users') void api.users.list({ query: '' }).catch(() => undefined);
+    if (tab.value !== 'exhibitions') void api.exhibitions.list({ query: '' }).catch(() => undefined);
+    if (tab.value !== 'settings') void api.settings.get().catch(() => undefined);
   }, 0);
 }
 
@@ -202,7 +205,10 @@ onMounted(() => {
   loadPanel();
   preloadPanels();
 });
-onBeforeUnmount(() => window.clearTimeout(searchTimer));
+onBeforeUnmount(() => {
+  window.clearTimeout(searchTimer);
+  window.clearTimeout(preloadTimer);
+});
 
 // ── 用户管理 ─────────────────────────────────────────────────────
 
@@ -526,7 +532,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
               data-size="small"
               type="button"
               style="flex: 1 1 0"
-              @click="router.push(`/user-public/${encodeURIComponent(String(user.nickname ?? ''))}`)"
+              @click="router.push({ path: `/user-public/${encodeURIComponent(String(user.nickname ?? ''))}`, query: { userId: String(user.id ?? '') } })"
             >
               {{ t('s_gt2gfg') }}
             </button>

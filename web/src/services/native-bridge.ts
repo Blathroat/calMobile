@@ -60,7 +60,7 @@ export interface NativeActionPayloads {
   'camera.ensurePermission': Record<string, never>;
   // 键名与 SystemActions.calendarStatus / applyCalendarChange 读取的一致：
   // 日期用后端下发的 ISO 日期原样传入，缺日期时原生直接失败，不猜月份。
-  'calendar.status': { title?: string; date: string };
+  'calendar.status': { title: string; date: string };
   // 标题与地点只做展示，date 缺失原生直接失败。
   'calendar.toggle': { title: string; venue?: string; date: string; time?: string; description?: string };
   'notify.requestPermission': Record<string, never>;
@@ -87,7 +87,7 @@ export interface NativeActionResults {
   'calendar.status': { granted: boolean; inCalendar: boolean };
   // 写系统日历失败时 message 带原生给的说明，granted/inCalendar 仍反映真实状态。
   'calendar.toggle': { granted: boolean; inCalendar: boolean; message?: string };
-  'notify.requestPermission': { granted: boolean };
+  'notify.requestPermission': boolean;
   'media.pickImage': { dataUrl: string };
   'media.import': { url: string; kind: string };
   'media.store': { url: string };

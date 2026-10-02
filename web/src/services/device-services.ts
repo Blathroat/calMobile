@@ -25,9 +25,9 @@ export const device = {
   ensureCameraPermission() {
     return nativeBridge.call('camera.ensurePermission', {});
   },
-  /** 查这一天是否已写进系统日历。`date` 必须是后端下发的 `YYYY-MM-DD`，缺失或非法时原生直接失败，不猜年月。 */
-  calendarStatus(date: string): Promise<NativeActionResults['calendar.status']> {
-    return nativeBridge.call('calendar.status', { date });
+  /** 按标题与后端下发的 `YYYY-MM-DD` 日期查询系统日历，与加入/移出动作使用相同定位信息。 */
+  calendarStatus(payload: Parameters<typeof nativeBridge.call<'calendar.status'>>[1]): Promise<NativeActionResults['calendar.status']> {
+    return nativeBridge.call('calendar.status', payload);
   },
   /** 加入/移出系统日历，返回写入后的状态；写失败时 `message` 带原生给的说明。 */
   toggleCalendar(payload: Parameters<typeof nativeBridge.call<'calendar.toggle'>>[1]) {

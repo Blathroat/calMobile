@@ -37,8 +37,6 @@ const confirmKind = ref<ConfirmKind>('');
 const confirmPassword = ref('');
 const confirmError = ref('');
 const busy = ref(false);
-/** 取消二次确认时用它强制开关重建，避免原生 checkbox 停在错误的一面。 */
-const renderKey = ref(0);
 
 // 各面板自己的输入与结果
 const pendingEmail = ref('');
@@ -203,6 +201,13 @@ async function verifyEmail(): Promise<void> {
 
 // ── 两步验证 ──────────────────────────────────────────────────────
 
+/** 点击只发起验证流程；开关立即恢复到服务器已确认的状态。 */
+function requestTwoFactorChange(event: Event): void {
+  (event.currentTarget as HTMLInputElement).checked = enabled.value;
+  if (enabled.value) askDisable();
+  else open('choose');
+}
+
 /** 关两步验证要当前密码：会话被偷不等于能关掉第二道锁，因此先二次确认。 */
 function askDisable(): void {
   clearMessages();
@@ -218,9 +223,6 @@ function askDisable(): void {
       panel.value = 'disable2fa';
     },
   });
-  // 原生 checkbox 在被点后自己就翻了面，而 `:checked` 绑定的 `enabled` 没变：
-  // 重建开关，用户若取消确认，界面不会停在「已关闭」而实际还开着。
-  renderKey.value += 1;
 }
 
 async function disableTwoFactor(): Promise<void> {
@@ -408,7 +410,7 @@ function onQrError(message: string): void {
 
       <!-- 两步验证：开关是总开关，打开后先选「用验证器」还是「用邮箱」 -->
       <div class="stack" data-gap="sm">
-        <div :key="renderKey" class="switch-row">
+        <div class="switch-row">
           <span class="switch-copy">
             <strong>{{ t('s_15msj8x') }}</strong>
           </span>
@@ -418,7 +420,7 @@ function onQrError(message: string): void {
               type="checkbox"
               :checked="enabled"
               :disabled="busy || (!canEnable && !enabled)"
-              @change="($event.target as HTMLInputElement).checked ? open('choose') : askDisable()"
+              @change="requestTwoFactorChange"
             >
             <span />
           </label>

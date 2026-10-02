@@ -15,9 +15,8 @@
  */
 import { computed, nextTick, onBeforeUnmount, ref, type Ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { api } from '@/app/runtime';
+import { api, refreshRuntimeBootstrap } from '@/app/runtime';
 import { toast } from '@/services/toast';
-import { useSessionStore } from '@/stores/session';
 import {
   PATTERNS,
   check,
@@ -36,7 +35,6 @@ const EMAIL_MAX = 60;
 type FieldName = 'username' | 'email' | 'password' | 'confirm';
 
 const router = useRouter();
-const session = useSessionStore();
 
 const step = ref<1 | 2>(1);
 const username = ref('');
@@ -47,6 +45,8 @@ const code = ref('');
 /** 验证码到底发去了哪个邮箱：后端回什么就显示什么，避免用户填了别名邮箱后对不上。 */
 const sentTo = ref('');
 const pending = ref<JsonObject | null>(null);
+/** 注册凭据只提交一次；后续启动失败可在同一会话里重试。 */
+let verifiedSession: AbortSignal | undefined;
 
 const accountBusy = ref(false);
 const verifyBusy = ref(false);
@@ -122,6 +122,7 @@ function showStep(next: 1 | 2): void {
   if (next === 2) {
     void nextTick(() => codeInput.value?.focus());
   } else {
+    verifiedSession = undefined;
     stopCountdown();
   }
 }
@@ -180,24 +181,28 @@ async function submitAccount(): Promise<void> {
 
 async function verifyAccount(): Promise<void> {
   verifyError.value = '';
-  codeError.value = check(code.value, {
+  const needsVerification = verifiedSession !== api.session.signal;
+  codeError.value = needsVerification ? check(code.value, {
     label: t('s_s8pbve'),
     required: true,
     pattern: PATTERNS.verificationCode,
     patternMessage: t('s_1x20l1k'),
-  });
+  }) : '';
   if (codeError.value) return;
   verifyBusy.value = true;
   try {
-    const saved = await api.auth.registerVerify({
-      email: pending.value?.email || email.value.trim(),
-      code: code.value.trim(),
-    });
-    if (!saved?.ok) {
-      verifyError.value = String(saved?.error || t('s_osck6n'));
-      return;
+    if (needsVerification) {
+      const saved = await api.auth.registerVerify({
+        email: pending.value?.email || email.value.trim(),
+        code: code.value.trim(),
+      });
+      if (!saved?.ok) {
+        verifyError.value = String(saved?.error || t('s_osck6n'));
+        return;
+      }
+      verifiedSession = api.session.signal;
     }
-    session.applyUser(saved.user as JsonObject | undefined);
+    await refreshRuntimeBootstrap();
     stopCountdown();
     toast(t('s_6e6nd9'), 'success');
     await router.replace('/home');

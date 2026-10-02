@@ -71,7 +71,7 @@ export interface UserRow {
   social_media?: string | null;
   avatar?: string | null;
   show_registrations?: boolean | null;
-  /** 已看过的一次性提示 key 列表（见 `domain/settings.ts` 的 `readSeenHints`）。 */
+  /** 已看过的一次性提示 key 列表（见 `domain/settings.ts` 的 `saveSeenHint`）。 */
   seen_hints?: string[] | null;
   status?: string | null;
   email_verified?: boolean | null;

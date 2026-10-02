@@ -136,10 +136,14 @@ test('生产关闭状态页时两个路径都返回 404', async () => {
   }
 });
 
-test('HSTS 默认下发，HSTS_MAX_AGE=0 时不下发', async () => {
+test('HSTS 使用配置的秒数，默认下发，HSTS_MAX_AGE=0 时不下发', async () => {
   const withHsts = await serve();
   const normal = await hit(withHsts.port, 'GET', '/ping');
-  assert.match(String(normal.headers['strict-transport-security']), /max-age=\d+/);
+  assert.equal(normal.headers['strict-transport-security'], 'max-age=15552000; includeSubDomains');
+
+  const customHsts = await serve({ hstsMaxAge: 60 });
+  const configured = await hit(customHsts.port, 'GET', '/ping');
+  assert.equal(configured.headers['strict-transport-security'], 'max-age=60; includeSubDomains');
 
   const withoutHsts = await serve({ hstsMaxAge: 0 });
   const stripped = await hit(withoutHsts.port, 'GET', '/ping');

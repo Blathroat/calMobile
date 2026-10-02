@@ -6,7 +6,7 @@
  * 它不会告诉你像素对不对，但能告诉你**有没有整块丢失**。
  *
  * 用法：
- *   node scripts/ui-parity.mjs                     # 默认与 master 对照
+ *   node scripts/ui-parity.mjs                     # 默认与 Vue 迁移前的固定提交对照
  *   node scripts/ui-parity.mjs --ref 5e3d9ab^      # 指定参考提交
  *   node scripts/ui-parity.mjs --full              # 打印每条缺失文案
  *
@@ -41,15 +41,25 @@ const PAIRS = [
 
 const args = process.argv.slice(2);
 const refIndex = args.indexOf('--ref');
-const REF = refIndex >= 0 ? args[refIndex + 1] : 'master';
+// PR #34 的基点：合并后 master 已没有旧页面，不能再用浮动分支作迁移基准。
+const BASELINE = '6491a068f05d8a17ba51e9d3eb073eda4363755f';
+const REF = refIndex >= 0 ? args[refIndex + 1] : BASELINE;
 const FULL = args.includes('--full');
 /**
  * 「别处也没有」的 key 数量上限（`--max-gone N`）。
- * 存量里有二十来条是**有意删除**的（保存配色、报名方式抽屉、账号状态说明、EasyMDE 相关…），
+ * 存量里有一批是**有意删除**的（保存配色、报名方式抽屉、账号状态说明、EasyMDE 相关…），
  * 因此 CI 用它做预算：整块文案消失会让数量跳变并让构建失败，个别调整则在预算内。
  */
 const maxIndex = args.indexOf('--max-gone');
 const MAX_GONE = maxIndex >= 0 ? Number(args[maxIndex + 1]) : Number.POSITIVE_INFINITY;
+if (!REF || REF.startsWith('--')) throw new Error('--ref 后必须指定参考提交');
+if (maxIndex >= 0 && (!Number.isSafeInteger(MAX_GONE) || MAX_GONE < 0)) {
+  throw new Error('--max-gone 后必须指定非负整数');
+}
+const resolved = spawnSync('git', ['rev-parse', '--verify', `${REF}^{commit}`], { encoding: 'utf8' });
+if (resolved.status !== 0) {
+  throw new Error(`无法解析参考提交 ${REF}：请获取完整 Git 历史，或用 --ref 指定含旧页面的提交`);
+}
 const SHOULD_SHOW = (key) => FULL || FULL_KEYS.has(key);
 
 const T_CALL = /\bt\(\s*(['"])(s_[a-z0-9]+)\1\s*\)/g;
@@ -129,8 +139,8 @@ const unresolved = rows.filter((row) => row.note).length;
 if (unresolved > 0) {
   console.warn(`\n注意：${unresolved} 个页面没能取到参考实现（${REF}），对照不完整。`);
 }
-if (unresolved === rows.length) {
-  console.error('FAIL 参考提交完全取不到：先 `git fetch origin master`，或用 --ref 指定可解析的提交。');
+if (unresolved > 0) {
+  console.error('FAIL 参考页面不完整：请获取完整 Git 历史，或用 --ref 指定包含全部旧页面的提交。');
   process.exitCode = 1;
 } else if (missingTotal > MAX_GONE) {
   console.error(`FAIL 「别处也没有」的文案有 ${missingTotal} 条，超过预算 ${MAX_GONE} 条：可能有整块界面没搬过来。`);

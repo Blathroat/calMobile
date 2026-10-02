@@ -17,6 +17,12 @@ import { openSheet } from '@/services/sheet';
 import { useSessionStore } from '@/stores/session';
 import { navigation } from './navigation';
 
+// 外壳结构使用下面的固定身份；启动数据与认证流程由 runtime 测试覆盖。
+vi.mock('@/app/runtime', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/app/runtime')>(),
+  bootApp: async () => undefined,
+}));
+
 const ROUTES = [
   '/login',
   '/register',

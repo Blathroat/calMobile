@@ -156,6 +156,36 @@ const put = (path: string, body?: unknown, options?: RequestOptions): Promise<Ht
   request('PUT', path, { ...options, body });
 const del = (path: string, options?: RequestOptions): Promise<HttpResponse> => request('DELETE', path, options);
 
+/** 暂停真实写入，等并发请求全部进入锁等待后放行，稳定复现先读后写的竞态。 */
+async function raceWrites(
+  table: 'exhibitions' | 'users',
+  requests: Array<() => Promise<HttpResponse>>,
+): Promise<HttpResponse[]> {
+  const blocker = await pool.connect();
+  let pending: Promise<HttpResponse[]> | undefined;
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query(`LOCK TABLE ${table} IN SHARE MODE`);
+    pending = Promise.all(requests.map((run) => run()));
+    await vi.waitFor(
+      async () => {
+        const waiting = await pool.query<{ total: number }>(
+          `SELECT count(*)::int AS total FROM pg_stat_activity
+         WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+        );
+        assert.ok(Number(waiting.rows[0]?.total) >= requests.length, '并发请求尚未全部进入锁等待');
+      },
+      { timeout: 5000, interval: 10 },
+    );
+  } finally {
+    await blocker.query('ROLLBACK');
+    blocker.release();
+    // 失败时也收完请求，避免未完成写入污染下一条用例。
+    if (pending) await pending;
+  }
+  return pending!;
+}
+
 /** 示例展会的日期是相对今天生成的，因此期望值也要按「今天」算出来。 */
 function isoDateAfter(days: number): string {
   const date = new Date();
@@ -2623,6 +2653,185 @@ test('展商可同时筹备的展会数上限：超出后不能再新建，管�
   }
 });
 
+/** 给现有展商留一个名额；所有日期由数据库给出，避免测试机时区改变计数口径。 */
+async function withOneExhibitionSlot(
+  run: (fixture: {
+    today: string;
+    past: string;
+    future: string;
+    create: (date: string) => Promise<HttpResponse>;
+  }) => Promise<void>,
+): Promise<void> {
+  const before = await get('/api/v1/settings');
+  const dates = await pool.query<{ today: string; past: string; future: string; total: number }>(
+    `SELECT CURRENT_DATE::text AS today, (CURRENT_DATE - 1)::text AS past,
+      (CURRENT_DATE + 35)::text AS future, count(*)::int AS total FROM exhibitions
+      WHERE exhibitor_id = (SELECT id FROM users WHERE username = $1) AND exhibition_date >= CURRENT_DATE`,
+    [tokens.exhibitor.user.username],
+  );
+  const { today, past, future, total } = dates.rows[0]!;
+  const created: string[] = [];
+  const create = async (date: string) => {
+    const response = await post(
+      '/api/v1/exhibitions',
+      {
+        title: '并发额度用例',
+        venue: '测试展馆',
+        time: '09:00-17:00',
+        date,
+        category: '智能家居',
+        status: '无需审核',
+        qrEnabled: false,
+      },
+      { token: tokens.exhibitor.token },
+    );
+    if (response.body.exhibition?.id) created.push(String(response.body.exhibition.id));
+    return response;
+  };
+  try {
+    const configured = await put(
+      '/api/v1/settings',
+      { maxFutureExhibitions: total + 1 },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(configured.body.ok, true, JSON.stringify(configured.body));
+    await run({ today, past, future, create });
+  } finally {
+    for (const id of created) await del(`/api/v1/exhibitions/${id}`, { token: tokens.admin.token });
+    await put(
+      '/api/v1/settings',
+      {
+        maxFutureExhibitions: before.body.exhibitor.maxFutureExhibitions,
+      },
+      { token: tokens.admin.token },
+    );
+  }
+}
+
+test('展会额度按保存后的日期计算：当天占名额，历史展会不占，改期不能绕过上限', async () => {
+  await withOneExhibitionSlot(async ({ today, past, future, create }) => {
+    const current = await create(today);
+    assert.strictEqual(current.body.ok, true, JSON.stringify(current.body));
+    const currentId = String(current.body.exhibition.id);
+    const update = (id: string, date: string, token = tokens.exhibitor.token) =>
+      put(`/api/v1/exhibitions/${id}`, { title: '额度改期用例', date }, { token });
+
+    const unchangedQuota = await update(currentId, future);
+    assert.strictEqual(unchangedQuota.body.ok, true, '已占名额的展会改期不应重复计数');
+    const historical = await create(past);
+    assert.strictEqual(historical.body.ok, true, '额度已满仍可录入历史展会');
+    const historicalId = String(historical.body.exhibition.id);
+
+    const overLimit = await update(historicalId, today);
+    assert.strictEqual(overLimit.status, 200);
+    assert.strictEqual(overLimit.body.ok, false, '历史展会改到今天也要检查额度');
+    assert.match(String(overLimit.body.error), /同时筹备/);
+    assert.strictEqual((await get(`/api/v1/exhibitions/${historicalId}`)).body.exhibition.date, past);
+
+    assert.strictEqual((await update(currentId, past)).body.ok, true, '改回过去日期应释放名额');
+    assert.strictEqual((await update(historicalId, today)).body.ok, true, '释放后的名额可以用于改期');
+    assert.strictEqual((await update(currentId, future, tokens.admin.token)).body.ok, true, '管理员改期不受额度限制');
+  });
+});
+
+test('展会额度调低后仍可编辑已占名额的展会，但历史改期仍受限', async () => {
+  await withOneExhibitionSlot(async ({ today, past, future, create }) => {
+    const current = await create(today);
+    const extra = await create(past);
+    assert.strictEqual(current.body.ok, true, JSON.stringify(current.body));
+    assert.strictEqual(extra.body.ok, true, JSON.stringify(extra.body));
+    const currentId = String(current.body.exhibition.id);
+    const extraId = String(extra.body.exhibition.id);
+    const promoted = await put(
+      `/api/v1/exhibitions/${extraId}`,
+      {
+        title: '管理员扩展额度用例',
+        date: future,
+      },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(promoted.body.ok, true, JSON.stringify(promoted.body));
+
+    const lowered = await put('/api/v1/settings', { maxFutureExhibitions: 1 }, { token: tokens.admin.token });
+    assert.strictEqual(lowered.body.ok, true, JSON.stringify(lowered.body));
+    const edited = await put(
+      `/api/v1/exhibitions/${currentId}`,
+      {
+        title: '额度调低后的标题',
+        venue: '更新展馆',
+      },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(edited.body.ok, true, '降低额度不能冻结已有展会的普通编辑');
+    const rescheduled = await put(
+      `/api/v1/exhibitions/${currentId}`,
+      {
+        title: '额度调低后的改期',
+        date: future,
+      },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(rescheduled.body.ok, true, '未来展会之间改期没有增加名额');
+    const historical = await create(past);
+    assert.strictEqual(historical.body.ok, true, JSON.stringify(historical.body));
+    const expanded = await put(
+      `/api/v1/exhibitions/${historical.body.exhibition.id}`,
+      {
+        title: '额度调低后的历史改期',
+        date: future,
+      },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(expanded.body.ok, false, '超额时仍不能增加未来展会');
+  });
+});
+
+for (const operations of [
+  ['新建', '新建'],
+  ['新建', '改期'],
+  ['改期', '改期'],
+] as const) {
+  test(`展会额度并发${operations.join('与')}：最后一个名额只能用一次`, async () => {
+    await withOneExhibitionSlot(async ({ past, future, create }) => {
+      const requests: Array<() => Promise<HttpResponse>> = [];
+      const candidateIds: string[] = [];
+      for (const operation of operations) {
+        if (operation === '新建') {
+          requests.push(() => create(future));
+        } else {
+          const historical = await create(past);
+          assert.strictEqual(historical.body.ok, true, JSON.stringify(historical.body));
+          const id = String(historical.body.exhibition.id);
+          candidateIds.push(id);
+          requests.push(() =>
+            put(
+              `/api/v1/exhibitions/${id}`,
+              {
+                title: '并发改期用例',
+                date: future,
+              },
+              { token: tokens.exhibitor.token },
+            ),
+          );
+        }
+      }
+      const results = await raceWrites('exhibitions', requests);
+      assert.ok(
+        results.every((result) => result.status === 200),
+        JSON.stringify(results),
+      );
+      assert.strictEqual(results.filter((result) => result.body.ok === true).length, 1, JSON.stringify(results));
+      const rejected = results.find((result) => result.body.ok === false);
+      assert.match(String(rejected?.body.error), /同时筹备/);
+      for (const result of results) {
+        if (result.body.exhibition?.id) candidateIds.push(String(result.body.exhibition.id));
+      }
+      const persisted = await Promise.all([...new Set(candidateIds)].map((id) => get(`/api/v1/exhibitions/${id}`)));
+      assert.strictEqual(persisted.filter((result) => result.body.exhibition.date === future).length, 1);
+    });
+  });
+}
+
 test('一次性提示与账号绑定：记下之后 bootstrap 会带回来', async () => {
   const key = 'home-calendar-swipe';
   const before = await get('/api/v1/bootstrap', { token: tokens.user.token });
@@ -2644,6 +2853,47 @@ test('一次性提示与账号绑定：记下之后 bootstrap 会带回来', asy
   // 提示 key 是受控短码：乱填直接拒绝
   const bad = await put('/api/v1/profile/hints', { hint: 'A B' }, { token: tokens.user.token });
   assert.strictEqual(bad.body.ok, false, '非法提示标识应当被拒绝');
+});
+
+test('一次性提示并发确认保留各自记录，重复确认幂等且最多保留最近 50 项', async () => {
+  const username = tokens.user.user.username;
+  const before = await get('/api/v1/bootstrap', { token: tokens.user.token });
+  const savedHints = before.body.user.seenHints;
+  const original = Array.from({ length: 49 }, (_, index) => `test-hint-${index}`);
+  try {
+    await pool.query('UPDATE users SET seen_hints = $2 WHERE username = $1', [username, original]);
+    const mark = (hint: string) => put('/api/v1/profile/hints', { hint }, { token: tokens.user.token });
+    const keys = ['test-hint-concurrent-a', 'test-hint-concurrent-b'];
+    const responses = await raceWrites(
+      'users',
+      keys.map((key) => () => mark(key)),
+    );
+    assert.ok(
+      responses.every((result) => result.status === 200 && result.body.ok),
+      JSON.stringify(responses),
+    );
+    const loaded = await get('/api/v1/bootstrap', { token: tokens.user.token });
+    const hints: string[] = loaded.body.user.seenHints;
+    assert.strictEqual(hints.length, 50);
+    assert.ok(
+      keys.every((key) => hints.includes(key)),
+      '并发确认的两条提示都应持久保留',
+    );
+    assert.ok(!hints.includes(original[0]!), '超出上限只移除最早的提示');
+    assert.ok(
+      original.slice(1).every((key) => hints.includes(key)),
+      '其余已读提示不能丢失',
+    );
+
+    const duplicate = await raceWrites('users', [() => mark(keys[0]!), () => mark(keys[0]!)]);
+    assert.ok(
+      duplicate.every((result) => result.body.ok),
+      JSON.stringify(duplicate),
+    );
+    assert.deepStrictEqual((await get('/api/v1/bootstrap', { token: tokens.user.token })).body.user.seenHints, hints);
+  } finally {
+    await pool.query('UPDATE users SET seen_hints = $2 WHERE username = $1', [username, savedHints]);
+  }
 });
 
 test('老库的 app_settings.media 缺 videoSizeMb 时用默认值兜底', async () => {

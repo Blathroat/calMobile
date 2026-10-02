@@ -2,7 +2,9 @@
 
 本文件只保留跨模块的操作流程。后端命令、环境变量、迁移和状态页细节见 [`server/README.md`](../server/README.md)。
 
-后端要求 Node.js ≥ 24.0.0。部署与本地开发使用仓库提交的 `server/pnpm-lock.yaml`，安装依赖时启用冻结锁文件。
+开发与运行要求 Node.js 24.15+（24.x）或 26+，使用两个工程 `packageManager` 固定的 pnpm 版本。前后端安装均启用冻结锁文件。
+
+前端 `vue-tsc` 使用官方 `@typescript/typescript6` 兼容包（以 `typescript` 别名安装）；TypeScript 7 的原生编译入口暂不受当前 Vue 类型检查器支持。后端使用 TypeScript 7。升级时保留 `.vue` 类型检查门禁。
 
 ## 本地运行
 
@@ -123,15 +125,16 @@ node scripts/ui-shot.mjs --account demo --routes admin --click 展会
 改动页面文案后，用它对照重构前的实现看有没有整块丢失：
 
 ```bash
-node scripts/ui-parity.mjs          # 与 master 的页面模块对照 t('s_xxx') 覆盖
+node scripts/ui-parity.mjs          # 与 Vue 迁移前固定提交 6491a068 对照 t('s_xxx') 覆盖
 node scripts/ui-parity.mjs --full   # 连「搬到了别处」的 key 一起打印
+node scripts/ui-parity.mjs --ref <commit> --max-gone 70  # 显式选择含全部旧页面的参考提交
 ```
 
 `→ 无` 才是真缺口；`→ web/src/...` 说明那条文案搬到了路由 meta、共享服务或共享组件里。
 
-CI 里这两个脚本都在跑：`ui-parity` 在 `web-and-server` 作业（`--ref origin/master --max-gone 25`，超预算说明有整块界面没搬过来），
+CI 里这两个脚本都在跑：`ui-parity` 在 `web-and-server` 作业（固定基准 `6491a068f05d8a17ba51e9d3eb073eda4363755f`、`--max-gone 70`，超预算说明有整块界面没搬过来；需要完整 Git 历史，参考提交无效或任一参考页面缺失都失败），
 `ui-shot` 在 `ui-regression` 作业（自带 PostgreSQL 服务、迁移 + 示例数据、后端与 `vite preview`，截图作为 `ui-screenshots` 工件上传）。
-预算值随有意删除的文案调整；`ui-shot` 登录失败时会直接报错并带出页面上的错误文案，不会静默截下一串登录页。
+预算值随有意删除的文案调整。`ui-shot` 的 `detail` 别名会从后端公开展会列表选择真实 id，也可指定 `detail/<id>`；没有展会时失败。截图前检查目标路由、顶栏标题、正文和加载状态，登录失败、权限重定向、空白正文或页面错误都报错，并保存 `failure.png`。`--click` 指定的操作不存在时同样失败。
 
 动效全部静止时，先确认三个动画 scale 都为 1：
 
@@ -147,7 +150,7 @@ pwsh -File scripts\emu.ps1 motion
 - 生产使用 HTTPS 和反向代理，`CORS_ORIGIN` 只允许 WebView 来源；客户端关闭明文放行。
 - 分别配置访问令牌密钥 `JWT_SECRET` 与必填的验证器加密密钥 `TOTP_SECRET_KEY`（各自至少 32 个随机字符），更换数据库凭据，并显式配置 `MAIL_FROM_ADDRESS`；邮件使用托管 SMTP，不部署 Mailpit，不使用 `memory` 或仅写日志的通道。
 - 生产状态页默认关闭；临时打开时用反代 Basic Auth 或 IP 白名单，公网探活只使用 `/ping`。
-- 使用 Node.js ≥ 24.0.0，在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，再执行 `pnpm db:migrate:prod` 并重启生产进程；迁移完成后才切流量。
+- 使用 Node.js 24.15+（24.x）或 26+，在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，再执行 `pnpm db:migrate:prod` 并重启生产进程；迁移完成后才切流量。
 - 数据库启用 `Asia/Shanghai` 时区，配置备份、恢复演练和日志轮转。
 - 上传媒体仍在客户端私有目录；上线前确认这符合产品范围，或先完成对象存储和上传接口。
 - 注册和安全邮件涉及个人信息，注册页需要隐私告知；营销或提醒邮件需要退订机制。

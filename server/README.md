@@ -2,7 +2,7 @@
 
 `server/` 是与 Android 客户端并列的 Node.js 服务：**Hono + PostgreSQL**，提供客户端全部数据接口。前端只认 `web/src/api/client.ts` 的类型化领域 API，契约测试使用 `web/api-endpoints.mjs` 的动作表，因此后端换实现不影响页面。
 
-后端要求 Node.js ≥ 24.0.0。依赖通过 `pnpm-lock.yaml` 锁定；在受支持的 Node 版本下使用 `pnpm install --frozen-lockfile`。
+开发与运行要求 Node.js 24.15+（24.x）或 26+。依赖通过 `pnpm-lock.yaml` 锁定；在受支持的 Node 版本下使用 `pnpm install --frozen-lockfile`。
 
 | 目录 | 说明 |
 | --- | --- |

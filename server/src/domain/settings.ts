@@ -507,14 +507,6 @@ const HINT_KEY = /^[a-z0-9][a-z0-9-]{2,39}$/;
 /** 一个人最多记多少条已读提示：key 是受控的短码，留个上限避免无限增长。 */
 const HINT_LIMIT = 50;
 
-/** 读「看过的提示」列表；没有该用户时返回空数组。 */
-export async function readSeenHints(userId: string | null | undefined): Promise<string[]> {
-  if (!userId) return [];
-  const result = await query<{ seen_hints: string[] | null }>('SELECT seen_hints FROM users WHERE id = $1', [userId]);
-  const stored = result.rows[0]?.seen_hints;
-  return Array.isArray(stored) ? stored.filter((item) => typeof item === 'string') : [];
-}
-
 /**
  * 记下一条「看过的提示」并返回最新列表。
  *
@@ -524,9 +516,15 @@ export async function saveSeenHint(userId: string | null | undefined, hint: unkn
   if (!userId) throw badRequest('请先登录后再记录提示状态');
   const key = String(hint ?? '').trim();
   if (!HINT_KEY.test(key)) throw badRequest('提示标识不合法');
-  const current = await readSeenHints(userId);
-  if (current.includes(key)) return current;
-  const next = [...current, key].slice(-HINT_LIMIT);
-  await query('UPDATE users SET seen_hints = $2, updated_at = now() WHERE id = $1', [userId, next]);
-  return next;
+  // 在 UPDATE 持有行锁时合并，等待中的请求会基于最新值追加，不覆盖另一设备刚确认的提示。
+  const result = await query<{ seen_hints: string[] }>(
+    `UPDATE users SET
+       seen_hints = CASE WHEN $2 = ANY(seen_hints) THEN seen_hints
+         ELSE (array_append(seen_hints, $2))[GREATEST(1, cardinality(seen_hints) + 2 - $3):]
+         END,
+       updated_at = CASE WHEN $2 = ANY(seen_hints) THEN updated_at ELSE now() END
+     WHERE id = $1 RETURNING seen_hints`,
+    [userId, key, HINT_LIMIT],
+  );
+  return result.rows[0]?.seen_hints ?? [];
 }

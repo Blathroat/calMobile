@@ -17,6 +17,10 @@ public class AssetGuardTest {
     public void 资源路径只放行web目录() {
         assertEquals("web/index.html", AssetGuard.resolveAssetPath("/assets/web/index.html"));
         assertEquals("web/assets/index.js", AssetGuard.resolveAssetPath("/assets/web/assets/index.js"));
+        assertEquals("web/assets/qr-reader-abc123.js",
+                AssetGuard.resolveAssetPath("/assets/web/assets/qr-reader-abc123.js"));
+        assertEquals("web/assets/zxing_reader-abc123.wasm",
+                AssetGuard.resolveAssetPath("/assets/web/assets/zxing_reader-abc123.wasm"));
         assertNull(AssetGuard.resolveAssetPath("/assets/other/x.html"));
         assertNull(AssetGuard.resolveAssetPath("/assets/web"));
         assertNull(AssetGuard.resolveAssetPath("/assets/web2/x.html"));
@@ -30,6 +34,8 @@ public class AssetGuardTest {
         // %2e 编码的点也要被解开后再判
         assertNull(AssetGuard.resolveAssetPath("/assets/web/%2e%2e/%2e%2e/res/x"));
         assertNull(AssetGuard.resolveAssetPath("/assets/web/sub/../.."));
+        assertNull(AssetGuard.resolveAssetPath("/assets/web/assets/%2e%2e/%2e%2e/decoder.wasm"));
+        assertNull(AssetGuard.resolveAssetPath("/assets/web/assets/..%5c..%5cworker.js"));
     }
 
     @Test

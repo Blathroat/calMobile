@@ -1,4 +1,0 @@
-qrcode-generator 1.4.4 (MIT)
-来源：https://registry.npmjs.org/qrcode-generator/-/qrcode-generator-1.4.4.tgz
-文件：qrcode.js、LICENSE
-说明：浏览器端二维码生成，暴露全局 qrcode(typeNumber, errorCorrectionLevel)，报名码由前端绘制到 canvas，不依赖 CDN。

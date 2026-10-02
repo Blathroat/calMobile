@@ -23,16 +23,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DEFAULT_CHROME = resolveChrome();
-const CHROME_CANDIDATES = [
-  process.env.CHROME_PATH,
-  process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : '',
-  '/usr/bin/google-chrome',
-  '/usr/bin/google-chrome-stable',
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  process.platform === 'win32' ? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' : '',
-].filter(Boolean);
 
 /** 找本机可用的 Chromium：CI 上通常是 `/usr/bin/google-chrome`，本地是安装目录。 */
 function resolveChrome() {
@@ -174,16 +164,31 @@ async function browserWs(port) {
   throw new Error(`Chrome 调试端口 ${port} 没起来，检查 --chrome 路径与是否有别的实例占着该端口`);
 }
 
+/** detail 是便捷别名：从公开列表选择真实展会，不把缺少 id 的空路由当详情页。 */
+async function resolveRoute(route) {
+  const target = route.startsWith('/') ? route : `/${route}`;
+  if (target !== '/detail') return target;
+  const response = await fetch('http://127.0.0.1:3000/api/v1/exhibitions', { signal: AbortSignal.timeout(5000) });
+  if (!response.ok) throw new Error(`无法选择详情页的展会：后端返回 ${response.status}`);
+  const exhibitions = await response.json();
+  const exhibition = Array.isArray(exhibitions) ? exhibitions.find((item) => item?.id) : undefined;
+  if (!exhibition) throw new Error('没有可供详情页截图的展会：请准备已有展会，或从 --routes 中移除 detail');
+  return `/detail/${encodeURIComponent(exhibition.id)}`;
+}
+
 async function main() {
   // 前端静态服务没起就没什么可截的，先给一条能直接照抄的命令。
   try {
-    await fetch(options.base, { signal: AbortSignal.timeout(3000) });
+    const response = await fetch(options.base, { signal: AbortSignal.timeout(3000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch {
     console.error(`前端服务没起来：${options.base}\n先执行：\n  pnpm --dir web build\n  pnpm --dir web exec vite preview --port 5173 --strictPort`);
     process.exit(1);
   }
 
-  const profileDir = path.resolve('.omo/ui-shot-chrome');
+  // 每次截图独立 profile，避免连续执行时上一进程的目录锁阻止 Chrome 启动。
+  fs.mkdirSync('.omo', { recursive: true });
+  const profileDir = fs.mkdtempSync(path.resolve('.omo/ui-shot-chrome-'));
   const flags = [
     '--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars',
     `--remote-debugging-port=${options.port}`,
@@ -193,6 +198,7 @@ async function main() {
   // CI（容器里以 root 运行）必须关沙箱，否则 Chrome 起不来。
   if (process.env.CI || process.getuid?.() === 0) flags.unshift('--no-sandbox');
   const chrome = spawn(options.chrome, flags, { detached: true, stdio: 'ignore' });
+  const chromeStopped = new Promise((resolve) => chrome.once('exit', resolve));
   // 脱离父进程：截图结束时不会被这个子进程拖住命令行。
   chrome.unref();
 
@@ -223,13 +229,34 @@ async function main() {
       }
       return result.result?.value;
     };
+    /** 路由、正文和加载态都落定后才留证据；空白、重定向与错误状态必须让门禁失败。 */
+    const waitForScreen = async (expected) => {
+      let state;
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        state = await evaluate(`(() => {
+          const body = document.querySelector('.page-surface');
+          return {
+            path: location.hash.slice(1),
+            title: document.querySelector('.topbar-title')?.textContent?.trim() ?? '',
+            content: body?.textContent?.trim() ?? '',
+            loading: Boolean(body?.querySelector('.skeleton, [aria-busy="true"], [data-busy="true"]')),
+            error: [...(body?.querySelectorAll('.state[data-tone="error"], .field-error') ?? [])]
+              .map((node) => node.textContent.trim()).filter(Boolean).join('；'),
+          };
+        })()`);
+        if (state.path === expected && state.title && state.content && !state.loading) {
+          if (state.error) throw new Error(`页面 ${expected} 加载失败：${state.error}`);
+          return;
+        }
+        await sleep(250);
+      }
+      throw new Error(`页面 ${expected} 未就绪：实际路由 ${state?.path}，${state?.error || '路由未匹配、正文为空或仍在加载'}`);
+    };
     let navigation = 0;
     const goto = async (hash, wait = 1500) => {
       navigation += 1;
       if (navigation === 1) {
-        // 首次进入用真实导航，并带上唯一参数：Chrome 复用固定的 profile 目录，会缓存上一次
-        // 构建的 index.html，而重建后的 chunk 文件名已经变了——那时页面会静默变成空白，
-        // 后面的点击全部落空，截图却「看起来正常」。
+        // 首次进入用真实导航，后续保持同一份页面内会话。
         await session.send('Page.navigate', { url: `${options.base}?t=${Date.now()}#${hash}` });
       } else {
         // 之后一律在站内切哈希：整页重载会丢掉内存里的访问令牌，受登录保护的页面会整批
@@ -238,6 +265,7 @@ async function main() {
       }
       // 哈希路由的站内切换不一定再触发 load：等一小会儿即可。
       await sleep(wait);
+      await waitForScreen(hash);
     };
     const shot = async (name) => {
       const { data } = await session.send('Page.captureScreenshot', { format: 'png' });
@@ -267,7 +295,13 @@ async function main() {
         document.querySelector('form button[type="submit"]').click();
         return 'submitted';
       })()`);
-      await sleep(2400);
+      // 登录包含密码校验与 bootstrap；机器繁忙时不能用固定 2.4 秒把正常请求判失败。
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        const pending = await evaluate(`location.hash.includes('/login')
+          && !document.querySelector('.field-error')?.textContent?.trim()`);
+        if (!pending) break;
+        await sleep(250);
+      }
       // 登录失败时后面每一屏都会是登录页——那是最难看出原因的一种「截图全绿」。
       // 这里直接失败，并把页面上的错误文案带出来（多半是后端没起或账号不对）。
       const hash = await evaluate('location.hash');
@@ -282,7 +316,8 @@ async function main() {
 
     let index = 3;
     for (const route of String(options.routes).split(',').map((item) => item.trim()).filter(Boolean)) {
-      await goto(`/${route}`, 1600);
+      const target = await resolveRoute(route);
+      await goto(target, 1600);
       for (const label of String(options.click).split(',').map((item) => item.trim()).filter(Boolean)) {
         const clicked = await evaluate(`(() => {
           // 只认按钮与卡片：底部导航也是「管理 / 个人」这样的文案，混进来会点错东西。
@@ -293,15 +328,12 @@ async function main() {
           return 'clicked';
         })()`);
         console.log(`click ${label} → ${clicked}`);
+        if (clicked !== 'clicked') throw new Error(`页面 ${target} 上找不到操作：${label}`);
         await sleep(1400);
+        await waitForScreen(await evaluate('location.hash.slice(1)'));
       }
       await shot(`${String(index).padStart(2, '0')}-${route.replace(/[/?=&]/g, '_')}`);
       const landed = await evaluate('location.hash');
-      // 受登录保护的页面落回登录页 = 会话在切换中丢了（或账号没权限）：这是最难发现的
-      // 一种「截图全绿」，直接失败并说清原因。
-      if (!route.includes('login') && String(landed).includes('/login')) {
-        throw new Error(`路由 ${route} 落回了登录页（${landed}）\n会话没有跨页面保留：检查是否有整页重载，或账号 ${options.account} 不存在`);
-      }
       console.log(`route ${route} → ${landed}`);
       index += 1;
     }
@@ -311,6 +343,16 @@ async function main() {
     }
     await browser.send('Browser.close').catch(() => undefined);
     console.log('截图完成。');
+  } catch (error) {
+    // 失败时也保留现场，便于辨认错误状态、空白与权限重定向。
+    if (session) {
+      try {
+        const { data } = await session.send('Page.captureScreenshot', { format: 'png' });
+        fs.mkdirSync(options.out, { recursive: true });
+        fs.writeFileSync(path.join(options.out, 'failure.png'), Buffer.from(data, 'base64'));
+      } catch { /* 页面可能已关闭，保留原始失败原因。 */ }
+    }
+    throw error;
   } finally {
     session?.socket.close();
     browser?.socket.close();
@@ -319,6 +361,10 @@ async function main() {
     } catch {
       // 已经退出了
     }
+    await Promise.race([chromeStopped, sleep(2000)]);
+    try {
+      fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    } catch { /* Windows 上子进程可能仍占用临时目录，下次会使用另一个独立目录。 */ }
   }
 }
 
