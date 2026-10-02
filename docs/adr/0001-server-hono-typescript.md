@@ -2,7 +2,7 @@
 
 **Status**: accepted
 
-`server/` 使用 Hono 4 + TypeScript：`tsc` 编译到 `dist/`（镜像 `src/`），生产跑 `node dist/index.js --production`，开发用单一 `tsx watch scripts/dev.ts` 入口重建状态页资源并重启服务，测试统一到 vitest 双 project（单测 / 契约）。Node.js 最低支持 24.0.0。所有路由（含状态页）直接由 Hono 提供；访问令牌使用 `jose` 并固定 HS256，刷新令牌仍是随机串并只存哈希。
+`server/` 使用 Hono 4 + TypeScript：`tsc` 编译到 `dist/`（镜像 `src/`），生产跑 `node dist/index.js --production`，开发用单一 `tsx watch scripts/dev.ts` 入口重建状态页资源并重启服务，测试统一到 vitest 双 project（单测 / 契约）。Node.js 支持 24.15+（24.x）或 26+。所有路由（含状态页）直接由 Hono 提供；访问令牌使用 `jose` 并固定 HS256，刷新令牌仍是随机串并只存哈希。
 
 ## Considered Options
 
@@ -30,4 +30,4 @@
 - **目录结构**：契约测试位于 `src/test/api.test.ts`，`rootDir: "src"` 使 dist 干净镜像；测试由 vitest contract project 运行。
 - **契约测试改写**：状态页测试在 VM 中执行构建后的内联脚本，覆盖 INITIAL、数据库不可用、迁移待应用和通用错误提示；不再要求完整 SSR 首屏。
 - **限流记账**：不再猴补丁 `res.json`，改为中间件 `await next()` 后 `c.res.clone()` 读信封 `ok === false`——行为保持，且只涉及 7 个低流量认证路由。
-- **部署要求**：Node.js ≥ 24.0.0；在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，后者生成状态页资源模块并编译生产产物；生产数据库迁移使用 `pnpm db:migrate:prod`。状态页由客户端脚本渲染首屏和后续局部刷新，禁用 JavaScript 时只显示启用提示。
+- **部署要求**：Node.js 24.15+（24.x）或 26+；在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，后者生成状态页资源模块并编译生产产物；生产数据库迁移使用 `pnpm db:migrate:prod`。状态页由客户端脚本渲染首屏和后续局部刷新，禁用 JavaScript 时只显示启用提示。

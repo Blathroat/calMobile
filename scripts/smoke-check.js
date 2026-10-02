@@ -24,9 +24,9 @@ function run(label, executable, args, options = {}) {
 }
 
 function main() {
-  const nodeMajor = Number.parseInt(process.versions.node.split('.')[0], 10);
-  if (!Number.isFinite(nodeMajor) || nodeMajor < 24) {
-    console.error(`后端要求 Node.js >= 24.0.0，当前版本为 ${process.versions.node}`);
+  const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number);
+  if (!(nodeMajor >= 26 || (nodeMajor === 24 && nodeMinor >= 15))) {
+    console.error(`要求 Node.js 24.15+（24.x）或 26+，当前版本为 ${process.versions.node}`);
     process.exitCode = 1;
     return;
   }

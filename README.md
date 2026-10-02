@@ -2,7 +2,7 @@
 
 CalMobile 是展会排期助手：浏览月历、查看展会、在线报名、审核和现场核销。界面由 WebView 承载，业务数据在 Hono + PostgreSQL 后端，Android 原生只提供设备能力。
 
-后端要求 Node.js ≥ 24.0.0，并使用 pnpm 管理依赖。首次启动后端前，请在 `server/.env` 中将 `JWT_SECRET` 和必填的 `TOTP_SECRET_KEY` 换成各自独立、至少 32 个字符的随机密钥。
+开发与运行要求 Node.js 24.15+（24.x）或 26+，并使用 pnpm 管理依赖。首次启动后端前，请在 `server/.env` 中将 `JWT_SECRET` 和必填的 `TOTP_SECRET_KEY` 换成各自独立、至少 32 个字符的随机密钥。
 
 ## 快速开始
 

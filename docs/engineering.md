@@ -19,7 +19,6 @@
 ```text
 web/
 ├── index.html
-├── public/vendor/          内置第三方库（jsQR / qrcode-generator，按需注入）
 ├── src/app/                外壳、启动、路由、导航方向、外观（明暗与强调色）
 ├── src/api/                类型化领域 API
 ├── src/components/         共享界面件（图标、顶栏、底部导航、状态块、分段控件、二维码…）
@@ -94,7 +93,8 @@ web/
 - 顶栏使用 `--topbar-h`；展会图保持 9:16；并排字段使用等高布局；日期、时间和状态使用选择器、分段控件或面板。
 - 强调色使用 `--accent*`；二维码保持白底黑点；Markdown / HTML 渲染前经过 `web/src/services/markdown.ts`。
 - 动效只动画 `transform` 与 `opacity`，并遵守 `prefers-reduced-motion`。动效全失时先检查设备 `animator_duration_scale`，再改代码。
-- 第三方库必须内置到 `web/public/vendor/` 并记录版本和许可证，不引用 CDN 或图标字体。
+- 第三方库由 `web/package.json` 与锁文件统一管理；重型功能通过动态导入按屏加载，构建产物随 APK 打包，不依赖运行时 CDN。Markdown 解析使用 Marked，历史 HTML 编辑转换使用 Turndown，HTML 清洗统一走 DOMPurify 与项目标签、属性和媒体协议规则。
+- 二维码生成使用 qrcode-generator；识别使用 ZXing-C++ 的 `zxing-wasm/reader`，在 Worker 中串行解码。WASM 通过 Vite 资源导入定位到本地文件，Android 返回 `application/wasm`；暂停与换页后丢弃过期帧，离开时释放 Worker 和摄像头。
 
 ## 文案与资源
 

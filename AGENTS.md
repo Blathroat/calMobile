@@ -5,7 +5,7 @@
 ## 开始与验证
 
 - 先读与任务对应的文档：产品行为看 [`docs/product.md`](docs/product.md)，边界与界面看 [`docs/engineering.md`](docs/engineering.md)，构建与上线看 [`docs/operations.md`](docs/operations.md)。修改后端骨架前先读 [`server/README.md`](server/README.md) 的服务骨架部分。
-- 后端要求 Node.js ≥ 24.0.0。按影响范围验证：`node scripts/smoke-check.js`、`node scripts/webui-check.js`、`node --test scripts/webui-render.test.js`、`node scripts/check-strings.js`、`node scripts/ui-parity.mjs`、`pnpm --dir server build`、`pnpm --dir server typecheck`、`pnpm --dir server test`、`pnpm --dir server test:contract`、`gradlew.bat :app:testDebugUnitTest`、`gradlew.bat :app:assembleDebug`。界面改动另外用 `node scripts/ui-shot.mjs` 逐屏留截图证据（用法见 [`docs/operations.md`](docs/operations.md)）。
+- 开发与运行要求 Node.js 24.15+（24.x）或 26+。按影响范围验证：`node scripts/smoke-check.js`、`node scripts/webui-check.js`、`node --test scripts/webui-render.test.js`、`node scripts/check-strings.js`、`node scripts/ui-parity.mjs`、`pnpm --dir server build`、`pnpm --dir server typecheck`、`pnpm --dir server test`、`pnpm --dir server test:contract`、`gradlew.bat :app:testDebugUnitTest`、`gradlew.bat :app:assembleDebug`。界面改动另外用 `node scripts/ui-shot.mjs` 逐屏留截图证据（用法见 [`docs/operations.md`](docs/operations.md)）。
 - 前端文案源码变更后运行 `node scripts/extract-strings.js --write`；服务端源码变更后重启进程。
 
 ## 边界
@@ -21,7 +21,7 @@
 - 用户可见文案写入 `strings_frontend.xml` 并用 `t('key')` 读取；资源首尾不留空白。颜色、字号、间距、圆角只写入 `styles/tokens.css`，动效只写入 `styles/motion.css`。
 - 页面只提供内容：外壳（`src/app/App.vue` 的顶栏 + 滚动内容区 + 底部导航 + 页脚槽）与 `src/app/shell.ts` 的导航项是唯一容器，页面不再自建 `.page` / `.topbar` / `.app-body`；固定操作区用 `<Teleport defer to="#app-foot">` 投递，顶栏右侧操作写在路由 `meta.topAction`。
 - 个人偏好（明暗模式、强调色）按账号保存（`users.ui_mode` / `users.ui_theme`），本机只缓存首帧；切换统一走 `src/app/preferences.ts`（本地先生效、落库失败回滚），不要把偏好写进 `app_settings`。
-- Markdown / HTML 先经 Vue service 的 sanitize 入口；第三方库内置在 `web/public/vendor/`，不引用 CDN，并只在用到的那一屏按需注入（`src/services/vendor.ts`）。
+- Markdown / HTML 先经 Vue service 的 sanitize 入口；第三方库统一由 pnpm 与锁文件管理，通过动态导入按需加载。WASM、Worker 等资源随 Vite 构建打包到 APK，运行时不引用 CDN。
 - 新页面在 `web/src/app/router.ts` 注册（含 `meta.title / back / tab`），同时更新 [`docs/engineering.md`](docs/engineering.md) 的屏幕表和 `web/src/app/shell.test.ts` 的 `ROUTES`；管理功能优先内联。
 - 表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`；后端仍需再次校验。
 
