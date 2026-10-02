@@ -411,7 +411,7 @@ async function savePreferences(patch: JsonObject): Promise<void> {
 async function requestNotification(): Promise<void> {
   try {
     const result = await device.requestNotificationPermission();
-    const granted = result.granted === true;
+    const granted = result === true;
     notify.granted = granted;
     // 拿到结果后同步到设备能力，按钮的显隐以它为准（见 notificationsGranted）。
     capabilities.apply({ notifications: granted });

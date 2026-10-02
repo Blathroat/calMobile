@@ -24,11 +24,11 @@ describe('NativeBridge', () => {
     const { native, fakeWindow, bridge } = createNative();
     native.invoke = (action, payload, callbackId) => {
       expect(action).toBe('calendar.status');
-      expect(JSON.parse(payload)).toEqual({ date: '2026-09-20' });
+      expect(JSON.parse(payload)).toEqual({ title: '秋季展会', date: '2026-09-20' });
       // 原生 calendar.status 回报的就是这两个键（见 SystemActions.calendarStatus）。
       fakeWindow.CalMobileBridge?.onResult(callbackId, true, { granted: true, inCalendar: false }, null, null);
     };
-    await expect(bridge.call('calendar.status', { date: '2026-09-20' })).resolves.toEqual({ granted: true, inCalendar: false });
+    await expect(bridge.call('calendar.status', { title: '秋季展会', date: '2026-09-20' })).resolves.toEqual({ granted: true, inCalendar: false });
   });
 
   it('preserves stable error codes and times out synchronous actions', async () => {
@@ -39,22 +39,22 @@ describe('NativeBridge', () => {
     expect(cancelled.code).toBe('cancelled');
 
     const timeoutBridge = createNative().bridge;
-    await expect(timeoutBridge.call('calendar.status', { date: '2026-09-20' })).rejects.toMatchObject({ code: 'timeout' });
+    await expect(timeoutBridge.call('calendar.status', { title: '秋季展会', date: '2026-09-20' })).rejects.toMatchObject({ code: 'timeout' });
   });
 
   it('rejects outside Android and ignores unknown callback ids', async () => {
     const fakeWindow = {} as Window;
     const bridge = new NativeBridge({ windowLike: fakeWindow, timeoutMs: 10 });
     bridges.push(bridge);
-    await expect(bridge.call('calendar.status', { date: '2026-09-20' })).rejects.toThrow('没有原生桥接');
+    await expect(bridge.call('calendar.status', { title: '秋季展会', date: '2026-09-20' })).rejects.toThrow('没有原生桥接');
     fakeWindow.CalMobileBridge?.onResult('unknown', true, {}, null, null);
   });
 
   it('device 服务把动作名固定成原生契约', async () => {
     // 动作名一旦改动就要同步 `WebAppActions.handle()` 的动作表，这里锁一个代表性动作。
     const spy = vi.spyOn(nativeBridge, 'call').mockResolvedValue({ saved: true } as never);
-    await device.calendarStatus('2026-09-20');
-    expect(spy).toHaveBeenCalledWith('calendar.status', { date: '2026-09-20' });
+    await device.calendarStatus({ title: '秋季展会', date: '2026-09-20' });
+    expect(spy).toHaveBeenCalledWith('calendar.status', { title: '秋季展会', date: '2026-09-20' });
     spy.mockRestore();
   });
 
@@ -65,7 +65,7 @@ describe('NativeBridge', () => {
     const bridge = new NativeBridge({ windowLike: fakeWindow, timeoutMs: 10, interactiveTimeoutMs: 60 });
     bridges.push(bridge);
 
-    const plain = await bridge.call('calendar.status', { date: '2026-09-20' }).catch((error) => error);
+    const plain = await bridge.call('calendar.status', { title: '秋季展会', date: '2026-09-20' }).catch((error) => error);
     expect(plain.code).toBe('timeout');
 
     const interactive = bridge.call('media.pickImage', {}).catch((error) => error);

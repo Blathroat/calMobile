@@ -107,7 +107,7 @@ async function loadCalendarState(): Promise<void> {
   const item = exhibition.value;
   if (!item) return;
   try {
-    const result = await device.calendarStatus(String(item.date ?? ''));
+    const result = await device.calendarStatus({ title: String(item.title ?? ''), date: String(item.date ?? '') });
     calendarState.value = { inCalendar: result.inCalendar === true, granted: result.granted === true };
   } catch {
     calendarState.value = { inCalendar: false, granted: false };
