@@ -9,7 +9,7 @@
  * 点日期**不发请求**：`exhibitions.month` 一次返回整月展会，选中哪一天纯属本地状态，
  * 因此既不重新取数，也不重建日历 DOM（重建会让卡片闪一下、圆点动画重放）。
  */
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, bootApp } from '@/app/runtime';
 import { preloadAdjacentMonths } from '@/app/preload';
@@ -21,6 +21,7 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MediaBox from '@/components/MediaBox.vue';
 import HintNote from '@/components/HintNote.vue';
 import { useHint } from '@/composables/useHint';
+import { useAsync } from '@/composables/useAsync';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
 import { addMonths, calendarRowCount, daysInMonth, firstWeekdayOffset, monthLabel } from '@/services/format';
@@ -44,10 +45,11 @@ const view = ref({
 /** 落点月份只采用一次：之后切月份、点日期都以用户为准。 */
 const landingApplied = ref(false);
 
-const monthData = ref<JsonObject | null>(null);
-const error = ref('');
-const loading = ref(true);
-const hasContent = computed(() => monthData.value !== null);
+const monthQuery = useAsync<{ data: JsonObject; year: number; month: number }>();
+const monthData = computed(() => monthQuery.data.value?.data);
+const error = computed(() => monthQuery.error.value?.message ?? '');
+const loading = monthQuery.loading;
+const hasContent = computed(() => monthData.value !== undefined);
 
 const calendarHost = ref<HTMLElement>();
 const swipeHost = ref<HTMLElement>();
@@ -125,39 +127,38 @@ function dayLabel(cell: Cell): string {
 }
 
 /** 加载当前 `view` 对应的月份；已有内容时保留旧内容，只标记忙碌。 */
-async function load(): Promise<void> {
-  loading.value = !hasContent.value;
-  error.value = '';
-  try {
+async function load(): Promise<boolean> {
+  const requested = { ...view.value };
+  const applyLanding = !landingApplied.value;
+  const result = await monthQuery.run(async (signal) => {
     // 落点月份由后端下发（示例数据集中在 2026 年 6–8 月），首屏必须等它落定。
     await bootApp();
-    if (!landingApplied.value) {
-      landingApplied.value = true;
+    signal.throwIfAborted();
+    if (applyLanding) {
       const landing = (bootstrap.calendar.landing ?? {}) as JsonObject;
       const year = Number(landing.year);
       const month = Number(landing.month);
       if (Number.isInteger(year) && Number.isInteger(month) && month >= 1 && month <= 12) {
-        view.value.year = year;
-        view.value.month = month;
+        requested.year = year;
+        requested.month = month;
       }
     }
     const data = await api.exhibitions.month({
-      year: view.value.year,
-      month: view.value.month,
-      day: view.value.day || undefined,
+      year: requested.year,
+      month: requested.month,
+      day: requested.day || undefined,
     }) as JsonObject;
-    monthData.value = data;
-    // 只有还没选中日期时才采用后端给的落点，避免刷新覆盖用户的选择。
-    if (!view.value.day) view.value.day = Number(data.day) || 0;
-    // 相邻月份与当天首条展会预热：滑到下个月、点进详情都不用等。
-    preloadAdjacentMonths(view.value.year, view.value.month);
-    for (const item of items.value.slice(0, 2)) warm(item.id);
-  } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : String(reason);
-    if (!hasContent.value) monthData.value = null;
-  } finally {
-    loading.value = false;
-  }
+    return { data, year: requested.year, month: requested.month };
+  });
+  if (!result) return false;
+  landingApplied.value = true;
+  view.value.year = result.year;
+  view.value.month = result.month;
+  // 只有还没选中日期时才采用后端给的落点，避免刷新覆盖用户的选择。
+  if (!view.value.day) view.value.day = Number(result.data.day) || 0;
+  preloadAdjacentMonths(result.year, result.month);
+  for (const item of items.value.slice(0, 2)) warm(item.id);
+  return true;
 }
 
 function selectDay(day: number): void {
@@ -169,17 +170,29 @@ function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+let monthTimer: number | undefined;
+let enterFrame: number | undefined;
+let pendingMonth: { year: number; month: number } | undefined;
+
 /** 切换月份：先让当前卡片滑出，再载入新月份并滑入，让「月份变了」在视觉上连续。 */
 function shiftMonth(delta: number): void {
-  const next = addMonths(view.value.year, view.value.month, delta);
+  const current = pendingMonth ?? view.value;
+  const next = addMonths(current.year, current.month, delta);
+  pendingMonth = next;
+  window.clearTimeout(monthTimer);
+  monthQuery.cancel();
+  // 用户已经指定月份时，晚到的启动落点不再接管视图。
+  landingApplied.value = true;
   const apply = (): void => {
+    pendingMonth = undefined;
     view.value.year = next.year;
     view.value.month = next.month;
     // 交给新月份自己挑第一个有展会的日期。
     view.value.day = 0;
     enter.value = delta > 0 ? 'right' : 'left';
-    void load().then(() => {
-      requestAnimationFrame(() => { enter.value = ''; });
+    void load().then((applied) => {
+      if (!applied) return;
+      enterFrame = requestAnimationFrame(() => { enter.value = ''; });
     });
   };
   if (prefersReducedMotion()) {
@@ -187,7 +200,7 @@ function shiftMonth(delta: number): void {
     return;
   }
   leave.value = delta > 0 ? 'left' : 'right';
-  window.setTimeout(() => {
+  monthTimer = window.setTimeout(() => {
     leave.value = '';
     apply();
   }, 140);
@@ -301,6 +314,10 @@ onMounted(() => {
   announce();
   void load();
 });
+onBeforeUnmount(() => {
+  window.clearTimeout(monthTimer);
+  if (enterFrame !== undefined) cancelAnimationFrame(enterFrame);
+});
 </script>
 
 <template>
@@ -399,7 +416,7 @@ onMounted(() => {
   <div class="list" data-gap="sm">
     <SkeletonBlock v-if="loading && !hasContent" :rows="2" />
     <StateBlock
-      v-else-if="items.length === 0"
+      v-else-if="!loading && !error && items.length === 0"
       :title="t('s_1vtk64c')"
       :description="t('s_1jbzuzw')"
       :action-label="t('s_50ih74')"

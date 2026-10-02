@@ -46,6 +46,13 @@ class NavigationCoordinator {
     this.sequence = id;
     const current = { id, controller: new AbortController() };
     this.active = current;
+    return this.current()!;
+  }
+
+  /** 页面每次取数时取得当前导航；原地切分区后也会获得新的生命周期。 */
+  current(): NavigationScope | undefined {
+    const current = this.active;
+    if (!current) return undefined;
     return { id: current.id, signal: current.controller.signal, isCurrent: () => this.active?.id === current.id };
   }
 
