@@ -9,7 +9,7 @@
  */
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api } from '@/app/runtime';
+import { api, refreshRuntimeBootstrap } from '@/app/runtime';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
@@ -44,6 +44,8 @@ const demoHint = t('s_d8r5bl');
 
 /** 预认证票：第二步与重发都要用它；它本身不是登录凭据。 */
 const ticket = ref('');
+/** 验证码已消费时只重试启动数据；换会话后不能沿用这个完成标记。 */
+let verifiedSession: AbortSignal | undefined;
 const maskedEmail = ref('');
 /** 这个账号能用哪些第二因子（由第一步下发）：验证器 / 邮箱验证码 / 备用码。 */
 const methods = ref({ totp: false, email: true, backup: false });
@@ -71,11 +73,11 @@ function redirectTarget(): string {
 }
 
 /** 进入登录态之后的收尾：提示 + 跳回原页面（替换历史，不新增返回栈）。 */
-function enterAs(user: Record<string, unknown> | undefined): void {
-  session.applyUser(user);
+async function enterAs(): Promise<void> {
+  await refreshRuntimeBootstrap();
   stopCountdown();
   toast(`欢迎回来，${session.user.nickname || session.user.username}`, 'success');
-  void router.replace(redirectTarget());
+  await router.replace(redirectTarget());
 }
 
 /** 后端只回 `ok:false` 而没带原因时兜一句通用文案，否则错误行会是空白。 */
@@ -109,7 +111,7 @@ async function submit(): Promise<void> {
       if (wait > 0) startCountdown(wait);
       return;
     }
-    enterAs(result.user as Record<string, unknown> | undefined);
+    await enterAs();
   } catch (reason) {
     error.value = message(reason);
   } finally {
@@ -119,7 +121,8 @@ async function submit(): Promise<void> {
 
 async function verify(): Promise<void> {
   verifyError.value = '';
-  const invalid = check(code.value, {
+  const needsVerification = verifiedSession !== api.session.signal;
+  const invalid = needsVerification && check(code.value, {
     label: t('s_s8pbve'),
     required: true,
     max: CODE_MAX,
@@ -132,8 +135,11 @@ async function verify(): Promise<void> {
   }
   busy.value = true;
   try {
-    const result = await api.auth.loginVerify({ ticket: ticket.value, code: code.value.trim() }) as AuthResult;
-    enterAs(result.user as Record<string, unknown> | undefined);
+    if (needsVerification) {
+      await api.auth.loginVerify({ ticket: ticket.value, code: code.value.trim() });
+      verifiedSession = api.session.signal;
+    }
+    await enterAs();
   } catch (reason) {
     verifyError.value = message(reason);
   } finally {
@@ -163,9 +169,9 @@ async function guest(): Promise<void> {
   error.value = '';
   guestBusy.value = true;
   try {
-    const result = await api.auth.guest() as AuthResult;
-    session.applyUser(result.user as Record<string, unknown> | undefined);
-    void router.replace(redirectTarget());
+    await api.auth.guest();
+    await refreshRuntimeBootstrap();
+    await router.replace('/home');
   } catch (reason) {
     error.value = message(reason);
   } finally {
@@ -189,6 +195,7 @@ function stopCountdown(): void {
 }
 
 function backToStepOne(): void {
+  verifiedSession = undefined;
   ticket.value = '';
   step.value = 1;
   verifyError.value = '';

@@ -17,10 +17,7 @@ export function bootApp(): Promise<void> {
     // 顺序反了的话 bootstrap 会以匿名身份回答，页面首帧会停在登录页。
     .restore()
     .catch(() => false)
-    .then(() => api.bootstrap())
-    .then((data) => {
-      applyRuntimeBootstrap(data);
-    })
+    .then(() => refreshRuntimeBootstrap())
     .catch((error) => {
       bootPromise = undefined;
       throw error;
@@ -32,11 +29,19 @@ export function resetBootForTests(): void {
   bootPromise = undefined;
 }
 
+/** 每次身份切换后重读整份启动数据，偏好与权限落定后才允许进入下一屏。 */
+export async function refreshRuntimeBootstrap(): Promise<void> {
+  const signal = api.session.signal;
+  const data = await api.bootstrap();
+  signal.throwIfAborted();
+  applyRuntimeBootstrap(data);
+}
+
 /**
  * 把启动数据落到各个 store。
  *
  * 明暗模式与强调色也在这里落一次：后端是偏好的权威来源（`users.ui_mode` /
- * `app_settings`），本机缓存只负责首帧不闪白。
+ * `users.ui_theme`），本机缓存只负责首帧不闪白。
  */
 export function applyRuntimeBootstrap(data: Bootstrap): void {
   useSessionStore().applyUser(data.user);

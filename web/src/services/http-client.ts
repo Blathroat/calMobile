@@ -73,6 +73,8 @@ export interface HttpClientOptions {
   timeoutMs?: number;
   fetcher?: typeof fetch;
   getAccessToken?: () => string | undefined;
+  /** 身份切换会作废本次请求；续期不改变此信号。 */
+  getSessionSignal?: () => AbortSignal;
   refresh?: () => Promise<boolean>;
 }
 
@@ -94,7 +96,7 @@ export class HttpClient {
   private readonly fetcher: typeof fetch;
   private readonly timeoutMs: number;
   // 正在进行的令牌刷新。并发的 401 复用它，避免同时打出多个刷新请求。
-  private refreshing: Promise<boolean> | undefined;
+  private refreshing: { signal?: AbortSignal; promise: Promise<boolean> } | undefined;
 
   constructor(private readonly options: HttpClientOptions) {
     // WebView 对原生 fetch 的 this 绑定严格，保存函数后必须绑定全局对象再调用。
@@ -117,13 +119,17 @@ export class HttpClient {
     // 去掉 baseUrl 末尾的斜杠：调用方传不传都不该拼出 `//`。
     const url = `${this.options.baseUrl.replace(/\/$/, '')}${path}${queryString(request.query)}`;
     const controller = new AbortController();
+    const sessionSignal = this.options.getSessionSignal?.();
     // 超时即 abort，fetch 会以 AbortError 结束；reason 用来把它和「调用方取消」分开。
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     // 调用方取消也走同一个 controller，统一在 finally 里解绑。
     const abortFromCaller = () => controller.abort();
     request.signal?.addEventListener('abort', abortFromCaller, { once: true });
+    sessionSignal?.addEventListener('abort', abortFromCaller, { once: true });
+    if (request.signal?.aborted || sessionSignal?.aborted) controller.abort();
 
     try {
+      controller.signal.throwIfAborted();
       const token = this.options.getAccessToken?.();
       const response = await this.fetcher(url, {
         method: request.method ?? 'GET',
@@ -137,12 +143,23 @@ export class HttpClient {
         body: request.body === undefined ? undefined : JSON.stringify(request.body),
         signal: controller.signal,
       });
+      controller.signal.throwIfAborted();
 
       if (response.status === 401 && canRefresh && this.options.refresh) {
         // 并发的 401 共用同一个刷新 Promise；刷新一结束就置空，否则下一次 401 会复用一个已结算的旧结果。
-        this.refreshing ??= this.options.refresh().finally(() => { this.refreshing = undefined; });
+        if (!this.refreshing || this.refreshing.signal !== sessionSignal) {
+          const current = {
+            signal: sessionSignal,
+            promise: this.options.refresh().finally(() => {
+              if (this.refreshing === current) this.refreshing = undefined;
+            }),
+          };
+          this.refreshing = current;
+        }
         // 刷新成功才重放；canRefresh=false 保证重放后再 401 就直接抛给上层，不再刷新。
-        if (await this.refreshing) return this.request<T>(path, request, false);
+        const renewed = await this.refreshing.promise;
+        controller.signal.throwIfAborted();
+        if (renewed) return this.request<T>(path, request, false);
       }
 
       let data: unknown;
@@ -150,9 +167,11 @@ export class HttpClient {
         // 先读响应体再判状态：错误响应也靠体里的 error 字段给文案。
         data = await response.json();
       } catch (error) {
+        controller.signal.throwIfAborted();
         // 5xx 常返回网关的 HTML 错误页，解析失败同样属于传输失败。
         throw new TransportError(`响应不是合法 JSON：${error instanceof Error ? error.message : String(error)}`);
       }
+      controller.signal.throwIfAborted();
       // 5xx 归传输失败：后端或代理异常，不是业务规则的判定结果。
       if (response.status >= 500) throw new TransportError(`后端返回 ${response.status}`);
       if (!response.ok) {
@@ -170,10 +189,11 @@ export class HttpClient {
       return data as T;
     } catch (error) {
       if (error instanceof ApiError || error instanceof TransportError) throw error;
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      if (controller.signal.aborted) {
+        // 以本请求的信号判定来源，兼容 fetch 与页面来自不同 realm 的异常对象。
         // AbortError 只有两个来源：这里掐的超时，或者调用方传进来的 signal。
         // 调用方的 signal 上带 aborted 标记，据此分开报：文案是排障用的，不是给用户看的业务提示。
-        if (request.signal?.aborted) throw new TransportError(t('s_1s8cf91'), 'aborted');
+        if (request.signal?.aborted || sessionSignal?.aborted) throw new TransportError(t('s_1s8cf91'), 'aborted');
         throw new TransportError(`后端响应超时（超过 ${this.timeoutMs / 1000} 秒）`, 'timeout');
       }
       // 其余都是网络层的原生错误（DNS、证书、连接被拒等），后端状态未知。
@@ -182,6 +202,7 @@ export class HttpClient {
       // 无论成败都要清定时器，否则每成功一次就多留一个待触发的 abort。
       clearTimeout(timer);
       request.signal?.removeEventListener('abort', abortFromCaller);
+      sessionSignal?.removeEventListener('abort', abortFromCaller);
     }
   }
 }
