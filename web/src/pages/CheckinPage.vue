@@ -3,7 +3,7 @@
  * 展商 · 核销报名码
  *
  * 展会在「编辑展会」里开启「是否启用报名二维码」后，报名审核通过的用户会在报名详情
- * 看到报名码。展商在本页用摄像头取景，由内置的 jsQR 在画面里实时识别二维码，
+ * 看到报名码。展商在本页用摄像头取景，由 Worker 中的 ZXing WASM 实时识别二维码，
  * 识别成功后调用 `checkin` 把报名状态改为「已参加」。
  *
  * 摄像头不可用（未授权、设备没有摄像头、内核不支持 getUserMedia）时保留「手动输入报名码」
@@ -15,7 +15,7 @@ import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
 import { device } from '@/services/device-services';
-import { loadQrDecoder } from '@/services/vendor';
+import { createQrDecoder, type QrDecoder } from '@/services/qr-decoder';
 import { openSheet } from '@/services/sheet';
 import { toast } from '@/services/toast';
 import { REGISTRATION_STATUS } from '@/services/status';
@@ -32,8 +32,6 @@ const CODE_PREFIX = 'CALMOBILE-CHECKIN|';
 const DECODE_WIDTH = 640;
 /** 识别节流：约每 120ms 解一帧，既跟得上手势又不占满 CPU。 */
 const DECODE_INTERVAL = 120;
-interface JsQrResult { data?: string }
-type JsQrDecoder = (data: Uint8ClampedArray, width: number, height: number, options?: { inversionAttempts?: string }) => JsQrResult | null;
 
 /** 取景区只表达一件事：当前是取景、识别中，还是某一步失败 / 已停止。 */
 type StageMode = 'idle' | 'live' | 'error' | 'stopped' | 'detected';
@@ -81,6 +79,9 @@ const manual = reactive({ code: '', error: '' });
 let stream: MediaStream | null = null;
 let frameHandle = 0;
 let lastDecodeAt = 0;
+let decoder: QrDecoder | null = null;
+let decodeBusy = false;
+let scanEpoch = 0;
 /** 页面被替换后置为 false：异步步骤（权限、getUserMedia）回来时据此放弃取景。 */
 let alive = true;
 
@@ -89,19 +90,27 @@ onMounted(() => {
   // （后台按钮、深链、返回键回来）都把它记为已读，下次不再显示。
   void dismissCheckinHint();
   if (limited.value) return;
-  void loadQrDecoder()
-    .then(() => { decoderReady.value = true; })
-    .catch((reason: unknown) => {
-      // 取景仍然可用，但解不了码；页面会提示改用手动输入。
-      decoderFailed.value = true;
-      console.warn(`二维码识别组件加载失败：${reason instanceof Error ? reason.message : String(reason)}`);
-    });
+  try {
+    decoder = createQrDecoder();
+    void decoder.ready.then(() => { if (alive) decoderReady.value = true; }).catch(decoderUnavailable);
+  } catch {
+    decoderUnavailable();
+  }
 });
 
 onBeforeUnmount(() => {
   alive = false;
   releaseCamera();
+  decoder?.dispose();
 });
+
+function decoderUnavailable(): void {
+  if (!alive) return;
+  releaseCamera();
+  decoderReady.value = false;
+  decoderFailed.value = true;
+  showNotice(t('s_ugjygq'), 'error');
+}
 
 function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -148,12 +157,13 @@ function previewOf(raw: string): string {
 // ── 取景与识别 ─────────────────────────────────────────────────
 
 async function toggleScan(): Promise<void> {
+  if (starting.value) return;
   if (scanning.value) {
     stopScan();
     return;
   }
   if (decoderFailed.value) {
-    showNotice(t('s_dyicmi'), 'error');
+    decoderUnavailable();
     return;
   }
   const supported = typeof navigator !== 'undefined'
@@ -166,24 +176,32 @@ async function toggleScan(): Promise<void> {
 
   starting.value = true;
   try {
+    await startScan();
+  } finally {
+    if (alive) starting.value = false;
+  }
+}
+
+async function startScan(): Promise<void> {
+  const epoch = ++scanEpoch;
+  try {
     // 先让原生确认摄像头权限，用户同意后 WebView 的 getUserMedia 才会放行。
     const granted = await device.ensureCameraPermission();
+    if (!alive || epoch !== scanEpoch || decoderFailed.value) return;
     if (granted !== true) {
       showNotice(t('s_1w8qxkd'), 'error');
       return;
     }
   } catch (reason) {
-    showNotice(reason instanceof Error ? reason.message : String(reason), 'error');
+    if (alive && epoch === scanEpoch) showNotice(reason instanceof Error ? reason.message : String(reason), 'error');
     return;
-  } finally {
-    starting.value = false;
   }
   if (!alive) return;
 
   setStage('live', '', '');
   showNotice(t('s_i7g6c4'));
   await nextTick();
-  if (!alive) return;
+  if (!alive || epoch !== scanEpoch) return;
 
   let media: MediaStream;
   try {
@@ -193,11 +211,12 @@ async function toggleScan(): Promise<void> {
     });
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : '';
+    if (!alive || epoch !== scanEpoch) return;
     setStage('error', t('s_jkwui8'), `${message || t('s_k3ej4k')}。可以改用“手动输入报名码”。`);
     clearStatus();
     return;
   }
-  if (!alive) {
+  if (!alive || epoch !== scanEpoch || decoderFailed.value) {
     media.getTracks().forEach((track) => track.stop());
     return;
   }
@@ -214,6 +233,7 @@ async function toggleScan(): Promise<void> {
   } catch {
     // 部分内核要求用户手势才自动播放；播放失败时下面的循环仍会尝试取帧。
   }
+  if (!alive || epoch !== scanEpoch || stream !== media) return;
   scanning.value = true;
   showNotice(t('s_o51o77'));
   scheduleFrame();
@@ -231,6 +251,7 @@ function stopScan(): void {
 }
 
 function releaseCamera(): void {
+  scanEpoch += 1;
   scanning.value = false;
   if (frameHandle) {
     cancelAnimationFrame(frameHandle);
@@ -249,22 +270,15 @@ function scheduleFrame(): void {
     if (!scanning.value) return;
     if (timestamp - lastDecodeAt >= DECODE_INTERVAL) {
       lastDecodeAt = timestamp;
-      decodeFrame();
+      void decodeFrame();
     }
     scheduleFrame();
   });
 }
 
-/** jsQR 由 `services/vendor` 注入到全局；没加载完就跳过这一帧。 */
-function currentDecoder(): JsQrDecoder | null {
-  const decoder = (window as unknown as { jsQR?: JsQrDecoder }).jsQR;
-  return typeof decoder === 'function' ? decoder : null;
-}
-
 /** 取当前画面中间 4:3 区域解码，兼顾识别率与性能。 */
-function decodeFrame(): void {
-  if (!decoderReady.value) return;
-  const decoder = currentDecoder();
+async function decodeFrame(): Promise<void> {
+  if (!decoderReady.value || decodeBusy || !alive || !scanning.value) return;
   const node = videoEl.value;
   const target = canvasEl.value;
   if (!decoder || !node || !target) return;
@@ -289,8 +303,17 @@ function decodeFrame(): void {
   } catch {
     return;
   }
-  const found = decoder(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
-  if (found?.data) void handleCode(found.data);
+  const epoch = scanEpoch;
+  decodeBusy = true;
+  try {
+    const found = await decoder.decode(image);
+    // 停止、重启或离开页面后，旧帧的结果不再触发核销。
+    if (alive && scanning.value && epoch === scanEpoch && found) await handleCode(found);
+  } catch {
+    if (epoch === scanEpoch) decoderUnavailable();
+  } finally {
+    if (alive) decodeBusy = false;
+  }
 }
 
 /** 识别到内容后先停止取景，避免同一张码被连续提交。 */
@@ -307,12 +330,14 @@ async function verify(raw: string): Promise<void> {
   submitting.value = true;
   showLoadingStatus();
   try {
-    renderResult(await api.checkIn(raw));
+    const response = await api.checkIn(raw);
+    if (alive) renderResult(response);
   } catch (reason) {
+    if (!alive) return;
     outcome.value = null;
     showVerifyError(t('s_bctg3f'), reason instanceof Error ? reason.message : String(reason));
   } finally {
-    submitting.value = false;
+    if (alive) submitting.value = false;
   }
 }
 
@@ -349,6 +374,7 @@ async function restart(): Promise<void> {
  * 校验失败就把错误写回 `manual.error` 并留在面板里，成功才关闭。
  */
 function openManual(): void {
+  stopScan();
   manual.code = '';
   manual.error = '';
   openSheet({

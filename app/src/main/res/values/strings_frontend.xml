@@ -385,7 +385,6 @@
     <string name="s_dpy0pe">多选选项</string>
     <string name="s_dtadu0">用户名最短</string>
     <string name="s_dvh8t7">移出日历</string>
-    <string name="s_dyicmi">未获得摄像头权限，可在系统设置里开启，或使用“手动输入报名码”。</string>
     <string name="s_e1wq8p">分享展会</string>
     <string name="s_e4jezx">上一个月</string>
     <string name="s_e6tqxb">密码最短</string>
@@ -516,6 +515,7 @@
     <string name="s_tvr34s">6 位验证码或备用码</string>
     <string name="s_u2zwo3">重新生成备用码</string>
     <string name="s_u9jq8n">用户名</string>
+    <string name="s_ugjygq">二维码识别组件不可用，请使用“手动输入报名码”。</string>
     <string name="s_und5qj">还没有账号？</string>
     <string name="s_usxjfe">保存服务器设置</string>
     <string name="s_v8pba2">未收集额外信息</string>

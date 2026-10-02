@@ -91,7 +91,7 @@ function decodePng(buffer) {
         }
     }
 
-    // 统一转成 RGBA，jsQR 只接受这个格式。
+    // 统一转成识别库接受的 RGBA 像素格式。
     const data = new Uint8ClampedArray(width * height * 4);
     for (let i = 0; i < width * height; i += 1) {
         let r;
@@ -143,17 +143,17 @@ function crop(image, x, y, w, h) {
  * 在整张截图里滑动窗口搜索二维码。
  * 窗口按 1/2 边长步进，覆盖到码即可，避免精确裁剪带来的手工坐标误差。
  */
-function search(image, jsQR, minSide = 240) {
+async function search(image, readBarcodes, minSide = 240) {
     const sizes = [minSide, Math.round(minSide * 1.5), minSide * 2];
     for (const side of sizes) {
         const step = Math.max(40, Math.round(side / 3));
         for (let y = 0; y + side <= image.height; y += step) {
             for (let x = 0; x + side <= image.width; x += step) {
-                const found = jsQR(crop(image, x, y, side, side).data, side, side, {
-                    inversionAttempts: 'attemptBoth',
+                const [found] = await readBarcodes(crop(image, x, y, side, side), {
+                    formats: ['QRCode'], maxNumberOfSymbols: 1,
                 });
-                if (found?.data) {
-                    return { text: found.data, region: { x, y, side } };
+                if (found?.text) {
+                    return { text: found.text, region: { x, y, side } };
                 }
             }
         }
@@ -161,16 +161,17 @@ function search(image, jsQR, minSide = 240) {
     return null;
 }
 
-function main() {
+async function main() {
     const [file, box] = process.argv.slice(2);
     if (!file) {
         console.error('用法：node scripts/decode-shot.js <截图.png> [x,y,w,h]');
         process.exitCode = 2;
         return;
     }
-    const require_ = require('node:module').createRequire(__filename);
-    const jsQR = require_(path.resolve(__dirname, '..',
-        'web/public/vendor/jsQR.js'));
+    const requireWeb = require('node:module').createRequire(path.resolve(__dirname, '../web/package.json'));
+    const { prepareZXingModule, readBarcodes } = requireWeb('zxing-wasm/reader');
+    const wasm = fs.readFileSync(requireWeb.resolve('zxing-wasm/reader/zxing_reader.wasm'));
+    prepareZXingModule({ overrides: { wasmBinary: wasm } });
 
     const image = decodePng(fs.readFileSync(file));
     console.log(`截图尺寸：${image.width}×${image.height}`);
@@ -179,12 +180,12 @@ function main() {
     if (box) {
         const [x, y, w, h] = box.split(',').map(Number);
         const region = crop(image, x, y, w, h);
-        const hit = jsQR(region.data, w, h, { inversionAttempts: 'attemptBoth' });
-        if (hit?.data) {
-            found = { text: hit.data, region: { x, y, side: w } };
+        const [hit] = await readBarcodes(region, { formats: ['QRCode'], maxNumberOfSymbols: 1 });
+        if (hit?.text) {
+            found = { text: hit.text, region: { x, y, side: w } };
         }
     } else {
-        found = search(image, jsQR);
+        found = await search(image, readBarcodes);
     }
 
     if (!found) {
@@ -197,7 +198,10 @@ function main() {
 }
 
 if (require.main === module) {
-    main();
+    main().catch((error) => {
+        console.error(`FAIL ${error.message}`);
+        process.exitCode = 1;
+    });
 }
 
 module.exports = { decodePng, crop, search };

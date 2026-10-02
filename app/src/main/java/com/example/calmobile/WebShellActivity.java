@@ -254,6 +254,7 @@ public class WebShellActivity extends Activity {
         MIME_TYPES.put("css", "text/css");
         MIME_TYPES.put("js", "application/javascript");
         MIME_TYPES.put("mjs", "application/javascript");
+        MIME_TYPES.put("wasm", "application/wasm");
         MIME_TYPES.put("json", "application/json");
         MIME_TYPES.put("svg", "image/svg+xml");
         MIME_TYPES.put("png", "image/png");
@@ -307,7 +308,7 @@ public class WebShellActivity extends Activity {
     /**
      * APK 内的静态资源响应头。
      * <p>
-     * 脚本与样式用 `no-cache`（**可以缓存，但每次都要回来校验**），而不是 `max-age`：
+     * 脚本、WASM 与样式用 `no-cache`（**可以缓存，但每次都要回来校验**），而不是 `max-age`：
      * 覆盖安装 APK 并不会清掉 `/data/data/<包名>/cache`，WebView 的 HTTP 缓存键又只有 URL，
      * 因此 `max-age=86400` 会出现「新的 index.html 配旧的 js 模块」这种只在升级当天复现的错乱。
      * 这些文件就在 APK 里，回源（重新读 assets）本身很便宜，没必要为省一次读取冒版本不一致的风险。
@@ -316,7 +317,7 @@ public class WebShellActivity extends Activity {
     private Map<String, String> assetHeaders(String assetPath, String extension) {
         Map<String, String> headers = new HashMap<>();
         boolean revalidated = "js".equals(extension) || "mjs".equals(extension)
-                || "css".equals(extension) || "woff2".equals(extension);
+                || "wasm".equals(extension) || "css".equals(extension) || "woff2".equals(extension);
         headers.put("Cache-Control", revalidated ? "no-cache" : "no-store");
         headers.put("X-Content-Type-Options", "nosniff");
         return headers;

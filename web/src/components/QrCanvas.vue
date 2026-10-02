@@ -7,7 +7,7 @@
  * 拿不到二维码不该让整页挂掉。
  */
 import { onMounted, ref, watch } from 'vue';
-import { loadQrEncoder } from '@/services/vendor';
+import { drawQr } from '@/services/qr-encoder';
 import { t } from '@/i18n';
 const props = withDefaults(defineProps<{ text: string; size?: number; quiet?: number; label?: string }>(), {
   size: 220,
@@ -23,52 +23,10 @@ async function render(): Promise<void> {
   const node = canvas.value;
   if (!node || !props.text) return;
   try {
-    await loadQrEncoder();
-    if (!draw(node, props.text, props.quiet)) emit('error', t('s_3rgb49'));
+    if (!await drawQr(node, props.text, props.quiet)) emit('error', t('s_3rgb49'));
   } catch (reason) {
     emit('error', reason instanceof Error ? reason.message : String(reason));
   }
-}
-
-/** 真正落笔；返回是否画成功。 */
-function draw(node: HTMLCanvasElement, text: string, quiet: number): boolean {
-  const generator = (window as { qrcode?: (type: number, level: string) => QrModel }).qrcode;
-  if (typeof generator !== 'function') return false;
-  let model: QrModel;
-  try {
-    // 0 表示按内容自动选择版本，M 级纠错在屏幕与打印下都够用。
-    model = generator(0, 'M');
-    model.addData(String(text || ''));
-    model.make();
-  } catch {
-    return false;
-  }
-  const context = node.getContext('2d');
-  if (!context) return false;
-  const modules = model.getModuleCount();
-  const scale = node.width / (modules + quiet * 2);
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, node.width, node.height);
-  context.fillStyle = '#20252b';
-  for (let row = 0; row < modules; row += 1) {
-    for (let column = 0; column < modules; column += 1) {
-      if (!model.isDark(row, column)) continue;
-      context.fillRect(
-        Math.round((column + quiet) * scale),
-        Math.round((row + quiet) * scale),
-        Math.ceil(scale),
-        Math.ceil(scale),
-      );
-    }
-  }
-  return true;
-}
-
-interface QrModel {
-  addData(data: string): void;
-  make(): void;
-  getModuleCount(): number;
-  isDark(row: number, column: number): boolean;
 }
 
 onMounted(render);
