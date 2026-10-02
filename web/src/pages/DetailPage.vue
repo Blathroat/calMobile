@@ -12,7 +12,7 @@ import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
 import { useSessionStore } from '@/stores/session';
 import { device } from '@/services/device-services';
-import { markdownToHtml, plainText, sanitizeHtml } from '@/services/markdown';
+import { loadMarkdownParser, markdownToHtml, plainText, sanitizeHtml } from '@/services/markdown';
 import { coverOf } from '@/services/cover';
 import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
@@ -92,7 +92,11 @@ function footerHint(): string {
 
 async function load(): Promise<void> {
   calendarRequested = false;
-  const data = await query.run(() => api.exhibitions.get(exhibitionId.value));
+  const data = await query.run(async () => {
+    const detail = await api.exhibitions.get(exhibitionId.value);
+    if (detail.exhibition?.description) await loadMarkdownParser();
+    return detail;
+  });
   if (data?.found === false) {
     calendarState.value = { inCalendar: false, granted: false };
     return;

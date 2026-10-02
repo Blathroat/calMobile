@@ -23,7 +23,7 @@ import {
 } from '@/services/validate';
 import { EXHIBITION_STATUS, REGISTRATION_MODES } from '@/services/status';
 import { device } from '@/services/device-services';
-import { markdownToHtml, plainText } from '@/services/markdown';
+import { loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
 import AppIcon from '@/components/AppIcon.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -204,7 +204,11 @@ async function load(): Promise<void> {
     built.value = true;
     return;
   }
-  const data = await detail.run(() => api.exhibitions.get(exhibitionId.value));
+  const data = await detail.run(async () => {
+    const result = await api.exhibitions.get(exhibitionId.value);
+    if (result.exhibition?.description) await loadMarkdownParser();
+    return result;
+  });
   if (!data || data.found === false) return;
   if (built.value) return;
   built.value = true;

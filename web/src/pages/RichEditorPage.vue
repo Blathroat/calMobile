@@ -16,7 +16,7 @@ import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
 import { allowedFormats, uploadCountLimit, uploadSizeLimitMb, uploadSizeError } from '@/services/validate';
 import { device } from '@/services/device-services';
-import { markdownToHtml, plainText, sanitizeHtml } from '@/services/markdown';
+import { htmlToMarkdown, loadHtmlConverter, loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
 import AppIcon from '@/components/AppIcon.vue';
 import PasteTextPanel from '@/components/PasteTextPanel.vue';
 import StateBlock from '@/components/StateBlock.vue';
@@ -37,7 +37,7 @@ const query = useAsync<ExhibitionDetail>();
 /** 路由只带 id：`/rich-editor?id=…`（旧实现的 hash 参数一并兜住）。 */
 const exhibitionId = computed(() => String(route.params.id ?? route.query.id ?? ''));
 const exhibition = computed<JsonObject>(() => (query.data.value?.exhibition ?? {}) as JsonObject);
-const notFound = computed(() => query.data.value !== undefined && query.data.value.found === false);
+const notFound = computed(() => !exhibitionId.value || query.data.value?.found === false);
 const loadFailed = computed(() => query.error.value !== undefined && query.data.value === undefined);
 
 const content = ref('');
@@ -45,7 +45,9 @@ const saving = ref(false);
 const showPreview = ref(false);
 const editor = ref<HTMLTextAreaElement>();
 /** 内容只从取回的详情写一次，之后预览 / 打字都不再被覆盖。 */
-let seeded = false;
+const seeded = ref(false);
+const canSave = computed(() => seeded.value && !query.loading.value && !loadFailed.value
+  && !notFound.value && Boolean(exhibition.value.id));
 
 const previewHtml = computed(() => markdownToHtml(content.value));
 
@@ -82,25 +84,26 @@ const mediaHint = computed(() => {
 
 // ── 取数 ─────────────────────────────────────────────────────────
 
-/** 旧实现支持 HTML 简介：取回后降级成纯文本，避免把标签当正文再次保存。 */
+/** 历史 HTML 在编辑时转成 Markdown，保留链接、格式与媒体。 */
 function initialContent(item: JsonObject): string {
   const raw = String(item.description ?? '');
-  if (item.descriptionFormat === 'html') {
-    const html = /<[a-z][\s\S]*>/i.test(raw) ? raw : '';
-    return html ? plainText(sanitizeHtml(html), 20_000) : raw;
-  }
-  return raw;
+  return item.descriptionFormat === 'html' ? htmlToMarkdown(raw) : raw;
 }
 
 async function load(): Promise<void> {
   if (!exhibitionId.value) {
-    seeded = true;
     return;
   }
-  const data = await query.run(() => api.exhibitions.get(exhibitionId.value));
-  if (!data || data.found === false || seeded) return;
-  seeded = true;
+  const data = await query.run(async () => {
+    const detail = await api.exhibitions.get(exhibitionId.value);
+    if (detail.found === false) return detail;
+    await loadMarkdownParser();
+    if (detail.exhibition?.descriptionFormat === 'html') await loadHtmlConverter();
+    return detail;
+  });
+  if (!data || data.found === false || seeded.value) return;
   content.value = initialContent((data.exhibition ?? {}) as JsonObject);
+  seeded.value = true;
 }
 
 onMounted(() => { void load(); });
@@ -289,7 +292,7 @@ function clearAll(): void {
 }
 
 async function save(): Promise<void> {
-  if (saving.value) return;
+  if (saving.value || !canSave.value) return;
   const markdown = content.value.trim();
   saving.value = true;
   try {
@@ -458,7 +461,7 @@ function escapeRegExp(value: string): string {
   <Teleport v-if="!loadFailed && !notFound" defer to="#app-foot">
     <div class="page-foot">
       <div class="stack" data-gap="sm">
-        <button class="cta" type="button" :disabled="saving" :data-loading="saving ? 'true' : 'false'" @click="save">
+        <button class="cta" type="button" :disabled="saving || !canSave" :data-loading="saving ? 'true' : 'false'" @click="save">
           {{ t('s_1kqdxz5') }}
         </button>
         <p class="field-hint text-center">{{ t('s_4l0yq7') }}</p>

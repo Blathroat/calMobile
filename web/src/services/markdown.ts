@@ -1,5 +1,47 @@
 /** Markdown 渲染入口，所有富文本先经过清洗再交给页面展示。 */
+import type TurndownService from 'turndown';
+
 const URL_PATTERN = /^(https?:|mailto:)/i;
+let parser: typeof import('marked').marked | undefined;
+let purifier: ReturnType<typeof import('dompurify').default> | undefined;
+let converter: TurndownService | undefined;
+
+/** 页面在加载简介时准备解析器和清洗器，Vite 将依赖打成 APK 内的按需资源。 */
+export async function loadMarkdownParser(): Promise<void> {
+  if (parser && purifier) return;
+  const [marked, dompurify] = await Promise.all([import('marked'), import('dompurify')]);
+  parser = marked.marked;
+  if (purifier) return;
+  purifier = dompurify.default(window);
+  purifier.addHook('uponSanitizeAttribute', (node, attribute) => {
+    const name = attribute.attrName;
+    const allowed = node.nodeName === 'VIDEO' ? VIDEO_ATTRS : ALLOWED_ATTRS;
+    if (!allowed.has(name)) attribute.keepAttr = false;
+    if (name === 'href' && !/^(https?:|mailto:|#)/i.test(attribute.attrValue.trim())) attribute.keepAttr = false;
+    if ((name === 'src' || name === 'poster') && !SAFE_URL.test(attribute.attrValue.trim())) attribute.keepAttr = false;
+  });
+  purifier.addHook('afterSanitizeAttributes', (node) => {
+    if (node.nodeName !== 'A') return;
+    node.setAttribute('rel', 'noopener noreferrer');
+    node.setAttribute('target', '_blank');
+  });
+}
+
+/** 仅历史 HTML 简介进入编辑页时加载转换器。 */
+export async function loadHtmlConverter(): Promise<void> {
+  if (converter) return;
+  const { default: Turndown } = await import('turndown');
+  converter = new Turndown({
+    headingStyle: 'atx',
+    bulletListMarker: '-',
+    codeBlockStyle: 'fenced',
+    emDelimiter: '*',
+    // Turndown 的空白规则优先于 keep；没有字幕的视频也必须保留。
+    blankReplacement: (_content, node) => node.nodeName === 'VIDEO'
+      ? `\n\n${node.outerHTML}\n\n` : ((node as HTMLElement & { isBlock: boolean }).isBlock ? '\n\n' : ''),
+  });
+  converter.keep(['video', 'table', 'u', 's', 'del', 'sub', 'sup']);
+}
 
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] || character));
@@ -11,44 +53,19 @@ export function sanitizeUrl(value: string): string {
 }
 
 export function markdownToHtml(source: string): string {
-  const lines = String(source || '').split(/\r?\n/);
-  const html: string[] = [];
-  let inList = false;
-  for (const line of lines) {
-    const text = line.trim();
-    if (!text) { if (inList) { html.push('</ul>'); inList = false; } continue; }
-    const list = /^[-*]\s+(.+)$/.exec(text);
-    if (list) {
-      if (!inList) { html.push('<ul>'); inList = true; }
-      html.push(`<li>${inline(list[1] || '')}</li>`);
-      continue;
-    }
-    if (inList) { html.push('</ul>'); inList = false; }
-    const heading = /^(#{1,3})\s+(.+)$/.exec(text);
-    if (heading) { const level = heading[1]?.length || 1; html.push(`<h${level}>${inline(heading[2] || '')}</h${level}>`); continue; }
-    html.push(`<p>${inline(text)}</p>`);
-  }
-  if (inList) html.push('</ul>');
-  return html.join('');
-}
-
-function inline(value: string): string {
-  let text = escapeHtml(value);
-  text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, url) => `<img src="${escapeHtml(sanitizeUrl(url))}" alt="${escapeHtml(alt)}">`);
-  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, url) => `<a href="${escapeHtml(sanitizeUrl(url))}" rel="noopener noreferrer">${label}</a>`);
-  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  return text;
+  if (!source) return '';
+  return sanitizeHtml(parser!.parse(source, { async: false, gfm: true, breaks: true }));
 }
 
 // ── HTML 清洗 ─────────────────────────────────────────────────────
 
 const ALLOWED_TAGS = new Set([
-  'p', 'br', 'div', 'span', 'strong', 'b', 'em', 'i', 'u', 's', 'sub', 'sup',
+  'p', 'br', 'div', 'span', 'strong', 'b', 'em', 'i', 'u', 's', 'del', 'sub', 'sup', 'pre', 'code',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote',
   'a', 'img', 'video', 'hr', 'figure', 'figcaption', 'table', 'thead', 'tbody', 'tr', 'td', 'th',
 ]);
 
-const ALLOWED_ATTRS = new Set(['href', 'src', 'alt', 'title', 'width', 'height', 'colspan', 'rowspan']);
+const ALLOWED_ATTRS = new Set(['href', 'src', 'alt', 'title', 'width', 'height', 'colspan', 'rowspan', 'start']);
 
 /**
  * `<video>` 的专用属性白名单。
@@ -64,47 +81,20 @@ const SAFE_URL = /^(https?:|data:image\/|content:|file:)/i;
 export function sanitizeHtml(html: unknown): string {
   const source = String(html ?? '').trim();
   if (!source || typeof document === 'undefined') return '';
-  const template = document.createElement('template');
-  template.innerHTML = source;
-  clean(template.content);
-  return template.innerHTML;
+  return purifier!.sanitize(source, {
+    ALLOWED_TAGS: [...ALLOWED_TAGS],
+    ALLOWED_ATTR: [...ALLOWED_ATTRS, ...VIDEO_ATTRS],
+    ALLOW_DATA_ATTR: false,
+    ALLOW_ARIA_ATTR: false,
+    ALLOWED_URI_REGEXP: /^(https?:|mailto:|data:image\/|content:|file:|#)/i,
+  });
 }
 
-function clean(root: ParentNode): void {
-  for (const node of Array.from(root.childNodes)) {
-    if (node.nodeType === Node.COMMENT_NODE) {
-      node.remove();
-      continue;
-    }
-    if (node.nodeType === Node.TEXT_NODE) continue;
-    if (node.nodeType !== Node.ELEMENT_NODE) {
-      node.remove();
-      continue;
-    }
-    const element = node as Element;
-    const tag = element.tagName.toLowerCase();
-    if (!ALLOWED_TAGS.has(tag)) {
-      // 保留文本内容，丢弃标签本身（script / style 的内容也会被清掉）
-      element.replaceWith(document.createTextNode(element.textContent ?? ''));
-      continue;
-    }
-    for (const attribute of Array.from(element.attributes)) {
-      const name = attribute.name.toLowerCase();
-      const allowed = tag === 'video' ? VIDEO_ATTRS : ALLOWED_ATTRS;
-      if (!allowed.has(name)) {
-        element.removeAttribute(attribute.name);
-        continue;
-      }
-      if ((name === 'href' || name === 'src') && !SAFE_URL.test(attribute.value.trim())) {
-        element.removeAttribute(attribute.name);
-      }
-    }
-    if (tag === 'a') {
-      element.setAttribute('rel', 'noopener noreferrer');
-      element.setAttribute('target', '_blank');
-    }
-    clean(element);
-  }
+/** 编辑历史 HTML 时保留格式、链接和媒体，先清洗再转换，避免另存时丢失正文。 */
+export function htmlToMarkdown(html: unknown): string {
+  const source = sanitizeHtml(html);
+  if (!source) return '';
+  return converter!.turndown(source);
 }
 
 /** 简介文本摘要：去掉标签后截断，用于列表与卡片。 */
