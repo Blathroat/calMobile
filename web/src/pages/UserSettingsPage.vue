@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 用户设置：编辑资料、修改密码、通知偏好、应用配色、深色模式与安全入口。
+ * 用户设置：编辑资料、通知偏好、应用配色、深色模式与安全入口。
  *
  * 为什么从个人页拆出来：个人页回答的是「我是谁、我公开了什么」（只读展示 + 一个隐私开关），
  * 而这里的每一项都会写后端（`PUT /profile`、`PUT /profile/password`、
@@ -24,14 +24,16 @@ import { useSessionStore } from '@/stores/session';
 import { useSettingsStore } from '@/stores/settings';
 import { device } from '@/services/device-services';
 import { toast } from '@/services/toast';
-import { check, limit, matchRule, passwordRule, passwordStrength, validateAll } from '@/services/validate';
+import { check, limit, validateAll } from '@/services/validate';
 import AvatarBox from '@/components/AvatarBox.vue';
 import AvatarCropper from '@/components/AvatarCropper.vue';
 import SegControl from '@/components/SegControl.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
+import UserSettingsFormSheet from '@/components/UserSettingsFormSheet.vue';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
+import { closeSheet, openSheet } from '@/services/sheet';
 
 const router = useRouter();
 const session = useSessionStore();
@@ -227,7 +229,6 @@ async function saveAvatar(url: string): Promise<void> {
 
 // ── 编辑资料 ──────────────────────────────────────────────────────
 
-const editing = ref(false);
 const editBusy = ref(false);
 const editError = ref('');
 const editForm = reactive({ nickname: '', bio: '', region: '', socialMedia: '' });
@@ -241,14 +242,33 @@ function openEditor(): void {
   editForm.socialMedia = String(profile.socialMedia || '');
   Object.assign(editInvalid, { nickname: false, bio: false, region: false, socialMedia: false });
   editError.value = '';
-  // 两份表单共用页脚上的保存按钮，同时只能开一个。
-  passwordOpen.value = false;
-  editing.value = true;
+  openSheet({
+    title: t('s_1sq2bvr'),
+    component: UserSettingsFormSheet,
+    props: {
+      mode: 'profile',
+      form: editForm,
+      invalid: editInvalid,
+      error: () => editError.value,
+      limits: {
+        nickname: limit('nickname', 20),
+        bio: limit('bio', 200),
+        region: limit('region', 40),
+        socialMedia: limit('socialMedia', 40),
+      },
+      onUpdate: updateEditorField,
+      onSubmit: saveEditor,
+    },
+    size: 'full',
+    actions: [
+      { label: t('s_1c3mapc'), variant: 'primary', disabled: () => editBusy.value, onClick: () => saveEditor() },
+      { label: t('s_1589w37'), disabled: () => editBusy.value, onClick: (close) => close() },
+    ],
+  });
 }
 
-function closeEditor(): void {
-  editing.value = false;
-  editError.value = '';
+function updateEditorField(field: string, value: string): void {
+  if (field in editForm) editForm[field as keyof typeof editForm] = value;
 }
 
 /** 校验一次并把错误落到对应字段上，返回是否通过。 */
@@ -273,6 +293,7 @@ function validateEditor(): boolean {
 }
 
 async function saveEditor(): Promise<void> {
+  if (editBusy.value) return;
   if (guardProfileWrite()) return;
   if (!validateEditor()) return;
   editBusy.value = true;
@@ -289,7 +310,7 @@ async function saveEditor(): Promise<void> {
     const fresh = (saved.user as JsonObject | undefined) ?? {};
     session.applyUser({ ...user.value, ...fresh });
     Object.assign(profile, fresh);
-    editing.value = false;
+    closeSheet();
     editError.value = '';
     toast(t('s_i86pw9'), 'success');
   } catch (reason) {
@@ -332,68 +353,6 @@ async function savePrivacy(value: boolean): Promise<void> {
     toast(errorText(reason), 'error');
   } finally {
     privacyBusy.value = false;
-  }
-}
-
-// ── 修改密码（演示环境只校验输入格式） ────────────────────────────
-
-const passwordOpen = ref(false);
-const passwordBusy = ref(false);
-const passwordError = ref('');
-const passwordForm = reactive({ current: '', next: '', confirm: '' });
-const passwordInvalid = reactive({ current: false, next: false, confirm: false });
-const passwordMin = computed(() => Number(passwordRule().min) || 6);
-const passwordMax = computed(() => Number(passwordRule().max) || 32);
-/** 强度只作提示，不参与提交拦截（与注册页同一套 `passwordStrength`）。 */
-const passwordMeter = computed(() => passwordStrength(passwordForm.next));
-
-function openPassword(): void {
-  Object.assign(passwordForm, { current: '', next: '', confirm: '' });
-  Object.assign(passwordInvalid, { current: false, next: false, confirm: false });
-  passwordError.value = '';
-  editing.value = false;
-  passwordOpen.value = true;
-}
-
-function closePassword(): void {
-  passwordOpen.value = false;
-  passwordError.value = '';
-}
-
-function validatePassword(): boolean {
-  const rule = passwordRule();
-  const currentError = check(passwordForm.current, { label: t('s_1q7kb1c'), required: true, max: rule.max });
-  const nextError = check(passwordForm.next, {
-    ...rule,
-    required: true,
-    custom: (value) => matchRule(value, passwordForm.confirm),
-  });
-  const confirmError = check(passwordForm.confirm, { label: t('s_1b253gw'), required: true, max: rule.max });
-
-  passwordInvalid.current = currentError !== '';
-  passwordInvalid.next = nextError !== '';
-  passwordInvalid.confirm = confirmError !== '';
-
-  const result = validateAll([() => currentError, () => nextError, () => confirmError]);
-  passwordError.value = result.message;
-  return result.ok;
-}
-
-async function savePassword(): Promise<void> {
-  if (!validatePassword()) return;
-  passwordBusy.value = true;
-  try {
-    const saved = await api.profile.changePassword({
-      currentPassword: passwordForm.current,
-      newPassword: passwordForm.next,
-      confirmPassword: passwordForm.confirm,
-    });
-    passwordOpen.value = false;
-    toast(String(saved.note || t('s_4hjltm')), 'success');
-  } catch (reason) {
-    passwordError.value = errorText(reason) || t('s_a7qley');
-  } finally {
-    passwordBusy.value = false;
   }
 }
 
@@ -557,97 +516,6 @@ async function changeMode(value: string): Promise<void> {
         <span>{{ t('s_13i47qi') }}</span>
       </div>
 
-      <!-- 编辑资料：原位展开，校验失败就落在字段上（`.field[data-invalid]` + 顶部说明） -->
-      <div v-if="editing" class="card form">
-        <span class="section-label">{{ t('s_1sq2bvr') }}</span>
-        <div class="field" :data-invalid="editInvalid.nickname ? 'true' : 'false'">
-          <label for="settings-nickname">{{ t('s_1c2rfxc') }}</label>
-          <input
-            id="settings-nickname"
-            v-model="editForm.nickname"
-            class="input"
-            type="text"
-            :maxlength="limit('nickname', 20)"
-          >
-        </div>
-        <div class="field" :data-invalid="editInvalid.bio ? 'true' : 'false'">
-          <label for="settings-bio">{{ t('s_ml9unw') }}</label>
-          <textarea id="settings-bio" v-model="editForm.bio" class="textarea" rows="3" :maxlength="limit('bio', 200)" />
-        </div>
-        <div class="field" :data-invalid="editInvalid.region ? 'true' : 'false'">
-          <label for="settings-region">{{ t('s_11ftk7j') }}</label>
-          <input
-            id="settings-region"
-            v-model="editForm.region"
-            class="input"
-            type="text"
-            :maxlength="limit('region', 40)"
-            :placeholder="t('s_132uhjs')"
-          >
-        </div>
-        <div class="field" :data-invalid="editInvalid.socialMedia ? 'true' : 'false'">
-          <label for="settings-social">{{ t('s_1hnvqec') }}</label>
-          <input
-            id="settings-social"
-            v-model="editForm.socialMedia"
-            class="input"
-            type="text"
-            :maxlength="limit('socialMedia', 40)"
-          >
-        </div>
-        <p v-if="editError" class="field-error" role="alert">{{ editError }}</p>
-      </div>
-
-      <!-- 修改密码：与编辑资料一样原位展开，保存入口同样投递到页脚 -->
-      <div class="list" data-gap="sm">
-        <button class="row-card" type="button" data-pressable="true" @click="openPassword">
-          <span class="row-copy">
-            <strong class="row-title">{{ t('s_1pt7oo1') }}</strong>
-            <span class="row-meta">{{ t('s_1pt7oo1') }}（至少 {{ passwordMin }} 个字符）</span>
-          </span>
-          <span class="dim" aria-hidden="true">›</span>
-        </button>
-      </div>
-
-      <div v-if="passwordOpen" class="card form">
-        <span class="section-label">{{ t('s_1pt7oo1') }}</span>
-        <div class="field" :data-invalid="passwordInvalid.current ? 'true' : 'false'">
-          <label for="password-current">{{ t('s_1q7kb1c') }}</label>
-          <input
-            id="password-current"
-            v-model="passwordForm.current"
-            class="input"
-            type="password"
-            autocomplete="current-password"
-          >
-        </div>
-        <div class="field" :data-invalid="passwordInvalid.next ? 'true' : 'false'">
-          <label for="password-next">{{ t('s_9sfqbi') }}（{{ passwordMin }}–{{ passwordMax }} 个字符）</label>
-          <input
-            id="password-next"
-            v-model="passwordForm.next"
-            class="input"
-            type="password"
-            autocomplete="new-password"
-          >
-        </div>
-        <div class="row" data-between="true">
-          <span class="row-meta">{{ t('s_1lj253k') }}</span>
-          <span class="password-meter" :data-level="passwordMeter.level">{{ passwordMeter.label }}</span>
-        </div>
-        <div class="field" :data-invalid="passwordInvalid.confirm ? 'true' : 'false'">
-          <label for="password-confirm">{{ t('s_1b253gw') }}</label>
-          <input
-            id="password-confirm"
-            v-model="passwordForm.confirm"
-            class="input"
-            type="password"
-            autocomplete="new-password"
-          >
-        </div>
-        <p v-if="passwordError" class="field-error" role="alert">{{ passwordError }}</p>
-      </div>
-
       <!-- 通知设置：两个偏好 + 系统通知权限入口 -->
       <div class="card">
         <span class="section-label">{{ COPY.notificationsTitle }}</span>
@@ -770,26 +638,4 @@ async function changeMode(value: string): Promise<void> {
     @close="cropSource = ''"
     @error="onCropError"
   />
-
-  <!-- 固定操作区：编辑资料与修改密码共用的保存 / 取消入口 -->
-  <Teleport v-if="editing || passwordOpen" defer to="#app-foot">
-    <div class="page-foot row" data-gap="sm">
-      <button
-        class="cta"
-        type="button"
-        :disabled="editBusy || passwordBusy"
-        @click="editing ? saveEditor() : savePassword()"
-      >
-        {{ editing ? t('s_1c3mapc') : t('s_13ekny6') }}
-      </button>
-      <button
-        class="cta ghost"
-        type="button"
-        :disabled="editBusy || passwordBusy"
-        @click="editing ? closeEditor() : closePassword()"
-      >
-        {{ t('s_1589w37') }}
-      </button>
-    </div>
-  </Teleport>
 </template>

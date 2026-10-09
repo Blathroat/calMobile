@@ -218,6 +218,28 @@ function codeFromInbox(email: string): { code: string; mail: StoredMail } {
   return { code: match[1]!, mail };
 }
 
+/** 通过真实邮件或 TOTP 领取限定用途的一次性身份复核票。 */
+async function identityTicket(
+  token: string,
+  email: string,
+  scope: 'password' | 'email' | 'totp' | 'factor',
+  options: { method?: 'email' | 'totp'; code?: string } = {},
+): Promise<string> {
+  const method = options.method || 'email';
+  let code = options.code || '';
+  if (method === 'email') {
+    // 测试不等待生产环境 60 秒重发窗口；验证码本身仍走实际签发、邮件与消费链路。
+    await pool.query("DELETE FROM email_codes WHERE lower(email) = lower($1) AND purpose = 'security'", [email]);
+    const sent = await post('/api/v1/profile/security/email-code', undefined, { token });
+    assert.strictEqual(sent.body.ok, true, `身份复核码发送失败：${JSON.stringify(sent.body)}`);
+    code = codeFromInbox(email).code;
+  }
+  const verified = await post('/api/v1/profile/security/verify', { method, code, scope }, { token });
+  assert.strictEqual(verified.body.ok, true, `身份复核失败：${JSON.stringify(verified.body)}`);
+  assert.ok(verified.body.stepUpToken, '应发出短时身份复核票');
+  return verified.body.stepUpToken;
+}
+
 /** 一个必然与真实码不同的 6 位码（用来测错码分支，避免极小概率撞上真码）。 */
 function otherCode(code: string): string {
   return code === '000000' ? '111111' : '000000';
@@ -470,11 +492,20 @@ test('注册是两步的：第一步只发码不建号，验证码通过才建�
   const stillNot = await post('/api/v1/auth/login', { username: 'tester01', password: 'password' });
   assert.strictEqual(stillNot.body.ok, false, '错码之后仍然不该有账号');
 
-  const created = await post('/api/v1/auth/register/verify', { email, code });
+  const registeredDeviceToken = 'register-device-token-123';
+  const created = await post('/api/v1/auth/register/verify', {
+    email, code, deviceToken: registeredDeviceToken, deviceName: 'New Phone',
+  });
   assert.strictEqual(created.body.ok, true, `验证失败：${JSON.stringify(created.body)}`);
   assert.strictEqual(created.body.user.role, 'user', '自助注册固定为普通用户');
   assert.strictEqual(created.body.user.email, email);
   assert.ok(created.body.token, '验证通过后应当直接进入登录态');
+  const remembered = await pool.query(
+    `SELECT 1 FROM trusted_devices d JOIN users u ON u.id = d.user_id
+      WHERE u.username = $1 AND d.name = $2`,
+    ['tester01', 'New Phone'],
+  );
+  assert.strictEqual(remembered.rowCount, 1, '注册设备应当默认记为可信设备');
 
   // 邮箱当场就是已验证状态：它就是刚刚被验证过的那个
   const stored = await pool.query('SELECT email_verified, email_verified_at FROM users WHERE lower(email) = $1', [
@@ -686,7 +717,8 @@ test('开启两步验证后，密码对了也只发预认证票，过码才发�
     const session = await login('twofactor');
 
     // 开启第一步：验证码发到已验证邮箱，且回给页面的是打码后的地址
-    const enable = await post('/api/v1/profile/2fa/enable', undefined, { token: session.token });
+    const enableProof = await identityTicket(session.token, 'twofactor@example.com', 'factor');
+    const enable = await post('/api/v1/profile/2fa/enable', { stepUpToken: enableProof }, { token: session.token });
     assert.strictEqual(enable.body.ok, true, `开启失败：${JSON.stringify(enable.body)}`);
     assert.ok(enable.body.maskedEmail, '要告诉用户码发到哪个邮箱了');
     assert.ok(!enable.body.maskedEmail.includes('twofactor@'), `邮箱应当打码：${enable.body.maskedEmail}`);
@@ -726,21 +758,78 @@ test('开启两步验证后，密码对了也只发预认证票，过码才发�
     const replay = await post('/api/v1/auth/login/verify', { ticket: step1.body.ticket, code: loginCode.code });
     assert.strictEqual(replay.body.ok, false, '预认证票只能用一次');
 
-    // 关闭要当前密码
-    const wrongPassword = await post(
-      '/api/v1/profile/2fa/disable',
-      { password: 'not-my-password' },
-      { token: done.body.token },
-    );
-    assert.strictEqual(wrongPassword.body.ok, false, '密码不对不该能关掉两步验证');
-
-    const disabled = await post('/api/v1/profile/2fa/disable', { password: 'password' }, { token: done.body.token });
+    // 关闭也要先用当前邮箱身份复核；旧的密码字段不能绕过复核。
+    const noProof = await post('/api/v1/profile/2fa/disable', { password: 'password' }, { token: done.body.token });
+    assert.strictEqual(noProof.body.ok, false, '只提交密码不应能关闭两步验证');
+    const proof = await identityTicket(done.body.token, 'twofactor@example.com', 'factor');
+    const disabled = await post('/api/v1/profile/2fa/disable', { stepUpToken: proof }, { token: done.body.token });
     assert.strictEqual(disabled.body.ok, true, JSON.stringify(disabled.body));
 
     const plain = await post('/api/v1/auth/login', { username: 'twofactor', password: 'password' });
     assert.ok(plain.body.token, '关掉之后应当恢复成一步登录');
   } finally {
     await pool.query("DELETE FROM users WHERE id = 'usr-2fa'");
+  }
+});
+
+test('可信设备跳过二步验证，设备管理可立即撤销单台或全部会话', async () => {
+  await createVerifiedAccount('usr-devices', 'deviceowner', 'devices@example.com');
+  try {
+    const base = await login('deviceowner');
+    const enableProof = await identityTicket(base.token, 'devices@example.com', 'factor');
+    const enable = await post('/api/v1/profile/2fa/enable', { stepUpToken: enableProof }, { token: base.token });
+    assert.strictEqual(enable.body.ok, true);
+    const setupCode = codeFromInbox('devices@example.com').code;
+    const enabled = await post('/api/v1/profile/2fa/enable/verify', { code: setupCode }, { token: base.token });
+    assert.strictEqual(enabled.body.ok, true);
+
+    const deviceToken = 'persistent-device-secret-a1b2c3';
+    const challenge = await post('/api/v1/auth/login', {
+      username: 'deviceowner', password: 'password', deviceToken, deviceName: 'QA Laptop',
+    });
+    assert.strictEqual(challenge.body.twoFactorRequired, true);
+    const loginCode = codeFromInbox('devices@example.com').code;
+    const verified = await post('/api/v1/auth/login/verify', {
+      ticket: challenge.body.ticket,
+      code: loginCode,
+      deviceToken,
+      deviceName: 'QA Laptop',
+      trustDevice: true,
+    });
+    assert.strictEqual(verified.body.ok, true);
+
+    const trustedLogin = await post('/api/v1/auth/login', {
+      username: 'deviceowner', password: 'password', deviceToken, deviceName: 'QA Laptop',
+    });
+    assert.strictEqual(trustedLogin.body.ok, true);
+    assert.strictEqual(trustedLogin.body.trustedDevice, true);
+    assert.strictEqual(trustedLogin.body.twoFactorRequired, undefined);
+
+    const listed = await get('/api/v1/profile/sessions', { token: trustedLogin.body.token });
+    assert.strictEqual(listed.status, 200);
+    const device = listed.body.sessions.find((item: { deviceName: string }) => item.deviceName === 'QA Laptop');
+    assert.ok(device, `应显示可信设备：${JSON.stringify(listed.body)}`);
+    assert.strictEqual(device.current, true);
+    assert.ok(!JSON.stringify(listed.body).includes(deviceToken), '设备列表不得泄露可重用的本机凭据');
+
+    const revoked = await del(`/api/v1/profile/sessions/${encodeURIComponent(device.id)}`, { token: trustedLogin.body.token });
+    assert.strictEqual(revoked.body.ok, true);
+    const invalidated = await get('/api/v1/profile', { token: trustedLogin.body.token });
+    assert.strictEqual(invalidated.status, 401, '下线设备后访问令牌也应立即失效');
+
+    // 下线全部会话会一并清除可信设备，之后同一设备也必须重新过码。
+    const all = await post('/api/v1/profile/sessions/revoke-all', undefined, { token: base.token });
+    assert.strictEqual(all.body.ok, true);
+    const baseInvalidated = await get('/api/v1/profile', { token: base.token });
+    assert.strictEqual(baseInvalidated.status, 401);
+    // 清除测试中上一封已消费验证码产生的冷却，模拟下一次真实登录可重新发码。
+    await pool.query("DELETE FROM email_codes WHERE user_id = $1 AND purpose = 'login'", ['usr-devices']);
+    const relogin = await post('/api/v1/auth/login', {
+      username: 'deviceowner', password: 'password', deviceToken, deviceName: 'QA Laptop',
+    });
+    assert.strictEqual(relogin.body.twoFactorRequired, true, '全部下线后不应继续信任旧设备凭据');
+  } finally {
+    await pool.query("DELETE FROM users WHERE id = 'usr-devices'");
   }
 });
 
@@ -756,8 +845,17 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
     const untouched = await get('/api/v1/profile', { token: session.token });
     assert.strictEqual(untouched.body.email, 'before@example.com', '被拦住之后邮箱不能变');
 
+    // 没做当前身份复核不能发新地址验证码。
+    const noProof = await post('/api/v1/profile/email', { email: 'after1@example.com' }, { token: session.token });
+    assert.strictEqual(noProof.status, 400);
+    assert.match(noProof.body.error, /请先验证身份/);
+    const noProofTaken = await post('/api/v1/profile/email', { email: 'demo@example.com' }, { token: session.token });
+    assert.strictEqual(noProofTaken.status, 400, '没有身份复核时不能通过返回值探测邮箱是否已被占用');
+    assert.match(noProofTaken.body.error, /请先验证身份/);
+
     // 第一轮：换到 after1，验证码被别人拿去用（换了登录身份）应当失败
-    const asked = await post('/api/v1/profile/email', { email: 'after1@example.com' }, { token: session.token });
+    const proof1 = await identityTicket(session.token, 'before@example.com', 'email');
+    const asked = await post('/api/v1/profile/email', { email: 'after1@example.com', stepUpToken: proof1 }, { token: session.token });
     assert.strictEqual(asked.body.ok, true, `发码失败：${JSON.stringify(asked.body)}`);
     const stolen = codeFromInbox('after1@example.com');
     const adminSession = await login('demo');
@@ -774,7 +872,8 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
     );
 
     // 第二轮：换到 after2，这一次自己走完
-    const asked2 = await post('/api/v1/profile/email', { email: 'after2@example.com' }, { token: session.token });
+    const proof2 = await identityTicket(session.token, 'before@example.com', 'email');
+    const asked2 = await post('/api/v1/profile/email', { email: 'after2@example.com', stepUpToken: proof2 }, { token: session.token });
     assert.strictEqual(asked2.body.ok, true, JSON.stringify(asked2.body));
     const own = codeFromInbox('after2@example.com');
     const done = await post(
@@ -791,11 +890,46 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
     assert.strictEqual(byNewEmail.body.ok, true, '改完之后新邮箱应当能登录');
 
     // 已被占用的邮箱不能再被改成目标
-    const taken = await post('/api/v1/profile/email', { email: 'demo@example.com' }, { token: session.token });
+    const proof3 = await identityTicket(session.token, 'after2@example.com', 'email');
+    const taken = await post('/api/v1/profile/email', { email: 'demo@example.com', stepUpToken: proof3 }, { token: session.token });
     assert.strictEqual(taken.body.ok, false);
     assert.ok(taken.body.error.includes('已被'), taken.body.error);
   } finally {
     await pool.query("DELETE FROM users WHERE id = 'usr-email'");
+  }
+});
+
+test('身份复核票绑定账号、当前会话和单个操作，只能使用一次', async () => {
+  await createVerifiedAccount('usr-stepup', 'stepupuser', 'stepup@example.com');
+  try {
+    const current = await login('stepupuser');
+    const other = await login('stepupuser');
+    const proof = await identityTicket(current.token, 'stepup@example.com', 'email');
+
+    const wrongSession = await post('/api/v1/profile/email', {
+      email: 'wrong-session@example.com', stepUpToken: proof,
+    }, { token: other.token });
+    assert.strictEqual(wrongSession.status, 400, '身份票不能跨设备会话使用');
+
+    const wrongScope = await post('/api/v1/profile/2fa/disable', { stepUpToken: proof }, { token: current.token });
+    assert.strictEqual(wrongScope.body.ok, false, '换邮箱的票不能用于关闭两步验证');
+
+    const accepted = await post('/api/v1/profile/email', {
+      email: 'accepted@example.com', stepUpToken: proof,
+    }, { token: current.token });
+    assert.strictEqual(accepted.body.ok, true, `正确会话与用途应能使用：${JSON.stringify(accepted.body)}`);
+
+    const replay = await post('/api/v1/profile/email', {
+      email: 'replay@example.com', stepUpToken: proof,
+    }, { token: current.token });
+    assert.strictEqual(replay.status, 400, '身份票必须是一次性的');
+
+    const noTotp = await post('/api/v1/profile/security/verify', {
+      method: 'totp', scope: 'password', code: '123456',
+    }, { token: current.token });
+    assert.strictEqual(noTotp.body.ok, false, '没有配置 TOTP 的账号不能用 TOTP 复核身份');
+  } finally {
+    await pool.query("DELETE FROM users WHERE id = 'usr-stepup'");
   }
 });
 
@@ -804,8 +938,11 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
   try {
     const session = await login('totpuser');
 
-    // 绑定第一步：拿到密钥与 otpauth 地址，但**这一步还不生效**
-    const setup = await post('/api/v1/profile/2fa/totp/setup', undefined, { token: session.token });
+    // 配置验证器前要通过邮箱身份复核；密钥生成本身不打开两步验证。
+    const noSetupProof = await post('/api/v1/profile/2fa/totp/setup', undefined, { token: session.token });
+    assert.strictEqual(noSetupProof.status, 400, '没有身份复核票不能生成新密钥');
+    const setupProof = await identityTicket(session.token, 'totp@example.com', 'totp');
+    const setup = await post('/api/v1/profile/2fa/totp/setup', { stepUpToken: setupProof }, { token: session.token });
     assert.strictEqual(setup.body.ok, true, `生成密钥失败：${JSON.stringify(setup.body)}`);
     assert.match(setup.body.secret, /^[A-Z2-7]{32}$/, '密钥应当是 32 个 base32 字符');
     assert.ok(String(setup.body.otpauthUri).startsWith('otpauth://totp/'), '要给出验证器能扫的地址');
@@ -813,7 +950,7 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
 
     // 码不对不给绑，开关也不能开
     const farCode = codeFor(setup.body.secret, { at: Date.now() + 5 * 60 * 1000 });
-    const wrong = await post('/api/v1/profile/2fa/totp/enable', { code: farCode }, { token: session.token });
+    const wrong = await post('/api/v1/profile/2fa/totp/enable', { code: farCode, stepUpToken: setup.body.stepUpToken }, { token: session.token });
     assert.strictEqual(wrong.body.ok, false, '漂移 5 分钟的码不该通过');
     let security = await get('/api/v1/profile/security', { token: session.token });
     assert.strictEqual(security.body.twoFactorEnabled, false, '没确认之前开关不该被打开');
@@ -821,7 +958,7 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     // 输对码 → 正式绑定，并带回一批备用码
     const bound = await post(
       '/api/v1/profile/2fa/totp/enable',
-      { code: codeFor(setup.body.secret) },
+      { code: codeFor(setup.body.secret), stepUpToken: setup.body.stepUpToken },
       { token: session.token },
     );
     assert.strictEqual(bound.body.ok, true, `绑定失败：${JSON.stringify(bound.body)}`);
@@ -831,11 +968,37 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     assert.strictEqual(security.body.totpEnabled, true, '要能区分「绑过验证器」与「开关打开」');
     assert.strictEqual(security.body.backupCodesLeft, 10);
 
+    // TOTP 身份复核每个会话五次上限；正确码通过后清空失败窗口。
+    const wrongIdentityCode = codeFor(setup.body.secret, { at: Date.now() + 5 * 60 * 1000 });
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const wrongIdentity = await post('/api/v1/profile/security/verify', {
+        method: 'totp', scope: 'password', code: wrongIdentityCode,
+      }, { token: session.token });
+      assert.strictEqual(wrongIdentity.body.ok, false);
+    }
+    const recoveredIdentity = await post('/api/v1/profile/security/verify', {
+      method: 'totp', scope: 'password', code: codeFor(setup.body.secret),
+    }, { token: session.token });
+    assert.strictEqual(recoveredIdentity.body.ok, true, '正确 TOTP 应可复核并清空失败次数');
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const wrongIdentity = await post('/api/v1/profile/security/verify', {
+        method: 'totp', scope: 'password', code: wrongIdentityCode,
+      }, { token: session.token });
+      assert.strictEqual(wrongIdentity.body.ok, false);
+    }
+    const limitedIdentity = await post('/api/v1/profile/security/verify', {
+      method: 'totp', scope: 'password', code: wrongIdentityCode,
+    }, { token: session.token });
+    assert.strictEqual(limitedIdentity.status, 429, '并发猜码窗口达到上限后必须限流');
+    await pool.query("DELETE FROM security_stepup_attempts WHERE user_id = 'usr-totp'");
+
     // 登录第一步要告诉页面能用哪些方式
     const step1 = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
     assert.strictEqual(step1.body.twoFactorRequired, true);
-    assert.deepStrictEqual(step1.body.methods, { totp: true, email: true, backup: true });
+    assert.deepStrictEqual(step1.body.methods, { totp: true, email: false, backup: true });
     assert.strictEqual(step1.body.token, undefined, '第一步仍然不能有令牌');
+    const emailedDespiteTotp = await post('/api/v1/auth/login/code', { ticket: step1.body.ticket });
+    assert.strictEqual(emailedDespiteTotp.body.ok, false, '选择 TOTP 后不能绕过选择改走邮箱验证码');
 
     // 用验证器码登录
     const viaTotp = await post('/api/v1/auth/login/verify', {
@@ -879,13 +1042,62 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     });
     assert.strictEqual(stale.body.ok, false, '重新生成之后旧备用码必须失效');
 
-    // 关闭要把绑定、待确认密钥与备用码一起清掉
-    const disabled = await post('/api/v1/profile/2fa/disable', { password: 'password' }, { token: session.token });
+    // 轮换前也要复核身份；旧密钥在新密钥确认前继续有效。
+    const noRotateProof = await post('/api/v1/profile/2fa/totp/setup', { stepUpToken: 'wrong-ticket' }, { token: session.token });
+    assert.strictEqual(noRotateProof.status, 400);
+    const rotateProof = await identityTicket(session.token, 'totp@example.com', 'totp', {
+      method: 'totp', code: codeFor(setup.body.secret),
+    });
+    const rotatedSetup = await post('/api/v1/profile/2fa/totp/setup', { stepUpToken: rotateProof }, { token: session.token });
+    assert.strictEqual(rotatedSetup.body.ok, true);
+    assert.notStrictEqual(rotatedSetup.body.secret, setup.body.secret);
+    const wrongRotation = await post('/api/v1/profile/2fa/totp/enable', {
+      code: codeFor(rotatedSetup.body.secret, { at: Date.now() + 5 * 60 * 1000 }),
+      stepUpToken: rotatedSetup.body.stepUpToken,
+    }, { token: session.token });
+    assert.strictEqual(wrongRotation.body.ok, false);
+    const stillOld = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
+    const oldFactorWorks = await post('/api/v1/auth/login/verify', {
+      ticket: stillOld.body.ticket, code: codeFor(setup.body.secret),
+    });
+    assert.strictEqual(oldFactorWorks.body.ok, true, '新密钥尚未确认时旧验证器仍然可用');
+    const rotated = await post('/api/v1/profile/2fa/totp/enable', {
+      code: codeFor(rotatedSetup.body.secret),
+      stepUpToken: rotatedSetup.body.stepUpToken,
+    }, { token: session.token });
+    assert.strictEqual(rotated.body.ok, true);
+    const newFactorLogin = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
+    const newFactorWorks = await post('/api/v1/auth/login/verify', {
+      ticket: newFactorLogin.body.ticket, code: codeFor(rotatedSetup.body.secret),
+    });
+    assert.strictEqual(newFactorWorks.body.ok, true, '确认轮换后新验证器立即生效');
+
+    // 关闭必须经过身份复核，但保留 TOTP 密钥与备用码，供后续一键恢复。
+    const noDisableProof = await post('/api/v1/profile/2fa/disable', { password: 'password' }, { token: session.token });
+    assert.strictEqual(noDisableProof.body.ok, false);
+    const disableProof = await identityTicket(session.token, 'totp@example.com', 'factor', {
+      method: 'totp', code: codeFor(rotatedSetup.body.secret),
+    });
+    const disabled = await post('/api/v1/profile/2fa/disable', { stepUpToken: disableProof }, { token: session.token });
     assert.strictEqual(disabled.body.ok, true, JSON.stringify(disabled.body));
     security = await get('/api/v1/profile/security', { token: session.token });
     assert.strictEqual(security.body.twoFactorEnabled, false);
-    assert.strictEqual(security.body.totpEnabled, false, '关闭后验证器绑定要被清掉');
-    assert.strictEqual(security.body.backupCodesLeft, 0, '关闭后备用码要被清掉');
+    assert.strictEqual(security.body.totpEnabled, true, '关闭后保留验证器绑定');
+    assert.strictEqual(security.body.backupCodesLeft, 10, '关闭后保留尚未使用的备用码');
+
+    const activated = await post('/api/v1/profile/2fa/totp/activate', undefined, { token: session.token });
+    assert.strictEqual(activated.body.ok, true, '已配置的验证器应可直接重新开启');
+    security = await get('/api/v1/profile/security', { token: session.token });
+    assert.strictEqual(security.body.twoFactorEnabled, true);
+    assert.strictEqual(security.body.twoFactorMethod, 'totp');
+    assert.strictEqual(security.body.backupCodesLeft, 10, '一键开启不应轮换备用码');
+
+    const finalProof = await identityTicket(session.token, 'totp@example.com', 'factor');
+    const finalDisable = await post('/api/v1/profile/2fa/disable', { stepUpToken: finalProof }, { token: session.token });
+    assert.strictEqual(finalDisable.body.ok, true);
+    security = await get('/api/v1/profile/security', { token: session.token });
+    assert.strictEqual(security.body.twoFactorEnabled, false);
+    assert.strictEqual(security.body.totpEnabled, true);
 
     const plain = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
     assert.ok(plain.body.token, '关闭之后应当恢复成一步登录');
@@ -2275,36 +2487,33 @@ test('资料保存只改提交过的字段', async () => {
   assert.strictEqual(long.body.ok, false, '简介超长必须被服务端拦住');
 });
 
-test('改密码校验当前密码，成功后旧刷新令牌失效', async () => {
+test('改密码需要身份复核，成功后旧刷新令牌失效', async () => {
   const session = await login('user');
-  const wrong = await post(
-    '/api/v1/profile/password',
-    {
-      currentPassword: 'nope',
-      newPassword: 'newpassword',
-      confirmPassword: 'newpassword',
-    },
-    { token: session.token },
-  );
-  assert.strictEqual(wrong.body.ok, false);
+  const profile = await get('/api/v1/profile', { token: session.token });
+  const email = String(profile.body.email);
+  const noProof = await post('/api/v1/profile/password', {
+    currentPassword: 'password', newPassword: 'newpassword', confirmPassword: 'newpassword',
+  }, { token: session.token });
+  assert.strictEqual(noProof.body.ok, false, '仅有当前密码不能修改密码');
 
   const mismatch = await post(
     '/api/v1/profile/password',
     {
-      currentPassword: 'password',
       newPassword: 'newpassword',
       confirmPassword: 'other',
+      stepUpToken: 'not-consumed-until-input-is-valid',
     },
     { token: session.token },
   );
   assert.strictEqual(mismatch.body.ok, false);
 
+  const proof = await identityTicket(session.token, email, 'password');
   const changed = await post(
     '/api/v1/profile/password',
     {
-      currentPassword: 'password',
       newPassword: 'newpassword',
       confirmPassword: 'newpassword',
+      stepUpToken: proof,
     },
     { token: session.token },
   );
@@ -2315,12 +2524,13 @@ test('改密码校验当前密码，成功后旧刷新令牌失效', async () =>
 
   const relogin = await login('user', 'newpassword');
   assert.ok(relogin.token);
+  const restoreProof = await identityTicket(relogin.token, email, 'password');
   const restored = await post(
     '/api/v1/profile/password',
     {
-      currentPassword: 'newpassword',
       newPassword: 'password',
       confirmPassword: 'password',
+      stepUpToken: restoreProof,
     },
     { token: relogin.token },
   );
@@ -3035,7 +3245,7 @@ function backendRoutes(): DeclaredRoute[] {
 /**
  * 前端每个数据动作都必须能在后端找到对应路由。
  *
- * 这条断言是「52 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
+ * 这条断言是「58 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
  * 同步 `ENDPOINTS`，都会在这里失败，而不是等到某个页面在真机上静默报错。
  */
 test('前端每个数据动作都对应后端已注册的路由', () => {
@@ -3043,8 +3253,8 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
   const actions = Object.keys(endpoints);
   assert.strictEqual(
     actions.length,
-    52,
-    `前端数据动作数量变了（期望 52）：${actions.length} 个 —— ${actions.join(', ')}`,
+    58,
+    `前端数据动作数量变了（期望 58）：${actions.length} 个 —— ${actions.join(', ')}`,
   );
 
   const declared = backendRoutes();

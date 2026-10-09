@@ -24,7 +24,7 @@ import java.util.Map;
  * | `media.pickImage` / `media.import` / `media.store` | 系统选择器与私有目录落盘 |
  * | `share.text` | 系统分享面板 |
  * | `export.csv` | 系统「另存为」面板 |
- * | `session.save` / `session.load` / `session.clear` | 刷新令牌属于设备状态，存应用私有目录（{@link SessionStore}），冷启动靠它换回访问令牌 |
+ * | `session.save` / `session.load` / `session.clear` / `session.device` | 会话与可信设备凭据属于设备状态，存应用私有目录（{@link SessionStore}） |
  *
  * 数据行由前端传进来（它已经从后端拿到数据），原生只负责落盘与格式。
  */
@@ -76,6 +76,9 @@ final class WebAppActions {
                 return;
             case "session.clear":
                 callback.success(SessionActions.clear(activity));
+                return;
+            case "session.device":
+                callback.success(SessionActions.device(activity));
                 return;
             default:
                 callback.failure("未实现的动作：" + action);

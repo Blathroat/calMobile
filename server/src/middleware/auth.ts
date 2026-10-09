@@ -17,6 +17,8 @@ export interface AuthedUser {
   nickname: string;
   role: string;
   status: string;
+  /** JWT 会话 id；老版本令牌没有 sid，等自然过期后会统一升级。 */
+  sessionId?: string;
   can: Capabilities;
 }
 
@@ -47,14 +49,25 @@ export async function resolveUser(token: string): Promise<AuthedUser | null> {
   if (!token) {
     return null;
   }
-  let decoded: { userId?: unknown };
+  let decoded: { userId?: unknown; sid?: unknown };
   try {
-    const verified = await jwtVerify<{ userId?: unknown }>(token, new TextEncoder().encode(accessSecret), {
+    const verified = await jwtVerify<{ userId?: unknown; sid?: unknown }>(token, new TextEncoder().encode(accessSecret), {
       algorithms: ['HS256'],
     });
     decoded = verified.payload;
   } catch {
     return null;
+  }
+  const sessionId = typeof decoded.sid === 'string' ? decoded.sid : '';
+  if (sessionId) {
+    const active = await query(
+      `SELECT 1 FROM refresh_tokens
+        WHERE user_id = $1 AND session_id = $2 AND revoked_at IS NULL AND expires_at > now()
+        LIMIT 1`,
+      [decoded.userId, sessionId],
+    );
+    // 撤销单台设备或全部设备后，旧访问令牌也立即失效；只保留没有 sid 的旧版 JWT 到期。
+    if (active.rows.length === 0) return null;
   }
   const result = await query<UserRow>(`SELECT ${USER_FIELDS} FROM users WHERE id = $1`, [decoded.userId]);
   if (result.rows.length === 0) {
@@ -74,6 +87,7 @@ export async function resolveUser(token: string): Promise<AuthedUser | null> {
     nickname: row.nickname,
     role: row.role,
     status: row.status,
+    ...(sessionId ? { sessionId } : {}),
     can: capabilities(row.role, row.status),
   };
 }

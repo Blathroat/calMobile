@@ -10,9 +10,10 @@ import { onMounted, ref, watch } from 'vue';
 export interface SegItem {
   value: string;
   label: string;
+  disabled?: boolean;
 }
 
-const props = withDefaults(defineProps<{ items: SegItem[]; modelValue: string; label?: string }>(), { label: '' });
+const props = withDefaults(defineProps<{ items: SegItem[]; modelValue: string; label?: string; disabled?: boolean }>(), { label: '', disabled: false });
 const emit = defineEmits<{ 'update:modelValue': [string] }>();
 
 const indicator = ref<HTMLElement>();
@@ -61,6 +62,7 @@ onMounted(() => requestAnimationFrame(() => position(false)));
       type="button"
       :data-value="item.value"
       :aria-pressed="String(item.value) === String(props.modelValue) ? 'true' : 'false'"
+      :disabled="props.disabled || item.disabled === true"
       @click="select(item.value)"
     >
       {{ item.label }}

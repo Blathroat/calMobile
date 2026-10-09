@@ -30,6 +30,7 @@
 import { HttpClient } from '@/services/http-client';
 import { QueryCache } from '@/services/query-cache';
 import { SessionClient } from '@/services/session-client';
+import { nativeBridge } from '@/services/native-bridge';
 import type { ApiResult, AuthResult, Bootstrap, Exhibition, ExhibitionDetail, Id, JsonObject, Registration, RegistrationDetail, ReviewList, SearchResult, User } from './types';
 
 /**
@@ -85,7 +86,7 @@ export interface ApiClient {
     get(): Promise<JsonObject>;
     /** 保存资料；会同时失效 `profile` 与 `users.public`（资料会出现在公开主页）。 */
     save(payload: JsonObject): Promise<ApiResult>;
-    /** 修改密码，需要旧密码；不失效缓存（改密码不影响任何已缓存数据）。 */
+    /** 已通过用途受限的身份复核票后修改密码；成功后服务端撤销全部会话。 */
     changePassword(payload: JsonObject): Promise<ApiResult>;
     /** 通知偏好。 */
     notifications(): Promise<JsonObject>;
@@ -101,22 +102,34 @@ export interface ApiClient {
   security: {
     /** 安全设置概览：两步验证开关、当前邮箱、是否已绑定验证器。 */
     get(): Promise<JsonObject>;
-    /** 开启两步验证第一步：生成并下发验证码。 */
-    enableTwoFactor(): Promise<JsonObject>;
+    /** 开启邮箱两步验证第一步：当前身份复核通过后，下发验证码。 */
+    enableTwoFactor(stepUpToken: string): Promise<JsonObject>;
     /** 开启两步验证第二步：校验验证码，通过后才真正生效。 */
     verifyTwoFactor(code: string): Promise<JsonObject>;
-    /** 关闭两步验证，需要重新输入密码确认。 */
-    disableTwoFactor(password: string): Promise<JsonObject>;
+    /** 向当前邮箱发送一次身份复核码。 */
+    identityEmailCode(): Promise<JsonObject>;
+    /** 用 TOTP 或邮箱码换取限定操作、五分钟有效的一次性身份复核票。 */
+    verifyIdentity(method: 'email' | 'totp', code: string, scope: 'password' | 'email' | 'totp' | 'factor'): Promise<JsonObject>;
+    /** 关闭两步验证需要先通过身份复核。 */
+    disableTwoFactor(stepUpToken: string): Promise<JsonObject>;
     /** 更换邮箱第一步：给新地址发验证码，此时还没真正更换。 */
-    changeEmail(email: string): Promise<JsonObject>;
+    changeEmail(email: string, stepUpToken: string): Promise<JsonObject>;
     /** 更换邮箱第二步：验证新地址；成功后失效 `profile`（用户名/邮箱展示会变）。 */
     verifyEmail(email: string, code: string): Promise<JsonObject>;
     /** 生成 TOTP（验证器应用）绑定用的密钥与二维码地址。 */
-    totpSetup(): Promise<JsonObject>;
-    /** 用验证器当前动态码确认绑定。 */
-    totpEnable(code: string): Promise<JsonObject>;
+    totpSetup(stepUpToken: string): Promise<JsonObject>;
+    /** 重新开启保留的验证器密钥，不重新绑定。 */
+    activateTotp(): Promise<JsonObject>;
+    /** 用验证器当前动态码和一次性身份复核票确认绑定。 */
+    totpEnable(code: string, stepUpToken: string): Promise<JsonObject>;
     /** 用密码换取一批备用码；返回即展示，之后不再能取回，页面要提示用户自行保存。 */
     backupCodes(password: string): Promise<JsonObject>;
+    /** 当前账号的活动设备；id 是撤销用的不可逆标识，不是设备凭据。 */
+    sessions(): Promise<JsonObject>;
+    /** 下线指定设备及其活动会话。 */
+    revokeSession(deviceId: string): Promise<ApiResult>;
+    /** 下线全部设备并清除可信设备记录。 */
+    revokeAllSessions(): Promise<ApiResult>;
   };
   /** 展会：列表、月历、详情与管理端编辑。写操作会连带失效报名、审核与搜索。 */
   exhibitions: {
@@ -201,15 +214,28 @@ export interface ApiClient {
  * @returns 绑定了独立缓存与令牌状态的 `ApiClient`。实例内部持有缓存，因此全应用只应创建一次
  *   （见 `app/runtime.ts`），多处创建会让缓存与失效各管一半。
  */
-export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
+export function createApi(
+  baseUrl = 'http://127.0.0.1:3000/api/v1',
+  onSessionExpired?: () => void,
+): ApiClient {
   // 先声明后用：HttpClient 的取令牌与刷新回调都引用 session，构造顺序上只能这样解环。
   let session!: SessionClient;
+  let cache!: QueryCache;
+  const notifySessionExpired = () => {
+    cache.clear();
+    onSessionExpired?.();
+  };
+  const expireSession = () => {
+    session.clear();
+    notifySessionExpired();
+  };
   const http = new HttpClient({
     baseUrl, getAccessToken: () => session.token, getSessionSignal: () => session.signal,
     refresh: () => session.refresh(),
+    onSessionExpired: expireSession,
   });
-  session = new SessionClient(http);
-  const cache = new QueryCache();
+  session = new SessionClient(http, notifySessionExpired);
+  cache = new QueryCache();
   let cacheSession = session.signal;
   // 读：键统一拼成 前缀:路径:参数，前缀就是写接口失效时用的那个前缀。
   const read = <T>(key: string, path: string, request: Parameters<HttpClient['request']>[1] = {}) => {
@@ -239,17 +265,35 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
     cache.clear();
     return result;
   };
+  const devicePayload = async (): Promise<JsonObject> => {
+    let userAgent = '';
+    try { userAgent = navigator.userAgent; } catch { /* SSR 与测试环境使用默认名称 */ }
+    const deviceName = nativeBridge.hasNative()
+      ? 'Android App'
+      : /iPhone|iPad/i.test(userAgent) ? 'iPhone / iPad'
+        : /Android/i.test(userAgent) ? 'Android Browser'
+          : /Windows/i.test(userAgent) ? 'Windows Browser'
+            : /Mac OS/i.test(userAgent) ? 'Mac Browser'
+              : /Linux/i.test(userAgent) ? 'Linux Browser' : 'Browser';
+    return { deviceToken: await session.deviceToken(), deviceName };
+  };
 
   return {
     session,
     // 不走 read()：身份来源必须是最新的，不能命中缓存。
     bootstrap: () => http.request<Bootstrap>('/bootstrap'),
     auth: {
-      login: async (username, password) => afterAuth(await http.request<AuthResult>('/auth/login', { method: 'POST', body: { username, password } })),
-      loginVerify: async (payload) => afterAuth(await http.request<AuthResult>('/auth/login/verify', { method: 'POST', body: payload })),
+      login: async (username, password) => afterAuth(await http.request<AuthResult>('/auth/login', {
+        method: 'POST', body: { username, password, ...await devicePayload() },
+      })),
+      loginVerify: async (payload) => afterAuth(await http.request<AuthResult>('/auth/login/verify', {
+        method: 'POST', body: { ...payload, ...await devicePayload() },
+      })),
       loginCode: (ticket) => http.request<ApiResult>('/auth/login/code', { method: 'POST', body: { ticket } }),
       register: (payload) => http.request<ApiResult>('/auth/register', { method: 'POST', body: payload }),
-      registerVerify: async (payload) => afterAuth(await http.request<AuthResult>('/auth/register/verify', { method: 'POST', body: payload })),
+      registerVerify: async (payload) => afterAuth(await http.request<AuthResult>('/auth/register/verify', {
+        method: 'POST', body: { ...payload, ...await devicePayload() },
+      })),
       forgotPassword: (email) => http.request<ApiResult>('/auth/password/forgot', { method: 'POST', body: { email } }),
       resetPassword: (payload) => http.request<ApiResult>('/auth/password/reset', { method: 'POST', body: payload }),
       guest: async () => {
@@ -278,14 +322,22 @@ export function createApi(baseUrl = 'http://127.0.0.1:3000/api/v1'): ApiClient {
     security: {
       // 安全相关全部直连 http：验证码与备用码是一次性的，进缓存既没用也危险。
       get: () => http.request<JsonObject>('/profile/security'),
-      enableTwoFactor: () => http.request<JsonObject>('/profile/2fa/enable', { method: 'POST' }),
+      identityEmailCode: () => http.request<JsonObject>('/profile/security/email-code', { method: 'POST' }),
+      verifyIdentity: (method, code, scope) => http.request<JsonObject>('/profile/security/verify', {
+        method: 'POST', body: { method, code, scope },
+      }),
+      enableTwoFactor: (stepUpToken) => http.request<JsonObject>('/profile/2fa/enable', { method: 'POST', body: { stepUpToken } }),
       verifyTwoFactor: (code) => http.request<JsonObject>('/profile/2fa/enable/verify', { method: 'POST', body: { code } }),
-      disableTwoFactor: (password) => http.request<JsonObject>('/profile/2fa/disable', { method: 'POST', body: { password } }),
-      changeEmail: (email) => http.request<JsonObject>('/profile/email', { method: 'POST', body: { email } }),
+      disableTwoFactor: (stepUpToken) => http.request<JsonObject>('/profile/2fa/disable', { method: 'POST', body: { stepUpToken } }),
+      changeEmail: (email, stepUpToken) => http.request<JsonObject>('/profile/email', { method: 'POST', body: { email, stepUpToken } }),
       verifyEmail: (email, code) => write<JsonObject>('/profile/email/verify', { method: 'POST', body: { email, code } }, ['profile']),
-      totpSetup: () => http.request<JsonObject>('/profile/2fa/totp/setup', { method: 'POST' }),
-      totpEnable: (code) => http.request<JsonObject>('/profile/2fa/totp/enable', { method: 'POST', body: { code } }),
+      totpSetup: (stepUpToken) => http.request<JsonObject>('/profile/2fa/totp/setup', { method: 'POST', body: { stepUpToken } }),
+      activateTotp: () => http.request<JsonObject>('/profile/2fa/totp/activate', { method: 'POST' }),
+      totpEnable: (code, stepUpToken) => http.request<JsonObject>('/profile/2fa/totp/enable', { method: 'POST', body: { code, stepUpToken } }),
       backupCodes: (password) => http.request<JsonObject>('/profile/2fa/backup-codes', { method: 'POST', body: { password } }),
+      sessions: () => http.request<JsonObject>('/profile/sessions'),
+      revokeSession: (deviceId) => write<ApiResult>(`/profile/sessions/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }),
+      revokeAllSessions: () => write<ApiResult>('/profile/sessions/revoke-all', { method: 'POST' }),
     },
     exhibitions: {
       list: (query = {}) => read<Exhibition[]>('exhibitions.list', '/exhibitions', { query }),

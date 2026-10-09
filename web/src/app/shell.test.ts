@@ -37,6 +37,7 @@ const ROUTES = [
   '/profile',
   '/settings',
   '/security',
+  '/security/devices',
   '/exhibitor',
   '/exhibition-form',
   '/exhibition-form/exh-1',
@@ -118,6 +119,11 @@ describe('app shell', () => {
       } else {
         expect(tabbar, `${path} 不该有底部导航`).toBeNull();
       }
+      if (path !== '/login' && !TAB_ROUTES.has(path)) {
+        const back = container.querySelector<HTMLButtonElement>('.topbar > .icon-button');
+        expect(back, `${path} 缺少左上角返回按钮`).not.toBeNull();
+        expect(back?.querySelector('svg path')?.getAttribute('d'), `${path} 返回按钮不是左尖括号`).toBe('m14 5-7 7 7 7');
+      }
     } finally {
       unmount(container, app);
     }
@@ -164,8 +170,7 @@ describe('app shell', () => {
       unmount(login.container, login.app);
     }
 
-    // 设置页展开「修改密码」后才投递固定操作区：它必须落在页脚槽，不落在滚动内容区里。
-    // 这一页两组取数都失败时只画错误块（没有可展开的分区），所以先让它们成功返回。
+    // 设置页的资料表单走全局抽屉，不占页面滚动区或固定页脚。
     const profileSpy = vi.spyOn(api.profile, 'get').mockResolvedValue({});
     const notificationsSpy = vi.spyOn(api.profile, 'notifications').mockResolvedValue({});
     const settings = await mountRoute('/settings');
@@ -174,17 +179,49 @@ describe('app shell', () => {
       await nextTick();
       const foot = settings.container.querySelector('#app-foot');
       expect(foot?.childElementCount).toBe(0);
-      const entry = settings.container.querySelector<HTMLElement>('.page-surface .row-card');
-      expect(entry, '/settings 没有渲染出可展开的分区').not.toBeNull();
+      const entry = [...settings.container.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent?.trim() === 's_1sq2bvr');
+      expect(entry, '/settings 没有资料编辑入口').not.toBeUndefined();
       entry?.click();
       await nextTick();
       await nextTick();
-      expect(settings.container.querySelector('#app-foot .page-foot')).not.toBeNull();
-      expect(settings.container.querySelector('.app-body .page-foot')).toBeNull();
+      expect(settings.container.querySelector('#app-foot')?.childElementCount).toBe(0);
+      expect(settings.container.querySelector('.sheet-panel #settings-nickname')).not.toBeNull();
+      expect(settings.container.querySelector('.app-body #settings-nickname')).toBeNull();
+
+      const cancel = [...settings.container.querySelectorAll<HTMLButtonElement>('.sheet-panel button')]
+        .find((button) => button.textContent?.trim() === 's_1589w37');
+      cancel?.click();
+      await new Promise((resolve) => setTimeout(resolve, 260));
+      await nextTick();
+
     } finally {
       unmount(settings.container, settings.app);
       profileSpy.mockRestore();
       notificationsSpy.mockRestore();
+    }
+
+    // 修改密码归入安全设置，打开后先通过身份复核。
+    const securitySpy = vi.spyOn(api.security, 'get').mockResolvedValue({
+      email: 'user@example.com', emailVerified: true, canEnable: true,
+      twoFactorEnabled: false, twoFactorMethod: 'off', totpEnabled: false,
+    });
+    const passwordCodeSpy = vi.spyOn(api.security, 'identityEmailCode').mockResolvedValue({ ok: true, maskedEmail: 'u***@example.com' });
+    const security = await mountRoute('/security');
+    try {
+      const passwordEntry = [...security.container.querySelectorAll<HTMLButtonElement>('.page-surface button')]
+        .find((button) => button.textContent?.includes('s_1pt7oo1'));
+      expect(passwordEntry, '/security 没有修改密码入口').not.toBeUndefined();
+      passwordEntry?.click();
+      await nextTick();
+      security.container.querySelector<HTMLButtonElement>('.sheet-panel .cta.ghost')?.click();
+      await vi.waitFor(() => expect(security.container.querySelector('.sheet-panel #security-identity-code')).not.toBeNull());
+      expect(security.container.querySelector('.sheet-panel #security-identity-code')).not.toBeNull();
+      expect(security.container.querySelector('.app-body #security-sheet-new-password')).toBeNull();
+    } finally {
+      unmount(security.container, security.app);
+      passwordCodeSpy.mockRestore();
+      securitySpy.mockRestore();
     }
 
     // 详情页在没有数据时不投递页脚，槽位保持空（CSS 用 :empty 收起整行）。
@@ -195,6 +232,67 @@ describe('app shell', () => {
       expect(foot?.childElementCount).toBe(0);
     } finally {
       unmount(detail.container, detail.app);
+    }
+  });
+
+  it('安全方式在抽屉关闭或验证失败时回到服务器确认的选项', async () => {
+    const securitySpy = vi.spyOn(api.security, 'get').mockResolvedValue({
+      email: 'user@example.com', emailVerified: true, canEnable: true,
+      twoFactorEnabled: false, twoFactorMethod: 'off', backupCodesLeft: 0,
+    });
+    const emailCodeSpy = vi.spyOn(api.security, 'identityEmailCode').mockResolvedValue({ ok: true, maskedEmail: 'u***@example.com' });
+    const identitySpy = vi.spyOn(api.security, 'verifyIdentity').mockResolvedValue({ ok: true, stepUpToken: 'step-up' });
+    const setupSpy = vi.spyOn(api.security, 'totpSetup').mockResolvedValue({
+      secret: 'JBSWY3DPEHPK3PXP', otpauthUri: 'otpauth://totp/test', stepUpToken: 'confirm-step',
+    });
+    const enableSpy = vi.spyOn(api.security, 'totpEnable').mockResolvedValue({ ok: false, error: '验证码不正确' });
+    const { container, app } = await mountRoute('/security');
+    try {
+      const selected = (mode: string) => container.querySelector<HTMLButtonElement>(`.seg button[data-value="${mode}"]`)?.getAttribute('aria-pressed');
+      await vi.waitFor(() => expect(selected('off')).toBe('true'));
+      container.querySelector<HTMLButtonElement>('.seg button[data-value="totp"]')?.click();
+      await vi.waitFor(() => expect(container.querySelector('.sheet-panel')).not.toBeNull());
+      container.querySelector<HTMLButtonElement>('.sheet-panel .cta.ghost')?.click();
+      await vi.waitFor(() => expect(emailCodeSpy).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(container.querySelector('.sheet-panel #security-identity-code')).not.toBeNull());
+
+      const identityCode = container.querySelector<HTMLInputElement>('#security-identity-code')!;
+      identityCode.value = '123456';
+      identityCode.dispatchEvent(new Event('input', { bubbles: true }));
+      container.querySelector<HTMLButtonElement>('.sheet-panel .cta:not(.ghost)')?.click();
+      await vi.waitFor(() => expect(container.querySelector('.sheet-panel #security-sheet-totp-code')).not.toBeNull());
+
+      [...container.querySelectorAll<HTMLButtonElement>('.sheet-panel button')]
+        .find((button) => button.classList.contains('ghost'))?.click();
+      await new Promise((resolve) => setTimeout(resolve, 260));
+      await nextTick();
+      expect(selected('off')).toBe('true');
+
+      container.querySelector<HTMLButtonElement>('.seg button[data-value="totp"]')?.click();
+      await vi.waitFor(() => expect(container.querySelector('.sheet-panel')).not.toBeNull());
+      container.querySelector<HTMLButtonElement>('.sheet-panel .cta.ghost')?.click();
+      await vi.waitFor(() => expect(emailCodeSpy).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(container.querySelector('.sheet-panel #security-identity-code')).not.toBeNull());
+      const secondIdentityCode = container.querySelector<HTMLInputElement>('#security-identity-code')!;
+      secondIdentityCode.value = '123456';
+      secondIdentityCode.dispatchEvent(new Event('input', { bubbles: true }));
+      container.querySelector<HTMLButtonElement>('.sheet-panel .cta:not(.ghost)')?.click();
+      await vi.waitFor(() => expect(container.querySelector('.sheet-panel #security-sheet-totp-code')).not.toBeNull());
+      const code = container.querySelector<HTMLInputElement>('#security-sheet-totp-code')!;
+      code.value = '123456';
+      code.dispatchEvent(new Event('input', { bubbles: true }));
+      container.querySelector<HTMLButtonElement>('.sheet-panel .cta:not(.ghost)')?.click();
+      await vi.waitFor(() => expect(container.querySelector('.sheet-panel [role="alert"]')?.textContent).toContain('验证码不正确'));
+      expect(selected('off')).toBe('true');
+      expect(identitySpy).toHaveBeenCalledWith('email', '123456', 'totp');
+      expect(enableSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      unmount(container, app);
+      securitySpy.mockRestore();
+      emailCodeSpy.mockRestore();
+      identitySpy.mockRestore();
+      setupSpy.mockRestore();
+      enableSpy.mockRestore();
     }
   });
 
@@ -230,6 +328,18 @@ describe('app shell', () => {
       await router.push('/home');
       await nextTick();
       expect(navigation.direction.value).toBe('none');
+    } finally {
+      unmount(container, app);
+    }
+  });
+
+  it('认证端拒绝续期后回登录页并保留当前地址', async () => {
+    const { container, app, router } = await mountRoute('/registration-form/exh-1');
+    try {
+      useSessionStore().expire();
+      await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/login'));
+      expect(router.currentRoute.value.query).toMatchObject({ redirect: '/registration-form/exh-1', expired: '1' });
+      expect(container.querySelector('.topbar-title')?.textContent?.trim()).toBe('s_1yggxgd');
     } finally {
       unmount(container, app);
     }

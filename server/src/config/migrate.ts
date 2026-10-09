@@ -404,6 +404,74 @@ export const STEPS: MigrationStep[] = [
         ALTER TABLE users ADD COLUMN IF NOT EXISTS seen_hints TEXT[] NOT NULL DEFAULT '{}';
         `,
   },
+  {
+    // 会话按设备追踪与撤销；设备令牌只保存哈希。两步验证明确区分用户选择的主验证方式。
+    id: '0010-trusted-devices-and-sessions',
+    sql: `
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_method TEXT NOT NULL DEFAULT 'email';
+        UPDATE users
+           SET two_factor_method = 'totp'
+         WHERE two_factor_enabled = true AND totp_secret <> '';
+
+        ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS session_id TEXT;
+        ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS device_hash TEXT NOT NULL DEFAULT '';
+        ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS device_name TEXT NOT NULL DEFAULT '';
+        UPDATE refresh_tokens SET session_id = id WHERE session_id IS NULL;
+        ALTER TABLE refresh_tokens ALTER COLUMN session_id SET NOT NULL;
+        CREATE INDEX IF NOT EXISTS refresh_tokens_session_idx ON refresh_tokens (session_id, revoked_at);
+        CREATE INDEX IF NOT EXISTS refresh_tokens_device_idx ON refresh_tokens (user_id, device_hash, revoked_at);
+
+        CREATE TABLE IF NOT EXISTS trusted_devices (
+            id          TEXT PRIMARY KEY,
+            user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash  TEXT NOT NULL,
+            name        TEXT NOT NULL DEFAULT '',
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+            last_used_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            UNIQUE (user_id, token_hash)
+        );
+        CREATE INDEX IF NOT EXISTS trusted_devices_user_idx ON trusted_devices (user_id, last_used_at DESC);
+        `,
+  },
+  {
+    // 安全操作需要短时、单次、绑定当前会话的身份复核凭据；邮箱复核码只存哈希。
+    id: '0011-security-step-up',
+    sql: `
+        ALTER TABLE email_codes DROP CONSTRAINT IF EXISTS email_codes_purpose_check;
+        ALTER TABLE email_codes ADD CONSTRAINT email_codes_purpose_check
+            CHECK (purpose IN ('register', 'reset', 'login', 'enable2fa', 'email', 'security'));
+
+        CREATE TABLE IF NOT EXISTS security_stepup_tickets (
+            id          TEXT PRIMARY KEY,
+            user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            session_id  TEXT NOT NULL,
+            scope       TEXT NOT NULL CHECK (scope IN ('password', 'email', 'totp', 'totp-confirm', 'factor')),
+            token_hash  TEXT NOT NULL UNIQUE,
+            expires_at  TIMESTAMPTZ NOT NULL,
+            consumed_at TIMESTAMPTZ,
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS security_stepup_user_expiry_idx
+            ON security_stepup_tickets (user_id, expires_at);
+
+        CREATE TABLE IF NOT EXISTS security_stepup_attempts (
+            id          TEXT PRIMARY KEY,
+            user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            session_id  TEXT NOT NULL,
+            attempted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS security_stepup_attempts_lookup_idx
+            ON security_stepup_attempts (user_id, session_id, attempted_at DESC);
+        `,
+  },
+  {
+    id: '0012-totp-confirm-scope',
+    sql: `
+        ALTER TABLE security_stepup_tickets DROP CONSTRAINT IF EXISTS security_stepup_tickets_scope_check;
+        ALTER TABLE security_stepup_tickets ADD CONSTRAINT security_stepup_tickets_scope_check
+            CHECK (scope IN ('password', 'email', 'totp', 'totp-confirm', 'factor'));
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {

@@ -1,143 +1,202 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, nextTick, type App } from 'vue';
+import { createApp, defineComponent, h, nextTick, type App } from 'vue';
 import { createPinia } from 'pinia';
-import { api, bootApp } from '@/app/runtime';
-import { confirmSheet } from '@/services/sheet';
+import { api } from '@/app/runtime';
+import AppSheet from '@/components/AppSheet.vue';
+import { closeSheet } from '@/services/sheet';
 import SecurityPage from './SecurityPage.vue';
 
 vi.mock('@/app/runtime', () => ({
-  bootApp: vi.fn().mockResolvedValue(undefined),
   api: {
     security: {
       get: vi.fn(),
+      identityEmailCode: vi.fn(),
+      verifyIdentity: vi.fn(),
       enableTwoFactor: vi.fn(),
       verifyTwoFactor: vi.fn(),
       disableTwoFactor: vi.fn(),
+      changeEmail: vi.fn(),
+      verifyEmail: vi.fn(),
+      totpSetup: vi.fn(),
+      activateTotp: vi.fn(),
+      totpEnable: vi.fn(),
+      backupCodes: vi.fn(),
+      sessions: vi.fn(),
+      revokeSession: vi.fn(),
+      revokeAllSessions: vi.fn(),
     },
+    profile: { changePassword: vi.fn() },
+    session: { clear: vi.fn() },
   },
 }));
-vi.mock('@/services/sheet', () => ({ confirmSheet: vi.fn() }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 
 let app: App | undefined;
-const securityInfo = (enabled = false) => ({
-  email: 'user@example.com', emailVerified: true, canEnable: true, twoFactorEnabled: enabled,
+const securityInfo = (mode: 'off' | 'email' | 'totp' = 'off', totpConfigured = mode === 'totp') => ({
+  email: 'user@example.com', emailVerified: true, canEnable: true,
+  twoFactorEnabled: mode !== 'off', twoFactorMethod: mode, totpEnabled: totpConfigured, backupCodesLeft: 0,
 });
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => { resolve = yes; });
-  return { promise, resolve };
-}
+const TestRoot = defineComponent({
+  setup: () => () => h('div', [h(SecurityPage), h(AppSheet)]),
+});
 
 async function flush(): Promise<void> {
   for (let i = 0; i < 8; i += 1) await Promise.resolve();
   await nextTick();
 }
 
-function toggle(): HTMLInputElement {
-  return document.querySelector<HTMLInputElement>('#security-2fa')!;
+function choice(mode: 'off' | 'email' | 'totp'): HTMLButtonElement {
+  return document.querySelector<HTMLButtonElement>(`.seg button[data-value="${mode}"]`)!;
 }
 
-async function clickButton(label: string): Promise<void> {
-  const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === label);
-  expect(button).toBeDefined();
-  button!.click();
-  await flush();
+function selected(mode: 'off' | 'email' | 'totp'): boolean {
+  return choice(mode).getAttribute('aria-pressed') === 'true';
 }
 
-async function fill(selector: string, value: string): Promise<void> {
-  const input = document.querySelector<HTMLInputElement>(selector)!;
-  input.value = value;
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-  await nextTick();
-}
-
-async function mount(enabled = false): Promise<void> {
-  vi.mocked(api.security.get).mockResolvedValue(securityInfo(enabled));
+async function mount(mode: 'off' | 'email' | 'totp' = 'off', totpConfigured = mode === 'totp'): Promise<void> {
+  vi.mocked(api.security.get).mockResolvedValue(securityInfo(mode, totpConfigured));
   document.body.innerHTML = '<div id="security-test"></div>';
-  app = createApp(SecurityPage);
+  app = createApp(TestRoot);
   app.use(createPinia()).mount('#security-test');
   await flush();
 }
 
+async function clickPrimary(): Promise<void> {
+  document.querySelector<HTMLButtonElement>('.sheet-panel .cta:not(.ghost)')?.click();
+  await flush();
+}
+
+async function enterCode(selector: string): Promise<void> {
+  const input = document.querySelector<HTMLInputElement>(selector)!;
+  input.value = '123456';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await nextTick();
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(bootApp).mockResolvedValue(undefined);
-  window.CalMobileStrings = {
-    s_1589w37: '取消',
-    s_16xoiwx: '使用邮箱',
-    s_1jjtbcm: '验证并开启',
-    s_1b3874r: '关闭两步验证',
-  };
-  vi.mocked(api.security.enableTwoFactor).mockResolvedValue({ ok: true });
+  vi.mocked(api.security.identityEmailCode).mockResolvedValue({ ok: true, maskedEmail: 'u***@example.com' });
+  vi.mocked(api.security.verifyIdentity).mockResolvedValue({ ok: true, stepUpToken: 'step-up' });
+  vi.mocked(api.security.enableTwoFactor).mockResolvedValue({ ok: true, maskedEmail: 'u***@example.com' });
+  vi.mocked(api.security.totpSetup).mockResolvedValue({ ok: true, secret: 'JBSWY3DPEHPK3PXP', otpauthUri: 'otpauth://totp/test', stepUpToken: 'confirm-step' });
 });
 
-afterEach(() => {
+afterEach(async () => {
   app?.unmount();
   app = undefined;
+  closeSheet();
+  await new Promise((resolve) => setTimeout(resolve, 240));
   document.body.innerHTML = '';
-  delete window.CalMobileStrings;
 });
 
-describe('两步验证开关以服务器已确认状态为准', () => {
-  it('打开方式面板与取消后都保持未开启', async () => {
+describe('安全方式切换与抽屉', () => {
+  it('选择邮箱方式打开抽屉，取消后回到关闭选项', async () => {
     await mount();
-    toggle().click();
-    expect(toggle().checked).toBe(false);
+    choice('email').click();
     await flush();
-    await clickButton('取消');
-    expect(toggle().checked).toBe(false);
-    expect(api.security.enableTwoFactor).not.toHaveBeenCalled();
+    document.querySelector<HTMLButtonElement>('.sheet-panel .cta.ghost')?.click();
+    await flush();
+    await enterCode('#security-identity-code');
+    await clickPrimary();
+    await flush();
+    expect(document.querySelector('.sheet-panel #security-sheet-factor-code')).not.toBeNull();
+    expect(selected('email')).toBe(true);
+    document.querySelector<HTMLButtonElement>('.sheet-panel .ghost')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 240));
+    await nextTick();
+    expect(selected('off')).toBe(true);
+    expect(api.security.enableTwoFactor).toHaveBeenCalledTimes(1);
   });
 
-  it('发码失败后保持未开启，并展示错误', async () => {
+  it('启用请求失败时不改变原选项，并在页面显示原因', async () => {
     vi.mocked(api.security.enableTwoFactor).mockRejectedValue(new Error('发码失败'));
     await mount();
-    toggle().click();
+    choice('email').click();
     await flush();
-    await clickButton('使用邮箱');
+    document.querySelector<HTMLButtonElement>('.sheet-panel .cta.ghost')?.click();
+    await flush();
+    await enterCode('#security-identity-code');
+    await clickPrimary();
+    await flush();
+    expect(selected('off')).toBe(true);
     expect(document.querySelector('[role="alert"]')?.textContent).toBe('发码失败');
-    expect(toggle().checked).toBe(false);
+    expect(document.querySelector('.sheet-panel')).not.toBeNull();
   });
 
-  it('发码和验证期间保持未开启，服务器确认成功后才开启', async () => {
-    const verified = deferred<{ ok: boolean }>();
-    vi.mocked(api.security.verifyTwoFactor).mockReturnValue(verified.promise);
+  it('初次绑定先做邮箱身份复核，TOTP 验证失败时滑回原方式', async () => {
+    vi.mocked(api.security.totpEnable).mockResolvedValue({ ok: false, error: '验证码不正确' });
     await mount();
-    toggle().click();
+    choice('totp').click();
     await flush();
-    await clickButton('使用邮箱');
-    expect(toggle().checked).toBe(false);
-    await fill('#security-2fa-code', '123456');
-    await clickButton('验证并开启');
-    expect(api.security.verifyTwoFactor).toHaveBeenCalledWith('123456');
-    expect(toggle().checked).toBe(false);
-    vi.mocked(api.security.get).mockResolvedValue(securityInfo(true));
-    verified.resolve({ ok: true });
+    expect(document.querySelectorAll('.sheet-panel .seg button')).toHaveLength(0);
+    document.querySelector<HTMLButtonElement>('.sheet-panel .cta.ghost')?.click();
     await flush();
-    expect(toggle().checked).toBe(true);
+    expect(api.security.identityEmailCode).toHaveBeenCalledTimes(1);
+    await enterCode('#security-identity-code');
+    await clickPrimary();
+    await flush();
+    await enterCode('#security-sheet-totp-code');
+    await clickPrimary();
+    expect(document.querySelector('.sheet-panel [role="alert"]')?.textContent).toBe('验证码不正确');
+    expect(selected('off')).toBe(true);
+    expect(api.security.verifyIdentity).toHaveBeenCalledWith('email', '123456', 'totp');
+    expect(api.security.totpSetup).toHaveBeenCalledWith('step-up');
+    expect(api.security.totpEnable).toHaveBeenCalledWith('123456', 'confirm-step');
   });
 
-  it('关闭确认、输入密码和服务器处理期间保持开启，成功后才关闭', async () => {
-    const disabled = deferred<{ ok: boolean }>();
-    vi.mocked(api.security.disableTwoFactor).mockReturnValue(disabled.promise);
-    await mount(true);
-    toggle().click();
-    expect(toggle().checked).toBe(true);
+  it('已配置 TOTP 后身份复核可选验证器或邮箱', async () => {
+    await mount('totp');
+    document.querySelector<HTMLButtonElement>('.seg button[data-value="email"]')?.click();
     await flush();
-    const confirmations = vi.mocked(confirmSheet).mock.calls;
-    const confirmation = confirmations[confirmations.length - 1]![0];
-    await confirmation.onConfirm?.();
+    expect(document.querySelectorAll('.sheet-panel .seg button')).toHaveLength(2);
+    expect(document.querySelector('.sheet-panel .seg')?.textContent).toContain('s_1s11mp7');
+    expect(document.querySelector('.sheet-panel .seg')?.textContent).toContain('s_s8pbve');
+  });
+
+  it('邮箱验证通过并经安全状态确认后才切换选项', async () => {
+    vi.mocked(api.security.verifyTwoFactor).mockResolvedValue({ ok: true, backupCodes: [] });
+    vi.mocked(api.security.get)
+      .mockResolvedValueOnce(securityInfo('off'))
+      .mockResolvedValueOnce(securityInfo('email'));
+    await mount();
+    choice('email').click();
     await flush();
-    expect(toggle().checked).toBe(true);
-    await fill('#security-2fa-password', 'current-password');
-    await clickButton('关闭两步验证');
-    expect(api.security.disableTwoFactor).toHaveBeenCalledWith('current-password');
-    expect(toggle().checked).toBe(true);
-    vi.mocked(api.security.get).mockResolvedValue(securityInfo(false));
-    disabled.resolve({ ok: true });
+    document.querySelector<HTMLButtonElement>('.sheet-panel .cta.ghost')?.click();
     await flush();
-    expect(toggle().checked).toBe(false);
+    await enterCode('#security-identity-code');
+    await clickPrimary();
+    await flush();
+    await enterCode('#security-sheet-factor-code');
+    await clickPrimary();
+    await flush();
+    expect(api.security.verifyTwoFactor).toHaveBeenCalledWith('123456');
+    expect(selected('email')).toBe(true);
+    expect(selected('off')).toBe(false);
+  });
+
+  it('已配置 TOTP 后重新开启是一键操作，不再生成新密钥', async () => {
+    vi.mocked(api.security.activateTotp).mockResolvedValue({ ok: true });
+    await mount('off', true);
+    vi.mocked(api.security.get).mockResolvedValueOnce(securityInfo('totp', true));
+    choice('totp').click();
+    await flush();
+    expect(api.security.activateTotp).toHaveBeenCalledTimes(1);
+    expect(api.security.totpSetup).not.toHaveBeenCalled();
+    expect(selected('totp')).toBe(true);
+  });
+
+  it('身份复核失败时立即回滚分段控件', async () => {
+    vi.mocked(api.security.verifyIdentity).mockResolvedValue({ ok: false, error: '验证码不正确' });
+    await mount();
+    choice('totp').click();
+    await flush();
+    document.querySelector<HTMLButtonElement>('.sheet-panel .cta.ghost')?.click();
+    await flush();
+    await enterCode('#security-identity-code');
+    await clickPrimary();
+    expect(selected('off')).toBe(true);
+    expect(document.querySelector('.sheet-panel [role="alert"]')?.textContent).toBe('验证码不正确');
   });
 });

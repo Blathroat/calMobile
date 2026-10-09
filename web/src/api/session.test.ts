@@ -11,6 +11,42 @@ function deferred<T>() {
 afterEach(() => { vi.unstubAllGlobals(); delete window.CalMobileNative; });
 
 describe('会话身份隔离', () => {
+  it('敏感安全操作只提交用途限定身份复核票', async () => {
+    const requests: Array<{ url: string; body: unknown }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      requests.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      return response({ ok: true, stepUpToken: 'step-up', email: 'new@example.com' });
+    }));
+    const api = createApi('http://test/api/v1');
+    api.session.setTokens({ token: 'access' });
+
+    await api.security.identityEmailCode();
+    await api.security.verifyIdentity('totp', '123456', 'email');
+    await api.security.totpSetup('setup-proof');
+    await api.security.totpEnable('654321', 'confirm-proof');
+    await api.security.activateTotp();
+    await api.security.disableTwoFactor('factor-proof');
+    await api.security.changeEmail('new@example.com', 'email-proof');
+    await api.profile.changePassword({ newPassword: 'secret-123', confirmPassword: 'secret-123', stepUpToken: 'password-proof' });
+
+    expect(requests.map(({ url }) => new URL(url).pathname)).toEqual([
+      '/api/v1/profile/security/email-code',
+      '/api/v1/profile/security/verify',
+      '/api/v1/profile/2fa/totp/setup',
+      '/api/v1/profile/2fa/totp/enable',
+      '/api/v1/profile/2fa/totp/activate',
+      '/api/v1/profile/2fa/disable',
+      '/api/v1/profile/email',
+      '/api/v1/profile/password',
+    ]);
+    expect(requests[1]?.body).toEqual({ method: 'totp', code: '123456', scope: 'email' });
+    expect(requests[2]?.body).toEqual({ stepUpToken: 'setup-proof' });
+    expect(requests[3]?.body).toEqual({ code: '654321', stepUpToken: 'confirm-proof' });
+    expect(requests[5]?.body).toEqual({ stepUpToken: 'factor-proof' });
+    expect(requests[6]?.body).toEqual({ email: 'new@example.com', stepUpToken: 'email-proof' });
+    expect(requests[7]?.body).toMatchObject({ stepUpToken: 'password-proof' });
+  });
+
   it('退出后未完成的刷新不能恢复旧令牌或重放旧请求', async () => {
     const renewal = deferred<Response>();
     const fetcher = vi.fn(async (url: string) => url.endsWith('/auth/refresh')
@@ -75,6 +111,25 @@ describe('会话身份隔离', () => {
     await api.security.get().catch(() => undefined);
     expect(api.session.token).toBeUndefined();
     expect(await api.profile.get()).toEqual({ username: 'guest' });
+  });
+
+  it('认证端拒绝续期时通知应用回登录页，临时网络失败保留会话', async () => {
+    const expired = vi.fn();
+    const rejectedFetcher = vi.fn(async () => response({ error: '过期' }, 401));
+    vi.stubGlobal('fetch', rejectedFetcher);
+    const rejectedApi = createApi('http://test', expired);
+    rejectedApi.session.setTokens({ token: 'old', refreshToken: 'refresh-old' });
+    await rejectedApi.profile.get().catch(() => undefined);
+    expect(rejectedApi.session.token).toBeUndefined();
+    expect(expired).toHaveBeenCalledTimes(1);
+
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline'); }));
+    const transientExpired = vi.fn();
+    const transientApi = createApi('http://test', transientExpired);
+    transientApi.session.setTokens({ token: 'old', refreshToken: 'refresh-old' });
+    await transientApi.profile.get().catch(() => undefined);
+    expect(transientApi.session.token).toBe('old');
+    expect(transientExpired).not.toHaveBeenCalled();
   });
 
   it('设备恢复回包迟于退出时不再恢复身份', async () => {

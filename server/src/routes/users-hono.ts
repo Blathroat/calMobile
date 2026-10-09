@@ -20,7 +20,7 @@ import {
 import * as labels from '../domain/labels.js';
 import { requireAdmin, type Actor } from '../domain/permissions.js';
 import { badRequest, notFound } from '../domain/errors.js';
-import { revokeAllForUser } from '../domain/session.js';
+import { revokeAllDevicesForUser } from '../domain/session.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { authenticateHono, optionalAuthHono, userOf, type HonoEnv } from './hono-utils.js';
 import { readJsonBody } from '../http/body-limit.js';
@@ -140,7 +140,7 @@ app.put('/:id/status', authenticateHono, async (c) => {
     const row = await findUserById(id);
     if (!row) throw notFound('用户不存在或已删除');
     await query('UPDATE users SET status = $2, updated_at = now() WHERE id = $1', [id, status]);
-    if (status === 'banned') await revokeAllForUser(id);
+    if (status === 'banned') await revokeAllDevicesForUser(id);
     return { user: statusPayload((await findUserById(id)) || row) };
   });
 });

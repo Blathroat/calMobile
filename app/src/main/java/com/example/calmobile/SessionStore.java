@@ -3,6 +3,8 @@ package com.example.calmobile;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.util.UUID;
+
 /**
  * 登录会话的**设备状态**存储：刷新令牌与上次登录的用户名。
  *
@@ -26,6 +28,7 @@ public final class SessionStore {
     private static final String PREFS = "calmobile.session";
     private static final String KEY_REFRESH_TOKEN = "refresh_token";
     private static final String KEY_USERNAME = "username";
+    private static final String KEY_DEVICE_TOKEN = "device_token";
 
     private SessionStore() {
     }
@@ -97,6 +100,18 @@ public final class SessionStore {
     /** 退出登录：两个键一起清，避免残留用户名让登录页回填出「还在登录」的错觉。 */
     public static void clear(Context context) {
         prefs(context).edit().remove(KEY_REFRESH_TOKEN).remove(KEY_USERNAME).apply();
+    }
+
+    /** 稳定设备凭据留在应用私有存储中，退出或撤销会话时保留以支持可信设备设置。 */
+    public static synchronized String deviceToken(Context context) {
+        SharedPreferences preferences = prefs(context);
+        String token = normalize(preferences.getString(KEY_DEVICE_TOKEN, ""));
+        if (token.isEmpty()) {
+            token = UUID.randomUUID().toString().replace("-", "")
+                    + UUID.randomUUID().toString().replace("-", "");
+            preferences.edit().putString(KEY_DEVICE_TOKEN, token).apply();
+        }
+        return token;
     }
 
     // ── 会话快照 ───────────────────────────────────────────────────

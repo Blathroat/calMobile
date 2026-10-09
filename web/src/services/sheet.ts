@@ -9,11 +9,12 @@
  *
  * `layout: 'stack'` 把按钮竖着排（选项多、文字长短不一时比并排更好读）。
  */
-import { reactive, readonly, type Component } from 'vue';
+import { markRaw, reactive, readonly, type Component } from 'vue';
 import { t } from '@/i18n';
 
 export interface SheetAction {
   label: string;
+  disabled?: boolean | (() => boolean);
   variant?: 'primary' | 'ghost' | 'danger';
   onClick?: (close: () => void) => void | Promise<void>;
 }
@@ -28,6 +29,7 @@ export interface SheetState {
   layout: 'row' | 'stack';
   size: 'auto' | 'full';
   closing: boolean;
+  onClose?: () => void;
 }
 
 const state = reactive<{ current: SheetState | null }>({ current: null });
@@ -49,16 +51,18 @@ export function openSheet(options: {
   props?: Record<string, unknown>;
   layout?: 'row' | 'stack';
   size?: 'auto' | 'full';
+  onClose?: () => void;
 }): void {
   state.current = {
     title: options.title ?? '',
     message: options.message ?? '',
     actions: options.actions ?? [],
-    component: options.component ?? null,
+    component: options.component ? markRaw(options.component) : null,
     props: options.props ?? {},
     layout: options.layout ?? 'row',
     size: options.size ?? 'auto',
     closing: false,
+    onClose: options.onClose,
   };
 }
 
@@ -67,6 +71,7 @@ export function closeSheet(): void {
   const current = state.current;
   if (!current || current.closing) return;
   current.closing = true;
+  current.onClose?.();
   window.setTimeout(() => {
     if (state.current === current) state.current = null;
   }, prefersReducedMotion() ? 0 : LEAVE_MS);

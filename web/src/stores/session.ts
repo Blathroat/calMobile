@@ -2,7 +2,7 @@
  * 跨页面会话状态：当前用户、是否已登录、是否受限，以及路由守卫要用的权限表。
  *
  * 服务端始终是身份与权限的最终权威：这里存的只是**最近一次响应的副本**，
- * 不是持久化的账号数据；令牌失效时由 `api/client.ts` 的登出流程清会话与缓存。
+ * 不是持久化的账号数据；令牌失效时由 `api/client.ts` 清会话与缓存，外壳负责回登录页。
  *
  * 谁写：`app/runtime.ts`（bootstrap 的 `user` 段）、登录 / 注册 / 资料 / 安全各页面在拿到
  * 新用户后回写、`api/client.ts` 登出时调 `clear()`。
@@ -26,6 +26,8 @@ import type { User } from '@/api/types';
 export interface SessionState {
   /** 是否已登录；后端漏发 `loggedIn` 时用「带了 `id`」兜底判定 */
   loggedIn: boolean;
+  /** 认证端明确拒绝续期后置位，由应用外壳负责跳回登录页。 */
+  expired: boolean;
   /** 是否访客态；只在未登录时为 true，与 `loggedIn` 互斥 */
   guest: boolean;
   /** 最近一次后端下发的用户对象（字段全是可选的），读时自己兜底 */
@@ -38,9 +40,9 @@ export interface SessionState {
  */
 const emptyUser = (): User => ({ role: 'guest', roleLabel: t('s_h6o1xg'), can: {} });
 
-/** 当前会话；唯一写入口是 `applyUser()` / `clear()`，别直接改 state。 */
+/** 当前会话；写入口是 `applyUser()` / `clear()` / `expire()`，别直接改 state。 */
 export const useSessionStore = defineStore('session', {
-  state: (): SessionState => ({ loggedIn: false, guest: true, user: emptyUser() }),
+  state: (): SessionState => ({ loggedIn: false, expired: false, guest: true, user: emptyUser() }),
   getters: {
     /** 当前角色代码（后端下发英文代码，展示用 `user.roleLabel`）；缺失时按 guest 处理。 */
     role: (state) => String(state.user.role ?? 'guest'),
@@ -62,12 +64,19 @@ export const useSessionStore = defineStore('session', {
       this.user = { ...emptyUser(), ...user };
       this.loggedIn = user.loggedIn === true || user.id !== undefined;
       this.guest = user.guest !== false && !this.loggedIn;
+      this.expired = false;
     },
     /** 登出 / 令牌失效时复位到访客态；不负责清后端缓存（那是 `api/client.ts` 的事）。 */
     clear() {
       this.loggedIn = false;
+      this.expired = false;
       this.guest = true;
       this.user = emptyUser();
+    },
+    /** 令牌被认证端拒绝：与用户主动退出区分，供外壳带回原地址重新登录。 */
+    expire() {
+      this.clear();
+      this.expired = true;
     },
     /**
      * 本地记下一条「已看过的一次性提示」（乐观更新）。

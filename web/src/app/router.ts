@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 /**
  * 路由表与访问守卫。
  *
@@ -35,6 +36,7 @@ import ForgotPasswordPage from '@/pages/ForgotPasswordPage.vue';
 import ProfilePage from '@/pages/ProfilePage.vue';
 import UserSettingsPage from '@/pages/UserSettingsPage.vue';
 import SecurityPage from '@/pages/SecurityPage.vue';
+import SecurityDevicesPage from '@/pages/SecurityDevicesPage.vue';
 import ExhibitorPage from '@/pages/ExhibitorPage.vue';
 import ExhibitionFormPage from '@/pages/ExhibitionFormPage.vue';
 import ReviewPage from '@/pages/ReviewPage.vue';
@@ -125,6 +127,7 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
       },
       { path: '/settings', component: UserSettingsPage, meta: { title: 's_1vmubx9', back: true, requiresAuth: true } },
       { path: '/security', component: SecurityPage, meta: { title: 's_1iiaolc', back: true, requiresAuth: true } },
+      { path: '/security/devices', component: SecurityDevicesPage, meta: { title: t('s_10pjh16'), back: true, requiresAuth: true } },
       // 展商后台与审核 / 核销 / 富文本编辑器同属展商角色，管理员也能进
       {
         path: '/exhibitor',

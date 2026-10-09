@@ -61,14 +61,15 @@ web/
 | 07 | `web/src/pages/MyRegistrationsPage.vue` | 我的报名 |
 | 08 | `web/src/pages/RegistrationDetailPage.vue` | 报名详情、报名码与撤销 |
 | 09 | `web/src/pages/ProfilePage.vue` | 个人资料展示与设置卡片（隐私开关在设置页） |
-| — | `web/src/pages/UserSettingsPage.vue` | 用户设置（头像、资料、密码、通知、配色、明暗、隐私、安全），入口在个人页顶栏右侧与设置卡片 |
+| — | `web/src/pages/UserSettingsPage.vue` | 用户设置（头像、资料、通知、配色、明暗、隐私、安全入口），入口在个人页顶栏右侧与设置卡片 |
 | 10 | `web/src/pages/ExhibitorPage.vue` | 展商后台 |
 | 11 | `web/src/pages/ExhibitionFormPage.vue` | 展会编辑 |
 | 12 | `web/src/pages/RichEditorPage.vue` | Markdown 简介与媒体 |
 | 13 | `web/src/pages/ReviewPage.vue` | 报名审核 |
 | 14 | `web/src/pages/UserPublicPage.vue` | 用户公开页 |
 | 15 | `web/src/pages/AdminPage.vue` | 管理后台 |
-| — | `web/src/pages/SecurityPage.vue` | 邮箱与两步验证 |
+| — | `web/src/pages/SecurityPage.vue` | 密码、邮箱、身份复核与两步验证 |
+| — | `web/src/pages/SecurityDevicesPage.vue` | 查看并撤销已登录设备 |
 | — | `web/src/pages/CheckinPage.vue` | 现场核销工具 |
 
 设计稿的 16、17 屏已内联到管理后台与用户设置；核销属于展商后台入口，不新增二级页面。应用配色与明暗模式是**个人偏好**（用户在「用户设置」里自己选），管理后台只维护全局默认色板与品牌文案。新增页面时在 `web/src/app/router.ts` 注册路由，同时更新本表与 `web/src/app/shell.test.ts` 的 `ROUTES`（该用例逐屏挂载外壳并断言顶栏、内容区、底部导航与页脚槽）。
@@ -82,7 +83,9 @@ web/
 
 ## 原生桥接
 
-原生只处理以下设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出，以及会话刷新令牌的设备内存储（`session.save` / `session.load` / `session.clear`，见 `SessionStore.java`）。`AppSettings` 是后端设置的设备镜像；日历用后端下发的 ISO 日期定位，失败必须回调失败。
+可信设备的随机凭据也由原生 `session.device` 生成并保存在设备私有目录；浏览器预览使用本机存储。
+
+原生只处理以下设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出，以及会话刷新令牌与可信设备凭据的设备内存存储（`session.save` / `session.load` / `session.clear` / `session.device`，见 `SessionStore.java`）。`AppSettings` 是后端设置的设备镜像；日历用后端下发的 ISO 日期定位，失败必须回调失败。
 
 媒体落在应用私有目录 `files/media`，前端只保存短 URL；资源路径只允许单层文件名。业务数据动作不加入原生动作表。
 

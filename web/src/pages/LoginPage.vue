@@ -26,11 +26,14 @@ const step = ref<1 | 2>(1);
 const account = ref('');
 const password = ref('');
 const code = ref('');
+const trustThisDevice = ref(false);
 const error = ref('');
 const verifyError = ref('');
 const busy = ref(false);
 const guestBusy = ref(false);
 const resendBusy = ref(false);
+const expiredSession = computed(() => route.query.expired === '1');
+const expiredSessionMessage = t('s_1nvd98z');
 
 /** 账号框的上限：这个框也能填邮箱，卡在用户名的 20 会把长邮箱直接挡在外面。 */
 const ACCOUNT_MAX = 120;
@@ -41,6 +44,7 @@ const passwordMax = computed(() => Number(limit('passwordMax', 32)) || 32);
 
 /** 示例数据里的三个演示账号覆盖三种角色，入口页直接给出来，省得去翻文档。 */
 const demoHint = t('s_d8r5bl');
+const trustDeviceLabel = t('s_tz1s06');
 
 /** 预认证票：第二步与重发都要用它；它本身不是登录凭据。 */
 const ticket = ref('');
@@ -106,6 +110,7 @@ async function submit(): Promise<void> {
       code.value = '';
       error.value = '';
       verifyError.value = '';
+      trustThisDevice.value = false;
       step.value = 2;
       const wait = Number(result.resendAfterSec);
       if (wait > 0) startCountdown(wait);
@@ -136,7 +141,11 @@ async function verify(): Promise<void> {
   busy.value = true;
   try {
     if (needsVerification) {
-      await api.auth.loginVerify({ ticket: ticket.value, code: code.value.trim() });
+      await api.auth.loginVerify({
+        ticket: ticket.value,
+        code: code.value.trim(),
+        trustDevice: trustThisDevice.value,
+      });
       verifiedSession = api.session.signal;
     }
     await enterAs();
@@ -199,6 +208,7 @@ function backToStepOne(): void {
   ticket.value = '';
   step.value = 1;
   verifyError.value = '';
+  trustThisDevice.value = false;
   stopCountdown();
 }
 
@@ -219,6 +229,7 @@ onBeforeUnmount(stopCountdown);
       <strong>{{ t('s_153oaxf') }}</strong>
       <span>{{ bootstrap.announcement.text }}</span>
     </div>
+    <p v-if="expiredSession" class="notice" data-tone="accent" role="status">{{ expiredSessionMessage }}</p>
 
     <!-- 第一步：账号与密码 -->
     <form v-if="step === 1" class="form" novalidate @submit.prevent="submit">
@@ -287,6 +298,12 @@ onBeforeUnmount(stopCountdown);
         <span class="field-counter" aria-live="polite" :data-over="code.length > CODE_MAX ? 'true' : 'false'">
           {{ code.length }}/{{ CODE_MAX }}
         </span>
+      </div>
+      <div class="check-row">
+        <label class="check-label" for="login-trust-device">
+          <input id="login-trust-device" v-model="trustThisDevice" type="checkbox">
+          <span>{{ trustDeviceLabel }}</span>
+        </label>
       </div>
       <p v-if="verifyError" class="field-error" role="alert">{{ verifyError }}</p>
       <button class="cta" type="submit" :disabled="busy" :data-loading="busy ? 'true' : 'false'">

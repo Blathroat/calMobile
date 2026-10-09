@@ -25,6 +25,7 @@ export const PURPOSES = {
   login: { zh: '登录', en: 'sign-in verification' },
   enable2fa: { zh: '开启两步验证', en: 'two-factor setup' },
   email: { zh: '更换邮箱', en: 'email change' },
+  security: { zh: '身份验证', en: 'identity verification' },
 } as const satisfies Record<string, PurposeLabel>;
 
 export const PURPOSE_KEYS = Object.keys(PURPOSES);
@@ -92,7 +93,7 @@ export interface VerificationMail {
 /**
  * 生成一封验证码邮件。
  *
- * @param options.purpose  `register` / `reset` / `login` / `enable2fa` / `email`。
+ * @param options.purpose  `register` / `reset` / `login` / `enable2fa` / `email` / `security`。
  * @param options.code 4–8 位数字；格式不对直接抛错，宁可不发也不发一封没码的邮件。
  * @param options.expiresInMin 有效期（分钟），与后端实际 TTL 保持一致。
  * @param options.brand 应用名，来自服务器设置。

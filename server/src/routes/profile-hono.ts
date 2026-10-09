@@ -19,6 +19,7 @@ import {
   passwordOnlySchema,
   emailSchema,
   codeSchema,
+  securityIdentitySchema,
   emailVerifyLooseSchema,
   notifySchema,
 } from '../domain/schemas.js';
@@ -28,25 +29,31 @@ import {
   secondFactorState,
   beginTotpSetup,
   confirmTotpSetup,
+  verifyBoundTotp,
+  activateBoundTotp,
   regenerateBackupCodes,
-  clearSecondFactors,
+  disableSecondFactor,
 } from '../domain/two-factor.js';
+import {
+  clearSecurityStepUpFailures,
+  consumeSecurityStepUp,
+  issueSecurityStepUp,
+  reserveSecurityStepUpAttempt,
+  type SecurityStepUpScope,
+} from '../domain/security-stepup.js';
 import {
   readNotificationPreferences,
   saveNotificationPreferences,
   readServerSettings,
   saveSeenHint,
 } from '../domain/settings.js';
-import { revokeAllForUser } from '../domain/session.js';
+import { hashToken, revokeAllDevicesForUser, revokeDeviceForUser } from '../domain/session.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { clientIp } from '../http/client-ip.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import type { NodeEnv } from '../server/node-middleware.js';
+import { tokenFrom } from '../middleware/auth.js';
 import { authenticateHono, userOf, type HonoContext, type HonoEnv } from './hono-utils.js';
-
-interface PasswordHashRow {
-  password_hash: string;
-}
 
 interface PasswordFactorRow {
   password_hash: string;
@@ -102,6 +109,13 @@ async function verifiedAt(userId: string) {
   return value ? new Date(value).toISOString() : '';
 }
 
+/** 新版 JWT 的 sid 跨续期保持稳定；旧版 JWT 用当前 bearer 的哈希作临时会话标识。 */
+function stepUpSessionId(c: HonoContext, user: { userId: string; sessionId?: string }): string {
+  if (user.sessionId) return user.sessionId;
+  const token = tokenFrom({ headers: { authorization: c.req.header('authorization') } });
+  return `legacy:${hashToken(token)}`;
+}
+
 /** 创建个人资料路由；IP 信任策略从服务骨架传入，和认证路由使用同一配置。 */
 export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
   const app = new Hono<HonoEnv>();
@@ -155,15 +169,13 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const body = bodyRecord(await readJsonBody(c));
     return mutate(c, async () => {
       const bounds = await limits();
-      const { currentPassword: current, newPassword: nextPassword } = parseSchema(passwordChangeSchema(bounds), body);
-      const found = await query<PasswordHashRow>('SELECT password_hash FROM users WHERE id = $1', [user.userId]);
-      const row = found.rows[0];
-      if (!row || !(await bcrypt.compare(current, row.password_hash))) throw badRequest('当前密码不正确');
+      const { newPassword: nextPassword } = parseSchema(passwordChangeSchema(bounds), body);
+      await consumeSecurityStepUp(body.stepUpToken, user.userId, stepUpSessionId(c, user), 'password');
       await query('UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1', [
         user.userId,
         await bcrypt.hash(nextPassword, 10),
       ]);
-      await revokeAllForUser(user.userId);
+      await revokeAllDevicesForUser(user.userId);
       return {};
     });
   });
@@ -177,21 +189,80 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       emailVerified: factors.emailVerified,
       emailVerifiedAt: await verifiedAt(user.userId),
       twoFactorEnabled: factors.enabled,
+      twoFactorMethod: factors.method,
       totpEnabled: factors.totpBound,
       backupCodesLeft: factors.backupCodesLeft,
       canEnable: factors.emailVerified && factors.email !== '',
     });
   });
 
+  app.post('/security/email-code', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    const factors = await secondFactorState(user.userId);
+    if (!factors) throw notFound('用户不存在或已删除');
+    if (!factors.emailVerified || !factors.email) throw badRequest('请先验证当前邮箱');
+    const sent = await issueCode({
+      purpose: 'security',
+      email: factors.email,
+      userId: user.userId,
+      ip: requestIp(c, options.trustProxy),
+    });
+    return jsonResponse(c, { ok: true, error: '', ...sent, maskedEmail: maskEmail(factors.email) });
+  });
+
+  app.post('/security/verify', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    const body = bodyRecord(await readJsonBody(c));
+    const { method, scope, code } = parseSchema(securityIdentitySchema, body);
+    const factors = await secondFactorState(user.userId);
+    if (!factors) throw notFound('用户不存在或已删除');
+
+    if (method === 'totp') {
+      if (!factors.totpBound) return jsonResponse(c, { ok: false, error: '此账号尚未配置验证器' });
+      const currentSessionId = stepUpSessionId(c, user);
+      await reserveSecurityStepUpAttempt(user.userId, currentSessionId);
+      try {
+        if (!(await verifyBoundTotp(user.userId, code))) {
+          return jsonResponse(c, { ok: false, error: '验证器验证码不正确' });
+        }
+        await clearSecurityStepUpFailures(user.userId, currentSessionId);
+      } catch (error: unknown) {
+        if (isCodeRejected(error)) return jsonResponse(c, { ok: false, error: error.message });
+        throw error;
+      }
+    } else {
+      if (!factors.emailVerified || !factors.email) {
+        return jsonResponse(c, { ok: false, error: '当前邮箱尚未验证，无法使用邮箱验证码复核身份' });
+      }
+      try {
+        const consumed = await consumeCode({ purpose: 'security', email: factors.email, code });
+        if (consumed.userId !== user.userId) {
+          return jsonResponse(c, { ok: false, error: '验证码不正确或已失效' });
+        }
+      } catch (error: unknown) {
+        if (isCodeRejected(error)) return jsonResponse(c, { ok: false, error: error.message });
+        throw error;
+      }
+    }
+
+    const stepUpToken = await issueSecurityStepUp(
+      user.userId,
+      stepUpSessionId(c, user),
+      scope as SecurityStepUpScope,
+    );
+    return jsonResponse(c, { ok: true, error: '', stepUpToken, expiresInSec: 300 });
+  });
+
   app.post('/2fa/enable', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
+    const body = bodyRecord(await readJsonBody(c));
+    await consumeSecurityStepUp(body.stepUpToken, user.userId, stepUpSessionId(c, user), 'factor');
     const found = await query<FactorToggleRow>(
       'SELECT email, email_verified, two_factor_enabled FROM users WHERE id = $1',
       [user.userId],
     );
     const row = found.rows[0];
     if (!row) throw notFound('用户不存在或已删除');
-    if (row.two_factor_enabled === true) return jsonResponse(c, { ok: true, error: '', alreadyEnabled: true });
     if (row.email_verified !== true || !row.email) throw badRequest('请先验证邮箱，再开启两步验证');
     const sent = await issueCode({
       purpose: 'enable2fa',
@@ -206,7 +277,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const user = requireUser({ user: userOf(c) });
     const body = bodyRecord(await readJsonBody(c));
     const { code } = parseSchema(codeSchema, body);
-    const found = await query<EmailOnlyRow>('SELECT email FROM users WHERE id = $1', [user.userId]);
+    const found = await query<FactorToggleRow>('SELECT email, two_factor_enabled FROM users WHERE id = $1', [user.userId]);
     const emailRow = found.rows[0];
     if (!emailRow) throw notFound('用户不存在或已删除');
     let consumed;
@@ -221,35 +292,53 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       throw error;
     }
     if (consumed.userId !== user.userId) return jsonResponse(c, { ok: false, error: '验证码不正确或已失效' });
-    await query('UPDATE users SET two_factor_enabled = true, updated_at = now() WHERE id = $1', [user.userId]);
+    await query(
+      "UPDATE users SET two_factor_enabled = true, two_factor_method = 'email', updated_at = now() WHERE id = $1",
+      [user.userId],
+    );
     return jsonResponse(c, {
       ok: true,
       error: '',
       twoFactorEnabled: true,
-      backupCodes: await regenerateBackupCodes(user.userId),
+      twoFactorMethod: 'email',
+      backupCodes: emailRow.two_factor_enabled === true ? [] : await regenerateBackupCodes(user.userId),
     });
   });
 
   app.post('/2fa/totp/setup', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
+    const body = bodyRecord(await readJsonBody(c));
+    await consumeSecurityStepUp(body.stepUpToken, user.userId, stepUpSessionId(c, user), 'totp');
     const found = await query<TotpAccountRow>('SELECT id, username, email FROM users WHERE id = $1', [user.userId]);
     const account = found.rows[0];
     if (!account) throw notFound('用户不存在或已删除');
     const settings = await readServerSettings();
     const issuer = String((settings.brand && (settings.brand.zh || settings.brand.en)) || 'calMobile');
     const setup = await beginTotpSetup(account, issuer);
-    return jsonResponse(c, { ok: true, error: '', issuer, ...setup });
+    const confirmToken = await issueSecurityStepUp(user.userId, stepUpSessionId(c, user), 'totp-confirm');
+    return jsonResponse(c, { ok: true, error: '', issuer, ...setup, stepUpToken: confirmToken });
+  });
+
+  app.post('/2fa/totp/activate', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    if (!(await activateBoundTotp(user.userId))) throw badRequest('请先配置验证器并验证邮箱');
+    return jsonResponse(c, { ok: true, error: '', twoFactorEnabled: true, twoFactorMethod: 'totp' });
   });
 
   app.post('/2fa/totp/enable', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
     const body = bodyRecord(await readJsonBody(c));
     const { code } = parseSchema(codeSchema, body);
+    const currentSessionId = stepUpSessionId(c, user);
+    await reserveSecurityStepUpAttempt(user.userId, currentSessionId);
     try {
-      const result = await confirmTotpSetup(user.userId, code);
+      const result = await confirmTotpSetup(user.userId, code, body.stepUpToken, currentSessionId);
+      await clearSecurityStepUpFailures(user.userId, currentSessionId);
       return jsonResponse(c, { ok: true, error: '', twoFactorEnabled: true, ...result });
     } catch (error: unknown) {
-      if (isCodeRejected(error)) return jsonResponse(c, { ok: false, error: error.message });
+      if (isCodeRejected(error)) {
+        return jsonResponse(c, { ok: false, error: error.message });
+      }
       throw error;
     }
   });
@@ -274,13 +363,60 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const user = requireUser({ user: userOf(c) });
     const body = bodyRecord(await readJsonBody(c));
     return mutate(c, async () => {
-      const { password } = parseSchema(passwordOnlySchema, body);
-      const found = await query<PasswordHashRow>('SELECT password_hash FROM users WHERE id = $1', [user.userId]);
-      const row = found.rows[0];
-      if (!row || !(await bcrypt.compare(password, row.password_hash))) throw badRequest('当前密码不正确');
-      await clearSecondFactors(user.userId);
+      await consumeSecurityStepUp(body.stepUpToken, user.userId, stepUpSessionId(c, user), 'factor');
+      await disableSecondFactor(user.userId);
       return { twoFactorEnabled: false };
     });
+  });
+
+  app.get('/sessions', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    const result = await query<{
+      id: string;
+      device_name: string;
+      first_seen: string | Date;
+      last_active: string | Date;
+      current: boolean;
+      active_sessions: number;
+    }>(
+      `
+        SELECT COALESCE(NULLIF(device_hash, ''), session_id) AS id,
+               max(device_name) AS device_name,
+               min(created_at) AS first_seen,
+               max(created_at) AS last_active,
+               bool_or(session_id = $2) AS current,
+               count(DISTINCT session_id)::int AS active_sessions
+          FROM refresh_tokens
+         WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+         GROUP BY COALESCE(NULLIF(device_hash, ''), session_id)
+         ORDER BY max(created_at) DESC
+      `,
+      [user.userId, userOf(c)?.sessionId || ''],
+    );
+    return jsonResponse(c, {
+      sessions: result.rows.map((row) => ({
+        id: row.id,
+        deviceName: row.device_name || '',
+        firstSeen: new Date(row.first_seen).toISOString(),
+        lastActive: new Date(row.last_active).toISOString(),
+        current: row.current === true,
+        activeSessions: Number(row.active_sessions) || 1,
+      })),
+    });
+  });
+
+  app.delete('/sessions/:id', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    const id = c.req.param('id').trim();
+    if (!id || id.length > 128) throw badRequest('设备标识无效');
+    await revokeDeviceForUser(user.userId, id);
+    return jsonResponse(c, { ok: true, error: '' });
+  });
+
+  app.post('/sessions/revoke-all', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    await revokeAllDevicesForUser(user.userId);
+    return jsonResponse(c, { ok: true, error: '' });
   });
 
   app.post('/email', authenticateHono, async (c) => {
@@ -290,6 +426,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const current = await query<EmailOnlyRow>('SELECT email FROM users WHERE id = $1', [user.userId]);
     if (String(current.rows[0]?.email || '').toLowerCase() === email.toLowerCase())
       throw badRequest('新邮箱与当前邮箱相同');
+    await consumeSecurityStepUp(body.stepUpToken, user.userId, stepUpSessionId(c, user), 'email');
     const taken = await query('SELECT id FROM users WHERE lower(email) = lower($1)', [email]);
     if (taken.rows.length > 0) return jsonResponse(c, { ok: false, error: '该邮箱已被其他账号使用' });
     const sent = await issueCode({
@@ -359,9 +496,15 @@ export const PROFILE_ENDPOINTS: readonly [string, string][] = [
   ['PUT', '/'],
   ['POST', '/password'],
   ['GET', '/security'],
+  ['POST', '/security/email-code'],
+  ['POST', '/security/verify'],
+  ['GET', '/sessions'],
+  ['DELETE', '/sessions/:id'],
+  ['POST', '/sessions/revoke-all'],
   ['POST', '/2fa/enable'],
   ['POST', '/2fa/enable/verify'],
   ['POST', '/2fa/totp/setup'],
+  ['POST', '/2fa/totp/activate'],
   ['POST', '/2fa/totp/enable'],
   ['POST', '/2fa/backup-codes'],
   ['POST', '/2fa/disable'],

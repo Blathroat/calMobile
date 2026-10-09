@@ -19,14 +19,25 @@ export type Limits = ServerSettings['limits'];
 const usernamePattern = /^[A-Za-z0-9_.-]+$/;
 
 export const loginSchema = z
-  .object({ username: textSchema({ required: false }), password: inputString })
+  .object({
+    username: textSchema({ required: false }),
+    password: inputString,
+    deviceToken: z.string().trim().max(128).optional(),
+    deviceName: z.string().trim().max(80).optional(),
+  })
   .superRefine(({ username, password }, ctx) => {
     if (!username || !password) ctx.addIssue({ code: 'custom', message: '请输入账号与密码' });
   });
 export type LoginInput = z.infer<typeof loginSchema>;
 
 export const loginVerifySchema = z
-  .object({ ticket: textSchema({ required: false }), code: textSchema({ required: false }) })
+  .object({
+    ticket: textSchema({ required: false }),
+    code: textSchema({ required: false }),
+    deviceToken: z.string().trim().max(128).optional(),
+    deviceName: z.string().trim().max(80).optional(),
+    trustDevice: z.boolean().optional(),
+  })
   .superRefine(({ ticket, code }, ctx) => {
     if (!ticket || !code) ctx.addIssue({ code: 'custom', message: '请填写验证码' });
   });
@@ -37,6 +48,8 @@ export const codeSchema = z.object({ code: textSchema({ required: false }) });
 export const registerVerifySchema = z.object({
   email: inputString.transform((value) => value.trim()),
   code: inputString.transform((value) => value.trim()),
+  deviceToken: z.string().trim().max(128).optional(),
+  deviceName: z.string().trim().max(80).optional(),
 });
 export const refreshSchema = z.object({ refreshToken: inputString });
 export const logoutSchema = z.object({ refreshToken: inputString });
@@ -117,9 +130,9 @@ export type ProfilePatchInput = z.infer<ReturnType<typeof profilePatchSchema>>;
 
 export function passwordChangeSchema(limits: Limits) {
   return z
-    .object({ currentPassword: inputString, newPassword: inputString, confirmPassword: inputString })
-    .superRefine(({ currentPassword, newPassword, confirmPassword }, ctx) => {
-      if (!currentPassword || !newPassword) {
+    .object({ newPassword: inputString, confirmPassword: inputString })
+    .superRefine(({ newPassword, confirmPassword }, ctx) => {
+      if (!newPassword || !confirmPassword) {
         ctx.addIssue({ code: 'custom', message: '请填写完整密码' });
       } else if (newPassword !== confirmPassword) {
         ctx.addIssue({ code: 'custom', message: '两次输入的新密码不一致' });
@@ -131,6 +144,12 @@ export function passwordChangeSchema(limits: Limits) {
     });
 }
 export type PasswordChangeInput = z.infer<ReturnType<typeof passwordChangeSchema>>;
+
+export const securityIdentitySchema = z.object({
+  method: z.enum(['email', 'totp']),
+  scope: z.enum(['password', 'email', 'totp', 'totp-confirm', 'factor']),
+  code: inputString.pipe(z.string().trim().regex(/^\d{6}$/, '请输入 6 位数字验证码')),
+});
 
 export const passwordOnlySchema = z.object({ password: inputString }).superRefine(({ password }, ctx) => {
   if (!password) ctx.addIssue({ code: 'custom', path: ['password'], message: '请输入当前密码' });

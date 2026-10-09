@@ -41,7 +41,8 @@ export type NativeAction =
   | 'export.csv'
   | 'session.save'
   | 'session.load'
-  | 'session.clear';
+  | 'session.clear'
+  | 'session.device';
 
 /**
  * 稳定错误码：只有这两类在原生侧被规范化，其余失败的 `code` 是 undefined。
@@ -78,6 +79,8 @@ export interface NativeActionPayloads {
   'session.save': { refreshToken: string; username?: string };
   'session.load': Record<string, never>;
   'session.clear': Record<string, never>;
+  /** 生成或读取本机稳定的设备凭据；退出登录时不清除，用于记住设备与会话管理。 */
+  'session.device': Record<string, never>;
 }
 
 /** 每个动作成功回调的返回体。只保证列出的字段存在，新增字段先在这里登记再使用。 */
@@ -99,6 +102,7 @@ export interface NativeActionResults {
   // 读回的值可能与写入不同：原生侧才是权威存储，空 refreshToken 表示没有会话。
   'session.load': { refreshToken: string; username: string };
   'session.clear': { ok: boolean };
+  'session.device': { deviceToken: string };
 }
 
 /**

@@ -191,13 +191,13 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | 方法与路径 | 动作 | 权限与说明 |
 | --- | --- | --- |
 | `GET /bootstrap` | `bootstrap` | 可匿名。一次下发 `user / theme / ui / capabilities / categories / review / media / announcement / brand / limits / server / calendar`（含 `calendar.landing` 落点月份） |
-| `POST /auth/login` | `auth.login` | **用户名或已验证邮箱** + 密码换 `token` + `refreshToken`，并更新最近登录时间。账号开启两步验证时**不发令牌**：只回 `{ twoFactorRequired, ticket, maskedEmail, expiresInSec, resendAfterSec, emailSent, methods: { totp, email, backup } }`。**绑了验证器就不会自动发邮件码**（`emailSent:false`，需要时走 `/auth/login/code`） |
-| `POST /auth/login/verify` | `auth.loginVerify` | 两步验证第二步：`{ ticket, code }` → 会话。`code` 可以是 6 位验证码（验证器或邮箱）或 `XXXXX-XXXXX` 形式的备用码，按「验证器 → 邮箱验证码 → 备用码」依次试；先验码再消费票（码错了票还能接着用），票单次使用；码不对 / 过期是 200 + `ok:false` |
+| `POST /auth/login` | `auth.login` | **用户名或已验证邮箱** + 密码换 `token` + `refreshToken`，并更新最近登录时间。可带稳定设备凭据 `{ deviceToken, deviceName }`；两步验证已开启且设备未记住时**不发令牌**，只回 `{ twoFactorRequired, ticket, ..., methods }`。选中的 TOTP 或邮箱方式决定主验证码；邮箱方式登录时发码，TOTP 方式不自动发邮件；已记住设备以密码登录后可直接建会话 |
+| `POST /auth/login/verify` | `auth.loginVerify` | 两步验证第二步：`{ ticket, code, deviceToken, deviceName, trustDevice }` → 会话。`code` 可以是选定的 6 位验证码或 `XXXXX-XXXXX` 形式的一次性备用码；`trustDevice:true` 仅在验证通过后记住本机。先验码再消费票，码错了票还能接着用，票单次使用；码不对 / 过期是 200 + `ok:false` |
 | `POST /auth/login/code` | `auth.loginCode` | 两步验证：用同一张票补发一封邮箱验证码（票没过期就还有效），限流同上 |
 | `POST /auth/register` | `auth.register` | 注册**第一步**：校验用户名 / 密码 / 邮箱与查重，把待建账号暂存进验证码记录并发码；**不建账号、不发令牌**。限流：同一邮箱 60 秒 1 条 / 1 小时 5 条 / 24 小时 15 条，同一 IP 1 小时 20 条（429） |
 | `POST /auth/register/verify` | `auth.registerVerify` | 注册**第二步**：验证码通过才建账号（`email_verified = true`）并发令牌；码不对 / 过期 / 次数用尽是 200 + `ok:false` |
 | `POST /auth/password/forgot` | `auth.forgotPassword` | 找回密码第一步：给**已验证邮箱**的账号发码。**不区分邮箱是否存在**——不存在的邮箱同样走一遍限流与落库，只是不发信；两种情况响应字段与耗时都一致（防账号枚举）。只给未封禁账号发 |
-| `POST /auth/password/reset` | `auth.resetPassword` | 找回密码第二步：验证码通过 → 改密码 → **撤销该用户全部刷新令牌**（密码可能已泄露，其它设备的登录状态要一起断）。密码校验在消费验证码之前，两次不一致不会烧掉这枚码 |
+| `POST /auth/password/reset` | `auth.resetPassword` | 找回密码第二步：验证码通过 → 改密码 → **撤销该用户全部会话并清除可信设备**（密码可能已泄露，其它设备的登录状态要一起断）。密码校验在消费验证码之前，两次不一致不会烧掉这枚码 |
 | `POST /auth/guest` | `auth.guest` | 只返回访客态，不发令牌 |
 | `POST /auth/logout` | `auth.logout` | 撤销该刷新令牌 |
 | `POST /auth/refresh` | — | 刷新令牌换新令牌（轮换：旧的立即作废） |
@@ -208,17 +208,23 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | --- | --- | --- |
 | `GET /profile` | `profile.get` | 登录 |
 | `PUT /profile` | `profile.save` | 登录。只写出现过的字段（个人页保存资料不会顺带改隐私开关）；**不接受 `email`** —— 邮箱是身份凭据，必须走下面的改邮箱两步流程 |
-| `POST /profile/password` | `profile.password` | 登录。校验当前密码，成功后撤销全部刷新令牌 |
+| `POST /profile/password` | `profile.password` | 登录。需要五分钟、单次且绑定当前会话与 `password` 用途的 `stepUpToken`；密码改动成功后撤销全部会话并清除可信设备 |
 | `GET /profile/notifications` | `notify.preferences` | 登录 |
 | `PUT /profile/notifications` | `notify.savePreferences` | 登录，支持部分字段 |
-| `GET /profile/security` | `security.get` | 登录。返回 `{ email, emailVerified, emailVerifiedAt, twoFactorEnabled, canEnable }` |
-| `POST /profile/2fa/enable` | `security.enable2fa` | 登录。把验证码发到**已验证邮箱**（开启也要过码，顺便证明邮箱现在真能收信）。没有已验证邮箱时 400 |
-| `POST /profile/2fa/enable/verify` | `security.verify2fa` | 登录。`{ code }` 通过才把 `two_factor_enabled` 置真，并返回一批**备用码**（明文只出现这一次） |
-| `POST /profile/2fa/totp/setup` | `security.totpSetup` | 登录。生成验证器密钥（base32）与 `otpauth://` 地址；**这一步不生效**，密钥先进 `totp_pending_secret`，确认过码才算绑定 |
-| `POST /profile/2fa/totp/enable` | `security.totpEnable` | 登录。`{ code }` 对得上刚生成的密钥才正式绑定、打开开关，并返回一批备用码 |
+| `GET /profile/security` | `security.get` | 登录。返回 `{ email, emailVerified, emailVerifiedAt, twoFactorEnabled, twoFactorMethod: 'off' \| 'totp' \| 'email', totpEnabled, backupCodesLeft, canEnable }` |
+| `POST /profile/security/email-code` | `security.identityEmailCode` | 登录。向当前已验证邮箱发送安全操作复核码，`purpose=security`；同邮箱一分钟冷却 |
+| `POST /profile/security/verify` | `security.verifyIdentity` | 登录。`{ method: 'email' \| 'totp', code, scope }`；已配置 TOTP 的账号才可选 TOTP。通过后签发五分钟、单次、绑定账号 / 当前会话 / `password`、`email`、`totp`、`totp-confirm` 或 `factor` 操作范围的票据；错误 TOTP 每会话 15 分钟最多五次 |
+| `GET /profile/sessions` | `security.sessions` | 登录。按设备聚合活动会话，返回安全展示名、首次 / 最近活动时间、当前设备标记与活动会话数；id 是撤销标识，不下发设备凭据 |
+| `DELETE /profile/sessions/:id` | `security.revokeSession` | 登录。撤销该设备的全部刷新令牌并清除可信设备状态；它的访问令牌也立即失效 |
+| `POST /profile/sessions/revoke-all` | `security.revokeAllSessions` | 登录。撤销全部会话并清除可信设备状态，当前客户端也会回登录页 |
+| `POST /profile/2fa/enable` | `security.enable2fa` | 登录。需要已消费 `factor` 复核票后才向**已验证邮箱**发开启验证码；没有已验证邮箱时 400 |
+| `POST /profile/2fa/enable/verify` | `security.verify2fa` | 登录。`{ code }` 通过才把 `two_factor_enabled` 置真并选中邮箱方式；首次开启返回一批**备用码**（明文只出现这一次） |
+| `POST /profile/2fa/totp/setup` | `security.totpSetup` | 登录。需要已消费 `totp` 复核票；生成验证器密钥（base32）与 `otpauth://` 地址并返回单独的 `totp-confirm` 票。新密钥先进 `totp_pending_secret`，确认前旧密钥仍有效 |
+| `POST /profile/2fa/totp/enable` | `security.totpEnable` | 登录。`{ code, stepUpToken }` 对得上待确认密钥且票据属于当前会话时才替换原密钥、开启并选中 TOTP；首次绑定返回备用码，轮换保留既有备用码 |
+| `POST /profile/2fa/totp/activate` | `security.totpActivate` | 登录。仅当邮箱已验证且账号保留已确认的 TOTP 密钥时一键选中并开启 TOTP，不生成新密钥或轮换备用码 |
 | `POST /profile/2fa/backup-codes` | `security.backupCodes` | 登录。`{ password }` 校验后**重新生成**备用码（旧的全部作废），要求两步验证已开启 |
-| `POST /profile/2fa/disable` | `security.disable2fa` | 登录。`{ password }` 校验当前密码后关闭，并**清掉验证器绑定与备用码**（只翻开关会让下次开启静默沿用旧密钥） |
-| `POST /profile/email` | `security.changeEmail` | 登录。`{ email }` 把验证码发到**新**地址；与当前相同 / 已被占用会被拒 |
+| `POST /profile/2fa/disable` | `security.disable2fa` | 登录。需要已消费 `factor` 复核票后关闭开关；保留已确认 TOTP 密钥与未使用备用码，支持稍后恢复 |
+| `POST /profile/email` | `security.changeEmail` | 登录。`{ email, stepUpToken }` 需要已消费 `email` 复核票后把验证码发到**新**地址；与当前相同 / 已被占用会被拒。重发也需要重新复核 |
 | `POST /profile/email/verify` | `security.verifyEmail` | 登录。`{ email, code }` 通过才落库，并把 `email_verified` 置真；验证码必须是为当前账号签发的 |
 
 ### 展会
@@ -321,7 +327,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 - **隐私**：用户公开页的报名记录只有本人、管理员，或该用户打开了 `showRegistrations` 时才返回；管理员视角带 `viewedAsAdmin` 标记。公开页的每条报名都**不含 `checkInCode`**（现场核销的唯一凭据），本人与管理员走 `/registrations`、`/review` 时照常下发。
 - **撤销报名**：只能撤销自己的报名，且**已参加是终态**——现场核销过的记录本人也不能再撤销（否则出勤记录可以事后抹掉），与审核流转同一口径；已撤销的记录重复撤销给出业务提示。
 - **字符数上限**：标题、地点、简介、报名答案等长度取管理员配置的 `limits`，页面被绕过也拦得住。
-- **密码**：bcrypt 哈希存储；改密码后撤销该用户全部刷新令牌。登录时账号不存在也走一次 bcrypt（对固定的哑哈希比对），避免用「立即返回」与「比对后返回」的耗时差枚举出哪些用户名真实存在。
+- **密码**：bcrypt 哈希存储；安全设置里的改密码要求用途限定的身份复核票，成功后撤销该用户全部会话并清掉可信设备。登录时账号不存在也走一次 bcrypt（对固定的哑哈希比对），避免用「立即返回」与「比对后返回」的耗时差枚举出哪些用户名真实存在。
 - **登录限流**：`/auth/login` 与 `/auth/register` 按「IP + 用户名」内存滑动窗口限速——**只统计失败**（4xx 或 200 + `ok:false`），5 分钟内失败 10 次之后给 429，挡住脚本化撞库；成功登录不计数，否则连着登录十来次就会把自己关在门外。单进程内存实现，多实例部署时换共享存储。
 - **刷新令牌轮换**：撤销与校验合成一条条件更新（`UPDATE … WHERE revoked_at IS NULL` 并检查 `rowCount`），同一个刷新令牌并发用两次时只有一个能换到新令牌，另一个按「登录状态已失效」处理。
 - **权限**：访客不能报名与编辑；普通用户不能碰展会配置与用户管理；展商只能管理自己举办的展会；服务器设置（含全局配色默认值）要管理员，个人外观模式与个人配色都要登录。
@@ -333,8 +339,9 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 - **展会日期只存 `exhibition_date`**，年 / 月 / 日由 SQL 派生（`src/domain/queries.ts` 的 `EXHIBITION_COLUMNS`），不会出现三者互相漂移；日期一律用 `to_char` 取成字符串，避免时区把日期挪一天。
 - **报名记录不冗余展会标题 / 时间 / 地点**，读取时 JOIN 展会表，展会改期后不会两边不一致。
 - 迁移按编号记录在 `schema_migrations`，只跑没跑过的步骤；新增字段请追加新步骤，不要改已发布的那一步。
-- **邮箱是身份，不只是联系方式**：`users.email` 大小写无关唯一（只有空串例外，允许留空的老数据并存），`email_verified` / `email_verified_at` 记验证状态，`two_factor_enabled` 是两步验证开关。验证码只存哈希；注册用途的待建账号暂存在 `email_codes.payload`（密码存哈希）——「先验证邮箱、通过后才建账号」因此不会往 `users` 里留下未验证的半成品。两步验证的预认证票在 `preauth_tickets`，发信留痕在 `mail_log`。
-- 表：`users`、`exhibitions`、`exhibition_fields`、`registrations`、`app_settings`、`notification_preferences`、`refresh_tokens`、`notifications`、`email_codes`、`preauth_tickets`、`mail_log`、`schema_migrations`。
+- **邮箱是身份，不只是联系方式**：`users.email` 大小写无关唯一（只有空串例外，允许留空的老数据并存），`email_verified` / `email_verified_at` 记验证状态，`two_factor_enabled` 与 `two_factor_method` 保存两步验证状态和所选方法。验证码只存哈希；注册用途的待建账号暂存在 `email_codes.payload`（密码存哈希）——「先验证邮箱、通过后才建账号」因此不会往 `users` 里留下未验证的半成品。两步验证的预认证票在 `preauth_tickets`，发信留痕在 `mail_log`。
+- **会话与可信设备**：`refresh_tokens` 的 `session_id` 关联 JWT 的 `sid`，按设备存令牌哈希、名称和撤销时间；认证时检查 sid 是否仍有活动刷新令牌，因此远程撤销后访问令牌也立即失效。稳定设备凭据保存在客户端设备私有存储，服务端只保存它的哈希；注册完成默认记住当时设备，登录二步验证可选择记住其他设备。
+- 表：`users`、`exhibitions`、`exhibition_fields`、`registrations`、`app_settings`、`notification_preferences`、`refresh_tokens`、`trusted_devices`、`notifications`、`email_codes`、`preauth_tickets`、`mail_log`、`schema_migrations`。
 
 ## 环境变量
 
@@ -376,20 +383,20 @@ pnpm lint                 # oxlint
 pnpm format               # oxfmt
 ```
 
-`src/test/api.test.ts`（61 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
+`src/test/api.test.ts`（78 项）会自己起一个服务实例（随机端口）并连真实数据库，逐接口断言：
 
 - 页面真正用到的字段都在（展会 25 个字段、报名、审核统计、启动数据的 12 个配置块）；
 - 权限确实拦得住（访客 / 普通用户 / 展商越权访问、受限账号在报名 / 发布 / 编辑 / 删除展会 / 改报名设置 / 核销 / 改资料上的 403 文案与仍然可用的操作、管理员即便被标成受限也不受限）；
 - 业务规则确实生效（报名窗口、收集项必填与选项、重复报名、自动通过、审核状态机与 `canRevise` 策略、核销状态流转、隐私开关、媒体上限收敛与缺键兜底）；
 - **注册两步流程与验证码规则**：第一步只发码、不建号、不发令牌，账号在验证通过前登不进去；错码不建号；同一枚码只能用一次；同一邮箱 60 秒内不能重复发码（429）；错够 5 次这枚码即作废（连正确的码也不再认）；发码与验证之间用户名被抢注时给「已被注册」而不是 500。
-- **TOTP 与备用码**：绑定验证器要先把生成的密钥输对一次才算成功（生成密钥这一步不生效）；登录时 6 位码按「验证器 → 邮箱验证码」试，`XXXXX-XXXXX`（或丢掉横线的 10 位）按备用码试；备用码一次一枚、用过的立即失效，重新生成会让旧码全部作废，关闭两步验证会把验证器绑定与备用码一起清掉。TOTP 实现对着 RFC 6238 官方向量测（`domain/totp.test.ts`），密钥在库里是 AES-256-GCM 密文。
-- **找回密码与两步验证**：找回密码对已注册与未注册邮箱的响应字段完全一致（不泄露账号是否存在），但只有已注册的会真的收到邮件；改密码后旧刷新令牌失效、一码一用；两步验证开启后 `POST /auth/login` 只回票不发令牌、错码仍然没令牌、过码才发令牌、同一张票只能用一次、关闭要当前密码；改邮箱必须把码发到新地址、通过才落库，且别人账号的改邮箱验证码用不了；验证码的明文只存在于邮件里，用例从内存收件箱的正文里把它读出来 —— 走的是用户实际收到的那条路径，后端没有、也不该有「读出明文码」的接口；
+- **TOTP 与备用码**：绑定验证器要先把生成的密钥输对一次才算成功（生成密钥这一步不生效）；登录主验证码遵循 `two_factor_method` 所选的 TOTP 或邮箱方式，备用码始终可作为恢复方式；备用码一次一枚、用过的立即失效，重新生成会让旧码全部作废；关闭两步验证会保留已确认的验证器绑定与未使用备用码，之后可一键恢复。TOTP 实现对着 RFC 6238 官方向量测（`domain/totp.test.ts`），密钥在库里是 AES-256-GCM 密文。
+- **找回密码与两步验证**：找回密码对已注册与未注册邮箱的响应字段完全一致（不泄露账号是否存在），但只有已注册的会真的收到邮件；改密码后旧会话与可信设备失效、身份复核票绑定当前会话且只能用一次；两步验证开启后 `POST /auth/login` 只回票不发令牌、错码仍然没令牌、过码才发令牌、同一张预认证票只能用一次；关闭两步验证要复核身份但保留 TOTP 密钥与备用码，TOTP 轮换在新码确认前保留旧密钥；改邮箱必须先复核当前身份、再把码发到新地址并通过才落库，且别人账号的改邮箱验证码用不了；验证码的明文只存在于邮件里，用例从内存收件箱的正文里把它读出来 —— 走的是用户实际收到的那条路径，后端没有、也不该有「读出明文码」的接口；
 - 刷新令牌并发重放只会换到一套新令牌（轮换的撤销是原子条件更新）；
 - **前后端路由交叉校验**：前端 `api.js` 的每个数据动作都有后端路由接住，后端也没有前端用不到的路由；
 - **骨架公共层**：安全响应头、CORS（含预检 204）与 404 的文案在所有 Hono 业务响应上一并生效；
 - 状态页在数据库不可用时如实降级（`ok:false`、`data:null`、响应不带 pg/SQL/堆栈原文，不抛 500）。
 
-`src/**/*.test.ts`（vitest unit project，150 项）跑不依赖数据库的部分：入口判定（`entry.test.ts` —— ESM 下取代 `require.main` 的那次比对）、JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.ts` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.ts` 与 `http/error-response.test.ts` —— 503 的分类是状态码来源，判错会把库故障伪装成 500）、**客户端 IP 的代理信任三态**（`http/client-ip.test.ts`：不信任/跳数/来源三种取值下取址正确，跳数错一位限流就会退化成全局额度）、**JSON 体积上限与写操作信封**（`http/body-limit.test.ts`：超限 413、坏 JSON 400、业务失败 200 + `ok:false`）、**骨架自身的行为**（`server/hono-app.test.ts`：探针、404、安全头、CORS、请求日志），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.ts`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.ts`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.ts`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.ts`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `pnpm test` 的前置条件。
+`src/**/*.test.ts`（vitest unit project，170 项）跑不依赖数据库的部分：入口判定（`entry.test.ts` —— ESM 下取代 `require.main` 的那次比对）、JWT 配置校验、认证中间件（含受限账号放行但能力位置灰）、服务器设置补丁的纯函数（`domain/settings.test.ts` —— 媒体上限收敛与缺键兜底）、**数据库不可用的判定**（`domain/errors.test.ts` 与 `http/error-response.test.ts` —— 503 的分类是状态码来源，判错会把库故障伪装成 500）、**客户端 IP 的代理信任三态**（`http/client-ip.test.ts`：不信任/跳数/来源三种取值下取址正确，跳数错一位限流就会退化成全局额度）、**JSON 体积上限与写操作信封**（`http/body-limit.test.ts`：超限 413、坏 JSON 400、业务失败 200 + `ok:false`）、**骨架自身的行为**（`server/hono-app.test.ts`：探针、404、安全头、CORS、请求日志），以及邮件与验证码：通道选择与「生产禁用 `memory`」（`config/mail.test.ts`）、`console` / `memory` 两条发信路径与邮件头注入清洗（`services/mailer.test.ts`）、验证码文案的双语 / HTML 转义 / 不放链接（`services/mail-templates.test.ts`）、验证码的形态 / 哈希加盐 / 等长比较 / 邮箱归一化（`domain/otp.test.ts`）。真发 SMTP 那条路要 Mailpit 在跑，属于本地验证而不是 `pnpm test` 的前置条件。
 
 字段漂移会在这里失败，而不是在页面上静默渲染成空。
 

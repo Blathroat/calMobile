@@ -10,6 +10,7 @@
     <string name="s_107xpf9">已核销</string>
     <string name="s_10ai5t2">两次输入的密码不一致</string>
     <string name="s_10lkv9z">更新失败</string>
+    <string name="s_10pjh16">登录设备</string>
     <string name="s_10q6dxb">保存展会</string>
     <string name="s_10tql41">管理员查看公开页不受用户隐私设置限制，下方已参加展会为该用户的完整记录。</string>
     <string name="s_115qa00">确认绑定</string>
@@ -25,9 +26,9 @@
     <string name="s_12cew5p">选中即生效，作用于强调色、选中态与系统栏。</string>
     <string name="s_12hokt7">退出登录</string>
     <string name="s_12ibypn">还没有填写简介，可用 Markdown 编辑并插入图片。</string>
+    <string name="s_12vww4d">查看当前账号已登录的设备，并可远程下线。</string>
     <string name="s_131vhix">撤销后如需参加请重新提交报名。</string>
     <string name="s_132uhjs">例如：上海 · 浦东新区</string>
-    <string name="s_13ekny6">确认修改</string>
     <string name="s_13eo9zy">需要继续核销时再次开启摄像头，或手动输入报名码。</string>
     <string name="s_13he981">按「展会日期在今天及以后」计数；填 0 表示不限，超出后展商不能再新建。</string>
     <string name="s_13i47qi">通知偏好与修改密码不受影响。</string>
@@ -38,6 +39,7 @@
     <string name="s_14nrrfg">这是你的公开页</string>
     <string name="s_14ol5jh">头像已移除</string>
     <string name="s_14pxh3f">账号已被限制，不能核销</string>
+    <string name="s_14rkh56">设备已下线</string>
     <string name="s_14s86i5">日期</string>
     <string name="s_153oaxf">公告</string>
     <string name="s_1589w37">取消</string>
@@ -54,6 +56,7 @@
     <string name="s_15vddzv">我举办的展会</string>
     <string name="s_15wm4xy">通知设置已更新</string>
     <string name="s_167n8sn">保存后可在展会详情页确认展示效果。</string>
+    <string name="s_16bctuo">验证并继续</string>
     <string name="s_16q73v0">已开启两步验证</string>
     <string name="s_16txual">地区上限</string>
     <string name="s_16uw4a2">报名二维码</string>
@@ -67,6 +70,7 @@
     <string name="s_17xmsms">例如：calMobile</string>
     <string name="s_17yba4l">报名时间</string>
     <string name="s_17zyr1e">返回首页</string>
+    <string name="s_1849dsd">验证码已发送到</string>
     <string name="s_185tvls">邮箱</string>
     <string name="s_189gp0e">可以让用户在报名详情页长按报名码复制，或直接输入二维码下方的文本。</string>
     <string name="s_18ko8bk">报</string>
@@ -80,6 +84,7 @@
     <string name="s_1aifth0">该用户还没有填写简介</string>
     <string name="s_1aj4gvd">插入视频</string>
     <string name="s_1am6dte">受限</string>
+    <string name="s_1aobeo5">修改登录密码</string>
     <string name="s_1aph6eg">密码</string>
     <string name="s_1appv4n">请选择开展日期</string>
     <string name="s_1apxo2s">安全</string>
@@ -94,13 +99,16 @@
     <string name="s_1c20uoy">已绑定验证器：直接输入验证器 App 里的 6 位码即可。</string>
     <string name="s_1c2rfxc">昵称</string>
     <string name="s_1c3mapc">保存</string>
+    <string name="s_1c6u5vm">两次输入的新密码不一致</string>
     <string name="s_1c9tz51">请用英文逗号分隔后缀，例如 jpg,png</string>
     <string name="s_1ca6fcy">更换邮箱</string>
     <string name="s_1ccx4t4">状态</string>
+    <string name="s_1cd4e3o">首次登录</string>
     <string name="s_1ceimwm">再次输入密码</string>
     <string name="s_1cfg610">普通用户</string>
     <string name="s_1cjrrf7">展商已扫码核销，祝参展顺利</string>
     <string name="s_1ckoagi">封面已上传</string>
+    <string name="s_1ckyrx8">为保护账号安全，请先验证身份。</string>
     <string name="s_1co82cb">展会名称</string>
     <string name="s_1csq350">注册邮箱</string>
     <string name="s_1d9en33">该展会无需审核，已直接为你通过，可在“我的报名”查看。</string>
@@ -129,7 +137,9 @@
     <string name="s_1ghvdtm">深色模式</string>
     <string name="s_1gnart">需提交报名信息</string>
     <string name="s_1gqx0u5">插入链接</string>
+    <string name="s_1grrtzz">账号密码</string>
     <string name="s_1h1rste">当前以访客身份浏览</string>
+    <string name="s_1h3kna">处理中</string>
     <string name="s_1h3z4vq">全部展会</string>
     <string name="s_1hhb6bo">未填写邮箱</string>
     <string name="s_1hnvqec">社交账号</string>
@@ -159,7 +169,7 @@
     <string name="s_1k42kcd">展商已完成审核</string>
     <string name="s_1k84spe">图片</string>
     <string name="s_1kbcp7q">分类</string>
-    <string name="s_1kc9jaw">验证码已发送到邮箱</string>
+    <string name="s_1kgsxi1">密码长度需在</string>
     <string name="s_1kliyri">账号已被限制，不能编辑个人信息</string>
     <string name="s_1kll7do">插入表格</string>
     <string name="s_1kmur0r">换个关键词，或清空搜索查看全部展会。</string>
@@ -172,7 +182,6 @@
     <string name="s_1lj253k">密码强度</string>
     <string name="s_1lpnuh4">未知</string>
     <string name="s_1lsc240">展</string>
-    <string name="s_1lteqo2">验证器（TOTP）</string>
     <string name="s_1lwkw6n">昵称或邮箱</string>
     <string name="s_1lwq2zi">英文标题</string>
     <string name="s_1lylgf9">简介已清空</string>
@@ -181,8 +190,8 @@
     <string name="s_1m3j883">（已验证）</string>
     <string name="s_1m9kuky">返回管理后台</string>
     <string name="s_1mcmbiu">字</string>
-    <string name="s_1mdazxm">用验证器开启（推荐）</string>
     <string name="s_1mdxfsy">展商</string>
+    <string name="s_1mh7xs6">当前验证方式</string>
     <string name="s_1mimz3w">开启两步验证</string>
     <string name="s_1moomrn">单个视频大小上限</string>
     <string name="s_1n008jl">注册</string>
@@ -191,12 +200,17 @@
     <string name="s_1n9i5np">验证码 10 分钟内有效，请勿转发给他人。</string>
     <string name="s_1nl5fxw">添加选项</string>
     <string name="s_1no1khr">移除头像</string>
+    <string name="s_1nvd98z">登录状态已失效，请重新登录</string>
     <string name="s_1nxza37">已停止扫码</string>
+    <string name="s_1o6qoze">选择一种登录时使用的第二验证方式。</string>
+    <string name="s_1o7jyw3">确定下线</string>
     <string name="s_1oas91y">已追加粘贴内容</string>
     <string name="s_1ogoh03">导出 CSV</string>
     <string name="s_1oim33">用户管理</string>
     <string name="s_1okxm8b">请输入当前密码</string>
     <string name="s_1omalh8">展商后台</string>
+    <string name="s_1oot79w">验证码已发送至</string>
+    <string name="s_1oriphf">关闭两步验证后，可随时重新开启已配置的验证器。</string>
     <string name="s_1ow5v10">首页</string>
     <string name="s_1p1p02k">验证器已绑定，两步验证已开启</string>
     <string name="s_1prtpth">加入日历</string>
@@ -219,7 +233,6 @@
     <string name="s_1qk0zaw">待核销</string>
     <string name="s_1qkfbmc">查看大图</string>
     <string name="s_1qksguo">找回密码</string>
-    <string name="s_1qnrion">没有新的备用码。</string>
     <string name="s_1qnyx3k">常见图片格式</string>
     <string name="s_1qrntx4">拒绝</string>
     <string name="s_1r4txyl">审核状态</string>
@@ -227,6 +240,8 @@
     <string name="s_1rgheyl">展会自己没有上传封面时用它；留空则继续显示占位图。</string>
     <string name="s_1ro3s85">用注册邮箱收验证码，验证通过后设置新密码。</string>
     <string name="s_1rt1gs6">报名状态</string>
+    <string name="s_1s11mp7">TOTP（推荐）</string>
+    <string name="s_1s1vt07">验证码有效期为10分钟。</string>
     <string name="s_1s57su3">0 条结果</string>
     <string name="s_1s8cf91">请求已被取消</string>
     <string name="s_1sd7orv">关键词</string>
@@ -244,6 +259,7 @@
     <string name="s_1t8d6e3">创建第一个展会，配置日期、地点与报名收集项。</string>
     <string name="s_1tanmo5">账号已被限制，不能报名</string>
     <string name="s_1tbhtoh">展会数据加载失败</string>
+    <string name="s_1tcj8tk">个字符</string>
     <string name="s_1tdesxa">管理视角</string>
     <string name="s_1te6cde">展商审核后会更新状态</string>
     <string name="s_1tlfy5l">展会地点</string>
@@ -282,8 +298,8 @@
     <string name="s_1wz04v2">保存后可编辑</string>
     <string name="s_1x20l1k">请输入 6 位数字验证码</string>
     <string name="s_1x7q517">发现展会</string>
-    <string name="s_1xbevn8">重新绑定验证器</string>
     <string name="s_1xtehpy">5 分钟内有效。收不到时先看看垃圾邮件，或点下面的重新发送。</string>
+    <string name="s_1xwid0y">下线设备后，该设备的访问令牌会立即失效。</string>
     <string name="s_1y26ptk">头像大小上限</string>
     <string name="s_1y8221p">单选选项</string>
     <string name="s_1ya7561">未获得通知权限</string>
@@ -313,19 +329,20 @@
     <string name="s_3fklp8">输入关键词开始搜索</string>
     <string name="s_3fnyn8">三</string>
     <string name="s_3ppp7q">在这里粘贴 Markdown 文本</string>
+    <string name="s_3r6q30">下线设备</string>
     <string name="s_3rgb49">二维码生成失败</string>
     <string name="s_3rxr06">头像已更新</string>
     <string name="s_3xcdlm">未启用：报名详情不展示报名码，展商仍可在报名管理中手动调整状态。</string>
     <string name="s_3zbkfg">找到值得参加的展会，保存日程并完成报名</string>
     <string name="s_41skpq">操作未完成</string>
     <string name="s_4e7do4">展会列表加载失败</string>
-    <string name="s_4hjltm">密码已更新</string>
     <string name="s_4hlup6">调整审核状态</string>
     <string name="s_4l0yq7">保存后详情页会按 Markdown 渲染。</string>
     <string name="s_4o8ie2">报名开始</string>
     <string name="s_4odn3m">应用配色</string>
     <string name="s_4okt0a">标题</string>
     <string name="s_4wwqgm">浅色</string>
+    <string name="s_4zkefu">当前设备</string>
     <string name="s_50ih74">搜索展会</string>
     <string name="s_533bde">去登录</string>
     <string name="s_5iff2f">头像保存失败</string>
@@ -333,10 +350,13 @@
     <string name="s_5rsk4v">验证码已发送</string>
     <string name="s_5rwrkf">进入应用时显示公告</string>
     <string name="s_60i0xr">报名截止</string>
+    <string name="s_635d3n">个活动会话</string>
     <string name="s_63jsvx">展会封面</string>
     <string name="s_68p8ln">登录后报名</string>
     <string name="s_69k40o">斜体</string>
+    <string name="s_6d2k5f">没有活动设备</string>
     <string name="s_6e6nd9">账号已创建，已为你登录</string>
+    <string name="s_6jj3gk">未命名设备</string>
     <string name="s_6osh3w">已参加展会</string>
     <string name="s_6piprk">上传封面</string>
     <string name="s_6w32w9">富文本媒体限制</string>
@@ -356,15 +376,14 @@
     <string name="s_9sfqbi">新密码</string>
     <string name="s_9xu72h">展会分类</string>
     <string name="s_a4vkn3">图片格式</string>
-    <string name="s_a7qley">修改失败</string>
     <string name="s_a8pyd6">暂无报名记录</string>
     <string name="s_accfpb">张</string>
     <string name="s_aebw86">邮箱与两步验证</string>
     <string name="s_akobwu">验证码已发送到新邮箱</string>
     <string name="s_ariomv">分类只能包含中英文、数字与常见分隔符</string>
+    <string name="s_b4oncm">轮换验证器</string>
     <string name="s_b7cu2g">中</string>
     <string name="s_bctg3f">核销失败</string>
-    <string name="s_bk5dms">暂无可用方式</string>
     <string name="s_booftk">追加</string>
     <string name="s_bsz4ru">深色</string>
     <string name="s_c6rjk">当前状态</string>
@@ -399,6 +418,7 @@
     <string name="s_ex1lrt">撤销后的报名不会出现在展商审核列表。</string>
     <string name="s_ex547b">部分公开</string>
     <string name="s_f02bjx">已提交 · 已通过</string>
+    <string name="s_f346xo">此账号当前没有有效登录会话。</string>
     <string name="s_f478sb">请输入密码</string>
     <string name="s_f4agbb">还没有举办中的展会</string>
     <string name="s_f66edb">提交失败</string>
@@ -412,6 +432,7 @@
     <string name="s_gupxm1">两步验证已关闭</string>
     <string name="s_guqe2t">核销</string>
     <string name="s_gya40f">创建展会</string>
+    <string name="s_h25ssx">最近活动</string>
     <string name="s_h2sz0p">该报名已由你撤销</string>
     <string name="s_h6o1xg">访客</string>
     <string name="s_h8z5hw">报名开始日期不能晚于展会开展日期</string>
@@ -452,7 +473,6 @@
     <string name="s_kre8wf">确认</string>
     <string name="s_kthke1">允许的图片后缀</string>
     <string name="s_kvpltc">加载失败</string>
-    <string name="s_kzys7n">开启后每次登录都要输一次邮箱验证码。</string>
     <string name="s_lcz4jf">编辑资料、修改密码、通知、配色、隐私与安全</string>
     <string name="s_lh9gvq">隐私设置</string>
     <string name="s_lltmb4">已隐藏</string>
@@ -461,6 +481,7 @@
     <string name="s_m70x1a">生成新备用码会让旧的一次性码全部失效。</string>
     <string name="s_m8zmid">几步完成，马上开始安排你的展会之旅</string>
     <string name="s_mf99no">访客可以浏览展会详情，报名需要先登录。</string>
+    <string name="s_mfq1av">全部下线</string>
     <string name="s_mj5xsg">保存后可删除展会</string>
     <string name="s_ml9unw">个人简介</string>
     <string name="s_mu5yl5">已启用：报名通过后展示报名码，核销后状态变为“已参加”。</string>
@@ -469,6 +490,7 @@
     <string name="s_nynzo5">立即报名</string>
     <string name="s_o51o77">正在识别，请把报名码放进取景框。</string>
     <string name="s_ocmice">确认密码</string>
+    <string name="s_ohd7za">备用码还剩</string>
     <string name="s_omytgn">返回</string>
     <string name="s_onix0y">上传头像</string>
     <string name="s_oozrzl">扫码核销</string>
@@ -476,10 +498,13 @@
     <string name="s_osck6n">注册失败</string>
     <string name="s_otl7kf">补充信息</string>
     <string name="s_p1k61">关闭两步验证</string>
+    <string name="s_p88szl">请手动输入下面的密钥</string>
     <string name="s_p9fllo">新建展会</string>
     <string name="s_pdyp8r">已退出登录</string>
     <string name="s_ph3tpb">请选择分类</string>
+    <string name="s_pk468e">下线此设备</string>
     <string name="s_pkm2s4">报名摘要</string>
+    <string name="s_poqjmt">管理登录设备</string>
     <string name="s_pur5qm">开办的展会</string>
     <string name="s_pzy8ri">管理</string>
     <string name="s_q3pv0x">公开</string>
@@ -487,6 +512,7 @@
     <string name="s_q79se0">视频</string>
     <string name="s_q88a0n">未设置选项</string>
     <string name="s_qa4u6r">删除该收集项</string>
+    <string name="s_qcmnqj">吗？</string>
     <string name="s_qqaurb">撤销失败</string>
     <string name="s_qr7208">返回列表</string>
     <string name="s_qsy6ow">日</string>
@@ -509,10 +535,12 @@
     <string name="s_shrzdv">发送验证码</string>
     <string name="s_shtqx3">正在核对报名信息…</string>
     <string name="s_spr4u2">\n\n| 列 1 | 列 2 |\n| --- | --- |\n| 内容 | 内容 |\n\n</string>
+    <string name="s_src3bx">请输入确认密码。</string>
     <string name="s_szog53">重置密码</string>
     <string name="s_tt5vxa">正常</string>
     <string name="s_tv7wlb">尚未绑定邮箱</string>
     <string name="s_tvr34s">6 位验证码或备用码</string>
+    <string name="s_tz1s06">以后此设备登录时无需验证</string>
     <string name="s_u2zwo3">重新生成备用码</string>
     <string name="s_u9jq8n">用户名</string>
     <string name="s_ugjygq">二维码识别组件不可用，请使用“手动输入报名码”。</string>
@@ -530,6 +558,8 @@
     <string name="s_wo4aqm">粘贴后可直接替换当前内容，或在末尾追加。</string>
     <string name="s_wttsdb">开启摄像头扫码</string>
     <string name="s_ww6ehr">重置登录密码</string>
+    <string name="s_xdbgt7">更换地址</string>
+    <string name="s_xdjet7">将结束所有设备上的登录状态，并要求重新验证。</string>
     <string name="s_xf7p1v">报名已撤销</string>
     <string name="s_xocxb0">更换封面</string>
     <string name="s_xr45ks">简介</string>
@@ -538,6 +568,7 @@
     <string name="s_y6u3g">下一个月</string>
     <string name="s_y9zw6u">管理分区</string>
     <string name="s_ydow7a">操作失败</string>
+    <string name="s_ydvenk">验证器验证码</string>
     <string name="s_yfjo64">在首页选择日期并打开展会，即可提交报名。</string>
     <string name="s_yh7i0p">确认更换</string>
     <string name="s_yuxvje">账号</string>
@@ -547,7 +578,9 @@
     <string name="s_z3ic32">无序清单</string>
     <string name="s_z599mr">用户提交报名后会出现在这里，点击记录可查看完整回答。</string>
     <string name="s_zfeh7n">确认撤销</string>
+    <string name="s_zfw5mg">密码已更新，请重新登录。</string>
     <string name="s_zienpw">报名码内容</string>
     <string name="s_zkl7t2">准备扫码</string>
+    <string name="s_zlneve">其他设备</string>
     <string name="s_zqzoiq">核销报名码</string>
 </resources>

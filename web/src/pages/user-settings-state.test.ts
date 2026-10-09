@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, nextTick, type App } from 'vue';
+import { createApp, h, nextTick, type App } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import UserSettingsPage from './UserSettingsPage.vue';
+import AppSheet from '@/components/AppSheet.vue';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
+import { closeSheet, sheet } from '@/services/sheet';
 
 vi.mock('@/app/runtime', () => ({
   bootApp: async () => undefined,
@@ -23,11 +25,16 @@ const PROFILE = {
 };
 let app: App | undefined;
 
-beforeEach(() => {
+beforeEach(async () => {
+  if (sheet.current) {
+    closeSheet();
+    await new Promise((resolve) => setTimeout(resolve, 240));
+  }
   vi.resetAllMocks();
   document.body.innerHTML = '<div id="app-foot"></div><div id="settings-test"></div>';
   window.CalMobileStrings = {
     s_1no1khr: '移除头像', s_1sq2bvr: '编辑资料', s_lswd2v: '重试',
+    s_1c3mapc: '保存', s_1589w37: '取消',
     s_1sz2kuw: '资料加载失败', s_121kyl5: '通知偏好加载失败',
   };
   vi.mocked(api.profile.get).mockResolvedValue(PROFILE);
@@ -49,7 +56,7 @@ async function mountSettings(): Promise<void> {
   useSessionStore().applyUser({ id: PROFILE.id, username: PROFILE.username, avatar: PROFILE.avatar });
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings', component: UserSettingsPage }] });
   await router.push('/settings');
-  app = createApp(UserSettingsPage).use(pinia).use(router);
+  app = createApp({ render: () => [h(UserSettingsPage), h(AppSheet)] }).use(pinia).use(router);
   app.mount('#settings-test');
   await nextTick();
 }
@@ -99,5 +106,20 @@ describe('设置页独立取数状态', () => {
     button('重试')!.click();
     await vi.waitFor(() => expect(document.querySelector<HTMLInputElement>('#notify-reminder')!.disabled).toBe(false));
     expect(api.profile.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('资料编辑在抽屉里完成并在保存成功后关闭', async () => {
+    await mountSettings();
+    await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
+    button('编辑资料')!.click();
+    await nextTick();
+    expect(document.querySelector('.sheet-panel #settings-nickname')).not.toBeNull();
+
+    const nickname = document.querySelector<HTMLInputElement>('.sheet-panel #settings-nickname')!;
+    nickname.value = '新昵称';
+    nickname.dispatchEvent(new Event('input', { bubbles: true }));
+    button('保存')!.click();
+    await vi.waitFor(() => expect(api.profile.save).toHaveBeenCalledWith(expect.objectContaining({ nickname: '新昵称' })));
+    expect(sheet.current?.closing).toBe(true);
   });
 });

@@ -48,6 +48,15 @@ watch(
   { immediate: true },
 );
 
+/** 会话续期被认证端拒绝后立即回登录页，并带回用户原本所在地址。 */
+watch(() => session.expired, (expired) => {
+  if (!expired || route.path === '/login') return;
+  void router.replace({
+    path: '/login',
+    query: { redirect: route.fullPath, expired: '1' },
+  });
+}, { flush: 'sync' });
+
 /**
  * 换页时收起底部面板：面板属于上一屏（报名详情、状态选择、手动输入报名码），
  * 跟着路由留在新页面上会盖住正文——底部面板是全局挂载的，只有外壳看得全这次切换。

@@ -33,7 +33,12 @@ describe('router guards', () => {
     await router.push('/home');
     expect(router.currentRoute.value.path).toBe('/home');
 
-    for (const path of ['/search', '/detail/exh-1', '/user-public/exhibitor', '/my-registrations', '/profile']) {
+    const protectedPaths = [
+      '/search', '/detail/exh-1', '/registration-form/exh-1', '/user-public/exhibitor',
+      '/my-registrations', '/registration-detail/reg-1', '/profile', '/settings', '/security',
+      '/exhibitor', '/exhibition-form', '/exhibition-form/exh-1', '/review', '/checkin', '/rich-editor', '/admin',
+    ];
+    for (const path of protectedPaths) {
       await router.push(path);
       expect(router.currentRoute.value.path, `${path} 应当要求登录`).toBe('/login');
       // 带上原地址，登录后能送回用户本来要去的地方

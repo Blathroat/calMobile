@@ -76,6 +76,8 @@ export interface HttpClientOptions {
   /** 身份切换会作废本次请求；续期不改变此信号。 */
   getSessionSignal?: () => AbortSignal;
   refresh?: () => Promise<boolean>;
+  /** 认证令牌已被拒绝时清除应用侧登录态并返回登录页。 */
+  onSessionExpired?: () => void;
 }
 
 /** 把查询参数拼成 `?a=1&b=2`；没有有效参数时返回空串（不留一个孤立的 `?`）。 */
@@ -175,6 +177,11 @@ export class HttpClient {
       // 5xx 归传输失败：后端或代理异常，不是业务规则的判定结果。
       if (response.status >= 500) throw new TransportError(`后端返回 ${response.status}`);
       if (!response.ok) {
+        // 刷新后重放仍被拒绝，说明本次登录态已经失效。登录、刷新、登出等认证接口
+        // 自己返回 401 时不能按这个规则处理。
+        if (response.status === 401 && !canRefresh && token && !path.startsWith('/auth/')) {
+          this.options.onSessionExpired?.();
+        }
         // 4xx：优先用后端给的 error 文案，没有就退回状态码。
         const message = typeof data === 'object' && data !== null && 'error' in data
           ? String(data.error)

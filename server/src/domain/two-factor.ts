@@ -16,6 +16,7 @@ import crypto from 'node:crypto';
 import { loadProcessConfig } from '../config/env.js';
 import { query, transaction } from '../config/pool.js';
 import { CodeRejected, isCodeRejected, consumeCode } from './otp.js';
+import { consumeSecurityStepUp } from './security-stepup.js';
 import * as totp from './totp.js';
 
 const { totpSecretKey } = loadProcessConfig().auth;
@@ -28,6 +29,7 @@ interface FactorStateRow {
   email?: string | null;
   email_verified?: boolean | null;
   two_factor_enabled?: boolean | null;
+  two_factor_method?: string | null;
   totp_secret?: string | null;
   backup_left?: number | null;
 }
@@ -45,6 +47,7 @@ export interface SecondFactorUser {
   email?: string;
   username?: string;
   totp_secret?: string | null;
+  two_factor_method?: string | null;
 }
 
 /**
@@ -54,6 +57,7 @@ export interface SecondFactorUser {
  */
 export async function secondFactorState(userId: string): Promise<{
   enabled: boolean;
+  method: 'off' | 'totp' | 'email';
   totpBound: boolean;
   email: string;
   emailVerified: boolean;
@@ -61,7 +65,7 @@ export async function secondFactorState(userId: string): Promise<{
 } | null> {
   const result = await query<FactorStateRow>(
     `
-        SELECT u.email, u.email_verified, u.two_factor_enabled, u.totp_secret,
+        SELECT u.email, u.email_verified, u.two_factor_enabled, u.two_factor_method, u.totp_secret,
                (SELECT count(*)::int FROM backup_codes c
                  WHERE c.user_id = u.id AND c.used_at IS NULL) AS backup_left
           FROM users u
@@ -76,6 +80,7 @@ export async function secondFactorState(userId: string): Promise<{
   const email = String(row.email || '');
   return {
     enabled: row.two_factor_enabled === true,
+    method: row.two_factor_enabled !== true ? 'off' : row.two_factor_method === 'totp' ? 'totp' : 'email',
     totpBound: String(row.totp_secret || '') !== '',
     email,
     emailVerified: row.email_verified === true,
@@ -132,21 +137,19 @@ export async function regenerateBackupCodes(userId: string, count = totp.BACKUP_
   return codes;
 }
 
-/** 清掉验证器绑定与备用码（关闭两步验证、或重新绑定时用）。 */
-export async function clearSecondFactors(userId: string): Promise<void> {
+/** 关闭两步验证但保留已确认的验证器与备用码，便于稍后直接恢复。 */
+export async function disableSecondFactor(userId: string): Promise<void> {
   await query(
     `
         UPDATE users
            SET two_factor_enabled = false,
-               totp_secret = '',
+               two_factor_method = 'email',
                totp_pending_secret = '',
-               totp_confirmed_at = NULL,
                updated_at = now()
          WHERE id = $1
     `,
     [userId],
   );
-  await query('DELETE FROM backup_codes WHERE user_id = $1', [userId]);
 }
 
 /**
@@ -177,10 +180,10 @@ export async function verifySecondFactor(
   }
 
   const stored = String(user.totp_secret || '');
-  if (stored) {
-    if (totp.verifyCode(openSecret(stored), value)) {
-      return { method: 'totp' };
-    }
+  const selectedMethod = user.two_factor_method === 'totp' ? 'totp' : 'email';
+  if (selectedMethod === 'totp') {
+    if (stored && totp.verifyCode(openSecret(stored), value)) return { method: 'totp' };
+    throw new CodeRejected('验证器验证码不正确');
   }
 
   try {
@@ -217,12 +220,37 @@ export async function beginTotpSetup(
   };
 }
 
+/** 身份复核只接受已绑定的 TOTP；是否当前开启两步验证不影响它的可用性。 */
+export async function verifyBoundTotp(userId: string, code: unknown): Promise<boolean> {
+  const found = await query<{ totp_secret?: string | null }>('SELECT totp_secret FROM users WHERE id = $1', [userId]);
+  const stored = String(found.rows[0]?.totp_secret || '');
+  const value = String(code ?? '').trim();
+  return Boolean(stored && /^\d{6}$/.test(value) && totp.verifyCode(openSecret(stored), value));
+}
+
+/** 已绑定验证器关闭后，可直接重新启用；不会覆盖密钥或备用码。 */
+export async function activateBoundTotp(userId: string): Promise<boolean> {
+  const result = await query(
+    `UPDATE users
+        SET two_factor_enabled = true, two_factor_method = 'totp', updated_at = now()
+      WHERE id = $1 AND email_verified = true AND email <> '' AND totp_secret <> ''
+      RETURNING id`,
+    [userId],
+  );
+  return result.rowCount === 1;
+}
+
 /**
  * 确认绑定验证器：码要对得上「待确认」的密钥，成功后开关打开并生成第一批备用码。
  *
  * @returns 备用码的明文，只出现这一次。
  */
-export async function confirmTotpSetup(userId: string, code: unknown): Promise<{ backupCodes: string[] }> {
+export async function confirmTotpSetup(
+  userId: string,
+  code: unknown,
+  stepUpToken: unknown,
+  sessionId: string,
+): Promise<{ backupCodes: string[] }> {
   const found = await query<PendingSecretRow>('SELECT totp_pending_secret FROM users WHERE id = $1', [userId]);
   const pending = String((found.rows[0] || {}).totp_pending_secret || '');
   if (!pending) {
@@ -232,17 +260,20 @@ export async function confirmTotpSetup(userId: string, code: unknown): Promise<{
   if (!totp.verifyCode(openSecret(pending), value)) {
     throw new CodeRejected('验证码不正确，请确认手机时间准确、且扫的是刚生成的密钥');
   }
-  await query(
+  await consumeSecurityStepUp(stepUpToken, userId, sessionId, 'totp-confirm');
+  const updated = await query(
     `
         UPDATE users
-           SET totp_secret = totp_pending_secret,
+           SET totp_secret = $2,
                totp_pending_secret = '',
                totp_confirmed_at = now(),
                two_factor_enabled = true,
+               two_factor_method = 'totp',
                updated_at = now()
-         WHERE id = $1
+         WHERE id = $1 AND totp_pending_secret = $2
     `,
-    [userId],
+    [userId, pending],
   );
+  if (updated.rowCount !== 1) throw new CodeRejected('验证器配置已变化，请重新验证身份并绑定');
   return { backupCodes: await regenerateBackupCodes(userId) };
 }

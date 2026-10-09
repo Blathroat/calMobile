@@ -1,101 +1,88 @@
 <script setup lang="ts">
-/**
- * 安全设置：邮箱与两步验证。
- * 旧实现：`profile.js` 的 `securityCard()`（`git show 5e3d9ab^`），本页把它按屏幕拆出来。
- *
- * 两条放一起，因为它们是同一件事的两半：邮箱就是找回密码与两步验证的凭据。
- * 两个改动都**要过验证码**（改邮箱发到新地址、开启两步验证发到现邮箱），
- * 所以这里的每个动作都是「点一下 → 输码 → 生效」，面板原地展开在触发按钮附近。
- *
- * 关两步验证与改邮箱这类不可逆动作先走一次 `confirmSheet`；面板内的失败落在
- * `.field-error` 上、成功落在 `.notice` 上，toast 只作为附加反馈。
- */
+/** 邮箱、两步验证方式与活动设备入口。带输入的安全操作统一通过全局抽屉完成。 */
 import { computed, onMounted, reactive, ref } from 'vue';
-import { api, bootApp } from '@/app/runtime';
+import { useRouter } from 'vue-router';
+import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
+import { useBootstrapStore } from '@/stores/bootstrap';
 import { toast } from '@/services/toast';
-import { confirmSheet } from '@/services/sheet';
-import { PATTERNS, check } from '@/services/validate';
-import QrCanvas from '@/components/QrCanvas.vue';
+import { openSheet } from '@/services/sheet';
+import SecuritySetupSheet from '@/components/SecuritySetupSheet.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
+import SegControl from '@/components/SegControl.vue';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
+type FactorMode = 'off' | 'totp' | 'email';
+type SheetAction = 'email-factor-start' | 'email-send' | 'email-verify' | 'factor-email' | 'factor-totp' | 'disable' | 'password-change' | 'regenerate';
+type IdentityScope = 'password' | 'email' | 'totp' | 'factor';
+type IdentityMethod = 'email' | 'totp';
+const modeOptions: Array<{ value: FactorMode; label: string }> = [
+  { value: 'off', label: t('s_g0fanx') },
+  { value: 'totp', label: t('s_1s11mp7') },
+  { value: 'email', label: t('s_s8pbve') },
+];
+const copy = {
+  changeEmail: t('s_1ca6fcy'),
+  devicesTitle: t('s_10pjh16'),
+  devicesDescription: t('s_12vww4d'),
+  manageDevices: t('s_poqjmt'),
+  passwordTitle: t('s_1grrtzz'),
+  passwordDescription: t('s_1aobeo5'),
+  passwordChanged: t('s_zfw5mg'),
+  rotateTotp: t('s_b4oncm'),
+  disableDescription: t('s_1oriphf'),
+};
+
+const router = useRouter();
 const session = useSessionStore();
-
-type Panel = '' | 'email' | 'choose' | 'totp' | 'enable2fa' | 'disable2fa' | 'backupCodes' | 'codes';
-type ConfirmKind = '' | 'disable' | 'regenerate';
-
+const bootstrap = useBootstrapStore();
 const info = reactive<JsonObject>({});
 const loading = ref(true);
 const loadError = ref('');
 const error = ref('');
 const notice = ref('');
-const panel = ref<Panel>('');
-const confirmKind = ref<ConfirmKind>('');
-const confirmPassword = ref('');
-const confirmError = ref('');
 const busy = ref(false);
-
-// 各面板自己的输入与结果
-const pendingEmail = ref('');
-const newEmail = ref('');
-const emailCode = ref('');
-const twoFactorCode = ref('');
-const totpSecret = ref('');
-const totpUri = ref('');
-const totpCode = ref('');
-const qrError = ref('');
-const newCodes = ref<string[]>([]);
-
-const emailInvalid = ref(false);
-const emailCodeInvalid = ref(false);
-const twoFactorCodeInvalid = ref(false);
-const totpCodeInvalid = ref(false);
+const selectedMode = ref<FactorMode>('off');
+let drawerCommitted = false;
 
 const enabled = computed(() => info.twoFactorEnabled === true);
 const totpEnabled = computed(() => info.totpEnabled === true);
 const canEnable = computed(() => info.canEnable === true);
+const activeMode = computed<FactorMode>(() => {
+  if (!enabled.value) return 'off';
+  return info.twoFactorMethod === 'totp' ? 'totp' : 'email';
+});
+const availableModeOptions = computed(() => modeOptions.map((option) => ({
+  ...option,
+  disabled: option.value !== 'off' && !canEnable.value && option.value !== activeMode.value,
+})));
 const emailLabel = computed(() => {
   const email = String(info.email || '');
   if (!email) return t('s_tv7wlb');
   return `${email}${info.emailVerified === true ? t('s_1m3j883') : t('s_1webb8b')}`;
 });
-
-const methodLabel = computed(() => {
-  if (totpEnabled.value) return t('s_1lteqo2');
-  return info.emailVerified === true ? t('s_s8pbve') : t('s_bk5dms');
+const methodHint = computed(() => {
+  if (!enabled.value) return canEnable.value ? t('s_1o6qoze') : t('s_1qj48cz');
+  const name = activeMode.value === 'totp' ? t('s_1s11mp7') : t('s_16xoiwx');
+  return `${t('s_1mh7xs6')}：${name}；${t('s_ohd7za')} ${Number(info.backupCodesLeft) || 0} ${t('s_d5a1x9')}`;
 });
-
-/** 已开启时说明当前方式与剩余备用码，未开启时说明开启条件。 */
-const factorHint = computed(() => {
-  if (enabled.value) {
-    return `当前验证方式：${methodLabel.value}；备用码还剩 ${Number(info.backupCodesLeft) || 0} 个。`;
-  }
-  return canEnable.value ? t('s_kzys7n') : t('s_1qj48cz');
-});
-
-/** 密钥分组展示：4 个一组，方便手抄核对（旧实现同一处理）。 */
-const secretGroups = computed(() => totpSecret.value.match(/.{1,4}/g)?.join(' ') ?? '');
 
 function errorText(reason: unknown): string {
   return reason instanceof Error && reason.message ? reason.message : t('s_osck6n');
 }
 
-/** 一次只留一条原位提示：新动作开始时先清掉上一条。 */
-function clearMessages(): void {
-  error.value = '';
-  notice.value = '';
+function assertOk(result: JsonObject): void {
+  if (result.ok === false) throw new Error(String(result.error || t('s_osck6n')));
 }
 
 async function load(): Promise<void> {
-  await bootApp().catch(() => undefined);
   loading.value = true;
   loadError.value = '';
   try {
-    const result = await api.security.get();
-    Object.assign(info, result ?? {});
+    Object.assign(info, await api.security.get());
+    selectedMode.value = activeMode.value;
   } catch (reason) {
     loadError.value = errorText(reason);
   } finally {
@@ -103,244 +90,280 @@ async function load(): Promise<void> {
   }
 }
 
-/**
- * 动作成功后重读安全状态：**不动** `loading`，否则整页会退回骨架屏，
- * 刚写上的成功提示也会跟着一起消失（旧实现只重画这一张卡）。
- */
 async function refresh(): Promise<void> {
-  try {
-    const result = await api.security.get();
-    Object.assign(info, result ?? {});
-  } catch {
-    // 重读失败保留上一次的显示值：本次动作已经成功了，不该改口说没成功。
-  }
+  Object.assign(info, await api.security.get());
+  selectedMode.value = activeMode.value;
 }
 
 onMounted(load);
 
-/** 切换面板：只改面板时不重取数据，避免开关闪回旧值。 */
-function open(next: Panel): void {
-  panel.value = next;
-  confirmKind.value = '';
-  confirmPassword.value = '';
-  confirmError.value = '';
-  clearMessages();
-  if (next !== 'codes') newCodes.value = [];
-  if (next !== 'email') {
-    pendingEmail.value = '';
-    newEmail.value = '';
-    emailCode.value = '';
-  }
-  if (next !== 'totp') qrError.value = '';
-  emailInvalid.value = false;
-  emailCodeInvalid.value = false;
-  twoFactorCodeInvalid.value = false;
-  totpCodeInvalid.value = false;
+function openFormSheet(options: {
+  title: string;
+  kind: 'change-email' | 'email-factor' | 'totp' | 'password' | 'change-password' | 'identity-only';
+  action: SheetAction;
+  identityScope?: IdentityScope;
+  totpAvailable?: boolean;
+  initialEmail?: string;
+  maskedEmail?: string;
+  secret?: string;
+  otpauthUri?: string;
+}): void {
+  drawerCommitted = false;
+  openSheet({
+    title: options.title,
+    component: SecuritySetupSheet,
+    size: 'full',
+    onClose: () => {
+      if (!drawerCommitted) selectedMode.value = activeMode.value;
+    },
+    props: {
+      kind: options.kind,
+      action: options.action,
+      initialEmail: options.initialEmail,
+      maskedEmail: options.maskedEmail,
+      secret: options.secret,
+      otpauthUri: options.otpauthUri,
+      identityScope: options.identityScope,
+      totpAvailable: options.totpAvailable,
+      passwordMin: Number(bootstrap.limits.passwordMin) || 6,
+      passwordMax: Number(bootstrap.limits.passwordMax) || 32,
+      sendIdentityCode: requestIdentityCode,
+      verifyIdentity: (method: IdentityMethod, code: string, scope: IdentityScope) => verifyIdentity(method, code, scope, options.kind),
+      onIdentityFailure: () => { selectedMode.value = activeMode.value; },
+      submitAction: submitSheetAction,
+    },
+  });
 }
 
-/**
- * 跑一个会改状态的动作：统一处理忙碌、错误与重读。
- * `reload` 为真时静默重读安全状态，让开关与提示回到后端权威值。
- */
-async function run(action: () => Promise<void>, options: { reload?: boolean } = {}): Promise<void> {
-  busy.value = true;
-  clearMessages();
+async function submitSheetAction(payload: {
+  action: string;
+  email?: string;
+  code?: string;
+  password?: string;
+  newPassword?: string;
+  confirmPassword?: string;
+  stepUpToken?: string;
+}): Promise<{ pendingEmail?: string; backupCodes?: string[]; maskedEmail?: string; close?: boolean }> {
+  let result: JsonObject;
   try {
-    await action();
+    switch (payload.action as SheetAction) {
+    case 'email-factor-start':
+      result = await api.security.enableTwoFactor(String(payload.stepUpToken || ''));
+      assertOk(result);
+      return { maskedEmail: String(result.maskedEmail || maskedCurrentEmail()), close: false };
+    case 'email-send':
+      try {
+        result = await api.security.changeEmail(String(payload.email || ''), String(payload.stepUpToken || ''));
+        assertOk(result);
+        return { pendingEmail: String(result.email || payload.email || ''), close: false };
+      } catch (reason) {
+        const failed = reason instanceof Error ? reason : new Error(errorText(reason));
+        Object.assign(failed, { pendingEmail: String(payload.email || '') });
+        throw failed;
+      }
+    case 'email-verify':
+      result = await api.security.verifyEmail(String(payload.email || ''), String(payload.code || ''));
+      assertOk(result);
+      session.applyUser({ ...session.user, ...(result.user as JsonObject | undefined ?? {}) });
+      drawerCommitted = true;
+      await refresh();
+      notice.value = t('s_vhfyh8');
+      toast(t('s_vhfyh8'), 'success');
+      return { close: true };
+    case 'factor-email':
+      result = await api.security.verifyTwoFactor(String(payload.code || ''));
+      assertOk(result);
+      drawerCommitted = true;
+      await refresh();
+      notice.value = t('s_14jjxmk');
+      toast(t('s_14jjxmk'), 'success');
+      return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
+    case 'factor-totp':
+      result = await api.security.totpEnable(String(payload.code || ''), String(payload.stepUpToken || ''));
+      assertOk(result);
+      drawerCommitted = true;
+      await refresh();
+      notice.value = t('s_1p1p02k');
+      toast(t('s_1p1p02k'), 'success');
+      return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
+    case 'disable':
+      result = await api.security.disableTwoFactor(String(payload.stepUpToken || ''));
+      assertOk(result);
+      drawerCommitted = true;
+      await refresh();
+      notice.value = t('s_gupxm1');
+      toast(t('s_gupxm1'), 'success');
+      return { close: true };
+    case 'password-change':
+      result = await api.profile.changePassword({
+        newPassword: payload.newPassword,
+        confirmPassword: payload.confirmPassword,
+        stepUpToken: payload.stepUpToken,
+      });
+      assertOk(result);
+      drawerCommitted = true;
+      api.session.clear();
+      session.clear();
+      toast(copy.passwordChanged, 'success');
+      void router.replace('/login');
+      return { close: true };
+    case 'regenerate':
+      result = await api.security.backupCodes(String(payload.password || ''));
+      assertOk(result);
+      drawerCommitted = true;
+      await refresh();
+      return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
+    default:
+      throw new Error(t('s_osck6n'));
+    }
   } catch (reason) {
+    if (['factor-email', 'factor-totp', 'disable'].includes(payload.action)) selectedMode.value = activeMode.value;
+    throw reason;
+  }
+}
+
+function maskedCurrentEmail(): string {
+  const email = String(info.email || '');
+  const at = email.indexOf('@');
+  if (at <= 0) return email ? '***' : '';
+  return `${email.slice(0, Math.min(2, at))}***${email.slice(at)}`;
+}
+
+async function requestIdentityCode(): Promise<string> {
+  const result = await api.security.identityEmailCode();
+  assertOk(result);
+  return String(result.maskedEmail || maskedCurrentEmail());
+}
+
+async function verifyIdentity(method: IdentityMethod, code: string, scope: IdentityScope, kind: string) {
+  const verified = await api.security.verifyIdentity(method, code, scope);
+  assertOk(verified);
+  const stepUpToken = String(verified.stepUpToken || '');
+  if (!stepUpToken) throw new Error(t('s_osck6n'));
+
+  if (scope === 'totp') {
+    const setup = await api.security.totpSetup(stepUpToken);
+    assertOk(setup);
+    return {
+      stepUpToken: String(setup.stepUpToken || ''),
+      secret: String(setup.secret || ''),
+      otpauthUri: String(setup.otpauthUri || ''),
+    };
+  }
+  if (scope === 'factor') {
+    if (kind === 'identity-only') {
+      const disabled = await api.security.disableTwoFactor(stepUpToken);
+      assertOk(disabled);
+      drawerCommitted = true;
+      await refresh();
+      notice.value = t('s_gupxm1');
+      toast(t('s_gupxm1'), 'success');
+      return { stepUpToken: '', complete: true };
+    }
+    return { stepUpToken };
+  }
+  return { stepUpToken };
+}
+
+function openEmailChange(): void {
+  error.value = '';
+  openFormSheet({
+    title: t('s_1ca6fcy'), kind: 'change-email', action: 'email-send',
+    identityScope: 'email', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
+  });
+}
+
+function openPasswordChange(): void {
+  openFormSheet({
+    title: t('s_1pt7oo1'), kind: 'change-password', action: 'password-change',
+    identityScope: 'password', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
+  });
+}
+
+async function chooseMode(target: FactorMode): Promise<void> {
+  if (busy.value || target === activeMode.value) return;
+  const previous = activeMode.value;
+  selectedMode.value = target;
+  error.value = '';
+  notice.value = '';
+  if (target === 'off') {
+    openSheet({
+      title: t('s_1b3874r'),
+      message: copy.disableDescription,
+      onClose: () => { selectedMode.value = activeMode.value; },
+      actions: [
+        { label: t('s_1589w37'), onClick: (close) => { close(); selectedMode.value = previous; } },
+        {
+          label: t('s_1b3874r'), variant: 'danger',
+          onClick: (close) => {
+            close();
+            selectedMode.value = 'off';
+            openFormSheet({
+              title: t('s_1b3874r'), kind: 'identity-only', action: 'disable',
+              identityScope: 'factor', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
+            });
+          },
+        },
+      ],
+    });
+    return;
+  }
+  if (!canEnable.value) {
+    selectedMode.value = previous;
+    error.value = t('s_1qj48cz');
+    return;
+  }
+
+  busy.value = true;
+  try {
+    if (target === 'email') {
+      openFormSheet({
+        title: t('s_16xoiwx'), kind: 'email-factor', action: 'factor-email',
+        identityScope: 'factor', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
+      });
+    } else if (totpEnabled.value) {
+      const activated = await api.security.activateTotp();
+      assertOk(activated);
+      await refresh();
+      notice.value = t('s_1p1p02k');
+      toast(t('s_1p1p02k'), 'success');
+    } else {
+      openFormSheet({
+        title: t('s_1s11mp7'), kind: 'totp', action: 'factor-totp',
+        identityScope: 'totp', totpAvailable: false, maskedEmail: maskedCurrentEmail(),
+      });
+    }
+  } catch (reason) {
+    selectedMode.value = previous;
     error.value = errorText(reason);
   } finally {
     busy.value = false;
-    if (options.reload) await refresh();
   }
 }
 
-// ── 邮箱：先发码到新地址，通过才落库 ─────────────────────────────
-
-async function sendEmailCode(): Promise<void> {
-  emailInvalid.value = false;
-  const message = check(newEmail.value, {
-    label: t('s_185tvls'),
-    required: true,
-    max: 120,
-    pattern: PATTERNS.email,
-    patternMessage: t('s_1u3yg0h'),
-  });
-  if (message) {
-    error.value = message;
-    emailInvalid.value = true;
-    return;
-  }
-  await run(async () => {
-    const result = await api.security.changeEmail(newEmail.value.trim());
-    if (result.ok !== true) throw new Error(String(result.error || t('s_osck6n')));
-    pendingEmail.value = String(result.email || newEmail.value.trim());
-    notice.value = t('s_akobwu');
-    toast(t('s_akobwu'), 'success');
-  });
-}
-
-async function verifyEmail(): Promise<void> {
-  emailCodeInvalid.value = false;
-  if (!PATTERNS.verificationCode.test(emailCode.value.trim())) {
-    error.value = t('s_1x20l1k');
-    emailCodeInvalid.value = true;
-    return;
-  }
-  await run(async () => {
-    const result = await api.security.verifyEmail(pendingEmail.value, emailCode.value.trim());
-    if (result.ok !== true) throw new Error(String(result.error || t('s_osck6n')));
-    // 后端把整份用户对象带回来：换邮箱等于换了身份凭据，会话必须一起更新。
-    session.applyUser({ ...session.user, ...(result.user as JsonObject | undefined ?? {}) });
-    notice.value = t('s_vhfyh8');
-    toast(t('s_vhfyh8'), 'success');
-    pendingEmail.value = '';
-    panel.value = '';
-  }, { reload: true });
-}
-
-// ── 两步验证 ──────────────────────────────────────────────────────
-
-/** 点击只发起验证流程；开关立即恢复到服务器已确认的状态。 */
-function requestTwoFactorChange(event: Event): void {
-  (event.currentTarget as HTMLInputElement).checked = enabled.value;
-  if (enabled.value) askDisable();
-  else open('choose');
-}
-
-/** 关两步验证要当前密码：会话被偷不等于能关掉第二道锁，因此先二次确认。 */
-function askDisable(): void {
-  clearMessages();
-  confirmSheet({
-    title: t('s_1b3874r'),
-    message: t('s_kikkwz'),
-    confirmLabel: t('s_1b3874r'),
-    tone: 'danger',
-    onConfirm: () => {
-      confirmKind.value = 'disable';
-      confirmPassword.value = '';
-      confirmError.value = '';
-      panel.value = 'disable2fa';
-    },
-  });
-}
-
-async function disableTwoFactor(): Promise<void> {
-  confirmError.value = '';
-  if (!confirmPassword.value) {
-    confirmError.value = t('s_1okxm8b');
-    return;
-  }
-  await run(async () => {
-    const result = await api.security.disableTwoFactor(confirmPassword.value);
-    if (result.ok !== true) throw new Error(String(result.error || t('s_osck6n')));
-    confirmPassword.value = '';
-    panel.value = '';
-    notice.value = t('s_gupxm1');
-    toast(t('s_gupxm1'), 'success');
-  }, { reload: true });
-}
-
-/** 重新生成备用码会让旧码全部失效，因此同样要二次确认 + 当前密码。 */
 function askRegenerate(): void {
-  clearMessages();
-  confirmSheet({
-    title: t('s_u2zwo3'),
-    message: t('s_m70x1a'),
-    confirmLabel: t('s_yvmn4o'),
-    tone: 'danger',
-    onConfirm: () => {
-      confirmKind.value = 'regenerate';
-      confirmPassword.value = '';
-      confirmError.value = '';
-      panel.value = 'backupCodes';
-    },
+  openSheet({
+    title: t('s_u2zwo3'), message: t('s_m70x1a'),
+    actions: [
+      { label: t('s_1589w37'), onClick: (close) => close() },
+      { label: t('s_yvmn4o'), variant: 'danger', onClick: (close) => {
+        close();
+        openFormSheet({ title: t('s_u2zwo3'), kind: 'password', action: 'regenerate' });
+      } },
+    ],
   });
 }
 
-async function regenerateBackupCodes(): Promise<void> {
-  confirmError.value = '';
-  if (!confirmPassword.value) {
-    confirmError.value = t('s_1okxm8b');
-    return;
-  }
-  await run(async () => {
-    const result = await api.security.backupCodes(confirmPassword.value);
-    if (result.ok !== true) throw new Error(String(result.error || t('s_osck6n')));
-    newCodes.value = Array.isArray(result.backupCodes) ? result.backupCodes.map((code) => String(code)) : [];
-    confirmPassword.value = '';
-    panel.value = 'codes';
-  }, { reload: true });
-}
-
-/** 用邮箱验证码开启：先请后端把码发到现邮箱，再输码确认。 */
-async function openEmailEnable(): Promise<void> {
-  await run(async () => {
-    const result = await api.security.enableTwoFactor();
-    if (result.ok !== true) throw new Error(String(result.error || t('s_osck6n')));
-    panel.value = 'enable2fa';
-    notice.value = t('s_1kc9jaw');
-    toast(t('s_1kc9jaw'), 'success');
+async function rebindTotp(): Promise<void> {
+  openFormSheet({
+    title: copy.rotateTotp, kind: 'totp', action: 'factor-totp',
+    identityScope: 'totp', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
   });
-}
-
-async function verifyEmailEnable(): Promise<void> {
-  twoFactorCodeInvalid.value = false;
-  if (!PATTERNS.verificationCode.test(twoFactorCode.value.trim())) {
-    error.value = t('s_1x20l1k');
-    twoFactorCodeInvalid.value = true;
-    return;
-  }
-  await run(async () => {
-    const result = await api.security.verifyTwoFactor(twoFactorCode.value.trim());
-    if (result.ok !== true) throw new Error(String(result.error || t('s_osck6n')));
-    newCodes.value = Array.isArray(result.backupCodes) ? result.backupCodes.map((code) => String(code)) : [];
-    // 开启成功会带一批备用码回来：切到「抄下来」面板，别让用户错过。
-    panel.value = newCodes.value.length > 0 ? 'codes' : '';
-    notice.value = t('s_14jjxmk');
-    toast(t('s_14jjxmk'), 'success');
-  }, { reload: true });
-}
-
-/** 绑定验证器第一步：拿密钥与 otpauth 地址画二维码。 */
-async function startTotp(): Promise<void> {
-  await run(async () => {
-    const result = await api.security.totpSetup();
-    if (result.ok !== true) throw new Error(String(result.error || t('s_osck6n')));
-    totpSecret.value = String(result.secret || '');
-    totpUri.value = String(result.otpauthUri || '');
-    totpCode.value = '';
-    qrError.value = '';
-    panel.value = 'totp';
-  });
-}
-
-async function enableTotp(): Promise<void> {
-  totpCodeInvalid.value = false;
-  if (!PATTERNS.verificationCode.test(totpCode.value.trim())) {
-    error.value = t('s_1x20l1k');
-    totpCodeInvalid.value = true;
-    return;
-  }
-  await run(async () => {
-    const result = await api.security.totpEnable(totpCode.value.trim());
-    if (result.ok !== true) throw new Error(String(result.error || t('s_osck6n')));
-    newCodes.value = Array.isArray(result.backupCodes) ? result.backupCodes.map((code) => String(code)) : [];
-    panel.value = 'codes';
-    notice.value = t('s_1p1p02k');
-    toast(t('s_1p1p02k'), 'success');
-  }, { reload: true });
-}
-
-/** 二维码画不出来时说明原因，并让用户改用手抄密钥。 */
-function onQrError(message: string): void {
-  qrError.value = message;
 }
 </script>
 
 <template>
   <SkeletonBlock v-if="loading" :rows="3" />
-
   <StateBlock
     v-else-if="loadError"
     tone="error"
@@ -349,230 +372,47 @@ function onQrError(message: string): void {
     :action-label="t('s_lswd2v')"
     @action="load"
   />
-
   <template v-else>
     <div class="card">
       <span class="section-label">{{ t('s_1apxo2s') }}</span>
-
-      <!-- 原位提示：失败在字段上，成功单独一行，toast 只作为附加反馈 -->
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
       <p v-if="notice" class="notice" data-tone="accent" role="status">{{ notice }}</p>
 
-      <!-- 邮箱那一行：当前地址 + 验证状态 + 更换入口 -->
       <div class="row" data-between="true">
         <span class="row-copy">
           <span class="row-title">{{ t('s_185tvls') }}</span>
           <span class="row-meta truncate">{{ emailLabel }}</span>
         </span>
-        <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="open(panel === 'email' ? '' : 'email')">
-          {{ t('s_1ca6fcy') }}
-        </button>
+        <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="openEmailChange">{{ copy.changeEmail }}</button>
       </div>
 
-      <!-- 新邮箱面板：验证码发到新地址，通过才落库 -->
-      <div v-if="panel === 'email'" class="stack" data-gap="sm">
-        <p class="field-hint">{{ t('s_1itmqlh') }}</p>
-        <div class="field" :data-invalid="emailInvalid ? 'true' : 'false'">
-          <label for="security-email">{{ t('s_185tvls') }}</label>
-          <input
-            id="security-email"
-            v-model="newEmail"
-            class="input"
-            type="email"
-            :placeholder="t('s_1i2pkg8')"
-            autocomplete="email"
-          >
-        </div>
-        <div v-if="pendingEmail" class="field" :data-invalid="emailCodeInvalid ? 'true' : 'false'">
-          <label for="security-email-code">{{ t('s_doboo3') }}</label>
-          <input
-            id="security-email-code"
-            v-model="emailCode"
-            class="input"
-            type="text"
-            inputmode="numeric"
-            maxlength="6"
-            :placeholder="t('s_doboo3')"
-          >
-        </div>
-        <div class="row" data-gap="sm">
-          <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="sendEmailCode">
-            {{ pendingEmail ? t('s_1fyr64c') : t('s_shrzdv') }}
-          </button>
-          <button v-if="pendingEmail" class="cta" data-size="small" type="button" :disabled="busy" @click="verifyEmail">
-            {{ t('s_yh7i0p') }}
-          </button>
-          <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="open('')">
-            {{ t('s_1589w37') }}
-          </button>
-        </div>
+      <div class="stack" data-gap="xs">
+        <span class="row-title">{{ t('s_15msj8x') }}</span>
+        <SegControl :items="availableModeOptions" :model-value="selectedMode" :disabled="busy" :label="t('s_15msj8x')" @update:model-value="(value) => chooseMode(value as FactorMode)" />
       </div>
+      <p class="field-hint">{{ methodHint }}</p>
 
-      <!-- 两步验证：开关是总开关，打开后先选「用验证器」还是「用邮箱」 -->
-      <div class="stack" data-gap="sm">
-        <div class="switch-row">
-          <span class="switch-copy">
-            <strong>{{ t('s_15msj8x') }}</strong>
-          </span>
-          <label class="switch" for="security-2fa">
-            <input
-              id="security-2fa"
-              type="checkbox"
-              :checked="enabled"
-              :disabled="busy || (!canEnable && !enabled)"
-              @change="requestTwoFactorChange"
-            >
-            <span />
-          </label>
-        </div>
-        <p class="field-hint">{{ factorHint }}</p>
-
-        <!-- 已经开着的时候才给这两个恢复入口 -->
-        <div v-if="enabled" class="row" data-gap="sm">
-          <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="askRegenerate">
-            {{ t('s_u2zwo3') }}
-          </button>
-          <button v-if="totpEnabled" class="cta ghost" data-size="small" type="button" :disabled="busy" @click="startTotp">
-            {{ t('s_1xbevn8') }}
-          </button>
-        </div>
+      <div v-if="enabled || totpEnabled" class="row" data-gap="sm">
+        <button v-if="enabled" class="cta ghost" data-size="small" type="button" :disabled="busy" @click="askRegenerate">{{ t('s_u2zwo3') }}</button>
+        <button v-if="totpEnabled" class="cta ghost" data-size="small" type="button" :disabled="busy" @click="rebindTotp">{{ copy.rotateTotp }}</button>
       </div>
+    </div>
 
-      <!-- 选择第二因子的方式：验证器（推荐）或邮箱验证码 -->
-      <div v-if="panel === 'choose'" class="stack" data-gap="sm">
-        <div class="row" data-gap="sm">
-          <button class="cta" data-size="small" type="button" :disabled="busy" @click="startTotp">
-            {{ t('s_1mdazxm') }}
-          </button>
-          <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="openEmailEnable">
-            {{ t('s_16xoiwx') }}
-          </button>
-          <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="open('')">
-            {{ t('s_1589w37') }}
-          </button>
-        </div>
-      </div>
+    <div class="card">
+      <span class="section-label">{{ copy.passwordTitle }}</span>
+      <button class="row-card" type="button" data-pressable="true" @click="openPasswordChange">
+        <span class="row-copy">
+          <strong class="row-title">{{ t('s_1pt7oo1') }}</strong>
+          <span class="row-meta">{{ copy.passwordDescription }}</span>
+        </span>
+        <span class="dim" aria-hidden="true">›</span>
+      </button>
+    </div>
 
-      <!-- 绑定验证器：二维码 + 手抄密钥 + 输码确认。手抄是必须的，相机与反光都可能扫不出来 -->
-      <div v-if="panel === 'totp'" class="stack" data-gap="sm">
-        <p class="field-hint">{{ qrError ? `${qrError}，请手动输入下面的密钥。` : t('s_ijepao') }}</p>
-        <div class="qr-wrap">
-          <QrCanvas :text="totpUri" :size="200" @error="onQrError" />
-        </div>
-        <code class="qr-code-text">{{ secretGroups }}</code>
-        <div class="field" :data-invalid="totpCodeInvalid ? 'true' : 'false'">
-          <label for="security-totp-code">{{ t('s_doboo3') }}</label>
-          <input
-            id="security-totp-code"
-            v-model="totpCode"
-            class="input"
-            type="text"
-            inputmode="numeric"
-            maxlength="6"
-            :placeholder="t('s_doboo3')"
-          >
-        </div>
-        <div class="row" data-gap="sm">
-          <button class="cta" data-size="small" type="button" :disabled="busy" @click="enableTotp">
-            {{ t('s_115qa00') }}
-          </button>
-          <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="open('')">
-            {{ t('s_1589w37') }}
-          </button>
-        </div>
-      </div>
-
-      <!-- 用邮箱验证码开启：发码后输码 -->
-      <div v-if="panel === 'enable2fa'" class="stack" data-gap="sm">
-        <p class="field-hint">{{ t('s_1mimz3w') }}：验证码已发到你的邮箱，10 分钟内有效。</p>
-        <div class="field" :data-invalid="twoFactorCodeInvalid ? 'true' : 'false'">
-          <label for="security-2fa-code">{{ t('s_doboo3') }}</label>
-          <input
-            id="security-2fa-code"
-            v-model="twoFactorCode"
-            class="input"
-            type="text"
-            inputmode="numeric"
-            maxlength="6"
-            :placeholder="t('s_doboo3')"
-          >
-        </div>
-        <div class="row" data-gap="sm">
-          <button class="cta" data-size="small" type="button" :disabled="busy" @click="verifyEmailEnable">
-            {{ t('s_1jjtbcm') }}
-          </button>
-          <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="open('')">
-            {{ t('s_1589w37') }}
-          </button>
-        </div>
-      </div>
-
-      <!-- 关闭两步验证要当前密码 -->
-      <div v-if="panel === 'disable2fa' && confirmKind === 'disable'" class="stack" data-gap="sm">
-        <p class="field-hint">{{ t('s_kikkwz') }}</p>
-        <div class="field" :data-invalid="confirmError ? 'true' : 'false'">
-          <label for="security-2fa-password">{{ t('s_1q7kb1c') }}</label>
-          <input
-            id="security-2fa-password"
-            v-model="confirmPassword"
-            class="input"
-            type="password"
-            :placeholder="t('s_f478sb')"
-            autocomplete="current-password"
-          >
-        </div>
-        <p v-if="confirmError" class="field-error" role="alert">{{ confirmError }}</p>
-        <div class="row" data-gap="sm">
-          <button class="cta danger" data-size="small" type="button" :disabled="busy" @click="disableTwoFactor">
-            {{ t('s_1b3874r') }}
-          </button>
-          <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="open('')">
-            {{ t('s_1589w37') }}
-          </button>
-        </div>
-      </div>
-
-      <!-- 重新生成备用码：同样要当前密码（旧码会全部失效） -->
-      <div v-if="panel === 'backupCodes' && confirmKind === 'regenerate'" class="stack" data-gap="sm">
-        <p class="field-hint">{{ t('s_m70x1a') }}</p>
-        <div class="field" :data-invalid="confirmError ? 'true' : 'false'">
-          <label for="security-backup-password">{{ t('s_1q7kb1c') }}</label>
-          <input
-            id="security-backup-password"
-            v-model="confirmPassword"
-            class="input"
-            type="password"
-            :placeholder="t('s_f478sb')"
-            autocomplete="current-password"
-          >
-        </div>
-        <p v-if="confirmError" class="field-error" role="alert">{{ confirmError }}</p>
-        <div class="row" data-gap="sm">
-          <button class="cta" data-size="small" type="button" :disabled="busy" @click="regenerateBackupCodes">
-            {{ t('s_yvmn4o') }}
-          </button>
-          <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="open('')">
-            {{ t('s_1589w37') }}
-          </button>
-        </div>
-      </div>
-
-      <!-- 一次性展示新备用码：库里只有哈希，关掉就再也看不到 -->
-      <div v-if="panel === 'codes'" class="stack" data-gap="sm">
-        <template v-if="newCodes.length === 0">
-          <p class="field-hint">{{ t('s_1qnrion') }}</p>
-        </template>
-        <template v-else>
-          <strong>{{ t('s_eqtk1v') }}</strong>
-          <p class="field-hint">{{ t('s_116vgro') }}</p>
-          <div class="stack" data-gap="xs">
-            <code v-for="code in newCodes" :key="code" class="qr-code-text">{{ code }}</code>
-          </div>
-          <button class="cta ghost" data-size="small" type="button" @click="open('')">
-            {{ t('s_1qhhjx1') }}
-          </button>
-        </template>
-      </div>
+    <div class="card">
+      <span class="section-label">{{ copy.devicesTitle }}</span>
+      <p class="field-hint">{{ copy.devicesDescription }}</p>
+      <button class="cta ghost" type="button" @click="router.push('/security/devices')">{{ copy.manageDevices }}</button>
     </div>
   </template>
 </template>

@@ -25,8 +25,16 @@ interface SessionUser {
 interface RefreshTokenRow {
   id: string;
   user_id: string;
+  session_id: string;
+  device_hash: string;
+  device_name: string;
   expires_at: string | Date;
   revoked_at: string | Date | null;
+}
+
+export interface SessionDevice {
+  deviceHash: string;
+  deviceName: string;
 }
 
 /** 刷新令牌的有效期（天）：从 REFRESH_TOKEN_TTL（如 7d）解析。 */
@@ -44,8 +52,11 @@ function errorMessage(error: unknown): string {
 }
 
 /** 签发访问令牌；访问令牌只允许 HS256。 */
-export async function signAccessToken(user: Pick<SessionUser, 'id' | 'username' | 'role'>): Promise<string> {
-  return new SignJWT({ userId: user.id, username: user.username, role: user.role })
+export async function signAccessToken(
+  user: Pick<SessionUser, 'id' | 'username' | 'role'>,
+  sessionId?: string,
+): Promise<string> {
+  return new SignJWT({ userId: user.id, username: user.username, role: user.role, ...(sessionId ? { sid: sessionId } : {}) })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuedAt()
     .setExpirationTime(accessExpiresIn)
@@ -56,14 +67,14 @@ export async function signAccessToken(user: Pick<SessionUser, 'id' | 'username' 
  * 新建一个刷新令牌并落库。
  * 刷新令牌本身是随机串，不是 JWT：它必须能被撤销，落在数据库里才作数。
  */
-export async function issueRefreshToken(userId: string): Promise<string> {
+export async function issueRefreshToken(userId: string, sessionId: string, device: SessionDevice = { deviceHash: '', deviceName: '' }): Promise<string> {
   const token = crypto.randomBytes(32).toString('hex');
   await query(
     `
-        INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at)
-        VALUES ($1, $2, $3, now() + ($4 || ' days')::interval)
+        INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, session_id, device_hash, device_name)
+        VALUES ($1, $2, $3, now() + ($4 || ' days')::interval, $5, $6, $7)
     `,
-    [crypto.randomUUID(), userId, hashToken(token), String(refreshDays())],
+    [crypto.randomUUID(), userId, hashToken(token), String(refreshDays()), sessionId, device.deviceHash, device.deviceName],
   );
   // 顺手清掉过期与已撤销的：不清的话这张表会随每次登录一直长。
   void purgeStaleTokens();
@@ -82,10 +93,14 @@ export function purgeStaleTokens(): Promise<unknown> {
 }
 
 /** 登录成功后一次性签发两个令牌。 */
-export async function issueSession(user: SessionUser): Promise<{ token: string; refreshToken: string }> {
+export async function issueSession(
+  user: SessionUser,
+  device: SessionDevice = { deviceHash: '', deviceName: '' },
+): Promise<{ token: string; refreshToken: string }> {
+  const sessionId = crypto.randomUUID();
   return {
-    token: await signAccessToken(user),
-    refreshToken: await issueRefreshToken(user.id),
+    token: await signAccessToken(user, sessionId),
+    refreshToken: await issueRefreshToken(user.id, sessionId, device),
   };
 }
 
@@ -107,7 +122,8 @@ export async function rotateRefreshToken(token: string): Promise<{
   const hash = hashToken(token);
   const result = await query<RefreshTokenRow>(
     `
-        SELECT id, user_id, expires_at, revoked_at FROM refresh_tokens WHERE token_hash = $1
+        SELECT id, user_id, session_id, device_hash, device_name, expires_at, revoked_at
+          FROM refresh_tokens WHERE token_hash = $1
     `,
     [hash],
   );
@@ -138,8 +154,11 @@ export async function rotateRefreshToken(token: string): Promise<{
   }
   return {
     user: account,
-    token: await signAccessToken(account),
-    refreshToken: await issueRefreshToken(account.id),
+    token: await signAccessToken(account, row.session_id || row.id),
+    refreshToken: await issueRefreshToken(account.id, row.session_id || row.id, {
+      deviceHash: row.device_hash || '',
+      deviceName: row.device_name || '',
+    }),
   };
 }
 
@@ -158,4 +177,50 @@ export async function revokeRefreshToken(token: unknown): Promise<boolean> {
 /** 撤销某个用户的全部刷新令牌（改密码、封禁账号时用）。 */
 export async function revokeAllForUser(userId: string): Promise<void> {
   await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
+}
+
+/** 把设备令牌变成不可逆哈希；空令牌表示旧版客户端，没有设备身份。 */
+export function hashDeviceToken(token: unknown): string {
+  const value = String(token ?? '').trim();
+  return value ? hashToken(`trusted-device:${value}`) : '';
+}
+
+/** 只在两步验证通过或注册完成后调用；同一设备重复记住时更新名称和最后使用时间。 */
+export async function rememberTrustedDevice(userId: string, device: SessionDevice): Promise<void> {
+  if (!device.deviceHash) return;
+  await query(
+    `
+        INSERT INTO trusted_devices (id, user_id, token_hash, name)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (user_id, token_hash) DO UPDATE
+            SET name = EXCLUDED.name, last_used_at = now()
+    `,
+    [crypto.randomUUID(), userId, device.deviceHash, device.deviceName],
+  );
+}
+
+/** 密码正确时检查本设备是否已被本人记住；命中后更新活跃时间。 */
+export async function useTrustedDevice(userId: string, deviceHash: string): Promise<boolean> {
+  if (!deviceHash) return false;
+  const result = await query(
+    'UPDATE trusted_devices SET last_used_at = now() WHERE user_id = $1 AND token_hash = $2 RETURNING id',
+    [userId, deviceHash],
+  );
+  return result.rowCount === 1;
+}
+
+/** 下线一个设备：撤销它的全部活动会话，并忘记它的可信状态。 */
+export async function revokeDeviceForUser(userId: string, deviceId: string): Promise<void> {
+  await query(
+    `UPDATE refresh_tokens SET revoked_at = now()
+      WHERE user_id = $1 AND revoked_at IS NULL AND (device_hash = $2 OR session_id = $2)`,
+    [userId, deviceId],
+  );
+  await query('DELETE FROM trusted_devices WHERE user_id = $1 AND token_hash = $2', [userId, deviceId]);
+}
+
+/** 全部下线也清掉可信设备，避免撤销会话后旧设备只凭密码就能绕过二步验证。 */
+export async function revokeAllDevicesForUser(userId: string): Promise<void> {
+  await revokeAllForUser(userId);
+  await query('DELETE FROM trusted_devices WHERE user_id = $1', [userId]);
 }

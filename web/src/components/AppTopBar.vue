@@ -35,7 +35,7 @@ function goBack(): void {
       :title="t('s_omytgn')"
       @click="goBack"
     >
-      <AppIcon name="back" />
+      <AppIcon name="chevronLeft" />
     </button>
     <span v-else class="topbar-side" aria-hidden="true" />
     <h1 class="topbar-title">{{ props.title }}</h1>

@@ -1318,9 +1318,9 @@ label {
 }
 
 .choice input:checked + label {
-    border-color: var(--dark);
-    background: var(--dark);
-    color: var(--on-dark);
+    border-color: var(--accent);
+    background: var(--accent-glow, rgba(192, 86, 33, .14));
+    color: var(--accent-ink);
     font-weight: 700;
 }
 

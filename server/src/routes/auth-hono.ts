@@ -20,7 +20,16 @@ import {
   refreshSchema,
   logoutSchema,
 } from '../domain/schemas.js';
-import { issueSession, rotateRefreshToken, revokeRefreshToken, revokeAllForUser } from '../domain/session.js';
+import {
+  issueSession,
+  rotateRefreshToken,
+  revokeRefreshToken,
+  revokeAllDevicesForUser,
+  hashDeviceToken,
+  rememberTrustedDevice,
+  useTrustedDevice,
+  type SessionDevice,
+} from '../domain/session.js';
 import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp.js';
 import { secondFactorState, verifySecondFactor, type SecondFactorUser } from '../domain/two-factor.js';
 import { issueTicket, findTicket, consumeTicket, countTicketFailure } from '../domain/preauth.js';
@@ -48,12 +57,15 @@ interface LoginFactorRow {
   email: string | null;
   email_verified: boolean | null;
   totp_secret: string | null;
+  two_factor_method: string | null;
   status: string;
 }
 interface LoginCodeRow {
   id: string;
   email: string | null;
   email_verified: boolean | null;
+  two_factor_enabled?: boolean | null;
+  two_factor_method?: string | null;
 }
 interface RegistrationNameRow {
   username: string | null;
@@ -102,6 +114,13 @@ function requestIp(c: Context, trustProxy: TrustProxy): string {
     { remoteAddress: env?.incoming?.socket?.remoteAddress, forwardedFor: c.req.header('x-forwarded-for') },
     trustProxy,
   );
+}
+
+function sessionDevice(token: unknown, name: unknown): SessionDevice {
+  return {
+    deviceHash: hashDeviceToken(token),
+    deviceName: String(name ?? '').trim().slice(0, 80),
+  };
 }
 
 function authLimiter(trustProxy: TrustProxy) {
@@ -156,7 +175,8 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   app.post('/login', limited, async (c) => {
     const parsed = safeParseSchema(loginSchema, await bodyOf(c));
     if (!parsed.success) return failureResponse(c, parsed.error);
-    const { username, password } = parsed.data;
+    const { username, password, deviceToken, deviceName } = parsed.data;
+    const device = sessionDevice(deviceToken, deviceName);
     const result = await query<LoginAccountRow>(
       `SELECT id, username, email, email_verified, two_factor_enabled, password_hash, status
          FROM users WHERE lower(username) = lower($1) OR lower(email) = lower($1)
@@ -171,11 +191,16 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
       if (account.email_verified !== true || !account.email) {
         return failureResponse(c, '两步验证邮箱不可用，请联系管理员关闭两步验证');
       }
+      if (await useTrustedDevice(account.id, device.deviceHash)) {
+        await query('UPDATE users SET last_login_time = now() WHERE id = $1', [account.id]);
+        const session = await issueSession(account as unknown as Parameters<typeof issueSession>[0], device);
+        return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(account.id), trustedDevice: true });
+      }
       const ticket = await issueTicket(account.id);
       const factors = await secondFactorState(account.id);
-      const emailUsable = Boolean(factors && factors.emailVerified && factors.email);
+      const emailUsable = Boolean(factors && factors.method === 'email' && factors.emailVerified && factors.email);
       const sent =
-        emailUsable && !factors!.totpBound
+        emailUsable
           ? await issueCode({
               purpose: 'login',
               email: account.email,
@@ -193,25 +218,26 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
         emailSent: Boolean(sent),
         maskedEmail: maskEmail(account.email),
         methods: {
-          totp: Boolean(factors && factors.totpBound),
+          totp: Boolean(factors && factors.method === 'totp' && factors.totpBound),
           email: emailUsable,
           backup: Boolean(factors && factors.backupCodesLeft > 0),
         },
       });
     }
     await query('UPDATE users SET last_login_time = now() WHERE id = $1', [account.id]);
-    const session = await issueSession(account as unknown as Parameters<typeof issueSession>[0]);
+    const session = await issueSession(account as unknown as Parameters<typeof issueSession>[0], device);
     return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(account.id) });
   });
 
   app.post('/login/verify', limited, async (c) => {
     const parsed = safeParseSchema(loginVerifySchema, await bodyOf(c));
     if (!parsed.success) return failureResponse(c, parsed.error);
-    const { ticket, code } = parsed.data;
+    const { ticket, code, deviceToken, deviceName, trustDevice } = parsed.data;
+    const device = sessionDevice(deviceToken, deviceName);
     const found = await findTicket(ticket);
     if (!found) return failureResponse(c, '验证已过期，请重新登录');
     const account = await query<LoginFactorRow>(
-      'SELECT id, username, role, email, email_verified, totp_secret, status FROM users WHERE id = $1',
+      'SELECT id, username, role, email, email_verified, totp_secret, two_factor_method, status FROM users WHERE id = $1',
       [found.userId],
     );
     const row = account.rows[0];
@@ -226,8 +252,9 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
       throw error;
     }
     if (!(await consumeTicket(found.id))) return failureResponse(c, '验证已使用，请重新登录');
+    if (trustDevice === true) await rememberTrustedDevice(row.id, device);
     await query('UPDATE users SET last_login_time = now() WHERE id = $1', [row.id]);
-    const session = await issueSession(row);
+    const session = await issueSession(row, device);
     return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(row.id) });
   });
 
@@ -237,12 +264,18 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     const { ticket } = parsed.data;
     const found = await findTicket(ticket);
     if (!found) return failureResponse(c, '验证已过期，请重新登录');
-    const account = await query<LoginCodeRow>('SELECT id, email, email_verified FROM users WHERE id = $1', [
+    const account = await query<LoginCodeRow>(
+      'SELECT id, email, email_verified, two_factor_enabled, two_factor_method FROM users WHERE id = $1',
+      [
       found.userId,
-    ]);
+      ],
+    );
     const row = account.rows[0];
     if (!row || row.email_verified !== true || !row.email)
       return failureResponse(c, '两步验证邮箱不可用，请联系管理员关闭两步验证');
+    if (row.two_factor_enabled === true && row.two_factor_method === 'totp') {
+      return failureResponse(c, '当前启用的是验证器方式，不能发送邮箱验证码');
+    }
     const sent = await issueCode({
       purpose: 'login',
       email: row.email,
@@ -271,7 +304,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   app.post('/register/verify', limited, async (c) => {
     const parsed = safeParseSchema(registerVerifySchema, await bodyOf(c));
     if (!parsed.success) return failureResponse(c, parsed.error);
-    const { email, code } = parsed.data;
+    const { email, code, deviceToken, deviceName } = parsed.data;
     let consumed;
     try {
       consumed = await consumeCode({
@@ -300,7 +333,9 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
         return failureResponse(c, '该用户名或邮箱已被注册');
       throw error;
     }
-    const session = await issueSession({ id, username, role: 'user' });
+    const device = sessionDevice(deviceToken, deviceName);
+    await rememberTrustedDevice(id, device);
+    const session = await issueSession({ id, username, role: 'user' }, device);
     return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(id) });
   });
 
@@ -345,7 +380,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
       userRow.id,
       await bcrypt.hash(newPassword, 10),
     ]);
-    await revokeAllForUser(userRow.id);
+    await revokeAllDevicesForUser(userRow.id);
     return okResponse(c);
   });
 
@@ -374,7 +409,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
 
   app.post('/logout-all', async (c) => {
     const user = await requireUser(c);
-    await revokeAllForUser(user.userId);
+    await revokeAllDevicesForUser(user.userId);
     return okResponse(c);
   });
 

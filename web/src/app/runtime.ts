@@ -6,7 +6,7 @@ import { useCapabilitiesStore } from '@/stores/capabilities';
 import { useSessionStore } from '@/stores/session';
 import { useSettingsStore } from '@/stores/settings';
 
-export const api = createApi();
+export const api = createApi(undefined, () => useSessionStore().expire());
 
 let bootPromise: Promise<void> | undefined;
 

@@ -6,7 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 会话持久化动作：`session.save` / `session.load` / `session.clear`。
+ * 会话与稳定设备凭据：`session.save` / `session.load` / `session.clear` / `session.device`。
  *
  * 刷新令牌是**设备状态**而非业务数据，因此它的落地在原生侧（{@link SessionStore}），
  * 前端通过桥接读写；访问令牌仍然只在内存里，冷启动时用刷新令牌换新的。
@@ -57,6 +57,13 @@ final class SessionActions {
         SessionStore.clear(activity);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("ok", true);
+        return result;
+    }
+
+    /** `session.device`：读取或首次创建仅供本机使用的随机设备凭据。 */
+    static Map<String, Object> device(Activity activity) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("deviceToken", SessionStore.deviceToken(activity));
         return result;
     }
 }

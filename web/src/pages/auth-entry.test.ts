@@ -138,4 +138,17 @@ describe('入口身份初始化', () => {
       expect(document.documentElement.dataset.accent).toBe('1');
     }, 20_000);
   });
+
+  it('登录二步验证可选择记住当前设备', async () => {
+    const { container, fetcher, router } = await loginScreen({ twoFactor: true });
+    await enterVerification(container, false);
+    const remember = container.querySelector<HTMLInputElement>('#login-trust-device');
+    expect(remember).not.toBeNull();
+    remember!.click();
+    fill(container, '#login-code', '123456');
+    await submitForm(container);
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/detail/one'));
+    const verification = fetcher.mock.calls.find(([url]) => url.endsWith('/auth/login/verify'));
+    expect(JSON.parse(verification?.[1]?.body as string)).toMatchObject({ trustDevice: true });
+  }, 20_000);
 });
