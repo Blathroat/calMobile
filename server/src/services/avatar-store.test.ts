@@ -84,17 +84,13 @@ test('声明超限时不读流；读到上限后停', async () => {
   // 流一创建就会自己 pull 去填队列，所以不能用 pull 判断「有没有读」。
   // 声明长度已经超限时，读取函数不应再取 reader。
   let gotReader = false;
-  const stream = new ReadableStream<Uint8Array>({
-    pull(controller) {
-      controller.enqueue(new Uint8Array([1]));
-      controller.close();
+  // 声明长度已经超限时只会看 getReader 有没有被调用，不必真的建一条流。
+  const stream = {
+    getReader() {
+      gotReader = true;
+      throw new Error('不应读取');
     },
-  });
-  const original = stream.getReader.bind(stream);
-  stream.getReader = () => {
-    gotReader = true;
-    return original();
-  };
+  } as unknown as ReadableStream<Uint8Array>;
   const skipped = await readCappedBytes(stream, 4, 5);
   assert.equal(skipped.ok, false);
   assert.equal(gotReader, false);
