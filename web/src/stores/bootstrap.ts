@@ -40,7 +40,7 @@ export interface BootstrapState {
   calendar: JsonObject;
   /** 上传上限：`imageCount` / `imageSizeMb` / `videoCount` / `videoSizeMb`；0 是合法值（表示禁用） */
   media: JsonObject;
-  /** 服务端约定：`imageFormats` / `videoFormats` 后缀白名单、`avatarSizeMb` 等 */
+  /** 服务端约定：`avatarSizeMb` / `avatarFormats`，以及封面用的 `imageFormats` / `videoFormats` */
   server: JsonObject;
   /** 审核策略，目前只有 `canRevise`：报名被审核后是否还允许修改 */
   review: JsonObject;

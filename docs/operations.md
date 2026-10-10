@@ -66,7 +66,7 @@ server {
 }
 ```
 
-**上传与媒体**：当前媒体（展会封面、头像、简介里的图片与视频）由**设备侧**处理 —— 原生选图、压缩后落在设备私有目录，后端只存一个短 URL，因此换设备看不到旧图。要改成服务端上传，需要在这个仓库里另开一轮工作（上传接口 + 落盘目录 + 静态分发 + 前端改走接口），届时新增的配置建议沿用这几个名字：`UPLOAD_DIR`（落盘目录）、`MEDIA_BASE_URL`（对外访问前缀）、`UPLOAD_MAX_MB`（单文件上限，与 `app_settings.upload` 的校验对齐）。单次请求体上限由 `client_max_body_size` 与服务的 JSON 体积守卫（2MB）分别把关，上传接口要单独放宽前者。
+**上传与媒体**：头像在设备上裁剪后由 `POST /api/v1/profile/avatar` 上传，文件落在 `UPLOAD_DIR`（默认 `server/data/uploads`），经 `GET /media/avatars/:file` 分发。库里存 `/media/avatars/...`；配了 `MEDIA_BASE_URL`（`http(s)://主机[:端口]`，不含路径）时存绝对地址。移除走 `DELETE /api/v1/profile/avatar`。单文件上限是 `min(upload.avatarSizeMb, UPLOAD_MAX_MB)`，`UPLOAD_MAX_MB` 缺省并封顶 20。这一路不走 2MB 的 JSON 体积守卫。展会封面、简介里的图片与视频仍由设备侧处理，落在设备私有目录，换设备看不到。nginx 的 `client_max_body_size` 要盖住头像上限；默认 2MB 时现有的 `12m` 够用，把头像上限调到 20 时要一并调大。
 
 ## 验证顺序
 

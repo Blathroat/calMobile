@@ -5,12 +5,15 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Insets;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.webkit.ConsoleMessage;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
@@ -47,6 +50,32 @@ public class WebShellActivity extends Activity {
 
     private static final String TAG = "WebShellActivity";
 
+    /** API 35 起这个调用已过时，但 30–34 仍要靠它让出系统栏，否则内边距会叠两层。 */
+    @SuppressWarnings("deprecation")
+    private void drawBehindSystemBars() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+        }
+    }
+
+    /**
+     * 把状态栏、导航栏和键盘让出来。
+     *
+     * inset 收成容器内边距后就吃掉，避免 WebView 再按同一块区域垫一层。
+     * 只在 API 30 及以上调用：更早的系统仍由窗口自己避开系统栏。
+     */
+    private static WindowInsets padForSystemBars(View view, WindowInsets insets) {
+        int barTypes = WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout();
+        Insets bars = insets.getInsets(barTypes);
+        int bottom = Math.max(bars.bottom, insets.getInsets(WindowInsets.Type.ime()).bottom);
+        view.setPadding(bars.left, bars.top, bars.right, bottom);
+        return new WindowInsets.Builder(insets)
+                .setInsets(WindowInsets.Type.systemBars(), Insets.NONE)
+                .setInsets(WindowInsets.Type.displayCutout(), Insets.NONE)
+                .setInsets(WindowInsets.Type.ime(), Insets.NONE)
+                .build();
+    }
+
     /** 上传文件的落盘目录（files/media），图片以短 URL 引用，避免把 base64 写进长简介。 */
     public static File mediaDir(Context context) {
         File dir = new File(context.getFilesDir(), "media");
@@ -64,6 +93,10 @@ public class WebShellActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         AppSettings.applyWindowColors(this);
+        // targetSdk 35 起窗口默认铺到系统栏下面。WebView 里的
+        // env(safe-area-inset-*) 经常仍是 0，顶栏会压住状态栏，底栏会贴进导航栏。
+        // API 30–34 仍要自己关掉「装饰避开系统栏」，否则内边距会再垫一层。
+        drawBehindSystemBars();
 
         FrameLayout container = new FrameLayout(this);
         container.setLayoutParams(new ViewGroup.LayoutParams(
@@ -77,7 +110,11 @@ public class WebShellActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         webView.setBackgroundColor(surfaceColor);
         container.addView(webView);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            container.setOnApplyWindowInsetsListener(WebShellActivity::padForSystemBars);
+        }
         setContentView(container);
+        container.requestApplyInsets();
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);

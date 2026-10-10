@@ -46,6 +46,21 @@ test('media 里的其它键不受 videoSizeMb 影响，未提交的段保持原�
   assert.deepEqual(next.upload, current.upload, '没有提交 upload 时不应被重置');
 });
 
+test('头像大小夹在 1..20，头像格式只接受画布能导出的后缀', () => {
+  assert.equal(applyServerPatch(defaults(), { avatarSizeMb: 0 }).upload.avatarSizeMb, 1);
+  assert.equal(applyServerPatch(defaults(), { avatarSizeMb: 99 }).upload.avatarSizeMb, 20);
+  assert.deepEqual(applyServerPatch(defaults(), { avatarFormats: 'png, JPEG' }).upload.avatarFormats, ['png', 'jpeg']);
+  assert.throws(() => applyServerPatch(defaults(), { avatarFormats: 'gif' }), /jpg、jpeg、png、webp/);
+
+  const legacy = defaults();
+  legacy.upload = { avatarSizeMb: 4, imageFormats: ['png'], videoFormats: ['mp4'] };
+  const next = applyServerPatch(legacy, { avatarSizeMb: 6 });
+  assert.equal(next.upload.avatarSizeMb, 6);
+  assert.deepEqual(next.upload.avatarFormats, ['jpg', 'jpeg', 'png', 'webp'], '老库缺格式时补默认值');
+  assert.deepEqual(next.upload.imageFormats, ['png']);
+  assert.deepEqual(next.upload.videoFormats, ['mp4']);
+});
+
 test('imageSizeMb 仍然是 1..50，且与 videoSizeMb 各自独立收敛', () => {
   const next = applyServerPatch(defaults(), { imageSizeMb: 9999, videoSizeMb: 9999 });
   assert.equal(next.media.imageSizeMb, 50);

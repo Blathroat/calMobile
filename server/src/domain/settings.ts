@@ -52,6 +52,7 @@ export interface ServerPatch {
   videoCount?: unknown;
   videoSizeMb?: unknown;
   avatarSizeMb?: unknown;
+  avatarFormats?: unknown;
   imageFormats?: unknown;
   videoFormats?: unknown;
   exhibitionTitle?: unknown;
@@ -260,11 +261,14 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
       videoSizeMb: clampNumber(source.videoSizeMb, fallback.videoSizeMb, 1, 500),
     };
   }
-  if (['avatarSizeMb', 'imageFormats', 'videoFormats'].some((key) => key in source)) {
+  if (['avatarSizeMb', 'avatarFormats', 'imageFormats', 'videoFormats'].some((key) => key in source)) {
+    // 老库的 upload JSON 里还没有 avatarFormats：以默认值为底再盖库里的键。
+    const fallback = { ...DEFAULT_SETTINGS.upload, ...next.upload };
     next.upload = {
-      avatarSizeMb: clampNumber(source.avatarSizeMb, next.upload.avatarSizeMb, 1, 20),
-      imageFormats: formatList(source.imageFormats, next.upload.imageFormats),
-      videoFormats: formatList(source.videoFormats, next.upload.videoFormats),
+      avatarSizeMb: clampNumber(source.avatarSizeMb, fallback.avatarSizeMb, 1, 20),
+      avatarFormats: avatarFormatList(source.avatarFormats, fallback.avatarFormats),
+      imageFormats: formatList(source.imageFormats, fallback.imageFormats),
+      videoFormats: formatList(source.videoFormats, fallback.videoFormats),
     };
   }
   // 字符数上限：逐项收敛，成对的上下限再互相约束一次。
@@ -302,6 +306,25 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   }
 
   return next;
+}
+
+const AVATAR_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+
+/**
+ * 头像格式只接受裁剪画布能导出的四种后缀。
+ *
+ * 空值沿用原来的列表。提交了内容但含有不支持的后缀时直接拒绝，
+ * 避免管理员以为 gif 已生效、上传时才失败。
+ */
+export function avatarFormatList(value: unknown, fallback: string[]): string[] {
+  const base = fallback.length > 0 ? fallback : ['jpg', 'jpeg', 'png', 'webp'];
+  if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) return base;
+  const parsed = formatList(value, []);
+  if (parsed.length === 0) return base;
+  if (parsed.some((item) => !AVATAR_EXTENSIONS.has(item))) {
+    throw badRequest('头像格式只支持 jpg、jpeg、png、webp');
+  }
+  return parsed;
 }
 
 /** 「jpg,png」或数组都接受，返回去重后的小写数组。 */

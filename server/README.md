@@ -297,8 +297,9 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `media.imageSizeMb` | 10 | 1–50 | 单张图片容量上限（MB） |
 | `media.videoCount` | 2 | 0–10 | 一次最多选几段视频 |
 | `media.videoSizeMb` | 50 | 1–500 | **单段视频容量上限（MB）**。原生侧由 `ui.sync` 同步到 `AppSettings.getMediaVideoSizeMb()`，`MediaActions` 用它算 `limitMb`（为 0 会变成「不限」，因此这里不给 0） |
-| `upload.avatarSizeMb` | 2 | 1–20 | 头像容量上限（MB） |
-| `upload.imageFormats` | `jpg,jpeg,png,webp` | 非空列表 | 允许的图片格式 |
+| `upload.avatarSizeMb` | 2 | 1–20 | 头像容量上限（MB）。与 `UPLOAD_MAX_MB` 取较小值后，由 `POST /api/v1/profile/avatar` 执行 |
+| `upload.avatarFormats` | `jpg,jpeg,png,webp` | 这四者的非空子集 | 头像允许的后缀。裁剪结果按这个列表导出，不在列表里的后缀保存时会被拒绝 |
+| `upload.imageFormats` | `jpg,jpeg,png,webp` | 非空列表 | 允许的图片格式（展会封面与简介，不含头像） |
 | `upload.videoFormats` | `mp4,mov,webm` | 非空列表 | 允许的视频格式 |
 
 越界值由 `domain/settings.ts` 的 `applyServerPatch()` **收敛到范围内**（不是拒绝请求），例如 `videoSizeMb: 9999` 保存后读回 500、`0` 读回 1。这几个键都是 `app_settings` 里那一项 JSON 的成员，**不是数据库列**，因此新增上限不需要迁移步骤：`readServerSettings()` 以 `DEFAULT_SETTINGS` 为底、用库里的值覆盖，老库里没有 `videoSizeMb` 时会自动拿到默认值 50，不会给出 `undefined`。
@@ -411,6 +412,6 @@ pnpm format               # oxfmt
 - **不要把状态页对公网打开**：它给出迁移清单、各表行数与接口清单；需要启用时仍应由反代加 Basic Auth / IP 白名单，`/ping` 才是给外部探活用的事实源；
 - **不要在服务器上跑 Mailpit**：`docker-compose.yml` 的 `mailpit` 服务与 `MAIL_SMTP_HOST=127.0.0.1` 只用于本地开发；生产要指向托管中继，并用专用子域配好 SPF / DKIM / DMARC（启动自检对 127.0.0.1 / 1025 会警告）；
 - 生产环境不要把 `MAIL_TRANSPORT` 配成 `console`：那样验证码只写日志，用户永远收不到（`resolveMailConfig` 会拦截 `memory`，但 `console` 是合法通道，只能靠部署时确认）；
-- 上传的媒体目前仍在客户端私有目录（`files/media`），需要补对象存储与上传接口；
+- 头像已经上传到服务器本地目录（`UPLOAD_DIR`，默认 `server/data/uploads`，由 `GET /media/avatars/:file` 分发）。展会封面和简介里的图片、视频仍在客户端私有目录（`files/media`）；
 - 通知只有数据库落点，还没有推送通道；
 - 系统日历、分享、摄像头属于设备能力，永远留在客户端（`ui.sync`、`calendar.status` / `calendar.toggle` 等 10 个动作不进 API）。

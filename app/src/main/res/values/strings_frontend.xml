@@ -33,6 +33,7 @@
     <string name="s_13he981">按「展会日期在今天及以后」计数；填 0 表示不限，超出后展商不能再新建。</string>
     <string name="s_13i47qi">通知偏好与修改密码不受影响。</string>
     <string name="s_145fdbt">配色已保存</string>
+    <string name="s_14byhwl">头像格式</string>
     <string name="s_14c4war">五</string>
     <string name="s_14ggq2g">清空内容</string>
     <string name="s_14jjxmk">两步验证已开启</string>
@@ -438,6 +439,7 @@
     <string name="s_h8z5hw">报名开始日期不能晚于展会开展日期</string>
     <string name="s_hadtmi">该展会未设置额外报名信息，确认后即可提交。</string>
     <string name="s_hdawan">例如 CALMOBILE-CHECKIN|展会|报名</string>
+    <string name="s_hij4iq">头像格式只支持 jpg、jpeg、png、webp</string>
     <string name="s_hiwq5k">报名已通过</string>
     <string name="s_hk23ql">强</string>
     <string name="s_hzjdbg">发送邮箱验证码</string>
@@ -451,6 +453,7 @@
     <string name="s_ijepao">用验证器 App 扫码，或手动输入下面的密钥。</string>
     <string name="s_injt47">允许的视频后缀</string>
     <string name="s_iq65l2">管理可见</string>
+    <string name="s_ivjnb8">头像</string>
     <string name="s_ixjm5p">单张图片大小</string>
     <string name="s_j08rvp">密码已重置，请用新密码登录</string>
     <string name="s_j5c9oy">已开启通知权限</string>
@@ -568,7 +571,6 @@
     <string name="s_y6u3g">下一个月</string>
     <string name="s_y9zw6u">管理分区</string>
     <string name="s_ydow7a">操作失败</string>
-    <string name="s_ydvenk">验证器验证码</string>
     <string name="s_yfjo64">在首页选择日期并打开展会，即可提交报名。</string>
     <string name="s_yh7i0p">确认更换</string>
     <string name="s_yuxvje">账号</string>

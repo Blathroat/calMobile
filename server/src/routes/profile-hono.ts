@@ -47,6 +47,15 @@ import {
   readServerSettings,
   saveSeenHint,
 } from '../domain/settings.js';
+import { resolveUploadConfig } from '../config/upload.js';
+import {
+  deleteStoredAvatar,
+  formatAllowed,
+  inspectAvatar,
+  readCappedBytes,
+  storedAvatarUrl,
+  writeAvatarFile,
+} from '../services/avatar-store.js';
 import { hashToken, revokeAllDevicesForUser, revokeDeviceForUser } from '../domain/session.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { clientIp } from '../http/client-ip.js';
@@ -94,6 +103,11 @@ function requestIp(c: HonoContext, trustProxy: TrustProxy): string {
     { remoteAddress: env?.incoming?.socket?.remoteAddress, forwardedFor: c.req.header('x-forwarded-for') },
     trustProxy,
   );
+}
+
+async function currentAvatar(userId: string): Promise<string> {
+  const result = await query<{ avatar: string | null }>('SELECT avatar FROM users WHERE id = $1', [userId]);
+  return result.rows[0]?.avatar || '';
 }
 
 async function loadUser(id: string) {
@@ -150,7 +164,17 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
         set('region', parsed.region);
       }
       if (has(parsed, 'socialMedia')) set('social_media', parsed.socialMedia);
-      if (has(parsed, 'avatar')) set('avatar', parsed.avatar);
+      let removedAvatar = '';
+      if (has(parsed, 'avatar')) {
+        const nextAvatar = String(parsed.avatar ?? '');
+        const previous = await currentAvatar(user.userId);
+        if (nextAvatar !== previous) {
+          // 新头像只能走上传接口，避免再把设备私有路径写进库。清空仍然允许。
+          if (nextAvatar !== '') throw badRequest('头像请通过上传更新');
+          set('avatar', '');
+          removedAvatar = previous;
+        }
+      }
       if (has(parsed, 'showRegistrations')) set('show_registrations', parsed.showRegistrations);
 
       if (assignments.length > 0) {
@@ -160,7 +184,55 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
           values,
         );
       }
+      if (removedAvatar) await deleteStoredAvatar(removedAvatar, resolveUploadConfig());
       return { user: await loadUser(user.userId) };
+    });
+  });
+
+  app.post('/avatar', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    assertNotLimited(user, 'profile');
+    return mutate(c, async () => {
+      const settings = await readServerSettings();
+      const config = resolveUploadConfig();
+      const limitMb = Math.min(settings.upload.avatarSizeMb, config.maxMb);
+      const maxBytes = limitMb * 1024 * 1024;
+      const declared = Number(c.req.header('content-length'));
+      const read = await readCappedBytes(
+        c.req.raw.body,
+        maxBytes,
+        Number.isFinite(declared) ? declared : undefined,
+      );
+      if (!read.ok) throw badRequest(`头像超过 ${limitMb} MB 限制`);
+      const inspected = inspectAvatar(read.bytes);
+      if (!inspected.ok) {
+        throw badRequest(inspected.reason === 'too-large' ? '图片尺寸过大' : '无法识别的图片');
+      }
+      if (!formatAllowed(inspected.image.extension, settings.upload.avatarFormats)) {
+        throw badRequest(`服务器设置不允许上传 .${inspected.image.extension} 格式，允许：${settings.upload.avatarFormats.join('、')}`);
+      }
+      const previous = await currentAvatar(user.userId);
+      const fileName = await writeAvatarFile(read.bytes, inspected.image.extension, config);
+      const url = storedAvatarUrl(fileName, config);
+      try {
+        await query('UPDATE users SET avatar = $2, updated_at = now() WHERE id = $1', [user.userId, url]);
+      } catch (error) {
+        await deleteStoredAvatar(url, config);
+        throw error;
+      }
+      await deleteStoredAvatar(previous, config);
+      return { url, user: await loadUser(user.userId) };
+    });
+  });
+
+  app.delete('/avatar', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    assertNotLimited(user, 'profile');
+    return mutate(c, async () => {
+      const previous = await currentAvatar(user.userId);
+      await query("UPDATE users SET avatar = '', updated_at = now() WHERE id = $1", [user.userId]);
+      await deleteStoredAvatar(previous, resolveUploadConfig());
+      return { url: '', user: await loadUser(user.userId) };
     });
   });
 
@@ -494,6 +566,8 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
 export const PROFILE_ENDPOINTS: readonly [string, string][] = [
   ['GET', '/'],
   ['PUT', '/'],
+  ['POST', '/avatar'],
+  ['DELETE', '/avatar'],
   ['POST', '/password'],
   ['GET', '/security'],
   ['POST', '/security/email-code'],

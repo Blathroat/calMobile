@@ -90,6 +90,7 @@ const form = reactive({
   videoCount: 2,
   videoSizeMb: 50,
   avatarSizeMb: 2,
+  avatarFormats: '',
   imageFormats: '',
   videoFormats: '',
   limits: {} as Record<string, number>,
@@ -105,6 +106,9 @@ const COPY = {
   coverHint: t('s_1rgheyl'),
   exhibitorLimit: t('s_17fthq4'),
   exhibitorLimitHint: t('s_13he981'),
+  avatarSection: t('s_ivjnb8'),
+  avatarFormats: t('s_14byhwl'),
+  avatarFormatsInvalid: t('s_hij4iq'),
 };
 const coverBusy = ref(false);
 const settingsError = ref('');
@@ -367,6 +371,12 @@ function fillForm(data: JsonObject): void {
   form.videoCount = Number(media.videoCount ?? bootstrap.media.videoCount ?? 2);
   form.videoSizeMb = Number(media.videoSizeMb ?? bootstrap.media.videoSizeMb ?? 50);
   form.avatarSizeMb = Number(upload.avatarSizeMb ?? bootstrap.server.avatarSizeMb ?? 2);
+  const avatarFormats = Array.isArray(upload.avatarFormats)
+    ? upload.avatarFormats
+    : Array.isArray(bootstrap.server.avatarFormats)
+      ? bootstrap.server.avatarFormats
+      : ['jpg', 'jpeg', 'png', 'webp'];
+  form.avatarFormats = avatarFormats.map((item) => String(item)).join(',');
   form.imageFormats = (Array.isArray(upload.imageFormats) ? upload.imageFormats : []).map((item) => String(item)).join(',');
   form.videoFormats = (Array.isArray(upload.videoFormats) ? upload.videoFormats : []).map((item) => String(item)).join(',');
   form.limits = {};
@@ -411,6 +421,19 @@ async function saveSettings(): Promise<void> {
     [t('s_1lwq2zi'), check(form.brand.en, {
       label: t('s_1lwq2zi'), required: true, max: 24, pattern: titleEnPattern, patternMessage: t('s_1q0bxzm'),
     })],
+    [COPY.avatarFormats, check(form.avatarFormats, {
+      label: COPY.avatarFormats,
+      required: true,
+      max: 80,
+      pattern: formatPattern,
+      patternMessage: t('s_1c9tz51'),
+      custom: (value) => value.split(',')
+        .map((item) => item.trim().toLowerCase().replace(/^\./, ''))
+        .filter(Boolean)
+        .some((item) => !/^(jpg|jpeg|png|webp)$/.test(item))
+        ? COPY.avatarFormatsInvalid
+        : '',
+    })],
     [t('s_a4vkn3'), check(form.imageFormats, {
       label: t('s_a4vkn3'), max: 120, pattern: formatPattern, patternMessage: t('s_1c9tz51'),
     })],
@@ -439,6 +462,7 @@ async function saveSettings(): Promise<void> {
       videoCount: Number(form.videoCount) || 0,
       videoSizeMb: Number(form.videoSizeMb) || 0,
       avatarSizeMb: Number(form.avatarSizeMb) || 0,
+      avatarFormats: form.avatarFormats.trim(),
       imageFormats: form.imageFormats.trim(),
       videoFormats: form.videoFormats.trim(),
       defaultCover: form.defaultCover.trim(),
@@ -453,8 +477,15 @@ async function saveSettings(): Promise<void> {
       return;
     }
     const settings = (saved.settings ?? {}) as JsonObject;
-    // 保存成功后把新设置落回 bootstrap：本页与其它页面立刻用上新品牌、上限与分类。
-    applyRuntimeBootstrap({ ...settings, user: session.user, loggedIn: session.loggedIn } as unknown as Bootstrap);
+    // 设置接口的上传段叫 `upload`，启动数据里同一段叫 `server`。裁剪导出要立刻读到新的头像格式。
+    const upload = settings.upload;
+    const server = upload && typeof upload === 'object' && !Array.isArray(upload) ? upload : settings.server;
+    applyRuntimeBootstrap({
+      ...settings,
+      server,
+      user: session.user,
+      loggedIn: session.loggedIn,
+    } as unknown as Bootstrap);
     fillForm(settings);
     toast(t('s_1qb27ho'), 'success');
   } catch (reason) {
@@ -820,12 +851,27 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
             placeholder="mp4,mov,webm"
           />
         </div>
+      </div>
+
+      <div class="card">
+        <span class="section-label">{{ COPY.avatarSection }}</span>
         <div class="field">
           <label for="settings-avatar-size">{{ t('s_1y26ptk') }}</label>
           <div class="row" data-gap="md">
-            <input id="settings-avatar-size" v-model.number="form.avatarSizeMb" class="input" type="number" min="0" inputmode="numeric" />
+            <input id="settings-avatar-size" v-model.number="form.avatarSizeMb" class="input" type="number" min="1" max="20" inputmode="numeric" />
             <span class="row-meta">MB</span>
           </div>
+        </div>
+        <div class="field">
+          <label for="settings-avatar-formats">{{ COPY.avatarFormats }}</label>
+          <input
+            id="settings-avatar-formats"
+            v-model="form.avatarFormats"
+            class="input"
+            type="text"
+            maxlength="80"
+            placeholder="jpg,jpeg,png,webp"
+          />
         </div>
       </div>
 

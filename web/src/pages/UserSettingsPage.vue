@@ -8,8 +8,9 @@
  * 也不会再出现「点了保存却不知道保存的是哪块」。
  *
  * 头像链路：`media.pickImage` 选图 → 共享组件 `AvatarCropper`（单指拖动 + 双指捏合裁剪）
- * → `media.store` 落盘换短 URL → 写进资料。手势、取景与导出都在组件里，本页只负责
- * 「拿到裁剪后的 dataUrl 之后的事」；组件交付 dataUrl 后自己走退场动画，落盘不受影响。
+ * → `POST /profile/avatar` 把方图传到服务器。手势、取景与导出都在组件里，本页只负责
+ * 「拿到裁剪后的 dataUrl 之后的事」；组件交付 dataUrl 后自己走退场动画，上传不受影响。
+ * 导出格式跟管理设置里的头像格式走：优先 jpeg，否则 png，再否则 webp。
  *
  * 配色与明暗模式都**没有**「保存」按钮：两者走 `app/preferences`，它内部是
  * 「本地立即生效 → 落库 → 失败回滚」，失败时界面不会停在没保存成功的颜色/模式上。
@@ -24,7 +25,7 @@ import { useSessionStore } from '@/stores/session';
 import { useSettingsStore } from '@/stores/settings';
 import { device } from '@/services/device-services';
 import { toast } from '@/services/toast';
-import { check, limit, validateAll } from '@/services/validate';
+import { avatarExportMime, check, limit, validateAll } from '@/services/validate';
 import AvatarBox from '@/components/AvatarBox.vue';
 import AvatarCropper from '@/components/AvatarCropper.vue';
 import SegControl from '@/components/SegControl.vue';
@@ -130,7 +131,9 @@ async function loadNotifications(): Promise<void> {
 
 onMounted(load);
 
-// ── 头像：选图 → 共享组件裁剪 → media.store 落盘 ──────────────────
+// ── 头像：选图 → 共享组件裁剪 → 上传到服务器 ────────────────────
+
+const avatarMime = computed(() => avatarExportMime());
 
 const avatarBusy = ref(false);
 const avatarMessage = ref('');
@@ -182,48 +185,60 @@ function onCropError(message: string): void {
   toast(message, 'error');
 }
 
-/** `@done` 拿到的就是裁剪后的方图 dataUrl；这里落盘换短 URL，再写进资料。 */
+/** 把裁剪结果的 data URL 解成字节。认不出时返回 null，由调用方提示。 */
+function avatarBytes(dataUrl: string): { bytes: Uint8Array; contentType: string } | null {
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/i.exec(dataUrl.trim());
+  const payload = match?.[2]?.replace(/\s/g, '') ?? '';
+  if (!match?.[1] || !payload) return null;
+  const binary = atob(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return { bytes, contentType: match[1].toLowerCase() };
+}
+
+/** `@done` 拿到的就是裁剪后的方图 dataUrl；这里上传到服务器并写进资料。 */
 async function storeAvatar(dataUrl: string): Promise<void> {
   if (guardProfileWrite()) return;
+  const image = avatarBytes(dataUrl);
+  if (!image) {
+    avatarError.value = t('s_1dc9o49');
+    toast(avatarError.value, 'error');
+    return;
+  }
   avatarBusy.value = true;
   try {
-    const stored = await device.storeMedia({ dataUrl, kind: 'avatar' });
-    const url = String(stored?.url || '');
-    if (!url) {
-      avatarError.value = t('s_5iff2f');
-      return;
-    }
-    await saveAvatar(url);
+    const saved = await api.profile.uploadAvatar(image.bytes, image.contentType);
+    const fresh = (saved.user as JsonObject | undefined) ?? {};
+    session.applyUser({ ...user.value, ...fresh });
+    Object.assign(profile, fresh);
+    avatarMessage.value = t('s_3rxr06');
+    toast(avatarMessage.value, 'success');
   } catch (reason) {
-    avatarError.value = t('s_5iff2f');
-    toast(errorText(reason) || t('s_5iff2f'), 'error');
+    avatarError.value = errorText(reason);
+    toast(avatarError.value, 'error');
   } finally {
     avatarBusy.value = false;
   }
 }
 
-/** 头像与资料同属 `PUT /profile`：写入后把整份用户对象合并回会话。 */
-async function saveAvatar(url: string): Promise<void> {
+/** 移除头像：服务端清掉资料里的地址，并删除自己保存的文件。 */
+async function removeAvatar(): Promise<void> {
   if (guardProfileWrite()) return;
+  avatarBusy.value = true;
   avatarMessage.value = '';
   avatarError.value = '';
   try {
-    const saved = await api.profile.save({
-      nickname: String(user.value.nickname || user.value.username || ''),
-      bio: String(profile.bio || ''),
-      region: String(profile.region || ''),
-      socialMedia: String(profile.socialMedia || ''),
-      avatar: url,
-      showRegistrations: profile.showRegistrations === true,
-    });
+    const saved = await api.profile.removeAvatar();
     const fresh = (saved.user as JsonObject | undefined) ?? {};
     session.applyUser({ ...user.value, ...fresh });
     Object.assign(profile, fresh);
-    avatarMessage.value = url ? t('s_3rxr06') : t('s_14ol5jh');
+    avatarMessage.value = t('s_14ol5jh');
     toast(avatarMessage.value, 'success');
   } catch (reason) {
-    avatarError.value = t('s_5iff2f');
-    toast(errorText(reason) || t('s_5iff2f'), 'error');
+    avatarError.value = errorText(reason);
+    toast(avatarError.value, 'error');
+  } finally {
+    avatarBusy.value = false;
   }
 }
 
@@ -502,7 +517,7 @@ async function changeMode(value: string): Promise<void> {
             type="button"
             :disabled="limited || !profileReady || avatarBusy"
             :title="limited ? limitHint : undefined"
-            @click="saveAvatar('')"
+            @click="removeAvatar"
           >
             {{ t('s_1no1khr') }}
           </button>
@@ -634,6 +649,7 @@ async function changeMode(value: string): Promise<void> {
   <AvatarCropper
     v-if="cropSource"
     :source="cropSource"
+    :mime="avatarMime"
     @done="storeAvatar"
     @close="cropSource = ''"
     @error="onCropError"

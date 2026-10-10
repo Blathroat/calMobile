@@ -86,6 +86,10 @@ export interface ApiClient {
     get(): Promise<JsonObject>;
     /** 保存资料；会同时失效 `profile` 与 `users.public`（资料会出现在公开主页）。 */
     save(payload: JsonObject): Promise<ApiResult>;
+    /** 上传裁剪后的头像字节。成功后服务端写入资料并返回新的用户对象。 */
+    uploadAvatar(bytes: Uint8Array, contentType: string): Promise<ApiResult>;
+    /** 移除头像，并删掉服务器上的文件。 */
+    removeAvatar(): Promise<ApiResult>;
     /** 已通过用途受限的身份复核票后修改密码；成功后服务端撤销全部会话。 */
     changePassword(payload: JsonObject): Promise<ApiResult>;
     /** 通知偏好。 */
@@ -313,6 +317,10 @@ export function createApi(
     profile: {
       get: () => read<JsonObject>('profile', '/profile'),
       save: (payload) => write<ApiResult>('/profile', { method: 'PUT', body: payload }, ['profile', 'users.public']),
+      uploadAvatar: (bytes, contentType) => write<ApiResult>('/profile/avatar', {
+        method: 'POST', bytes, contentType, timeoutMs: 20_000,
+      }, ['profile', 'users.public']),
+      removeAvatar: () => write<ApiResult>('/profile/avatar', { method: 'DELETE' }, ['profile', 'users.public']),
       changePassword: (payload) => http.request<ApiResult>('/profile/password', { method: 'POST', body: payload }),
       notifications: () => read<JsonObject>('notifications', '/profile/notifications'),
       saveNotifications: (payload) => write<ApiResult>('/profile/notifications', { method: 'PUT', body: payload }, ['notifications']),

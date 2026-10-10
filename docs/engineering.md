@@ -87,13 +87,13 @@ web/
 
 原生只处理以下设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出，以及会话刷新令牌与可信设备凭据的设备内存存储（`session.save` / `session.load` / `session.clear` / `session.device`，见 `SessionStore.java`）。`AppSettings` 是后端设置的设备镜像；日历用后端下发的 ISO 日期定位，失败必须回调失败。
 
-媒体落在应用私有目录 `files/media`，前端只保存短 URL；资源路径只允许单层文件名。业务数据动作不加入原生动作表。
+头像裁剪后上传到服务器（`POST /api/v1/profile/avatar`，文件在 `GET /media/avatars/:file`）。大小和格式由管理设置里的 `avatarSizeMb`、`avatarFormats` 控制，格式只接受 jpg、jpeg、png、webp。其余媒体落在应用私有目录 `files/media`，前端只保存短 URL；资源路径只允许单层文件名。业务数据动作不加入原生动作表。
 
 ## 界面规则
 
 - `docs/newUI/` 是视觉来源；生产样式集中在 `styles/tokens.css` 和 `styles/motion.css`，页面不重复写颜色、字号、间距或圆角。
 - 触控命中区域至少 44px；状态同时使用文字与颜色或描边；空、加载、错误、成功和禁用状态在原位置给出下一步。
-- 顶栏使用 `--topbar-h`；展会图保持 9:16；并排字段使用等高布局；日期、时间和状态使用选择器、分段控件或面板。
+- 顶栏使用 `--topbar-h`，再叠 `--safe-top`；有底部导航时内容区叠 `--safe-bottom`。Android WebView 里这两项 `env()` 经常是 0，因此 `WebShellActivity` 按系统栏 inset 缩小页面，避免顶栏压住状态栏、底栏贴进导航栏。展会图保持 9:16；并排字段使用等高布局；日期、时间和状态使用选择器、分段控件或面板。
 - 强调色使用 `--accent*`；二维码保持白底黑点；Markdown / HTML 渲染前经过 `web/src/services/markdown.ts`。
 - 动效只动画 `transform` 与 `opacity`，并遵守 `prefers-reduced-motion`。动效全失时先检查设备 `animator_duration_scale`，再改代码。
 - 第三方库由 `web/package.json` 与锁文件统一管理；重型功能通过动态导入按屏加载，构建产物随 APK 打包，不依赖运行时 CDN。Markdown 解析使用 Marked，历史 HTML 编辑转换使用 Turndown，HTML 清洗统一走 DOMPurify 与项目标签、属性和媒体协议规则。

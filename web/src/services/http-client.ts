@@ -58,6 +58,11 @@ export interface HttpRequest {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   query?: Record<string, unknown>;
   body?: unknown;
+  /** 原始字节。设置后不再把 `body` 编成 JSON，并使用 `contentType`。 */
+  bytes?: Uint8Array;
+  contentType?: string;
+  /** 单次超时。缺省用客户端的 `timeoutMs`。头像上传比普通 JSON 更久。 */
+  timeoutMs?: number;
   signal?: AbortSignal;
 }
 
@@ -123,7 +128,8 @@ export class HttpClient {
     const controller = new AbortController();
     const sessionSignal = this.options.getSessionSignal?.();
     // 超时即 abort，fetch 会以 AbortError 结束；reason 用来把它和「调用方取消」分开。
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timeoutMs = request.timeoutMs ?? this.timeoutMs;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     // 调用方取消也走同一个 controller，统一在 finally 里解绑。
     const abortFromCaller = () => controller.abort();
     request.signal?.addEventListener('abort', abortFromCaller, { once: true });
@@ -133,16 +139,23 @@ export class HttpClient {
     try {
       controller.signal.throwIfAborted();
       const token = this.options.getAccessToken?.();
+      const payload = request.bytes !== undefined
+        ? copyBytes(request.bytes)
+        : request.body === undefined
+          ? undefined
+          : JSON.stringify(request.body);
       const response = await this.fetcher(url, {
         method: request.method ?? 'GET',
         headers: {
           Accept: 'application/json',
           // 只有带请求体时才发 Content-Type：GET 带它没有意义，还可能触发多余的预检。
-          ...(request.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          ...(payload === undefined
+            ? {}
+            : { 'Content-Type': request.bytes !== undefined ? (request.contentType || 'application/octet-stream') : 'application/json' }),
           // 未登录干脆不发 Authorization，后端据此回 401，而不是把空令牌当成非法令牌。
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: request.body === undefined ? undefined : JSON.stringify(request.body),
+        body: payload,
         signal: controller.signal,
       });
       controller.signal.throwIfAborted();
@@ -201,7 +214,7 @@ export class HttpClient {
         // AbortError 只有两个来源：这里掐的超时，或者调用方传进来的 signal。
         // 调用方的 signal 上带 aborted 标记，据此分开报：文案是排障用的，不是给用户看的业务提示。
         if (request.signal?.aborted || sessionSignal?.aborted) throw new TransportError(t('s_1s8cf91'), 'aborted');
-        throw new TransportError(`后端响应超时（超过 ${this.timeoutMs / 1000} 秒）`, 'timeout');
+        throw new TransportError(`后端响应超时（超过 ${timeoutMs / 1000} 秒）`, 'timeout');
       }
       // 其余都是网络层的原生错误（DNS、证书、连接被拒等），后端状态未知。
       throw new TransportError(`连不上后端服务：${error instanceof Error ? error.message : String(error)}`);
@@ -212,4 +225,14 @@ export class HttpClient {
       sessionSignal?.removeEventListener('abort', abortFromCaller);
     }
   }
+}
+
+/**
+ * 拷成独立的 ArrayBuffer。
+ * `Uint8Array` 的底层缓冲可能是 SharedArrayBuffer，fetch 不接受这种视图。
+ */
+function copyBytes(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
+  return copy;
 }

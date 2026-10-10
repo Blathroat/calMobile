@@ -16,6 +16,9 @@
 
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { Client } from 'pg';
 import { host, port, user, password, database as databaseName } from '../config/database.js';
 import { pool } from '../config/pool.js';
@@ -351,7 +354,7 @@ test('bootstrap 下发前端启动所需的全部配置块', async () => {
     limited: false,
   });
   assert.deepStrictEqual(Object.keys(body.media).sort(), ['imageCount', 'imageSizeMb', 'videoCount', 'videoSizeMb']);
-  assert.deepStrictEqual(Object.keys(body.server).sort(), ['avatarSizeMb', 'imageFormats', 'videoFormats']);
+  assert.deepStrictEqual(Object.keys(body.server).sort(), ['avatarFormats', 'avatarSizeMb', 'imageFormats', 'videoFormats']);
 });
 
 test('带令牌的 bootstrap 返回真实用户态与个人外观模式', async () => {
@@ -2475,6 +2478,118 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
   }
 });
 
+/** 8×8 的最小 JPEG：带 SOI、SOF0 和 EOI，上传校验认得出。 */
+function minimalJpeg(): Buffer {
+  return Buffer.from([
+    0xff, 0xd8,
+    0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x08, 0x00, 0x08, 0x01, 0x01, 0x11, 0x00,
+    0xff, 0xd9,
+  ]);
+}
+
+function requestBytes(
+  method: string,
+  requestPath: string,
+  payload: Buffer,
+  { token, headers = {} }: { token?: string; headers?: Record<string, string> } = {},
+): Promise<HttpResponse & { raw: Buffer }> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: serverPort(),
+        path: requestPath,
+        method,
+        headers: {
+          ...headers,
+          'Content-Length': String(payload.length),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          const raw = Buffer.concat(chunks);
+          let body: unknown = raw.toString('utf8');
+          try {
+            body = JSON.parse(String(body));
+          } catch {
+            // 图片响应保持原始字节，JSON 字段用不到
+          }
+          resolve({ status: res.statusCode ?? 0, body, headers: res.headers, raw });
+        });
+      },
+    );
+    req.on('error', reject);
+    req.end(payload);
+  });
+}
+
+test('头像上传落到服务器，并遵守大小与格式设置', async () => {
+  const previousDir = process.env.UPLOAD_DIR;
+  const directory = await mkdtemp(path.join(tmpdir(), 'calmobile-avatar-'));
+  process.env.UPLOAD_DIR = directory;
+  const jpeg = minimalJpeg();
+  try {
+    const anonymous = await requestBytes('POST', '/api/v1/profile/avatar', jpeg, {
+      headers: { 'Content-Type': 'image/jpeg' },
+    });
+    assert.strictEqual(anonymous.status, 401);
+
+    const uploaded = await requestBytes('POST', '/api/v1/profile/avatar', jpeg, {
+      token: tokens.user.token,
+      headers: { 'Content-Type': 'image/jpeg' },
+    });
+    assert.strictEqual(uploaded.status, 200);
+    assert.strictEqual(uploaded.body.ok, true, JSON.stringify(uploaded.body));
+    const url = String(uploaded.body.url);
+    assert.match(url, /^\/media\/avatars\/[a-f0-9]{32}\.jpg$/);
+    assert.strictEqual(uploaded.body.user.avatar, url);
+
+    const image = await requestBytes('GET', url, Buffer.alloc(0));
+    assert.strictEqual(image.status, 200);
+    assert.strictEqual(image.headers?.['content-type'], 'image/jpeg');
+    assert.strictEqual(image.headers?.['cross-origin-resource-policy'], 'cross-origin');
+    assert.ok(image.raw.equals(jpeg));
+
+    const replaced = await put('/api/v1/profile', { avatar: 'https://appassets.androidplatform.net/media/local.jpg' }, {
+      token: tokens.user.token,
+    });
+    assert.strictEqual(replaced.body.ok, false);
+    const kept = await get('/api/v1/profile', { token: tokens.user.token });
+    assert.strictEqual(kept.body.avatar, url, '资料保存不能把设备路径写回头像');
+
+    const narrowed = await put('/api/v1/settings', { avatarFormats: 'png' }, { token: tokens.admin.token });
+    assert.strictEqual(narrowed.body.ok, true, JSON.stringify(narrowed.body));
+    const rejected = await requestBytes('POST', '/api/v1/profile/avatar', jpeg, {
+      token: tokens.user.token,
+      headers: { 'Content-Type': 'image/jpeg' },
+    });
+    assert.strictEqual(rejected.status, 200);
+    assert.strictEqual(rejected.body.ok, false);
+    assert.match(String(rejected.body.error), /不允许上传 \.jpg/);
+
+    const bogus = await put('/api/v1/settings', { avatarFormats: 'gif' }, { token: tokens.admin.token });
+    assert.strictEqual(bogus.body.ok, false);
+    assert.match(String(bogus.body.error), /jpg、jpeg、png、webp/);
+
+    const restored = await put('/api/v1/settings', { avatarFormats: 'jpg,jpeg,png,webp' }, { token: tokens.admin.token });
+    assert.strictEqual(restored.body.ok, true);
+    const removed = await del('/api/v1/profile/avatar', { token: tokens.user.token });
+    assert.strictEqual(removed.body.ok, true);
+    assert.strictEqual(removed.body.user.avatar, '');
+    const gone = await requestBytes('GET', url, Buffer.alloc(0));
+    assert.strictEqual(gone.status, 404);
+  } finally {
+    if (previousDir === undefined) delete process.env.UPLOAD_DIR;
+    else process.env.UPLOAD_DIR = previousDir;
+    await rm(directory, { recursive: true, force: true });
+    await put('/api/v1/settings', { avatarFormats: 'jpg,jpeg,png,webp' }, { token: tokens.admin.token }).catch(() => undefined);
+    await del('/api/v1/profile/avatar', { token: tokens.user.token }).catch(() => undefined);
+  }
+});
+
 test('资料保存只改提交过的字段', async () => {
   const before = await get('/api/v1/profile', { token: tokens.user.token });
   const saved = await put('/api/v1/profile', { bio: '契约测试改的简介' }, { token: tokens.user.token });
@@ -3245,7 +3360,7 @@ function backendRoutes(): DeclaredRoute[] {
 /**
  * 前端每个数据动作都必须能在后端找到对应路由。
  *
- * 这条断言是「58 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
+ * 这条断言是「60 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
  * 同步 `ENDPOINTS`，都会在这里失败，而不是等到某个页面在真机上静默报错。
  */
 test('前端每个数据动作都对应后端已注册的路由', () => {
@@ -3253,8 +3368,8 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
   const actions = Object.keys(endpoints);
   assert.strictEqual(
     actions.length,
-    58,
-    `前端数据动作数量变了（期望 58）：${actions.length} 个 —— ${actions.join(', ')}`,
+    60,
+    `前端数据动作数量变了（期望 60）：${actions.length} 个 —— ${actions.join(', ')}`,
   );
 
   const declared = backendRoutes();

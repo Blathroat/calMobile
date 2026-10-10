@@ -11,7 +11,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { t } from '@/i18n';
 
-const props = defineProps<{ source: string }>();
+const props = withDefaults(defineProps<{ source: string; mime?: string }>(), {
+  mime: 'image/jpeg',
+});
 
 const emit = defineEmits<{
   done: [dataUrl: string];
@@ -306,7 +308,8 @@ function exportCrop(): string {
     -left / scale, -top / scale, sourceSize, sourceSize,
     0, 0, CROP_OUTPUT_SIZE, CROP_OUTPUT_SIZE,
   );
-  return canvas.toDataURL('image/jpeg', 0.9);
+  const mime = props.mime === 'image/png' || props.mime === 'image/webp' ? props.mime : 'image/jpeg';
+  return canvas.toDataURL(mime, 0.9);
 }
 
 function confirm(): void {

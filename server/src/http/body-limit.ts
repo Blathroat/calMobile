@@ -20,6 +20,16 @@ export const JSON_BODY_LIMIT_BYTES = 2 * 1024 * 1024;
 export const TOO_LARGE_MESSAGE = '请求体超过大小上限';
 export const PARSE_FAILED_MESSAGE = '请求体不是合法的 JSON';
 
+/**
+ * 头像上传不走 2MB 的 JSON 上限。
+ *
+ * 它的正文是图片字节，上限是 `min(avatarSizeMb, UPLOAD_MAX_MB)`，由上传路由自己读并拒绝。
+ * 挂在全局守卫里的话，管理员把上限调到 2MB 以上时请求会先被 413 挡掉。
+ */
+export function skipsJsonBodyLimit(method: string, path: string): boolean {
+  return method === 'POST' && path === '/api/v1/profile/avatar';
+}
+
 /** 声明的 Content-Length 是否已经超限（没有声明 / 非法值都算没超）。 */
 export function exceedsDeclaredLength(headerValue: string | undefined): boolean {
   if (!headerValue) {
@@ -41,7 +51,7 @@ export function tooLargeResponse(c: Context): Response {
  */
 export function jsonBodySizeGuard() {
   return async function jsonBodySizeGuard(c: Context, next: () => Promise<void>): Promise<Response | void> {
-    if (exceedsDeclaredLength(c.req.header('content-length'))) {
+    if (!skipsJsonBodyLimit(c.req.method, c.req.path) && exceedsDeclaredLength(c.req.header('content-length'))) {
       return tooLargeResponse(c);
     }
     await next();

@@ -25,6 +25,8 @@ server/.env
 
 # 后端 tsc 编译产物（pnpm build → server/dist，镜像 src/）
 server/dist/
+# 上传的头像（运行时生成，不入库）
+server/data/
 server/src/status-page-assets.ts
 web/dist/
 *.tsbuildinfo

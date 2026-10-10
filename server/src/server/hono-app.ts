@@ -26,6 +26,7 @@ import { createBootstrapRoutes } from '../routes/bootstrap-hono.js';
 import { createUsersRoutes } from '../routes/users-hono.js';
 import { createSearchRoutes } from '../routes/search-hono.js';
 import { createSettingsRoutes } from '../routes/settings-hono.js';
+import { createMediaRoutes } from '../routes/media-hono.js';
 
 /** 与 `/api/v1/status` 的服务标识一致。 */
 const SERVICE_NAME = 'calmobile-server';
@@ -69,6 +70,7 @@ export function createApp(options: AppOptions): Hono {
    * JSON 体积守卫：声明体积超过 2MB 直接 413。
    *
    * 放在所有路由之前，超限请求不会进入业务处理器。
+   * `POST /api/v1/profile/avatar` 除外：它传的是图片字节，上限由头像设置单独把关。
    * 所有正文都由 Hono 路由读取。
    * 实现只有一份：`http/body-limit.ts`。
    */
@@ -127,6 +129,7 @@ export function createApp(options: AppOptions): Hono {
   app.route('/api/v1/registrations', createRegistrationsRoutes());
   app.route('/api/v1/review', createReviewRoutes());
   app.route('/api/v1/checkin', createCheckinRoutes());
+  app.route('/media', createMediaRoutes());
 
   /**
    * 统一错误处理。

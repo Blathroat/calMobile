@@ -14,6 +14,7 @@ vi.mock('@/app/runtime', () => ({
     get: vi.fn(),
     notifications: vi.fn(),
     save: vi.fn(),
+    removeAvatar: vi.fn(),
     saveNotifications: vi.fn(),
   } },
 }));
@@ -40,6 +41,7 @@ beforeEach(async () => {
   vi.mocked(api.profile.get).mockResolvedValue(PROFILE);
   vi.mocked(api.profile.notifications).mockResolvedValue({ exhibitionReminder: true, registrationUpdates: true });
   vi.mocked(api.profile.save).mockResolvedValue({ ok: true, user: { ...PROFILE, avatar: '' } });
+  vi.mocked(api.profile.removeAvatar).mockResolvedValue({ ok: true, user: { ...PROFILE, avatar: '' } });
   vi.mocked(api.profile.saveNotifications).mockResolvedValue({ ok: true, notify: { exhibitionReminder: false } });
 });
 
@@ -72,13 +74,13 @@ describe('设置页独立取数状态', () => {
     await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
     button('移除头像')!.click();
     await nextTick();
-    expect(api.profile.save).not.toHaveBeenCalled();
+    expect(api.profile.removeAvatar).not.toHaveBeenCalled();
     expect(button('移除头像')!.disabled).toBe(true);
     expect(button('编辑资料')!.disabled).toBe(true);
     expect(document.querySelector<HTMLInputElement>('#settings-privacy-registrations')!.disabled).toBe(true);
     button('移除头像')!.dispatchEvent(new Event('click'));
     await nextTick();
-    expect(api.profile.save).not.toHaveBeenCalled();
+    expect(api.profile.removeAvatar).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain('资料请求暂时失败');
 
     const reminder = document.querySelector<HTMLInputElement>('#notify-reminder')!;
@@ -90,10 +92,7 @@ describe('设置页独立取数状态', () => {
     await vi.waitFor(() => expect(button('移除头像')!.disabled).toBe(false));
     expect(api.profile.notifications).toHaveBeenCalledTimes(1);
     button('移除头像')!.click();
-    await vi.waitFor(() => expect(api.profile.save).toHaveBeenCalledWith({
-      nickname: PROFILE.nickname, bio: PROFILE.bio, region: PROFILE.region,
-      socialMedia: PROFILE.socialMedia, showRegistrations: true, avatar: '',
-    }));
+    await vi.waitFor(() => expect(api.profile.removeAvatar).toHaveBeenCalled());
   });
 
   it('通知偏好失败时禁用其开关并可独立重试，资料仍然可以编辑', async () => {

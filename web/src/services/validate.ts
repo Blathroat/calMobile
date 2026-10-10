@@ -37,6 +37,32 @@ export function limit(key: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+const AVATAR_EXPORT = new Set(['jpg', 'jpeg', 'png', 'webp']);
+
+/** 头像大小上限（MB）。缺省与后端 `upload.avatarSizeMb` 一致。 */
+export function avatarSizeLimitMb(): number {
+  const value = Number(useBootstrapStore().server.avatarSizeMb);
+  return Number.isFinite(value) && value > 0 ? value : 2;
+}
+
+/** 头像允许的后缀。缺省与后端默认列表一致。 */
+export function avatarFormatList(): string[] {
+  const list = useBootstrapStore().server.avatarFormats;
+  const formats = Array.isArray(list)
+    ? list.map((item) => String(item).toLowerCase()).filter((item) => AVATAR_EXPORT.has(item))
+    : [];
+  return formats.length > 0 ? formats : ['jpg', 'jpeg', 'png', 'webp'];
+}
+
+/** 裁剪导出用的 MIME：优先 jpeg，否则 png，再否则 webp。 */
+export function avatarExportMime(): 'image/jpeg' | 'image/png' | 'image/webp' {
+  const formats = new Set(avatarFormatList());
+  if (formats.has('jpg') || formats.has('jpeg')) return 'image/jpeg';
+  if (formats.has('png')) return 'image/png';
+  if (formats.has('webp')) return 'image/webp';
+  return 'image/jpeg';
+}
+
 /** 上传允许的后缀列表（小写，不含点）。 */
 export function allowedFormats(kind: 'image' | 'video' = 'image'): string[] {
   const server = useBootstrapStore().server;

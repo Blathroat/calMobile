@@ -15,6 +15,7 @@ import {
   exceedsDeclaredLength,
   jsonBodySizeGuard,
   readJsonBody,
+  skipsJsonBodyLimit,
   tooLargeResponse,
 } from './body-limit.js';
 import { JSON_HEADERS, failureResponse, mutate, okResponse } from './respond.js';
@@ -56,6 +57,27 @@ test('体积守卫：声明体积超限给 413 + 固定文案，且不进路由'
   assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8');
   assert.deepEqual(await response.json(), { error: '请求体超过大小上限' });
   assert.equal(reached, false, '超限请求不该进路由');
+});
+
+test('体积守卫放过头像上传，其它路径仍按 2MB 拒绝', async () => {
+  assert.equal(skipsJsonBodyLimit('POST', '/api/v1/profile/avatar'), true);
+  assert.equal(skipsJsonBodyLimit('DELETE', '/api/v1/profile/avatar'), false);
+  assert.equal(skipsJsonBodyLimit('POST', '/api/v1/profile'), false);
+
+  const app = new Hono();
+  let reached = false;
+  app.use('*', jsonBodySizeGuard());
+  app.post('/api/v1/profile/avatar', (c) => {
+    reached = true;
+    return c.json({ ok: true });
+  });
+  const response = await app.request('/api/v1/profile/avatar', {
+    method: 'POST',
+    headers: { 'content-length': String(JSON_BODY_LIMIT_BYTES + 1), 'content-type': 'image/jpeg' },
+    body: 'x',
+  });
+  assert.equal(response.status, 200);
+  assert.equal(reached, true);
 });
 
 test('体积守卫：正常体积放行', async () => {

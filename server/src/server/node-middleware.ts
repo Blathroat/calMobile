@@ -83,7 +83,14 @@ export function securityHeaders(hstsMaxAge = 15_552_000): MiddlewareHandler {
     headers.push(['Strict-Transport-Security', `max-age=${hstsMaxAge}; includeSubDomains`]);
   }
   return async function securityHeaders(c, next) {
-    applyHeaders(c, headers);
+    const applied = c.req.path.startsWith('/media/')
+      ? headers.map((header) =>
+          header[0] === 'Cross-Origin-Resource-Policy'
+            ? (['Cross-Origin-Resource-Policy', 'cross-origin'] as const)
+            : header,
+        )
+      : headers;
+    applyHeaders(c, applied);
     await next();
   };
 }
