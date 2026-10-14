@@ -694,6 +694,21 @@ label {
     height: 20px;
 }
 
+.icon-button:disabled {
+    color: var(--ink-3);
+    cursor: not-allowed;
+}
+
+/* 跟在区块标题后面的小图标：命中区仍是 44px，字形贴着标题。 */
+.icon-button[data-inline="true"] {
+    margin-inline-start: calc((var(--touch) - 16px) / -2);
+}
+
+.icon-button[data-inline="true"] svg {
+    width: 16px;
+    height: 16px;
+}
+
 .icon-button[data-variant="outlined"] {
     border: var(--hairline) solid var(--stroke);
     background: var(--screen);

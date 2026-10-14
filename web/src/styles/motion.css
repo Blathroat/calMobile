@@ -201,7 +201,7 @@
 
 .cta:active:not([disabled]),
 .round-action:active,
-.icon-button:active,
+.icon-button:active:not(:disabled),
 .tab:active,
 .seg button:active,
 .pill:active,
@@ -263,7 +263,7 @@
     box-shadow: var(--shadow-float);
     }
 
-    .icon-button:hover {
+    .icon-button:hover:not(:disabled) {
         transform: translateY(-1px);
     }
 

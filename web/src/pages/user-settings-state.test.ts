@@ -113,6 +113,9 @@ describe('设置页独立取数状态', () => {
     button('编辑资料')!.click();
     await nextTick();
     expect(document.querySelector('.sheet-panel #settings-nickname')).not.toBeNull();
+    expect(document.querySelector('.sheet-panel #settings-bio')).not.toBeNull();
+    expect(document.querySelector('.sheet-panel #settings-region')).not.toBeNull();
+    expect(document.querySelector('.sheet-panel #settings-social')).not.toBeNull();
 
     const nickname = document.querySelector<HTMLInputElement>('.sheet-panel #settings-nickname')!;
     nickname.value = '新昵称';

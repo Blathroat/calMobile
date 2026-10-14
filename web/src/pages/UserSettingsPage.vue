@@ -1,11 +1,9 @@
 <script setup lang="ts">
 /**
- * 用户设置：编辑资料、通知偏好、应用配色、深色模式与安全入口。
+ * 用户设置：头像、通知偏好、应用配色、深色模式、隐私开关与安全入口。
  *
- * 为什么从个人页拆出来：个人页回答的是「我是谁、我公开了什么」（只读展示 + 一个隐私开关），
- * 而这里的每一项都会写后端（`PUT /profile`、`PUT /profile/password`、
- * `PUT /profile/notifications`、`PUT /settings/*`）。「看」与「改」分开后，两边各自都短，
- * 也不会再出现「点了保存却不知道保存的是哪块」。
+ * 编辑资料与个人页简介标题旁的铅笔共用 `services/profile-editor.ts` 的同一抽屉。
+ * 头像、通知、配色、明暗、隐私和安全入口留在这里，因为它们各自写不同的接口。
  *
  * 头像链路：`media.pickImage` 选图 → 共享组件 `AvatarCropper`（单指拖动 + 双指捏合裁剪）
  * → `POST /profile/avatar` 把方图传到服务器。手势、取景与导出都在组件里，本页只负责
@@ -25,16 +23,15 @@ import { useSessionStore } from '@/stores/session';
 import { useSettingsStore } from '@/stores/settings';
 import { device } from '@/services/device-services';
 import { toast } from '@/services/toast';
-import { avatarExportMime, check, limit, validateAll } from '@/services/validate';
+import { avatarExportMime } from '@/services/validate';
+import { openProfileEditor } from '@/services/profile-editor';
 import AvatarBox from '@/components/AvatarBox.vue';
 import AvatarCropper from '@/components/AvatarCropper.vue';
 import SegControl from '@/components/SegControl.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
-import UserSettingsFormSheet from '@/components/UserSettingsFormSheet.vue';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
-import { closeSheet, openSheet } from '@/services/sheet';
 
 const router = useRouter();
 const session = useSessionStore();
@@ -242,97 +239,9 @@ async function removeAvatar(): Promise<void> {
   }
 }
 
-// ── 编辑资料 ──────────────────────────────────────────────────────
-
-const editBusy = ref(false);
-const editError = ref('');
-const editForm = reactive({ nickname: '', bio: '', region: '', socialMedia: '' });
-const editInvalid = reactive({ nickname: false, bio: false, region: false, socialMedia: false });
-
+/** 编辑资料：与个人页铅笔打开的是同一抽屉。资料没加载完或账号受限时先拦住。 */
 function openEditor(): void {
-  if (guardProfileWrite()) return;
-  editForm.nickname = String(user.value.nickname || user.value.username || '');
-  editForm.bio = String(profile.bio || '');
-  editForm.region = String(profile.region || '');
-  editForm.socialMedia = String(profile.socialMedia || '');
-  Object.assign(editInvalid, { nickname: false, bio: false, region: false, socialMedia: false });
-  editError.value = '';
-  openSheet({
-    title: t('s_1sq2bvr'),
-    component: UserSettingsFormSheet,
-    props: {
-      mode: 'profile',
-      form: editForm,
-      invalid: editInvalid,
-      error: () => editError.value,
-      limits: {
-        nickname: limit('nickname', 20),
-        bio: limit('bio', 200),
-        region: limit('region', 40),
-        socialMedia: limit('socialMedia', 40),
-      },
-      onUpdate: updateEditorField,
-      onSubmit: saveEditor,
-    },
-    size: 'full',
-    actions: [
-      { label: t('s_1c3mapc'), variant: 'primary', disabled: () => editBusy.value, onClick: () => saveEditor() },
-      { label: t('s_1589w37'), disabled: () => editBusy.value, onClick: (close) => close() },
-    ],
-  });
-}
-
-function updateEditorField(field: string, value: string): void {
-  if (field in editForm) editForm[field as keyof typeof editForm] = value;
-}
-
-/** 校验一次并把错误落到对应字段上，返回是否通过。 */
-function validateEditor(): boolean {
-  const nicknameError = check(editForm.nickname, {
-    label: t('s_1c2rfxc'),
-    required: true,
-    max: limit('nickname', 20),
-  });
-  const bioError = check(editForm.bio, { label: t('s_ml9unw'), max: limit('bio', 200) });
-  const regionError = check(editForm.region, { label: t('s_11ftk7j'), max: limit('region', 40) });
-  const socialError = check(editForm.socialMedia, { label: t('s_1hnvqec'), max: limit('socialMedia', 40) });
-
-  editInvalid.nickname = nicknameError !== '';
-  editInvalid.bio = bioError !== '';
-  editInvalid.region = regionError !== '';
-  editInvalid.socialMedia = socialError !== '';
-
-  const result = validateAll([() => nicknameError, () => bioError, () => regionError, () => socialError]);
-  editError.value = result.message;
-  return result.ok;
-}
-
-async function saveEditor(): Promise<void> {
-  if (editBusy.value) return;
-  if (guardProfileWrite()) return;
-  if (!validateEditor()) return;
-  editBusy.value = true;
-  try {
-    const saved = await api.profile.save({
-      nickname: editForm.nickname.trim(),
-      bio: editForm.bio.trim(),
-      region: editForm.region.trim(),
-      socialMedia: editForm.socialMedia.trim(),
-      // 头像与公开开关不在这个表单里改，但仍要原样回传，避免后端把未提及的字段当成清空。
-      avatar: String(user.value.avatar || ''),
-      showRegistrations: profile.showRegistrations === true,
-    });
-    const fresh = (saved.user as JsonObject | undefined) ?? {};
-    session.applyUser({ ...user.value, ...fresh });
-    Object.assign(profile, fresh);
-    closeSheet();
-    editError.value = '';
-    toast(t('s_i86pw9'), 'success');
-  } catch (reason) {
-    editError.value = errorText(reason);
-  } finally {
-    editBusy.value = false;
-  }
+  openProfileEditor(profile, { blocked: guardProfileWrite });
 }
 
 // ── 隐私：是否在公开页展示自己的报名记录 ──────────────────────────

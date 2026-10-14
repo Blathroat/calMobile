@@ -4,10 +4,10 @@
  * 线框：docs/newUI/remaining-ui.html #screen-profile
  * 旧实现：app/src/main/assets/web/js/pages/profile.js（`git show 5e3d9ab^`）
  *
- * 这一屏只回答「我是谁、我公开了什么」：身份与资料是只读展示，底部给一个设置入口。
- * 账号维护（编辑资料、修改密码、通知设置、应用配色、明暗模式、**隐私开关**、安全入口）
- * 都在 `UserSettingsPage.vue`，入口有两个：顶栏右侧的设置图标（路由 meta 的 `topAction`）
- * 与这一屏的设置卡片，两者进的是同一页。
+ * 这一屏回答「我是谁、我公开了什么」。头像卡片下方展示地区；简介标题右侧的铅笔
+ * 打开与用户设置相同的编辑资料抽屉（`services/profile-editor.ts`）。
+ * 头像裁剪、通知、配色、明暗、隐私开关与安全入口仍在 `UserSettingsPage.vue`，
+ * 入口有两个：顶栏右侧的设置图标（路由 meta 的 `topAction`）与这一屏的设置卡片。
  *
  * 退出登录仍走 `POST /auth/logout`，一次调用清掉服务端与本地会话。
  */
@@ -17,6 +17,7 @@ import { api, bootApp } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
+import { openProfileEditor } from '@/services/profile-editor';
 import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -27,6 +28,8 @@ import { t } from '@/i18n';
 const COPY = {
   /** 设置入口的说明：把设置页里能改的东西列出来，省得点进去才发现。 */
   settingsMeta: t('s_lcz4jf'),
+  /** 简介下方社交账号行的前缀，与后面的内容同一字重。 */
+  socialPrefix: t('s_1wbzx3u'),
 };
 
 const router = useRouter();
@@ -34,6 +37,9 @@ const session = useSessionStore();
 
 const user = computed(() => session.user);
 const loggedIn = computed(() => session.loggedIn);
+/** 受限账号不能改资料：只有后端明确下发 `false` 才算。 */
+const limited = computed(() => user.value.can?.profile === false);
+const limitHint = computed(() => t('s_1kliyri'));
 
 // ── 取数：本页只用到个人资料 ──────────────────────────────────────
 
@@ -84,6 +90,17 @@ function identityMeta(): string {
 function profileValue(key: string, emptyKey: string): string {
   const value = profile[key];
   return typeof value === 'string' && value !== '' ? value : t(emptyKey);
+}
+
+/** 编辑资料：与设置页「编辑资料」打开同一抽屉。受限账号先说明原因。 */
+function openEditor(): void {
+  openProfileEditor(profile, {
+    blocked: () => {
+      if (!limited.value) return false;
+      toast(limitHint.value, 'error');
+      return true;
+    },
+  });
 }
 
 // ── 退出登录 ──────────────────────────────────────────────────────
@@ -137,35 +154,38 @@ function logout(): void {
     />
 
     <template v-else>
-      <!-- 身份卡：只展示头像、昵称、角色/状态与邮箱；「编辑」「上传头像」都在设置页 -->
+      <!-- 身份卡：头像、昵称、角色/状态，以及地区（地区的空态与简介区原来的空态一致） -->
       <div class="card">
         <div class="row" data-gap="md">
           <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || user.username || '')" large />
           <span class="row-copy">
             <strong class="row-title">{{ user.nickname || user.username }}</strong>
             <span class="row-meta">{{ identityMeta() }}</span>
-            <span class="row-meta truncate">{{ user.email || t('s_1hhb6bo') }}</span>
+            <span class="row-meta truncate">{{ profileValue('region', 's_15h5nhd') }}</span>
           </span>
         </div>
       </div>
 
-      <!-- 资料：简介 + 地区 + 社交账号（只展示，改资料在设置页） -->
+      <!-- 简介与社交账号。地区已上收到身份卡；铅笔打开与设置页相同的编辑资料抽屉。 -->
       <div class="card">
-        <span class="section-label">{{ t('s_ml9unw') }}</span>
-        <p class="row-meta">{{ profileValue('bio', 's_17mtsm3') }}</p>
-        <div class="stack" data-gap="sm">
-          <div class="row" data-between="true">
-            <span class="row-meta">{{ t('s_11ftk7j') }}</span>
-            <span class="strong truncate">{{ profileValue('region', 's_15h5nhd') }}</span>
-          </div>
-          <div class="row" data-between="true">
-            <span class="row-meta">{{ t('s_1hnvqec') }}</span>
-            <span class="strong truncate">{{ profileValue('socialMedia', 's_15h5nhd') }}</span>
-          </div>
+        <div class="row">
+          <span class="section-label">{{ t('s_ml9unw') }}</span>
+          <button
+            class="icon-button"
+            data-inline="true"
+            type="button"
+            :aria-label="t('s_1sq2bvr')"
+            :disabled="limited"
+            :title="limited ? limitHint : t('s_1sq2bvr')"
+            @click="openEditor"
+          >
+            <AppIcon name="edit" />
+          </button>
         </div>
+        <p class="row-meta">{{ profileValue('bio', 's_17mtsm3') }}<br><br>{{ COPY.socialPrefix }}{{ profileValue('socialMedia', 's_15h5nhd') }}</p>
       </div>
 
-      <!-- 设置入口：与顶栏右侧的设置图标进同一页（编辑资料、隐私、安全都在那里） -->
+      <!-- 设置入口：与顶栏右侧的设置图标进同一页（头像、通知、隐私、安全都在那里） -->
       <div class="card">
         <span class="section-label">{{ t('s_1vmubx9') }}</span>
         <button class="row-card" type="button" data-pressable="true" @click="router.push('/settings')">
