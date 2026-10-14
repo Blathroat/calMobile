@@ -35,6 +35,7 @@
     <string name="s_145fdbt">配色已保存</string>
     <string name="s_14byhwl">头像格式</string>
     <string name="s_14c4war">五</string>
+    <string name="s_14frgky">请使用展商分享的链接</string>
     <string name="s_14ggq2g">清空内容</string>
     <string name="s_14jjxmk">两步验证已开启</string>
     <string name="s_14nrrfg">这是你的公开页</string>
@@ -75,6 +76,7 @@
     <string name="s_185tvls">邮箱</string>
     <string name="s_189gp0e">可以让用户在报名详情页长按报名码复制，或直接输入二维码下方的文本。</string>
     <string name="s_18ko8bk">报</string>
+    <string name="s_18o1cfv">报名站地址未配置</string>
     <string name="s_18st7j">报名记录不存在</string>
     <string name="s_196bpby">用户名最长</string>
     <string name="s_19g8l4d">，已选择</string>
@@ -207,6 +209,7 @@
     <string name="s_1o7jyw3">确定下线</string>
     <string name="s_1oas91y">已追加粘贴内容</string>
     <string name="s_1ogoh03">导出 CSV</string>
+    <string name="s_1oi8c69">退出后需要重新登录才能查看报名。</string>
     <string name="s_1oim33">用户管理</string>
     <string name="s_1okxm8b">请输入当前密码</string>
     <string name="s_1omalh8">展商后台</string>
@@ -245,6 +248,7 @@
     <string name="s_1s1vt07">验证码有效期为10分钟。</string>
     <string name="s_1s57su3">0 条结果</string>
     <string name="s_1s8cf91">请求已被取消</string>
+    <string name="s_1scjlq7">请通过展商发给你的链接报名。</string>
     <string name="s_1sd7orv">关键词</string>
     <string name="s_1sfkhdl">展会已保存</string>
     <string name="s_1sgquew">六</string>
@@ -289,6 +293,7 @@
     <string name="s_1w55sta">恢复报名</string>
     <string name="s_1w5fs53">插入图片</string>
     <string name="s_1w8qxkd">未获得摄像头权限，可在系统设置里开启，或使用“手动输入报名码”。</string>
+    <string name="s_1wbzx3u">社交账号：</string>
     <string name="s_1webb8b">（未验证）</string>
     <string name="s_1wed2to">例如：发现展会</string>
     <string name="s_1wgtu4f">关闭后其他人看不到你参加过的展会</string>
@@ -479,6 +484,7 @@
     <string name="s_lcz4jf">编辑资料、修改密码、通知、配色、隐私与安全</string>
     <string name="s_lh9gvq">隐私设置</string>
     <string name="s_lltmb4">已隐藏</string>
+    <string name="s_lmwrgt">已复制报名链接</string>
     <string name="s_lp789j">已清空编辑器内容</string>
     <string name="s_lswd2v">重试</string>
     <string name="s_m70x1a">生成新备用码会让旧的一次性码全部失效。</string>
@@ -515,6 +521,7 @@
     <string name="s_q79se0">视频</string>
     <string name="s_q88a0n">未设置选项</string>
     <string name="s_qa4u6r">删除该收集项</string>
+    <string name="s_qbzw14">这个地址不能浏览展会。请打开展商发给你的报名链接。</string>
     <string name="s_qcmnqj">吗？</string>
     <string name="s_qqaurb">撤销失败</string>
     <string name="s_qr7208">返回列表</string>
@@ -542,6 +549,7 @@
     <string name="s_szog53">重置密码</string>
     <string name="s_tt5vxa">正常</string>
     <string name="s_tv7wlb">尚未绑定邮箱</string>
+    <string name="s_tvkiif">报名：</string>
     <string name="s_tvr34s">6 位验证码或备用码</string>
     <string name="s_tz1s06">以后此设备登录时无需验证</string>
     <string name="s_u2zwo3">重新生成备用码</string>
@@ -561,6 +569,7 @@
     <string name="s_wo4aqm">粘贴后可直接替换当前内容，或在末尾追加。</string>
     <string name="s_wttsdb">开启摄像头扫码</string>
     <string name="s_ww6ehr">重置登录密码</string>
+    <string name="s_x5w1x9">复制报名链接</string>
     <string name="s_xdbgt7">更换地址</string>
     <string name="s_xdjet7">将结束所有设备上的登录状态，并要求重新验证。</string>
     <string name="s_xf7p1v">报名已撤销</string>

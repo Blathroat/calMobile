@@ -23,6 +23,7 @@ import StatusTag from '@/components/StatusTag.vue';
 import QrCanvas from '@/components/QrCanvas.vue';
 import { answerLines, formatRecordDate } from '@/services/format';
 import type { Registration, RegistrationDetail } from '@/api/types';
+import { paths } from '@/app/surface';
 import { t } from '@/i18n';
 
 const route = useRoute();
@@ -64,7 +65,7 @@ function modifyRegistration(): void {
   const item = record.value;
   if (!item) return;
   void router.push({
-    path: `/registration-form/${item.exhibitionId}`,
+    path: paths.registrationForm(String(item.exhibitionId)),
     query: { registrationId: item.id },
   });
 }
@@ -120,7 +121,7 @@ function askCancel(): void {
     :title="t('s_18st7j')"
     :description="String(query.data.value?.error || t('s_11prq8e'))"
     :action-label="t('s_qr7208')"
-    @action="router.push('/my-registrations')"
+    @action="router.push(paths.registrations)"
   />
 
   <template v-else>

@@ -1,7 +1,10 @@
 /** Hono 骨架与公共层回归测试。 */
 
 import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import { tmpdir } from 'node:os';
+import nodePath from 'node:path';
 import { serveApp } from '../index.js';
 import { createApp, type AppOptions } from './hono-app.js';
 
@@ -101,6 +104,47 @@ test('未知路径返回统一 JSON 404', async () => {
   const response = await hit(server.port, 'GET', '/nope?a=1');
   assert.equal(response.status, 404);
   assert.deepEqual(JSON.parse(response.body), { error: '路径 /nope?a=1 不存在' });
+});
+
+test('报名站页面按 Host 跳转，接口与缺失脚本仍不是页面', async () => {
+  const root = mkdtempSync(nodePath.join(tmpdir(), 'join-site-'));
+  writeFileSync(nodePath.join(root, 'join.html'), '<!doctype html><title>报名</title>', 'utf8');
+  mkdirSync(nodePath.join(root, 'assets'));
+  writeFileSync(nodePath.join(root, 'assets', 'app.js'), 'console.log(1)', 'utf8');
+  try {
+    const redirected = await serve({ joinRoot: root, publicBaseUrl: 'https://app.example.com' });
+    const page = await hit(redirected.port, 'GET', '/e/exh-1', undefined, { host: 'localhost' });
+    assert.equal(page.status, 308);
+    assert.equal(page.headers.location, 'https://app.example.com/e/exh-1');
+
+    const ping = await hit(redirected.port, 'GET', '/api/v1/ping', undefined, { host: 'localhost' });
+    assert.equal(ping.status, 200);
+    assert.equal(JSON.parse(ping.body).ok, true);
+
+    const local = await serve({ joinRoot: root });
+    const html = await hit(local.port, 'GET', '/e/exh-1');
+    assert.equal(html.status, 200);
+    assert.match(html.body, /报名/);
+    assert.match(String(html.headers['content-type']), /text\/html/);
+
+    const shell = await hit(local.port, 'GET', '/nope');
+    assert.equal(shell.status, 200);
+    assert.match(shell.body, /报名/);
+
+    const script = await hit(local.port, 'GET', '/assets/app.js');
+    assert.equal(script.status, 200);
+    assert.match(String(script.headers['cache-control']), /immutable/);
+
+    const missingAsset = await hit(local.port, 'GET', '/assets/missing.js');
+    assert.equal(missingAsset.status, 404);
+    assert.equal(missingAsset.body, '资源不存在');
+
+    const missingApi = await hit(local.port, 'GET', '/api/v1/not-an-endpoint');
+    assert.equal(missingApi.status, 404);
+    assert.equal(JSON.parse(missingApi.body).error, '路径 /api/v1/not-an-endpoint 不存在');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('公共 JSON 体积守卫拒绝超限正文', async () => {

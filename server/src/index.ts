@@ -20,6 +20,7 @@ import { isEntry } from './entry.js';
 
 import { createAdaptorServer } from '@hono/node-server';
 import { createApp } from './server/hono-app.js';
+import { defaultJoinRoot, joinSiteMissingMessage, joinSiteReady } from './server/join-site.js';
 import { productionProblems } from './config/production.js';
 import { pool } from './config/pool.js';
 import packageJson from '../package.json' with { type: 'json' };
@@ -30,7 +31,14 @@ type NodeServer = ReturnType<typeof createAdaptorServer>;
 const config = loadProcessConfig();
 const PORT = config.port;
 
-/** 骨架：公共层、探针、状态页、业务路由和统一错误处理。 */
+/**
+ * 报名站产物在加载时定下来：有 `join.html` 才托管。
+ * 测试直接 `listen()` / `createApp()` 时目录可以不存在，不会在 import 时退出。
+ */
+const joinRoot = defaultJoinRoot();
+const joinReady = joinSiteReady(joinRoot);
+
+/** 骨架：公共层、探针、状态页、业务路由、报名站和统一错误处理。 */
 const app = createApp({
   corsOrigin: config.corsOrigin,
   logLevel: config.logLevel,
@@ -39,6 +47,8 @@ const app = createApp({
   serviceVersion: packageJson.version,
   hstsMaxAge: runtime.hstsMaxAge,
   forceHttps: runtime.forceHttps,
+  joinRoot: joinReady ? joinRoot : undefined,
+  publicBaseUrl: runtime.publicBaseUrl,
 });
 
 /**
@@ -71,6 +81,11 @@ function listen(port: number, hostname?: string, listeningListener?: () => void)
  * 业务接口在数据库恢复后自动可用（连接池会重建连接）。
  */
 async function start() {
+  if (!joinReady) {
+    console.error(joinSiteMissingMessage(joinRoot));
+    process.exit(1);
+  }
+
   const startedBy = runtime.startedBy ? `（pnpm ${runtime.startedBy}）` : '';
   console.log(`运行模式：${runtime.nodeEnv}${startedBy}`);
 
@@ -98,6 +113,10 @@ async function start() {
 
   const server = listen(PORT, undefined, () => {
     console.log(`服务器运行在 http://localhost:${PORT}`);
+    console.log(`报名站：http://localhost:${PORT}/`);
+    if (runtime.publicBaseUrl) {
+      console.log(`对外报名站：${runtime.publicBaseUrl}/`);
+    }
     if (runtime.statusPageEnabled) {
       console.log(`状态页：http://localhost:${PORT}/status`);
     }

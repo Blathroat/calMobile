@@ -3,7 +3,7 @@
  * 屏幕 10 · 展商后台
  * 线框：docs/newUI/remaining-ui.html #screen-exhibitor-backend
  *
- * 卡片上只保留「查看报名」与「编辑展会」两个入口：报名方式、编辑简介与删除展会
+ * 卡片上保留「查看报名」「编辑展会」，并给出「复制报名链接」。报名方式、编辑简介与删除展会
  * 都属于展会的配置，统一收进「编辑展会」的二级界面，卡片保持清爽。
  * 顶部提供「核销报名码」，展商在现场扫描用户报名详情里的二维码即可完成核销。
  *
@@ -20,6 +20,8 @@ import { coverOf } from '@/services/cover';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
+import { openSheet } from '@/services/sheet';
+import { registrationLink } from '@/services/registration-link';
 import { statusTone } from '@/services/status';
 import AppIcon from '@/components/AppIcon.vue';
 import HintNote from '@/components/HintNote.vue';
@@ -71,6 +73,28 @@ function openExhibitionForm(id: unknown): void {
 }
 
 /** 核销报名码：受限账号进得去页面也提交不了，入口就在这里挡住。 */
+const joinLinkMissing = t('s_18o1cfv');
+const joinLinkCopied = t('s_lmwrgt');
+const joinLinkCopy = t('s_x5w1x9');
+
+async function copyJoinLink(id: unknown): Promise<void> {
+  const link = registrationLink(bootstrap.publicBaseUrl, id);
+  if (!link) {
+    toast(joinLinkMissing, 'error');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(link);
+    toast(joinLinkCopied);
+  } catch {
+    openSheet({
+      title: joinLinkCopy,
+      message: link,
+      actions: [{ label: t('s_1589w37'), onClick: (close) => close() }],
+    });
+  }
+}
+
 function openCheckin(): void {
   if (limited.value) {
     toast(t('s_14pxh3f'), 'error');
@@ -181,6 +205,9 @@ onMounted(load);
             {{ t('s_eutzzb') }}
           </button>
         </div>
+        <button class="cta ghost" data-size="small" type="button" @click="copyJoinLink(item.id)">
+          {{ joinLinkCopy }}
+        </button>
       </div>
     </div>
 

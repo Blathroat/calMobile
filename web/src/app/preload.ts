@@ -9,6 +9,7 @@
  * 预热和页面同时取同一份数据只会发一次请求。
  */
 import { api } from '@/app/runtime';
+import { isJoinSurface } from '@/app/surface';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 
@@ -64,6 +65,10 @@ function homeMonth(): { year: number; month: number } {
 /** 底部导航能直达的几个页面（切换最频繁）。 */
 export function preloadTabs(): void {
   const session = useSessionStore();
+  if (isJoinSurface) {
+    if (session.loggedIn) enqueue('my-registrations', () => api.registrations.list());
+    return;
+  }
   const { year, month } = homeMonth();
   // 首页的键带上落点年月：参数变了就重新预热，否则真实落点会被默认月份永久挡住。
   enqueue(`home-${year}-${month}`, () => api.exhibitions.month({ year, month }));

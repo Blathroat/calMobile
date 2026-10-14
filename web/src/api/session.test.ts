@@ -8,7 +8,11 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-afterEach(() => { vi.unstubAllGlobals(); delete window.CalMobileNative; });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  delete window.CalMobileNative;
+  window.localStorage.removeItem('calmobile.session');
+});
 
 describe('会话身份隔离', () => {
   it('敏感安全操作只提交用途限定身份复核票', async () => {
@@ -130,6 +134,23 @@ describe('会话身份隔离', () => {
     await transientApi.profile.get().catch(() => undefined);
     expect(transientApi.session.token).toBe('old');
     expect(transientExpired).not.toHaveBeenCalled();
+  });
+
+  it('没有原生桥时把刷新令牌留在本机，重新打开后能换回访问令牌', async () => {
+    const fetcher = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/auth/refresh')) return response({ token: 'renewed', refreshToken: 'refresh-next' });
+      return response({ error: '不该请求' }, 500);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const first = createApi('http://test');
+    first.session.setTokens({ token: 'access', refreshToken: 'refresh-1' }, 'join');
+    expect(window.localStorage.getItem('calmobile.session')).toContain('refresh-1');
+
+    const second = createApi('http://test');
+    await expect(second.session.restore()).resolves.toBe(true);
+    expect(second.session.token).toBe('renewed');
+    second.session.clear();
+    expect(window.localStorage.getItem('calmobile.session')).toBeNull();
   });
 
   it('设备恢复回包迟于退出时不再恢复身份', async () => {

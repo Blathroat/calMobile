@@ -7,7 +7,7 @@
  * - 页面需要固定操作区时用 `Teleport to="#app-foot"`，它落在网格的第三行；
  * - 轻提示与底部面板是全局的，每个页面都不用自己挂载容器。
  */
-import { computed, onMounted, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { RouterView, useRoute, useRouter } from 'vue-router';
 import AppTopBar from '@/components/AppTopBar.vue';
 import AppIcon from '@/components/AppIcon.vue';
@@ -15,9 +15,12 @@ import AppTabBar from '@/components/AppTabBar.vue';
 import AppToasts from '@/components/AppToasts.vue';
 import AppSheet from '@/components/AppSheet.vue';
 import { bodyAttrs, tabItems } from '@/app/shell';
+import { paths } from '@/app/surface';
 import { navigation } from '@/app/navigation';
 import { preloadTabs, resetPreload } from '@/app/preload';
-import { closeSheet, sheet } from '@/services/sheet';
+import { api } from '@/app/runtime';
+import { closeSheet, confirmSheet, sheet } from '@/services/sheet';
+import { toast } from '@/services/toast';
 import { watchSystemMode } from '@/app/theme';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
@@ -33,6 +36,36 @@ const showTabs = computed(() => route.meta.tab !== undefined);
 const title = computed(() => (typeof route.meta.title === 'string' ? t(route.meta.title) : ''));
 const topAction = computed(() => route.meta.topAction);
 const attrs = computed(() => bodyAttrs(route.meta));
+const logoutBusy = ref(false);
+
+function onTopAction(): void {
+  const action = topAction.value;
+  if (!action) return;
+  if (action.action === 'logout') {
+    confirmSheet({
+      title: t('s_12hokt7'),
+      message: t('s_1oi8c69'),
+      confirmLabel: t('s_12hokt7'),
+      tone: 'danger',
+      onConfirm: async () => {
+        if (logoutBusy.value) return;
+        logoutBusy.value = true;
+        try {
+          await api.auth.logout();
+          session.clear();
+          toast(t('s_pdyp8r'));
+          await router.replace('/login');
+        } catch (reason) {
+          toast(reason instanceof Error ? reason.message : String(reason), 'error');
+        } finally {
+          logoutBusy.value = false;
+        }
+      },
+    });
+    return;
+  }
+  if (action.to) void router.push(action.to);
+}
 
 /**
  * 启动数据落定、以及身份变化（登录 / 退出 / 换号）之后，重新热身底部导航那几个页面。
@@ -78,17 +111,18 @@ onMounted(watchSystemMode);
     <!-- 页脚槽写在最前面：页面用 Teleport 投递固定操作区，目标必须已经存在。
          它在网格里的位置由 tokens.css 固定到第三行。 -->
     <div id="app-foot" class="app-foot" />
-    <AppTopBar :title="title" :show-back="route.meta.back === true">
+    <AppTopBar :title="title" :show-back="route.meta.back === true" :back-to="paths.home">
       <template #actions>
         <!-- 页面级操作由路由 meta 声明（例如个人页右上角的「设置」入口），
-             页面组件不用为了一个图标去改外壳。 -->
+             页面组件不用为了一个图标去改外壳。详情页的分享按钮投递到 #app-top-actions。 -->
+        <div id="app-top-actions" />
         <button
           v-if="topAction"
           class="icon-button"
           type="button"
           :aria-label="t(topAction.label)"
           :title="t(topAction.label)"
-          @click="router.push(topAction.to)"
+          @click="onTopAction"
         >
           <AppIcon :name="topAction.icon" />
         </button>

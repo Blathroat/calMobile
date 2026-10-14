@@ -10,7 +10,8 @@
     "dev": "vite",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
-    "build": "vite build"
+    "build": "vite build",
+    "build:join": "vite build --config vite.join.config.ts"
   },
   "dependencies": {
     "dompurify": "3.4.16",

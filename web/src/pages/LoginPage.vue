@@ -15,6 +15,7 @@ import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { check, limit } from '@/services/validate';
 import type { AuthResult } from '@/api/types';
+import { isJoinSurface, paths } from '@/app/surface';
 import { t } from '@/i18n';
 
 const route = useRoute();
@@ -73,7 +74,7 @@ const resendLabel = computed(() => {
 /** 登录前所在页面携带的参数（例如展会 id），登录后原样带回。 */
 function redirectTarget(): string {
   const value = route.query.redirect;
-  return typeof value === 'string' && value ? value : '/home';
+  return typeof value === 'string' && value ? value : paths.home;
 }
 
 /** 进入登录态之后的收尾：提示 + 跳回原页面（替换历史，不新增返回栈）。 */
@@ -267,7 +268,7 @@ onBeforeUnmount(stopCountdown);
       <button class="cta" type="submit" :disabled="busy" :data-loading="busy ? 'true' : 'false'">
         {{ t('s_1yggxgd') }}
       </button>
-      <button class="cta ghost" type="button" :disabled="guestBusy" :data-loading="guestBusy ? 'true' : 'false'" @click="guest">
+      <button v-if="!isJoinSurface" class="cta ghost" type="button" :disabled="guestBusy" :data-loading="guestBusy ? 'true' : 'false'" @click="guest">
         {{ t('s_1jfbdwq') }}
       </button>
     </form>

@@ -6,9 +6,10 @@
  * 已经是绝对地址或设备私有目录地址的，原样返回。
  */
 
-const API_ORIGIN = 'http://127.0.0.1:3000';
+/** 报名站与页面同源，相对路径即可。App 仍补上 WebView 访问不到的本机源。 */
+const API_ORIGIN = import.meta.env.VITE_SURFACE === 'join' ? '' : 'http://127.0.0.1:3000';
 
 export function resolveMediaUrl(src: string): string {
-  if (src.startsWith('/media/')) return `${API_ORIGIN}${src}`;
+  if (src.startsWith('/media/')) return API_ORIGIN ? `${API_ORIGIN}${src}` : src;
   return src;
 }

@@ -27,6 +27,7 @@ import {
   type CheckOptions,
 } from '@/services/validate';
 import type { JsonObject } from '@/api/types';
+import { paths } from '@/app/surface';
 import { t } from '@/i18n';
 
 /** 邮箱长度上限：注册接口对邮箱的字段长度限制，与后端保持一致。 */
@@ -205,7 +206,7 @@ async function verifyAccount(): Promise<void> {
     await refreshRuntimeBootstrap();
     stopCountdown();
     toast(t('s_6e6nd9'), 'success');
-    await router.replace('/home');
+    await router.replace(paths.home);
   } catch (reason) {
     verifyError.value = messageOf(reason);
   } finally {

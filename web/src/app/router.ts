@@ -68,7 +68,7 @@ declare module 'vue-router' {
     /** 底部导航的选中项；存在即显示底部导航 */
     tab?: string;
     /** 顶栏右侧的页面级操作（例如个人页的「设置」入口），`label` 同样是文案 key */
-    topAction?: { icon: string; to: string; label: string };
+    topAction?: { icon: string; to?: string; label: string; action?: 'logout' };
     /** 内容区间距：`tight` 用于信息密集页，其余交给 tokens.css 默认值 */
     bodyGap?: BodyGap;
     /** 内容区去掉内边距（整屏自定义布局的页面用） */

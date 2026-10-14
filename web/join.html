@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>报名</title>
+    <script>
+      // 与 App 的 index.html 同一段首帧脚本：报名站没有原生注入，只读本机缓存。
+      try {
+        var mode = localStorage.getItem('calmobile.mode');
+        if (mode === 'dark' || mode === 'light') {
+          document.documentElement.dataset.mode = mode;
+        }
+        var accent = localStorage.getItem('calmobile.accent');
+        if (accent && /^#[0-9a-fA-F]{6}$/.test(accent)) {
+          document.documentElement.style.setProperty('--accent', accent);
+        }
+      } catch (ignored) {
+        // 隐私模式下忽略存储读取失败，保持跟随系统
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/join/main.ts"></script>
+  </body>
+</html>

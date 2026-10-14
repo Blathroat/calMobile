@@ -1,5 +1,8 @@
 /** 开发入口：状态页源码变化时由 tsx 重启，重启前重新生成内联资源。 */
 await import('./build-status-page.ts');
+// 报名站必须在加载服务之前构建完：服务在 import 时决定托管目录。
+const { buildJoinSite, watchJoinSite } = await import('./build-join.ts');
+await buildJoinSite();
 const { adbReverseDisabled, watchAdbReverse } = await import('../src/dev/adb-reverse.ts');
 const { resolveProcessSettings } = await import('../src/config/env.ts');
 
@@ -14,4 +17,5 @@ if (adbReverseDisabled(process.env)) {
 }
 
 const { start } = await import('../src/index.ts');
+watchJoinSite();
 await start();

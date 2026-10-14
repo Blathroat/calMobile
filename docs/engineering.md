@@ -18,8 +18,11 @@
 
 ```text
 web/
-├── index.html
+├── index.html              应用入口（hash 路由，构建到 web/dist，打进 APK）
+├── join.html               报名站入口（history 路由，构建到 web/dist-join，不打进 APK）
+├── vite.join.config.ts     只给报名站注入 VITE_SURFACE=join
 ├── src/app/                外壳、启动、路由、导航方向、外观（明暗与强调色）
+├── src/join/               报名站启动、路由和「请使用分享链接」页
 ├── src/api/                类型化领域 API
 ├── src/components/         共享界面件（图标、顶栏、底部导航、状态块、分段控件、二维码…）
 ├── src/composables/        页面取数 composable
@@ -36,11 +39,11 @@ web/
 外壳在 `web/src/app/App.vue`：`.app` 网格 = 顶栏 + 可滚动的内容区 + 底部导航（或页面页脚）。页面只往内容区放内容。
 
 - 顶栏标题、返回键、底部导航项与内容区密度都由路由 `meta` 决定（`title` / `back` / `tab` / `bodyGap` / `bodyPad` / `bodyAlign` / `queryInPlace`），导航项按角色过滤（`web/src/app/shell.ts`）。
-- 页面级顶栏操作也写在 `meta.topAction`（`{ icon, to, label }`），外壳据此渲染右上角图标按钮（个人页的「设置」入口就是这么来的）。
+- 页面级顶栏操作也写在 `meta.topAction`（`{ icon, to, label }`，或 `{ icon, label, action: 'logout' }`），外壳据此渲染右上角图标按钮（个人页的「设置」入口、报名站「我的报名」的退出登录就是这么来的）。
 - 页面需要固定操作区时用 `<Teleport defer to="#app-foot">` 投递 `.page-foot`，它落在网格第三行；`defer` 让目标元素与页面在同一次渲染里创建时也能找到。入口页（01）是例外：注册 / 忘记密码两个文字入口按旧版版式跟在表单后面随内容滚动，不占页脚槽。
 - 页面不要自建 `.page` / `.topbar` / `.app-body` / `.tabbar`，也不要声明颜色、字号、间距与圆角。
 - 内容区的左右内距由外壳给两道（`.app-body` 与路由容器 `.page-surface` 各 `var(--s4)`，合计 32px，与旧版实机一致），页面不要再自己加左右内距；确需通栏的页面用路由 `meta.bodyPad: 'none'`，两道一起去掉。
-- 底部面板统一走 `web/src/services/sheet.ts`：一句话加按钮用 `title / message / actions`；带输入框或列表的用 `component` + `props`（面板组件只负责内容，关闭与动作仍由服务管，例如手动输入报名码与粘贴 Markdown）；选项多于两个时 `layout: 'stack'` 竖排。页面不再自建 `.sheet` 结构。
+- 底部面板统一走 `web/src/services/sheet.ts`：一句话加按钮用 `title / message / actions`；带输入框或列表的用 `component` + `props`（面板组件只负责内容，关闭与动作仍由服务管，例如手动输入报名码与粘贴 Markdown）；选项多于两个时 `layout: 'stack'` 竖排。页面不再自建 `.sheet` 结构。个人页与用户设置的「编辑资料」共用 `web/src/services/profile-editor.ts`。
 - 列表型页面的分区/筛选写进地址栏（`?tab=`），从二级页返回时才能回到同一分区。
 - 切换方向由 `web/src/app/navigation.ts` 算出：二级页按路径深度写 `.app[data-direction]`（前进 / 后退 / 原地替换），底部导航之间按导航顺序写 `.app[data-tab-move]`，`motion.css` 据此选过渡；冷启动的第一次跳转按原地替换处理，首帧静态落地。
 - 标签页之间的过渡是**只位移不淡入**的横向滑动：淡入期间新页面还是透明的，露出来的是外壳背景，浅色模式下就是「切标签页闪一下白」。同一屏只换 query（管理页的分区）时方向信号一个都不动，否则动画名会被换成淡入、同一个元素重放一次淡入。
@@ -60,7 +63,7 @@ web/
 | 06 | `web/src/pages/SearchPage.vue` | 搜索展会、地点和用户 |
 | 07 | `web/src/pages/MyRegistrationsPage.vue` | 我的报名 |
 | 08 | `web/src/pages/RegistrationDetailPage.vue` | 报名详情、报名码与撤销 |
-| 09 | `web/src/pages/ProfilePage.vue` | 个人资料展示与设置卡片（隐私开关在设置页） |
+| 09 | `web/src/pages/ProfilePage.vue` | 个人资料展示（身份卡显示地区；简介标题旁的铅笔打开编辑资料抽屉）与设置卡片 |
 | — | `web/src/pages/UserSettingsPage.vue` | 用户设置（头像、资料、通知、配色、明暗、隐私、安全入口），入口在个人页顶栏右侧与设置卡片 |
 | 10 | `web/src/pages/ExhibitorPage.vue` | 展商后台 |
 | 11 | `web/src/pages/ExhibitionFormPage.vue` | 展会编辑 |
@@ -72,7 +75,21 @@ web/
 | — | `web/src/pages/SecurityDevicesPage.vue` | 查看并撤销已登录设备 |
 | — | `web/src/pages/CheckinPage.vue` | 现场核销工具 |
 
-设计稿的 16、17 屏已内联到管理后台与用户设置；核销属于展商后台入口，不新增二级页面。应用配色与明暗模式是**个人偏好**（用户在「用户设置」里自己选），管理后台只维护全局默认色板与品牌文案。新增页面时在 `web/src/app/router.ts` 注册路由，同时更新本表与 `web/src/app/shell.test.ts` 的 `ROUTES`（该用例逐屏挂载外壳并断言顶栏、内容区、底部导航与页脚槽）。
+设计稿的 16、17 屏已内联到管理后台与用户设置；核销属于展商后台入口，不新增二级页面。应用配色与明暗模式是**个人偏好**（用户在「用户设置」里自己选），管理后台只维护全局默认色板与品牌文案。新增**应用**页面时在 `web/src/app/router.ts` 注册路由，同时更新本表与 `web/src/app/shell.test.ts` 的 `ROUTES`（该用例逐屏挂载外壳并断言顶栏、内容区、底部导航与页脚槽）。报名站不进入这张表，也不写入 `ROUTES`。
+
+### 浏览器报名站
+
+报名站复用上表里的入口页、报名页和报名详情，但是第二份构建：`web/join.html` 经 `web/vite.join.config.ts` 输出到 `web/dist-join`，由后端在同一个 `PORT` 上托管，不进 APK。`VITE_SURFACE=join` 只由这份配置注入，不写进 `web/.env`。路径对照在 `web/src/app/surface.ts`。
+
+| 路径 | 页面 | 用途 |
+| --- | --- | --- |
+| `/login`、`/register`、`/forgot-password` | 与应用相同的入口页 | 注册、登录、找回密码和两步验证 |
+| `/e/:id` | `RegistrationFormPage.vue` | 只通过分享链接进入；表单上方多一段展会简介 |
+| `/mine` | `MyRegistrationsPage.vue` | 我的报名；顶栏退出登录 |
+| `/mine/:id` | `RegistrationDetailPage.vue` | 状态、回答、二维码、修改和撤销 |
+| 其它 | `web/src/join/LinkOnlyPage.vue` | 说明请使用展商分享的链接 |
+
+应用仍用 hash 路由，接口和媒体地址是 `http://127.0.0.1:3000`。报名站用 history 路由，接口走相对的 `/api/v1`，媒体走相对的 `/media`。报名站不预取月历、展会列表、资料和管理数据。应用文案由原生注入；报名站构建时把同一份 `strings_frontend.xml` 写进页面。
 
 ## 数据加载规则
 

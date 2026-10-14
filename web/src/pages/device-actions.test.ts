@@ -26,7 +26,7 @@ vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 let app: App | undefined;
 
 beforeEach(() => {
-  document.body.innerHTML = '<div id="app-foot"></div><div id="device-test"></div>';
+  document.body.innerHTML = '<div id="app-foot"></div><div id="app-top-actions"></div><div id="device-test"></div>';
   window.CalMobileStrings = {
     s_dvh8t7: '移出日历',
     s_1prtpth: '加入日历',

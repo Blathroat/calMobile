@@ -218,8 +218,11 @@ export interface ApiClient {
  * @returns 绑定了独立缓存与令牌状态的 `ApiClient`。实例内部持有缓存，因此全应用只应创建一次
  *   （见 `app/runtime.ts`），多处创建会让缓存与失效各管一半。
  */
+/** App 写死本机地址（WebView 不能用相对路径）。报名站与页面同源。 */
+const DEFAULT_API_BASE = import.meta.env.VITE_SURFACE === 'join' ? '/api/v1' : 'http://127.0.0.1:3000/api/v1';
+
 export function createApi(
-  baseUrl = 'http://127.0.0.1:3000/api/v1',
+  baseUrl = DEFAULT_API_BASE,
   onSessionExpired?: () => void,
 ): ApiClient {
   // 先声明后用：HttpClient 的取令牌与刷新回调都引用 session，构造顺序上只能这样解环。

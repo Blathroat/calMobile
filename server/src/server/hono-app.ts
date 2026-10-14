@@ -9,7 +9,6 @@
 
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import type { TrustProxy } from '../config/runtime.js';
 import { corsHeaders, headContentLength, requestLogger, requireHttps, securityHeaders } from './node-middleware.js';
 import { errorResponse } from '../http/error-response.js';
 import { jsonResponse } from '../http/respond.js';
@@ -27,6 +26,8 @@ import { createUsersRoutes } from '../routes/users-hono.js';
 import { createSearchRoutes } from '../routes/search-hono.js';
 import { createSettingsRoutes } from '../routes/settings-hono.js';
 import { createMediaRoutes } from '../routes/media-hono.js';
+import type { TrustProxy } from '../config/runtime.js';
+import { canonicalRedirect, isJoinPagePath, lookupJoinFile, requestHost } from './join-site.js';
 
 /** 与 `/api/v1/status` 的服务标识一致。 */
 const SERVICE_NAME = 'calmobile-server';
@@ -46,6 +47,10 @@ export interface AppOptions {
   readonly hstsMaxAge?: number;
   /** `FORCE_HTTPS`：反代已终止 TLS 时把明文请求 308 跳到 https。 */
   readonly forceHttps?: boolean;
+  /** 报名站构建目录。缺省或目录里没有入口文件时，未知路径仍是 JSON 404。 */
+  readonly joinRoot?: string;
+  /** `PUBLIC_BASE_URL`。配了之后，报名站页面的 Host 必须和它对齐。 */
+  readonly publicBaseUrl?: string;
 }
 
 /**
@@ -150,7 +155,29 @@ export function createApp(options: AppOptions): Hono {
    */
   app.notFound((c) => {
     const url = new URL(c.req.url);
-    return jsonResponse(c, { error: `路径 ${url.pathname}${url.search} 不存在` }, 404);
+    const missing = jsonResponse(c, { error: `路径 ${url.pathname}${url.search} 不存在` }, 404);
+    if (!options.joinRoot || !isJoinPagePath(url.pathname)) return missing;
+    const location = canonicalRedirect({
+      requestHost: requestHost({
+        host: c.req.header('host') || '',
+        forwardedHost: c.req.header('x-forwarded-host') || '',
+        trustProxy: options.trustProxy,
+      }),
+      publicBaseUrl: options.publicBaseUrl || '',
+      pathAndQuery: `${url.pathname}${url.search}`,
+    });
+    if (location) return c.redirect(location, 308);
+    const found = lookupJoinFile(options.joinRoot, url.pathname);
+    if (found.kind === 'missing') {
+      return new Response('资源不存在', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    }
+    return new Response(new Uint8Array(found.file.body), {
+      status: 200,
+      headers: {
+        'content-type': found.file.type,
+        'cache-control': found.file.cache,
+      },
+    });
   });
 
   return app;

@@ -340,9 +340,11 @@ test('bootstrap 下发前端启动所需的全部配置块', async () => {
     'limits',
     'server',
     'calendar',
+    'publicBaseUrl',
   ]) {
     assert.ok(body[key] !== undefined, `bootstrap 缺少 ${key}`);
   }
+  assert.equal(typeof body.publicBaseUrl, 'string', 'publicBaseUrl 必须是字符串，空串表示没配域名');
   assert.strictEqual(body.user.loggedIn, false, '匿名访问应当是访客态');
   assert.ok(body.brand.zh, '缺少中文标题');
   assert.ok(Number(body.limits.exhibitionTitle) > 0, '缺少表单字符数上限');

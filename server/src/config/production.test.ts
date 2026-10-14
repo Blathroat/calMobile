@@ -77,6 +77,7 @@ test('可疑但可能有意为之的只给警告，不拦启动', () => {
   assert.match(text, /TRUST_PROXY/);
   assert.match(text, /LOG_LEVEL=debug/);
   assert.match(text, /ENABLE_STATUS_PAGE/);
+  assert.match(text, /报名站/);
 });
 
 test('远端数据库没开 SSL 会提醒（同机 Docker 不提醒）', () => {

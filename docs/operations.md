@@ -20,13 +20,15 @@ pnpm dev
 
 开发模式打开 `/status`；生产使用 `pnpm start`，默认关闭状态页并执行配置自检。生产数据库迁移使用 `pnpm db:migrate:prod`。改动 `server/src` 后重启进程。
 
+`pnpm dev` 与 `pnpm start` 同时在 `PORT` 上提供浏览器报名站，本机打开 `http://localhost:3000/`（端口以 `server/.env` 的 `PORT` 为准）。域名写在 `PUBLIC_BASE_URL`，分享链接是 `{PUBLIC_BASE_URL}/e/{展会 id}`。没配域名时页面不跳转，应用也不会发出 `127.0.0.1` 报名链接。`pnpm dev` 会先构建 `web/dist-join`，并在页面源码变化时重新构建；`pnpm start` 在产物缺失时拒绝启动。报名站不打进 APK。改报名站页面后刷新浏览器即可，不必重启进程。
+
 ## 对外部署（域名、TLS 与上传）
 
 服务本身只监听 http，**TLS 由前面的反向代理终止**（证书、续期、HTTP/2 都在那一层）。下面几项都是可选的：不配就是本机开发形态。
 
 | 环境变量 | 作用 | 不配时 |
 | --- | --- | --- |
-| `PUBLIC_BASE_URL` | 对外访问地址（`https://app.example.com`），状态页与 `/ping` 显示它；也是以后邮件里绝对链接的基址 | 状态页只显示端口，不显示域名 |
+| `PUBLIC_BASE_URL` | 报名站规范来源与分享链接（`https://app.example.com`）。页面 Host 不一致时 308 到这里；`/api`、`/media` 和探针不跳转。状态页、`/ping` 和邮件里的绝对地址也用它 | 不跳转，状态页只显示端口；分享时说明报名站地址未配置，不生成 `127.0.0.1` 链接 |
 | `FORCE_HTTPS` | 反代终止 TLS 时打开：`X-Forwarded-Proto: http` 的请求 308 跳到 https | 不跳转，明文请求照常处理 |
 | `HSTS_MAX_AGE` | `Strict-Transport-Security` 的 max-age（秒），默认 180 天 | 下发默认值；填 `0` 表示不下发 |
 | `TRUST_PROXY` | 反代后面必须打开，否则 `req.ip` 是代理地址，按 IP 的验证码限流退化成全局额度 | 关闭（直连） |

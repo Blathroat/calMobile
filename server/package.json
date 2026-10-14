@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node dist/index.js --production",
     "dev": "tsx watch --watch-path=src --watch-path=status-page scripts/dev.ts",
-    "build": "tsx scripts/build-status-page.ts && tsc",
+    "build": "tsx scripts/build-join.ts && tsx scripts/build-status-page.ts && tsc",
     "typecheck": "tsx scripts/build-status-page.ts && tsc --noEmit",
     "pretest": "tsx scripts/build-status-page.ts",
     "pretest:contract": "tsx scripts/build-status-page.ts",

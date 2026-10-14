@@ -8,9 +8,11 @@ export interface SessionTokens { token: string; refreshToken?: string; }
  * 会话令牌。
  *
  * 访问令牌只在内存（短命，且每次请求都要带），刷新令牌写入**设备私有存储**
- * （原生 `SessionStore`），这样冷启动不必重新登录；写失败不影响本次会话，
+ * （原生 `SessionStore`），这样冷启动不必重新登录。浏览器报名站没有原生桥，
+ * 同一份刷新令牌改存在本机 `localStorage`。写失败不影响本次会话，
  * 只影响「下次还能不能免登录」，因此都吞掉错误。
  */
+const BROWSER_SESSION_KEY = 'calmobile.session';
 export class SessionClient {
   private accessToken = '';
   private refreshToken = '';
@@ -65,6 +67,8 @@ export class SessionClient {
     this.accessToken = tokens.token;
     this.refreshToken = tokens.refreshToken ?? '';
     this.username = username;
+    // 没有原生桥时当场写入。晚到的异步保存不能盖过随后的退出。
+    if (!nativeBridge.hasNative()) this.writeBrowserSession();
     void this.persist();
   }
 
@@ -73,6 +77,7 @@ export class SessionClient {
     this.accessToken = '';
     this.refreshToken = '';
     this.username = '';
+    if (!nativeBridge.hasNative()) this.writeBrowserSession(null);
     void this.forget();
   }
 
@@ -135,24 +140,55 @@ export class SessionClient {
         username: String(stored?.username ?? ''),
       };
     } catch {
-      // 浏览器里没有原生桥：按「没有会话」处理，登录页照常可用。
-      return { refreshToken: '', username: '' };
+      return this.readBrowserSession();
     }
   }
 
   private async persist(): Promise<void> {
+    const snapshot = { refreshToken: this.refreshToken, username: this.username };
+    if (!nativeBridge.hasNative()) return;
     try {
-      await nativeBridge.call('session.save', { refreshToken: this.refreshToken, username: this.username });
+      await nativeBridge.call('session.save', snapshot);
     } catch {
-      // 写不进去只影响免登录，不影响本次会话
+      // 退出或换号之后，这次保存已经过期，不能把旧令牌写回去。
+      if (this.refreshToken !== snapshot.refreshToken) return;
+      this.writeBrowserSession(snapshot);
     }
   }
 
   private async forget(): Promise<void> {
+    if (!nativeBridge.hasNative()) return;
     try {
       await nativeBridge.call('session.clear', {});
     } catch {
-      // 同上
+      if (this.refreshToken) return;
+      this.writeBrowserSession(null);
+    }
+  }
+
+  /** 没有原生桥时的刷新令牌。应用里桥接成功，不会走到这里。 */
+  private readBrowserSession(): { refreshToken: string; username: string } {
+    try {
+      const raw = window.localStorage.getItem(BROWSER_SESSION_KEY);
+      const stored = raw ? JSON.parse(raw) as { refreshToken?: unknown; username?: unknown } : {};
+      return {
+        refreshToken: String(stored.refreshToken ?? ''),
+        username: String(stored.username ?? ''),
+      };
+    } catch {
+      return { refreshToken: '', username: '' };
+    }
+  }
+
+  private writeBrowserSession(value: { refreshToken: string; username: string } | null = {
+    refreshToken: this.refreshToken,
+    username: this.username,
+  }): void {
+    try {
+      if (!value?.refreshToken) window.localStorage.removeItem(BROWSER_SESSION_KEY);
+      else window.localStorage.setItem(BROWSER_SESSION_KEY, JSON.stringify(value));
+    } catch {
+      // 隐私模式写不进去只影响刷新后免登录
     }
   }
 }

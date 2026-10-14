@@ -18,6 +18,7 @@ import MediaBox from '@/components/MediaBox.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { formatRecordDate, truncate } from '@/services/format';
 import type { Registration } from '@/api/types';
+import { isJoinSurface, paths } from '@/app/surface';
 import { t } from '@/i18n';
 
 const router = useRouter();
@@ -28,6 +29,8 @@ const query = useAsync<Registration[]>();
 const records = computed(() => query.data.value ?? []);
 const hasContent = computed(() => query.data.value !== undefined);
 /** 条数是派生数据（与首页的「N 场」同类），不占用文案 key；数据到位前保持「—」。 */
+const emptyDescription = t('s_1scjlq7');
+
 const countLabel = computed(() => {
   if (!session.loggedIn) return t('s_1ydrtwl');
   return hasContent.value ? `${records.value.length} 条记录` : '—';
@@ -53,7 +56,7 @@ function summary(record: Registration): string {
 }
 
 function openLogin(): void {
-  void router.push({ path: '/login', query: { redirect: '/my-registrations' } });
+  void router.push({ path: '/login', query: { redirect: paths.registrations } });
 }
 </script>
 
@@ -93,9 +96,9 @@ function openLogin(): void {
         v-else-if="records.length === 0"
         icon="ticket"
         :title="t('s_a8pyd6')"
-        :description="t('s_yfjo64')"
-        :action-label="t('s_11ps4x5')"
-        @action="router.push('/home')"
+        :description="isJoinSurface ? emptyDescription : t('s_yfjo64')"
+        :action-label="isJoinSurface ? '' : t('s_11ps4x5')"
+        @action="router.push(paths.home)"
       />
 
       <template v-else>
@@ -107,7 +110,7 @@ function openLogin(): void {
           data-pressable="true"
           :aria-label="`查看 ${record.exhibitionTitle} 的报名详情`"
           @pointerdown="warm(record.id)"
-          @click="router.push(`/registration-detail/${record.id}`)"
+          @click="router.push(paths.registrationDetail(String(record.id)))"
         >
           <!-- 报名接口不下发展会封面，这里保留线框的斜线占位 -->
           <MediaBox class-name="thumb" />

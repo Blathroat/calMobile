@@ -13,6 +13,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
+import { isJoinSurface, paths } from '@/app/surface';
 import { useAsync } from '@/composables/useAsync';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
@@ -22,6 +23,9 @@ import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { formatDateWithWeekday } from '@/services/format';
+import { coverOf } from '@/services/cover';
+import { loadMarkdownParser, markdownToHtml, sanitizeHtml } from '@/services/markdown';
+import MediaBox from '@/components/MediaBox.vue';
 import type { ExhibitionDetail, Registration } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -39,6 +43,18 @@ const session = useSessionStore();
 
 const query = useAsync<ExhibitionDetail>();
 const exhibition = computed(() => query.data.value?.exhibition);
+/** 报名站才展示封面和简介。App 的报名表单保持原来的摘要卡片。 */
+const joinDescription = computed(() => {
+  if (!isJoinSurface) return '';
+  const item = exhibition.value;
+  if (!item) return '';
+  const raw = String(item.description ?? '');
+  if (!raw) return '';
+  if (item.descriptionFormat === 'html') {
+    return /<[a-z][\s\S]*>/i.test(raw) ? sanitizeHtml(raw) : '';
+  }
+  return markdownToHtml(raw);
+});
 const fields = computed<FieldDef[]>(() => (Array.isArray(query.data.value?.fields) ? query.data.value?.fields as FieldDef[] : []));
 const exhibitionId = computed(() => String(route.params.id ?? ''));
 const registrationId = computed(() => String(route.query.registrationId ?? ''));
@@ -91,6 +107,7 @@ async function load(): Promise<void> {
       const record = await api.registrations.get(registrationId.value);
       existing = record?.found ? (record.registration ?? null) : null;
     }
+    if (detail?.found && isJoinSurface && detail.exhibition?.description) await loadMarkdownParser();
     if (detail?.found && !built) {
       built = true;
       seed(detail.fields ?? [], existing);
@@ -250,7 +267,7 @@ async function submit(): Promise<void> {
     // 提交成功后的短暂停留：定时器随页面一起取消，用户已经返回时不再被拉回列表。
     redirectTimer = window.setTimeout(() => {
       redirectTimer = undefined;
-      void router.replace('/my-registrations');
+      void router.replace(paths.registrations);
     }, 900);
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason);
@@ -267,8 +284,8 @@ async function submit(): Promise<void> {
     icon="info"
     :title="t('s_1tanmo5')"
     :description="t('s_1yv1vu0')"
-    :action-label="t('s_dn4ida')"
-    @action="router.push('/home')"
+    :action-label="isJoinSurface ? t('s_1m2dh8u') : t('s_dn4ida')"
+    @action="router.push(paths.home)"
   />
 
   <template v-else>
@@ -289,17 +306,25 @@ async function submit(): Promise<void> {
       icon="info"
       :title="t('s_1vim1qp')"
       :description="String(query.data.value?.error || t('s_1px91rj'))"
-      :action-label="t('s_17zyr1e')"
-      @action="router.push('/home')"
+      :action-label="isJoinSurface ? '' : t('s_17zyr1e')"
+      @action="router.push(paths.home)"
     />
 
     <template v-else-if="exhibition">
+      <MediaBox
+        v-if="isJoinSurface"
+        :src="coverOf(exhibition.imageUri)"
+        class-name="thumb thumb-cover"
+        :alt="String(exhibition.title || '')"
+      />
       <!-- 展会摘要：提交前确认名称与报名方式 -->
       <div class="card" data-tone="fill">
         <strong>{{ exhibition.title }}</strong>
         <span class="row-meta">{{ formatDateWithWeekday(exhibition.date) }} {{ exhibition.time }} · {{ exhibition.venue }}</span>
         <StatusTag :text="String(exhibition.modeLabel || exhibition.status || '')" />
       </div>
+
+      <div v-if="joinDescription" class="rich-content" v-html="joinDescription" />
 
       <form id="registration-form" class="form" novalidate @submit.prevent="submit">
         <template v-for="field in fields" :key="field.title">

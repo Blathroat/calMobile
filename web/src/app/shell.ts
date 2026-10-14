@@ -6,6 +6,7 @@
  * 页面不再自己拼 `.page` 这类旧容器的类名。
  */
 import { t } from '@/i18n';
+import { isJoinSurface, paths } from '@/app/surface';
 
 export interface TabItem {
   /** 路由 id，与 `router.ts` 的路径一致 */
@@ -33,6 +34,9 @@ export interface ShellMeta {
  * 个人页固定在最后。
  */
 export function tabItems(can: Record<string, boolean> | undefined): TabItem[] {
+  if (isJoinSurface) {
+    return [{ id: 'my-registrations', path: paths.registrations, label: t('s_1m2dh8u'), icon: 'ticket' }];
+  }
   const items: TabItem[] = [
     { id: 'home', path: '/home', label: t('s_1ow5v10'), icon: 'home' },
     { id: 'my-registrations', path: '/my-registrations', label: t('s_1m2dh8u'), icon: 'ticket' },

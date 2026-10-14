@@ -29,7 +29,7 @@
 
 ### 服务骨架与路由
 
-骨架在 `src/server/`（Hono + `@hono/node-server`）：一层层是 **安全响应头 → CORS → 请求日志 → JSON 体积守卫 → 路由 → 统一错误处理 / 404**，探针 `/ping`、`/api/v1/ping`、`/health` 由它直接回答。
+骨架在 `src/server/`（Hono + `@hono/node-server`）：一层层是 **安全响应头 → CORS → 请求日志 → JSON 体积守卫 → 路由 → 统一错误处理 / 404**，探针 `/ping`、`/api/v1/ping`、`/health` 由它直接回答。404 里，报名站页面回退到 `web/dist-join` 的 `join.html`；`/api`、`/media` 和探针仍是 JSON。配了 `PUBLIC_BASE_URL` 时，只有报名站页面会按 Host 做 308。
 
 认证、资料与安全、启动数据、用户管理、搜索、设置、展会、报名、审核、核销和状态页都直接挂在 Hono 上。所有正文由 Hono 路由读取，公共层统一处理安全头、CORS、日志和体积上限。
 
@@ -59,6 +59,7 @@ pnpm db:seed                  # 示例账号与展会（可反复执行）
 # 不想开收件箱容器也行：把 .env 的 MAIL_TRANSPORT 改成 console，整封邮件（含验证码）进后端日志
 
 pnpm dev                      # 开发模式（tsx watch，改源码自动重启），默认 http://127.0.0.1:3000
+                              # 同时构建并托管浏览器报名站：http://localhost:3000/
 ```
 
 ### 开发模式与生产模式
@@ -348,7 +349,8 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 
 | 变量 | 作用 | 示例 |
 | --- | --- | --- |
-| `PORT` | 服务端口 | `3000` |
+| `PORT` | 服务端口。API 与浏览器报名站共用，只改这一处 | `3000` |
+| `PUBLIC_BASE_URL` | 报名站规范来源与分享链接。只接受 `http(s)://主机[:端口]`，非法值当没配 | `https://app.example.com` |
 | `NODE_ENV` | 运行环境；`pnpm start` 传 `--production` 覆盖它 | `development` |
 | `ENABLE_STATUS_PAGE` | 强制开关状态页；**生产默认关闭** | `true`（谨慎） |
 | `TRUST_PROXY` | 反向代理跳数或可信来源；反代后面必须设 | `1` |
@@ -376,7 +378,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 ## 测试
 
 ```bash
-pnpm build                # tsc 编译到 dist（生产跑的就是这份产物）
+pnpm build                # 先构建报名站到 web/dist-join，再 tsc 编译到 dist（生产跑的就是这份产物）
 pnpm typecheck            # 只做类型检查，把类型错误与测试失败分开定位
 pnpm test:contract        # vitest contract project —— 逐接口的契约与规则测试（需要数据库）
 pnpm test                 # vitest unit project：不依赖数据库的纯函数单测

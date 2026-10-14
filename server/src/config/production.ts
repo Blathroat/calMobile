@@ -94,11 +94,11 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
     );
   }
 
-  // 对外地址：状态页与 /ping 靠它显示域名，以后邮件里的绝对链接也用它。
+  // 对外地址：报名站域名、分享链接、状态页和邮件里的绝对地址都靠它。
   const publicBaseUrl = String(env.PUBLIC_BASE_URL || '').trim();
   if (!publicBaseUrl) {
     warnings.push(
-      'PUBLIC_BASE_URL 没有配置：对外部署建议填域名（https://app.example.com），状态页与邮件里的地址才明确',
+      'PUBLIC_BASE_URL 没有配置：报名站不会绑定域名，分享链接也无法生成。对外部署请填 https://app.example.com',
     );
   } else if (!/^https:\/\//i.test(publicBaseUrl)) {
     warnings.push(`PUBLIC_BASE_URL=${publicBaseUrl} 不是 https：对外地址应当是 https`);

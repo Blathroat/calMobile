@@ -5,6 +5,7 @@ import { USER_COLUMNS, USER_FROM } from '../domain/queries.js';
 import { userPayload, guestPayload, type UserRow } from '../domain/payloads.js';
 import { capabilities } from '../domain/permissions.js';
 import { jsonResponse } from '../http/respond.js';
+import { publicBaseUrl } from '../config/runtime.js';
 import { optionalAuthHono, userOf, type HonoEnv } from './hono-utils.js';
 
 const app = new Hono<HonoEnv>();
@@ -57,6 +58,8 @@ app.get('/bootstrap', optionalAuthHono, async (c) => {
     cover: settings.cover,
     exhibitor: settings.exhibitor,
     calendar: { available: false, landing: await landingMonth() },
+    // 报名站的规范来源。空串表示没配，客户端不得自行编造 127.0.0.1 链接。
+    publicBaseUrl,
   });
 });
 

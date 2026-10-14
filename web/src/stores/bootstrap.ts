@@ -50,6 +50,8 @@ export interface BootstrapState {
   cover: JsonObject;
   /** 展商端策略：`maxFutureExhibitions` 是单个展商可同时筹备的展会数，0 表示不限 */
   exhibitor: JsonObject;
+  /** 报名站根地址（`PUBLIC_BASE_URL`）。空串表示没配域名，分享时不要拼本机地址。 */
+  publicBaseUrl: string;
 }
 
 /**
@@ -72,6 +74,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
     theme: {},
     cover: {},
     exhibitor: {},
+    publicBaseUrl: '',
   }),
   actions: {
     /**
@@ -94,6 +97,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
       this.theme = { ...this.theme, ...asObject(data.theme) };
       this.cover = { ...this.cover, ...asObject(data.cover) };
       this.exhibitor = { ...this.exhibitor, ...asObject(data.exhibitor) };
+      if (typeof data.publicBaseUrl === 'string') this.publicBaseUrl = data.publicBaseUrl;
     },
   },
 });

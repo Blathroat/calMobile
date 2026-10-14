@@ -10,7 +10,9 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
+import { registrationLink } from '@/services/registration-link';
 import { device } from '@/services/device-services';
 import { loadMarkdownParser, markdownToHtml, plainText, sanitizeHtml } from '@/services/markdown';
 import { coverOf } from '@/services/cover';
@@ -29,6 +31,8 @@ import { t } from '@/i18n';
 const route = useRoute();
 const router = useRouter();
 const session = useSessionStore();
+const bootstrap = useBootstrapStore();
+const joinLinkMissing = t('s_18o1cfv');
 const query = useAsync<ExhibitionDetail>();
 
 const COPY = {
@@ -157,10 +161,16 @@ function startRegistration(): void {
 function share(): void {
   const item = exhibition.value;
   if (!item) return;
-  const text = `${item.title}\n${formatDateWithWeekday(item.date)} ${item.time}\n${item.venue}`;
+  const link = registrationLink(bootstrap.publicBaseUrl, item.id);
+  const text = [
+    String(item.title ?? ''),
+    `${formatDateWithWeekday(item.date)} ${item.time}`,
+    String(item.venue ?? ''),
+    link ? `${t('s_tvkiif')}${link}` : '',
+  ].filter(Boolean).join('\n');
   openSheet({
     title: t('s_e1wq8p'),
-    message: text.replace(/\n/g, ' · '),
+    message: (link ? text : `${text}\n${joinLinkMissing}`).replace(/\n/g, ' · '),
     actions: [
       { label: t('s_1589w37'), onClick: (close) => close() },
       {
@@ -184,6 +194,12 @@ onMounted(() => { void load(); });
 </script>
 
 <template>
+  <Teleport defer to="#app-top-actions">
+    <button class="icon-button" type="button" :aria-label="t('s_e1wq8p')" :title="t('s_e1wq8p')" @click="share">
+      <AppIcon name="share" />
+    </button>
+  </Teleport>
+
   <SkeletonBlock v-if="query.loading.value && !query.data.value" :rows="3" />
 
   <StateBlock
