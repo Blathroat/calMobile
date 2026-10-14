@@ -21,7 +21,9 @@ import { isEntry } from './entry.js';
 import { createAdaptorServer } from '@hono/node-server';
 import { createApp } from './server/hono-app.js';
 import { defaultJoinRoot, joinSiteMissingMessage, joinSiteReady } from './server/join-site.js';
-import { productionProblems } from './config/production.js';
+import { adminIdentity, productionProblems } from './config/production.js';
+import { demoAccountsUsingExamplePassword, ensureProductionAdmin } from './config/bootstrap-admin.js';
+import { isDatabaseUnavailable } from './domain/errors.js';
 import { pool } from './config/pool.js';
 import packageJson from '../package.json' with { type: 'json' };
 
@@ -44,10 +46,12 @@ const app = createApp({
   logLevel: config.logLevel,
   trustProxy: runtime.trustProxy,
   statusPageEnabled: runtime.statusPageEnabled,
+  pingEnabled: runtime.pingEnabled,
+  healthEnabled: runtime.healthEnabled,
   serviceVersion: packageJson.version,
   hstsMaxAge: runtime.hstsMaxAge,
   forceHttps: runtime.forceHttps,
-  joinRoot: joinReady ? joinRoot : undefined,
+  joinRoot: runtime.webEnabled && joinReady ? joinRoot : undefined,
   publicBaseUrl: runtime.publicBaseUrl,
 });
 
@@ -81,7 +85,7 @@ function listen(port: number, hostname?: string, listeningListener?: () => void)
  * 业务接口在数据库恢复后自动可用（连接池会重建连接）。
  */
 async function start() {
-  if (!joinReady) {
+  if (runtime.webEnabled && !joinReady) {
     console.error(joinSiteMissingMessage(joinRoot));
     process.exit(1);
   }
@@ -109,19 +113,41 @@ async function start() {
         ? '状态页：已按 ENABLE_STATUS_PAGE 打开，请确保外部访问不到'
         : '状态页：已关闭（生产默认；需要时设 ENABLE_STATUS_PAGE=true）',
     );
+    console.log(
+      runtime.webEnabled ? '报名站：已按 ENABLE_WEB 打开' : '报名站：已关闭（生产默认；需要时设 ENABLE_WEB=true）',
+    );
+    console.log(runtime.healthEnabled ? '健康检查：已按 ENABLE_HEALTH 打开' : '健康检查：已关闭（生产默认）');
+    try {
+      const weak = await demoAccountsUsingExamplePassword(pool);
+      if (weak.length > 0) {
+        console.error(`生产环境拒绝启动：示例账号仍使用示例密码（${weak.join('、')}）。请删除这些账号。`);
+        process.exit(1);
+      }
+      const admin = adminIdentity(config.env);
+      const outcome = await ensureProductionAdmin(pool, admin);
+      console.log(
+        outcome === 'created' ? `已创建管理员 ${admin.username}` : `管理员 ${admin.username} 已存在，未改动密码`,
+      );
+    } catch (error: unknown) {
+      if (isDatabaseUnavailable(error)) {
+        console.warn('数据库暂时不可用，跳过管理员账号检查；服务仍会启动');
+      } else {
+        const message = error instanceof Error ? error.message : '管理员账号检查失败';
+        console.error(`生产环境拒绝启动：${message}`);
+        process.exit(1);
+      }
+    }
   }
 
   const server = listen(PORT, undefined, () => {
     console.log(`服务器运行在 http://localhost:${PORT}`);
-    console.log(`报名站：http://localhost:${PORT}/`);
-    if (runtime.publicBaseUrl) {
-      console.log(`对外报名站：${runtime.publicBaseUrl}/`);
+    if (runtime.webEnabled) {
+      console.log(`报名站：http://localhost:${PORT}/`);
+      if (runtime.publicBaseUrl) console.log(`对外报名站：${runtime.publicBaseUrl}/`);
     }
-    if (runtime.statusPageEnabled) {
-      console.log(`状态页：http://localhost:${PORT}/status`);
-    }
-    console.log(`连通性检查：http://localhost:${PORT}/ping`);
-    console.log(`健康检查：http://localhost:${PORT}/health`);
+    if (runtime.statusPageEnabled) console.log(`状态页：http://localhost:${PORT}/status`);
+    if (runtime.pingEnabled) console.log(`连通性检查：http://localhost:${PORT}/ping`);
+    if (runtime.healthEnabled) console.log(`健康检查：http://localhost:${PORT}/health`);
   });
 
   // 优雅停机：先停接新请求，再收连接池。

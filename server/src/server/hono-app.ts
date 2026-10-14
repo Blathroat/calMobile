@@ -41,6 +41,10 @@ export interface AppOptions {
   readonly trustProxy: TrustProxy;
   /** `/status` 与 `/api/v1/status` 是否开放（生产默认关）。 */
   readonly statusPageEnabled: boolean;
+  /** `/ping` 与 `/api/v1/ping` 是否开放。 */
+  readonly pingEnabled: boolean;
+  /** `/health` 是否开放（生产默认关）。 */
+  readonly healthEnabled: boolean;
   /** 服务版本号（`package.json` 的 version），`/ping` 下发它。 */
   readonly serviceVersion: string;
   /** `HSTS_MAX_AGE`：0 表示不下发 `Strict-Transport-Security`；缺省 180 天。 */
@@ -82,17 +86,19 @@ export function createApp(options: AppOptions): Hono {
   app.use('*', jsonBodySizeGuard());
 
   // ── 探针（不代表数据库可用；连库一起看的是 /api/v1/status） ────
-  // 探针不是写操作：响应里没有 error 字段，和迁移前的 res.json 一模一样
-  const ping = (c: Context): Response =>
-    jsonResponse(c, { ok: true, service: SERVICE_NAME, version: options.serviceVersion });
+  // 关掉时不注册路由，404 与未知路径同一句，不说明开关名字。
+  if (options.pingEnabled) {
+    const ping = (c: Context): Response =>
+      jsonResponse(c, { ok: true, service: SERVICE_NAME, version: options.serviceVersion });
+    app.get('/ping', ping);
+    app.get('/api/v1/ping', ping);
+  }
 
-  app.get('/ping', ping);
-  app.get('/api/v1/ping', ping);
-
-  /** 与 /ping 同义的存活探针。 */
-  app.get('/health', (c) =>
-    jsonResponse(c, { status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime() }),
-  );
+  if (options.healthEnabled) {
+    app.get('/health', (c) =>
+      jsonResponse(c, { status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime() }),
+    );
+  }
 
   // ── 状态页开关 ────────────────────────────────────────────
   // 生产默认关：它暴露迁移清单、各表行数与接口清单，属于运维排查入口。
@@ -115,11 +121,6 @@ export function createApp(options: AppOptions): Hono {
     };
     app.get('/status', (c) => report(c, true));
     app.get('/api/v1/status', (c) => report(c, false));
-  } else {
-    const disabled = (c: Context): Response =>
-      jsonResponse(c, { error: '状态页在生产环境已关闭（需要时设 ENABLE_STATUS_PAGE=true 再启动）' }, 404);
-    app.get('/status', disabled);
-    app.get('/api/v1/status', disabled);
   }
 
   // 认证、资料、展会、报名、审核、核销、用户、搜索、设置和启动数据都由 Hono 处理。

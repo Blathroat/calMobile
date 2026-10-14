@@ -558,8 +558,13 @@ export async function migrate(): Promise<void> {
   }
 }
 
-/** 示例数据：账号、展会（含收集项）、报名、服务器设置。可重复执行。 */
+/** 示例数据：账号、展会（含收集项）、报名、服务器设置。可重复执行。生产环境拒绝执行。 */
 export async function seed(): Promise<void> {
+  if (runtime.isProduction) {
+    throw new Error(
+      '生产环境不写入示例账号。管理员由 ADMIN_USERNAME、ADMIN_PASSWORD、ADMIN_EMAIL 在启动时创建。',
+    );
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -592,7 +597,7 @@ export async function seed(): Promise<void> {
         [id, username, passwordHash, email, nickname, role, bio],
       );
     }
-    console.log(`示例账号就绪（${accounts.length} 个，密码均为 password）`);
+    console.log(`示例账号就绪（${accounts.length} 个）`);
 
     // 示例展会的日期**相对今天**生成：写死日期的示例数据过一阵就会全部过期，
     // 报名窗口规则一上线，演示里就再也报不上名了。偏移量以天为单位。

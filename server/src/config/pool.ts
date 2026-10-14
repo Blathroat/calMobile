@@ -5,9 +5,6 @@
 
 import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
 import * as databaseConfig from './database.js';
-import { resolveProcessSettings } from './env.js';
-
-const logLevel = resolveProcessSettings(process.env).logLevel;
 
 // 创建连接池
 export const pool = new Pool({
@@ -34,10 +31,6 @@ pool.on('error', (err) => {
   console.error('数据库连接池错误：', err);
 });
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /**
  * 执行查询
  * @param text SQL 查询语句
@@ -47,16 +40,11 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
   text: string,
   params?: unknown[],
 ): Promise<QueryResult<T>> {
-  const start = Date.now();
   try {
-    const result = await pool.query<T>(text, params);
-    // 逐条 SQL 只在 LOG_LEVEL=debug 时打印：默认级别下每个请求都刷一整条语句太吵。
-    if (logLevel === 'debug') {
-      console.log('执行查询', { text, duration: Date.now() - start, rows: result.rowCount });
-    }
-    return result;
+    return await pool.query<T>(text, params);
   } catch (error: unknown) {
-    console.error('查询错误：', { text, error: errorMessage(error) });
+    // 不打印语句、参数或 pg 原文：语句里会带表结构和筛选条件。
+    console.error('查询失败');
     throw error;
   }
 }

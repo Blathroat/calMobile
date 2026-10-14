@@ -2,8 +2,8 @@
  * 生产环境的启动前自检。
  *
  * 分成两档，界限是「配错了会**不安全或根本用不了**」还是「只是不够好」：
- * - `fatal`：拒绝启动。开发密钥、默认库密码、只往日志里打验证码、发件人地址是占位值 ——
- *   这几类要么让任何人都能伪造令牌，要么让注册 / 找回密码 / 两步验证整条链路静默失效；
+ * - `fatal`：拒绝启动。开发密钥、默认库密码、默认管理员口令、只往日志里打验证码、发件人地址是占位值 ——
+ *   这几类要么让任何人都能伪造令牌或登进管理员，要么让注册 / 找回密码 / 两步验证整条链路静默失效；
  * - `warnings`：打在日志里继续启动。同一个进程里看得到的警告比一个不肯起来的服务有用，
  *   而且这些项可能是有意为之（例如内网里就在跑 Mailpit、或反代已经做了来源限制）。
  *
@@ -24,6 +24,69 @@ export const DEV_SECRET_HINTS = [
 
 /** 一眼能看出是「占位」的发件人地址。 */
 export const PLACEHOLDER_FROM = [/@localhost$/i, /\.local$/i];
+
+/** 生产管理员不能用的口令。比对前会转成小写。 */
+export const WEAK_ADMIN_PASSWORDS = ['password', 'postgres', 'admin', 'demo', '123456', 'changeme'];
+
+const ADMIN_USERNAME = /^[A-Za-z0-9_.-]+$/;
+const ADMIN_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PLACEHOLDER_ADMIN_EMAIL = [/@example\.com$/i, /@localhost$/i, /\.local$/i];
+
+export interface AdminIdentity {
+  username: string;
+  password: string;
+  email: string;
+}
+
+function explicitSwitch(value: unknown): 'on' | 'off' | '' {
+  const text = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(text)) return 'on';
+  if (['false', '0', 'no', 'off'].includes(text)) return 'off';
+  return '';
+}
+
+/** 生产环境必须声明的初始管理员。密码本身不写进错误文案。 */
+export function adminIdentityProblems(env: EnvLike): string[] {
+  const fatal: string[] = [];
+  const username = String(env.ADMIN_USERNAME || '').trim();
+  const password = String(env.ADMIN_PASSWORD || '');
+  const email = String(env.ADMIN_EMAIL || '').trim();
+  if (!username) {
+    fatal.push('ADMIN_USERNAME 没有配置');
+  } else if (username.length < 3 || username.length > 20 || !ADMIN_USERNAME.test(username)) {
+    fatal.push('ADMIN_USERNAME 需为 3–20 位字母、数字、下划线、点或横线');
+  }
+  if (!password) {
+    fatal.push('ADMIN_PASSWORD 没有配置');
+  } else if (
+    WEAK_ADMIN_PASSWORDS.includes(password.toLowerCase()) ||
+    DEV_SECRET_HINTS.some((pattern) => pattern.test(password))
+  ) {
+    fatal.push('ADMIN_PASSWORD 还是示例或占位密码，请换成随机值');
+  } else if (password.length < 12 || password.length > 32) {
+    fatal.push('ADMIN_PASSWORD 长度需在 12–32 个字符之间');
+  }
+  if (!email) {
+    fatal.push('ADMIN_EMAIL 没有配置');
+  } else if (
+    email.length > 120 ||
+    !ADMIN_EMAIL.test(email) ||
+    PLACEHOLDER_ADMIN_EMAIL.some((pattern) => pattern.test(email))
+  ) {
+    fatal.push(`ADMIN_EMAIL 不能使用（${email}）：请换成可收信的地址`);
+  }
+  return fatal;
+}
+
+export function adminIdentity(env: EnvLike): AdminIdentity {
+  return {
+    username: String(env.ADMIN_USERNAME || '').trim(),
+    password: String(env.ADMIN_PASSWORD || ''),
+    email: String(env.ADMIN_EMAIL || '').trim(),
+  };
+}
 
 export interface ProductionProblems {
   fatal: string[];
@@ -73,6 +136,8 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
     fatal.push(`MAIL_FROM_ADDRESS 是占位地址（${from}）：请换成已配好 SPF/DKIM 的发信域`);
   }
 
+  fatal.push(...adminIdentityProblems(env));
+
   // ── 可疑但可能是有意为之的 ──────────────────────────────────────
   const smtpHost = String(env.MAIL_SMTP_HOST || '').trim();
   if (/^(127\.0\.0\.1|localhost|::1)$/i.test(smtpHost)) {
@@ -115,14 +180,14 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
     warnings.push('LOG_LEVEL=debug 会打印每个请求，生产建议 info 或 quiet');
   }
 
-  if (
-    ['true', '1', 'yes', 'on'].includes(
-      String(env.ENABLE_STATUS_PAGE || '')
-        .trim()
-        .toLowerCase(),
-    )
-  ) {
+  if (explicitSwitch(env.ENABLE_STATUS_PAGE) === 'on') {
     warnings.push('ENABLE_STATUS_PAGE 显式打开了状态页：它包含迁移清单、各表行数与接口清单，请确保外部访问不到');
+  }
+  if (explicitSwitch(env.ENABLE_HEALTH) === 'on') {
+    warnings.push('ENABLE_HEALTH 显式打开了 /health：响应里有进程运行时间，公网探活请只用 /ping');
+  }
+  if (explicitSwitch(env.ENABLE_PING) === 'off') {
+    warnings.push('ENABLE_PING 关闭了 /ping：编排和公网探活将没有存活探针');
   }
 
   // 非本机数据库却没开 SSL：托管数据库通常要求 TLS。

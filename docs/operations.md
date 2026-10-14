@@ -18,9 +18,9 @@ pnpm db:migrate && pnpm db:seed
 pnpm dev
 ```
 
-开发模式打开 `/status`；生产使用 `pnpm start`，默认关闭状态页并执行配置自检。生产数据库迁移使用 `pnpm db:migrate:prod`。改动 `server/src` 后重启进程。
+开发模式打开 `/status`、`/health` 和报名站；生产使用 `pnpm start`，默认关闭这三项，只留 `/ping`，并执行配置自检。生产数据库迁移使用 `pnpm db:migrate:prod`。改动 `server/src` 后重启进程。
 
-`pnpm dev` 与 `pnpm start` 同时在 `PORT` 上提供浏览器报名站，本机打开 `http://localhost:3000/`（端口以 `server/.env` 的 `PORT` 为准）。域名写在 `PUBLIC_BASE_URL`，分享链接是 `{PUBLIC_BASE_URL}/e/{展会 id}`。没配域名时页面不跳转，应用也不会发出 `127.0.0.1` 报名链接。`pnpm dev` 会先构建 `web/dist-join`，并在页面源码变化时重新构建；`pnpm start` 在产物缺失时拒绝启动。报名站不打进 APK。改报名站页面后刷新浏览器即可，不必重启进程。
+`pnpm dev` 默认在 `PORT` 上提供浏览器报名站，本机打开 `http://localhost:3000/`（端口以 `server/.env` 的 `PORT` 为准）。`pnpm start` 默认不托管页面；设 `ENABLE_WEB=true` 后才托管，并且产物缺失时拒绝启动。域名写在 `PUBLIC_BASE_URL`，分享链接是 `{PUBLIC_BASE_URL}/e/{展会 id}`。没配域名时页面不跳转，应用也不会发出 `127.0.0.1` 报名链接。`pnpm dev` 会先构建 `web/dist-join`，并在页面源码变化时重新构建。报名站不打进 APK。改报名站页面后刷新浏览器即可，不必重启进程。
 
 ## 对外部署（域名、TLS 与上传）
 
@@ -34,10 +34,14 @@ pnpm dev
 | `TRUST_PROXY` | 反代后面必须打开，否则 `req.ip` 是代理地址，按 IP 的验证码限流退化成全局额度 | 关闭（直连） |
 | `CORS_ORIGIN` | 允许的前端来源。App 页面跑在 WebView 的 `https://appassets.androidplatform.net`，浏览器调试用 `*` | `*`（仅开发） |
 | `ENABLE_STATUS_PAGE` | `/status` 与 `/api/v1/status`：迁移清单、各表行数与接口清单 | 生产关闭、其它环境开启 |
+| `ENABLE_PING` | `/ping` 与 `/api/v1/ping`：对外存活探针，只返回服务名和版本 | 两种环境都开启 |
+| `ENABLE_HEALTH` | `/health`：进程是否在跑，响应里带运行时间 | 生产关闭、其它环境开启 |
+| `ENABLE_WEB` | 是否托管浏览器报名站。生产打开后缺少 `web/dist-join` 会拒绝启动 | 生产关闭、其它环境开启 |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_EMAIL` | 生产初始管理员。只在该用户名还不存在时创建，之后不覆盖密码。口令 12–32 位，不能用示例口令 | 生产必填 |
 
 部署检查单：
 
-1. `pnpm start` 的自检会把「会出事」的配置直接拒绝启动（开发密钥、默认库口令、占位发件人……），先让它过。
+1. `pnpm start` 的自检会把「会出事」的配置直接拒绝启动（开发密钥、默认库口令、默认管理员口令、占位发件人……），先让它过。生产不要跑 `pnpm db:seed`。
 2. 反代把域名指向服务端口，只暴露 443；配 `proxy_set_header X-Forwarded-Proto $scheme;` 与 `X-Forwarded-For`，服务端设 `TRUST_PROXY=1`。
 3. 确认 https 全站可用之后再开 `FORCE_HTTPS` 与长 `HSTS_MAX_AGE`（HSTS 一旦下发，浏览器会长期拒绝 http 访问）。
 4. `CORS_ORIGIN` 换成真实来源，不要留 `*`。
@@ -151,7 +155,7 @@ pwsh -File scripts\emu.ps1 motion
 
 - 生产使用 HTTPS 和反向代理，`CORS_ORIGIN` 只允许 WebView 来源；客户端关闭明文放行。
 - 分别配置访问令牌密钥 `JWT_SECRET` 与必填的验证器加密密钥 `TOTP_SECRET_KEY`（各自至少 32 个随机字符），更换数据库凭据，并显式配置 `MAIL_FROM_ADDRESS`；邮件使用托管 SMTP，不部署 Mailpit，不使用 `memory` 或仅写日志的通道。
-- 生产状态页默认关闭；临时打开时用反代 Basic Auth 或 IP 白名单，公网探活只使用 `/ping`。
+- 生产状态页、`/health` 和报名站默认关闭。状态页临时打开时用反代 Basic Auth 或 IP 白名单。公网探活只使用 `/ping`。初始管理员写在 `ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL`，不要使用示例账号。
 - 使用 Node.js 24.15+（24.x）或 26+，在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，再执行 `pnpm db:migrate:prod` 并重启生产进程；迁移完成后才切流量。
 - 数据库启用 `Asia/Shanghai` 时区，配置备份、恢复演练和日志轮转。
 - 上传媒体仍在客户端私有目录；上线前确认这符合产品范围，或先完成对象存储和上传接口。

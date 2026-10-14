@@ -11,9 +11,12 @@
  * `config/database.ts` 都是在 require 的那一刻就把值定下来的，晚一步就白改了。
  * `index.js` 与 `config/migrate.ts` 的第一行导入就是它。
  *
- * 模块里同时给出三件生产环境相关的东西（都可用环境变量覆盖）：
- * - `statusPageEnabled`：生产环境**默认关闭** `/status` 与 `/api/v1/status`
+ * 模块里同时给出这些可按环境覆盖的开关（空着就用该环境的默认值）：
+ * - `statusPageEnabled`：`ENABLE_STATUS_PAGE`。生产默认关闭 `/status` 与 `/api/v1/status`
  *   （它们会暴露迁移清单、各表行数与接口清单）；
+ * - `pingEnabled`：`ENABLE_PING`。两种环境都默认打开，这是对外的存活探针；
+ * - `healthEnabled`：`ENABLE_HEALTH`。开发默认打开，生产默认关闭（响应里有进程运行时间）；
+ * - `webEnabled`：`ENABLE_WEB`。开发默认托管报名站，生产默认不托管；
  * - `trustProxy`：反代后面必须显式打开，否则 `req.ip` 会是代理地址，
  *   按 IP 的验证码限流会退化成「全体用户共用一个 1 小时 20 条」的额度；
  * - `startedBy`：给启动日志用，一眼看出这次是 `pnpm start` 还是 `pnpm dev` 起的。
@@ -34,6 +37,12 @@ export interface Runtime {
   nodeEnv: string;
   isProduction: boolean;
   statusPageEnabled: boolean;
+  /** `/ping` 与 `/api/v1/ping`。 */
+  pingEnabled: boolean;
+  /** `/health`。 */
+  healthEnabled: boolean;
+  /** 是否托管浏览器报名站。 */
+  webEnabled: boolean;
   trustProxy: TrustProxy;
   startedBy: string;
   /** 对外访问地址（`PUBLIC_BASE_URL`，已去掉尾斜杠）：域名/端口对外暴露的那一个。 */
@@ -50,6 +59,15 @@ export function bool(value: unknown): boolean {
       .trim()
       .toLowerCase(),
   );
+}
+
+/** 空值用环境默认；显式 true/false 优先。 */
+export function configuredFlag(value: unknown, fallback: boolean): boolean {
+  const text = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  if (text === '') return fallback;
+  return bool(text);
 }
 
 /**
@@ -70,11 +88,11 @@ export function resolveRuntime(argv: string[] = [], env: EnvLike = {}): Runtime 
   const nodeEnv = wantsProduction ? 'production' : wantsDevelopment ? 'development' : declared || 'development';
   const isProduction = nodeEnv === 'production';
 
-  // 状态页：没显式配就按环境取默认（生产关闭、其它开着）。
-  const statusSetting = String(env.ENABLE_STATUS_PAGE || '')
-    .trim()
-    .toLowerCase();
-  const statusPageEnabled = statusSetting === '' ? !isProduction : bool(statusSetting);
+  // 没显式配就按环境取默认。生产关掉会暴露内部信息的入口，留下 /ping 给探活。
+  const statusPageEnabled = configuredFlag(env.ENABLE_STATUS_PAGE, !isProduction);
+  const pingEnabled = configuredFlag(env.ENABLE_PING, true);
+  const healthEnabled = configuredFlag(env.ENABLE_HEALTH, !isProduction);
+  const webEnabled = configuredFlag(env.ENABLE_WEB, !isProduction);
 
   // trust proxy：默认**关闭**。反代后面不开的话，所有请求的 IP 都是代理地址，
   // 按 IP 的限流会误伤全体用户；但反过来在直连场景开启，客户端就能伪造
@@ -91,6 +109,9 @@ export function resolveRuntime(argv: string[] = [], env: EnvLike = {}): Runtime 
     nodeEnv,
     isProduction,
     statusPageEnabled,
+    pingEnabled,
+    healthEnabled,
+    webEnabled,
     trustProxy,
     // pnpm / npm 都会设置这个变量：`start` / `dev` / `test` 之一，用于启动日志与排查。
     startedBy: String(env.npm_lifecycle_event || '').trim(),
@@ -130,6 +151,9 @@ const resolved = resolveRuntime(process.argv, process.env);
 export const nodeEnv = resolved.nodeEnv;
 export const isProduction = resolved.isProduction;
 export const statusPageEnabled = resolved.statusPageEnabled;
+export const pingEnabled = resolved.pingEnabled;
+export const healthEnabled = resolved.healthEnabled;
+export const webEnabled = resolved.webEnabled;
 export const trustProxy = resolved.trustProxy;
 export const startedBy = resolved.startedBy;
 export const publicBaseUrl = resolved.publicBaseUrl;

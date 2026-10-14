@@ -62,6 +62,8 @@ async function serve(overrides: Partial<AppOptions> = {}): Promise<{ port: numbe
     logLevel: 'quiet',
     trustProxy: false,
     statusPageEnabled: false,
+    pingEnabled: true,
+    healthEnabled: true,
     serviceVersion: VERSION,
     ...overrides,
   };
@@ -170,13 +172,12 @@ test('CORS 与预检由 Hono 公共层处理', async () => {
   assert.equal(preflight.headers['access-control-allow-headers'], 'authorization,content-type');
 });
 
-test('生产关闭状态页时两个路径都返回 404', async () => {
-  const server = await serve({ statusPageEnabled: false });
-  const message = { error: '状态页在生产环境已关闭（需要时设 ENABLE_STATUS_PAGE=true 再启动）' };
-  for (const path of ['/status', '/api/v1/status']) {
+test('关掉的探针与状态页走统一 404，不说明如何打开', async () => {
+  const server = await serve({ statusPageEnabled: false, pingEnabled: false, healthEnabled: false });
+  for (const path of ['/status', '/api/v1/status', '/ping', '/api/v1/ping', '/health']) {
     const response = await hit(server.port, 'GET', path);
     assert.equal(response.status, 404);
-    assert.deepEqual(JSON.parse(response.body), message);
+    assert.equal(JSON.parse(response.body).error, `路径 ${path} 不存在`);
   }
 });
 

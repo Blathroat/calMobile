@@ -29,7 +29,7 @@
 
 ### 服务骨架与路由
 
-骨架在 `src/server/`（Hono + `@hono/node-server`）：一层层是 **安全响应头 → CORS → 请求日志 → JSON 体积守卫 → 路由 → 统一错误处理 / 404**，探针 `/ping`、`/api/v1/ping`、`/health` 由它直接回答。404 里，报名站页面回退到 `web/dist-join` 的 `join.html`；`/api`、`/media` 和探针仍是 JSON。配了 `PUBLIC_BASE_URL` 时，只有报名站页面会按 Host 做 308。
+骨架在 `src/server/`（Hono + `@hono/node-server`）：一层层是 **安全响应头 → CORS → 请求日志 → JSON 体积守卫 → 路由 → 统一错误处理 / 404**。打开的探针由它直接回答；关掉的与未知路径一样是 JSON 404。报名站打开时，页面回退到 `web/dist-join` 的 `join.html`；`/api`、`/media` 和探针仍是 JSON。配了 `PUBLIC_BASE_URL` 时，只有报名站页面会按 Host 做 308。
 
 认证、资料与安全、启动数据、用户管理、搜索、设置、展会、报名、审核、核销和状态页都直接挂在 Hono 上。所有正文由 Hono 路由读取，公共层统一处理安全头、CORS、日志和体积上限。
 
@@ -54,7 +54,7 @@ docker compose up -d
 # 端口 127.0.0.1:5432（数据库）/ 1025（SMTP）/ 8025（收件箱网页）
 
 pnpm db:migrate               # 可反复执行，只跑没跑过的迁移
-pnpm db:seed                  # 示例账号与展会（可反复执行）
+pnpm db:seed                  # 仅开发库：示例账号与展会（可反复执行；生产会拒绝）
 
 # 不想开收件箱容器也行：把 .env 的 MAIL_TRANSPORT 改成 console，整封邮件（含验证码）进后端日志
 
@@ -69,15 +69,18 @@ pnpm dev                      # 开发模式（tsx watch，改源码自动重启
 | | `pnpm dev` | `pnpm start` |
 | --- | --- | --- |
 | `NODE_ENV` | `.env` 里的 `development`（或注入的真实值） | `production`（`--production` 压过 `.env`） |
-| `/status` 与 `/api/v1/status` | 打开 | **关闭**（404 + 一句说明）；需要时 `ENABLE_STATUS_PAGE=true` 打开，并自行限制来源 |
-| 启动前配置自检 | 不检查 | **致命项拒绝启动**：开发用的 JWT 密钥、`DB_PASSWORD=postgres`、`MAIL_TRANSPORT=console|memory`、占位或缺失的发件人地址；可疑项（Mailpit 地址、`CORS_ORIGIN=*`、没配 `TRUST_PROXY`、`LOG_LEVEL=debug`）只打警告 |
+| `/status` 与 `/api/v1/status` | 打开 | **关闭**（与未知路径同一句 404）；需要时 `ENABLE_STATUS_PAGE=true` 打开，并自行限制来源 |
+| `/health` | 打开 | **关闭**；需要时 `ENABLE_HEALTH=true` |
+| 浏览器报名站 | 打开 | **关闭**；需要时 `ENABLE_WEB=true`，且 `web/dist-join` 必须已经构建 |
+| 启动前配置自检 | 不检查 | **致命项拒绝启动**：开发用的 JWT 密钥、`DB_PASSWORD=postgres`、未配置或仍是示例口令的 `ADMIN_PASSWORD`、`MAIL_TRANSPORT=console|memory`、占位或缺失的发件人地址；库里仍能用示例口令登录的 `demo` / `exhibitor` / `user` 也会拒绝启动。可疑项（Mailpit 地址、`CORS_ORIGIN=*`、没配 `TRUST_PROXY`、`LOG_LEVEL=debug`、显式打开状态页或 `/health`）只打警告 |
+| 初始管理员 | `pnpm db:seed` 的示例账号 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_EMAIL`。只在该用户名还不存在时创建，不覆盖已有密码。生产不要跑 `db:seed` |
 | 发信通道 | 缺省 `console` | 缺省 `smtp`，且 `memory` 被拒 |
 | 迁移目标 | `pnpm db:migrate`（开发库） | `pnpm db:migrate:prod`（会先打印 `[production] 目标库 host:port/db`） |
-| 存活探针 | `/ping`、`/health` | 同左（**这两个不受影响**，编排的探针用它们） |
+| 存活探针 | `/ping`、`/health` | 只留 `/ping`（编排探活用它；`ENABLE_PING=false` 可关） |
 
 判定集中在 `src/config/runtime.ts`（纯函数 `resolveRuntime(argv, env)`，有用例钉住优先级），启动自检在 `src/config/production.ts`。`tsx src/index.ts` 直接跑、不带参数时是**开发模式**——生产请用 `pnpm start` 或显式 `NODE_ENV=production`，别用裸命令，否则状态页会开着。
 
-示例账号：`demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`。
+开发库示例账号：`demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`。生产环境不使用这组账号。
 
 起好之后浏览器打开 **http://127.0.0.1:3000/status** 就是后端与数据库的状态页（开发模式默认打开；`pnpm start` 的生产模式默认关闭，见下面的「开发模式与生产模式」）：徽章一眼看出「正常 / 异常」，下面按卡片列出服务信息、数据库（连通、延迟、版本、连接池）、迁移、各表数据量、自检项与接口清单，默认每 5 秒自动刷新一次。页面源码拆在 `status-page/template.html`、`styles.css`、`client.ts`，`pnpm build` 会把它们编译成 `src/status-page-assets.ts`，响应时仍输出单文件、自包含 HTML。开发时 `pnpm dev` 由单一 `tsx watch` 入口监视 `src/` 与 `status-page/`，改动后重建内联资源并重启服务。**后端在数据库不可用时也照常启动**（日志里给警告，不再直接退出），因此库挂了页面照样打得开，并显示通用失败提示。探活脚本读同一份数据的 JSON 版：`GET /api/v1/status`（正常 200，异常 503）。
 
@@ -353,6 +356,12 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `PUBLIC_BASE_URL` | 报名站规范来源与分享链接。只接受 `http(s)://主机[:端口]`，非法值当没配 | `https://app.example.com` |
 | `NODE_ENV` | 运行环境；`pnpm start` 传 `--production` 覆盖它 | `development` |
 | `ENABLE_STATUS_PAGE` | 强制开关状态页；**生产默认关闭** | `true`（谨慎） |
+| `ENABLE_PING` | `/ping` 与 `/api/v1/ping`；两种环境默认打开 | `false` 关掉 |
+| `ENABLE_HEALTH` | `/health`；**生产默认关闭** | `true`（谨慎） |
+| `ENABLE_WEB` | 是否托管浏览器报名站；**生产默认关闭**。打开后缺少构建产物会拒绝启动 | `true` |
+| `ADMIN_USERNAME` | 生产初始管理员用户名（3–20 位） | `opsadmin` |
+| `ADMIN_PASSWORD` | 生产初始管理员密码（12–32 位，不能用示例口令）。已有同名管理员时不会改写 | 随机字符串 |
+| `ADMIN_EMAIL` | 生产初始管理员邮箱，须可收信 | `ops@你的域名` |
 | `TRUST_PROXY` | 反向代理跳数或可信来源；反代后面必须设 | `1` |
 | `DB_HOST` / `DB_PORT` | PostgreSQL 地址和端口 | `127.0.0.1` / `5432` |
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` | 数据库凭据 | 仅本地配置 |
@@ -369,7 +378,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `MAIL_REPLY_TO` | 回复地址（可选） | `support@你的域名` |
 | `MAIL_SEND_TIMEOUT_MS` | 单封发信超时 | `8000` |
 | `MAIL_SMTP_TLS_REJECT_UNAUTHORIZED` | 只有自签名内网中继才该关掉 | `false`（默认不关） |
-| `LOG_LEVEL` | `quiet` 可关掉请求日志；开着时每行是 `客户端IP 方法 路径 状态码 耗时ms` | `info` |
+| `LOG_LEVEL` | `quiet` 可关掉请求日志；开着时每行是 `客户端IP 方法 路径 状态码 耗时ms`。查询失败只记「查询失败」，不打印语句或参数 | `info` |
 
 真实 `.env` 不得提交；`.env.example` 里放占位值。
 
@@ -409,7 +418,7 @@ pnpm format               # oxfmt
 
 跨模块的发布清单见 `docs/operations.md`。与服务端直接相关的几条：
 
-- `pnpm start`（生产模式）已经**默认关闭 `/status` 与 `/api/v1/status`**，并会对配置做启动前自检；只需要用 `TRUST_PROXY`、`ENABLE_STATUS_PAGE`、`DB_SSL` 按部署形态配一下，详见上面的「开发模式与生产模式」；
+- `pnpm start`（生产模式）已经**默认关闭 `/status`、`/api/v1/status`、`/health` 和报名站**，只留 `/ping`，并会对配置做启动前自检（含 `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_EMAIL`）；用 `TRUST_PROXY`、`ENABLE_STATUS_PAGE`、`ENABLE_WEB`、`DB_SSL` 按部署形态配一下，详见上面的「开发模式与生产模式」；
 - 配置访问令牌密钥 `JWT_SECRET`、必填 TOTP 加密密钥 `TOTP_SECRET_KEY` 与数据库密码，限制 `CORS_ORIGIN`，启用 TLS，并去掉客户端侧的明文放行（`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`）——密钥与库密码会被启动自检拦住，`CORS_ORIGIN` 目前只是警告；
 - **不要把状态页对公网打开**：它给出迁移清单、各表行数与接口清单；需要启用时仍应由反代加 Basic Auth / IP 白名单，`/ping` 才是给外部探活用的事实源；
 - **不要在服务器上跑 Mailpit**：`docker-compose.yml` 的 `mailpit` 服务与 `MAIL_SMTP_HOST=127.0.0.1` 只用于本地开发；生产要指向托管中继，并用专用子域配好 SPF / DKIM / DMARC（启动自检对 127.0.0.1 / 1025 会警告）；

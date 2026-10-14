@@ -50,6 +50,24 @@ test('状态页：生产默认关闭，其它环境默认打开，显式配置�
   );
 });
 
+test('探针默认都开，健康检查与报名站只在非生产默认打开', () => {
+  const production = resolveRuntime(argv('--production'), {});
+  assert.equal(production.pingEnabled, true);
+  assert.equal(production.healthEnabled, false);
+  assert.equal(production.webEnabled, false);
+
+  const development = resolveRuntime(argv(), { NODE_ENV: 'development' });
+  assert.equal(development.pingEnabled, true);
+  assert.equal(development.healthEnabled, true);
+  assert.equal(development.webEnabled, true);
+  assert.equal(resolveRuntime(argv(), { NODE_ENV: 'test' }).webEnabled, true);
+
+  assert.equal(resolveRuntime(argv('--production'), { ENABLE_WEB: 'true' }).webEnabled, true);
+  assert.equal(resolveRuntime(argv('--production'), { ENABLE_HEALTH: '1' }).healthEnabled, true);
+  assert.equal(resolveRuntime(argv(), { ENABLE_PING: 'false' }).pingEnabled, false);
+  assert.equal(resolveRuntime(argv(), { NODE_ENV: 'development', ENABLE_WEB: 'off' }).webEnabled, false);
+});
+
 test('trust proxy 默认关闭，只有显式声明才打开', () => {
   assert.equal(resolveRuntime(argv(), {}).trustProxy, false);
   assert.equal(resolveRuntime(argv(), { TRUST_PROXY: 'false' }).trustProxy, false);

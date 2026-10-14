@@ -79,6 +79,14 @@ async function enterVerification(container: HTMLElement, register: boolean) {
 }
 
 describe('入口身份初始化', () => {
+  it('登录页不展示示例账号', async () => {
+    const { container } = await loginScreen();
+    await nextTick();
+    expect(container.textContent).not.toContain('演示账号');
+    expect(container.textContent).not.toMatch(/demo\s*\/\s*exhibitor/);
+    expect(container.querySelector('#login-account')).not.toBeNull();
+  });
+
   it('换号登录先落新账号偏好，再回到原地址', async () => {
     const { container, router } = await loginScreen();
     fill(container, '#login-account', 'b');

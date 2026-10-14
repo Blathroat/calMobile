@@ -408,7 +408,6 @@ final class FrontendStrings {
             "s_crec0c",
             "s_crhxaz",
             "s_d5a1x9",
-            "s_d8r5bl",
             "s_dn42iy",
             "s_dn4ida",
             "s_doboo3",

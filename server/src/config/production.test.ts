@@ -22,6 +22,9 @@ function readyEnv(override = {}) {
     CORS_ORIGIN: 'https://appassets.androidplatform.net',
     TRUST_PROXY: '1',
     LOG_LEVEL: 'info',
+    ADMIN_USERNAME: 'opsadmin',
+    ADMIN_PASSWORD: 'correct-horse-battery',
+    ADMIN_EMAIL: 'ops@mail.example.com',
     ...override,
   };
 }
@@ -51,6 +54,19 @@ test('数据库密码还是 postgres 会很直白地被拦下', () => {
   assert.match(fatalOf(readyEnv({ DB_PASSWORD: '' })), /DB_PASSWORD 没有配置/);
 });
 
+test('生产管理员账号缺失或仍是示例口令会被拒绝，文案不含口令本身', () => {
+  assert.match(fatalOf(readyEnv({ ADMIN_USERNAME: '' })), /ADMIN_USERNAME 没有配置/);
+  assert.match(fatalOf(readyEnv({ ADMIN_USERNAME: '中文名' })), /3–20/);
+  assert.match(fatalOf(readyEnv({ ADMIN_PASSWORD: '' })), /ADMIN_PASSWORD 没有配置/);
+  assert.match(fatalOf(readyEnv({ ADMIN_PASSWORD: 'short' })), /12–32/);
+  const weak = fatalOf(readyEnv({ ADMIN_PASSWORD: 'password' }));
+  assert.match(weak, /示例或占位密码/);
+  assert.equal(weak.includes('password'), false);
+  assert.match(fatalOf(readyEnv({ ADMIN_EMAIL: '' })), /ADMIN_EMAIL 没有配置/);
+  assert.match(fatalOf(readyEnv({ ADMIN_EMAIL: 'ops@example.com' })), /不能使用/);
+  assert.match(fatalOf(readyEnv({ ADMIN_EMAIL: 'ops@calmobile.local' })), /不能使用/);
+});
+
 test('验证码发不出去的配置会被拒绝启动', () => {
   // 只写日志：注册、找回密码、两步验证整条链路都会静默失效
   assert.match(fatalOf(readyEnv({ MAIL_TRANSPORT: 'console' })), /永远收不到/);
@@ -68,6 +84,8 @@ test('可疑但可能有意为之的只给警告，不拦启动', () => {
       TRUST_PROXY: '',
       LOG_LEVEL: 'debug',
       ENABLE_STATUS_PAGE: 'true',
+      ENABLE_HEALTH: 'true',
+      ENABLE_PING: 'false',
     }),
   );
   assert.deepEqual(fatal, [], '这些都不该拦启动');
@@ -77,6 +95,8 @@ test('可疑但可能有意为之的只给警告，不拦启动', () => {
   assert.match(text, /TRUST_PROXY/);
   assert.match(text, /LOG_LEVEL=debug/);
   assert.match(text, /ENABLE_STATUS_PAGE/);
+  assert.match(text, /ENABLE_HEALTH/);
+  assert.match(text, /ENABLE_PING/);
   assert.match(text, /报名站/);
 });
 

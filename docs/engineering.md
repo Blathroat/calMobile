@@ -79,7 +79,7 @@ web/
 
 ### 浏览器报名站
 
-报名站复用上表里的入口页、报名页和报名详情，但是第二份构建：`web/join.html` 经 `web/vite.join.config.ts` 输出到 `web/dist-join`，由后端在同一个 `PORT` 上托管，不进 APK。`VITE_SURFACE=join` 只由这份配置注入，不写进 `web/.env`。路径对照在 `web/src/app/surface.ts`。
+报名站复用上表里的入口页、报名页和报名详情，但是第二份构建：`web/join.html` 经 `web/vite.join.config.ts` 输出到 `web/dist-join`，由后端在同一个 `PORT` 上托管，不进 APK。是否托管看 `ENABLE_WEB`：开发默认开，生产默认关。`VITE_SURFACE=join` 只由这份配置注入，不写进 `web/.env`。路径对照在 `web/src/app/surface.ts`。
 
 | 路径 | 页面 | 用途 |
 | --- | --- | --- |

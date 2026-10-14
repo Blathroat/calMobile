@@ -43,8 +43,6 @@ const CODE_MAX = 12;
 /** 密码上限由后端配置下发；取不到时与注册页用同一个兜底值。 */
 const passwordMax = computed(() => Number(limit('passwordMax', 32)) || 32);
 
-/** 示例数据里的三个演示账号覆盖三种角色，入口页直接给出来，省得去翻文档。 */
-const demoHint = t('s_d8r5bl');
 const trustDeviceLabel = t('s_tz1s06');
 
 /** 预认证票：第二步与重发都要用它；它本身不是登录凭据。 */
@@ -324,12 +322,8 @@ onBeforeUnmount(stopCountdown);
       <button class="cta ghost" type="button" @click="backToStepOne">{{ t('s_knqdo0') }}</button>
     </form>
 
-    <!-- 第一步才有意义的两块：演示账号提示与「注册 / 忘记密码」入口。
-         旧版把这三块跟在表单后面随内容滚动，这里保持一致。 -->
+    <!-- 第一步才有「注册 / 忘记密码」。 -->
     <div v-if="step === 1" class="stack" data-gap="sm">
-      <div class="notice">
-        <span>{{ demoHint }}</span>
-      </div>
       <footer class="row auth-entry">
         <span class="dim">{{ t('s_und5qj') }}</span>
         <button class="text-action" type="button" @click="router.push('/register')">{{ t('s_1fwr1ko') }}</button>
