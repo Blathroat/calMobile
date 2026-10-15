@@ -21,7 +21,6 @@ import {
   passwordChangeSchema,
   profilePatchSchema,
   registerSchema,
-  registrationSchema,
   resetPasswordSchema,
   reviewQuerySchema,
   reviewStatusSchema,
@@ -187,21 +186,10 @@ test('收集项 schema 限制数组长度、项类型和动态标题上限', () 
   );
 });
 
-test('资料与报名 schema 使用服务器上限', () => {
+test('资料 schema 使用服务器上限', () => {
   assert.equal(
     messageOf(() => parseSchema(profilePatchSchema({ ...limits, bio: 2 }), { bio: '内容超长' })),
     '个人简介最多 2 个字符',
-  );
-  assert.equal(
-    messageOf(() =>
-      parseSchema(registrationSchema(2), {
-        exhibitionId: 'exh-1',
-        visitorName: '张三',
-        visitorType: '普通观众',
-        answers: 'abc',
-      }),
-    ),
-    '整段报名内容最多 2 个字符',
   );
 });
 

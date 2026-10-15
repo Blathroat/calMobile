@@ -2,9 +2,8 @@
 /**
  * 屏幕 04 · 报名信息
  *
- * 表单按展商配置的收集项动态生成：文本、单选、多选三种类型。必填与字符上限取
- * bootstrap 下发的规则（`services/validate`），校验失败落在字段原位（`.field-error`
- * 加 `.field[data-invalid]`），提交按钮固定在页脚，成功后短暂停留再进「我的活动」。
+ * 表单按展商配置的收集项动态生成：文本、单选、多选三种类型。必填、选项和长度由回答文稿判断，
+ * 上限数字仍取 bootstrap。校验失败落在字段原位，提交按钮固定在页脚，成功后短暂停留再进「我的活动」。
  *
  * 从报名详情带 `?registrationId=` 进来是「修改报名」：按收集项标题回填已有答案，
  * 提交仍是一次新的报名写入（与旧实现一致）。
@@ -16,7 +15,8 @@ import { isJoinSurface, paths } from '@/app/surface';
 import { useAsync } from '@/composables/useAsync';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
-import { check, limit } from '@/services/validate';
+import { answerDocument } from '@domain/answer-document';
+import { limit } from '@/services/validate';
 import { EXHIBITION_STATUS } from '@/services/status';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -119,43 +119,30 @@ async function load(): Promise<void> {
 
 /** 按收集项把已有答案回填到表单；没有已有报名时只给必填单选补上第一项。 */
 function seed(list: unknown[], existing: Registration | null): void {
+  const decoded = answerDocument({
+    fields: list as FieldDef[],
+    source: { text: existing?.answers ?? '' },
+  }).values;
   for (const raw of list) {
     const field = raw as FieldDef;
     const title = String(field.title ?? '');
     if (!title) continue;
     const options = splitOptions(field.options);
-    const stored = existing ? storedValue(existing, title) : '';
+    const stored = decoded[title];
     if (field.type === '单选') {
+      const value = typeof stored === 'string' ? stored : '';
       answers[title] = existing
-        ? (options.find((option) => option === stored) ?? '')
+        ? (options.find((option) => option === value) ?? '')
         : (field.required === true ? (options[0] ?? '') : '');
       continue;
     }
     if (field.type === '多选') {
-      const chosen = splitChoices(stored);
+      const chosen = Array.isArray(stored) ? stored : [];
       answers[title] = options.filter((option) => chosen.includes(option));
       continue;
     }
-    answers[title] = stored;
+    answers[title] = typeof stored === 'string' ? stored : '';
   }
-}
-
-/** 答案行是「标题：值」的多行文本，与后端 `answerValue` 用同一套解析。 */
-function storedValue(record: Registration, title: string): string {
-  for (const line of String(record.answers ?? '').split('\n')) {
-    for (const separator of ['：', ':']) {
-      const prefix = `${title}${separator}`;
-      if (!line.startsWith(prefix)) continue;
-      const value = line.slice(prefix.length).trim();
-      return value === t('s_15h5nhd') ? '' : value;
-    }
-  }
-  return '';
-}
-
-/** 多选答案用顿号分隔（与后端 `splitChoices` 一致）。 */
-function splitChoices(value: string): string[] {
-  return value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean);
 }
 
 /** 选项为空时给一个占位选项，不渲染空白的单选 / 多选。 */
@@ -178,11 +165,6 @@ function textValue(field: FieldDef): string {
 function multiValue(field: FieldDef): string[] {
   const value = answers[field.title];
   return Array.isArray(value) ? value : [];
-}
-
-/** 校验与提交共用的字段值：多选拼成顿号分隔的文本，与旧实现一致。 */
-function valueOf(field: FieldDef): string {
-  return field.type === '多选' ? multiValue(field).join('、') : textValue(field);
 }
 
 function clearFieldError(title: string): void {
@@ -220,17 +202,19 @@ async function submit(): Promise<void> {
   error.value = '';
   for (const key of Object.keys(fieldErrors)) delete fieldErrors[key];
 
+  const document = answerDocument({
+    fields: fields.value,
+    source: { values: answers },
+    limits: { textFill: textFillMax.value, answer: answerMax.value },
+  });
   let firstInvalid = '';
-  for (const field of fields.value) {
-    const message = check(valueOf(field), {
-      label: field.title,
-      required: field.required === true,
-      // 文本框填写按单项上限；整段报名内容在拼好后再查一次。
-      max: field.type === '文本' ? textFillMax.value : 0,
-    });
-    if (!message) continue;
-    fieldErrors[field.title] = message;
-    if (!firstInvalid) firstInvalid = field.title;
+  for (const problem of document.problems) {
+    if (!problem.title) {
+      error.value = problem.message;
+      continue;
+    }
+    fieldErrors[problem.title] = problem.message;
+    if (!firstInvalid) firstInvalid = problem.title;
   }
   if (firstInvalid) {
     await focusField(firstInvalid);
@@ -240,16 +224,11 @@ async function submit(): Promise<void> {
     error.value = t('s_1b45hrg');
     return;
   }
+  if (error.value) return;
 
   const profile = session.user;
   const visitorName = String(profile.nickname || profile.username || t('s_jt5fam'));
   const visitorType = String(profile.roleLabel || t('s_1cfg610'));
-  const lines = fields.value.map((field) => `${field.title}：${valueOf(field) || t('s_15h5nhd')}`);
-  const packed = lines.join('\n');
-  if (answerMax.value > 0 && packed.length > answerMax.value) {
-    error.value = `整段报名内容最多 ${answerMax.value} 个字符`;
-    return;
-  }
 
   busy.value = true;
   try {
@@ -261,7 +240,7 @@ async function submit(): Promise<void> {
       day: item.day,
       visitorName,
       visitorType,
-      answers: lines.join('\n'),
+      answers: document.text,
     });
     if (!result?.ok) {
       error.value = String(result?.error || t('s_f66edb'));

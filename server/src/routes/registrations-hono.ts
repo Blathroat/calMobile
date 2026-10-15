@@ -10,6 +10,7 @@ import { readJsonBody } from '../http/body-limit.js';
 import { authenticateHono, userOf, type HonoEnv } from './hono-utils.js';
 import * as labels from '../domain/labels.js';
 import { limits as readLimits, parseSchema } from '../domain/validation.js';
+import { answerDocument } from '../domain/answer-document.js';
 import { registrationSchema, registrationTargetSchema } from '../domain/schemas.js';
 
 const app = new Hono<HonoEnv>();
@@ -36,41 +37,6 @@ async function loadRegistration(id: string) {
     id,
   ]);
   return result.rows[0] || null;
-}
-const EMPTY_ANSWER = '未填写';
-function answerValue(answers: unknown, title: string) {
-  for (const line of String(answers ?? '').split('\n'))
-    for (const separator of ['：', ':']) {
-      const prefix = `${title}${separator}`;
-      if (line.startsWith(prefix)) {
-        const value = line.slice(prefix.length).trim();
-        return value === EMPTY_ANSWER ? '' : value;
-      }
-    }
-  return '';
-}
-function splitChoices(value: string) {
-  return String(value || '')
-    .split(/[、,，]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-function validateAnswers(fields: Awaited<ReturnType<typeof loadFields>>, answers: unknown, textFill: number) {
-  for (const field of fields) {
-    const value = answerValue(answers, field.title);
-    if (!value) {
-      if (field.required) throw badRequest(`请填写「${field.title}」`);
-      continue;
-    }
-    if (field.type !== '单选' && field.type !== '多选') {
-      if (textFill > 0 && value.length > textFill) throw badRequest(`「${field.title}」最多 ${textFill} 个字符`);
-      continue;
-    }
-    const options = Array.isArray(field.options) ? field.options : [];
-    const chosen = field.type === '多选' ? splitChoices(value) : [value];
-    if (options.length > 0 && chosen.some((item) => !options.includes(item)))
-      throw badRequest(`「${field.title}」只能选择：${options.join(' / ')}`);
-  }
 }
 function bodyRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -109,17 +75,20 @@ app.post('/', authenticateHono, async (c) => {
     if (exhibition.before_start) throw badRequest('报名尚未开始');
     if (exhibition.after_end) throw badRequest('报名已截止');
     const bounds = await readLimits();
-    const answerMax = Number(bounds.answer) || 0;
-    const textFill = Number(bounds.textFill) || 200;
-    const { visitorName, visitorType, answers } = parseSchema(registrationSchema(answerMax), body);
-    validateAnswers(await loadFields(exhibitionId), answers, textFill);
+    const { visitorName, visitorType, answers } = parseSchema(registrationSchema(), body);
+    const document = answerDocument({
+      fields: await loadFields(exhibitionId),
+      source: { text: answers },
+      limits: { textFill: Number(bounds.textFill) || 200, answer: Number(bounds.answer) || 200 },
+    });
+    if (document.message) throw badRequest(document.message);
     const autoApproved = exhibition.status === 'optional';
     const status = autoApproved ? 'approved' : 'pending';
     const id = `reg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     try {
       await query(
         `INSERT INTO registrations (id, exhibition_id, visitor_id, visitor_name, visitor_type, answers, status) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [id, exhibitionId, user.userId, visitorName, visitorType, answers, status],
+        [id, exhibitionId, user.userId, visitorName, visitorType, document.text, status],
       );
     } catch (error: unknown) {
       if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505')

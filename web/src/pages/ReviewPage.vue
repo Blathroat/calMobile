@@ -19,7 +19,8 @@ import { openSheet } from '@/services/sheet';
 import type { SheetAction } from '@/services/sheet';
 import { device } from '@/services/device-services';
 import { REGISTRATION_STATUS, REVIEW_FILTERS, statusTone } from '@/services/status';
-import { answerLines, truncate } from '@/services/format';
+import { answerDocument } from '@domain/answer-document';
+import { truncate } from '@/services/format';
 import SegControl from '@/components/SegControl.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import RegistrationDetailSheet from '@/components/RegistrationDetailSheet.vue';
@@ -150,7 +151,7 @@ function openVisitor(record: Registration): void {
 }
 
 function openDetail(record: Registration): void {
-  const answers = answerLines(record.answers);
+  const answers = answerDocument({ source: { text: record.answers } }).lines;
   const targets = targetsFor(record);
   const hint = record.status === REGISTRATION_STATUS.ATTENDED
     ? t('s_159zzbg')

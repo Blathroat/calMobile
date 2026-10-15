@@ -10,7 +10,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
 import { toast } from '@/services/toast';
-import { check, limit } from '@/services/validate';
+import { answerDocument } from '@domain/answer-document';
+import { limit } from '@/services/validate';
 import RadioChoices from '@/components/RadioChoices.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -96,10 +97,6 @@ function multiValue(field: FieldDef): string[] {
   return Array.isArray(value) ? value : [];
 }
 
-function valueOf(field: FieldDef): string {
-  return field.type === '多选' ? multiValue(field).join('、') : textValue(field);
-}
-
 function onTextInput(field: FieldDef, event: Event): void {
   answers[field.title] = (event.target as HTMLInputElement).value;
   delete fieldErrors[field.title];
@@ -134,28 +131,23 @@ async function submit(): Promise<void> {
     error.value = t('s_1cujoxt');
     return;
   }
-  for (const field of fields.value) {
-    const message = check(valueOf(field), {
-      label: field.title,
-      required: field.required === true,
-      max: field.type === '文本' ? textFillMax.value : 0,
-    });
-    if (message) fieldErrors[field.title] = message;
+  const document = answerDocument({
+    fields: fields.value,
+    source: { values: answers },
+    limits: { textFill: textFillMax.value, answer: answerMax.value },
+  });
+  for (const problem of document.problems) {
+    if (problem.title) fieldErrors[problem.title] = problem.message;
+    else error.value = problem.message;
   }
-  if (Object.keys(fieldErrors).length > 0) return;
-  const lines = fields.value.map((field) => `${field.title}：${valueOf(field) || t('s_15h5nhd')}`);
-  const packed = lines.join('\n');
-  if (answerMax.value > 0 && packed.length > answerMax.value) {
-    error.value = `整段报名内容最多 ${answerMax.value} 个字符`;
-    return;
-  }
+  if (document.problems.length > 0) return;
   busy.value = true;
   try {
     const result = await api.meetings.submit({
       exhibitorId: String(form.value?.exhibitorId || route.params.exhibitorId || ''),
       meetingDate: meetingDate.value,
       meetingTime: meetingTime.value,
-      answers: lines.join('\n'),
+      answers: document.text,
     });
     if (result?.ok === false) {
       error.value = String(result.error || t('s_f66edb'));

@@ -14,7 +14,8 @@ import { useAsync } from '@/composables/useAsync';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
 import { REGISTRATION_STATUS, statusTone } from '@/services/status';
-import { answerLines, formatMeetingWhen } from '@/services/format';
+import { answerDocument } from '@domain/answer-document';
+import { formatMeetingWhen } from '@/services/format';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
@@ -33,7 +34,7 @@ const meeting = computed<JsonObject | undefined>(() => {
   const record = data.meeting;
   return record && typeof record === 'object' ? record as JsonObject : undefined;
 });
-const answers = computed(() => answerLines(meeting.value?.answers));
+const answers = computed(() => answerDocument({ source: { text: meeting.value?.answers } }).lines);
 const status = computed(() => String(meeting.value?.status || ''));
 const pending = computed(() => status.value === REGISTRATION_STATUS.PENDING);
 const approved = computed(() => status.value === REGISTRATION_STATUS.APPROVED);

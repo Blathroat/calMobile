@@ -67,17 +67,6 @@ export function formatRecordDate(record: JsonLike): string {
 
 type JsonLike = Record<string, unknown> | undefined | null;
 
-/** 把答案文本按行渲染为键值对，找不到分隔符时返回原文。 */
-export function answerLines(answers: unknown): Array<{ label: string; value: string }> {
-  const text = String(answers ?? '').trim();
-  if (text === '') return [];
-  return text.split('\n').map((line) => {
-    const index = line.indexOf('：') >= 0 ? line.indexOf('：') : line.indexOf(':');
-    if (index <= 0) return { label: '', value: line.trim() };
-    return { label: line.slice(0, index).trim(), value: line.slice(index + 1).trim() };
-  });
-}
-
 /** 裁剪文本，用于列表摘要。 */
 export function truncate(value: unknown, max = 42): string {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();

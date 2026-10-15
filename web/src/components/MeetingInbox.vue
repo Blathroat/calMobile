@@ -18,7 +18,8 @@ import { confirmSheet, openSheet } from '@/services/sheet';
 import type { SheetAction } from '@/services/sheet';
 import { meetingLink } from '@/services/registration-link';
 import { statusTone } from '@/services/status';
-import { answerLines, formatMeetingWhen, truncate } from '@/services/format';
+import { answerDocument } from '@domain/answer-document';
+import { formatMeetingWhen, truncate } from '@/services/format';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
@@ -126,7 +127,7 @@ function askStatus(record: JsonObject): void {
 }
 
 function openDetail(record: JsonObject): void {
-  const answers = answerLines(record.answers);
+  const answers = answerDocument({ source: { text: record.answers } }).lines;
   const actions: SheetAction[] = [];
   if (canChange(record)) {
     actions.push({

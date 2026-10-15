@@ -11,6 +11,7 @@ import * as labels from '../domain/labels.js';
 import { limits as readLimits, parseSchema } from '../domain/validation.js';
 import { boolSchema } from '../domain/validation.js';
 import { z } from 'zod';
+import { answerDocument } from '../domain/answer-document.js';
 import { meetingApplySchema, meetingSettingsSchema } from '../domain/schemas.js';
 import { readSection } from '../domain/settings.js';
 
@@ -111,45 +112,6 @@ async function replaceFields(
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
       [newId('mfield'), exhibitorId, item.title, item.type, item.required, JSON.stringify(item.options), index],
     );
-  }
-}
-
-function answerValue(answers: unknown, title: string) {
-  for (const line of String(answers ?? '').split('\n')) {
-    for (const separator of ['：', ':']) {
-      const prefix = `${title}${separator}`;
-      if (line.startsWith(prefix)) {
-        const value = line.slice(prefix.length).trim();
-        return value === '未填写' ? '' : value;
-      }
-    }
-  }
-  return '';
-}
-
-function splitChoices(value: string) {
-  return String(value || '')
-    .split(/[、,，]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function validateAnswers(fields: Awaited<ReturnType<typeof loadFields>>, answers: unknown, textFill: number) {
-  for (const field of fields) {
-    const value = answerValue(answers, field.title);
-    if (!value) {
-      if (field.required) throw badRequest(`请填写「${field.title}」`);
-      continue;
-    }
-    if (field.type !== '单选' && field.type !== '多选') {
-      if (textFill > 0 && value.length > textFill) throw badRequest(`「${field.title}」最多 ${textFill} 个字符`);
-      continue;
-    }
-    const options = Array.isArray(field.options) ? field.options : [];
-    const chosen = field.type === '多选' ? splitChoices(value) : [value];
-    if (options.length > 0 && chosen.some((item) => !options.includes(item))) {
-      throw badRequest(`「${field.title}」只能选择：${options.join(' / ')}`);
-    }
   }
 }
 
@@ -291,13 +253,15 @@ app.post('/', authenticateHono, async (c) => {
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
     const bounds = await readLimits();
-    const answerMax = Number(bounds.answer) || 200;
-    const textFill = Number(bounds.textFill) || 200;
-    const input = parseSchema(meetingApplySchema(answerMax), body);
+    const input = parseSchema(meetingApplySchema(), body);
     assertTime(input.meetingTime);
     if (input.exhibitorId === user.userId) throw badRequest('不能向自己预约私人会议');
-    const fields = await loadFields(input.exhibitorId);
-    validateAnswers(fields, input.answers, textFill);
+    const document = answerDocument({
+      fields: await loadFields(input.exhibitorId),
+      source: { text: input.answers },
+      limits: { textFill: Number(bounds.textFill) || 200, answer: Number(bounds.answer) || 200 },
+    });
+    if (document.message) throw badRequest(document.message);
     const { maxFutureMeetings } = await readSection('exhibitor');
     const id = newId('meet');
     try {
@@ -333,7 +297,7 @@ app.post('/', authenticateHono, async (c) => {
             visitor.rows[0]?.nickname || '用户',
             input.meetingDate,
             input.meetingTime,
-            input.answers,
+            document.text,
           ],
         );
       });

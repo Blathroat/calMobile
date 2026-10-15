@@ -20,7 +20,8 @@ import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import QrCanvas from '@/components/QrCanvas.vue';
-import { answerLines, formatRecordDate } from '@/services/format';
+import { answerDocument } from '@domain/answer-document';
+import { formatRecordDate } from '@/services/format';
 import type { Registration, RegistrationDetail } from '@/api/types';
 import { paths } from '@/app/surface';
 import { t } from '@/i18n';
@@ -31,7 +32,7 @@ const bootstrap = useBootstrapStore();
 
 const query = useAsync<RegistrationDetail>();
 const record = computed<Registration | undefined>(() => query.data.value?.registration);
-const answers = computed(() => answerLines(record.value?.answers));
+const answers = computed(() => answerDocument({ source: { text: record.value?.answers } }).lines);
 
 const cancelled = computed(() => record.value?.statusLabel === REGISTRATION_STATUS.CANCELLED);
 /** 已参加是终态：后端不允许再撤销，按钮就不要画成可点的。 */

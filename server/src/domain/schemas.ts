@@ -284,13 +284,13 @@ export function meetingSettingsSchema(limits: Limits) {
   });
 }
 
-/** 私人会议申请：日期必填，时间选填，答案是收集项拼出来的文本。 */
-export function meetingApplySchema(answerMax: number) {
+/** 私人会议申请：日期必填，时间选填。整段答案的长度在回答文稿里判断。 */
+export function meetingApplySchema() {
   return z.object({
     exhibitorId: textSchema({ label: '展商', max: 80 }),
     meetingDate: isoDateSchema({ label: '会议日期', required: true }),
     meetingTime: textSchema({ label: '会议时间', max: 20, required: false }),
-    answers: textSchema({ label: '整段报名内容', max: answerMax, required: false }),
+    answers: textSchema({ label: '整段报名内容', required: false }),
   });
 }
 
@@ -398,15 +398,12 @@ export function exhibitionInputSchema(
 }
 export type ExhibitionInput = z.infer<ReturnType<typeof exhibitionInputSchema>>;
 
-export function registrationSchema(answerMax = 0) {
+export function registrationSchema() {
   return z.object({
     exhibitionId: textSchema({ label: '展会', required: false }),
     visitorName: textSchema({ label: '姓名' }),
     visitorType: textSchema({ label: '参观身份' }),
-    answers: inputString.refine(
-      (value) => answerMax <= 0 || value.length <= answerMax,
-      `整段报名内容最多 ${answerMax} 个字符`,
-    ),
+    answers: inputString,
   });
 }
 export type RegistrationInput = z.infer<ReturnType<typeof registrationSchema>>;
