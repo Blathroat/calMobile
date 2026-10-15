@@ -1,53 +1,33 @@
 # 构建、测试与上线
 
-本文件只保留跨模块的操作流程。后端命令、环境变量、迁移和状态页细节见 [`server/README.md`](../server/README.md)。
+本文件是跨模块的验证和上线步骤。后端启动、模式差异和响应约定见 [`server/README.md`](../server/README.md)。环境变量以 `server/.env.example` 的注释为准。Node 版本以 `server/package.json` 和 `web/package.json` 的 `engines` 为准。
 
-开发与运行要求 Node.js 24.15+（24.x）或 26+，使用两个工程 `packageManager` 固定的 pnpm 版本。前后端安装均启用冻结锁文件。
+前端 `vue-tsc` 停在 TypeScript 6（`web/package.json` 的 `typescript`）。当前 Vue 类型检查器用不上 TypeScript 7 的原生编译入口。后端使用 TypeScript 7。升级时保留 `.vue` 类型检查。
 
-前端 `vue-tsc` 使用官方 `@typescript/typescript6` 兼容包（以 `typescript` 别名安装）；TypeScript 7 的原生编译入口暂不受当前 Vue 类型检查器支持。后端使用 TypeScript 7。升级时保留 `.vue` 类型检查门禁。
+## 按改动验证
 
-## 本地运行
+改完后，下表里对应命令的退出码为 0。脚本自身的参数写在脚本开头，这里只写什么时候跑哪一个。
 
-```bash
-docker compose up -d
-cd server
-pnpm install --frozen-lockfile
-cp .env.example .env
-# 将 JWT_SECRET 与必填的 TOTP_SECRET_KEY 分别换成独立的随机密钥（至少 32 个字符）
-pnpm db:migrate && pnpm db:seed
-pnpm dev
-```
+| 改动                 | 命令                                                                                                                                     |
+|----------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| Vue 页面、组件、样式 | `node scripts/webui-check.js`（类型检查、单测、生产构建）。打 APK 时 `preBuild` 把 `web/dist` 同步到 WebView 资源                        |
+| 路由、加载、文案绑定 | `node --test scripts/webui-render.test.js`，以及 `node scripts/check-strings.js`                                                         |
+| 前端文案源码         | 先 `node scripts/extract-strings.js --write`，再跑 `check-strings`。脚本替换范围见 [`engineering.md`](engineering.md)                    |
+| 界面有没有整块丢失   | `node scripts/ui-parity.mjs`。有意删除文案时，只改 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 里的 `--max-gone`           |
+| 界面截图             | `node scripts/ui-shot.mjs`。脚本开头写了预览服务和账号参数                                                                               |
+| 后端规则或响应       | `pnpm --dir server test`，以及 `pnpm --dir server test:contract`（需要 PostgreSQL）。改了已加载的 `server/src` 后重启不用 watch 起的进程 |
+| Java 或桥接          | `gradlew.bat :app:testDebugUnitTest`。出包或资源变更再跑 `gradlew.bat :app:assembleDebug`                                                |
+| 仓库级冒烟           | `node scripts/smoke-check.js`                                                                                                            |
 
-开发模式打开 `/status`、`/health` 和报名站；生产使用 `pnpm start`，默认关闭这三项，只留 `/ping`，并执行配置自检。生产数据库迁移使用 `pnpm db:migrate:prod`。改动 `server/src` 后重启进程。
+模拟器和真机用 `pwsh -File scripts\emu.ps1`，子命令写在脚本顶部。设备连不上后端时，先读 `server/src/dev/adb-reverse.ts` 开头。
 
-`pnpm dev` 默认在 `PORT` 上提供浏览器报名站，本机打开 `http://localhost:3000/`（端口以 `server/.env` 的 `PORT` 为准）。`pnpm start` 默认不托管页面；设 `ENABLE_WEB=true` 后才托管，并且产物缺失时拒绝启动。域名写在 `PUBLIC_BASE_URL`，分享链接是 `{PUBLIC_BASE_URL}/e/{展会 id}`。没配域名时页面不跳转，应用也不会发出 `127.0.0.1` 报名链接。`pnpm dev` 会先构建 `web/dist-join`，并在页面源码变化时重新构建。报名站不打进 APK。改报名站页面后刷新浏览器即可，不必重启进程。
+WebView 文字不一定出现在无障碍树里。点击回归用坐标，并保留截图。扫码回归用 `node scripts/decode-shot.js` 检查真实截图像素。
 
-## 对外部署（域名、TLS 与上传）
+动效全部静止时，先跑 `pwsh -File scripts\emu.ps1 motion check`。三个动画 scale 都为 1 之后，再改代码。
 
-服务本身只监听 http，**TLS 由前面的反向代理终止**（证书、续期、HTTP/2 都在那一层）。下面几项都是可选的：不配就是本机开发形态。
+## 上线
 
-| 环境变量 | 作用 | 不配时 |
-| --- | --- | --- |
-| `PUBLIC_BASE_URL` | 报名站规范来源与分享链接（`https://app.example.com`）。页面 Host 不一致时 308 到这里；`/api`、`/media` 和探针不跳转。状态页、`/ping` 和邮件里的绝对地址也用它 | 不跳转，状态页只显示端口；分享时说明报名站地址未配置，不生成 `127.0.0.1` 链接 |
-| `FORCE_HTTPS` | 反代终止 TLS 时打开：`X-Forwarded-Proto: http` 的请求 308 跳到 https | 不跳转，明文请求照常处理 |
-| `HSTS_MAX_AGE` | `Strict-Transport-Security` 的 max-age（秒），默认 180 天 | 下发默认值；填 `0` 表示不下发 |
-| `TRUST_PROXY` | 反代后面必须打开，否则 `req.ip` 是代理地址，按 IP 的验证码限流退化成全局额度 | 关闭（直连） |
-| `CORS_ORIGIN` | 允许的前端来源。App 页面跑在 WebView 的 `https://appassets.androidplatform.net`，浏览器调试用 `*` | `*`（仅开发） |
-| `ENABLE_STATUS_PAGE` | `/status` 与 `/api/v1/status`：迁移清单、各表行数与接口清单 | 生产关闭、其它环境开启 |
-| `ENABLE_PING` | `/ping` 与 `/api/v1/ping`：对外存活探针，只返回服务名和版本 | 两种环境都开启 |
-| `ENABLE_HEALTH` | `/health`：进程是否在跑，响应里带运行时间 | 生产关闭、其它环境开启 |
-| `ENABLE_WEB` | 是否托管浏览器报名站。生产打开后缺少 `web/dist-join` 会拒绝启动 | 生产关闭、其它环境开启 |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_EMAIL` | 生产初始管理员。只在该用户名还不存在时创建，之后不覆盖密码。口令 12–32 位，不能用示例口令 | 生产必填 |
-
-部署检查单：
-
-1. `pnpm start` 的自检会把「会出事」的配置直接拒绝启动（开发密钥、默认库口令、默认管理员口令、占位发件人……），先让它过。生产不要跑 `pnpm db:seed`。
-2. 反代把域名指向服务端口，只暴露 443；配 `proxy_set_header X-Forwarded-Proto $scheme;` 与 `X-Forwarded-For`，服务端设 `TRUST_PROXY=1`。
-3. 确认 https 全站可用之后再开 `FORCE_HTTPS` 与长 `HSTS_MAX_AGE`（HSTS 一旦下发，浏览器会长期拒绝 http 访问）。
-4. `CORS_ORIGIN` 换成真实来源，不要留 `*`。
-5. 状态页要么关掉，要么在反代上加 Basic Auth 并只允许内网访问。
-
-nginx 最小片段：
+服务只监听 HTTP。TLS、证书和 HTTP/2 由前面的反向代理终止。
 
 ```nginx
 server {
@@ -56,7 +36,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/app.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
 
-    client_max_body_size 64m;              # 要盖住视频单文件上限，默认 50MB
+    client_max_body_size 64m;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -72,97 +52,16 @@ server {
 }
 ```
 
-**上传与媒体**：头像、展会封面和简介里的图片、视频都上传到服务器，文件在 `UPLOAD_DIR`（默认 `server/data/uploads`）。头像经 `POST /api/v1/profile/avatar` 写入 `avatars/`，由 `GET /media/avatars/:file` 分发，移除走 `DELETE /api/v1/profile/avatar`。封面和简介媒体经 `POST /api/v1/media` 写入 `files/`，由 `GET /media/files/:file` 分发。库里存 `/media/...`；配了 `MEDIA_BASE_URL`（`http(s)://主机[:端口]`，不含路径）时存绝对地址。头像单文件上限是 `min(upload.avatarSizeMb, UPLOAD_MAX_MB)`，`UPLOAD_MAX_MB` 缺省并封顶 20。封面和简介的单文件上限是管理设置里的 `imageSizeMb` / `videoSizeMb`（视频默认 50MB），不走这道 20MB 硬顶。这两路都不走 2MB 的 JSON 体积守卫。没有被引用，或文件已经不在的地址会删掉；刚上传还没写进正文的文件保留一小时。存储总量默认 1024MB，可在管理设置里改。存满后默认拒绝新上传，也可以改成删掉最早的文件。nginx 的 `client_max_body_size` 要盖住视频单文件上限；默认 50MB 时至少要 `64m`，`12m` 只够头像。
+发布前下面每一项都成立：
 
-## 验证顺序
-
-```bash
-node scripts/smoke-check.js
-node scripts/webui-check.js
-node --test scripts/webui-render.test.js
-node scripts/check-strings.js
-pnpm --dir server build
-pnpm --dir server typecheck
-pnpm --dir server test
-pnpm --dir server test:contract
-gradlew.bat :app:testDebugUnitTest
-gradlew.bat :app:assembleDebug
-```
-
-按改动范围运行必要项目：
-
-- Vue 前端：`node scripts/webui-check.js`（类型检查、单测与生产构建三件套）；生成 APK 时 `preBuild` 自动将 `web/dist` 同步到 generated WebView 资源。
-
-- 前端路由、加载和文案：渲染测试、字符串检查。
-- 后端规则或响应：服务端单测与契约测试；数据库相关测试需要 PostgreSQL。
-- Java 或桥接：`testDebugUnitTest`；出包或资源变更再运行 `assembleDebug`。
-- 前端文案源码变更后先运行 `node scripts/extract-strings.js --write`。
-
-## 模拟器与真机回归
-
-```powershell
-pwsh -File scripts\emu.ps1 install
-pwsh -File scripts\emu.ps1 reverse
-pwsh -File scripts\emu.ps1 shot .omo\evidence\screen
-pwsh -File scripts\emu.ps1 logs
-pwsh -File scripts\emu.ps1 motion check
-```
-
-页面里的接口地址写死 `http://127.0.0.1:3000`（WebView 不允许别的写法），模拟器里的 `127.0.0.1` 又是模拟器自己，因此必须把设备的 3000 端口反向映射到本机。**`pnpm dev` 会自动接好并在运行期间看护**（`src/dev/adb-reverse.ts`：每 5 秒查一次，没设备时降到 15 秒，设备晚启动、adb server 重启后都会补回），所以只跑 `pnpm dev` 就能直接调试；日志里出现「已接通设备 tcp:3000 → 本机 tcp:3000（adb reverse）」就说明通了。`ADB_REVERSE=0` 可关掉自动接通。
-
-`emu.ps1 install` 与 `restart` 也会确保一次，服务不是用 `pnpm dev` 起的（例如 `pnpm start`）就单独跑 `reverse`。症状是应用里每个请求都失败、页面提示「连不上后端服务」，看起来像「后端没起」——先看这句提示，再看映射在不在（`adb reverse --list`）。
-
-WebView 文字不一定出现在无障碍树中，点击回归用坐标并保留截图证据；扫码回归可用 `node scripts/decode-shot.js` 检查真实截图像素。
-
-## 浏览器逐屏回归（CDP）
-
-模拟器里点坐标很脆（软键盘会改变布局、WebView 文案不一定进无障碍树），界面回归优先用 CDP 跑真实 Chromium：
-
-```bash
-pnpm --dir web build
-pnpm --dir web exec vite preview --port 5173 --strictPort   # 另开一个终端
-node scripts/ui-shot.mjs --out .omo/evidence/ui --account user --routes settings,profile
-node scripts/ui-shot.mjs --stub-native --routes settings      # 桩掉原生桥，跑通选图/裁剪等设备流程
-node scripts/ui-shot.mjs --account demo --routes admin --click 展会
-```
-
-脚本自己拉起 headless Chrome 并在结束时关掉它；需要后端在 `127.0.0.1:3000`，开发期把 `CORS_ORIGIN` 设为 `*`。
-
-改动页面文案后，用它对照重构前的实现看有没有整块丢失：
-
-```bash
-node scripts/ui-parity.mjs          # 与 Vue 迁移前固定提交 6491a068 对照 t('s_xxx') 覆盖
-node scripts/ui-parity.mjs --full   # 连「搬到了别处」的 key 一起打印
-node scripts/ui-parity.mjs --ref <commit> --max-gone 76  # 显式选择含全部旧页面的参考提交
-```
-
-`→ 无` 才是真缺口；`→ web/src/...` 说明那条文案搬到了路由 meta、共享服务或共享组件里。
-
-CI 里这两个脚本都在跑：`ui-parity` 在 `web-and-server` 作业（固定基准 `6491a068f05d8a17ba51e9d3eb073eda4363755f`、`--max-gone 76`，超预算说明有整块界面没搬过来；需要完整 Git 历史，参考提交无效或任一参考页面缺失都失败）。76 里包含新建展会不再使用的「保存后可编辑」。
-`ui-shot` 在 `ui-regression` 作业（自带 PostgreSQL 服务、迁移 + 示例数据、后端与 `vite preview`，截图作为 `ui-screenshots` 工件上传）。
-预算值随有意删除的文案调整。`ui-shot` 的 `detail` 别名会从后端公开展会列表选择真实 id，也可指定 `detail/<id>`；没有展会时失败。截图前检查目标路由、顶栏标题、正文和加载状态，登录失败、权限重定向、空白正文或页面错误都报错，并保存 `failure.png`。`--click` 指定的操作不存在时同样失败。
-
-动效全部静止时，先确认三个动画 scale 都为 1：
-
-```powershell
-pwsh -File scripts\emu.ps1 motion check
-pwsh -File scripts\emu.ps1 motion
-```
-
-## 发布检查
-
-发布前确认：
-
-- 生产使用 HTTPS 和反向代理，`CORS_ORIGIN` 只允许 WebView 来源；客户端关闭明文放行。
-- 分别配置访问令牌密钥 `JWT_SECRET` 与必填的验证器加密密钥 `TOTP_SECRET_KEY`（各自至少 32 个随机字符），更换数据库凭据，并显式配置 `MAIL_FROM_ADDRESS`；邮件使用托管 SMTP，不部署 Mailpit，不使用 `memory` 或仅写日志的通道。
-- 生产状态页、`/health` 和报名站默认关闭。状态页临时打开时用反代 Basic Auth 或 IP 白名单。公网探活只使用 `/ping`。初始管理员写在 `ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL`，不要使用示例账号。
-- 使用 Node.js 24.15+（24.x）或 26+，在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，再执行 `pnpm db:migrate:prod` 并重启生产进程；迁移完成后才切流量。
-- 数据库启用 `Asia/Shanghai` 时区，配置备份、恢复演练和日志轮转。
-- 头像、展会封面和简介媒体存在服务器 `UPLOAD_DIR`。nginx `client_max_body_size` 要盖住视频单文件上限（默认 50MB），`12m` 只够头像。
-- 注册和安全邮件涉及个人信息，注册页需要隐私告知；营销或提醒邮件需要退订机制。
-
-## 上线限制
-
-当前服务没有默认的公网部署形态、域名和 HTTPS。已有域名与服务器时，证书可用 Let's Encrypt；成本、邮件服务和备案取决于部署地区，具体供应商额度不写入代码文档。
-
-发布完成后检查生产日志中的运行模式、配置自检和邮件失败计数；故障详情留在服务端日志，不向客户端返回数据库地址、SQL 或堆栈。
+1. `pnpm start` 的自检通过。生产不跑 `pnpm db:seed`。自检会拒绝启动的项和只警告的项，见 [`server/README.md`](../server/README.md) 的模式表。
+2. 反代只暴露 443，并送出 `X-Forwarded-Proto` 与 `X-Forwarded-For`。服务端设 `TRUST_PROXY=1`。
+3. 确认 https 全站可用之后，再开 `FORCE_HTTPS` 和长 `HSTS_MAX_AGE`。
+4. `CORS_ORIGIN` 写成真实来源。
+5. 状态页保持关闭，或在反代上加 Basic Auth 并只允许内网访问。公网探活只用 `/ping`。
+6. `JWT_SECRET` 与 `TOTP_SECRET_KEY` 各自至少 32 个随机字符。数据库口令不是示例值。`MAIL_FROM_ADDRESS` 已显式配置。邮件走托管 SMTP。
+7. Node 版本满足 `engines`。在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，再执行 `pnpm db:migrate:prod`，迁移完成后再切流量。
+8. 数据库时区是 `Asia/Shanghai`。原因写在仓库根 `docker-compose.yml`。备份和恢复演练已经做过。
+9. `client_max_body_size` 盖住视频单文件上限。视频默认 50MB 时至少写 `64m`。头像那一道传输硬顶盖不住视频。上传目录和开关见 `server/.env.example`。存满之后的产品行为见 [`product.md`](product.md)。
+10. 注册和安全邮件涉及个人信息，注册页有隐私告知。营销或提醒邮件有退订。
+11. 客户端生产构建关闭明文放行：`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`。

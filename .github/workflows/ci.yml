@@ -53,11 +53,7 @@ jobs:
       - run: node --test scripts/webui-render.test.js
       - run: node scripts/check-strings.js
       - name: 逐屏文案对照（与迁移前固定提交比有没有整块丢失）
-        # 预算是「有意删掉的旧文案」的额度，不是容忍度：目前 76 条全部是刻意删除的。
-        # 前 72 条是入口页差异、展会简介小标题、现场亮点、说明性提示，以及安全设置改版替换的
-        # 10 条旧个人页文案。其后删了管理页「公开页」、公开页「返回个人主页 / 返回管理后台」，
-        # 以及新建展会不再使用的「保存后可编辑」。
-        # 每次新增删除都应当在这里把数字往上调，并确认删掉的那几条是有意的。
+        # 预算是有意删掉的旧文案额度。新增有意删除时，只把 --max-gone 往上调。
         run: node scripts/ui-parity.mjs --max-gone 76
       - run: pnpm --dir web typecheck
       - run: pnpm --dir web test

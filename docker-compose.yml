@@ -50,5 +50,5 @@ services:
 
 volumes:
   calmobile-pgdata:
-    # 固定卷名：不加 compose 项目前缀，与文档里的 docker volume rm 命令保持一致
+    # 固定卷名：不加 compose 项目前缀，避免项目目录名一变就换卷。
     name: calmobile-pgdata
