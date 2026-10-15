@@ -9,9 +9,9 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
-import { useBootstrapStore } from '@/stores/bootstrap';
 import { toast } from '@/services/toast';
-import { check } from '@/services/validate';
+import { check, limit } from '@/services/validate';
+import RadioChoices from '@/components/RadioChoices.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MeetingWhenFields from '@/components/MeetingWhenFields.vue';
@@ -29,7 +29,6 @@ interface FieldDef {
 
 const route = useRoute();
 const router = useRouter();
-const bootstrap = useBootstrapStore();
 const query = useAsync<JsonObject>();
 
 const meetingDate = ref('');
@@ -45,7 +44,8 @@ let redirectTimer: number | undefined;
 const form = computed(() => query.data.value);
 const open = computed(() => form.value?.open === true);
 const fields = computed<FieldDef[]>(() => (Array.isArray(form.value?.fields) ? form.value.fields as FieldDef[] : []));
-const answerMax = computed(() => Number(bootstrap.limits.answer) || 200);
+const textFillMax = computed(() => limit('textFill', 200));
+const answerMax = computed(() => limit('answer', 200));
 const closedMessage = computed(() => String(form.value?.message || t('s_7q6wmd')));
 const notice = computed(() => String(form.value?.notice || '').trim());
 
@@ -138,12 +138,17 @@ async function submit(): Promise<void> {
     const message = check(valueOf(field), {
       label: field.title,
       required: field.required === true,
-      max: field.type === '文本' ? answerMax.value : 0,
+      max: field.type === '文本' ? textFillMax.value : 0,
     });
     if (message) fieldErrors[field.title] = message;
   }
   if (Object.keys(fieldErrors).length > 0) return;
   const lines = fields.value.map((field) => `${field.title}：${valueOf(field) || t('s_15h5nhd')}`);
+  const packed = lines.join('\n');
+  if (answerMax.value > 0 && packed.length > answerMax.value) {
+    error.value = `整段报名内容最多 ${answerMax.value} 个字符`;
+    return;
+  }
   busy.value = true;
   try {
     const result = await api.meetings.submit({
@@ -214,19 +219,12 @@ async function submit(): Promise<void> {
       <template v-for="field in fields" :key="field.title">
         <fieldset v-if="field.type === '单选'" class="choice-group" :data-invalid="fieldErrors[field.title] ? 'true' : undefined">
           <legend>{{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span></legend>
-          <div class="choice-row">
-            <span v-for="(option, index) in splitOptions(field.options)" :key="option" class="choice">
-              <input
-                :id="`${fieldId(field)}-${index}`"
-                type="radio"
-                :name="fieldId(field)"
-                :value="option"
-                :checked="textValue(field) === option"
-                @change="onRadioChange(field, option)"
-              >
-              <label :for="`${fieldId(field)}-${index}`">{{ option }}</label>
-            </span>
-          </div>
+          <RadioChoices
+            :name="fieldId(field)"
+            :options="splitOptions(field.options)"
+            :selected="textValue(field)"
+            @select="onRadioChange(field, $event)"
+          />
           <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
         </fieldset>
         <fieldset v-else-if="field.type === '多选'" class="choice-group" :data-invalid="fieldErrors[field.title] ? 'true' : undefined">
@@ -239,7 +237,7 @@ async function submit(): Promise<void> {
                 :checked="multiValue(field).includes(option)"
                 @change="onMultiChange(field, option, $event)"
               >
-              {{ option }}
+              <span class="check-copy">{{ option }}</span>
             </label>
           </div>
           <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
@@ -250,7 +248,7 @@ async function submit(): Promise<void> {
             :id="fieldId(field)"
             class="input"
             type="text"
-            :maxlength="answerMax"
+            :maxlength="textFillMax"
             :value="textValue(field)"
             @input="onTextInput(field, $event)"
           >

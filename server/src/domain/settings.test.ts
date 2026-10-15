@@ -116,6 +116,22 @@ test('非法 / 重复 / 缺失 / 超长的颜色都不会让色板长度跑偏',
   assert.equal(extra.index, 7, 'index 要按截断后的长度夹取');
 });
 
+test('收集项的新长度上限缺省时补默认值，提交时按范围收敛', () => {
+  const current = defaults();
+  delete current.limits.textFill;
+  delete current.limits.radioOption;
+  delete current.limits.checkOption;
+  const untouched = applyServerPatch(current, {});
+  assert.equal(untouched.limits.textFill, 200);
+  assert.equal(untouched.limits.radioOption, 60);
+  assert.equal(untouched.limits.checkOption, 60);
+  assert.equal(untouched.limits.fieldTitle, DEFAULT_SETTINGS.limits.fieldTitle, '没提交的旧上限保持原值');
+  const next = applyServerPatch(current, { textFill: 80, radioOption: 999, checkOption: 0 });
+  assert.equal(next.limits.textFill, 80);
+  assert.equal(next.limits.radioOption, 120);
+  assert.equal(next.limits.checkOption, 1);
+});
+
 test('themeIndex 采用补齐后的色板长度夹取', () => {
   const legacy = { ...defaults(), theme: { index: 0, colors: DEFAULT_SETTINGS.theme.colors.slice(0, 4) } };
   // 老库的色板只有 4 项，但提交 7 应当落在新色板的范围内（补齐后 8 色），而不是被夹到 3

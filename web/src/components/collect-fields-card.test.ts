@@ -10,13 +10,15 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-function mount(fields: CollectField[]): void {
+function mount(fields: CollectField[], extra: { radioMax?: number; checkMax?: number } = {}): void {
   document.body.innerHTML = '<div id="collect-test"></div>';
   app = createApp(CollectFieldsCard, {
     fields,
     label: '报名收集项',
     hint: '报名的人会按这些问题填写',
     titleMax: 40,
+    radioMax: extra.radioMax,
+    checkMax: extra.checkMax,
   });
   app.mount('#collect-test');
 }
@@ -49,5 +51,16 @@ describe('报名收集项编辑卡', () => {
     await nextTick();
     expect(fields[0]?.type).toBe('多选');
     expect(fields[0]?.options).toEqual(['朋友']);
+  });
+
+  it('单选和多选的选项输入使用各自的字数上限', async () => {
+    const radio: CollectField[] = [{ title: '来源', type: '单选', required: false, options: ['友'] }];
+    mount(radio, { radioMax: 4, checkMax: 8 });
+    expect(document.querySelector<HTMLInputElement>('.option-input')?.maxLength).toBe(4);
+    const check: CollectField[] = [{ title: '需求', type: '多选', required: false, options: ['车'] }];
+    app?.unmount();
+    mount(check, { radioMax: 4, checkMax: 8 });
+    await nextTick();
+    expect(document.querySelector<HTMLInputElement>('.option-input')?.maxLength).toBe(8);
   });
 });

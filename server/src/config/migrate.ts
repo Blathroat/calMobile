@@ -48,6 +48,12 @@ export interface ServerSettings {
     exhibitionVenue: number;
     category: number;
     fieldTitle: number;
+    /** 报名时每个文本收集项最多填多少字。 */
+    textFill: number;
+    /** 每个单选选项最多多少字。 */
+    radioOption: number;
+    /** 每个多选选项最多多少字。 */
+    checkOption: number;
     usernameMin: number;
     usernameMax: number;
     passwordMin: number;
@@ -550,6 +556,9 @@ export const DEFAULT_SETTINGS: ServerSettings = {
     exhibitionVenue: 60,
     category: 20,
     fieldTitle: 30,
+    textFill: 200,
+    radioOption: 60,
+    checkOption: 60,
     usernameMin: 3,
     usernameMax: 20,
     passwordMin: 6,

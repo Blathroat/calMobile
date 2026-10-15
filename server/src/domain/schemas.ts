@@ -189,6 +189,9 @@ export const serverSettingsPatchSchema = z
     exhibitionVenue: z.unknown(),
     category: z.unknown(),
     fieldTitle: z.unknown(),
+    textFill: z.unknown(),
+    radioOption: z.unknown(),
+    checkOption: z.unknown(),
     usernameMin: z.unknown(),
     usernameMax: z.unknown(),
     passwordMin: z.unknown(),
@@ -244,13 +247,15 @@ export function fieldSchema(limits: Limits) {
             (labels.EXHIBITION_FIELD_TYPES as readonly string[]).includes(value),
           '收集项类型只能是 文本 / 单选 / 多选',
         ),
-      title: textSchema({ label: '收集项标题', max: limits.fieldTitle }),
+      title: textSchema({ label: '文本框标题', max: limits.fieldTitle }),
       required: boolSchema(false),
       options: z.unknown().optional(),
     })
     .transform((field, ctx) => {
       if (field.type === '文本') return { ...field, options: [] };
-      const options = stringListSchema({ label: '选项' }).safeParse(field.options);
+      const optionMax = field.type === '多选' ? limits.checkOption : limits.radioOption;
+      const optionLabel = field.type === '多选' ? '多选选项' : '单选选项';
+      const options = stringListSchema({ label: optionLabel, itemMax: optionMax }).safeParse(field.options);
       if (!options.success) {
         ctx.addIssue({ code: 'custom', message: options.error.issues[0]?.message || '请求参数不正确' });
         return z.NEVER;
@@ -283,7 +288,7 @@ export function meetingApplySchema(answerMax: number) {
     exhibitorId: textSchema({ label: '展商', max: 80 }),
     meetingDate: isoDateSchema({ label: '会议日期', required: true }),
     meetingTime: textSchema({ label: '会议时间', max: 20, required: false }),
-    answers: textSchema({ label: '报名信息', max: answerMax, required: false }),
+    answers: textSchema({ label: '整段报名内容', max: answerMax, required: false }),
   });
 }
 
@@ -398,7 +403,7 @@ export function registrationSchema(answerMax = 0) {
     visitorType: textSchema({ label: '参观身份' }),
     answers: inputString.refine(
       (value) => answerMax <= 0 || value.length <= answerMax,
-      `报名填写内容最多 ${answerMax} 个字符`,
+      `整段报名内容最多 ${answerMax} 个字符`,
     ),
   });
 }

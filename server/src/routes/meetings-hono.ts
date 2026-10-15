@@ -134,14 +134,17 @@ function splitChoices(value: string) {
     .filter(Boolean);
 }
 
-function validateAnswers(fields: Awaited<ReturnType<typeof loadFields>>, answers: unknown) {
+function validateAnswers(fields: Awaited<ReturnType<typeof loadFields>>, answers: unknown, textFill: number) {
   for (const field of fields) {
     const value = answerValue(answers, field.title);
     if (!value) {
       if (field.required) throw badRequest(`请填写「${field.title}」`);
       continue;
     }
-    if (field.type !== '单选' && field.type !== '多选') continue;
+    if (field.type !== '单选' && field.type !== '多选') {
+      if (textFill > 0 && value.length > textFill) throw badRequest(`「${field.title}」最多 ${textFill} 个字符`);
+      continue;
+    }
     const options = Array.isArray(field.options) ? field.options : [];
     const chosen = field.type === '多选' ? splitChoices(value) : [value];
     if (options.length > 0 && chosen.some((item) => !options.includes(item))) {
@@ -287,12 +290,14 @@ app.post('/', authenticateHono, async (c) => {
   assertNotLimited(user, 'register');
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
-    const answerMax = Number((await readLimits()).answer) || 200;
+    const bounds = await readLimits();
+    const answerMax = Number(bounds.answer) || 200;
+    const textFill = Number(bounds.textFill) || 200;
     const input = parseSchema(meetingApplySchema(answerMax), body);
     assertTime(input.meetingTime);
     if (input.exhibitorId === user.userId) throw badRequest('不能向自己预约私人会议');
     const fields = await loadFields(input.exhibitorId);
-    validateAnswers(fields, input.answers);
+    validateAnswers(fields, input.answers, textFill);
     const { maxFutureMeetings } = await readSection('exhibitor');
     const id = newId('meet');
     try {

@@ -67,7 +67,7 @@ test('整数、布尔和字符串列表 schema 保持表单输入兼容', () => 
   assert.deepEqual(parseSchema(stringListSchema({ max: 2, itemMax: 2 }), ['a', 'b', 'too long']), ['a', 'b']);
   assert.equal(
     messageOf(() => parseSchema(stringListSchema({ label: '选项', itemMax: 2 }), ['abc'])),
-    '选项单项最多 2 个字符',
+    '选项最多 2 个字符',
   );
   assert.equal(parseSchema(boolSchema(), 'true'), true);
   assert.equal(parseSchema(boolSchema(), 'false'), false);
@@ -142,6 +142,28 @@ test('展会 schema 拒绝非法日期并保留报名日期顺序规则', () => 
   );
 });
 
+test('收集项的选项按单选和多选各自的上限拦住', () => {
+  assert.equal(
+    messageOf(() =>
+      parseSchema(fieldsSchema({ ...limits, radioOption: 2 }), [{ title: '来源', type: '单选', options: ['朋友们'] }]),
+    ),
+    '单选选项最多 2 个字符',
+  );
+  assert.equal(
+    messageOf(() =>
+      parseSchema(fieldsSchema({ ...limits, checkOption: 2 }), [{ title: '需求', type: '多选', options: ['停车位'] }]),
+    ),
+    '多选选项最多 2 个字符',
+  );
+  assert.deepEqual(
+    parseSchema(fieldsSchema({ ...limits, radioOption: 2, checkOption: 2 }), [
+      { title: '来源', type: '单选', options: ['友'] },
+      { title: '需求', type: '多选', options: ['车'] },
+    ]).map((item) => item.options),
+    [['友'], ['车']],
+  );
+});
+
 test('收集项 schema 限制数组长度、项类型和动态标题上限', () => {
   assert.deepEqual(
     parseSchema(fieldsSchema(limits), [{ title: '说明', type: '文本', options: ['x'.repeat(61)] }])[0]?.options,
@@ -161,7 +183,7 @@ test('收集项 schema 限制数组长度、项类型和动态标题上限', () 
   );
   assert.equal(
     messageOf(() => parseSchema(fieldsSchema({ ...limits, fieldTitle: 2 }), [{ title: '过长标题' }])),
-    '收集项标题最多 2 个字符',
+    '文本框标题最多 2 个字符',
   );
 });
 
@@ -179,7 +201,7 @@ test('资料与报名 schema 使用服务器上限', () => {
         answers: 'abc',
       }),
     ),
-    '报名填写内容最多 2 个字符',
+    '整段报名内容最多 2 个字符',
   );
 });
 

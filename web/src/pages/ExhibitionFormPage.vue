@@ -25,6 +25,7 @@ import { EXHIBITION_STATUS, REGISTRATION_MODES } from '@/services/status';
 import { device } from '@/services/device-services';
 import { loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
 import CollectFieldsCard, { type CollectField } from '@/components/CollectFieldsCard.vue';
+import { firstCollectFieldError } from '@/services/collect-fields';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import SegControl from '@/components/SegControl.vue';
@@ -151,14 +152,16 @@ function failFirst(): boolean {
     toast(result.message, 'error');
     return true;
   }
-  const titleMax = limit('fieldTitle', 30);
-  for (const item of fields.value) {
-    if (item.title.trim().length > titleMax) {
-      formError.value = `收集项标题最多 ${titleMax} 个字符`;
-      invalidField.value = 'fields';
-      toast(formError.value, 'error');
-      return true;
-    }
+  const fieldMessage = firstCollectFieldError(fields.value, {
+    title: limit('fieldTitle', 30),
+    radio: limit('radioOption', 60),
+    check: limit('checkOption', 60),
+  });
+  if (fieldMessage) {
+    formError.value = fieldMessage;
+    invalidField.value = 'fields';
+    toast(formError.value, 'error');
+    return true;
   }
   formError.value = '';
   return false;
@@ -547,6 +550,8 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
       :label="t('s_s8p5nm')"
       :hint="mediaHint"
       :title-max="limit('fieldTitle', 30)"
+      :radio-max="limit('radioOption', 60)"
+      :check-max="limit('checkOption', 60)"
     />
 
     <!-- 删除放在内容最下，保存仍固定在页脚。新建还没有展会，按钮不可点。 -->

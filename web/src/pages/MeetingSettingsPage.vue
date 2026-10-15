@@ -15,6 +15,7 @@ import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
 import { meetingLink } from '@/services/registration-link';
 import { limit } from '@/services/validate';
+import { firstCollectFieldError } from '@/services/collect-fields';
 import AppIcon from '@/components/AppIcon.vue';
 import CollectFieldsCard, { type CollectField } from '@/components/CollectFieldsCard.vue';
 import StateBlock from '@/components/StateBlock.vue';
@@ -102,6 +103,15 @@ onMounted(load);
 async function save(): Promise<void> {
   if (locked.value || saving.value) {
     if (locked.value) toast(COPY.forcedHint, 'error');
+    return;
+  }
+  const fieldMessage = firstCollectFieldError(fields.value, {
+    title: limit('fieldTitle', 30),
+    radio: limit('radioOption', 60),
+    check: limit('checkOption', 60),
+  });
+  if (fieldMessage) {
+    toast(fieldMessage, 'error');
     return;
   }
   saving.value = true;
@@ -194,6 +204,8 @@ async function save(): Promise<void> {
       :label="COPY.fieldsLabel"
       :hint="COPY.fieldsHint"
       :title-max="limit('fieldTitle', 30)"
+      :radio-max="limit('radioOption', 60)"
+      :check-max="limit('checkOption', 60)"
       :disabled="locked"
     />
   </template>

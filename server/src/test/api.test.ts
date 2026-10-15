@@ -348,6 +348,9 @@ test('bootstrap 下发前端启动所需的全部配置块', async () => {
   assert.strictEqual(body.user.loggedIn, false, '匿名访问应当是访客态');
   assert.ok(body.brand.zh, '缺少中文标题');
   assert.ok(Number(body.limits.exhibitionTitle) > 0, '缺少表单字符数上限');
+  assert.ok(Number(body.limits.textFill) > 0, '缺少文本框填写上限');
+  assert.ok(Number(body.limits.radioOption) > 0, '缺少单选选项上限');
+  assert.ok(Number(body.limits.checkOption) > 0, '缺少多选选项上限');
   assert.deepStrictEqual(body.user.can, {
     register: false,
     profile: false,
@@ -1316,6 +1319,104 @@ test('展会收集项可以整体覆盖并读回', async () => {
   const read = await get('/api/v1/exhibitions/exh-2/fields');
   assert.strictEqual(read.body.length, 2);
   assert.deepStrictEqual(read.body[1].options, ['专业观众', '媒体']);
+});
+
+test('收集项的文本填写和选项长度按管理设置拦住', async () => {
+  const originalFields = await get('/api/v1/exhibitions/exh-1/fields');
+  assert.ok(Array.isArray(originalFields.body), `读取原收集项失败：${JSON.stringify(originalFields.body)}`);
+  try {
+    const tight = await put(
+      '/api/v1/settings',
+      { textFill: 2, radioOption: 2, checkOption: 2 },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(tight.body.ok, true, JSON.stringify(tight.body));
+    assert.strictEqual(tight.body.settings.limits.textFill, 2);
+    assert.strictEqual(tight.body.settings.limits.radioOption, 2);
+    assert.strictEqual(tight.body.settings.limits.checkOption, 2);
+
+    const longRadio = await put(
+      '/api/v1/exhibitions/exh-1/fields',
+      { fields: [{ title: '来源', type: '单选', required: false, options: ['朋友们'] }] },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(longRadio.body.ok, false, '超长单选选项必须被拒');
+    assert.ok(String(longRadio.body.error).includes('单选选项'), longRadio.body.error);
+
+    const longCheck = await put(
+      '/api/v1/exhibitions/exh-1/fields',
+      { fields: [{ title: '需求', type: '多选', required: false, options: ['停车位'] }] },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(longCheck.body.ok, false, '超长多选选项必须被拒');
+    assert.ok(String(longCheck.body.error).includes('多选选项'), longCheck.body.error);
+
+    const longTitle = await put(
+      '/api/v1/exhibitions/exh-1/fields',
+      { fields: [{ title: '标'.repeat(31), type: '文本', required: false, options: [] }] },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(longTitle.body.ok, false, '超长文本框标题必须被拒');
+    assert.ok(String(longTitle.body.error).includes('文本框标题'), longTitle.body.error);
+
+    const kept = await put(
+      '/api/v1/exhibitions/exh-1/fields',
+      { fields: [{ title: '来意', type: '文本', required: true, options: [] }] },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(kept.body.ok, true, JSON.stringify(kept.body));
+    const rejected = await post(
+      '/api/v1/registrations',
+      {
+        exhibitionId: 'exh-1',
+        visitorName: '长度用例',
+        visitorType: '专业观众',
+        answers: '来意：超过啦',
+      },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(rejected.body.ok, false, '超过文本框填写上限必须被拒');
+    assert.ok(String(rejected.body.error).includes('最多 2'), rejected.body.error);
+
+    const meetingFields = await put(
+      '/api/v1/meetings/settings',
+      { acceptMeetings: true, fields: [{ title: '来意', type: '文本', required: true, options: [] }] },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(meetingFields.body.ok, true, JSON.stringify(meetingFields.body));
+    const meetingRejected = await post(
+      '/api/v1/meetings',
+      { exhibitorId: 'usr-2', meetingDate: '2099-08-01', answers: '来意：超过啦' },
+      { token: tokens.user.token },
+    );
+    assert.strictEqual(meetingRejected.body.ok, false, '私人会议的文本框填写也要按上限拦住');
+    assert.ok(String(meetingRejected.body.error).includes('最多 2'), meetingRejected.body.error);
+  } finally {
+    const restored = await put(
+      '/api/v1/settings',
+      {
+        textFill: DEFAULT_SETTINGS.limits.textFill,
+        radioOption: DEFAULT_SETTINGS.limits.radioOption,
+        checkOption: DEFAULT_SETTINGS.limits.checkOption,
+      },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(restored.body.settings?.limits?.textFill, DEFAULT_SETTINGS.limits.textFill);
+    assert.strictEqual(restored.body.settings?.limits?.radioOption, DEFAULT_SETTINGS.limits.radioOption);
+    assert.strictEqual(restored.body.settings?.limits?.checkOption, DEFAULT_SETTINGS.limits.checkOption);
+    const restoredFields = await put(
+      '/api/v1/exhibitions/exh-1/fields',
+      { fields: originalFields.body },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(restoredFields.body.ok, true, `恢复收集项失败：${JSON.stringify(restoredFields.body)}`);
+    const closedMeetings = await put(
+      '/api/v1/meetings/settings',
+      { acceptMeetings: false, fields: [] },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(closedMeetings.body.ok, true, `恢复会议设置失败：${JSON.stringify(closedMeetings.body)}`);
+  }
 });
 
 // ── 报名 ────────────────────────────────────────────────────────

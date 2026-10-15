@@ -7,6 +7,7 @@
 -->
 <resources>
     <string name="s_105o66n">当前不可报名</string>
+    <string name="s_105tgz4">昵称最多多少个字</string>
     <string name="s_107xpf9">已核销</string>
     <string name="s_10ai5t2">两次输入的密码不一致</string>
     <string name="s_10lkv9z">更新失败</string>
@@ -23,11 +24,13 @@
     <string name="s_11iu5s7">允许修改已通过或已拒绝的报名</string>
     <string name="s_11prq8e">该记录可能已被撤销。</string>
     <string name="s_11ps4x5">去首页看看</string>
+    <string name="s_11w7dox">展会分类最多多少个字</string>
     <string name="s_121kyl5">通知偏好加载失败，下面显示的是默认值</string>
     <string name="s_12482qz">二</string>
     <string name="s_12cew5p">选中即生效，作用于强调色、选中态与系统栏。</string>
     <string name="s_12hokt7">退出登录</string>
     <string name="s_12ibypn">还没有填写简介，可用 Markdown 编辑并插入图片。</string>
+    <string name="s_12obyju">报名时每个文本框最多填多少个字</string>
     <string name="s_12vww4d">查看当前账号已登录的设备，并可远程下线。</string>
     <string name="s_12wwrng">管理私人会议</string>
     <string name="s_131vhix">撤销后如需参加请重新提交报名。</string>
@@ -81,6 +84,7 @@
     <string name="s_17yba4l">报名时间</string>
     <string name="s_17zyr1e">返回首页</string>
     <string name="s_1849dsd">验证码已发送到</string>
+    <string name="s_184z9xu">收集项文字</string>
     <string name="s_185tvls">邮箱</string>
     <string name="s_189gp0e">可以让用户在报名详情页长按报名码复制，或直接输入二维码下方的文本。</string>
     <string name="s_18jitmg">还没有私人会议申请</string>
@@ -134,6 +138,7 @@
     <string name="s_1de7lo">收不到时先看看垃圾邮件；验证码 10 分钟内有效。</string>
     <string name="s_1dfgo2m">私人会议设置</string>
     <string name="s_1dixw2w">创建你的展会档案</string>
+    <string name="s_1dtsr23">展会名称最多多少个字</string>
     <string name="s_1e05tqn">该报名已完成审核，管理员不允许重新审核。</string>
     <string name="s_1e3rp8l">跟随系统</string>
     <string name="s_1e4opb2">当日活动</string>
@@ -181,7 +186,7 @@
     <string name="s_1j1q2yf">封禁</string>
     <string name="s_1j51671">搜索关键词</string>
     <string name="s_1j66bbh">提交信息</string>
-    <string name="s_1j77by5">报名填写内容</string>
+    <string name="s_1j77by5">整段报名内容</string>
     <string name="s_1jbzuzw">可以切换到相邻日期，或搜索其它城市与分类的展会。</string>
     <string name="s_1jfbdwq">以访客身份浏览</string>
     <string name="s_1jikdwu">验证并创建账号</string>
@@ -216,11 +221,13 @@
     <string name="s_1m3j883">（已验证）</string>
     <string name="s_1mcmbiu">字</string>
     <string name="s_1mdxfsy">展商</string>
+    <string name="s_1mgsqy2">每个收集项的标题，文本、单选和多选共用</string>
     <string name="s_1mh7xs6">当前验证方式</string>
     <string name="s_1mimz3w">开启两步验证</string>
     <string name="s_1mj72e8">解除限制</string>
     <string name="s_1mm83sw">还没有收集项。点下面添加，报名的人会按这些问题填写。</string>
     <string name="s_1moomrn">单个视频大小上限</string>
+    <string name="s_1mq1kio">文本框填写</string>
     <string name="s_1n008jl">注册</string>
     <string name="s_1n1wiu4">当前运行环境不支持摄像头扫码，请使用“手动输入报名码”。</string>
     <string name="s_1n4563g">报名方式保存失败</string>
@@ -239,6 +246,7 @@
     <string name="s_1omalh8">展商后台</string>
     <string name="s_1oot79w">验证码已发送至</string>
     <string name="s_1oriphf">关闭两步验证后，可随时重新开启已配置的验证器。</string>
+    <string name="s_1otzax5">账号资料</string>
     <string name="s_1ow5v10">首页</string>
     <string name="s_1p1p02k">验证器已绑定，两步验证已开启</string>
     <string name="s_1pmufjh">已删除会议</string>
@@ -266,6 +274,7 @@
     <string name="s_1qrntx4">拒绝</string>
     <string name="s_1qtfrh7">发给对方，登录后即可申请。</string>
     <string name="s_1r4txyl">审核状态</string>
+    <string name="s_1r8v016">用户名最少多少个字</string>
     <string name="s_1rbi8qf">请输入验证器 App 里的 6 位码；也可以点下面的按钮改用邮箱验证码。</string>
     <string name="s_1rgheyl">展会自己没有上传封面时用它；留空则继续显示占位图。</string>
     <string name="s_1ro3s85">用注册邮箱收验证码，验证通过后设置新密码。</string>
@@ -290,6 +299,7 @@
     <string name="s_1t5x3h2">新增收集项</string>
     <string name="s_1t8d6e3">创建第一个展会，配置日期、地点与报名收集项。</string>
     <string name="s_1tanmo5">账号已被限制，不能报名</string>
+    <string name="s_1tau3xh">所有回答拼在一起的总字数，含标题。要比文本框填写大，否则填满一个文本框也会被拒绝</string>
     <string name="s_1tbhtoh">展会数据加载失败</string>
     <string name="s_1tcj8tk">个字符</string>
     <string name="s_1tdesxa">管理视角</string>
@@ -306,6 +316,7 @@
     <string name="s_1u7mlaq">删除展会</string>
     <string name="s_1u8q6av">选项</string>
     <string name="s_1u8rnsb">撤销报名</string>
+    <string name="s_1um8i41">展会地点最多多少个字</string>
     <string name="s_1umrk9v">提交报名</string>
     <string name="s_1utpn11">在公开页展示我的报名记录</string>
     <string name="s_1v481a9">验证码 10 分钟内有效，请到邮箱里查看（可能在垃圾邮件里）。</string>
@@ -315,6 +326,7 @@
     <string name="s_1vim1qp">展会不存在</string>
     <string name="s_1vlmecl">申请已提交，等待展商审核</string>
     <string name="s_1vmubx9">设置</string>
+    <string name="s_1vqr29w">个人简介最多多少个字</string>
     <string name="s_1vse82y">已提交 · 待审核</string>
     <string name="s_1vtk64c">这一天还没有活动</string>
     <string name="s_1vv5l4v">报名方式</string>
@@ -335,6 +347,7 @@
     <string name="s_1x7q517">发现展会</string>
     <string name="s_1xbipwq">复制</string>
     <string name="s_1xoauwk">项</string>
+    <string name="s_1xps9s3">每个多选选项最多多少个字</string>
     <string name="s_1xtehpy">5 分钟内有效。收不到时先看看垃圾邮件，或点下面的重新发送。</string>
     <string name="s_1xwid0y">下线设备后，该设备的访问令牌会立即失效。</string>
     <string name="s_1y1ga4e">是否接受会议预约</string>
@@ -349,7 +362,7 @@
     <string name="s_1ylglbm">常见</string>
     <string name="s_1ylv0q2">报名与简介设置</string>
     <string name="s_1yn5q3y">选择要审核的展会</string>
-    <string name="s_1yqwetn">收集项标题</string>
+    <string name="s_1yqwetn">文本框标题</string>
     <string name="s_1yv1vu0">账号已被限制，不能发布或修改展会、不能核销；仍可查看与审核已有报名。</string>
     <string name="s_1yxjgeu">已提交报名码</string>
     <string name="s_1yxtyq">管理员</string>
@@ -362,6 +375,7 @@
     <string name="s_2ccwmm">开启后，报名审核通过的用户会在报名详情里看到报名码，展商可在现场扫码核销。</string>
     <string name="s_2fmcqd">暂停报名</string>
     <string name="s_2i4r18">只能使用中英文、数字与下划线</string>
+    <string name="s_2kxjse">这些数字是对应文字最多能写多少个字，保存后立刻生效。</string>
     <string name="s_2qdje">展商可同时筹备私人会议数</string>
     <string name="s_2qe8t5">原生桥接已释放</string>
     <string name="s_2vsxvu">已参加的报名不能再撤销。</string>
@@ -414,6 +428,7 @@
     <string name="s_7tkrpl">可用中英文、数字与下划线</string>
     <string name="s_7xrrf0">报名管理</string>
     <string name="s_7zi2sm">粘贴 Markdown</string>
+    <string name="s_88zbx0">每个单选选项最多多少个字</string>
     <string name="s_8ddpxh">个人</string>
     <string name="s_8eggh4">设置登录密码</string>
     <string name="s_8kqs1o">还没有可展示的报名记录。</string>
@@ -458,6 +473,7 @@
     <string name="s_dpy0pe">多选选项</string>
     <string name="s_dtadu0">用户名最短</string>
     <string name="s_dvh8t7">移出日历</string>
+    <string name="s_dy6bvq">展会信息</string>
     <string name="s_e1wq8p">分享展会</string>
     <string name="s_e4jezx">上一个月</string>
     <string name="s_e5loml">等待主办人审核。撤销后可以再约同一天。</string>
@@ -489,9 +505,11 @@
     <string name="s_gupxm1">两步验证已关闭</string>
     <string name="s_guqe2t">核销</string>
     <string name="s_gya40f">创建展会</string>
+    <string name="s_gzhx13">地区最多多少个字</string>
     <string name="s_h1cjf4">申请私人会议</string>
     <string name="s_h25ssx">最近活动</string>
     <string name="s_h2sz0p">该报名已由你撤销</string>
+    <string name="s_h600z1">密码最少多少个字符</string>
     <string name="s_h6o1xg">访客</string>
     <string name="s_h8z5hw">报名开始日期不能晚于展会开展日期</string>
     <string name="s_hadtmi">该展会未设置额外报名信息，确认后即可提交。</string>
@@ -559,6 +577,7 @@
     <string name="s_nuznei">选填，24 小时制。</string>
     <string name="s_nynzo5">立即报名</string>
     <string name="s_o51o77">正在识别，请把报名码放进取景框。</string>
+    <string name="s_o6i8sq">密码最多多少个字符</string>
     <string name="s_ocmice">确认密码</string>
     <string name="s_ohd7za">备用码还剩</string>
     <string name="s_omytgn">返回</string>
@@ -627,6 +646,7 @@
     <string name="s_und5qj">还没有账号？</string>
     <string name="s_ung7fv">更改状态</string>
     <string name="s_usxjfe">保存服务器设置</string>
+    <string name="s_v3tpu7">用户名最多多少个字</string>
     <string name="s_v8pba2">未收集额外信息</string>
     <string name="s_vhfyh8">邮箱已更换</string>
     <string name="s_vih0tf">例如：上海新国际博览中心 · N3 馆</string>

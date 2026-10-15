@@ -24,6 +24,10 @@ const props = defineProps<{
   label: string;
   hint: string;
   titleMax: number;
+  /** 单选选项字数上限。缺省与后端默认一致。 */
+  radioMax?: number;
+  /** 多选选项字数上限。缺省与后端默认一致。 */
+  checkMax?: number;
   disabled?: boolean;
 }>();
 
@@ -80,6 +84,10 @@ function optionLabel(index: number): string {
   return `${COPY.option} ${index + 1}`;
 }
 
+function optionMax(item: CollectField): number {
+  return item.type === '多选' ? (props.checkMax ?? 60) : (props.radioMax ?? 60);
+}
+
 function itemLabel(index: number): string {
   return `${COPY.ordinal} ${index + 1} ${COPY.unit}`;
 }
@@ -130,6 +138,7 @@ function itemLabel(index: number): string {
               v-model="item.options[optionIndex]"
               class="input option-input"
               type="text"
+              :maxlength="optionMax(item)"
               :disabled="disabled"
               :aria-label="optionLabel(optionIndex)"
             />

@@ -51,21 +51,58 @@ const tabIds = new Set(TABS.map((item) => item.value));
 /**
  * 字符数上限的唯一清单：控件的键、提交的字段名与后端 `app_settings.limits` 的键名
  * 都从这里派生，新增一项只加一行。取值范围由后端收敛（超出会被夹到合法区间）。
+ * 按展会、收集项、账号分成三组，方便在同一张卡里查找。
  */
-const TEXT_LIMITS: Array<{ key: string; label: string; hint: string }> = [
-  { key: 'exhibitionTitle', label: t('s_1co82cb'), hint: t('s_1mcmbiu') },
-  { key: 'exhibitionVenue', label: t('s_1tlfy5l'), hint: t('s_1mcmbiu') },
-  { key: 'category', label: t('s_9xu72h'), hint: t('s_1mcmbiu') },
-  { key: 'fieldTitle', label: t('s_1yqwetn'), hint: t('s_1mcmbiu') },
-  { key: 'usernameMin', label: t('s_dtadu0'), hint: t('s_1mcmbiu') },
-  { key: 'usernameMax', label: t('s_196bpby'), hint: t('s_1mcmbiu') },
-  { key: 'passwordMin', label: t('s_e6tqxb'), hint: t('s_1jlgtug') },
-  { key: 'passwordMax', label: t('s_19rf1tx'), hint: t('s_1jlgtug') },
-  { key: 'nickname', label: t('s_jxewei'), hint: t('s_1mcmbiu') },
-  { key: 'bio', label: t('s_euttee'), hint: t('s_1mcmbiu') },
-  { key: 'region', label: t('s_16txual'), hint: t('s_1mcmbiu') },
-  { key: 'answer', label: t('s_1j77by5'), hint: t('s_1mcmbiu') },
+interface LimitItem {
+  key: string;
+  label: string;
+  hint: string;
+  unit: string;
+}
+
+const LIMIT_GROUPS: Array<{ id: string; title: string; items: LimitItem[] }> = [
+  {
+    id: 'exhibition',
+    title: t('s_dy6bvq'),
+    items: [
+      { key: 'exhibitionTitle', label: t('s_1co82cb'), hint: t('s_1dtsr23'), unit: t('s_1mcmbiu') },
+      { key: 'exhibitionVenue', label: t('s_1tlfy5l'), hint: t('s_1um8i41'), unit: t('s_1mcmbiu') },
+      { key: 'category', label: t('s_9xu72h'), hint: t('s_11w7dox'), unit: t('s_1mcmbiu') },
+    ],
+  },
+  {
+    id: 'collect',
+    title: t('s_184z9xu'),
+    items: [
+      { key: 'fieldTitle', label: t('s_1yqwetn'), hint: t('s_1mgsqy2'), unit: t('s_1mcmbiu') },
+      { key: 'textFill', label: t('s_1mq1kio'), hint: t('s_12obyju'), unit: t('s_1mcmbiu') },
+      { key: 'radioOption', label: t('s_1y8221p'), hint: t('s_88zbx0'), unit: t('s_1mcmbiu') },
+      { key: 'checkOption', label: t('s_dpy0pe'), hint: t('s_1xps9s3'), unit: t('s_1mcmbiu') },
+      { key: 'answer', label: t('s_1j77by5'), hint: t('s_1tau3xh'), unit: t('s_1mcmbiu') },
+    ],
+  },
+  {
+    id: 'account',
+    title: t('s_1otzax5'),
+    items: [
+      { key: 'usernameMin', label: t('s_dtadu0'), hint: t('s_1r8v016'), unit: t('s_1mcmbiu') },
+      { key: 'usernameMax', label: t('s_196bpby'), hint: t('s_v3tpu7'), unit: t('s_1mcmbiu') },
+      { key: 'passwordMin', label: t('s_e6tqxb'), hint: t('s_h600z1'), unit: t('s_1jlgtug') },
+      { key: 'passwordMax', label: t('s_19rf1tx'), hint: t('s_o6i8sq'), unit: t('s_1jlgtug') },
+      { key: 'nickname', label: t('s_jxewei'), hint: t('s_105tgz4'), unit: t('s_1mcmbiu') },
+      { key: 'bio', label: t('s_euttee'), hint: t('s_1vqr29w'), unit: t('s_1mcmbiu') },
+      { key: 'region', label: t('s_16txual'), hint: t('s_gzhx13'), unit: t('s_1mcmbiu') },
+    ],
+  },
 ];
+
+const LIMIT_ITEMS = LIMIT_GROUPS.flatMap((group) => group.items);
+
+function pairLimits(items: LimitItem[]): LimitItem[][] {
+  const rows: LimitItem[][] = [];
+  for (let index = 0; index < items.length; index += 2) rows.push(items.slice(index, index + 2));
+  return rows;
+}
 
 const router = useRouter();
 const route = useRoute();
@@ -107,6 +144,7 @@ const form = reactive({
 const COPY = {
   coverTitle: t('s_y0ihlw'),
   coverHint: t('s_1rgheyl'),
+  limitIntro: t('s_2kxjse'),
   exhibitorLimit: t('s_17fthq4'),
   exhibitorLimitHint: t('s_13he981'),
   meetingLimit: t('s_2qdje'),
@@ -126,16 +164,6 @@ const panelBusy = computed(() => tab.value === 'users' ? users.loading.value
 
 const userItems = computed<User[]>(() => users.data.value ?? []);
 const exhibitionItems = computed<Exhibition[]>(() => exhibitions.data.value ?? []);
-
-/** 前 10 项两两一行，最后两项各占一行（与旧实现的分组一致）。 */
-const limitRows = computed(() => {
-  const rows: Array<Array<{ key: string; label: string; hint: string }>> = [];
-  for (let index = 0; index + 1 < TEXT_LIMITS.length - 1; index += 2) {
-    rows.push(TEXT_LIMITS.slice(index, index + 2));
-  }
-  rows.push(TEXT_LIMITS.slice(-2));
-  return rows;
-});
 
 // ── 分区取数 ─────────────────────────────────────────────────────
 
@@ -396,7 +424,7 @@ function fillForm(data: JsonObject): void {
   form.imageFormats = (Array.isArray(upload.imageFormats) ? upload.imageFormats : []).map((item) => String(item)).join(',');
   form.videoFormats = (Array.isArray(upload.videoFormats) ? upload.videoFormats : []).map((item) => String(item)).join(',');
   form.limits = {};
-  for (const item of TEXT_LIMITS) form.limits[item.key] = Number(limits[item.key] ?? bootstrap.limits[item.key] ?? 0);
+  for (const item of LIMIT_ITEMS) form.limits[item.key] = Number(limits[item.key] ?? bootstrap.limits[item.key] ?? 0);
   const cover = (data.cover ?? {}) as JsonObject;
   const exhibitor = (data.exhibitor ?? {}) as JsonObject;
   form.defaultCover = String(cover.defaultCover ?? bootstrap.cover.defaultCover ?? '');
@@ -486,7 +514,7 @@ async function saveSettings(): Promise<void> {
       maxFutureExhibitions: Number(form.maxFutureExhibitions) || 0,
       maxFutureMeetings: Number(form.maxFutureMeetings) || 0,
     };
-    for (const item of TEXT_LIMITS) payload[item.key] = numberField(item.key);
+    for (const item of LIMIT_ITEMS) payload[item.key] = numberField(item.key);
 
     const saved = await api.settings.save(payload);
     if (saved?.ok !== true) {
@@ -920,19 +948,28 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
 
       <div class="card">
         <span class="section-label">{{ t('s_rlbden') }}</span>
-        <div v-for="(row, rowIndex) in limitRows" :key="rowIndex" class="grid-cols-2">
-          <div v-for="item in row" :key="item.key" class="field">
-            <label :for="`limit-${item.key}`">{{ item.label }}</label>
-            <div class="row" data-gap="md">
-              <input
-                :id="`limit-${item.key}`"
-                v-model.number="form.limits[item.key]"
-                class="input"
-                type="number"
-                min="0"
-                inputmode="numeric"
-              />
-              <span class="row-meta">{{ item.hint }}</span>
+        <p class="field-hint">{{ COPY.limitIntro }}</p>
+        <div v-for="group in LIMIT_GROUPS" :key="group.id" class="limit-group">
+          <span class="limit-group-title">{{ group.title }}</span>
+          <div
+            v-for="(row, rowIndex) in pairLimits(group.items)"
+            :key="`${group.id}-${rowIndex}`"
+            :class="row.length > 1 ? 'grid-cols-2' : undefined"
+          >
+            <div v-for="item in row" :key="item.key" class="field">
+              <label :for="`limit-${item.key}`">{{ item.label }}</label>
+              <div class="row" data-gap="md">
+                <input
+                  :id="`limit-${item.key}`"
+                  v-model.number="form.limits[item.key]"
+                  class="input"
+                  type="number"
+                  min="0"
+                  inputmode="numeric"
+                />
+                <span class="row-meta">{{ item.unit }}</span>
+              </div>
+              <p class="field-hint">{{ item.hint }}</p>
             </div>
           </div>
         </div>

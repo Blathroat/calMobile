@@ -27,7 +27,7 @@
     --frame: #252a31;           /* 深石墨，按钮悬浮 */
     --dark: #48515d;            /* 主按钮与选中态 */
     --ok: #e4efe8;              /* 成功底色 */
-    --ok-ink: #245d3c;          /* 成功文字 */
+    --ok-ink: #28754a;          /* 成功文字。浅色下贴近蓝字亮度，白底和成功底都可读。 */
     --warn-ink: #b17d2c;        /* 待审核文字 */
     --warn-tint: #f6eedd;
     --danger-ink: #a33a2a;      /* 已拒绝文字 */
@@ -701,6 +701,20 @@ label {
     background: var(--accent);
 }
 
+/* 管理设置里的文字长度分组：同一张卡里用分隔线隔开，方便按展会、收集项、账号查找。 */
+.limit-group {
+    display: grid;
+    gap: var(--s3);
+    padding-top: var(--s3);
+    border-top: var(--hairline) solid var(--stroke);
+}
+
+.limit-group-title {
+    color: var(--ink);
+    font-size: var(--fs-label);
+    font-weight: 700;
+}
+
 /* 入口页的品牌标记：线框的 .brand-mark（圆角方底 + 品牌首字）。
    旧版的入口 hero 用的是 `.ph-img`（无描边、只填底色），这里保持一致。 */
 .brand-mark {
@@ -1131,8 +1145,8 @@ button.avatar {
 }
 
 .status-tag[data-tone="ok"] {
-    border-color: transparent;
-    background: var(--ok);
+    background: var(--screen);
+    border-color: var(--ok-ink);
     color: var(--ok-ink);
 }
 
@@ -1143,8 +1157,8 @@ button.avatar {
 }
 
 .status-tag[data-tone="warn"] {
-    border-color: transparent;
-    background: var(--warn-tint);
+    background: var(--screen);
+    border-color: var(--warn-ink);
     color: var(--warn-ink);
 }
 
@@ -1154,7 +1168,8 @@ button.avatar {
 }
 
 .status-tag[data-tone="info"] {
-    background: var(--info-tint);
+    background: var(--screen);
+    border-color: var(--info-ink);
     color: var(--info-ink);
 }
 
@@ -1401,9 +1416,24 @@ button.avatar {
 }
 
 .choice-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    display: flex;
+    align-items: stretch;
     gap: var(--s2);
+}
+
+.choice-row > .choice {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* 有选项在一行里放不下时，每项独占一行。 */
+.choice-row[data-stack="true"] {
+    flex-direction: column;
+}
+
+.choice-row[data-stack="true"] > .choice {
+    flex: none;
+    width: 100%;
 }
 
 .choice {
@@ -1419,18 +1449,29 @@ button.avatar {
 
 .choice label {
     min-height: var(--ctrl);
+    height: auto;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: var(--s2);
-    padding: 0 var(--s3);
+    padding: var(--s2) var(--s3);
     border: var(--hairline) solid var(--stroke);
     border-radius: var(--r-input);
     background: var(--screen);
     color: var(--ink-2);
     font-size: var(--fs-label);
-    text-align: center;
+    line-height: 1.35;
+    text-align: start;
+    white-space: normal;
+    overflow-wrap: anywhere;
     transition: border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+}
+
+.choice-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow-wrap: anywhere;
+    text-align: start;
 }
 
 .choice input:checked + label {
@@ -1452,15 +1493,26 @@ button.avatar {
 
 .check-label {
     min-height: var(--ctrl);
+    height: auto;
     display: flex;
     align-items: center;
     gap: var(--s3);
-    padding: 0 var(--s3);
+    padding: var(--s2) var(--s3);
     border: var(--hairline) solid var(--stroke);
     border-radius: var(--r-input);
     background: var(--screen);
     color: var(--ink-2);
     font-size: var(--fs-label);
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.check-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
 }
 
 .check-label input {
@@ -1503,7 +1555,8 @@ button.avatar {
 
 .collect-item + .collect-item {
     border-top: var(--hairline) solid var(--stroke);
-    padding-top: var(--s3);
+    /* 浮动标题会向上探出半截，多留一截才看得出项与项的分隔。 */
+    padding-top: var(--s6);
 }
 
 .collect-primary {
