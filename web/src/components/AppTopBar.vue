@@ -31,8 +31,8 @@ function goBack(): void {
       v-if="props.showBack"
       class="icon-button"
       type="button"
-      :aria-label="t('s_omytgn')"
-      :title="t('s_omytgn')"
+      :aria-label="t('common.back')"
+      :title="t('common.back')"
       @click="goBack"
     >
       <AppIcon name="chevronLeft" />

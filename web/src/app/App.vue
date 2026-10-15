@@ -43,9 +43,9 @@ function onTopAction(): void {
   if (!action) return;
   if (action.action === 'logout') {
     confirmSheet({
-      title: t('s_12hokt7'),
-      message: t('s_1oi8c69'),
-      confirmLabel: t('s_12hokt7'),
+      title: t('profile.logout'),
+      message: t('app.logoutMessage'),
+      confirmLabel: t('profile.logout'),
       tone: 'danger',
       onConfirm: async () => {
         if (logoutBusy.value) return;
@@ -53,7 +53,7 @@ function onTopAction(): void {
         try {
           await api.auth.logout();
           session.clear();
-          toast(t('s_pdyp8r'));
+          toast(t('profile.loggedOut'));
           await router.replace('/login');
         } catch (reason) {
           toast(reason instanceof Error ? reason.message : String(reason), 'error');

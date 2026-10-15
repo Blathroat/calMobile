@@ -27,9 +27,9 @@ import { t } from '@/i18n';
 
 const COPY = {
   /** 设置入口的说明：把设置页里能改的东西列出来，省得点进去才发现。 */
-  settingsMeta: t('s_lcz4jf'),
+  settingsMeta: t('profile.settingsSummary'),
   /** 简介下方社交账号行的前缀，与后面的内容同一字重。 */
-  socialPrefix: t('s_1wbzx3u'),
+  socialPrefix: t('profile.socialPrefix'),
 };
 
 const router = useRouter();
@@ -39,7 +39,7 @@ const user = computed(() => session.user);
 const loggedIn = computed(() => session.loggedIn);
 /** 受限账号不能改资料：只有后端明确下发 `false` 才算。 */
 const limited = computed(() => user.value.can?.profile === false);
-const limitHint = computed(() => t('s_1kliyri'));
+const limitHint = computed(() => t('profile.restricted'));
 
 // ── 取数：本页只用到个人资料 ──────────────────────────────────────
 
@@ -50,7 +50,7 @@ const loadError = ref('');
 
 /** 取数失败优先用后端/传输层自带的原因，没有就回落到通用文案。 */
 function errorText(reason: unknown): string {
-  return reason instanceof Error && reason.message ? reason.message : t('s_1q9u8le');
+  return reason instanceof Error && reason.message ? reason.message : t('exhibition.form.saveFailed');
 }
 
 /**
@@ -83,7 +83,7 @@ onMounted(load);
 function identityMeta(): string {
   const code = String(user.value.role || '');
   const role = String(user.value.roleLabel || '');
-  const status = String(user.value.status || t('s_tt5vxa'));
+  const status = String(user.value.status || t('admin.users.normal'));
   if (code === 'exhibitor' || code === 'admin') return status;
   return role ? `${role} · ${status}` : status;
 }
@@ -111,16 +111,16 @@ const logoutBusy = ref(false);
 
 function logout(): void {
   confirmSheet({
-    title: t('s_12hokt7'),
-    message: t('s_1b7h1x'),
-    confirmLabel: t('s_12hokt7'),
+    title: t('profile.logout'),
+    message: t('profile.guestHint'),
+    confirmLabel: t('profile.logout'),
     tone: 'danger',
     onConfirm: async () => {
       logoutBusy.value = true;
       try {
         await api.auth.logout();
         session.clear();
-        toast(t('s_pdyp8r'));
+        toast(t('profile.loggedOut'));
         await router.replace('/login');
       } catch (reason) {
         toast(errorText(reason), 'error');
@@ -137,9 +137,9 @@ function logout(): void {
   <StateBlock
     v-if="!loggedIn"
     icon="user"
-    :title="t('s_1h1rste')"
-    :description="t('s_1b7h1x')"
-    :action-label="t('s_533bde')"
+    :title="t('profile.guestTitle')"
+    :description="t('profile.guestHint')"
+    :action-label="t('registration.list.goLogin')"
     @action="router.push({ path: '/login', query: { redirect: '/profile' } })"
   />
 
@@ -149,9 +149,9 @@ function logout(): void {
     <StateBlock
       v-else-if="loadFailed"
       tone="error"
-      :title="t('s_1sz2kuw')"
+      :title="t('security.profileLoadFailed')"
       :description="loadError"
-      :action-label="t('s_lswd2v')"
+      :action-label="t('common.retry')"
       @action="load"
     />
 
@@ -166,7 +166,7 @@ function logout(): void {
               <RoleTag :role-code="String(user.role || '')" />
             </span>
             <span class="row-meta">{{ identityMeta() }}</span>
-            <span class="row-meta truncate">{{ profileValue('region', 's_15h5nhd') }}</span>
+            <span class="row-meta truncate">{{ profileValue('region', 'profile.notFilled') }}</span>
           </span>
         </div>
       </div>
@@ -174,29 +174,29 @@ function logout(): void {
       <!-- 简介与社交账号。地区已上收到身份卡；铅笔打开与设置页相同的编辑资料抽屉。 -->
       <div class="card">
         <div class="row">
-          <span class="section-label">{{ t('s_ml9unw') }}</span>
+          <span class="section-label">{{ t('profile.bio') }}</span>
           <button
             class="icon-button"
             data-inline="true"
             type="button"
-            :aria-label="t('s_1sq2bvr')"
+            :aria-label="t('settings.profile.editProfile')"
             :disabled="limited"
-            :title="limited ? limitHint : t('s_1sq2bvr')"
+            :title="limited ? limitHint : t('settings.profile.editProfile')"
             @click="openEditor"
           >
             <AppIcon name="edit" />
           </button>
         </div>
-        <p class="row-meta">{{ profileValue('bio', 's_17mtsm3') }}<br><br>{{ COPY.socialPrefix }}{{ profileValue('socialMedia', 's_15h5nhd') }}</p>
+        <p class="row-meta">{{ profileValue('bio', 'profile.bioEmpty') }}<br><br>{{ COPY.socialPrefix }}{{ profileValue('socialMedia', 'profile.notFilled') }}</p>
       </div>
 
       <!-- 设置入口：与顶栏右侧的设置图标进同一页（头像、通知、隐私、安全都在那里） -->
       <div class="card">
-        <span class="section-label">{{ t('s_1vmubx9') }}</span>
+        <span class="section-label">{{ t('settings.title') }}</span>
         <button class="row-card" type="button" data-pressable="true" @click="router.push('/settings')">
           <span class="dim" aria-hidden="true"><AppIcon name="settings" size="icon icon-sm" /></span>
           <span class="row-copy">
-            <strong class="row-title">{{ t('s_1vmubx9') }}</strong>
+            <strong class="row-title">{{ t('settings.title') }}</strong>
             <span class="row-meta">{{ COPY.settingsMeta }}</span>
           </span>
           <AppIcon name="chevronRight" />
@@ -205,7 +205,7 @@ function logout(): void {
 
       <!-- 退出登录：整页唯一的破坏性动作，放在最底部并走二次确认 -->
       <button class="cta ghost" type="button" :disabled="logoutBusy" @click="logout">
-        {{ t('s_12hokt7') }}
+        {{ t('profile.logout') }}
       </button>
     </template>
   </template>

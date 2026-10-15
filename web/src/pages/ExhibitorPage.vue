@@ -40,12 +40,12 @@ const session = useSessionStore();
 
 /** 分区 id 写进 `?tab=`，从设置页返回时仍停在私人会议。 */
 const TABS = [
-  { value: 'exhibitions', label: t('s_11cd4ta') },
-  { value: 'meetings', label: t('s_zmypci') },
+  { value: 'exhibitions', label: t('admin.exhibitions.title') },
+  { value: 'meetings', label: t('registration.list.privateMeeting') },
 ];
 const tabIds = new Set(TABS.map((item) => item.value));
 const tab = ref(tabFromQuery());
-const partitionLabel = t('s_5yu22q');
+const partitionLabel = t('exhibitor.sections');
 
 function tabFromQuery(): string {
   const value = String(route.query.tab ?? '');
@@ -83,7 +83,7 @@ function load(): void {
 /** 新建展会：受限时用同一句提示兜住残留入口。 */
 function createExhibition(): void {
   if (limited.value) {
-    toast(t('s_19wazv8'), 'error');
+    toast(t('exhibition.form.publishBlocked'), 'error');
     return;
   }
   void router.push('/exhibition-form');
@@ -92,16 +92,16 @@ function createExhibition(): void {
 /** 编辑已有展会：受限时同样兜一层，别让残留入口绕过置灰。 */
 function openExhibitionForm(id: unknown): void {
   if (limited.value) {
-    toast(t('s_1wwetl9'), 'error');
+    toast(t('exhibition.form.editBlocked'), 'error');
     return;
   }
   void router.push(`/exhibition-form/${String(id)}`);
 }
 
 /** 核销报名码：受限账号进得去页面也提交不了，入口就在这里挡住。 */
-const joinLinkMissing = t('s_18o1cfv');
-const joinLinkCopied = t('s_lmwrgt');
-const joinLinkCopy = t('s_x5w1x9');
+const joinLinkMissing = t('exhibition.detail.registrationSiteMissing');
+const joinLinkCopied = t('exhibitor.registrationLinkCopied');
+const joinLinkCopy = t('exhibitor.copyLink');
 
 async function copyJoinLink(id: unknown): Promise<void> {
   const link = registrationLink(bootstrap.publicBaseUrl, id);
@@ -116,14 +116,14 @@ async function copyJoinLink(id: unknown): Promise<void> {
     openSheet({
       title: joinLinkCopy,
       message: link,
-      actions: [{ label: t('s_1589w37'), onClick: (close) => close() }],
+      actions: [{ label: t('common.cancel'), onClick: (close) => close() }],
     });
   }
 }
 
 function openCheckin(): void {
   if (limited.value) {
-    toast(t('s_14pxh3f'), 'error');
+    toast(t('exhibitor.cannotCheckin'), 'error');
     return;
   }
   // 这条提示教的就是「去核销」，用户走一次这个入口就不必再看到它。
@@ -151,9 +151,9 @@ onMounted(load);
   <StateBlock
     v-else-if="query.error.value && !hasContent"
     tone="error"
-    :title="t('s_4e7do4')"
+    :title="t('exhibitor.listLoadFailed')"
     :description="query.error.value.message"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
 
@@ -161,21 +161,21 @@ onMounted(load);
   <StateBlock
     v-else-if="items.length === 0"
     icon="briefcase"
-    :title="t('s_f4agbb')"
-    :description="limited ? t('s_19wazv8') : t('s_1t8d6e3')"
-    :action-label="limited ? '' : t('s_p9fllo')"
+    :title="t('exhibitor.noHosted')"
+    :description="limited ? t('exhibition.form.publishBlocked') : t('exhibitor.createFirstHint')"
+    :action-label="limited ? '' : t('exhibition.editor.newExhibition')"
     @action="createExhibition"
   />
 
   <template v-else>
     <div class="row" data-between="true">
-      <span class="section-label">{{ t('s_15vddzv') }}</span>
+      <span class="section-label">{{ t('exhibitor.hostedExhibitions') }}</span>
       <span class="pill">{{ `${items.length} 个 · ${registrationTotal} 条报名` }}</span>
     </div>
 
     <div v-if="limited" class="notice" data-tone="accent">
-      <strong>{{ t('s_19wazv8') }}</strong>
-      <span>{{ t('s_1yv1vu0') }}</span>
+      <strong>{{ t('exhibition.form.publishBlocked') }}</strong>
+      <span>{{ t('exhibition.form.restrictedAccount') }}</span>
     </div>
 
     <div v-if="query.error.value" class="notice" data-tone="accent">
@@ -186,13 +186,13 @@ onMounted(load);
       class="cta ghost"
       type="button"
       :disabled="limited"
-      :title="limited ? t('s_14pxh3f') : undefined"
+      :title="limited ? t('exhibitor.cannotCheckin') : undefined"
       @click="openCheckin"
     >
-      {{ t('s_zqzoiq') }}
+      {{ t('exhibitor.checkin') }}
     </button>
     <!-- 一次性提示：进过一次核销页（这条提示指的就是那个入口）就不再显示 -->
-    <HintNote v-if="hintVisible" :text="t('s_1w3gehu')" @dismiss="dismissHint" />
+    <HintNote v-if="hintVisible" :text="t('exhibitor.checkinHint')" @dismiss="dismissHint" />
 
     <div class="list" data-gap="sm">
       <div v-for="item in items" :key="String(item.id)" class="card">
@@ -211,7 +211,7 @@ onMounted(load);
             <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
             <span class="row-meta truncate">{{ item.venue }}</span>
             <span class="row-meta">{{ `${item.status} · ${item.registrationCount ?? 0} 条报名` }}</span>
-            <span v-if="item.qrEnabled === true" class="row-meta">{{ t('s_1ibqlvv') }}</span>
+            <span v-if="item.qrEnabled === true" class="row-meta">{{ t('exhibitor.qrEnabled') }}</span>
           </span>
           <StatusTag :text="String(item.modeLabel || '')" :tone="statusTone(String(item.status || ''))" />
         </button>
@@ -222,17 +222,17 @@ onMounted(load);
             type="button"
             @click="router.push(`/review?exhibitionId=${encodeURIComponent(String(item.id))}`)"
           >
-            {{ t('s_j8kyoz') }}
+            {{ t('admin.exhibitions.viewRegistrations') }}
           </button>
           <button
             class="cta ghost"
             data-size="small"
             type="button"
             :disabled="limited"
-            :title="limited ? t('s_1wwetl9') : undefined"
+            :title="limited ? t('exhibition.form.editBlocked') : undefined"
             @click="openExhibitionForm(item.id)"
           >
-            {{ t('s_eutzzb') }}
+            {{ t('admin.exhibitions.edit') }}
           </button>
           <button class="cta ghost" data-size="small" type="button" @click="copyJoinLink(item.id)">
             {{ joinLinkCopy }}
@@ -245,10 +245,10 @@ onMounted(load);
       class="cta"
       type="button"
       :disabled="limited"
-      :title="limited ? t('s_19wazv8') : undefined"
+      :title="limited ? t('exhibition.form.publishBlocked') : undefined"
       @click="createExhibition"
     >
-      {{ t('s_p9fllo') }}
+      {{ t('exhibition.editor.newExhibition') }}
     </button>
   </template>
 </template>

@@ -35,19 +35,19 @@ export interface ShellMeta {
  */
 export function tabItems(can: Record<string, boolean> | undefined): TabItem[] {
   if (isJoinSurface) {
-    return [{ id: 'my-registrations', path: paths.registrations, label: t('s_1m2dh8u'), icon: 'ticket' }];
+    return [{ id: 'my-registrations', path: paths.registrations, label: t('registration.list.title'), icon: 'ticket' }];
   }
   const items: TabItem[] = [
-    { id: 'home', path: '/home', label: t('s_1ow5v10'), icon: 'home' },
-    { id: 'my-registrations', path: '/my-registrations', label: t('s_1m2dh8u'), icon: 'ticket' },
+    { id: 'home', path: '/home', label: t('nav.home'), icon: 'home' },
+    { id: 'my-registrations', path: '/my-registrations', label: t('registration.list.title'), icon: 'ticket' },
   ];
   if (can?.exhibitor) {
-    items.push({ id: 'exhibitor', path: '/exhibitor', label: t('s_1mdxfsy'), icon: 'briefcase' });
+    items.push({ id: 'exhibitor', path: '/exhibitor', label: t('nav.exhibitor'), icon: 'briefcase' });
   }
   if (can?.admin) {
-    items.push({ id: 'admin', path: '/admin', label: t('s_pzy8ri'), icon: 'shield' });
+    items.push({ id: 'admin', path: '/admin', label: t('nav.admin'), icon: 'shield' });
   }
-  items.push({ id: 'profile', path: '/profile', label: t('s_8ddpxh'), icon: 'user' });
+  items.push({ id: 'profile', path: '/profile', label: t('nav.profile'), icon: 'user' });
   return items;
 }
 

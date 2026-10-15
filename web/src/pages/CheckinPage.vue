@@ -55,8 +55,8 @@ const startButton = ref<HTMLButtonElement>();
 const { dismiss: dismissCheckinHint } = useHint('exhibitor-checkin');
 
 const stageMode = ref<StageMode>('idle');
-const stageTitle = ref(t('s_zkl7t2'));
-const stageDescription = ref(t('s_15lwowq'));
+const stageTitle = ref(t('checkin.scan.ready'));
+const stageDescription = ref(t('checkin.scan.startOrType'));
 
 /** 状态区：行内提示（notice）、核销请求中的骨架、以及整段失败时的错误块。 */
 const statusText = ref('');
@@ -109,7 +109,7 @@ function decoderUnavailable(): void {
   releaseCamera();
   decoderReady.value = false;
   decoderFailed.value = true;
-  showNotice(t('s_ugjygq'), 'error');
+  showNotice(t('checkin.scan.decoderUnavailable'), 'error');
 }
 
 function prefersReducedMotion(): boolean {
@@ -151,7 +151,7 @@ function stageIcon(): string {
 
 /** 识别到的内容是不是本应用的报名码：不是也要说清楚，而不是笼统失败。 */
 function previewOf(raw: string): string {
-  return String(raw || '').startsWith(CODE_PREFIX) ? t('s_shtqx3') : t('s_cq6xrf');
+  return String(raw || '').startsWith(CODE_PREFIX) ? t('checkin.verifying') : t('checkin.notAppCode');
 }
 
 // ── 取景与识别 ─────────────────────────────────────────────────
@@ -170,7 +170,7 @@ async function toggleScan(): Promise<void> {
     && Boolean(navigator.mediaDevices)
     && typeof navigator.mediaDevices.getUserMedia === 'function';
   if (!supported) {
-    showNotice(t('s_1n1wiu4'), 'error');
+    showNotice(t('checkin.scan.unsupported'), 'error');
     return;
   }
 
@@ -189,7 +189,7 @@ async function startScan(): Promise<void> {
     const granted = await device.ensureCameraPermission();
     if (!alive || epoch !== scanEpoch || decoderFailed.value) return;
     if (granted !== true) {
-      showNotice(t('s_1w8qxkd'), 'error');
+      showNotice(t('checkin.scan.permissionDenied'), 'error');
       return;
     }
   } catch (reason) {
@@ -199,7 +199,7 @@ async function startScan(): Promise<void> {
   if (!alive) return;
 
   setStage('live', '', '');
-  showNotice(t('s_i7g6c4'));
+  showNotice(t('checkin.scan.opening'));
   await nextTick();
   if (!alive || epoch !== scanEpoch) return;
 
@@ -212,7 +212,7 @@ async function startScan(): Promise<void> {
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : '';
     if (!alive || epoch !== scanEpoch) return;
-    setStage('error', t('s_jkwui8'), `${message || t('s_k3ej4k')}。可以改用“手动输入报名码”。`);
+    setStage('error', t('checkin.scan.openFailed'), `${message || t('checkin.scan.previewFailed')}。可以改用“手动输入报名码”。`);
     clearStatus();
     return;
   }
@@ -235,7 +235,7 @@ async function startScan(): Promise<void> {
   }
   if (!alive || epoch !== scanEpoch || stream !== media) return;
   scanning.value = true;
-  showNotice(t('s_o51o77'));
+  showNotice(t('checkin.scan.placeCode'));
   scheduleFrame();
 }
 
@@ -246,7 +246,7 @@ function stopScan(): void {
     frameHandle = 0;
   }
   releaseCamera();
-  setStage('stopped', t('s_1nxza37'), t('s_13eo9zy'));
+  setStage('stopped', t('checkin.scan.stopped'), t('checkin.scan.resumeOrType'));
   clearStatus();
 }
 
@@ -320,7 +320,7 @@ async function decodeFrame(): Promise<void> {
 async function handleCode(raw: string): Promise<void> {
   if (submitting.value) return;
   releaseCamera();
-  setStage('detected', t('s_jimvs7'), previewOf(raw));
+  setStage('detected', t('checkin.scan.recognized'), previewOf(raw));
   await verify(raw);
 }
 
@@ -335,7 +335,7 @@ async function verify(raw: string): Promise<void> {
   } catch (reason) {
     if (!alive) return;
     outcome.value = null;
-    showVerifyError(t('s_bctg3f'), reason instanceof Error ? reason.message : String(reason));
+    showVerifyError(t('checkin.verifyFailed'), reason instanceof Error ? reason.message : String(reason));
   } finally {
     if (alive) submitting.value = false;
   }
@@ -346,12 +346,12 @@ function renderResult(response: ApiResult): void {
   clearStatus();
   outcome.value = {
     ok,
-    statusText: String(response?.status || t('s_1k1usxy')),
+    statusText: String(response?.status || t('checkin.notPassed')),
     message: String(response?.message || response?.error || ''),
     record: (response?.record ?? {}) as JsonObject,
   };
-  if (ok) toast(String(response?.message || t('s_shfy40')), 'success');
-  else toast(String(response?.error || t('s_1ibqo8o')), 'error');
+  if (ok) toast(String(response?.message || t('checkin.succeeded')), 'success');
+  else toast(String(response?.error || t('checkin.unsuccessful')), 'error');
 }
 
 function openReview(): void {
@@ -378,16 +378,16 @@ function openManual(): void {
   manual.code = '';
   manual.error = '';
   openSheet({
-    title: t('s_11elgkf'),
+    title: t('checkin.manual.enterCode'),
     component: ManualCodePanel,
     props: {
       model: manual,
-      hint: t('s_189gp0e'),
+      hint: t('checkin.manual.copyOrType'),
     },
     size: 'full',
     actions: [
-      { label: t('s_1589w37'), onClick: (close) => close() },
-      { label: t('s_guqe2t'), variant: 'primary', onClick: (close) => { void submitManual(close); } },
+      { label: t('common.cancel'), onClick: (close) => close() },
+      { label: t('checkin.manual.checkIn'), variant: 'primary', onClick: (close) => { void submitManual(close); } },
     ],
   });
 }
@@ -396,12 +396,12 @@ async function submitManual(close: () => void): Promise<void> {
   const code = manual.code.trim();
   if (!code) {
     // 留在面板里，让用户就地补上
-    manual.error = t('s_33a4b3');
+    manual.error = t('checkin.manual.codeRequired');
     return;
   }
   close();
   outcome.value = null;
-  setStage('detected', t('s_1yxjgeu'), previewOf(code));
+  setStage('detected', t('checkin.manual.submitted'), previewOf(code));
   await verify(code);
 }
 </script>
@@ -411,15 +411,15 @@ async function submitManual(close: () => void): Promise<void> {
   <StateBlock
     v-if="limited"
     icon="info"
-    :title="t('s_14pxh3f')"
-    :description="t('s_1yv1vu0')"
-    :action-label="t('s_dn4ida')"
+    :title="t('exhibitor.cannotCheckin')"
+    :description="t('exhibition.form.restrictedAccount')"
+    :action-label="t('exhibition.form.backToExhibitor')"
     @action="router.push('/exhibitor')"
   />
 
   <template v-else>
     <div class="row" data-between="true">
-      <span class="section-label">{{ t('s_oozrzl') }}</span>
+      <span class="section-label">{{ t('checkin.scan.checkIn') }}</span>
       <span class="pill">{{ REGISTRATION_STATUS.ATTENDED }}</span>
     </div>
 
@@ -454,7 +454,7 @@ async function submitManual(close: () => void): Promise<void> {
       tone="error"
       :title="verifyError.title"
       :description="verifyError.description"
-      :action-label="t('s_emjfb1')"
+      :action-label="t('checkin.scan.continue')"
       @action="restart"
     />
 
@@ -467,15 +467,15 @@ async function submitManual(close: () => void): Promise<void> {
         :data-loading="starting ? 'true' : 'false'"
         @click="toggleScan"
       >
-        {{ t('s_wttsdb') }}
+        {{ t('checkin.scan.start') }}
       </button>
-      <button class="cta ghost" type="button" @click="openManual">{{ t('s_11elgkf') }}</button>
+      <button class="cta ghost" type="button" @click="openManual">{{ t('checkin.manual.enterCode') }}</button>
     </div>
 
     <!-- 核销结果：成功与失败都在原位给出报名人信息与下一步 -->
     <div v-if="outcome" class="card">
       <div class="row" data-between="true">
-        <span class="section-label">{{ outcome.ok ? t('s_shfy40') : t('s_1ibqo8o') }}</span>
+        <span class="section-label">{{ outcome.ok ? t('checkin.succeeded') : t('checkin.unsuccessful') }}</span>
         <StatusTag
           :text="outcome.ok ? REGISTRATION_STATUS.ATTENDED : outcome.statusText"
           :tone="outcome.ok ? 'ok' : 'danger'"
@@ -484,25 +484,25 @@ async function submitManual(close: () => void): Promise<void> {
       <p class="row-meta">{{ outcome.message }}</p>
       <div class="card" data-tone="fill">
         <div class="row" data-between="true">
-          <span class="row-meta">{{ t('s_11cd4ta') }}</span>
+          <span class="row-meta">{{ t('admin.exhibitions.title') }}</span>
           <span class="strong truncate">{{ outcomeRecord.exhibitionTitle || '—' }}</span>
         </div>
         <div class="row" data-between="true">
-          <span class="row-meta">{{ t('s_33njx3') }}</span>
+          <span class="row-meta">{{ t('registration.detail.registrant') }}</span>
           <span class="strong truncate">{{ outcomeRecord.visitorName || '—' }}</span>
         </div>
         <div class="row" data-between="true">
-          <span class="row-meta">{{ t('s_17yba4l') }}</span>
+          <span class="row-meta">{{ t('registration.detail.registeredAt') }}</span>
           <span class="strong truncate">{{ outcomeRecord.registrationTime || '—' }}</span>
         </div>
         <div class="row" data-between="true">
-          <span class="row-meta">{{ t('s_vrp4t3') }}</span>
-          <span class="strong">{{ outcomeRecord.answers || t('s_v8pba2') }}</span>
+          <span class="row-meta">{{ t('exhibition.detail.registrationInfo') }}</span>
+          <span class="strong">{{ outcomeRecord.answers || t('registration.detail.noCollectedInfo') }}</span>
         </div>
       </div>
       <div class="grid-cols-2">
-        <button class="cta ghost" type="button" @click="restart">{{ t('s_emjfb1') }}</button>
-        <button class="cta" type="button" @click="openReview">{{ t('s_j8kyoz') }}</button>
+        <button class="cta ghost" type="button" @click="restart">{{ t('checkin.scan.continue') }}</button>
+        <button class="cta" type="button" @click="openReview">{{ t('admin.exhibitions.viewRegistrations') }}</button>
       </div>
     </div>
   </template>

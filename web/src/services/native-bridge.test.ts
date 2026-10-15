@@ -1,12 +1,6 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NativeBridge, NativeBridgeError, nativeBridge } from './native-bridge';
 import { device } from './device-services';
-
-// 文案本体在 res/values/strings_frontend.xml，由原生启动时注入；
-// 单测里注入同一条，断言才看得到可读的错误说明而不是 key。
-beforeAll(() => {
-  window.CalMobileStrings = { s_1adnxmn: '当前环境没有原生桥接，请在 Android 应用中打开' };
-});
 
 const bridges: NativeBridge[] = [];
 afterEach(() => { bridges.splice(0).forEach((bridge) => bridge.dispose()); });

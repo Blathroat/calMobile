@@ -47,16 +47,16 @@ const open = computed(() => form.value?.open === true);
 const fields = computed<FieldDef[]>(() => (Array.isArray(form.value?.fields) ? form.value.fields as FieldDef[] : []));
 const textFillMax = computed(() => limit('textFill', 200));
 const answerMax = computed(() => limit('answer', 200));
-const closedMessage = computed(() => String(form.value?.message || t('s_7q6wmd')));
+const closedMessage = computed(() => String(form.value?.message || t('meeting.apply.notAccepting')));
 const notice = computed(() => String(form.value?.notice || '').trim());
 
 const COPY = {
-  date: t('s_17cjhrl'),
-  time: t('s_ij2gvf'),
-  timeHint: t('s_nuznei'),
-  submit: t('s_1i76dc3'),
-  success: t('s_1vlmecl'),
-  pendingHint: t('s_11ac4it'),
+  date: t('meeting.apply.date'),
+  time: t('meeting.apply.time'),
+  timeHint: t('meeting.apply.optionalTime'),
+  submit: t('meeting.apply.submit'),
+  success: t('meeting.apply.submitted'),
+  pendingHint: t('meeting.apply.myActivitiesHint'),
 };
 
 function today(): string {
@@ -80,7 +80,7 @@ function splitOptions(options: unknown): string[] {
   const list = Array.isArray(options)
     ? options.map((item) => String(item).trim()).filter(Boolean)
     : [];
-  return list.length > 0 ? list : [t('s_q88a0n')];
+  return list.length > 0 ? list : [t('registration.form.unsetOption')];
 }
 
 function fieldId(field: FieldDef): string {
@@ -120,15 +120,15 @@ async function submit(): Promise<void> {
   dateError.value = '';
   for (const key of Object.keys(fieldErrors)) delete fieldErrors[key];
   if (!meetingDate.value) {
-    dateError.value = t('s_gkbqc');
+    dateError.value = t('meeting.apply.chooseDate');
     return;
   }
   if (meetingDate.value < today()) {
-    dateError.value = t('s_1tz7xu5');
+    dateError.value = t('meeting.apply.dateTooEarly');
     return;
   }
   if (meetingTime.value && !/^([01]\d|2[0-3]):[0-5]\d$/.test(meetingTime.value)) {
-    error.value = t('s_1cujoxt');
+    error.value = t('meeting.apply.timeFormat');
     return;
   }
   const document = answerDocument({
@@ -150,7 +150,7 @@ async function submit(): Promise<void> {
       answers: document.text,
     });
     if (result?.ok === false) {
-      error.value = String(result.error || t('s_f66edb'));
+      error.value = String(result.error || t('registration.form.submitFailed'));
       return;
     }
     success.value = true;
@@ -172,18 +172,18 @@ async function submit(): Promise<void> {
   <StateBlock
     v-else-if="query.error.value && !form"
     tone="error"
-    :title="t('s_kvpltc')"
+    :title="t('common.loadFailed')"
     :description="query.error.value.message"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
   <StateBlock
     v-else-if="form?.found === false"
     tone="error"
     icon="user"
-    :title="t('s_8wvztz')"
+    :title="t('meeting.apply.noPublicProfile')"
     :description="String(form?.error || '用户不存在或已删除')"
-    :action-label="t('s_17zyr1e')"
+    :action-label="t('exhibition.detail.backHome')"
     @action="router.push(paths.home)"
   />
   <template v-else-if="form">

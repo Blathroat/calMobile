@@ -20,7 +20,7 @@ export function collectFieldError(item: CollectLimitField, bounds: CollectLimitB
   }
   if (item.type === '文本') return '';
   const max = item.type === '多选' ? bounds.check : bounds.radio;
-  const name = item.type === '多选' ? t('s_dpy0pe') : t('s_1y8221p');
+  const name = item.type === '多选' ? t('admin.limits.checkOption') : t('admin.limits.radioOption');
   if (item.options.some((option) => option.trim().length > max)) {
     return `${name}最多 ${max} 个字符`;
   }

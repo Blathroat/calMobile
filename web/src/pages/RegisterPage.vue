@@ -69,22 +69,22 @@ const account = computed(() => usernameRule());
 const secret = computed(() => passwordRule());
 const strength = computed(() => passwordStrength(password.value));
 const resendLabel = computed(() => (remaining.value > 0
-  ? `${remaining.value} ${t('s_1qbu9z0')}`
-  : t('s_1fyr64c')));
+  ? `${remaining.value} ${t('auth.login.secondsUntilResend')}`
+  : t('auth.login.resendCode')));
 
 const RULES: Record<FieldName, () => CheckOptions> = {
   username: () => ({ required: true, ...account.value }),
   email: () => ({
-    label: t('s_185tvls'),
+    label: t('auth.register.email'),
     required: true,
     max: EMAIL_MAX,
     pattern: PATTERNS.email,
-    patternMessage: t('s_1u3yg0h'),
+    patternMessage: t('auth.register.emailInvalid'),
   }),
   password: () => ({ required: true, min: secret.value.min, max: secret.value.max }),
   // 一致性校验挂在确认框上：用户改的就是这个框，错误跟着它才会在改对后立刻消失。
   confirm: () => ({
-    label: t('s_ocmice'),
+    label: t('auth.register.confirmPassword'),
     required: true,
     max: secret.value.max,
     custom: (value: string) => matchRule(value, password.value),
@@ -162,7 +162,7 @@ async function submitAccount(): Promise<void> {
     };
     const sent = await api.auth.register(payload);
     if (!sent?.ok) {
-      error.value = String(sent?.error || t('s_osck6n'));
+      error.value = String(sent?.error || t('auth.register.failed'));
       return;
     }
     // 这一步后端没建账号，只回了「码发到哪、多久过期、多久能重发」。
@@ -171,7 +171,7 @@ async function submitAccount(): Promise<void> {
     code.value = '';
     showStep(2);
     startCountdown(sent.resendAfterSec);
-    toast(t('s_5rsk4v'), 'success');
+    toast(t('auth.login.codeSent'), 'success');
   } catch (reason) {
     error.value = messageOf(reason);
   } finally {
@@ -183,10 +183,10 @@ async function verifyAccount(): Promise<void> {
   verifyError.value = '';
   const needsVerification = verifiedSession !== api.session.signal;
   codeError.value = needsVerification ? check(code.value, {
-    label: t('s_s8pbve'),
+    label: t('auth.login.emailCode'),
     required: true,
     pattern: PATTERNS.verificationCode,
-    patternMessage: t('s_1x20l1k'),
+    patternMessage: t('auth.register.enterSixDigits'),
   }) : '';
   if (codeError.value) return;
   verifyBusy.value = true;
@@ -197,14 +197,14 @@ async function verifyAccount(): Promise<void> {
         code: code.value.trim(),
       });
       if (!saved?.ok) {
-        verifyError.value = String(saved?.error || t('s_osck6n'));
+        verifyError.value = String(saved?.error || t('auth.register.failed'));
         return;
       }
       verifiedSession = api.session.signal;
     }
     await refreshRuntimeBootstrap();
     stopCountdown();
-    toast(t('s_6e6nd9'), 'success');
+    toast(t('auth.register.createdAndSignedIn'), 'success');
     await router.replace(paths.home);
   } catch (reason) {
     verifyError.value = messageOf(reason);
@@ -221,10 +221,10 @@ async function resendCode(): Promise<void> {
   try {
     const sent = await api.auth.register(pending.value);
     if (!sent?.ok) {
-      verifyError.value = String(sent?.error || t('s_osck6n'));
+      verifyError.value = String(sent?.error || t('auth.register.failed'));
       return;
     }
-    toast(t('s_5rsk4v'), 'success');
+    toast(t('auth.login.codeSent'), 'success');
     startCountdown(sent.resendAfterSec);
   } catch (reason) {
     verifyError.value = messageOf(reason);
@@ -240,8 +240,8 @@ function messageOf(reason: unknown): string {
 
 <template>
   <div class="stack" data-gap="sm">
-    <h2>{{ t('s_1dixw2w') }}</h2>
-    <p class="muted">{{ t('s_m8zmid') }}</p>
+    <h2>{{ t('auth.register.createProfile') }}</h2>
+    <p class="muted">{{ t('auth.register.intro') }}</p>
   </div>
 
   <!-- 第一步：账号信息 -->
@@ -255,17 +255,17 @@ function messageOf(reason: unknown): string {
         type="text"
         autocomplete="username"
         :maxlength="account.max"
-        :placeholder="t('s_doztlr')"
+        :placeholder="t('auth.register.usernamePlaceholder')"
         @input="onFieldInput('username')"
         @blur="validateField('username')"
       >
-      <p class="field-hint">{{ t('s_7tkrpl') }}</p>
+      <p class="field-hint">{{ t('auth.register.usernameHint') }}</p>
       <p v-if="fieldErrors.username" class="field-error" role="alert">{{ fieldErrors.username }}</p>
       <span class="field-counter" :data-over="username.length > (account.max ?? 0) ? 'true' : 'false'">{{ username.length }}/{{ account.max }}</span>
     </div>
 
     <div class="field" :data-invalid="fieldErrors.email ? 'true' : undefined">
-      <label for="register-email">{{ t('s_185tvls') }}</label>
+      <label for="register-email">{{ t('auth.register.email') }}</label>
       <input
         id="register-email"
         v-model="email"
@@ -273,7 +273,7 @@ function messageOf(reason: unknown): string {
         type="email"
         autocomplete="email"
         :maxlength="EMAIL_MAX"
-        :placeholder="t('s_1i2pkg8')"
+        :placeholder="t('auth.register.emailPlaceholder')"
         @input="onFieldInput('email')"
         @blur="validateField('email')"
       >
@@ -290,7 +290,7 @@ function messageOf(reason: unknown): string {
         type="password"
         autocomplete="new-password"
         :maxlength="secret.max"
-        :placeholder="t('s_8eggh4')"
+        :placeholder="t('auth.register.setPassword')"
         @input="onFieldInput('password')"
         @blur="validateField('password')"
       >
@@ -300,7 +300,7 @@ function messageOf(reason: unknown): string {
     </div>
 
     <div class="field" :data-invalid="fieldErrors.confirm ? 'true' : undefined">
-      <label for="register-confirm">{{ t('s_ocmice') }}</label>
+      <label for="register-confirm">{{ t('auth.register.confirmPassword') }}</label>
       <input
         id="register-confirm"
         v-model="confirm"
@@ -308,7 +308,7 @@ function messageOf(reason: unknown): string {
         type="password"
         autocomplete="new-password"
         :maxlength="secret.max"
-        :placeholder="t('s_1ceimwm')"
+        :placeholder="t('auth.register.reenterPassword')"
         @input="onFieldInput('confirm')"
         @blur="validateField('confirm')"
       >
@@ -317,13 +317,13 @@ function messageOf(reason: unknown): string {
     </div>
 
     <div class="row" data-between="true">
-      <span class="row-meta">{{ t('s_1lj253k') }}</span>
+      <span class="row-meta">{{ t('auth.register.passwordStrength') }}</span>
       <span class="password-meter" :data-level="strength.level">{{ strength.label }}</span>
     </div>
 
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <button class="cta" type="submit" :data-loading="accountBusy ? 'true' : undefined" :disabled="accountBusy">
-      {{ t('s_n6lkn3') }}
+      {{ t('auth.register.createAccount') }}
     </button>
   </form>
 
@@ -331,12 +331,12 @@ function messageOf(reason: unknown): string {
   <form v-else class="form" novalidate @submit.prevent="verifyAccount">
     <div class="stack" data-gap="sm">
       <!-- 冒号放在文案资源里而不是尾随空格：Android 的 string 资源会裁掉首尾空白。 -->
-      <p class="muted">{{ t('s_sg8u9h') }}<strong>{{ sentTo }}</strong></p>
-      <p class="field-hint">{{ t('s_1v481a9') }}</p>
+      <p class="muted">{{ t('auth.login.codeSentTo') }}<strong>{{ sentTo }}</strong></p>
+      <p class="field-hint">{{ t('auth.register.codeHint') }}</p>
     </div>
 
     <div class="field" :data-invalid="codeError ? 'true' : undefined">
-      <label for="register-code">{{ t('s_s8pbve') }}</label>
+      <label for="register-code">{{ t('auth.login.emailCode') }}</label>
       <input
         id="register-code"
         ref="codeInput"
@@ -346,7 +346,7 @@ function messageOf(reason: unknown): string {
         inputmode="numeric"
         maxlength="6"
         autocomplete="one-time-code"
-        :placeholder="t('s_doboo3')"
+        :placeholder="t('auth.register.sixDigits')"
         @input="codeError = ''"
       >
       <p v-if="codeError" class="field-error" role="alert">{{ codeError }}</p>
@@ -354,7 +354,7 @@ function messageOf(reason: unknown): string {
 
     <p v-if="verifyError" class="field-error" role="alert">{{ verifyError }}</p>
     <button class="cta" type="submit" :data-loading="verifyBusy ? 'true' : undefined" :disabled="verifyBusy">
-      {{ t('s_1jikdwu') }}
+      {{ t('auth.register.verifyAndCreate') }}
     </button>
     <button
       class="cta ghost"
@@ -365,8 +365,8 @@ function messageOf(reason: unknown): string {
     >
       {{ resendLabel }}
     </button>
-    <button class="cta ghost" type="button" @click="showStep(1)">{{ t('s_177p9jq') }}</button>
+    <button class="cta ghost" type="button" @click="showStep(1)">{{ t('auth.register.backToEdit') }}</button>
   </form>
 
-  <button class="cta ghost" type="button" @click="router.replace('/login')">{{ t('s_1smt94y') }}</button>
+  <button class="cta ghost" type="button" @click="router.replace('/login')">{{ t('auth.register.backToLogin') }}</button>
 </template>

@@ -33,8 +33,8 @@ import { t } from '@/i18n';
 
 const COPY = {
   /** 详情面板里的主按钮：详情只读，点它才进状态选择。 */
-  adjustStatus: t('s_15y6qev'),
-  detail: t('s_ox3r68'),
+  adjustStatus: t('admin.users.adjustStatus'),
+  detail: t('registration.review.viewDetail'),
 };
 
 const route = useRoute();
@@ -123,14 +123,14 @@ function targetsFor(record: Registration): string[] {
 }
 
 function targetLabel(target: string): string {
-  if (target === REGISTRATION_STATUS.APPROVED) return t('s_j666m6');
-  if (target === REGISTRATION_STATUS.REJECTED) return t('s_1qrntx4');
-  return t('s_crec0c');
+  if (target === REGISTRATION_STATUS.APPROVED) return t('registration.review.approve');
+  if (target === REGISTRATION_STATUS.REJECTED) return t('registration.review.reject');
+  return t('registration.review.markAttended');
 }
 
 function statusMessage(status: string): string {
-  if (status === REGISTRATION_STATUS.APPROVED) return t('s_1j0wkqr');
-  if (status === REGISTRATION_STATUS.REJECTED) return t('s_yxll7l');
+  if (status === REGISTRATION_STATUS.APPROVED) return t('registration.review.approvedToast');
+  if (status === REGISTRATION_STATUS.REJECTED) return t('registration.review.rejectedToast');
   return `已将报名标记为${status}`;
 }
 
@@ -154,8 +154,8 @@ function openDetail(record: Registration): void {
   const answers = answerDocument({ source: { text: record.answers } }).lines;
   const targets = targetsFor(record);
   const hint = record.status === REGISTRATION_STATUS.ATTENDED
-    ? t('s_159zzbg')
-    : t('s_1e05tqn');
+    ? t('registration.review.attendedLocked')
+    : t('registration.review.reviseDenied');
   const actions: SheetAction[] = [];
   if (targets.length > 0) {
     actions.push({
@@ -167,7 +167,7 @@ function openDetail(record: Registration): void {
       },
     });
   }
-  actions.push({ label: t('s_g0fanx'), onClick: (close) => close() });
+  actions.push({ label: t('common.close'), onClick: (close) => close() });
   openSheet({
     title: String(record.visitorName ?? ''),
     // 收集项可能很多，用高面板并让内容自己滚动。
@@ -179,7 +179,7 @@ function openDetail(record: Registration): void {
       registrationTime: String(record.registrationTime ?? ''),
       summary: String(record.summary ?? ''),
       answers: answers.map((line) => ({
-        label: line.label || t('s_otl7kf'),
+        label: line.label || t('exhibition.detail.additionalInfo'),
         value: line.value || '—',
       })),
       hint: targets.length > 0 ? '' : hint,
@@ -192,11 +192,11 @@ function openDetail(record: Registration): void {
 function openActions(record: Registration): void {
   const targets = targetsFor(record);
   if (targets.length === 0) {
-    toast(t('s_1e05tqn'), 'error');
+    toast(t('registration.review.reviseDenied'), 'error');
     return;
   }
   openSheet({
-    title: t('s_1r4txyl'),
+    title: t('registration.review.status'),
     message: `当前：${record.status}`,
     // 与用户状态面板同一套排布：选项竖排，选中/主推动作一眼可辨。
     layout: 'stack',
@@ -208,7 +208,7 @@ function openActions(record: Registration): void {
         if (target === REGISTRATION_STATUS.REJECTED) askReject(record);
         else await changeStatus(record, target);
       },
-    })).concat([{ label: t('s_1589w37'), onClick: (close) => close() }]),
+    })).concat([{ label: t('common.cancel'), onClick: (close) => close() }]),
   });
 }
 
@@ -216,7 +216,7 @@ async function changeStatus(record: Registration, status: string): Promise<void>
   try {
     const result = await api.review.updateStatus(String(record.id), status);
     if (result?.ok !== true) {
-      toast(String(result?.error || t('s_10lkv9z')), 'error');
+      toast(String(result?.error || t('admin.users.updateFailed')), 'error');
       return;
     }
     toast(statusMessage(status), 'success');
@@ -229,12 +229,12 @@ async function changeStatus(record: Registration, status: string): Promise<void>
 /** 拒绝前二次确认：拒绝会通知报名人，误点代价高。 */
 function askReject(record: Registration): void {
   openSheet({
-    title: t('s_1qrntx4'),
+    title: t('registration.review.reject'),
     message: `将「${record.visitorName}」的报名标记为已拒绝？审核结果会同步到用户的“我的活动”。`,
     actions: [
-      { label: t('s_1589w37'), onClick: (close) => close() },
+      { label: t('common.cancel'), onClick: (close) => close() },
       {
-        label: t('s_1qrntx4'),
+        label: t('registration.review.reject'),
         variant: 'danger',
         onClick: async (close) => {
           close();
@@ -259,7 +259,7 @@ function csvCell(value: unknown): string {
 
 async function exportCsv(): Promise<void> {
   const rows = [
-    [t('s_33njx3'), t('s_17yba4l'), t('s_1ccx4t4'), t('s_rxiw2v')],
+    [t('registration.detail.registrant'), t('registration.detail.registeredAt'), t('admin.exhibitions.status'), t('registration.review.filledAnswers')],
     ...filtered.value.map((record) => [
       String(record.visitorName ?? ''),
       String(record.registrationTime ?? ''),
@@ -276,7 +276,7 @@ async function exportCsv(): Promise<void> {
   } catch (reason) {
     // 用户在系统保存框点了取消：按码判断，不给红色错误，只说明没有导出。
     if (reason && typeof reason === 'object' && (reason as { code?: unknown }).code === 'cancelled') {
-      toast(t('s_1va7jf9'));
+      toast(t('admin.exhibitions.exportCancelled'));
       return;
     }
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -290,7 +290,7 @@ async function exportCsv(): Promise<void> {
     <header class="row" data-between="true">
       <div class="stack" data-gap="sm">
         <span class="eyebrow">{{ bootstrap.brand.en }}</span>
-        <h2>{{ t('s_7xrrf0') }}</h2>
+        <h2>{{ t('registration.review.title') }}</h2>
       </div>
       <span class="pill">{{ `${exhibitions.length} 个展会` }}</span>
     </header>
@@ -299,13 +299,13 @@ async function exportCsv(): Promise<void> {
     <StateBlock
       v-else-if="list.error.value && list.data.value === undefined"
       tone="error"
-      :title="t('s_kvpltc')"
+      :title="t('common.loadFailed')"
       :description="list.error.value.message"
-      :action-label="t('s_lswd2v')"
+      :action-label="t('common.retry')"
       @action="loadExhibitions"
     />
     <template v-else>
-      <span class="section-label">{{ t('s_1yn5q3y') }}</span>
+      <span class="section-label">{{ t('registration.review.chooseExhibition') }}</span>
       <div class="list" data-gap="sm">
         <button
           v-for="item in exhibitions"
@@ -329,21 +329,21 @@ async function exportCsv(): Promise<void> {
     <div class="row" data-between="true">
       <div class="stack" data-gap="sm">
         <span class="eyebrow">{{ bootstrap.brand.en }}</span>
-        <h2>{{ t('s_7xrrf0') }}</h2>
+        <h2>{{ t('registration.review.title') }}</h2>
       </div>
       <span class="pill">{{ `待审核 ${pendingCount}` }}</span>
     </div>
 
-    <SegControl v-model="filter" :items="filterItems" :label="t('s_1r4txyl')" />
+    <SegControl v-model="filter" :items="filterItems" :label="t('registration.review.status')" />
 
     <SkeletonBlock v-if="reviewLoading" :rows="3" />
 
     <StateBlock
       v-else-if="review.error.value && !hasRecords"
       tone="error"
-      :title="t('s_1f0wrbh')"
+      :title="t('registration.review.listLoadFailed')"
       :description="review.error.value.message"
-      :action-label="t('s_lswd2v')"
+      :action-label="t('common.retry')"
       @action="refresh"
     />
 
@@ -356,7 +356,7 @@ async function exportCsv(): Promise<void> {
       v-else-if="filtered.length === 0"
       icon="ticket"
       :title="`没有${filter === '全部' ? '' : filter}的报名`"
-      :description="t('s_z599mr')"
+      :description="t('registration.review.emptyHint')"
     />
 
     <div v-else class="list" data-gap="sm" :data-busy="review.loading.value ? 'true' : undefined">
@@ -369,9 +369,9 @@ async function exportCsv(): Promise<void> {
             :aria-label="`查看 ${record.visitorName} 的公开页`"
             @click="openVisitor(record)"
           >
-            {{ String(record.visitorName ?? t('s_18ko8bk')).slice(0, 1) }}
+            {{ String(record.visitorName ?? t('registration.review.initialFallback')).slice(0, 1) }}
           </button>
-          <span v-else class="avatar" aria-hidden="true">{{ String(record.visitorName ?? t('s_18ko8bk')).slice(0, 1) }}</span>
+          <span v-else class="avatar" aria-hidden="true">{{ String(record.visitorName ?? t('registration.review.initialFallback')).slice(0, 1) }}</span>
           <button
             class="row-card"
             type="button"
@@ -393,10 +393,10 @@ async function exportCsv(): Promise<void> {
         </div>
         <div v-if="record.status === REGISTRATION_STATUS.PENDING" class="action-row">
           <button class="cta" data-size="small" type="button" @click="changeStatus(record, REGISTRATION_STATUS.APPROVED)">
-            {{ t('s_j666m6') }}
+            {{ t('registration.review.approve') }}
           </button>
           <button class="cta ghost" data-size="small" type="button" @click="askReject(record)">
-            {{ t('s_1qrntx4') }}
+            {{ t('registration.review.reject') }}
           </button>
         </div>
         <div v-else class="action-row">
@@ -407,7 +407,7 @@ async function exportCsv(): Promise<void> {
 
     <button class="cta ghost" type="button" :disabled="filtered.length === 0" @click="exportCsv">
       <AppIcon name="download" size="icon icon-sm" />
-      {{ t('s_1ogoh03') }}
+      {{ t('admin.exhibitions.exportCsv') }}
     </button>
   </template>
 </template>

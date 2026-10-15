@@ -15,7 +15,7 @@ import { toast } from '@/services/toast';
 import { check, limit, validateAll } from '@/services/validate';
 
 function errorText(reason: unknown): string {
-  return reason instanceof Error && reason.message ? reason.message : t('s_1q9u8le');
+  return reason instanceof Error && reason.message ? reason.message : t('exhibition.form.saveFailed');
 }
 
 /**
@@ -43,13 +43,13 @@ export function openProfileEditor(profile: JsonObject, options?: { blocked?: () 
   /** 校验一次并把错误落到对应字段上，返回是否通过。 */
   function validateEditor(): boolean {
     const nicknameError = check(editForm.nickname, {
-      label: t('s_1c2rfxc'),
+      label: t('settings.profile.nickname'),
       required: true,
       max: limit('nickname', 20),
     });
-    const bioError = check(editForm.bio, { label: t('s_ml9unw'), max: limit('bio', 200) });
-    const regionError = check(editForm.region, { label: t('s_11ftk7j'), max: limit('region', 40) });
-    const socialError = check(editForm.socialMedia, { label: t('s_1hnvqec'), max: limit('socialMedia', 40) });
+    const bioError = check(editForm.bio, { label: t('profile.bio'), max: limit('bio', 200) });
+    const regionError = check(editForm.region, { label: t('settings.profile.region'), max: limit('region', 40) });
+    const socialError = check(editForm.socialMedia, { label: t('settings.profile.social'), max: limit('socialMedia', 40) });
 
     editInvalid.nickname = nicknameError !== '';
     editInvalid.bio = bioError !== '';
@@ -81,7 +81,7 @@ export function openProfileEditor(profile: JsonObject, options?: { blocked?: () 
       Object.assign(profile, fresh);
       closeSheet();
       editError.value = '';
-      toast(t('s_i86pw9'), 'success');
+      toast(t('settings.profile.saved'), 'success');
     } catch (reason) {
       editError.value = errorText(reason);
     } finally {
@@ -90,7 +90,7 @@ export function openProfileEditor(profile: JsonObject, options?: { blocked?: () 
   }
 
   openSheet({
-    title: t('s_1sq2bvr'),
+    title: t('settings.profile.editProfile'),
     component: UserSettingsFormSheet,
     props: {
       mode: 'profile',
@@ -108,8 +108,8 @@ export function openProfileEditor(profile: JsonObject, options?: { blocked?: () 
     },
     size: 'full',
     actions: [
-      { label: t('s_1c3mapc'), variant: 'primary', disabled: () => editBusy.value, onClick: () => saveEditor() },
-      { label: t('s_1589w37'), disabled: () => editBusy.value, onClick: (close) => close() },
+      { label: t('common.save'), variant: 'primary', disabled: () => editBusy.value, onClick: () => saveEditor() },
+      { label: t('common.cancel'), disabled: () => editBusy.value, onClick: (close) => close() },
     ],
   });
 }

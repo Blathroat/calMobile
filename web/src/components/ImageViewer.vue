@@ -13,8 +13,8 @@ import AppIcon from './AppIcon.vue';
 import { t } from '@/i18n';
 
 const COPY = {
-  close: t('s_7nmx80'),
-  hint: t('s_sbw8m5'),
+  close: t('media.closeImage'),
+  hint: t('media.viewerHint'),
 };
 
 const props = withDefaults(defineProps<{

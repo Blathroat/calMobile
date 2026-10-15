@@ -209,7 +209,7 @@ export class NativeBridge {
    */
   call<A extends NativeAction>(action: A, payload: NativeActionPayloads[A]): Promise<NativeActionResults[A]> {
     // 没有桥就直接失败，不存在「在浏览器里假装成功」的分支。
-    if (!this.hasNative()) return Promise.reject(new NativeBridgeError(t('s_1adnxmn')));
+    if (!this.hasNative()) return Promise.reject(new NativeBridgeError(t('device.noBridge')));
     const callbackId = `cb-${this.sequence++}`;
     return new Promise<NativeActionResults[A]>((resolve, reject) => {
       const entry = { resolve: resolve as (value: unknown) => void, reject, timer: undefined as ReturnType<typeof setTimeout> | undefined };
@@ -238,7 +238,7 @@ export class NativeBridge {
    * 用于页面销毁或热重载，避免旧实例的 pending 永远挂着（再也不会有人回它们）。
    */
   dispose(): void {
-    const error = new NativeBridgeError(t('s_2qe8t5'));
+    const error = new NativeBridgeError(t('device.bridgeReleased'));
     for (const [callbackId, entry] of this.pending) {
       this.finish(callbackId);
       entry.reject(error);
@@ -259,7 +259,7 @@ export class NativeBridge {
         this.finish(callbackId);
         if (ok) entry.resolve(result);
         // 失败时只看 code（稳定）并给 error 文案兜底，不要解析文案本身。
-        else entry.reject(new NativeBridgeError(error || t('s_41skpq'), code ?? undefined));
+        else entry.reject(new NativeBridgeError(error || t('device.actionIncomplete'), code ?? undefined));
       },
     };
     this.installed = true;

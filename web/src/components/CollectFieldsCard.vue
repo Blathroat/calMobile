@@ -35,17 +35,17 @@ const FIELD_TYPES = ['文本', '单选', '多选'] as const;
 const TYPE_ITEMS = FIELD_TYPES.map((type) => ({ value: type, label: type }));
 
 const COPY = {
-  title: t('s_4okt0a'),
-  type: t('s_anh4cj'),
-  remove: t('s_1t2vi4h'),
-  option: t('s_1u8q6av'),
-  ordinal: t('s_biig97'),
-  unit: t('s_1xoauwk'),
-  placeholder: t('s_lx7l32'),
-  empty: t('s_1mm83sw'),
-  textHint: t('s_10wjl6q'),
-  radioHint: t('s_97dkkt'),
-  checkHint: t('s_17e66no'),
+  title: t('exhibition.editor.heading'),
+  type: t('registration.fields.fieldType'),
+  remove: t('common.delete'),
+  option: t('registration.fields.option'),
+  ordinal: t('registration.fields.ordinalPrefix'),
+  unit: t('registration.fields.itemUnit'),
+  placeholder: t('registration.fields.questionPlaceholder'),
+  empty: t('registration.fields.emptyHint'),
+  textHint: t('registration.fields.textInputHint'),
+  radioHint: t('registration.fields.singleChoiceHint'),
+  checkHint: t('registration.fields.multiChoiceHint'),
 };
 
 function addField(): void {
@@ -114,7 +114,7 @@ function itemLabel(index: number): string {
               :placeholder="COPY.placeholder"
               :maxlength="titleMax"
               :disabled="disabled"
-              :aria-label="t('s_1u3w62u')"
+              :aria-label="t('registration.fields.fieldTitle')"
             />
           </label>
           <SegControl
@@ -130,7 +130,7 @@ function itemLabel(index: number): string {
           v-if="isChoice(item)"
           class="collect-options"
           role="group"
-          :aria-label="item.type === '单选' ? t('s_1y8221p') : t('s_dpy0pe')"
+          :aria-label="item.type === '单选' ? t('admin.limits.radioOption') : t('admin.limits.checkOption')"
         >
           <div v-for="(option, optionIndex) in item.options" :key="optionIndex" class="option-row">
             <span class="option-index">{{ optionIndex + 1 }}</span>
@@ -153,7 +153,7 @@ function itemLabel(index: number): string {
             </button>
           </div>
           <button class="collect-quiet" type="button" :disabled="disabled" @click="addOption(item)">
-            {{ t('s_1nl5fxw') }}
+            {{ t('registration.fields.addOption') }}
           </button>
         </div>
         <div class="collect-foot">
@@ -166,7 +166,7 @@ function itemLabel(index: number): string {
             class="collect-quiet collect-remove"
             type="button"
             :disabled="disabled"
-            :aria-label="t('s_qa4u6r')"
+            :aria-label="t('registration.fields.removeField')"
             @click="removeField(index)"
           >
             {{ COPY.remove }}
@@ -174,6 +174,6 @@ function itemLabel(index: number): string {
         </div>
       </div>
     </div>
-    <button class="cta ghost" type="button" :disabled="disabled" @click="addField">{{ t('s_1t5x3h2') }}</button>
+    <button class="cta ghost" type="button" :disabled="disabled" @click="addField">{{ t('registration.fields.addField') }}</button>
   </div>
 </template>

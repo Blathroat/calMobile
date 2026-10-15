@@ -103,7 +103,7 @@ export function uploadSizeError(kind: 'image' | 'video', bytes: unknown): string
   const max = uploadSizeLimitMb(kind);
   const size = Number(bytes) || 0;
   if (size <= max * 1024 * 1024) return '';
-  const label = kind === 'video' ? t('s_q79se0') : t('s_1k84spe');
+  const label = kind === 'video' ? t('form.video') : t('form.image');
   return `${label}超过服务器设置的 ${max} MB 上限`;
 }
 
@@ -122,7 +122,7 @@ export interface CheckOptions {
 /** 逐条执行规则，返回第一条错误；通过时返回空串。 */
 export function check(value: unknown, options: CheckOptions = {}): string {
   const {
-    label = t('s_1qafeqo'),
+    label = t('form.thisField'),
     required = false,
     min = 0,
     max = 0,
@@ -151,19 +151,19 @@ export function validateAll(checks: Array<() => string>): { ok: boolean; message
 
 // ── 常用组合规则 ──────────────────────────────────────────────────
 
-export function usernameRule(label = t('s_u9jq8n')): CheckOptions {
+export function usernameRule(label = t('form.username')): CheckOptions {
   return {
     label,
     min: limit('usernameMin', 3),
     max: limit('usernameMax', 20),
     pattern: PATTERNS.username,
-    patternMessage: t('s_2i4r18'),
+    patternMessage: t('form.usernameCharset'),
   };
 }
 
 export function passwordRule(): CheckOptions {
   return {
-    label: t('s_1aph6eg'),
+    label: t('auth.login.password'),
     min: limit('passwordMin', 6),
     max: limit('passwordMax', 32),
   };
@@ -172,16 +172,16 @@ export function passwordRule(): CheckOptions {
 /** 密码强度提示：长度达标后再看字符种类，仅作提示不做拦截。 */
 export function passwordStrength(value: unknown): { level: number; label: string } {
   const text = String(value ?? '');
-  if (text.length === 0) return { level: 0, label: t('s_15h5nhd') };
+  if (text.length === 0) return { level: 0, label: t('profile.notFilled') };
   let score = text.length >= limit('passwordMin', 6) ? 1 : 0;
   if (/[A-Za-z]/.test(text) && /\d/.test(text)) score += 1;
   if (/[^A-Za-z0-9]/.test(text) || text.length >= 12) score += 1;
-  const labels = [t('s_ei6h3w'), t('s_ei6h3w'), t('s_b7cu2g'), t('s_hk23ql')];
+  const labels = [t('form.passwordWeak'), t('form.passwordWeak'), t('form.passwordMedium'), t('form.passwordStrong')];
   return { level: score, label: labels[score] ?? '' };
 }
 
 /** 两个密码框一致性校验。 */
-export function matchRule(value: unknown, other: unknown, message = t('s_10ai5t2')): string {
+export function matchRule(value: unknown, other: unknown, message = t('form.passwordMismatch')): string {
   const a = String(value ?? '');
   const b = String(other ?? '');
   if (!a || !b) return '';

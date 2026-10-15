@@ -38,7 +38,7 @@ export interface SessionState {
  * 空用户兜底：角色 guest、标签取注入文案、权限表为空。
  * @returns 一份全新的用户对象，避免多个 store 实例共享同一引用
  */
-const emptyUser = (): User => ({ role: 'guest', roleLabel: t('s_h6o1xg'), can: {} });
+const emptyUser = (): User => ({ role: 'guest', roleLabel: t('auth.login.guest'), can: {} });
 
 /** 当前会话；写入口是 `applyUser()` / `clear()` / `expire()`，别直接改 state。 */
 export const useSessionStore = defineStore('session', {

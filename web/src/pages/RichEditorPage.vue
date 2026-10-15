@@ -52,8 +52,8 @@ const editor = ref<HTMLTextAreaElement>();
 const seeded = ref(false);
 const canSave = computed(() => seeded.value && !query.loading.value && !loadFailed.value
   && !notFound.value && (draftMode.value || Boolean(exhibition.value.id)));
-const previewLabel = t('s_k2jp4x');
-const continueLabel = t('s_ajd5o');
+const previewLabel = t('exhibition.editor.preview');
+const continueLabel = t('exhibition.editor.continueEditing');
 
 const previewHtml = computed(() => markdownToHtml(content.value));
 
@@ -85,7 +85,7 @@ const mediaHint = computed(() => {
   const imageCount = Number(bootstrap.media.imageCount) || 8;
   const imageSize = Number(bootstrap.media.imageSizeMb) || 10;
   return `媒体数量与大小受服务器设置限制：图片 ${imageCount} 张 / 单张 ${imageSize} MB，`
-    + `视频 ${uploadCountLimit('video')} 个 / 单个不超过 ${uploadSizeLimitMb('video')} MB；${t('s_vkgi23')}`;
+    + `视频 ${uploadCountLimit('video')} 个 / 单个不超过 ${uploadSizeLimitMb('video')} MB；${t('exhibition.editor.mediaUsesShortUrl')}`;
 });
 
 // ── 取数 ─────────────────────────────────────────────────────────
@@ -198,7 +198,7 @@ function formatBytes(bytes: unknown): string {
 /** 允许的格式：服务器没配就回落到「常见」，错误提示里因此始终有下一步可走。 */
 function formatsHint(kind: 'image' | 'video'): string {
   const formats = allowedFormats(kind);
-  return formats.length > 0 ? formats.map((item) => `.${item}`).join('/') : t('s_1ylglbm');
+  return formats.length > 0 ? formats.map((item) => `.${item}`).join('/') : t('exhibition.editor.commonFormats');
 }
 
 /** 插入图片：设备选完后上传，正文只留下服务器地址。 */
@@ -212,7 +212,7 @@ async function insertImage(): Promise<void> {
   try {
     const result = await device.importMedia('image');
     if (!result?.url) {
-      toast(t('s_1dc9o49'), 'error');
+      toast(t('admin.media.unreadableImage'), 'error');
       return;
     }
     const url = await publishImportedMedia('image', result);
@@ -236,7 +236,7 @@ async function insertVideo(): Promise<void> {
   try {
     const result = await device.importMedia('video');
     if (!result?.url) {
-      toast(t('s_s0oos7'), 'error');
+      toast(t('exhibition.editor.videoUnreadable'), 'error');
       return;
     }
     // 视频不像图片那样会被原生压缩：超过服务器设置的上限时不要上传。
@@ -275,16 +275,16 @@ const paste = reactive({ text: '' });
 function openPasteSheet(): void {
   paste.text = '';
   openSheet({
-    title: t('s_7zi2sm'),
+    title: t('exhibition.editor.pasteMarkdown'),
     component: PasteTextPanel,
     props: {
       model: paste,
-      hint: t('s_wo4aqm'),
+      hint: t('exhibition.editor.pasteOrAppend'),
     },
     actions: [
-      { label: t('s_1589w37'), onClick: (close) => close() },
-      { label: t('s_booftk'), onClick: (close) => { applyPaste(false); close(); } },
-      { label: t('s_ekbz2c'), variant: 'primary', onClick: (close) => { applyPaste(true); close(); } },
+      { label: t('common.cancel'), onClick: (close) => close() },
+      { label: t('exhibition.editor.append'), onClick: (close) => { applyPaste(false); close(); } },
+      { label: t('exhibition.editor.replace'), variant: 'primary', onClick: (close) => { applyPaste(true); close(); } },
     ],
   });
 }
@@ -292,28 +292,28 @@ function openPasteSheet(): void {
 function applyPaste(replaceAll: boolean): void {
   const value = paste.text.trim();
   if (!value) {
-    toast(t('s_ijdxmv'), 'error');
+    toast(t('exhibition.editor.pasteEmpty'), 'error');
     return;
   }
   const current = content.value;
   content.value = replaceAll || !current.trim() ? value : `${current.trimEnd()}\n\n${value}`;
-  toast(replaceAll ? t('s_17pstxc') : t('s_1oas91y'), 'success');
+  toast(replaceAll ? t('exhibition.editor.pasteReplaced') : t('exhibition.editor.pasteAppended'), 'success');
 }
 
 function clearAll(): void {
   if (!content.value.trim()) return;
   openSheet({
-    title: t('s_kjpxv'),
-    message: t('s_1kokqyk'),
+    title: t('exhibition.editor.clearDescription'),
+    message: t('exhibition.editor.clearKeepsPublished'),
     actions: [
-      { label: t('s_1589w37'), onClick: (close) => close() },
+      { label: t('common.cancel'), onClick: (close) => close() },
       {
-        label: t('s_9mbwb2'),
+        label: t('exhibition.editor.clear'),
         variant: 'primary',
         onClick: (close) => {
           content.value = '';
           close();
-          toast(t('s_lp789j'));
+          toast(t('exhibition.editor.cleared'));
         },
       },
     ],
@@ -328,7 +328,7 @@ async function save(): Promise<void> {
     try {
       patchExhibitionDraft(markdown);
       const summary = plainText(markdownToHtml(markdown), 20);
-      toast(markdown ? `简介已保存（${summary}）` : t('s_1lylgf9'), 'success');
+      toast(markdown ? `简介已保存（${summary}）` : t('exhibition.editor.descriptionCleared'), 'success');
       await router.back();
     } finally {
       saving.value = false;
@@ -355,11 +355,11 @@ async function save(): Promise<void> {
       fields: query.data.value?.fields ?? [],
     });
     if (result?.ok !== true) {
-      toast(String(result?.error || t('s_1q9u8le')), 'error');
+      toast(String(result?.error || t('exhibition.form.saveFailed')), 'error');
       return;
     }
     const summary = plainText(markdownToHtml(markdown), 20);
-    toast(markdown ? `简介已保存（${summary}）` : t('s_1lylgf9'), 'success');
+    toast(markdown ? `简介已保存（${summary}）` : t('exhibition.editor.descriptionCleared'), 'success');
     await router.replace(`/exhibition-form/${encodeURIComponent(String(exhibition.value.id ?? exhibitionId.value))}`);
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -383,51 +383,51 @@ function escapeRegExp(value: string): string {
   <StateBlock
     v-else-if="loadFailed"
     tone="error"
-    :title="t('s_kvpltc')"
+    :title="t('common.loadFailed')"
     :description="query.error.value?.message"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
 
   <StateBlock
     v-else-if="notFound"
     tone="error"
-    :title="t('s_1vim1qp')"
-    :description="String(query.data.value?.error || t('s_1q6xpub'))"
-    :action-label="t('s_dn4ida')"
+    :title="t('exhibition.detail.notFound')"
+    :description="String(query.data.value?.error || t('exhibition.editor.loadDescriptionFailed'))"
+    :action-label="t('exhibition.form.backToExhibitor')"
     @action="router.replace('/exhibitor')"
   />
 
   <template v-else>
     <div class="card" data-tone="fill">
-      <strong>{{ exhibition.title || t('s_p9fllo') }}</strong>
+      <strong>{{ exhibition.title || t('exhibition.editor.newExhibition') }}</strong>
     </div>
 
     <!-- 工具条只留格式。预览和粘贴在编辑区下方，避免同一颗粘贴出现两次。 -->
-    <div class="toolbar" role="toolbar" :aria-label="t('s_28v8q')">
-      <button type="button" :aria-pressed="false" :title="t('s_4okt0a')" @click="prefixLine('## ')">H2</button>
-      <button type="button" :aria-pressed="false" :title="t('s_1e57pa0')" @click="surround('**', '**', '文本')">
+    <div class="toolbar" role="toolbar" :aria-label="t('exhibition.editor.title')">
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.heading')" @click="prefixLine('## ')">H2</button>
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.bold')" @click="surround('**', '**', '文本')">
         <strong>B</strong>
       </button>
-      <button type="button" :aria-pressed="false" :title="t('s_69k40o')" @click="surround('*', '*', '文本')">
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.italic')" @click="surround('*', '*', '文本')">
         <em>I</em>
       </button>
-      <button type="button" :aria-pressed="false" :title="t('s_1wogqko')" @click="prefixLine('> ')">&gt;</button>
-      <button type="button" :aria-pressed="false" :title="t('s_z3ic32')" @click="prefixLine('- ')">•</button>
-      <button type="button" :aria-pressed="false" :title="t('s_1l65wvf')" @click="prefixLine('1. ')">1.</button>
-      <button type="button" :aria-pressed="false" :title="t('s_1gqx0u5')" @click="surround('[', '](https://)', '链接文字')">
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.quote')" @click="prefixLine('> ')">&gt;</button>
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.bulletList')" @click="prefixLine('- ')">•</button>
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.numberedList')" @click="prefixLine('1. ')">1.</button>
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.link')" @click="surround('[', '](https://)', '链接文字')">
         <AppIcon name="share" size="icon icon-sm" />
       </button>
-      <button type="button" :aria-pressed="false" :title="t('s_1w5fs53')" @click="insertImage">
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.insertImage')" @click="insertImage">
         <AppIcon name="image" size="icon icon-sm" />
       </button>
-      <button type="button" :aria-pressed="false" :title="t('s_1aj4gvd')" @click="insertVideo">
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.insertVideo')" @click="insertVideo">
         <AppIcon name="video" size="icon icon-sm" />
       </button>
-      <button type="button" :aria-pressed="false" :title="t('s_1kll7do')" @click="appendText(t('s_spr4u2'))">
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.table')" @click="appendText(t('exhibition.editor.tableTemplate'))">
         <AppIcon name="list" size="icon icon-sm" />
       </button>
-      <button type="button" :aria-pressed="false" :title="t('s_14ggq2g')" @click="clearAll">
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.clearContent')" @click="clearAll">
         <AppIcon name="trash" size="icon icon-sm" />
       </button>
     </div>
@@ -440,7 +440,7 @@ function escapeRegExp(value: string): string {
       v-model="content"
       class="textarea editor-surface"
       rows="12"
-      :placeholder="t('s_1jvhwb1')"
+      :placeholder="t('exhibition.editor.placeholder')"
       @blur="rememberSelection"
       @select="rememberSelection"
       @click="rememberSelection"
@@ -449,7 +449,7 @@ function escapeRegExp(value: string): string {
 
     <div class="row" data-between="true">
       <span class="field-hint">{{ stats }}</span>
-      <span class="field-hint">{{ showPreview ? t('s_k2jp4x') : t('s_1jvhwb1') }}</span>
+      <span class="field-hint">{{ showPreview ? t('exhibition.editor.preview') : t('exhibition.editor.placeholder') }}</span>
     </div>
 
     <!-- 这一行只放预览和粘贴。插入图片、插入视频留在上面的工具条。 -->
@@ -467,7 +467,7 @@ function escapeRegExp(value: string): string {
       </button>
       <button class="cta ghost" data-size="small" type="button" @click="openPasteSheet">
         <AppIcon name="edit" size="icon icon-sm" />
-        {{ t('s_7zi2sm') }}
+        {{ t('exhibition.editor.pasteMarkdown') }}
       </button>
     </div>
     <p class="field-hint">{{ mediaHint }}</p>
@@ -475,16 +475,16 @@ function escapeRegExp(value: string): string {
     <!-- 媒体网格：正文里已有的图片与视频，逐格可删 -->
     <div class="stack" data-gap="sm">
       <div class="row" data-between="true">
-        <span class="section-label">{{ t('s_1w5fs53') }}</span>
+        <span class="section-label">{{ t('exhibition.editor.insertImage') }}</span>
         <span v-if="media.length > 0" class="pill">{{ `${media.length} 项` }}</span>
       </div>
-      <p v-if="media.length === 0" class="field-hint">{{ t('s_12ibypn') }}</p>
+      <p v-if="media.length === 0" class="field-hint">{{ t('exhibition.form.emptyDescription') }}</p>
       <div v-else class="media-grid">
         <div v-for="tile in media" :key="tile.url" class="media-tile">
-          <img v-if="tile.kind === 'image'" :src="tile.url" :alt="t('s_1w5fs53')" @error="removeMedia(tile)" />
+          <img v-if="tile.kind === 'image'" :src="tile.url" :alt="t('exhibition.editor.insertImage')" @error="removeMedia(tile)" />
           <!-- 视频用同一套槽位：`.media-tile img` 的铺满规则同样适用于 video -->
           <video v-else :src="tile.url" muted playsinline preload="metadata" @error="removeMedia(tile)" />
-          <button type="button" :aria-label="t('s_14ggq2g')" @click="removeMedia(tile)">×</button>
+          <button type="button" :aria-label="t('exhibition.editor.clearContent')" @click="removeMedia(tile)">×</button>
         </div>
       </div>
     </div>
@@ -495,9 +495,9 @@ function escapeRegExp(value: string): string {
     <div class="page-foot">
       <div class="stack" data-gap="sm">
         <button class="cta" type="button" :disabled="saving || !canSave" :data-loading="saving ? 'true' : 'false'" @click="save">
-          {{ t('s_1kqdxz5') }}
+          {{ t('exhibition.editor.saveDescription') }}
         </button>
-        <p class="field-hint text-center">{{ t('s_4l0yq7') }}</p>
+        <p class="field-hint text-center">{{ t('exhibition.editor.rendersAsMarkdown') }}</p>
       </div>
     </div>
   </Teleport>

@@ -45,24 +45,20 @@ const loggedIn = computed(() => session.loggedIn);
 /** 受限账号：只有后端明确下发 `false` 才算，老后端不下发 `profile` 时行为不变。 */
 const limited = computed(() => user.value.can?.profile === false);
 /** 受限时统一用同一句说明原因，避免每个入口各写一套说法。 */
-const limitHint = computed(() => t('s_1kliyri'));
+const limitHint = computed(() => t('profile.restricted'));
 
 /**
- * 资源文件里还没有的说法，先写成普通字符串字面量。
- *
- * 为什么放在脚本里而不是直接写在模板里：`scripts/extract-strings.js` 只扫描 `<script setup>`，
- * 模板里的中文不会被抽取。下次运行 `node scripts/extract-strings.js --write` 时，这些字面量
- * 会被换成 `t(...)` 调用并补进 strings_frontend.xml —— 因此这里不自己造 key，也不手改那个 XML。
+ * 本页专用说法。`t()` 不依赖响应式数据，在 setup 里取一次即可。
  */
 const COPY = {
   /** 已经有头像时按钮要换个说法（资源里只有「上传头像」）。 */
-  changeAvatar: t('s_1u0qxq'),
-  /** 卡片标题：资源里的 `s_1vmubx9` 就是「设置」，与顶栏标题重名，这里说明得更具体。 */
-  notificationsTitle: t('s_1ee0t5g'),
+  changeAvatar: t('settings.changeAvatar'),
+  /** 卡片标题。顶栏已经是「设置」，这里把范围说成通知。 */
+  notificationsTitle: t('settings.notify.title'),
   /** 安全入口的说明：这一页同时管邮箱与两步验证。 */
-  securityMeta: t('s_aebw86'),
+  securityMeta: t('settings.securityMeta'),
   /** 配色没有保存按钮，用它解释「点了就生效」。 */
-  accentHint: t('s_12cew5p'),
+  accentHint: t('settings.theme.accentHint'),
 };
 
 // ── 取数 ──────────────────────────────────────────────────────────
@@ -87,7 +83,7 @@ const notificationsGranted = computed(() => {
 
 /** 取数失败优先用后端/传输层自带的原因，没有就回落到通用文案。 */
 function errorText(reason: unknown): string {
-  return reason instanceof Error && reason.message ? reason.message : t('s_1q9u8le');
+  return reason instanceof Error && reason.message ? reason.message : t('exhibition.form.saveFailed');
 }
 
 /** 两组数据分别保留错误和重试入口；完整资料到齐前不能提交覆盖写入。 */
@@ -142,7 +138,7 @@ const cropSource = ref('');
 /** 资料未读成功或账号受限时不能覆盖写入，动作入口与禁用状态保持一致。 */
 function guardProfileWrite(): boolean {
   if (!profileReady.value) {
-    toast(profileError.value || t('s_1sz2kuw'), 'error');
+    toast(profileError.value || t('security.profileLoadFailed'), 'error');
     return true;
   }
   if (!limited.value) return false;
@@ -166,7 +162,7 @@ async function pickAvatar(): Promise<void> {
   }
   const source = String(picked?.dataUrl || '');
   if (!source) {
-    avatarError.value = t('s_1dc9o49');
+    avatarError.value = t('admin.media.unreadableImage');
     return;
   }
   cropSource.value = source;
@@ -199,7 +195,7 @@ async function storeAvatar(dataUrl: string): Promise<void> {
   if (guardProfileWrite()) return;
   const image = avatarBytes(dataUrl);
   if (!image) {
-    avatarError.value = t('s_1dc9o49');
+    avatarError.value = t('admin.media.unreadableImage');
     toast(avatarError.value, 'error');
     return;
   }
@@ -209,7 +205,7 @@ async function storeAvatar(dataUrl: string): Promise<void> {
     const fresh = (saved.user as JsonObject | undefined) ?? {};
     session.applyUser({ ...user.value, ...fresh });
     Object.assign(profile, fresh);
-    avatarMessage.value = t('s_3rxr06');
+    avatarMessage.value = t('settings.avatarUpdated');
     toast(avatarMessage.value, 'success');
   } catch (reason) {
     avatarError.value = errorText(reason);
@@ -230,7 +226,7 @@ async function removeAvatar(): Promise<void> {
     const fresh = (saved.user as JsonObject | undefined) ?? {};
     session.applyUser({ ...user.value, ...fresh });
     Object.assign(profile, fresh);
-    avatarMessage.value = t('s_14ol5jh');
+    avatarMessage.value = t('settings.avatarRemoved');
     toast(avatarMessage.value, 'success');
   } catch (reason) {
     avatarError.value = errorText(reason);
@@ -272,7 +268,7 @@ async function savePrivacy(value: boolean): Promise<void> {
     const fresh = (saved.user as JsonObject | undefined) ?? {};
     session.applyUser({ ...user.value, ...fresh });
     Object.assign(profile, fresh);
-    toast(value ? t('s_92i7f7') : t('s_dn42iy'), 'success');
+    toast(value ? t('settings.registrationsShown') : t('settings.registrationsHidden'), 'success');
   } catch (reason) {
     profile.showRegistrations = previous;
     toast(errorText(reason), 'error');
@@ -293,7 +289,7 @@ async function savePreferences(patch: JsonObject): Promise<void> {
     // 写接口统一返回 `{ ok, error, notify }`；失败时提示且不改动开关。
     const result = await api.profile.saveNotifications(patch);
     Object.assign(notify, result.notify ?? {});
-    toast(t('s_15wm4xy'), 'success');
+    toast(t('settings.notify.updated'), 'success');
   } catch (reason) {
     toast(errorText(reason), 'error');
   } finally {
@@ -308,7 +304,7 @@ async function requestNotification(): Promise<void> {
     notify.granted = granted;
     // 拿到结果后同步到设备能力，按钮的显隐以它为准（见 notificationsGranted）。
     capabilities.apply({ notifications: granted });
-    toast(granted ? t('s_j5c9oy') : t('s_1ya7561'), granted ? 'success' : 'error');
+    toast(granted ? t('settings.notify.permissionGranted') : t('settings.notify.permissionDenied'), granted ? 'success' : 'error');
   } catch (reason) {
     toast(errorText(reason), 'error');
   }
@@ -337,9 +333,9 @@ async function changeAccent(index: number): Promise<void> {
   accentBusy.value = true;
   try {
     await saveAccentIndex(index);
-    toast(t('s_145fdbt'), 'success');
+    toast(t('settings.theme.accentSaved'), 'success');
   } catch (reason) {
-    toast(errorText(reason) || t('s_1q9u8le'), 'error');
+    toast(errorText(reason) || t('exhibition.form.saveFailed'), 'error');
   } finally {
     accentBusy.value = false;
   }
@@ -348,9 +344,9 @@ async function changeAccent(index: number): Promise<void> {
 // ── 明暗模式 ──────────────────────────────────────────────────────
 
 const modeItems = computed(() => [
-  { value: 'auto', label: t('s_1e3rp8l') },
-  { value: 'light', label: t('s_4wwqgm') },
-  { value: 'dark', label: t('s_bsz4ru') },
+  { value: 'auto', label: t('settings.theme.followSystem') },
+  { value: 'light', label: t('settings.theme.light') },
+  { value: 'dark', label: t('settings.theme.dark') },
 ]);
 
 const mode = computed(() => settings.mode);
@@ -361,7 +357,7 @@ async function changeMode(value: string): Promise<void> {
   try {
     await saveUiMode(value);
   } catch (reason) {
-    toast(errorText(reason) || t('s_1q9u8le'), 'error');
+    toast(errorText(reason) || t('exhibition.form.saveFailed'), 'error');
   }
 }
 </script>
@@ -371,9 +367,9 @@ async function changeMode(value: string): Promise<void> {
   <StateBlock
     v-if="!loggedIn"
     icon="user"
-    :title="t('s_1h1rste')"
-    :description="t('s_1b7h1x')"
-    :action-label="t('s_533bde')"
+    :title="t('profile.guestTitle')"
+    :description="t('profile.guestHint')"
+    :action-label="t('registration.list.goLogin')"
     @action="router.push({ path: '/login', query: { redirect: '/settings' } })"
   />
 
@@ -385,9 +381,9 @@ async function changeMode(value: string): Promise<void> {
       <StateBlock
         v-else-if="profileError"
         tone="error"
-        :title="t('s_1sz2kuw')"
+        :title="t('security.profileLoadFailed')"
         :description="profileError"
-        :action-label="t('s_lswd2v')"
+        :action-label="t('common.retry')"
         @action="loadProfile"
       />
       <!-- 头像卡：当前头像 + 编辑资料入口 + 上传 / 移除 -->
@@ -399,7 +395,7 @@ async function changeMode(value: string): Promise<void> {
               <strong class="row-title">{{ user.nickname || user.username }}</strong>
               <RoleTag :role-code="String(user.role || '')" />
             </span>
-            <span class="row-meta truncate">{{ user.email || t('s_1hhb6bo') }}</span>
+            <span class="row-meta truncate">{{ user.email || t('settings.emailEmpty') }}</span>
           </span>
         </div>
         <button
@@ -410,7 +406,7 @@ async function changeMode(value: string): Promise<void> {
           :title="limited ? limitHint : undefined"
           @click="openEditor"
         >
-          {{ t('s_1sq2bvr') }}
+          {{ t('settings.profile.editProfile') }}
         </button>
         <div class="row" data-gap="md">
           <button
@@ -421,7 +417,7 @@ async function changeMode(value: string): Promise<void> {
             :title="limited ? limitHint : undefined"
             @click="pickAvatar"
           >
-            {{ user.avatar ? COPY.changeAvatar : t('s_onix0y') }}
+            {{ user.avatar ? COPY.changeAvatar : t('settings.uploadAvatar') }}
           </button>
           <button
             v-if="user.avatar"
@@ -432,7 +428,7 @@ async function changeMode(value: string): Promise<void> {
             :title="limited ? limitHint : undefined"
             @click="removeAvatar"
           >
-            {{ t('s_1no1khr') }}
+            {{ t('settings.removeAvatar') }}
           </button>
         </div>
         <p v-if="avatarMessage" class="notice" data-tone="accent" role="status">{{ avatarMessage }}</p>
@@ -441,7 +437,7 @@ async function changeMode(value: string): Promise<void> {
 
       <div v-if="limited" class="notice" data-tone="accent">
         <strong>{{ limitHint }}</strong>
-        <span>{{ t('s_13i47qi') }}</span>
+        <span>{{ t('settings.limitUnaffected') }}</span>
       </div>
 
       <!-- 通知设置：两个偏好 + 系统通知权限入口 -->
@@ -451,14 +447,14 @@ async function changeMode(value: string): Promise<void> {
         <StateBlock
           v-else-if="notifyError"
           tone="error"
-          :title="t('s_121kyl5')"
+          :title="t('settings.notify.loadFailed')"
           :description="notifyError"
-          :action-label="t('s_lswd2v')"
+          :action-label="t('common.retry')"
           @action="loadNotifications"
         />
         <div class="switch-row">
           <span class="switch-copy">
-            <strong>{{ t('s_1f8zcmv') }}</strong>
+            <strong>{{ t('settings.notify.exhibitionReminder') }}</strong>
           </span>
           <label class="switch" for="notify-reminder">
             <input
@@ -473,7 +469,7 @@ async function changeMode(value: string): Promise<void> {
         </div>
         <div class="switch-row">
           <span class="switch-copy">
-            <strong>{{ t('s_fz8qsa') }}</strong>
+            <strong>{{ t('settings.notify.registrationUpdates') }}</strong>
           </span>
           <label class="switch" for="notify-status">
             <input
@@ -488,13 +484,13 @@ async function changeMode(value: string): Promise<void> {
         </div>
         <!-- 系统通知权限只有设备知道：后端返回的 granted 只表示服务器侧开关可用 -->
         <button v-if="!notificationsGranted" class="cta ghost" type="button" @click="requestNotification">
-          {{ t('s_1splm64') }}
+          {{ t('settings.notify.requestPermission') }}
         </button>
       </div>
 
       <!-- 应用配色：点一下就换，没有「保存配色」这一步；色板里不放文字，选中只靠描边 -->
       <div class="card">
-        <span class="section-label">{{ t('s_4odn3m') }}</span>
+        <span class="section-label">{{ t('settings.theme.accent') }}</span>
         <div class="cluster">
           <button
             v-for="(color, index) in themeColors"
@@ -502,7 +498,7 @@ async function changeMode(value: string): Promise<void> {
             class="swatch"
             type="button"
             :style="{ background: color }"
-            :aria-label="`${t('s_4odn3m')} ${index + 1}`"
+            :aria-label="`${t('settings.theme.accent')} ${index + 1}`"
             :aria-pressed="index === accentIndex ? 'true' : 'false'"
             :disabled="accentBusy"
             @click="changeAccent(index)"
@@ -513,22 +509,22 @@ async function changeMode(value: string): Promise<void> {
 
       <!-- 深色模式：分段控件，切换立即生效并保存到后端 -->
       <div class="card">
-        <span class="section-label">{{ t('s_1ghvdtm') }}</span>
+        <span class="section-label">{{ t('settings.theme.darkMode') }}</span>
         <SegControl
           :model-value="mode"
           :items="modeItems"
-          :label="t('s_1ghvdtm')"
+          :label="t('settings.theme.darkMode')"
           @update:model-value="changeMode"
         />
       </div>
 
       <!-- 隐私：是否在公开页展示自己的报名记录（原先在个人页，按反馈收进设置） -->
       <div class="card">
-        <span class="section-label">{{ t('s_lh9gvq') }}</span>
+        <span class="section-label">{{ t('settings.privacy') }}</span>
         <div class="switch-row">
           <span class="switch-copy">
-            <strong>{{ t('s_1utpn11') }}</strong>
-            <span class="row-meta">{{ t('s_1wgtu4f') }}</span>
+            <strong>{{ t('settings.showRegistrations') }}</strong>
+            <span class="row-meta">{{ t('settings.showRegistrationsHint') }}</span>
           </span>
           <label class="switch" for="settings-privacy-registrations">
             <input
@@ -546,10 +542,10 @@ async function changeMode(value: string): Promise<void> {
 
       <!-- 安全：邮箱与两步验证共用同一套凭据，因此放在同一张卡里 -->
       <div class="card">
-        <span class="section-label">{{ t('s_1apxo2s') }}</span>
+        <span class="section-label">{{ t('security.section') }}</span>
         <button class="row-card" type="button" data-pressable="true" @click="router.push('/security')">
           <span class="row-copy">
-            <strong class="row-title">{{ t('s_1apxo2s') }}</strong>
+            <strong class="row-title">{{ t('security.section') }}</strong>
             <span class="row-meta">{{ COPY.securityMeta }}</span>
           </span>
           <span class="dim" aria-hidden="true">›</span>

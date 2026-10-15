@@ -36,12 +36,12 @@ const meetings = computed(() => query.data.value?.meetings ?? []);
 const hasContent = computed(() => query.data.value !== undefined);
 const isEmpty = computed(() => records.value.length === 0 && meetings.value.length === 0);
 /** 条数是派生数据（与首页的「N 场」同类），不占用文案 key；数据到位前保持「—」。 */
-const emptyDescription = t('s_1scjlq7');
-const registrationSection = t('s_1t3bw5g');
-const meetingSection = t('s_zmypci');
+const emptyDescription = t('registration.list.joinEmptyHint');
+const registrationSection = t('registration.list.exhibitionSection');
+const meetingSection = t('registration.list.privateMeeting');
 
 const countLabel = computed(() => {
-  if (!session.loggedIn) return t('s_1ydrtwl');
+  if (!session.loggedIn) return t('registration.list.signedOut');
   return hasContent.value ? `${records.value.length + meetings.value.length} 条记录` : '—';
 });
 
@@ -74,11 +74,11 @@ function warmMeeting(id: unknown): void {
 
 /** 报名摘要：没有额外信息时沿用旧页面同一句说明。 */
 function summary(record: Registration): string {
-  return truncate(record.answers, 34) || t('s_v8pba2');
+  return truncate(record.answers, 34) || t('registration.detail.noCollectedInfo');
 }
 
 function meetingSummary(meeting: JsonObject): string {
-  return truncate(meeting.answers, 34) || t('s_1ye52vk');
+  return truncate(meeting.answers, 34) || t('registration.list.noCollectFields');
 }
 
 function openLogin(): void {
@@ -90,7 +90,7 @@ function openLogin(): void {
   <div class="row" data-between="true">
     <div class="stack" data-gap="sm">
       <span class="eyebrow">{{ bootstrap.brand.en }}</span>
-      <h2>{{ t('s_1m2dh8u') }}</h2>
+      <h2>{{ t('registration.list.title') }}</h2>
     </div>
     <span class="pill">{{ countLabel }}</span>
   </div>
@@ -99,9 +99,9 @@ function openLogin(): void {
   <StateBlock
     v-if="!session.loggedIn"
     icon="user"
-    :title="t('s_1eiqw54')"
-    :description="t('s_mf99no')"
-    :action-label="t('s_533bde')"
+    :title="t('registration.list.loginToView')"
+    :description="t('registration.list.loginHint')"
+    :action-label="t('registration.list.goLogin')"
     @action="openLogin"
   />
 
@@ -112,18 +112,18 @@ function openLogin(): void {
       <StateBlock
         v-else-if="query.error.value && !hasContent"
         tone="error"
-        :title="t('s_1wh1onp')"
+        :title="t('registration.list.loadFailed')"
         :description="query.error.value.message"
-        :action-label="t('s_lswd2v')"
+        :action-label="t('common.retry')"
         @action="load"
       />
 
       <StateBlock
         v-else-if="isEmpty"
         icon="ticket"
-        :title="t('s_a8pyd6')"
-        :description="isJoinSurface ? emptyDescription : t('s_yfjo64')"
-        :action-label="isJoinSurface ? '' : t('s_11ps4x5')"
+        :title="t('registration.list.empty')"
+        :description="isJoinSurface ? emptyDescription : t('registration.list.emptyHint')"
+        :action-label="isJoinSurface ? '' : t('registration.list.browseHome')"
         @action="router.push(paths.home)"
       />
 

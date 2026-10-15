@@ -9,8 +9,8 @@ import { t } from '@/i18n';
 const props = defineProps<{ roleCode?: string }>();
 
 const COPY = {
-  exhibitor: t('s_1mdxfsy'),
-  admin: t('s_1yxtyq'),
+  exhibitor: t('nav.exhibitor'),
+  admin: t('app.administrator'),
 };
 
 function label(): string {

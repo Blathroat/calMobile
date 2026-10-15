@@ -8,7 +8,6 @@
 #   docker compose stop           # 停（数据留在命名卷 calmobile-pgdata 里）
 #   docker compose down -v        # 删容器与数据卷（开发数据清空，需重新 migrate + seed）
 #
-# 日常启停也可以用 scripts/db.ps1 与 scripts/mail.ps1 这两个薄封装（同样的动作加便利输出）。
 # 后端连接配置见 server/.env.example：默认 127.0.0.1:5432，不用改。
 
 name: calmobile

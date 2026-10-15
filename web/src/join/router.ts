@@ -23,32 +23,32 @@ export function createJoinRouter(history: RouterHistory = createWebHistory()) {
     history,
     routes: [
       { path: '/', redirect: () => (useSessionStore().loggedIn ? '/mine' : '/login') },
-      { path: '/login', component: LoginPage, meta: { title: 's_1yggxgd', bodyGap: 'tight' } },
-      { path: '/register', component: RegisterPage, meta: { title: 's_1n008jl', back: true, bodyGap: 'tight' } },
-      { path: '/forgot-password', component: ForgotPasswordPage, meta: { title: 's_1qksguo', back: true, bodyGap: 'tight' } },
+      { path: '/login', component: LoginPage, meta: { title: 'auth.login.title', bodyGap: 'tight' } },
+      { path: '/register', component: RegisterPage, meta: { title: 'auth.register.title', back: true, bodyGap: 'tight' } },
+      { path: '/forgot-password', component: ForgotPasswordPage, meta: { title: 'auth.forgot.title', back: true, bodyGap: 'tight' } },
       {
         path: '/e/:id',
         component: RegistrationFormPage,
-        meta: { title: 's_vrp4t3', back: true, bodyGap: 'tight', requiresAuth: true, capability: 'register' },
+        meta: { title: 'exhibition.detail.registrationInfo', back: true, bodyGap: 'tight', requiresAuth: true, capability: 'register' },
       },
       {
         path: '/mine',
         component: MyRegistrationsPage,
         meta: {
-          title: 's_1m2dh8u',
+          title: 'registration.list.title',
           tab: 'my-registrations',
           requiresAuth: true,
-          topAction: { icon: 'lock', label: 's_12hokt7', action: 'logout' },
+          topAction: { icon: 'lock', label: 'profile.logout', action: 'logout' },
         },
       },
-      { path: '/mine/m/:id', component: MeetingDetailPage, meta: { title: 's_g1bhp7', back: true, requiresAuth: true } },
-      { path: '/mine/:id', component: RegistrationDetailPage, meta: { title: 's_1e7myaa', back: true, requiresAuth: true } },
+      { path: '/mine/m/:id', component: MeetingDetailPage, meta: { title: 'meeting.title', back: true, requiresAuth: true } },
+      { path: '/mine/:id', component: RegistrationDetailPage, meta: { title: 'registration.detail.title', back: true, requiresAuth: true } },
       {
         path: '/m/:exhibitorId',
         component: MeetingApplyPage,
-        meta: { title: 's_ks6zd8', back: true, bodyGap: 'tight', requiresAuth: true, capability: 'register' },
+        meta: { title: 'meeting.apply.title', back: true, bodyGap: 'tight', requiresAuth: true, capability: 'register' },
       },
-      { path: '/:pathMatch(.*)*', name: 'link-only', component: LinkOnlyPage, meta: { title: 's_14frgky' } },
+      { path: '/:pathMatch(.*)*', name: 'link-only', component: LinkOnlyPage, meta: { title: 'join.title' } },
     ],
   });
 

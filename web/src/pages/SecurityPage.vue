@@ -19,20 +19,20 @@ type SheetAction = 'email-factor-start' | 'email-send' | 'email-verify' | 'facto
 type IdentityScope = 'password' | 'email' | 'totp' | 'factor';
 type IdentityMethod = 'email' | 'totp';
 const modeOptions: Array<{ value: FactorMode; label: string }> = [
-  { value: 'off', label: t('s_g0fanx') },
-  { value: 'totp', label: t('s_1s11mp7') },
-  { value: 'email', label: t('s_s8pbve') },
+  { value: 'off', label: t('common.close') },
+  { value: 'totp', label: t('security.totp.recommended') },
+  { value: 'email', label: t('auth.login.emailCode') },
 ];
 const copy = {
-  changeEmail: t('s_1ca6fcy'),
-  devicesTitle: t('s_10pjh16'),
-  devicesDescription: t('s_12vww4d'),
-  manageDevices: t('s_poqjmt'),
-  passwordTitle: t('s_1grrtzz'),
-  passwordDescription: t('s_1aobeo5'),
-  passwordChanged: t('s_zfw5mg'),
-  rotateTotp: t('s_b4oncm'),
-  disableDescription: t('s_1oriphf'),
+  changeEmail: t('security.email.change'),
+  devicesTitle: t('security.devices.title'),
+  devicesDescription: t('security.viewDevices'),
+  manageDevices: t('security.manageDevices'),
+  passwordTitle: t('security.password.account'),
+  passwordDescription: t('security.password.changeLogin'),
+  passwordChanged: t('security.password.updatedSignIn'),
+  rotateTotp: t('security.totp.rotate'),
+  disableDescription: t('security.disableKeepsAuthenticator'),
 };
 
 const router = useRouter();
@@ -60,21 +60,21 @@ const availableModeOptions = computed(() => modeOptions.map((option) => ({
 })));
 const emailLabel = computed(() => {
   const email = String(info.email || '');
-  if (!email) return t('s_tv7wlb');
-  return `${email}${info.emailVerified === true ? t('s_1m3j883') : t('s_1webb8b')}`;
+  if (!email) return t('security.email.unbound');
+  return `${email}${info.emailVerified === true ? t('security.email.verified') : t('security.email.unverified')}`;
 });
 const methodHint = computed(() => {
-  if (!enabled.value) return canEnable.value ? t('s_1o6qoze') : t('s_1qj48cz');
-  const name = activeMode.value === 'totp' ? t('s_1s11mp7') : t('s_16xoiwx');
-  return `${t('s_1mh7xs6')}：${name}；${t('s_ohd7za')} ${Number(info.backupCodesLeft) || 0} ${t('s_d5a1x9')}`;
+  if (!enabled.value) return canEnable.value ? t('security.chooseMethod') : t('security.email.unavailable');
+  const name = activeMode.value === 'totp' ? t('security.totp.recommended') : t('security.email.enableWithCode');
+  return `${t('security.currentMethod')}：${name}；${t('security.backupCodesLeft')} ${Number(info.backupCodesLeft) || 0} ${t('admin.limits.items')}`;
 });
 
 function errorText(reason: unknown): string {
-  return reason instanceof Error && reason.message ? reason.message : t('s_osck6n');
+  return reason instanceof Error && reason.message ? reason.message : t('auth.register.failed');
 }
 
 function assertOk(result: JsonObject): void {
-  if (result.ok === false) throw new Error(String(result.error || t('s_osck6n')));
+  if (result.ok === false) throw new Error(String(result.error || t('auth.register.failed')));
 }
 
 async function load(): Promise<void> {
@@ -167,32 +167,32 @@ async function submitSheetAction(payload: {
       session.applyUser({ ...session.user, ...(result.user as JsonObject | undefined ?? {}) });
       drawerCommitted = true;
       await refresh();
-      notice.value = t('s_vhfyh8');
-      toast(t('s_vhfyh8'), 'success');
+      notice.value = t('security.email.changed');
+      toast(t('security.email.changed'), 'success');
       return { close: true };
     case 'factor-email':
       result = await api.security.verifyTwoFactor(String(payload.code || ''));
       assertOk(result);
       drawerCommitted = true;
       await refresh();
-      notice.value = t('s_14jjxmk');
-      toast(t('s_14jjxmk'), 'success');
+      notice.value = t('security.twoFactorOn');
+      toast(t('security.twoFactorOn'), 'success');
       return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
     case 'factor-totp':
       result = await api.security.totpEnable(String(payload.code || ''), String(payload.stepUpToken || ''));
       assertOk(result);
       drawerCommitted = true;
       await refresh();
-      notice.value = t('s_1p1p02k');
-      toast(t('s_1p1p02k'), 'success');
+      notice.value = t('security.totp.bound');
+      toast(t('security.totp.bound'), 'success');
       return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
     case 'disable':
       result = await api.security.disableTwoFactor(String(payload.stepUpToken || ''));
       assertOk(result);
       drawerCommitted = true;
       await refresh();
-      notice.value = t('s_gupxm1');
-      toast(t('s_gupxm1'), 'success');
+      notice.value = t('security.twoFactorOff');
+      toast(t('security.twoFactorOff'), 'success');
       return { close: true };
     case 'password-change':
       result = await api.profile.changePassword({
@@ -214,7 +214,7 @@ async function submitSheetAction(payload: {
       await refresh();
       return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
     default:
-      throw new Error(t('s_osck6n'));
+      throw new Error(t('auth.register.failed'));
     }
   } catch (reason) {
     if (['factor-email', 'factor-totp', 'disable'].includes(payload.action)) selectedMode.value = activeMode.value;
@@ -239,7 +239,7 @@ async function verifyIdentity(method: IdentityMethod, code: string, scope: Ident
   const verified = await api.security.verifyIdentity(method, code, scope);
   assertOk(verified);
   const stepUpToken = String(verified.stepUpToken || '');
-  if (!stepUpToken) throw new Error(t('s_osck6n'));
+  if (!stepUpToken) throw new Error(t('auth.register.failed'));
 
   if (scope === 'totp') {
     const setup = await api.security.totpSetup(stepUpToken);
@@ -256,8 +256,8 @@ async function verifyIdentity(method: IdentityMethod, code: string, scope: Ident
       assertOk(disabled);
       drawerCommitted = true;
       await refresh();
-      notice.value = t('s_gupxm1');
-      toast(t('s_gupxm1'), 'success');
+      notice.value = t('security.twoFactorOff');
+      toast(t('security.twoFactorOff'), 'success');
       return { stepUpToken: '', complete: true };
     }
     return { stepUpToken };
@@ -268,14 +268,14 @@ async function verifyIdentity(method: IdentityMethod, code: string, scope: Ident
 function openEmailChange(): void {
   error.value = '';
   openFormSheet({
-    title: t('s_1ca6fcy'), kind: 'change-email', action: 'email-send',
+    title: t('security.email.change'), kind: 'change-email', action: 'email-send',
     identityScope: 'email', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
   });
 }
 
 function openPasswordChange(): void {
   openFormSheet({
-    title: t('s_1pt7oo1'), kind: 'change-password', action: 'password-change',
+    title: t('security.password.change'), kind: 'change-password', action: 'password-change',
     identityScope: 'password', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
   });
 }
@@ -288,18 +288,18 @@ async function chooseMode(target: FactorMode): Promise<void> {
   notice.value = '';
   if (target === 'off') {
     openSheet({
-      title: t('s_1b3874r'),
+      title: t('security.confirmDisable'),
       message: copy.disableDescription,
       onClose: () => { selectedMode.value = activeMode.value; },
       actions: [
-        { label: t('s_1589w37'), onClick: (close) => { close(); selectedMode.value = previous; } },
+        { label: t('common.cancel'), onClick: (close) => { close(); selectedMode.value = previous; } },
         {
-          label: t('s_1b3874r'), variant: 'danger',
+          label: t('security.confirmDisable'), variant: 'danger',
           onClick: (close) => {
             close();
             selectedMode.value = 'off';
             openFormSheet({
-              title: t('s_1b3874r'), kind: 'identity-only', action: 'disable',
+              title: t('security.confirmDisable'), kind: 'identity-only', action: 'disable',
               identityScope: 'factor', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
             });
           },
@@ -310,7 +310,7 @@ async function chooseMode(target: FactorMode): Promise<void> {
   }
   if (!canEnable.value) {
     selectedMode.value = previous;
-    error.value = t('s_1qj48cz');
+    error.value = t('security.email.unavailable');
     return;
   }
 
@@ -318,18 +318,18 @@ async function chooseMode(target: FactorMode): Promise<void> {
   try {
     if (target === 'email') {
       openFormSheet({
-        title: t('s_16xoiwx'), kind: 'email-factor', action: 'factor-email',
+        title: t('security.email.enableWithCode'), kind: 'email-factor', action: 'factor-email',
         identityScope: 'factor', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
       });
     } else if (totpEnabled.value) {
       const activated = await api.security.activateTotp();
       assertOk(activated);
       await refresh();
-      notice.value = t('s_1p1p02k');
-      toast(t('s_1p1p02k'), 'success');
+      notice.value = t('security.totp.bound');
+      toast(t('security.totp.bound'), 'success');
     } else {
       openFormSheet({
-        title: t('s_1s11mp7'), kind: 'totp', action: 'factor-totp',
+        title: t('security.totp.recommended'), kind: 'totp', action: 'factor-totp',
         identityScope: 'totp', totpAvailable: false, maskedEmail: maskedCurrentEmail(),
       });
     }
@@ -343,12 +343,12 @@ async function chooseMode(target: FactorMode): Promise<void> {
 
 function askRegenerate(): void {
   openSheet({
-    title: t('s_u2zwo3'), message: t('s_m70x1a'),
+    title: t('security.regenerateBackupCodes'), message: t('security.backupCodesInvalidate'),
     actions: [
-      { label: t('s_1589w37'), onClick: (close) => close() },
-      { label: t('s_yvmn4o'), variant: 'danger', onClick: (close) => {
+      { label: t('common.cancel'), onClick: (close) => close() },
+      { label: t('security.generateBackupCodes'), variant: 'danger', onClick: (close) => {
         close();
-        openFormSheet({ title: t('s_u2zwo3'), kind: 'password', action: 'regenerate' });
+        openFormSheet({ title: t('security.regenerateBackupCodes'), kind: 'password', action: 'regenerate' });
       } },
     ],
   });
@@ -367,33 +367,33 @@ async function rebindTotp(): Promise<void> {
   <StateBlock
     v-else-if="loadError"
     tone="error"
-    :title="t('s_1sz2kuw')"
+    :title="t('security.profileLoadFailed')"
     :description="loadError"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
   <template v-else>
     <div class="card">
-      <span class="section-label">{{ t('s_1apxo2s') }}</span>
+      <span class="section-label">{{ t('security.section') }}</span>
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
       <p v-if="notice" class="notice" data-tone="accent" role="status">{{ notice }}</p>
 
       <div class="row" data-between="true">
         <span class="row-copy">
-          <span class="row-title">{{ t('s_185tvls') }}</span>
+          <span class="row-title">{{ t('auth.register.email') }}</span>
           <span class="row-meta truncate">{{ emailLabel }}</span>
         </span>
         <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="openEmailChange">{{ copy.changeEmail }}</button>
       </div>
 
       <div class="stack" data-gap="xs">
-        <span class="row-title">{{ t('s_15msj8x') }}</span>
-        <SegControl :items="availableModeOptions" :model-value="selectedMode" :disabled="busy" :label="t('s_15msj8x')" @update:model-value="(value) => chooseMode(value as FactorMode)" />
+        <span class="row-title">{{ t('auth.login.twoFactor') }}</span>
+        <SegControl :items="availableModeOptions" :model-value="selectedMode" :disabled="busy" :label="t('auth.login.twoFactor')" @update:model-value="(value) => chooseMode(value as FactorMode)" />
       </div>
       <p class="field-hint">{{ methodHint }}</p>
 
       <div v-if="enabled || totpEnabled" class="row" data-gap="sm">
-        <button v-if="enabled" class="cta ghost" data-size="small" type="button" :disabled="busy" @click="askRegenerate">{{ t('s_u2zwo3') }}</button>
+        <button v-if="enabled" class="cta ghost" data-size="small" type="button" :disabled="busy" @click="askRegenerate">{{ t('security.regenerateBackupCodes') }}</button>
         <button v-if="totpEnabled" class="cta ghost" data-size="small" type="button" :disabled="busy" @click="rebindTotp">{{ copy.rotateTotp }}</button>
       </div>
     </div>
@@ -402,7 +402,7 @@ async function rebindTotp(): Promise<void> {
       <span class="section-label">{{ copy.passwordTitle }}</span>
       <button class="row-card" type="button" data-pressable="true" @click="openPasswordChange">
         <span class="row-copy">
-          <strong class="row-title">{{ t('s_1pt7oo1') }}</strong>
+          <strong class="row-title">{{ t('security.password.change') }}</strong>
           <span class="row-meta">{{ copy.passwordDescription }}</span>
         </span>
         <span class="dim" aria-hidden="true">›</span>

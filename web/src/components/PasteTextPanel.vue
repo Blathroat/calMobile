@@ -29,7 +29,7 @@ const props = withDefaults(defineProps<{
       v-model="props.model.text"
       class="textarea"
       :rows="props.rows"
-      :placeholder="props.placeholder || t('s_3ppp7q')"
+      :placeholder="props.placeholder || t('form.markdownPlaceholder')"
     />
   </div>
 </template>

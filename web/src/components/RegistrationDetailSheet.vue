@@ -17,10 +17,10 @@ import type { StatusTone } from '@/services/status';
 import { t } from '@/i18n';
 
 const COPY = {
-  status: t('s_1rt1gs6'),
-  time: t('s_17yba4l'),
-  answers: t('s_1j66bbh'),
-  summary: t('s_pkm2s4'),
+  status: t('registration.detail.status'),
+  time: t('registration.detail.registeredAt'),
+  answers: t('registration.detail.submittedInfo'),
+  summary: t('registration.detail.summary'),
 };
 
 withDefaults(defineProps<{
@@ -61,7 +61,7 @@ withDefaults(defineProps<{
           <span class="detail-value">{{ answer.value }}</span>
         </div>
       </div>
-      <p v-else class="row-meta">{{ t('s_v8pba2') }}</p>
+      <p v-else class="row-meta">{{ t('registration.detail.noCollectedInfo') }}</p>
     </div>
 
     <div v-if="summary" class="stack" data-gap="sm">

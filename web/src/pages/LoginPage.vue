@@ -33,7 +33,7 @@ const busy = ref(false);
 const guestBusy = ref(false);
 const resendBusy = ref(false);
 const expiredSession = computed(() => route.query.expired === '1');
-const expiredSessionMessage = t('s_1nvd98z');
+const expiredSessionMessage = t('auth.login.sessionExpired');
 
 /** 账号框的上限：这个框也能填邮箱，卡在用户名的 20 会把长邮箱直接挡在外面。 */
 const ACCOUNT_MAX = 120;
@@ -42,7 +42,7 @@ const CODE_MAX = 12;
 /** 密码上限由后端配置下发；取不到时与注册页用同一个兜底值。 */
 const passwordMax = computed(() => Number(limit('passwordMax', 32)) || 32);
 
-const trustDeviceLabel = t('s_tz1s06');
+const trustDeviceLabel = t('auth.login.trustDevice');
 
 /** 预认证票：第二步与重发都要用它；它本身不是登录凭据。 */
 const ticket = ref('');
@@ -58,14 +58,14 @@ let timer: number | undefined;
 
 const methodHint = computed(() => {
   const lines: string[] = [];
-  if (methods.value.totp) lines.push(t('s_1c20uoy'));
-  if (methods.value.backup) lines.push(t('s_dowbxh'));
+  if (methods.value.totp) lines.push(t('auth.login.totpBoundHint'));
+  if (methods.value.backup) lines.push(t('auth.login.backupHint'));
   return lines.join(' ');
 });
 
 const resendLabel = computed(() => {
-  if (remaining.value > 0) return `${remaining.value} ${t('s_1qbu9z0')}`;
-  return emailSent.value ? t('s_1fyr64c') : t('s_hzjdbg');
+  if (remaining.value > 0) return `${remaining.value} ${t('auth.login.secondsUntilResend')}`;
+  return emailSent.value ? t('auth.login.resendCode') : t('auth.login.sendEmailCode');
 });
 
 /** 登录前所在页面携带的参数（例如展会 id），登录后原样带回。 */
@@ -85,13 +85,13 @@ async function enterAs(): Promise<void> {
 /** 后端只回 `ok:false` 而没带原因时兜一句通用文案，否则错误行会是空白。 */
 function message(reason: unknown): string {
   const text = reason instanceof Error ? reason.message : String(reason);
-  return text || t('s_rn5blf');
+  return text || t('auth.login.failed');
 }
 
 async function submit(): Promise<void> {
   error.value = '';
-  const validated = check(account.value, { label: t('s_yuxvje'), required: true, max: ACCOUNT_MAX })
-    || check(password.value, { label: t('s_1aph6eg'), required: true, max: passwordMax.value });
+  const validated = check(account.value, { label: t('auth.login.account'), required: true, max: ACCOUNT_MAX })
+    || check(password.value, { label: t('auth.login.password'), required: true, max: passwordMax.value });
   if (validated) {
     error.value = validated;
     return;
@@ -126,11 +126,11 @@ async function verify(): Promise<void> {
   verifyError.value = '';
   const needsVerification = verifiedSession !== api.session.signal;
   const invalid = needsVerification && check(code.value, {
-    label: t('s_s8pbve'),
+    label: t('auth.login.emailCode'),
     required: true,
     max: CODE_MAX,
     // 第二因子三选一：6 位验证码（验证器或邮箱），或 XXXXX-XXXXX 形式的备用码
-    custom: (value) => (/^\d{6}$/.test(value) || /^[0-9A-Z]{5}-[0-9A-Z]{5}$/i.test(value) ? '' : t('s_28a6dt')),
+    custom: (value) => (/^\d{6}$/.test(value) || /^[0-9A-Z]{5}-[0-9A-Z]{5}$/i.test(value) ? '' : t('auth.login.codeOrBackupInvalid')),
   });
   if (invalid) {
     verifyError.value = invalid;
@@ -160,7 +160,7 @@ async function resend(): Promise<void> {
   resendBusy.value = true;
   try {
     const sent = await api.auth.loginCode(ticket.value);
-    toast(t('s_5rsk4v'), 'success');
+    toast(t('auth.login.codeSent'), 'success');
     // 从这一刻起才算「已经发过邮件」：按钮文案与「验证码已发送到…」都跟着变
     emailSent.value = true;
     startCountdown(Number((sent as { resendAfterSec?: number }).resendAfterSec));
@@ -218,13 +218,13 @@ onBeforeUnmount(stopCountdown);
        品牌方块靠左、标题与说明居中，注册 / 忘记密码跟在表单后面随内容滚动。 -->
   <div class="stack">
     <div class="stack" data-align="text">
-      <span class="brand-mark" aria-hidden="true">{{ t('s_1lsc240') }}</span>
+      <span class="brand-mark" aria-hidden="true">{{ t('exhibition.detail.brandMark') }}</span>
       <h2>{{ bootstrap.brand.zh }}</h2>
-      <p class="muted">{{ t('s_3zbkfg') }}</p>
+      <p class="muted">{{ t('auth.login.tagline') }}</p>
     </div>
 
     <div v-if="bootstrap.announcement.enabled === true && bootstrap.announcement.text" class="notice" data-tone="accent">
-      <strong>{{ t('s_153oaxf') }}</strong>
+      <strong>{{ t('auth.login.announcement') }}</strong>
       <span>{{ bootstrap.announcement.text }}</span>
     </div>
     <p v-if="expiredSession" class="notice" data-tone="accent" role="status">{{ expiredSessionMessage }}</p>
@@ -232,13 +232,13 @@ onBeforeUnmount(stopCountdown);
     <!-- 第一步：账号与密码 -->
     <form v-if="step === 1" class="form" novalidate @submit.prevent="submit">
       <div class="field">
-        <label for="login-account">{{ t('s_yuxvje') }}</label>
+        <label for="login-account">{{ t('auth.login.account') }}</label>
         <input
           id="login-account"
           v-model="account"
           class="input"
           type="text"
-          :placeholder="t('s_1sqr282')"
+          :placeholder="t('auth.login.accountPlaceholder')"
           autocomplete="username"
           :maxlength="ACCOUNT_MAX"
         />
@@ -247,13 +247,13 @@ onBeforeUnmount(stopCountdown);
         </span>
       </div>
       <div class="field">
-        <label for="login-password">{{ t('s_1aph6eg') }}</label>
+        <label for="login-password">{{ t('auth.login.password') }}</label>
         <input
           id="login-password"
           v-model="password"
           class="input"
           type="password"
-          :placeholder="t('s_f478sb')"
+          :placeholder="t('auth.login.passwordPlaceholder')"
           autocomplete="current-password"
           :maxlength="passwordMax"
         />
@@ -263,26 +263,26 @@ onBeforeUnmount(stopCountdown);
       </div>
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
       <button class="cta" type="submit" :disabled="busy" :data-loading="busy ? 'true' : 'false'">
-        {{ t('s_1yggxgd') }}
+        {{ t('auth.login.title') }}
       </button>
       <button v-if="!isJoinSurface" class="cta ghost" type="button" :disabled="guestBusy" :data-loading="guestBusy ? 'true' : 'false'" @click="guest">
-        {{ t('s_1jfbdwq') }}
+        {{ t('auth.login.browseAsGuest') }}
       </button>
     </form>
 
     <!-- 第二步：两步验证 -->
     <form v-else class="form" novalidate @submit.prevent="verify">
       <div class="stack" data-gap="sm">
-        <h2>{{ t('s_15msj8x') }}</h2>
+        <h2>{{ t('auth.login.twoFactor') }}</h2>
         <!-- 冒号而不是尾随空格：Android 会裁掉 string 资源的首尾空白 -->
-        <p v-if="emailSent" class="muted">{{ t('s_sg8u9h') }}<strong>{{ maskedEmail }}</strong></p>
+        <p v-if="emailSent" class="muted">{{ t('auth.login.codeSentTo') }}<strong>{{ maskedEmail }}</strong></p>
         <!-- 绑了验证器时第一步不会自动发邮件（省一封多半用不上的信，也避开 60 秒冷却） -->
-        <p v-else class="muted">{{ t('s_1rbi8qf') }}</p>
-        <p class="field-hint">{{ t('s_1xtehpy') }}</p>
+        <p v-else class="muted">{{ t('auth.login.totpOrEmailHint') }}</p>
+        <p class="field-hint">{{ t('auth.login.codeHint') }}</p>
         <p v-if="methodHint" class="field-hint">{{ methodHint }}</p>
       </div>
       <div class="field">
-        <label for="login-code">{{ t('s_s8pbve') }}</label>
+        <label for="login-code">{{ t('auth.login.emailCode') }}</label>
         <input
           id="login-code"
           v-model="code"
@@ -290,7 +290,7 @@ onBeforeUnmount(stopCountdown);
           type="text"
           inputmode="numeric"
           :maxlength="CODE_MAX"
-          :placeholder="t('s_tvr34s')"
+          :placeholder="t('auth.login.codeOrBackup')"
           autocomplete="one-time-code"
         />
         <span class="field-counter" aria-live="polite" :data-over="code.length > CODE_MAX ? 'true' : 'false'">
@@ -305,7 +305,7 @@ onBeforeUnmount(stopCountdown);
       </div>
       <p v-if="verifyError" class="field-error" role="alert">{{ verifyError }}</p>
       <button class="cta" type="submit" :disabled="busy" :data-loading="busy ? 'true' : 'false'">
-        {{ t('s_rvg0ck') }}
+        {{ t('auth.login.verifyAndLogin') }}
       </button>
       <!-- 邮箱验证码不可用（邮箱没验证）时，别摆一个点了会报错的按钮 -->
       <button
@@ -318,17 +318,17 @@ onBeforeUnmount(stopCountdown);
       >
         {{ resendLabel }}
       </button>
-      <button class="cta ghost" type="button" @click="backToStepOne">{{ t('s_knqdo0') }}</button>
+      <button class="cta ghost" type="button" @click="backToStepOne">{{ t('auth.login.previousStep') }}</button>
     </form>
 
     <!-- 第一步才有「注册 / 忘记密码」。 -->
     <div v-if="step === 1" class="stack" data-gap="sm">
       <footer class="row auth-entry">
-        <span class="dim">{{ t('s_und5qj') }}</span>
-        <button class="text-action" type="button" @click="router.push('/register')">{{ t('s_1fwr1ko') }}</button>
+        <span class="dim">{{ t('auth.login.noAccountYet') }}</span>
+        <button class="text-action" type="button" @click="router.push('/register')">{{ t('auth.login.signUp') }}</button>
       </footer>
       <div class="row auth-entry" data-flush="true">
-        <button class="text-action" type="button" @click="router.push('/forgot-password')">{{ t('s_5re2h1') }}</button>
+        <button class="text-action" type="button" @click="router.push('/forgot-password')">{{ t('auth.login.forgotPassword') }}</button>
       </div>
     </div>
   </div>

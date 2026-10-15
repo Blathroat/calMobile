@@ -60,25 +60,25 @@ const notice = ref('');
 const busy = ref(false);
 const qrError = ref('');
 const copy = {
-  emailSent: t('s_1849dsd'),
-  emailCodeExpiry: t('s_1s1vt07'),
-  changeAddress: t('s_xdbgt7'),
-  manualSecret: t('s_p88szl'),
-  identityDescription: t('s_1ckyrx8'),
-  disableDescription: t('s_1oriphf'),
-  emailMethod: t('s_s8pbve'),
-  totpMethod: t('s_1s11mp7'),
-  sendIdentityCode: t('s_shrzdv'),
-  identityCodeSent: t('s_1oot79w'),
-  verifyAndContinue: t('s_16bctuo'),
-  changePassword: t('s_1pt7oo1'),
-  newPassword: t('s_9sfqbi'),
-  confirmPassword: t('s_1b253gw'),
-  confirmPasswordRequired: t('s_src3bx'),
-  passwordLength: t('s_1kgsxi1'),
-  passwordCharacters: t('s_1tcj8tk'),
-  passwordMismatch: t('s_1c6u5vm'),
-  resendIdentityCode: t('s_1fyr64c'),
+  emailSent: t('security.setup.codeSentTo'),
+  emailCodeExpiry: t('security.setup.codeExpiry'),
+  changeAddress: t('security.setup.changeAddress'),
+  manualSecret: t('security.setup.enterSecret'),
+  identityDescription: t('security.setup.verifyIdentity'),
+  disableDescription: t('security.disableKeepsAuthenticator'),
+  emailMethod: t('auth.login.emailCode'),
+  totpMethod: t('security.totp.recommended'),
+  sendIdentityCode: t('auth.forgot.sendCode'),
+  identityCodeSent: t('security.setup.identityCodeSent'),
+  verifyAndContinue: t('security.setup.verifyAndContinue'),
+  changePassword: t('security.password.change'),
+  newPassword: t('auth.forgot.newPassword'),
+  confirmPassword: t('security.setup.confirmNewPassword'),
+  confirmPasswordRequired: t('security.setup.enterConfirmPassword'),
+  passwordLength: t('security.setup.passwordLength'),
+  passwordCharacters: t('security.setup.characters'),
+  passwordMismatch: t('security.setup.passwordMismatch'),
+  resendIdentityCode: t('auth.login.resendCode'),
 };
 
 const secretGroups = computed(() => secret.value.match(/.{1,4}/g)?.join(' ') ?? '');
@@ -86,7 +86,7 @@ const passwordMin = computed(() => Number(props.passwordMin) || 6);
 const passwordMax = computed(() => Number(props.passwordMax) || 32);
 
 function errorText(reason: unknown): string {
-  return reason instanceof Error && reason.message ? reason.message : t('s_osck6n');
+  return reason instanceof Error && reason.message ? reason.message : t('auth.register.failed');
 }
 
 async function run(action: string, values: Omit<SubmitPayload, 'action'> = {}): Promise<SubmitResult | undefined> {
@@ -103,7 +103,7 @@ async function run(action: string, values: Omit<SubmitPayload, 'action'> = {}): 
       pendingEmail.value = result.pendingEmail;
       email.value = result.pendingEmail;
       identityTicket.value = '';
-      notice.value = t('s_akobwu');
+      notice.value = t('security.setup.codeSentNewEmail');
       if (props.identityScope) {
         view.value = 'change-email';
         code.value = '';
@@ -158,7 +158,7 @@ async function verifyIdentity(): Promise<void> {
   if (!props.identityScope || !props.verifyIdentity) return;
   const value = code.value.trim();
   if (!PATTERNS.verificationCode.test(value)) {
-    error.value = t('s_1x20l1k');
+    error.value = t('auth.register.enterSixDigits');
     props.onIdentityFailure?.();
     return;
   }
@@ -204,8 +204,8 @@ async function verifyIdentity(): Promise<void> {
 async function sendEmailCode(): Promise<void> {
   const target = pendingEmail.value || email.value.trim();
   const validation = check(target, {
-    label: t('s_185tvls'), required: true, max: 120, pattern: PATTERNS.email,
-    patternMessage: t('s_1u3yg0h'),
+    label: t('auth.register.email'), required: true, max: 120, pattern: PATTERNS.email,
+    patternMessage: t('auth.register.emailInvalid'),
   });
   if (validation) { error.value = validation; return; }
   await run('email-send', { email: target });
@@ -234,19 +234,19 @@ async function submit(): Promise<void> {
   if (view.value === 'change-email') {
     if (!pendingEmail.value) { await sendEmailCode(); return; }
     if (!PATTERNS.verificationCode.test(code.value.trim())) {
-      error.value = t('s_1x20l1k');
+      error.value = t('auth.register.enterSixDigits');
       return;
     }
     await run('email-verify', { email: pendingEmail.value, code: code.value.trim() });
     return;
   }
   if (view.value === 'email-factor' || view.value === 'totp') {
-    if (!PATTERNS.verificationCode.test(code.value.trim())) { error.value = t('s_1x20l1k'); return; }
+    if (!PATTERNS.verificationCode.test(code.value.trim())) { error.value = t('auth.register.enterSixDigits'); return; }
     await run(props.action, { code: code.value.trim() });
     return;
   }
   if (view.value === 'password') {
-    if (!password.value) { error.value = t('s_1okxm8b'); return; }
+    if (!password.value) { error.value = t('security.setup.enterCurrentPassword'); return; }
     await run(props.action, { password: password.value });
     return;
   }
@@ -293,21 +293,21 @@ function requestEmailResend(): void {
       {{ copy.resendIdentityCode }}
     </button>
     <div v-if="identityMethod === 'totp' || identityCodeSent" class="field">
-      <label for="security-identity-code">{{ t('s_doboo3') }}</label>
-      <input id="security-identity-code" v-model="code" class="input" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" :placeholder="t('s_doboo3')">
+      <label for="security-identity-code">{{ t('auth.register.sixDigits') }}</label>
+      <input id="security-identity-code" v-model="code" class="input" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" :placeholder="t('auth.register.sixDigits')">
     </div>
     <p v-if="notice" class="notice" data-tone="accent" role="status">{{ notice }}</p>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <div class="row" data-gap="sm">
       <button class="cta" type="button" :disabled="busy || (identityMethod === 'email' && !identityCodeSent)" @click="verifyIdentity">{{ copy.verifyAndContinue }}</button>
-      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('s_1589w37') }}</button>
+      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('common.cancel') }}</button>
     </div>
   </div>
 
   <div v-else-if="view === 'change-email'" class="form" data-gap="sm">
-    <p class="field-hint">{{ t('s_1itmqlh') }}</p>
+    <p class="field-hint">{{ t('security.setup.replaceAfterCode') }}</p>
     <div class="field">
-      <label for="security-sheet-email">{{ t('s_185tvls') }}</label>
+      <label for="security-sheet-email">{{ t('auth.register.email') }}</label>
       <input
         id="security-sheet-email"
         v-model="email"
@@ -315,65 +315,65 @@ function requestEmailResend(): void {
         type="email"
         autocomplete="email"
         :disabled="Boolean(pendingEmail) || busy"
-        :placeholder="t('s_1i2pkg8')"
+        :placeholder="t('auth.register.emailPlaceholder')"
       >
     </div>
     <p v-if="pendingEmail" class="field-hint">{{ copy.emailSent }} {{ pendingEmail }} · {{ copy.emailCodeExpiry }}</p>
     <div v-if="pendingEmail" class="field">
-      <label for="security-sheet-email-code">{{ t('s_doboo3') }}</label>
-      <input id="security-sheet-email-code" v-model="code" class="input" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" :placeholder="t('s_doboo3')">
+      <label for="security-sheet-email-code">{{ t('auth.register.sixDigits') }}</label>
+      <input id="security-sheet-email-code" v-model="code" class="input" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" :placeholder="t('auth.register.sixDigits')">
     </div>
     <p v-if="notice" class="notice" data-tone="accent" role="status">{{ notice }}</p>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <div class="row" data-gap="sm">
-      <button v-if="!pendingEmail" class="cta" type="button" :disabled="busy" @click="sendEmailCode">{{ t('s_shrzdv') }}</button>
+      <button v-if="!pendingEmail" class="cta" type="button" :disabled="busy" @click="sendEmailCode">{{ t('auth.forgot.sendCode') }}</button>
       <template v-else>
-        <button class="cta" type="button" :disabled="busy" @click="submit">{{ t('s_yh7i0p') }}</button>
+        <button class="cta" type="button" :disabled="busy" @click="submit">{{ t('security.setup.confirmChange') }}</button>
         <button v-if="identityScope" class="cta ghost" type="button" :disabled="busy" @click="requestEmailResend">{{ copy.resendIdentityCode }}</button>
         <button class="cta ghost" type="button" :disabled="busy" @click="changeEmail">{{ copy.changeAddress }}</button>
       </template>
-      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('s_1589w37') }}</button>
+      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('common.cancel') }}</button>
     </div>
   </div>
 
   <div v-else-if="view === 'email-factor'" class="form" data-gap="sm">
-    <p class="field-hint">{{ t('s_1mimz3w') }}：{{ copy.emailSent }} {{ maskedEmail }} · {{ copy.emailCodeExpiry }}</p>
+    <p class="field-hint">{{ t('security.setup.enableTwoFactor') }}：{{ copy.emailSent }} {{ maskedEmail }} · {{ copy.emailCodeExpiry }}</p>
     <div class="field">
-      <label for="security-sheet-factor-code">{{ t('s_doboo3') }}</label>
-      <input id="security-sheet-factor-code" v-model="code" class="input" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" :placeholder="t('s_doboo3')">
+      <label for="security-sheet-factor-code">{{ t('auth.register.sixDigits') }}</label>
+      <input id="security-sheet-factor-code" v-model="code" class="input" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" :placeholder="t('auth.register.sixDigits')">
     </div>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <div class="row" data-gap="sm">
-      <button class="cta" type="button" :disabled="busy" @click="submit">{{ t('s_1jjtbcm') }}</button>
-      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('s_1589w37') }}</button>
+      <button class="cta" type="button" :disabled="busy" @click="submit">{{ t('security.setup.confirmEnable') }}</button>
+      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('common.cancel') }}</button>
     </div>
   </div>
 
   <div v-else-if="view === 'totp'" class="form" data-gap="sm">
-    <p class="field-hint">{{ qrError ? `${qrError}，${copy.manualSecret}` : t('s_ijepao') }}</p>
+    <p class="field-hint">{{ qrError ? `${qrError}，${copy.manualSecret}` : t('security.setup.scanOrEnter') }}</p>
     <div class="qr-wrap"><QrCanvas :text="otpauthUri || ''" :size="200" @error="qrError = $event" /></div>
     <code class="qr-code-text">{{ secretGroups }}</code>
     <div class="field">
-      <label for="security-sheet-totp-code">{{ t('s_doboo3') }}</label>
-      <input id="security-sheet-totp-code" v-model="code" class="input" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" :placeholder="t('s_doboo3')">
+      <label for="security-sheet-totp-code">{{ t('auth.register.sixDigits') }}</label>
+      <input id="security-sheet-totp-code" v-model="code" class="input" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" :placeholder="t('auth.register.sixDigits')">
     </div>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <div class="row" data-gap="sm">
-      <button class="cta" type="button" :disabled="busy" @click="submit">{{ t('s_115qa00') }}</button>
-      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('s_1589w37') }}</button>
+      <button class="cta" type="button" :disabled="busy" @click="submit">{{ t('security.setup.confirmBind') }}</button>
+      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('common.cancel') }}</button>
     </div>
   </div>
 
   <div v-else-if="view === 'password'" class="form" data-gap="sm">
-    <p class="field-hint">{{ action === 'disable' ? t('s_kikkwz') : t('s_m70x1a') }}</p>
+    <p class="field-hint">{{ action === 'disable' ? t('security.setup.disableNeedsPassword') : t('security.backupCodesInvalidate') }}</p>
     <div class="field">
-      <label for="security-sheet-password">{{ t('s_1q7kb1c') }}</label>
-      <input id="security-sheet-password" v-model="password" class="input" type="password" autocomplete="current-password" :placeholder="t('s_f478sb')">
+      <label for="security-sheet-password">{{ t('security.setup.currentPassword') }}</label>
+      <input id="security-sheet-password" v-model="password" class="input" type="password" autocomplete="current-password" :placeholder="t('auth.login.passwordPlaceholder')">
     </div>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <div class="row" data-gap="sm">
-      <button class="cta" type="button" :disabled="busy" @click="submit">{{ t('s_yvmn4o') }}</button>
-      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('s_1589w37') }}</button>
+      <button class="cta" type="button" :disabled="busy" @click="submit">{{ t('security.generateBackupCodes') }}</button>
+      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('common.cancel') }}</button>
     </div>
   </div>
 
@@ -381,8 +381,8 @@ function requestEmailResend(): void {
     <p class="field-hint">{{ copy.disableDescription }}</p>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <div class="row" data-gap="sm">
-      <button class="cta danger" type="button" :disabled="busy" @click="submit">{{ t('s_1b3874r') }}</button>
-      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('s_1589w37') }}</button>
+      <button class="cta danger" type="button" :disabled="busy" @click="submit">{{ t('security.confirmDisable') }}</button>
+      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('common.cancel') }}</button>
     </div>
   </div>
 
@@ -399,14 +399,14 @@ function requestEmailResend(): void {
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <div class="row" data-gap="sm">
       <button class="cta" type="button" :disabled="busy" @click="submitPassword">{{ copy.changePassword }}</button>
-      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('s_1589w37') }}</button>
+      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('common.cancel') }}</button>
     </div>
   </div>
 
   <div v-else class="stack" data-gap="sm">
-    <strong>{{ t('s_eqtk1v') }}</strong>
-    <p class="field-hint">{{ t('s_116vgro') }}</p>
+    <strong>{{ t('security.setup.writeBackupCodes') }}</strong>
+    <p class="field-hint">{{ t('security.setup.backupCodesOnce') }}</p>
     <div class="stack" data-gap="xs"><code v-for="item in backupCodes" :key="item" class="qr-code-text">{{ item }}</code></div>
-    <button class="cta" type="button" @click="closeSheet()">{{ t('s_1qhhjx1') }}</button>
+    <button class="cta" type="button" @click="closeSheet()">{{ t('security.setup.writtenDown') }}</button>
   </div>
 </template>

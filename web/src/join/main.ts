@@ -1,6 +1,6 @@
 /**
  * 报名站入口。启动顺序与 `src/main.ts` 相同，落点换成「我的活动」。
- * 浏览器没有原生注入。文案表由 `vite.join.config.ts` 在构建时写进页面，`t()` 读 `window.CalMobileStrings`。
+ * 界面文案随这份构建打进页面，`t()` 直接读 `web/src/i18n/strings.ts`。
  */
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';

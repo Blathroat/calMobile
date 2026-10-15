@@ -1,11 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { collectFieldError } from './collect-fields';
 
 const bounds = { title: 4, radio: 2, check: 2 };
-
-beforeEach(() => {
-  window.CalMobileStrings = { s_1y8221p: '单选选项', s_dpy0pe: '多选选项' };
-});
 
 describe('收集项长度', () => {
   it('标题、单选选项和多选选项分别拦住', () => {

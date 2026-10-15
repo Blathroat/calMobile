@@ -6,24 +6,26 @@
 
 ## 按改动验证
 
-改完后，下表里对应命令的退出码为 0。脚本自身的参数写在脚本开头，这里只写什么时候跑哪一个。
+改完后，下表里对应命令的退出码为 0。
 
-| 改动                 | 命令                                                                                                                                     |
-|----------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| Vue 页面、组件、样式 | `node scripts/webui-check.js`（类型检查、单测、生产构建）。打 APK 时 `preBuild` 把 `web/dist` 同步到 WebView 资源                        |
-| 路由、加载、文案绑定 | `node --test scripts/webui-render.test.js`，以及 `node scripts/check-strings.js`                                                         |
-| 前端文案源码         | 先 `node scripts/extract-strings.js --write`，再跑 `check-strings`。脚本替换范围见 [`engineering.md`](engineering.md)                    |
-| 界面有没有整块丢失   | `node scripts/ui-parity.mjs`。有意删除文案时，只改 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 里的 `--max-gone`           |
-| 界面截图             | `node scripts/ui-shot.mjs`。脚本开头写了预览服务和账号参数                                                                               |
-| 后端规则或响应       | `pnpm --dir server test`，以及 `pnpm --dir server test:contract`（需要 PostgreSQL）。改了已加载的 `server/src` 后重启不用 watch 起的进程 |
-| Java 或桥接          | `gradlew.bat :app:testDebugUnitTest`。出包或资源变更再跑 `gradlew.bat :app:assembleDebug`                                                |
-| 仓库级冒烟           | `node scripts/smoke-check.js`                                                                                                            |
+| 改动 | 命令 |
+|---|---|
+| Vue 页面、组件、样式、界面文案 | `pnpm --dir web typecheck`、`pnpm --dir web test`、`pnpm --dir web build`。打 APK 时 `preBuild` 把 `web/dist` 同步到 WebView 资源 |
+| 路由与加载 | `pnpm --dir web test` |
+| 后端规则或响应 | `pnpm --dir server test`，以及 `pnpm --dir server test:contract`（需要 PostgreSQL）。改了已加载的 `server/src` 后重启不用 watch 起的进程 |
+| Java 或桥接 | `gradlew.bat :app:testDebugUnitTest`。出包或资源变更再跑 `gradlew.bat :app:assembleDebug` |
 
-模拟器和真机用 `pwsh -File scripts\emu.ps1`，子命令写在脚本顶部。设备连不上后端时，先读 `server/src/dev/adb-reverse.ts` 开头。
+设备连不上后端时，先读 `server/src/dev/adb-reverse.ts` 开头。`pnpm dev` 会维护 `adb reverse tcp:3000 tcp:3000`。服务不是它起的时候，自己执行这条命令。
 
-WebView 文字不一定出现在无障碍树里。点击回归用坐标，并保留截图。扫码回归用 `node scripts/decode-shot.js` 检查真实截图像素。
+动效全部静止时，先看三枚系统动画 scale。都为 1 之后，再改代码：
 
-动效全部静止时，先跑 `pwsh -File scripts\emu.ps1 motion check`。三个动画 scale 都为 1 之后，再改代码。
+```
+adb shell settings get global animator_duration_scale
+adb shell settings get global transition_animation_scale
+adb shell settings get global window_animation_scale
+```
+
+要打开动画，对这三枚执行 `adb shell settings put global <name> 1`。应用重新进入页面后才会重新读取。
 
 ## 上线
 

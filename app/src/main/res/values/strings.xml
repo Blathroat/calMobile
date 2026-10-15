@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 应用名与原生系统能力（日历）用到的提示文案。
-     WebView 外壳只保留真正需要的条目；旧原生页面的资源已随 legacy 一并删除。
-     前端文案在 strings_frontend.xml（由 scripts/extract-strings.js 生成）。
-     日历这些文案由 CalendarHelper 随「写日历的结果」回到页面，前端统一提示，原生不再弹 Toast。 -->
+     日历这些文案由 CalendarHelper 随「写日历的结果」回到页面，前端统一提示，原生不再弹 Toast。
+     界面文案在 web/src/i18n/strings.ts。 -->
 <resources>
 <string name="app_name">展会排期助手</string>
 <string name="calendar_added">已添加到日历</string>

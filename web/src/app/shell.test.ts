@@ -138,7 +138,7 @@ describe('app shell', () => {
     // 标题 / 返回键走 meta.title 与 meta.back：二级页必须有返回键，否则只能靠系统手势。
     const detail = await mountRoute('/detail/exh-1');
     try {
-      expect(detail.container.querySelector('.topbar-title')?.textContent?.trim()).toBe('s_1ve1f4n');
+      expect(detail.container.querySelector('.topbar-title')?.textContent?.trim()).toBe('展会详情');
       expect(detail.container.querySelector('.topbar .icon-button')).not.toBeNull();
     } finally {
       unmount(detail.container, detail.app);
@@ -185,7 +185,7 @@ describe('app shell', () => {
       const foot = settings.container.querySelector('#app-foot');
       expect(foot?.childElementCount).toBe(0);
       const entry = [...settings.container.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent?.trim() === 's_1sq2bvr');
+        .find((button) => button.textContent?.trim() === '编辑资料');
       expect(entry, '/settings 没有资料编辑入口').not.toBeUndefined();
       entry?.click();
       await nextTick();
@@ -195,7 +195,7 @@ describe('app shell', () => {
       expect(settings.container.querySelector('.app-body #settings-nickname')).toBeNull();
 
       const cancel = [...settings.container.querySelectorAll<HTMLButtonElement>('.sheet-panel button')]
-        .find((button) => button.textContent?.trim() === 's_1589w37');
+        .find((button) => button.textContent?.trim() === '取消');
       cancel?.click();
       await new Promise((resolve) => setTimeout(resolve, 260));
       await nextTick();
@@ -215,7 +215,7 @@ describe('app shell', () => {
     const security = await mountRoute('/security');
     try {
       const passwordEntry = [...security.container.querySelectorAll<HTMLButtonElement>('.page-surface button')]
-        .find((button) => button.textContent?.includes('s_1pt7oo1'));
+        .find((button) => button.textContent?.includes('修改密码'));
       expect(passwordEntry, '/security 没有修改密码入口').not.toBeUndefined();
       passwordEntry?.click();
       await nextTick();
@@ -344,7 +344,7 @@ describe('app shell', () => {
       useSessionStore().expire();
       await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/login'));
       expect(router.currentRoute.value.query).toMatchObject({ redirect: '/registration-form/exh-1', expired: '1' });
-      expect(container.querySelector('.topbar-title')?.textContent?.trim()).toBe('s_1yggxgd');
+      expect(container.querySelector('.topbar-title')?.textContent?.trim()).toBe('登录');
     } finally {
       unmount(container, app);
     }

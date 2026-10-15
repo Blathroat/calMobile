@@ -76,7 +76,7 @@ describe('首页加载', () => {
     const { container } = await mount(HomePage, '/home');
     pending[0]!.resolve({ day: 1, exhibitions: [{ id: 'june', day: 1, title: '六月展会' }] });
     await flush();
-    const next = container.querySelector<HTMLButtonElement>('button[title="s_y6u3g"]')!;
+    const next = container.querySelector<HTMLButtonElement>('button[title="下一个月"]')!;
     next.click();
     await flush();
     next.click();

@@ -12,7 +12,7 @@ defineProps<{ items: TabItem[] }>();
 </script>
 
 <template>
-  <nav class="tabbar" :aria-label="t('s_1fe4wn6')">
+  <nav class="tabbar" :aria-label="t('nav.tabBar')">
     <RouterLink v-for="item in items" :key="item.id" class="tab" :to="item.path">
       <AppIcon :name="item.icon" />
       <span>{{ item.label }}</span>

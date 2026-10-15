@@ -203,7 +203,7 @@ export class HttpClient {
       }
       // 200 + ok:false 是后端的规则失败约定，同样按业务失败抛出，不让页面去判 ok。
       if (typeof data === 'object' && data !== null && 'ok' in data && data.ok === false) {
-        throw new ApiError('error' in data ? String(data.error) : t('s_ydow7a'), response.status);
+        throw new ApiError('error' in data ? String(data.error) : t('common.failed'), response.status);
       }
       // 响应体未做运行时校验：字段是否存在、类型对不对，由页面按可选类型自行兜底。
       return data as T;
@@ -213,7 +213,7 @@ export class HttpClient {
         // 以本请求的信号判定来源，兼容 fetch 与页面来自不同 realm 的异常对象。
         // AbortError 只有两个来源：这里掐的超时，或者调用方传进来的 signal。
         // 调用方的 signal 上带 aborted 标记，据此分开报：文案是排障用的，不是给用户看的业务提示。
-        if (request.signal?.aborted || sessionSignal?.aborted) throw new TransportError(t('s_1s8cf91'), 'aborted');
+        if (request.signal?.aborted || sessionSignal?.aborted) throw new TransportError(t('app.requestCancelled'), 'aborted');
         throw new TransportError(`后端响应超时（超过 ${timeoutMs / 1000} 秒）`, 'timeout');
       }
       // 其余都是网络层的原生错误（DNS、证书、连接被拒等），后端状态未知。

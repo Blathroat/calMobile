@@ -33,7 +33,7 @@ import { addMonths, calendarRowCount, daysInMonth, firstWeekdayOffset, formatChi
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
-const WEEK_LABELS = [t('s_1hqqsf'), t('s_12482qz'), t('s_3fnyn8'), t('s_q67h2y'), t('s_14c4war'), t('s_1sgquew'), t('s_qsy6ow')];
+const WEEK_LABELS = [t('home.weekdayMon'), t('home.weekdayTue'), t('home.weekdayWed'), t('home.weekdayThu'), t('home.weekdayFri'), t('home.weekdaySat'), t('home.weekdaySun')];
 const SWIPE_THRESHOLD = 46;
 
 const router = useRouter();
@@ -132,24 +132,24 @@ function dayRows(key: 'exhibitions' | 'meetings'): JsonObject[] {
 
 function meetingLine(meeting: JsonObject): string {
   const time = formatChineseTime(meeting.meetingTime);
-  return time ? `${time} · ${t('s_zmypci')}` : t('s_zmypci');
+  return time ? `${time} · ${t('registration.list.privateMeeting')}` : t('registration.list.privateMeeting');
 }
 
 const eventDays = (): number[] => (Array.isArray(monthData.value?.eventDays) ? monthData.value?.eventDays as number[] : []);
 const markedDays = (): number[] => (Array.isArray(monthData.value?.markedDays) ? monthData.value?.markedDays as number[] : []);
-const myActivityMark = t('s_1evxb6');
+const myActivityMark = t('home.hasMyActivity');
 
 const selectedMeta = computed(() => {
   const count = items.value.length + meetings.value.length;
-  return count > 0 ? `${count} 场` : t('s_xwhfsg');
+  return count > 0 ? `${count} 场` : t('home.noSchedule');
 });
 
 /** 启动公告：只在开关打开且本机未读过时显示一次。 */
 const announcement = ref('');
 
 function dayLabel(cell: Cell): string {
-  const suffix = `${cell.bold ? t('s_1hzbri3') : ''}${cell.hasEvent ? myActivityMark : ''}`;
-  const selected = cell.day === view.value.day && !cell.muted ? t('s_19g8l4d') : '';
+  const suffix = `${cell.bold ? t('home.hasExhibition') : ''}${cell.hasEvent ? myActivityMark : ''}`;
+  const selected = cell.day === view.value.day && !cell.muted ? t('home.daySelected') : '';
   // 用格子自己的月份：补位格子是上/下月的日期，报成当月会让读屏听到错的日期。
   return `${cell.month}月${cell.day}日${suffix}${selected}`;
 }
@@ -357,7 +357,7 @@ onBeforeUnmount(() => {
   </header>
 
   <div v-if="announcement" class="notice" data-tone="accent" role="status">
-    <strong>{{ t('s_153oaxf') }}</strong>
+    <strong>{{ t('auth.login.announcement') }}</strong>
     <span>{{ announcement }}</span>
   </div>
 
@@ -368,8 +368,8 @@ onBeforeUnmount(() => {
         class="icon-button"
         data-variant="outlined"
         type="button"
-        :aria-label="t('s_e4jezx')"
-        :title="t('s_e4jezx')"
+        :aria-label="t('home.previousMonth')"
+        :title="t('home.previousMonth')"
         @click="shiftMonth(-1)"
       >
         <AppIcon name="chevronLeft" />
@@ -378,8 +378,8 @@ onBeforeUnmount(() => {
         class="icon-button"
         data-variant="outlined"
         type="button"
-        :aria-label="t('s_y6u3g')"
-        :title="t('s_y6u3g')"
+        :aria-label="t('home.nextMonth')"
+        :title="t('home.nextMonth')"
         @click="shiftMonth(1)"
       >
         <AppIcon name="chevronRight" />
@@ -399,9 +399,9 @@ onBeforeUnmount(() => {
       <StateBlock
         v-else-if="error && !hasContent"
         tone="error"
-        :title="t('s_1tbhtoh')"
+        :title="t('home.exhibitionLoadFailed')"
         :description="error"
-        :action-label="t('s_lswd2v')"
+        :action-label="t('common.retry')"
         @action="load"
       />
       <template v-else>
@@ -431,10 +431,10 @@ onBeforeUnmount(() => {
   </div>
 
   <!-- 一次性提示：真滑动切过一次月份（或点「知道了」）就不再显示 -->
-  <HintNote v-if="hintVisible" :text="t('s_15hmwa0')" @dismiss="dismissHint" />
+  <HintNote v-if="hintVisible" :text="t('home.swipeMonthHint')" @dismiss="dismissHint" />
 
   <div class="row" data-between="true">
-    <strong>{{ view.day > 0 ? `${view.month} 月 ${view.day} 日的活动` : t('s_1e4opb2') }}</strong>
+    <strong>{{ view.day > 0 ? `${view.month} 月 ${view.day} 日的活动` : t('home.dayEvents') }}</strong>
     <span class="dim">{{ selectedMeta }}</span>
   </div>
 
@@ -446,9 +446,9 @@ onBeforeUnmount(() => {
     <SkeletonBlock v-if="loading && !hasContent" :rows="2" />
     <StateBlock
       v-else-if="!loading && !error && items.length === 0 && meetings.length === 0"
-      :title="t('s_1vtk64c')"
-      :description="t('s_1jbzuzw')"
-      :action-label="t('s_50ih74')"
+      :title="t('home.emptyDay')"
+      :description="t('home.emptyDayHint')"
+      :action-label="t('admin.exhibitions.search')"
       @action="router.push('/search')"
     />
     <template v-else>

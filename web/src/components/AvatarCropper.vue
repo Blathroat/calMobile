@@ -54,7 +54,7 @@ const panelEl = ref<HTMLElement>();
 const stageEl = ref<HTMLElement>();
 const imageEl = ref<HTMLImageElement>();
 
-const hint = ref(t('s_1ty4r7s'));
+const hint = ref(t('media.cropHint'));
 const hintTone = ref('');
 const closing = ref(false);
 
@@ -105,14 +105,14 @@ function onImageLoad(): void {
   state.y = 0;
   state.zoom = 1;
   state.ready = true;
-  hint.value = t('s_1ty4r7s');
+  hint.value = t('media.cropHint');
   hintTone.value = '';
   paint();
 }
 
 function onImageError(): void {
   // 解码失败时 `ready` 保持 false，手势本身就不会响应，这里只需要把提示换成失败文案。
-  hint.value = t('s_gnybt');
+  hint.value = t('media.imageLoadFailed');
   hintTone.value = 'error';
 }
 
@@ -291,7 +291,7 @@ function requestClose(): void {
  */
 function exportCrop(): string {
   const image = imageEl.value;
-  if (!image) throw new Error(t('s_94aane'));
+  if (!image) throw new Error(t('media.imageStillLoading'));
   const scale = imageScale.value;
   const sourceSize = stageEdge / scale;
   const left = ((stageEdge / 2) + state.x) - ((state.width * scale) / 2);
@@ -300,7 +300,7 @@ function exportCrop(): string {
   canvas.width = CROP_OUTPUT_SIZE;
   canvas.height = CROP_OUTPUT_SIZE;
   const context = canvas.getContext('2d');
-  if (!context) throw new Error(t('s_5iff2f'));
+  if (!context) throw new Error(t('media.avatarSaveFailed'));
   context.fillStyle = '#ffffff';
   context.fillRect(0, 0, CROP_OUTPUT_SIZE, CROP_OUTPUT_SIZE);
   context.drawImage(
@@ -315,7 +315,7 @@ function exportCrop(): string {
 function confirm(): void {
   if (!state.ready) {
     // 没有解码完的像素就没有可导出的图：这里只报告，不关闭，用户还能等图出来再确认。
-    emit('error', t('s_94aane'));
+    emit('error', t('media.imageStillLoading'));
     return;
   }
   let dataUrl = '';
@@ -358,7 +358,7 @@ onBeforeUnmount(() => {
     @click.self="requestClose"
   >
     <div ref="panelEl" class="sheet-panel">
-      <h2 class="sheet-title">{{ t('s_1dbfyef') }}</h2>
+      <h2 class="sheet-title">{{ t('media.cropAvatar') }}</h2>
       <!-- 圆形取景框由 tokens.css 的 .crop-stage 圆角给出；手势绑在框上而不是图片上 -->
       <div class="crop-wrap">
         <div ref="stageEl" class="crop-stage" :style="stageStyle">
@@ -374,13 +374,13 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="row" data-between="true">
-        <span class="field-hint">{{ t('s_vk66u0') }}</span>
+        <span class="field-hint">{{ t('media.pinchZoom') }}</span>
         <span class="crop-scale">{{ zoomLabel }}</span>
       </div>
       <p class="field-hint" :data-tone="hintTone || undefined">{{ hint }}</p>
       <div class="sheet-actions">
-        <button class="cta ghost" type="button" @click="requestClose">{{ t('s_1589w37') }}</button>
-        <button class="cta" type="button" @click="confirm">{{ t('s_1bykzhf') }}</button>
+        <button class="cta ghost" type="button" @click="requestClose">{{ t('common.cancel') }}</button>
+        <button class="cta" type="button" @click="confirm">{{ t('media.usePhoto') }}</button>
       </div>
     </div>
   </div>

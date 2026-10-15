@@ -65,7 +65,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
     categories: [],
     limits: {},
     // 品牌名兜底：文案注入晚于模块求值时 t() 只能退回 key，这里至少保证结构完整
-    brand: { zh: t('s_1x7q517'), en: 'calMobile' },
+    brand: { zh: t('app.brand'), en: 'calMobile' },
     announcement: {},
     calendar: {},
     media: {},

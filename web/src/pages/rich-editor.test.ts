@@ -17,12 +17,6 @@ let app: App | undefined;
 
 beforeEach(async () => {
   document.body.innerHTML = '<div id="app-foot"></div><div id="editor-test"></div>';
-  window.CalMobileStrings = {
-    s_1kqdxz5: '保存简介',
-    s_k2jp4x: '预览',
-    s_ajd5o: '继续编辑',
-    s_p9fllo: '新建展会',
-  };
   vi.clearAllMocks();
   await loadMarkdownParser();
   await loadHtmlConverter();

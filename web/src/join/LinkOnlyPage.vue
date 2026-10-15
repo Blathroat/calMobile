@@ -12,8 +12,8 @@ import { t } from '@/i18n';
 const router = useRouter();
 const session = useSessionStore();
 
-const title = t('s_14frgky');
-const description = t('s_qbzw14');
+const title = t('join.title');
+const description = t('join.needSharedLink');
 
 function next(): void {
   void router.push(session.loggedIn ? paths.registrations : '/login');
@@ -25,7 +25,7 @@ function next(): void {
     icon="info"
     :title="title"
     :description="description"
-    :action-label="session.loggedIn ? t('s_1m2dh8u') : t('s_533bde')"
+    :action-label="session.loggedIn ? t('registration.list.title') : t('registration.list.goLogin')"
     @action="next"
   />
 </template>

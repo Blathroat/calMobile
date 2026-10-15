@@ -29,12 +29,6 @@ beforeEach(async () => {
   }
   vi.resetAllMocks();
   document.body.innerHTML = '<div id="profile-test"></div>';
-  window.CalMobileStrings = {
-    s_1sq2bvr: '编辑资料', s_ml9unw: '个人简介', s_11ftk7j: '地区', s_1wbzx3u: '社交账号：',
-    s_1hnvqec: '社交账号', s_15h5nhd: '未填写', s_1hhb6bo: '未填写邮箱',
-    s_1kliyri: '账号已被限制，不能编辑个人信息',
-    s_1c3mapc: '保存', s_1589w37: '取消', s_17mtsm3: '还没有填写简介',
-  };
   vi.mocked(api.profile.get).mockResolvedValue(PROFILE);
   vi.mocked(api.profile.save).mockResolvedValue({ ok: true, user: { ...PROFILE, region: '杭州' } });
 });

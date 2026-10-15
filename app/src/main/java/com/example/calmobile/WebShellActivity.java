@@ -158,20 +158,6 @@ public class WebShellActivity extends Activity {
             }
 
             @Override
-            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
-                // 文案要在页面脚本执行前就位，否则首帧渲染时 t() 只能回退成 key。
-                // onPageStarted 比 onPageFinished 早得多（后者要等全部资源加载完）。
-                try {
-                    Map<String, String> strings = InjectStrings.load(WebShellActivity.this);
-                    Log.d(TAG, "注入前端文案 " + strings.size() + " 条（清单 "
-                            + FrontendStrings.NAMES.length + " 条）");
-                    view.evaluateJavascript(InjectStrings.script(strings), null);
-                } catch (Exception error) {
-                    Log.w(TAG, "文案注入失败", error);
-                }
-            }
-
-            @Override
             public void onPageFinished(WebView view, String url) {
                 // 页面脚本加载完成后通知前端，前端据此拉取 bootstrap 数据。
                 view.evaluateJavascript("window.CalMobileWeb&&window.CalMobileWeb.ready&&"

@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- AppTheme 引用的基础颜色。
-     WebView 外壳只保留真正需要的条目；旧原生页面的资源已随 legacy 一并删除。
-     前端文案在 strings_frontend.xml（由 scripts/extract-strings.js 生成）。
--->
+<!-- AppTheme 引用的基础颜色。 -->
 <resources>
 <color name="primary">#48515D</color>
 <color name="secondary">#C05621</color>

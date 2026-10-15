@@ -27,7 +27,7 @@ describe('join router', () => {
     expect(router.currentRoute.value.name).toBe('link-only');
     await router.push('/no-such');
     expect(router.currentRoute.value.name).toBe('link-only');
-    expect(router.currentRoute.value.meta.title).toBe('s_14frgky');
+    expect(router.currentRoute.value.meta.title).toBe('join.title');
   });
 
   it('opens meeting detail on its own path', async () => {
@@ -35,7 +35,7 @@ describe('join router', () => {
     useSessionStore().applyUser({ id: 'u1', loggedIn: true, guest: false, role: 'user', can: { register: true } });
     await router.push('/mine/m/meet-1');
     expect(router.currentRoute.value.path).toBe('/mine/m/meet-1');
-    expect(router.currentRoute.value.meta.title).toBe('s_g1bhp7');
+    expect(router.currentRoute.value.meta.title).toBe('meeting.title');
   });
 
   it('keeps the private meeting link behind login', async () => {

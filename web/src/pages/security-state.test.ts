@@ -151,8 +151,8 @@ describe('安全方式切换与抽屉', () => {
     document.querySelector<HTMLButtonElement>('.seg button[data-value="email"]')?.click();
     await flush();
     expect(document.querySelectorAll('.sheet-panel .seg button')).toHaveLength(2);
-    expect(document.querySelector('.sheet-panel .seg')?.textContent).toContain('s_1s11mp7');
-    expect(document.querySelector('.sheet-panel .seg')?.textContent).toContain('s_s8pbve');
+    expect(document.querySelector('.sheet-panel .seg')?.textContent).toContain('TOTP（推荐）');
+    expect(document.querySelector('.sheet-panel .seg')?.textContent).toContain('邮箱验证码');
   });
 
   it('邮箱验证通过并经安全状态确认后才切换选项', async () => {

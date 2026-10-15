@@ -42,7 +42,7 @@ const users = computed(() => asList(results.value?.users));
 const hasContent = computed(() => results.value !== undefined);
 const isEmptyResult = computed(() => hasContent.value && exhibitions.value.length === 0 && users.value.length === 0);
 const countLabel = computed(() => (!keyword.value.trim() || !hasContent.value
-  ? t('s_1s57su3')
+  ? t('search.zeroCount')
   : `${Number(results.value?.count) || 0} 条结果`));
 
 let timer: number | undefined;
@@ -126,22 +126,22 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="field">
-    <label for="search-input">{{ t('s_1sd7orv') }}</label>
+    <label for="search-input">{{ t('search.keyword') }}</label>
     <input
       id="search-input"
       v-model="keyword"
       class="input"
       type="search"
       autocomplete="off"
-      :placeholder="t('s_crhxaz')"
-      :aria-label="t('s_1j51671')"
+      :placeholder="t('search.placeholder')"
+      :aria-label="t('search.inputLabel')"
       @input="onInput"
       @keydown.enter.prevent="submitNow"
     >
   </div>
 
   <div class="row" data-between="true">
-    <span class="section-label">{{ t('s_i8d8h8') }}</span>
+    <span class="section-label">{{ t('search.results') }}</span>
     <span class="pill">{{ countLabel }}</span>
   </div>
 
@@ -155,23 +155,23 @@ onBeforeUnmount(() => {
     <StateBlock
       v-else-if="keyword.trim() && query.error.value && !hasContent"
       tone="error"
-      :title="t('s_2be1oh')"
+      :title="t('search.failed')"
       :description="query.error.value.message"
-      :action-label="t('s_lswd2v')"
+      :action-label="t('common.retry')"
       @action="retry"
     />
     <StateBlock
       v-else-if="!keyword.trim() || !hasContent"
       icon="search"
-      :title="t('s_3fklp8')"
-      :description="t('s_1m0n2yt')"
+      :title="t('search.startPrompt')"
+      :description="t('search.scopeHint')"
     />
     <StateBlock
       v-else-if="isEmptyResult"
       icon="search"
       :title="`没有找到与“${searched}”相关的结果`"
-      :description="t('s_s4kamn')"
-      :action-label="t('s_17zyr1e')"
+      :description="t('search.emptyHint')"
+      :action-label="t('exhibition.detail.backHome')"
       @action="router.push('/home')"
     />
     <div v-else class="stack">

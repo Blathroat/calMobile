@@ -32,21 +32,21 @@ watch(exhibitorId, load);
   <StateBlock
     v-else-if="query.error.value && query.data.value === undefined"
     tone="error"
-    :title="t('s_kvpltc')"
+    :title="t('common.loadFailed')"
     :description="query.error.value.message"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
   <template v-else>
     <div class="row" data-between="true">
-      <span class="section-label">{{ t('s_1h3z4vq') }}</span>
+      <span class="section-label">{{ t('admin.exhibitions.all') }}</span>
       <span class="pill">{{ `${items.length} 个展会` }}</span>
     </div>
     <StateBlock
       v-if="items.length === 0"
       icon="search"
-      :title="t('s_1qc01ta')"
-      :description="t('s_1tsjagr')"
+      :title="t('admin.exhibitions.empty')"
+      :description="t('admin.exhibitions.shownWhenCreated')"
     />
     <div v-else class="list" data-gap="sm" :data-busy="query.loading.value ? 'true' : undefined">
       <AdminExhibitionCard

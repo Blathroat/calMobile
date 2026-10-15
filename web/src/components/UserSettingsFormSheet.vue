@@ -28,7 +28,7 @@ function update(field: string, event: Event): void {
   <form class="form" novalidate @submit.prevent="emit('submit')">
     <template v-if="mode === 'profile'">
       <div class="field" :data-invalid="invalid.nickname ? 'true' : 'false'">
-        <label for="settings-nickname">{{ t('s_1c2rfxc') }}</label>
+        <label for="settings-nickname">{{ t('settings.profile.nickname') }}</label>
         <input
           id="settings-nickname"
           class="input"
@@ -40,7 +40,7 @@ function update(field: string, event: Event): void {
         >
       </div>
       <div class="field" :data-invalid="invalid.bio ? 'true' : 'false'">
-        <label for="settings-bio">{{ t('s_ml9unw') }}</label>
+        <label for="settings-bio">{{ t('profile.bio') }}</label>
         <textarea
           id="settings-bio"
           class="textarea"
@@ -51,7 +51,7 @@ function update(field: string, event: Event): void {
         />
       </div>
       <div class="field" :data-invalid="invalid.region ? 'true' : 'false'">
-        <label for="settings-region">{{ t('s_11ftk7j') }}</label>
+        <label for="settings-region">{{ t('settings.profile.region') }}</label>
         <input
           id="settings-region"
           class="input"
@@ -59,12 +59,12 @@ function update(field: string, event: Event): void {
           autocomplete="address-level1"
           :value="form.region"
           :maxlength="limits.region"
-          :placeholder="t('s_132uhjs')"
+          :placeholder="t('settings.profile.regionPlaceholder')"
           @input="update('region', $event)"
         >
       </div>
       <div class="field" :data-invalid="invalid.socialMedia ? 'true' : 'false'">
-        <label for="settings-social">{{ t('s_1hnvqec') }}</label>
+        <label for="settings-social">{{ t('settings.profile.social') }}</label>
         <input
           id="settings-social"
           class="input"

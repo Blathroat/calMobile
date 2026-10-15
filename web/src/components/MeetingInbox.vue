@@ -49,24 +49,24 @@ const exhibitorId = computed(() => String(
 const link = computed(() => meetingLink(bootstrap.publicBaseUrl, exhibitorId.value));
 
 const COPY = {
-  settings: t('s_1k704n3'),
-  section: t('s_1361yrb'),
-  empty: t('s_18jitmg'),
-  lockedHint: t('s_jpofr2'),
-  lock: t('s_17lo3mv'),
-  unlock: t('s_1mj72e8'),
-  remove: t('s_pxrfjx'),
-  approve: t('s_j666m6'),
-  reject: t('s_1qrntx4'),
-  detail: t('s_ox3r68'),
-  adjust: t('s_15y6qev'),
-  close: t('s_g0fanx'),
-  copy: t('s_1xbipwq'),
-  missing: t('s_18o1cfv'),
-  copied: t('s_4396rd'),
-  statusTitle: t('s_ung7fv'),
-  deleteTitle: t('s_pxrfjx'),
-  visitorFallback: t('s_1in002o'),
+  settings: t('meeting.relatedSettings'),
+  section: t('meeting.receivedApplications'),
+  empty: t('meeting.noApplications'),
+  lockedHint: t('meeting.lockedByAdmin'),
+  lock: t('meeting.restrict'),
+  unlock: t('meeting.unlock'),
+  remove: t('meeting.delete'),
+  approve: t('registration.review.approve'),
+  reject: t('registration.review.reject'),
+  detail: t('registration.review.viewDetail'),
+  adjust: t('admin.users.adjustStatus'),
+  close: t('common.close'),
+  copy: t('meeting.copyLink'),
+  missing: t('exhibition.detail.registrationSiteMissing'),
+  copied: t('meeting.linkCopied'),
+  statusTitle: t('meeting.changeStatus'),
+  deleteTitle: t('meeting.delete'),
+  visitorFallback: t('admin.users.title'),
 };
 
 function load(): void {
@@ -80,7 +80,7 @@ watch(() => props.exhibitorId, () => {
 });
 
 function summary(record: JsonObject): string {
-  return truncate(record.answers, 34) || t('s_1ye52vk');
+  return truncate(record.answers, 34) || t('registration.list.noCollectFields');
 }
 
 function reviewed(record: JsonObject): boolean {
@@ -106,7 +106,7 @@ function openProfile(record: JsonObject): void {
 async function changeStatus(record: JsonObject, status: string): Promise<void> {
   try {
     await api.meetings.setStatus(String(record.id), status);
-    toast(t('s_19ouzm0'), 'success');
+    toast(t('meeting.statusUpdated'), 'success');
     load();
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -167,7 +167,7 @@ function openDetail(record: JsonObject): void {
       statusTone: statusTone(String(record.status || '')),
       registrationTime: when,
       answers: answers.map((line) => ({
-        label: line.label || t('s_otl7kf'),
+        label: line.label || t('exhibition.detail.additionalInfo'),
         value: line.value || '—',
       })),
       hint: canChange(record) ? '' : COPY.lockedHint,
@@ -181,7 +181,7 @@ async function toggleLock(record: JsonObject): Promise<void> {
   const locked = record.locked !== true;
   try {
     await api.meetings.setLock(String(record.id), locked);
-    toast(locked ? t('s_ptv6uh') : t('s_pfnsj4'), 'success');
+    toast(locked ? t('meeting.locked') : t('meeting.unlocked'), 'success');
     load();
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -198,7 +198,7 @@ function askDelete(record: JsonObject): void {
     onConfirm: async () => {
       try {
         await api.meetings.remove(String(record.id));
-        toast(t('s_1pmufjh'), 'success');
+        toast(t('meeting.deleted'), 'success');
         load();
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -219,7 +219,7 @@ async function copyLink(): Promise<void> {
     openSheet({
       title: COPY.copy,
       message: link.value,
-      actions: [{ label: t('s_1589w37'), onClick: (close) => close() }],
+      actions: [{ label: t('common.cancel'), onClick: (close) => close() }],
     });
   }
 }
@@ -243,9 +243,9 @@ async function copyLink(): Promise<void> {
   <StateBlock
     v-else-if="query.error.value && !hasRecords"
     tone="error"
-    :title="t('s_kvpltc')"
+    :title="t('common.loadFailed')"
     :description="query.error.value.message"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
   <template v-else>

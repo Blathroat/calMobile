@@ -33,16 +33,16 @@ import RoleTag from '@/components/RoleTag.vue';
 import type { Bootstrap, Exhibition, JsonObject, User } from '@/api/types';
 import { t } from '@/i18n';
 
-const USER_STATUSES = [t('s_tt5vxa'), t('s_1am6dte'), t('s_1j1q2yf')];
+const USER_STATUSES = [t('admin.users.normal'), t('admin.users.restricted'), t('admin.users.banned')];
 
 /**
  * 分区用稳定的英文 id 做值（`value` 会写进 URL 的 `?tab=`），标签才是给用户看的文案：
  * 用中文当值会让地址栏里出现百分号转义，也不便于以后改文案。
  */
 const TABS = [
-  { value: 'users', label: t('s_1in002o') },
-  { value: 'exhibitions', label: t('s_11cd4ta') },
-  { value: 'settings', label: t('s_1vmubx9') },
+  { value: 'users', label: t('admin.users.title') },
+  { value: 'exhibitions', label: t('admin.exhibitions.title') },
+  { value: 'settings', label: t('settings.title') },
 ];
 
 const tabIds = new Set(TABS.map((item) => item.value));
@@ -62,35 +62,35 @@ interface LimitItem {
 const LIMIT_GROUPS: Array<{ id: string; title: string; items: LimitItem[] }> = [
   {
     id: 'exhibition',
-    title: t('s_dy6bvq'),
+    title: t('admin.limits.exhibitionInfo'),
     items: [
-      { key: 'exhibitionTitle', label: t('s_1co82cb'), hint: t('s_1dtsr23'), unit: t('s_1mcmbiu') },
-      { key: 'exhibitionVenue', label: t('s_1tlfy5l'), hint: t('s_1um8i41'), unit: t('s_1mcmbiu') },
-      { key: 'category', label: t('s_9xu72h'), hint: t('s_11w7dox'), unit: t('s_1mcmbiu') },
+      { key: 'exhibitionTitle', label: t('admin.limits.exhibitionName'), hint: t('admin.limits.exhibitionNameMax'), unit: t('admin.limits.chars') },
+      { key: 'exhibitionVenue', label: t('admin.limits.exhibitionVenue'), hint: t('admin.limits.exhibitionVenueMax'), unit: t('admin.limits.chars') },
+      { key: 'category', label: t('admin.limits.category'), hint: t('admin.limits.categoryMax'), unit: t('admin.limits.chars') },
     ],
   },
   {
     id: 'collect',
-    title: t('s_184z9xu'),
+    title: t('admin.limits.collectFields'),
     items: [
-      { key: 'fieldTitle', label: t('s_1yqwetn'), hint: t('s_1mgsqy2'), unit: t('s_1mcmbiu') },
-      { key: 'textFill', label: t('s_1mq1kio'), hint: t('s_12obyju'), unit: t('s_1mcmbiu') },
-      { key: 'radioOption', label: t('s_1y8221p'), hint: t('s_88zbx0'), unit: t('s_1mcmbiu') },
-      { key: 'checkOption', label: t('s_dpy0pe'), hint: t('s_1xps9s3'), unit: t('s_1mcmbiu') },
-      { key: 'answer', label: t('s_1j77by5'), hint: t('s_1tau3xh'), unit: t('s_1mcmbiu') },
+      { key: 'fieldTitle', label: t('admin.limits.fieldHeading'), hint: t('admin.limits.sharedFieldHeading'), unit: t('admin.limits.chars') },
+      { key: 'textFill', label: t('admin.limits.textFill'), hint: t('admin.limits.textFillMax'), unit: t('admin.limits.chars') },
+      { key: 'radioOption', label: t('admin.limits.radioOption'), hint: t('admin.limits.radioOptionMax'), unit: t('admin.limits.chars') },
+      { key: 'checkOption', label: t('admin.limits.checkOption'), hint: t('admin.limits.checkOptionMax'), unit: t('admin.limits.chars') },
+      { key: 'answer', label: t('admin.limits.fullAnswer'), hint: t('admin.limits.fullAnswerTotal'), unit: t('admin.limits.chars') },
     ],
   },
   {
     id: 'account',
-    title: t('s_1otzax5'),
+    title: t('admin.limits.account'),
     items: [
-      { key: 'usernameMin', label: t('s_dtadu0'), hint: t('s_1r8v016'), unit: t('s_1mcmbiu') },
-      { key: 'usernameMax', label: t('s_196bpby'), hint: t('s_v3tpu7'), unit: t('s_1mcmbiu') },
-      { key: 'passwordMin', label: t('s_e6tqxb'), hint: t('s_h600z1'), unit: t('s_1jlgtug') },
-      { key: 'passwordMax', label: t('s_19rf1tx'), hint: t('s_o6i8sq'), unit: t('s_1jlgtug') },
-      { key: 'nickname', label: t('s_jxewei'), hint: t('s_105tgz4'), unit: t('s_1mcmbiu') },
-      { key: 'bio', label: t('s_euttee'), hint: t('s_1vqr29w'), unit: t('s_1mcmbiu') },
-      { key: 'region', label: t('s_16txual'), hint: t('s_gzhx13'), unit: t('s_1mcmbiu') },
+      { key: 'usernameMin', label: t('admin.limits.usernameMin'), hint: t('admin.limits.usernameMinChars'), unit: t('admin.limits.chars') },
+      { key: 'usernameMax', label: t('admin.limits.usernameMax'), hint: t('admin.limits.usernameMaxChars'), unit: t('admin.limits.chars') },
+      { key: 'passwordMin', label: t('admin.limits.passwordMin'), hint: t('admin.limits.passwordMinChars'), unit: t('admin.limits.passwordPlaces') },
+      { key: 'passwordMax', label: t('admin.limits.passwordMax'), hint: t('admin.limits.passwordMaxChars'), unit: t('admin.limits.passwordPlaces') },
+      { key: 'nickname', label: t('admin.limits.nicknameMax'), hint: t('admin.limits.nicknameMaxChars'), unit: t('admin.limits.chars') },
+      { key: 'bio', label: t('admin.limits.bioMax'), hint: t('admin.limits.bioMaxChars'), unit: t('admin.limits.chars') },
+      { key: 'region', label: t('admin.limits.regionMax'), hint: t('admin.limits.regionMaxChars'), unit: t('admin.limits.chars') },
     ],
   },
 ];
@@ -145,25 +145,25 @@ const form = reactive({
 
 /** 管理页自己的文案：提示与开关说明放在这里，提取脚本会换成文案 key。 */
 const COPY = {
-  coverTitle: t('s_y0ihlw'),
-  coverHint: t('s_1rgheyl'),
-  limitIntro: t('s_2kxjse'),
-  exhibitorLimit: t('s_17fthq4'),
-  exhibitorLimitHint: t('s_13he981'),
-  meetingLimit: t('s_2qdje'),
-  meetingLimitHint: t('s_1g35i71'),
-  manageExhibitions: t('s_1tkl9jl'),
-  manageMeetings: t('s_1lrlx8m'),
-  adjustStatus: t('s_15y6qev'),
-  avatarSection: t('s_ivjnb8'),
-  avatarFormats: t('s_14byhwl'),
-  avatarFormatsInvalid: t('s_hij4iq'),
-  storageTitle: t('s_gabp1m'),
-  storageHint: t('s_12py9wp'),
-  storageLimit: t('s_5lv7y7'),
-  storageWhenFull: t('s_1hkkwf5'),
-  storageEvict: t('s_1c52fd4'),
-  storageReject: t('s_8tcweh'),
+  coverTitle: t('admin.media.defaultCover'),
+  coverHint: t('admin.media.defaultCoverFallback'),
+  limitIntro: t('admin.limits.charCapIntro'),
+  exhibitorLimit: t('admin.limits.concurrentExhibitions'),
+  exhibitorLimitHint: t('admin.limits.concurrentExhibitionsRule'),
+  meetingLimit: t('admin.limits.concurrentMeetings'),
+  meetingLimitHint: t('admin.limits.concurrentMeetingsRule'),
+  manageExhibitions: t('admin.users.manageExhibitions'),
+  manageMeetings: t('admin.users.manageMeetings'),
+  adjustStatus: t('admin.users.adjustStatus'),
+  avatarSection: t('admin.media.avatar'),
+  avatarFormats: t('admin.media.avatarFormats'),
+  avatarFormatsInvalid: t('admin.media.avatarFormatRule'),
+  storageTitle: t('admin.media.storage'),
+  storageHint: t('admin.media.storageCleanup'),
+  storageLimit: t('admin.media.storageCap'),
+  storageWhenFull: t('admin.media.whenFull'),
+  storageEvict: t('admin.media.evictOldest'),
+  storageReject: t('admin.media.rejectUpload'),
 };
 const storageUsage = ref({ usedBytes: 0, limitBytes: 1024 * 1024 * 1024, fileCount: 0 });
 const storagePolicies = [
@@ -291,7 +291,7 @@ function manageUser(user: User): void {
   // 不放「取消」：点遮罩、按返回或 Esc 都能关，面板里多一个取消只会让状态选项更不显眼。
   openSheet({
     title: `调整 ${user.nickname} 的状态`,
-    message: `${user.role} · 注册于 ${user.registrationTime || t('s_1lpnuh4')}`,
+    message: `${user.role} · 注册于 ${user.registrationTime || t('admin.users.unknown')}`,
     actions,
     layout: 'stack',
   });
@@ -302,7 +302,7 @@ async function updateUserStatus(user: User, status: string): Promise<void> {
     // 写接口统一返回 { ok, error }：只判断整个响应是否为真会把失败也当成成功。
     const result = await api.users.setStatus(String(user.id ?? ''), status);
     const ok = result?.ok === true;
-    toast(String(ok ? `已将 ${user.nickname} 设为${status}` : (result?.error || t('s_10lkv9z'))), ok ? 'success' : 'error');
+    toast(String(ok ? `已将 ${user.nickname} 设为${status}` : (result?.error || t('admin.users.updateFailed'))), ok ? 'success' : 'error');
     if (ok) await loadUsers();
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -315,16 +315,16 @@ async function updateUserStatus(user: User, status: string): Promise<void> {
  */
 function disableTwoFactor(user: User): void {
   confirmSheet({
-    title: t('s_p1k61'),
+    title: t('admin.users.disableTwoFactor'),
     message: `关闭后 ${user.nickname} 登录时只校验密码。请确认这是账号本人提出的请求。`,
-    confirmLabel: t('s_g0fanx'),
+    confirmLabel: t('common.close'),
     tone: 'danger',
     onConfirm: async () => {
       try {
         const result = await api.users.disableTwoFactor(String(user.id ?? ''));
         const ok = result?.ok === true;
         toast(
-          String(ok ? `已关闭 ${user.nickname} 的两步验证` : (result?.error || t('s_10lkv9z'))),
+          String(ok ? `已关闭 ${user.nickname} 的两步验证` : (result?.error || t('admin.users.updateFailed'))),
           ok ? 'success' : 'error',
         );
         if (ok) await loadUsers();
@@ -345,7 +345,7 @@ function csvCell(value: unknown): string {
 
 async function exportCsv(): Promise<void> {
   const rows = [
-    [t('s_1co82cb'), t('s_25fwki'), t('s_14s86i5'), t('s_1f90xvr'), t('s_1ccx4t4'), t('s_1kbcp7q'), t('s_xr45ks')],
+    [t('admin.limits.exhibitionName'), t('admin.exhibitions.venue'), t('admin.exhibitions.date'), t('admin.exhibitions.time'), t('admin.exhibitions.status'), t('admin.exhibitions.category'), t('admin.exhibitions.summary')],
     ...exhibitionItems.value.map((item) => [
       String(item.title ?? ''),
       String(item.venue ?? ''),
@@ -365,7 +365,7 @@ async function exportCsv(): Promise<void> {
   } catch (reason) {
     // 用户在系统保存框点了取消：按码判断，不给红色错误，只说明没有导出。
     if (reason && typeof reason === 'object' && (reason as { code?: unknown }).code === 'cancelled') {
-      toast(t('s_1va7jf9'));
+      toast(t('admin.exhibitions.exportCancelled'));
       return;
     }
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -444,7 +444,7 @@ const storagePercent = computed(() => {
   return Math.min(100, Math.round((storageUsage.value.usedBytes / limit) * 100));
 });
 const storageCaption = computed(
-  () => `${t('s_y7lj0n')} ${formatStorage(storageUsage.value.usedBytes)} / ${formatStorage(storageUsage.value.limitBytes)}`,
+  () => `${t('admin.media.used')} ${formatStorage(storageUsage.value.usedBytes)} / ${formatStorage(storageUsage.value.limitBytes)}`,
 );
 
 /**
@@ -456,7 +456,7 @@ async function pickDefaultCover(): Promise<void> {
   try {
     const stored = await device.importMedia('image');
     if (!stored?.url) {
-      toast(t('s_1dc9o49'), 'error');
+      toast(t('admin.media.unreadableImage'), 'error');
       return;
     }
     form.defaultCover = await publishImportedMedia('image', stored);
@@ -477,16 +477,16 @@ function numberField(key: string): number {
 async function saveSettings(): Promise<void> {
   settingsError.value = '';
   const checks: Array<[string, string]> = [
-    [t('s_1sx8n02'), check(form.brand.zh, { label: t('s_1sx8n02'), required: true, max: 20 })],
-    [t('s_1lwq2zi'), check(form.brand.en, {
-      label: t('s_1lwq2zi'), required: true, max: 24, pattern: titleEnPattern, patternMessage: t('s_1q0bxzm'),
+    [t('admin.settings.brandZh'), check(form.brand.zh, { label: t('admin.settings.brandZh'), required: true, max: 20 })],
+    [t('admin.settings.brandEn'), check(form.brand.en, {
+      label: t('admin.settings.brandEn'), required: true, max: 24, pattern: titleEnPattern, patternMessage: t('admin.settings.brandEnCharset'),
     })],
     [COPY.avatarFormats, check(form.avatarFormats, {
       label: COPY.avatarFormats,
       required: true,
       max: 80,
       pattern: formatPattern,
-      patternMessage: t('s_1c9tz51'),
+      patternMessage: t('admin.media.imageSuffixPattern'),
       custom: (value) => value.split(',')
         .map((item) => item.trim().toLowerCase().replace(/^\./, ''))
         .filter(Boolean)
@@ -494,11 +494,11 @@ async function saveSettings(): Promise<void> {
         ? COPY.avatarFormatsInvalid
         : '',
     })],
-    [t('s_a4vkn3'), check(form.imageFormats, {
-      label: t('s_a4vkn3'), max: 120, pattern: formatPattern, patternMessage: t('s_1c9tz51'),
+    [t('admin.media.imageFormats'), check(form.imageFormats, {
+      label: t('admin.media.imageFormats'), max: 120, pattern: formatPattern, patternMessage: t('admin.media.imageSuffixPattern'),
     })],
-    [t('s_1hybard'), check(form.videoFormats, {
-      label: t('s_1hybard'), max: 120, pattern: formatPattern, patternMessage: t('s_15k74t0'),
+    [t('admin.media.videoFormats'), check(form.videoFormats, {
+      label: t('admin.media.videoFormats'), max: 120, pattern: formatPattern, patternMessage: t('admin.media.videoSuffixPattern'),
     })],
   ];
   for (const [, message] of checks) {
@@ -535,7 +535,7 @@ async function saveSettings(): Promise<void> {
 
     const saved = await api.settings.save(payload);
     if (saved?.ok !== true) {
-      settingsError.value = String(saved?.error || t('s_jibr3q'));
+      settingsError.value = String(saved?.error || t('admin.settings.saveFailed'));
       toast(settingsError.value, 'error');
       return;
     }
@@ -558,7 +558,7 @@ async function saveSettings(): Promise<void> {
       loggedIn: session.loggedIn,
     } as unknown as Bootstrap);
     fillForm(settings);
-    toast(t('s_1qb27ho'), 'success');
+    toast(t('admin.settings.saved'), 'success');
   } catch (reason) {
     settingsError.value = reason instanceof Error ? reason.message : String(reason);
     toast(settingsError.value, 'error');
@@ -573,10 +573,10 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
 <template>
   <!-- 顶栏已经写着「管理后台」，正文不再重复这四个字。忙碌时只留一枚状态胶囊。 -->
   <div v-if="panelBusy" class="row">
-    <span class="pill">{{ t('s_1tp8nhc') }}</span>
+    <span class="pill">{{ t('admin.settings.loadingSecurity') }}</span>
   </div>
 
-  <SegControl :model-value="tab" :items="TABS" :label="t('s_y9zw6u')" @update:model-value="changeTab" />
+  <SegControl :model-value="tab" :items="TABS" :label="t('admin.sections')" @update:model-value="changeTab" />
 
   <!-- ── 用户管理 ─────────────────────────────────────────────── -->
   <template v-if="tab === 'users'">
@@ -584,24 +584,24 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
     <StateBlock
       v-else-if="users.error.value && users.data.value === undefined"
       tone="error"
-      :title="t('s_kvpltc')"
+      :title="t('common.loadFailed')"
       :description="users.error.value.message"
-      :action-label="t('s_lswd2v')"
+      :action-label="t('common.retry')"
       @action="loadUsers"
     />
     <template v-else>
       <div class="row" data-between="true">
-        <span class="section-label">{{ t('s_1oim33') }}</span>
+        <span class="section-label">{{ t('admin.users.manage') }}</span>
         <span class="pill">{{ `${userItems.length} 位用户` }}</span>
       </div>
       <div class="field">
-        <label for="admin-user-search">{{ t('s_jdu9oa') }}</label>
+        <label for="admin-user-search">{{ t('admin.users.search') }}</label>
         <input
           id="admin-user-search"
           class="input"
           type="search"
           autocomplete="off"
-          :placeholder="t('s_1lwkw6n')"
+          :placeholder="t('admin.users.searchPlaceholder')"
           @input="onSearch(($event.target as HTMLInputElement).value)"
         />
       </div>
@@ -611,7 +611,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
 
       <StateBlock
         v-if="userItems.length === 0"
-        :title="query ? `没有找到与“${query}”相关的用户` : t('s_7qwgro')"
+        :title="query ? `没有找到与“${query}”相关的用户` : t('admin.users.empty')"
       />
       <div v-else class="list" data-gap="sm" :data-busy="users.loading.value ? 'true' : undefined">
         <div v-for="user in userItems" :key="String(user.id)" class="card">
@@ -629,9 +629,9 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
                 <strong class="row-title truncate">{{ user.nickname }}</strong>
                 <RoleTag :role-code="String(user.roleCode || '')" />
               </span>
-              <span class="row-meta">{{ `${user.status} · 最近登录 ${user.lastLoginTime || t('s_1lpnuh4')}` }}</span>
+              <span class="row-meta">{{ `${user.status} · 最近登录 ${user.lastLoginTime || t('admin.users.unknown')}` }}</span>
               <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
-              <span v-if="user.twoFactorEnabled === true" class="row-meta">{{ t('s_16q73v0') }}</span>
+              <span v-if="user.twoFactorEnabled === true" class="row-meta">{{ t('admin.users.twoFactorEnabled') }}</span>
             </span>
             <StatusTag :text="String(user.status || '')" :tone="statusTone(String(user.status || ''))" />
           </button>
@@ -666,7 +666,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
             type="button"
             @click="disableTwoFactor(user)"
           >
-            {{ t('s_p1k61') }}
+            {{ t('admin.users.disableTwoFactor') }}
           </button>
         </div>
       </div>
@@ -679,25 +679,25 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
     <StateBlock
       v-else-if="exhibitions.error.value && exhibitions.data.value === undefined"
       tone="error"
-      :title="t('s_kvpltc')"
+      :title="t('common.loadFailed')"
       :description="exhibitions.error.value.message"
-      :action-label="t('s_lswd2v')"
+      :action-label="t('common.retry')"
       @action="loadExhibitions"
     />
     <template v-else>
       <div class="field">
-        <label for="admin-exhibition-search">{{ t('s_50ih74') }}</label>
+        <label for="admin-exhibition-search">{{ t('admin.exhibitions.search') }}</label>
         <input
           id="admin-exhibition-search"
           class="input"
           type="search"
           autocomplete="off"
-          :placeholder="t('s_1ttdxgu')"
+          :placeholder="t('admin.exhibitions.searchPlaceholder')"
           @input="onSearch(($event.target as HTMLInputElement).value)"
         />
       </div>
       <div class="row" data-between="true">
-        <span class="section-label">{{ t('s_1h3z4vq') }}</span>
+        <span class="section-label">{{ t('admin.exhibitions.all') }}</span>
         <span class="pill">{{ `${exhibitionItems.length} 个展会` }}</span>
       </div>
       <div v-if="exhibitions.error.value" class="notice" data-tone="accent">
@@ -707,8 +707,8 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       <StateBlock
         v-if="exhibitionItems.length === 0"
         icon="search"
-        :title="query ? `没有找到与“${query}”相关的展会` : t('s_1qc01ta')"
-        :description="query ? t('s_1kmur0r') : t('s_1tsjagr')"
+        :title="query ? `没有找到与“${query}”相关的展会` : t('admin.exhibitions.empty')"
+        :description="query ? t('admin.exhibitions.tryAnotherKeyword') : t('admin.exhibitions.shownWhenCreated')"
       />
       <div v-else class="list" data-gap="sm" :data-busy="exhibitions.loading.value ? 'true' : undefined">
         <AdminExhibitionCard
@@ -720,7 +720,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       </div>
 
       <button class="cta ghost" type="button" :disabled="exhibitionItems.length === 0" @click="exportCsv">
-        {{ t('s_1ogoh03') }}
+        {{ t('admin.exhibitions.exportCsv') }}
       </button>
     </template>
   </template>
@@ -731,15 +731,15 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
     <StateBlock
       v-else-if="settingsQuery.error.value && !loaded"
       tone="error"
-      :title="t('s_kvpltc')"
+      :title="t('common.loadFailed')"
       :description="settingsQuery.error.value.message"
-      :action-label="t('s_lswd2v')"
+      :action-label="t('common.retry')"
       @action="loadSettings"
     />
     <template v-else>
       <div class="notice" data-tone="accent">
-        <strong>{{ t('s_1l8hptt') }}</strong>
-        <span>{{ t('s_3fdon3') }}</span>
+        <strong>{{ t('admin.settings.server') }}</strong>
+        <span>{{ t('admin.settings.serverScope') }}</span>
       </div>
 
       <div class="card">
@@ -776,27 +776,27 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       </div>
 
       <div class="card">
-        <span class="section-label">{{ t('s_vxwprj') }}</span>
+        <span class="section-label">{{ t('admin.settings.brand') }}</span>
         <div class="field">
-          <label for="settings-title-zh">{{ t('s_1sx8n02') }}</label>
+          <label for="settings-title-zh">{{ t('admin.settings.brandZh') }}</label>
           <input
             id="settings-title-zh"
             v-model="form.brand.zh"
             class="input"
             type="text"
             maxlength="20"
-            :placeholder="t('s_1wed2to')"
+            :placeholder="t('admin.settings.brandZhPlaceholder')"
           />
         </div>
         <div class="field">
-          <label for="settings-title-en">{{ t('s_1lwq2zi') }}</label>
+          <label for="settings-title-en">{{ t('admin.settings.brandEn') }}</label>
           <input
             id="settings-title-en"
             v-model="form.brand.en"
             class="input"
             type="text"
             maxlength="24"
-            :placeholder="t('s_17xmsms')"
+            :placeholder="t('admin.settings.brandEnPlaceholder')"
           />
         </div>
       </div>
@@ -817,7 +817,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
             :data-loading="coverBusy ? 'true' : 'false'"
             @click="pickDefaultCover"
           >
-            {{ form.defaultCover ? t('s_xocxb0') : t('s_6piprk') }}
+            {{ form.defaultCover ? t('admin.media.changeCover') : t('admin.media.uploadCover') }}
           </button>
           <button
             v-if="form.defaultCover"
@@ -827,7 +827,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
             style="flex: 1 1 0"
             @click="form.defaultCover = ''"
           >
-            {{ t('s_eab5ax') }}
+            {{ t('admin.media.removeCover') }}
           </button>
         </div>
         <p class="field-hint">{{ COPY.coverHint }}</p>
@@ -846,7 +846,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
               min="0"
               inputmode="numeric"
             />
-            <span class="row-meta">{{ t('s_d5a1x9') }}</span>
+            <span class="row-meta">{{ t('admin.limits.items') }}</span>
           </div>
           <p class="field-hint">{{ COPY.exhibitorLimitHint }}</p>
         </div>
@@ -861,18 +861,18 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
               min="0"
               inputmode="numeric"
             />
-            <span class="row-meta">{{ t('s_d5a1x9') }}</span>
+            <span class="row-meta">{{ t('admin.limits.items') }}</span>
           </div>
           <p class="field-hint">{{ COPY.meetingLimitHint }}</p>
         </div>
       </div>
 
       <div class="card">
-        <span class="section-label">{{ t('s_1dao2v1') }}</span>
+        <span class="section-label">{{ t('admin.announce.entry') }}</span>
         <textarea id="settings-announcement" v-model="form.announcement" class="textarea" rows="3" />
         <div class="switch-row">
           <span class="switch-copy">
-            <strong>{{ t('s_5rwrkf') }}</strong>
+            <strong>{{ t('admin.announce.showOnEntry') }}</strong>
           </span>
           <label class="switch" for="settings-announcement-enabled">
             <input id="settings-announcement-enabled" v-model="form.announcementEnabled" type="checkbox" />
@@ -882,15 +882,15 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       </div>
 
       <div class="card">
-        <span class="section-label">{{ t('s_1v7py1m') }}</span>
+        <span class="section-label">{{ t('admin.settings.categories') }}</span>
         <textarea id="settings-categories" v-model="form.categories" class="textarea" rows="4" />
       </div>
 
       <div class="card">
-        <span class="section-label">{{ t('s_1shj529') }}</span>
+        <span class="section-label">{{ t('admin.settings.reviewPolicy') }}</span>
         <div class="switch-row">
           <span class="switch-copy">
-            <strong>{{ t('s_11iu5s7') }}</strong>
+            <strong>{{ t('admin.settings.allowReviseDecided') }}</strong>
           </span>
           <label class="switch" for="settings-revise">
             <input id="settings-revise" v-model="form.canRevise" type="checkbox" />
@@ -900,30 +900,30 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       </div>
 
       <div class="card">
-        <span class="section-label">{{ t('s_6w32w9') }}</span>
+        <span class="section-label">{{ t('admin.media.richMedia') }}</span>
         <div class="field">
-          <label for="settings-image-count">{{ t('s_s2a1jr') }}</label>
+          <label for="settings-image-count">{{ t('admin.media.imagesPerPost') }}</label>
           <div class="row" data-gap="md">
             <input id="settings-image-count" v-model.number="form.imageCount" class="input" type="number" min="0" inputmode="numeric" />
-            <span class="row-meta">{{ t('s_accfpb') }}</span>
+            <span class="row-meta">{{ t('admin.media.sheets') }}</span>
           </div>
         </div>
         <div class="field">
-          <label for="settings-image-size">{{ t('s_ixjm5p') }}</label>
+          <label for="settings-image-size">{{ t('admin.media.imageSize') }}</label>
           <div class="row" data-gap="md">
             <input id="settings-image-size" v-model.number="form.imageSizeMb" class="input" type="number" min="0" inputmode="numeric" />
             <span class="row-meta">MB</span>
           </div>
         </div>
         <div class="field">
-          <label for="settings-video-count">{{ t('s_1wlt01z') }}</label>
+          <label for="settings-video-count">{{ t('admin.media.videoCount') }}</label>
           <div class="row" data-gap="md">
             <input id="settings-video-count" v-model.number="form.videoCount" class="input" type="number" min="0" inputmode="numeric" />
-            <span class="row-meta">{{ t('s_d5a1x9') }}</span>
+            <span class="row-meta">{{ t('admin.limits.items') }}</span>
           </div>
         </div>
         <div class="field">
-          <label for="settings-video-size">{{ t('s_1moomrn') }}</label>
+          <label for="settings-video-size">{{ t('admin.media.videoSize') }}</label>
           <div class="row" data-gap="md">
             <input id="settings-video-size" v-model.number="form.videoSizeMb" class="input" type="number" min="0" inputmode="numeric" />
             <span class="row-meta">MB</span>
@@ -932,9 +932,9 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       </div>
 
       <div class="card">
-        <span class="section-label">{{ t('s_15f0vvs') }}</span>
+        <span class="section-label">{{ t('admin.media.uploadFormats') }}</span>
         <div class="field">
-          <label for="settings-image-formats">{{ t('s_kthke1') }}</label>
+          <label for="settings-image-formats">{{ t('admin.media.imageSuffixes') }}</label>
           <input
             id="settings-image-formats"
             v-model="form.imageFormats"
@@ -945,7 +945,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
           />
         </div>
         <div class="field">
-          <label for="settings-video-formats">{{ t('s_injt47') }}</label>
+          <label for="settings-video-formats">{{ t('admin.media.videoSuffixes') }}</label>
           <input
             id="settings-video-formats"
             v-model="form.videoFormats"
@@ -960,7 +960,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       <div class="card">
         <span class="section-label">{{ COPY.avatarSection }}</span>
         <div class="field">
-          <label for="settings-avatar-size">{{ t('s_1y26ptk') }}</label>
+          <label for="settings-avatar-size">{{ t('admin.media.avatarSize') }}</label>
           <div class="row" data-gap="md">
             <input id="settings-avatar-size" v-model.number="form.avatarSizeMb" class="input" type="number" min="1" max="20" inputmode="numeric" />
             <span class="row-meta">MB</span>
@@ -980,7 +980,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       </div>
 
       <div class="card">
-        <span class="section-label">{{ t('s_rlbden') }}</span>
+        <span class="section-label">{{ t('admin.limits.formChars') }}</span>
         <p class="field-hint">{{ COPY.limitIntro }}</p>
         <div v-for="group in LIMIT_GROUPS" :key="group.id" class="limit-group">
           <span class="limit-group-title">{{ group.title }}</span>
@@ -1016,7 +1016,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
         :data-loading="settingsSaving ? 'true' : 'false'"
         @click="saveSettings"
       >
-        {{ t('s_usxjfe') }}
+        {{ t('admin.settings.save') }}
       </button>
     </template>
   </template>

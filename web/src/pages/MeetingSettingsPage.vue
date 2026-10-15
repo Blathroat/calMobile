@@ -39,20 +39,20 @@ const locked = computed(() => forcedOff.value || session.user.can?.limited === t
 const ready = computed(() => built.value);
 
 const COPY = {
-  acceptLabel: t('s_1y1ga4e'),
-  acceptHint: t('s_imp9ca'),
-  allowCancelLabel: t('s_1ffrybx'),
-  allowCancelHint: t('s_hisyau'),
-  noticeLabel: t('s_q1lzkt'),
-  noticeHint: t('s_1ejowpe'),
-  forcedHint: t('s_42ird'),
-  fieldsLabel: t('s_c534rb'),
-  fieldsHint: t('s_caoulm'),
-  save: t('s_1y4m9v0'),
-  copy: t('s_1xbipwq'),
-  missing: t('s_18o1cfv'),
-  copied: t('s_4396rd'),
-  shareHint: t('s_1qtfrh7'),
+  acceptLabel: t('meeting.settings.accept'),
+  acceptHint: t('meeting.settings.acceptHint'),
+  allowCancelLabel: t('meeting.settings.allowCancel'),
+  allowCancelHint: t('meeting.settings.allowCancelHint'),
+  noticeLabel: t('meeting.settings.notice'),
+  noticeHint: t('meeting.settings.noticeHint'),
+  forcedHint: t('meeting.settings.restrictedAccount'),
+  fieldsLabel: t('meeting.settings.collectFields'),
+  fieldsHint: t('meeting.settings.collectFieldsHint'),
+  save: t('meeting.settings.save'),
+  copy: t('meeting.copyLink'),
+  missing: t('exhibition.detail.registrationSiteMissing'),
+  copied: t('meeting.linkCopied'),
+  shareHint: t('meeting.settings.shareHint'),
 };
 
 async function copyLink(): Promise<void> {
@@ -67,7 +67,7 @@ async function copyLink(): Promise<void> {
     openSheet({
       title: COPY.copy,
       message: link.value,
-      actions: [{ label: t('s_1589w37'), onClick: (close) => close() }],
+      actions: [{ label: t('common.cancel'), onClick: (close) => close() }],
     });
   }
 }
@@ -130,10 +130,10 @@ async function save(): Promise<void> {
         })),
     });
     if (result?.ok === false) {
-      toast(String(result.error || t('s_1q9u8le')), 'error');
+      toast(String(result.error || t('exhibition.form.saveFailed')), 'error');
       return;
     }
-    toast(t('s_1cimux'), 'success');
+    toast(t('meeting.settings.saved'), 'success');
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
   } finally {
@@ -156,9 +156,9 @@ async function save(): Promise<void> {
   <StateBlock
     v-else-if="query.error.value && !ready"
     tone="error"
-    :title="t('s_kvpltc')"
+    :title="t('common.loadFailed')"
     :description="query.error.value.message"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
   <template v-else-if="ready">

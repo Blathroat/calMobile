@@ -20,14 +20,14 @@ const props = withDefaults(defineProps<{
 <template>
   <div class="stack" data-gap="sm">
     <div class="field" :data-invalid="props.model.error ? 'true' : 'false'">
-      <label for="checkin-code">{{ t('s_zienpw') }}</label>
+      <label for="checkin-code">{{ t('checkin.manual.codeContent') }}</label>
       <input
         id="checkin-code"
         v-model="props.model.code"
         class="input"
         type="text"
         autocomplete="off"
-        :placeholder="props.placeholder || t('s_hdawan')"
+        :placeholder="props.placeholder || t('checkin.manual.example')"
       />
       <p v-if="props.hint" class="field-hint">{{ props.hint }}</p>
       <p v-if="props.model.error" class="field-error" role="alert">{{ props.model.error }}</p>

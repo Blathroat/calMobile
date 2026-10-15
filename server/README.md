@@ -29,7 +29,7 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 
 改了 `src` 里已经被加载的模块之后重启进程。`pnpm dev` 的 tsx watch 会自己重启。不用 watch 起的进程会一直按旧模块应答。
 
-`pnpm dev` 会看护 adb reverse。规则在 `src/dev/adb-reverse.ts` 开头。服务不是用 `pnpm dev` 起时，用 `pwsh -File scripts\emu.ps1 reverse`。
+`pnpm dev` 会看护 adb reverse。规则在 `src/dev/adb-reverse.ts` 开头。服务不是用 `pnpm dev` 起时，执行 `adb reverse tcp:3000 tcp:3000`。
 
 ## 服务骨架
 

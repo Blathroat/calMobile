@@ -48,8 +48,8 @@ const confirmError = ref('');
 
 const secret = computed(() => passwordRule());
 const resendLabel = computed(() => (remaining.value > 0
-  ? `${remaining.value} ${t('s_1qbu9z0')}`
-  : t('s_1fyr64c')));
+  ? `${remaining.value} ${t('auth.login.secondsUntilResend')}`
+  : t('auth.login.resendCode')));
 
 let timer: number | undefined;
 
@@ -94,20 +94,20 @@ function onEmailInput(): void {
 
 function validateEmail(): string {
   return check(email.value, {
-    label: t('s_185tvls'),
+    label: t('auth.register.email'),
     required: true,
     max: EMAIL_MAX,
     pattern: PATTERNS.email,
-    patternMessage: t('s_1u3yg0h'),
+    patternMessage: t('auth.register.emailInvalid'),
   });
 }
 
 function validateCode(): string {
   return check(code.value, {
-    label: t('s_s8pbve'),
+    label: t('auth.login.emailCode'),
     required: true,
     pattern: PATTERNS.verificationCode,
-    patternMessage: t('s_1x20l1k'),
+    patternMessage: t('auth.register.enterSixDigits'),
   });
 }
 
@@ -118,7 +118,7 @@ function validatePassword(): string {
 /** 一致性校验挂在确认框上：用户改的就是这个框，错误跟着它才会在改对后立刻消失。 */
 function validateConfirm(): string {
   return check(confirm.value, {
-    label: t('s_ocmice'),
+    label: t('auth.register.confirmPassword'),
     required: true,
     max: secret.value.max,
     custom: (value: string) => matchRule(value, password.value),
@@ -133,7 +133,7 @@ function validateConfirm(): string {
  */
 async function requestCode(target: string): Promise<string> {
   const sent = await api.auth.forgotPassword(target);
-  if (!sent?.ok) return String(sent?.error || t('s_osck6n'));
+  if (!sent?.ok) return String(sent?.error || t('auth.register.failed'));
   pendingEmail.value = target;
   sentTo.value = target;
   showStep(2);
@@ -170,11 +170,11 @@ async function submitReset(): Promise<void> {
       confirmPassword: confirm.value,
     });
     if (!result?.ok) {
-      resetError.value = String(result?.error || t('s_osck6n'));
+      resetError.value = String(result?.error || t('auth.register.failed'));
       return;
     }
     stopCountdown();
-    toast(t('s_j08rvp'), 'success');
+    toast(t('auth.forgot.resetSuccess'), 'success');
     await router.replace('/login');
   } catch (reason) {
     resetError.value = messageOf(reason);
@@ -194,7 +194,7 @@ async function resendCode(): Promise<void> {
       return;
     }
     // requestCode 成功后倒计时重新开始，这里给出「重发成功」的轻提示。
-    if (remaining.value > 0) toast(t('s_5rsk4v'), 'success');
+    if (remaining.value > 0) toast(t('auth.login.codeSent'), 'success');
   } catch (reason) {
     resetError.value = messageOf(reason);
   } finally {
@@ -209,14 +209,14 @@ function messageOf(reason: unknown): string {
 
 <template>
   <div class="stack" data-gap="sm">
-    <h2>{{ t('s_ww6ehr') }}</h2>
-    <p class="muted">{{ t('s_1ro3s85') }}</p>
+    <h2>{{ t('auth.forgot.resetLoginPassword') }}</h2>
+    <p class="muted">{{ t('auth.forgot.intro') }}</p>
   </div>
 
   <!-- 第一步：邮箱 -->
   <form v-if="step === 1" class="form" novalidate @submit.prevent="submitRequest">
     <div class="field" :data-invalid="emailError ? 'true' : undefined">
-      <label for="forgot-email">{{ t('s_1csq350') }}</label>
+      <label for="forgot-email">{{ t('auth.forgot.registeredEmail') }}</label>
       <input
         id="forgot-email"
         v-model="email"
@@ -224,17 +224,17 @@ function messageOf(reason: unknown): string {
         type="email"
         autocomplete="email"
         :maxlength="EMAIL_MAX"
-        :placeholder="t('s_1i2pkg8')"
+        :placeholder="t('auth.register.emailPlaceholder')"
         @input="onEmailInput"
         @blur="emailError = validateEmail()"
       >
-      <p class="field-hint">{{ t('s_1de7lo') }}</p>
+      <p class="field-hint">{{ t('auth.forgot.spamHint') }}</p>
       <p v-if="emailError" class="field-error" role="alert">{{ emailError }}</p>
     </div>
 
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <button class="cta" type="submit" :data-loading="requestBusy ? 'true' : undefined" :disabled="requestBusy">
-      {{ t('s_shrzdv') }}
+      {{ t('auth.forgot.sendCode') }}
     </button>
   </form>
 
@@ -242,12 +242,12 @@ function messageOf(reason: unknown): string {
   <form v-else class="form" novalidate @submit.prevent="submitReset">
     <div class="stack" data-gap="sm">
       <!-- 冒号放在文案资源里而不是尾随空格：Android 的 string 资源会裁掉首尾空白。 -->
-      <p class="muted">{{ t('s_15so5xh') }}<strong>{{ sentTo }}</strong></p>
-      <p class="field-hint">{{ t('s_1n9i5np') }}</p>
+      <p class="muted">{{ t('auth.forgot.sentIfRegistered') }}<strong>{{ sentTo }}</strong></p>
+      <p class="field-hint">{{ t('auth.forgot.doNotForward') }}</p>
     </div>
 
     <div class="field" :data-invalid="codeError ? 'true' : undefined">
-      <label for="forgot-code">{{ t('s_s8pbve') }}</label>
+      <label for="forgot-code">{{ t('auth.login.emailCode') }}</label>
       <input
         id="forgot-code"
         ref="codeInput"
@@ -257,7 +257,7 @@ function messageOf(reason: unknown): string {
         inputmode="numeric"
         maxlength="6"
         autocomplete="one-time-code"
-        :placeholder="t('s_doboo3')"
+        :placeholder="t('auth.register.sixDigits')"
         @input="codeError = ''"
         @blur="codeError = validateCode()"
       >
@@ -265,7 +265,7 @@ function messageOf(reason: unknown): string {
     </div>
 
     <div class="field" :data-invalid="passwordError ? 'true' : undefined">
-      <label for="forgot-password">{{ t('s_9sfqbi') }}（{{ secret.min }}–{{ secret.max }} 个字符）</label>
+      <label for="forgot-password">{{ t('auth.forgot.newPassword') }}（{{ secret.min }}–{{ secret.max }} 个字符）</label>
       <input
         id="forgot-password"
         v-model="password"
@@ -273,7 +273,7 @@ function messageOf(reason: unknown): string {
         type="password"
         autocomplete="new-password"
         :maxlength="secret.max"
-        :placeholder="t('s_8eggh4')"
+        :placeholder="t('auth.register.setPassword')"
         @input="passwordError = ''"
         @blur="passwordError = validatePassword()"
       >
@@ -281,7 +281,7 @@ function messageOf(reason: unknown): string {
     </div>
 
     <div class="field" :data-invalid="confirmError ? 'true' : undefined">
-      <label for="forgot-confirm">{{ t('s_ocmice') }}</label>
+      <label for="forgot-confirm">{{ t('auth.register.confirmPassword') }}</label>
       <input
         id="forgot-confirm"
         v-model="confirm"
@@ -289,7 +289,7 @@ function messageOf(reason: unknown): string {
         type="password"
         autocomplete="new-password"
         :maxlength="secret.max"
-        :placeholder="t('s_1ceimwm')"
+        :placeholder="t('auth.register.reenterPassword')"
         @input="confirmError = ''"
         @blur="confirmError = validateConfirm()"
       >
@@ -298,7 +298,7 @@ function messageOf(reason: unknown): string {
 
     <p v-if="resetError" class="field-error" role="alert">{{ resetError }}</p>
     <button class="cta" type="submit" :data-loading="resetBusy ? 'true' : undefined" :disabled="resetBusy">
-      {{ t('s_szog53') }}
+      {{ t('auth.forgot.reset') }}
     </button>
     <button
       class="cta ghost"
@@ -309,8 +309,8 @@ function messageOf(reason: unknown): string {
     >
       {{ resendLabel }}
     </button>
-    <button class="cta ghost" type="button" @click="showStep(1)">{{ t('s_9cd546') }}</button>
+    <button class="cta ghost" type="button" @click="showStep(1)">{{ t('auth.forgot.changeEmail') }}</button>
   </form>
 
-  <button class="cta ghost" type="button" @click="router.replace('/login')">{{ t('s_1smt94y') }}</button>
+  <button class="cta ghost" type="button" @click="router.replace('/login')">{{ t('auth.register.backToLogin') }}</button>
 </template>

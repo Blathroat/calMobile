@@ -41,7 +41,7 @@ const approved = computed(() => record.value?.statusLabel === REGISTRATION_STATU
 /** 已通过的报名还要看展商是否允许撤销。待审核不受这个开关影响。 */
 const hostBlocksCancel = computed(() => approved.value && record.value?.allowCancel === false);
 const canCancel = computed(() => !cancelled.value && !attended.value && !hostBlocksCancel.value);
-const hostCancelHint = t('s_p4j6oi');
+const hostCancelHint = t('registration.detail.approvedCancelBlocked');
 /** 待审核的报名始终可以改；其余状态由管理员的「是否需要重新审核」决定。 */
 const canRevise = computed(() => bootstrap.review.canRevise === true || record.value?.statusLabel === REGISTRATION_STATUS.PENDING);
 
@@ -57,13 +57,13 @@ async function load(): Promise<void> {
 }
 
 function statusHint(status: unknown): string {
-  if (status === REGISTRATION_STATUS.PENDING) return t('s_1te6cde');
+  if (status === REGISTRATION_STATUS.PENDING) return t('registration.detail.pendingExhibitorReview');
   if (status === REGISTRATION_STATUS.APPROVED) {
-    return bootstrap.review.canRevise === true ? t('s_i68x11') : t('s_1k42kcd');
+    return bootstrap.review.canRevise === true ? t('registration.detail.reviewStillEditable') : t('registration.detail.reviewFinished');
   }
-  if (status === REGISTRATION_STATUS.ATTENDED) return t('s_1cjrrf7');
-  if (status === REGISTRATION_STATUS.CANCELLED) return t('s_h2sz0p');
-  return t('s_1bzdeux');
+  if (status === REGISTRATION_STATUS.ATTENDED) return t('registration.detail.checkInWish');
+  if (status === REGISTRATION_STATUS.CANCELLED) return t('registration.detail.cancelledByYou');
+  return t('registration.detail.contactExhibitor');
 }
 
 function modifyRegistration(): void {
@@ -79,23 +79,23 @@ function askCancel(): void {
   const item = record.value;
   if (!item) return;
   confirmSheet({
-    title: t('s_1u8rnsb'),
+    title: t('registration.detail.cancelRegistration'),
     message: `确定撤销「${item.exhibitionTitle}」的报名吗？撤销后展商将不再审核该记录。`,
-    confirmLabel: t('s_zfeh7n'),
+    confirmLabel: t('exhibition.detail.confirmCancel'),
     tone: 'danger',
     onConfirm: async () => {
       cancelling.value = true;
       try {
         const result = await api.registrations.cancel(String(item.id));
         if (!result?.ok) {
-          toast(String(result?.error || t('s_qqaurb')), 'error');
+          toast(String(result?.error || t('exhibition.detail.cancelFailed')), 'error');
           return;
         }
         // 撤销是服务端已经完成的终态，就地更新本页状态与页脚；
         // 不重新取数：`registrations.get` 的缓存键（`registration:…`）不在 cancel 的失效前缀里。
         item.statusLabel = REGISTRATION_STATUS.CANCELLED;
         item.status = REGISTRATION_STATUS.CANCELLED;
-        toast(t('s_xf7p1v'), 'success');
+        toast(t('registration.detail.registrationCancelled'), 'success');
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
       } finally {
@@ -112,9 +112,9 @@ function askCancel(): void {
   <StateBlock
     v-else-if="query.error.value && !query.data.value"
     tone="error"
-    :title="t('s_kvpltc')"
+    :title="t('common.loadFailed')"
     :description="query.error.value.message"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
 
@@ -123,9 +123,9 @@ function askCancel(): void {
     v-else-if="!record"
     tone="error"
     icon="info"
-    :title="t('s_18st7j')"
-    :description="String(query.data.value?.error || t('s_11prq8e'))"
-    :action-label="t('s_qr7208')"
+    :title="t('registration.detail.registrationMissing')"
+    :description="String(query.data.value?.error || t('registration.detail.recordMaybeCancelled'))"
+    :action-label="t('registration.detail.backToList')"
     @action="router.push(paths.registrations)"
   />
 
@@ -137,31 +137,31 @@ function askCancel(): void {
     </div>
 
     <div class="card">
-      <span class="section-label">{{ t('s_vrp4t3') }}</span>
+      <span class="section-label">{{ t('exhibition.detail.registrationInfo') }}</span>
       <div class="stack" data-gap="sm">
         <div class="row" data-between="true">
-          <span class="row-meta">{{ t('s_33njx3') }}</span>
+          <span class="row-meta">{{ t('registration.detail.registrant') }}</span>
           <span class="strong truncate">{{ record.visitorName || '—' }}</span>
         </div>
         <div class="row" data-between="true">
-          <span class="row-meta">{{ t('s_yz0sc5') }}</span>
+          <span class="row-meta">{{ t('registration.detail.identity') }}</span>
           <span class="strong truncate">{{ record.visitorType || '—' }}</span>
         </div>
         <template v-if="answers.length > 0">
           <div v-for="(line, index) in answers" :key="`${line.label}-${index}`" class="row" data-between="true">
-            <span class="row-meta">{{ line.label || t('s_otl7kf') }}</span>
+            <span class="row-meta">{{ line.label || t('exhibition.detail.additionalInfo') }}</span>
             <span class="strong">{{ line.value || '—' }}</span>
           </div>
         </template>
         <div v-else class="row" data-between="true">
-          <span class="row-meta">{{ t('s_otl7kf') }}</span>
-          <span class="strong">{{ t('s_v8pba2') }}</span>
+          <span class="row-meta">{{ t('exhibition.detail.additionalInfo') }}</span>
+          <span class="strong">{{ t('registration.detail.noCollectedInfo') }}</span>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <span class="section-label">{{ t('s_c6rjk') }}</span>
+      <span class="section-label">{{ t('exhibition.detail.currentStatus') }}</span>
       <div class="row" data-gap="md">
         <StatusTag :text="String(record.statusLabel || '')" />
         <span class="row-meta">{{ statusHint(record.statusLabel) }}</span>
@@ -171,14 +171,14 @@ function askCancel(): void {
     <!-- 报名码：只有后端下发了 checkInCode（已通过 / 已参加且展商启用二维码）才渲染 -->
     <div v-if="record.checkInCode" class="card">
       <div class="row" data-between="true">
-        <span class="section-label">{{ t('s_w5wyci') }}</span>
-        <StatusTag :text="attended ? t('s_107xpf9') : t('s_1qk0zaw')" :tone="attended ? 'ok' : 'pending'" />
+        <span class="section-label">{{ t('registration.detail.checkInCode') }}</span>
+        <StatusTag :text="attended ? t('registration.detail.checkedIn') : t('registration.detail.pendingCheckIn')" :tone="attended ? 'ok' : 'pending'" />
       </div>
       <div class="qr-wrap">
         <QrCanvas
           :text="String(record.checkInCode)"
           :size="480"
-          :label="t('s_16uw4a2')"
+          :label="t('registration.detail.checkInQr')"
           @error="qrError = $event"
         />
       </div>
@@ -199,7 +199,7 @@ function askCancel(): void {
             :disabled="cancelled || !canRevise || cancelling"
             @click="modifyRegistration"
           >
-            {{ t('s_ebndq6') }}
+            {{ t('registration.detail.changeRegistration') }}
           </button>
           <button
             class="cta danger"
@@ -207,11 +207,11 @@ function askCancel(): void {
             :disabled="!canCancel || cancelling"
             @click="askCancel"
           >
-            {{ cancelled ? REGISTRATION_STATUS.CANCELLED : (attended ? REGISTRATION_STATUS.ATTENDED : t('s_1u8rnsb')) }}
+            {{ cancelled ? REGISTRATION_STATUS.CANCELLED : (attended ? REGISTRATION_STATUS.ATTENDED : t('registration.detail.cancelRegistration')) }}
           </button>
         </div>
         <p class="field-hint text-center">
-          {{ cancelled ? t('s_ex1lrt') : (attended ? t('s_2vsxvu') : (hostBlocksCancel ? hostCancelHint : t('s_131vhix'))) }}
+          {{ cancelled ? t('registration.detail.cancelledLeavesReview') : (attended ? t('registration.detail.attendedCannotCancel') : (hostBlocksCancel ? hostCancelHint : t('registration.detail.reapplyToAttend'))) }}
         </p>
       </div>
     </div>

@@ -51,7 +51,7 @@ function preferenceSaver<T>(
         signal.throwIfAborted();
         const result = await persist(next);
         signal.throwIfAborted();
-        if (result?.ok !== true) throw new Error(String(result?.error || t('s_1q9u8le')));
+        if (result?.ok !== true) throw new Error(String(result?.error || t('exhibition.form.saveFailed')));
         state.confirmed = next;
       } catch (reason) {
         if (!signal.aborted && revision === state.latest) apply(state.confirmed);

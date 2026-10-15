@@ -34,7 +34,7 @@ export interface CommandResult {
 export type CommandRunner = (args: string[]) => Promise<CommandResult>;
 
 export type ReverseOutcome =
-  /** 映射已经在了（本进程接的，或 `emu.ps1 reverse` 早先接的）。 */
+  /** 映射已经在了（本进程接的，或这次启动前已经接过）。 */
   | 'ready'
   /** 刚接上。 */
   | 'mapped'

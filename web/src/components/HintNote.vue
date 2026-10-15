@@ -11,7 +11,7 @@ import { t } from '@/i18n';
 
 const COPY = {
   /** 关闭入口：把这条提示标记为已看。 */
-  dismiss: t('s_15plsd9'),
+  dismiss: t('app.gotIt'),
 };
 
 const props = withDefaults(defineProps<{ text: string; busy?: boolean }>(), { busy: false });

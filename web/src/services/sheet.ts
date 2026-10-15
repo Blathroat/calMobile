@@ -91,9 +91,9 @@ export function confirmSheet(options: {
     title: options.title,
     message: options.message,
     actions: [
-      { label: options.cancelLabel ?? t('s_1589w37'), onClick: (close) => close() },
+      { label: options.cancelLabel ?? t('common.cancel'), onClick: (close) => close() },
       {
-        label: options.confirmLabel ?? t('s_kre8wf'),
+        label: options.confirmLabel ?? t('app.confirm'),
         variant: options.tone === 'danger' ? 'danger' : 'primary',
         onClick: (close) => {
           close();

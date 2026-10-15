@@ -24,7 +24,7 @@ const router = useRouter();
 function toggleLock(): void {
   const item = props.item;
   const closing = item.openForRegistration === true;
-  const title = closing ? t('s_2fmcqd') : t('s_1w55sta');
+  const title = closing ? t('admin.exhibitions.pauseRegistration') : t('admin.exhibitions.resumeRegistration');
   const nextStatus = closing ? EXHIBITION_STATUS.CLOSED : EXHIBITION_STATUS.REVIEW_REQUIRED;
   const message = closing
     ? `暂停后「${item.title}」不可报名，展商不能自行恢复。`
@@ -37,7 +37,7 @@ function toggleLock(): void {
       try {
         const result = await api.exhibitions.setStatus(String(item.id), nextStatus);
         const ok = result?.ok === true;
-        toast(String(ok ? `已${title}` : (result?.error || t('s_ydow7a'))), ok ? 'success' : 'error');
+        toast(String(ok ? `已${title}` : (result?.error || t('common.failed'))), ok ? 'success' : 'error');
         if (ok) emit('changed');
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -73,7 +73,7 @@ function toggleLock(): void {
         type="button"
         @click="router.push(`/review?exhibitionId=${encodeURIComponent(String(item.id))}`)"
       >
-        {{ t('s_j8kyoz') }}
+        {{ t('admin.exhibitions.viewRegistrations') }}
       </button>
       <button
         class="cta ghost"
@@ -81,10 +81,10 @@ function toggleLock(): void {
         type="button"
         @click="router.push(`/exhibition-form/${String(item.id)}`)"
       >
-        {{ t('s_eutzzb') }}
+        {{ t('admin.exhibitions.edit') }}
       </button>
       <button class="cta ghost" data-size="small" type="button" @click="toggleLock">
-        {{ item.openForRegistration === true ? t('s_2fmcqd') : t('s_1w55sta') }}
+        {{ item.openForRegistration === true ? t('admin.exhibitions.pauseRegistration') : t('admin.exhibitions.resumeRegistration') }}
       </button>
     </div>
   </div>

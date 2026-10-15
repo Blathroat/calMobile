@@ -32,12 +32,12 @@ const route = useRoute();
 const router = useRouter();
 const session = useSessionStore();
 const bootstrap = useBootstrapStore();
-const joinLinkMissing = t('s_18o1cfv');
+const joinLinkMissing = t('exhibition.detail.registrationSiteMissing');
 const query = useAsync<ExhibitionDetail>();
 
 const COPY = {
   /** 封面的 aria-label：点开后看大图。 */
-  openViewer: t('s_1qkfbmc'),
+  openViewer: t('exhibition.detail.viewLargeImage'),
 };
 
 const exhibition = computed(() => query.data.value?.exhibition);
@@ -79,8 +79,8 @@ const registerLimited = computed(() => session.loggedIn === true && session.user
 
 const registerBlocked = computed(() => exhibition.value?.openForRegistration === false || registerLimited.value);
 const registerLabel = computed(() => {
-  if (exhibition.value?.openForRegistration === false) return t('s_1lfeb57');
-  return registerLimited.value || canRegister.value ? t('s_nynzo5') : t('s_68p8ln');
+  if (exhibition.value?.openForRegistration === false) return t('exhibition.detail.registrationClosed');
+  return registerLimited.value || canRegister.value ? t('exhibition.detail.registerNow') : t('exhibition.detail.registerAfterLogin');
 });
 
 function footerHint(): string {
@@ -89,9 +89,9 @@ function footerHint(): string {
   if (item.openForRegistration === false) {
     return `${item.modeLabel || item.status}：该展会当前不接受报名。`;
   }
-  if (registerLimited.value) return t('s_1tanmo5');
+  if (registerLimited.value) return t('exhibition.detail.registerRestricted');
   // 访客进不来这一页（守守卫按「访客只可访问首页」处理），所以这里不再区分「先登录」的引导。
-  return t('s_rss9j6');
+  return t('exhibition.detail.trackInActivities');
 }
 
 async function load(): Promise<void> {
@@ -136,7 +136,7 @@ async function toggleCalendar(): Promise<void> {
       description: plainText(item.description, 200),
     });
     calendarState.value = { inCalendar: result.inCalendar === true, granted: result.granted === true };
-    toast(result.message || t('s_1qf1f04'), 'success');
+    toast(result.message || t('exhibition.detail.calendarUpdated'), 'success');
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
   } finally {
@@ -148,11 +148,11 @@ function startRegistration(): void {
   const item = exhibition.value;
   if (!item) return;
   if (registerLimited.value) {
-    toast(t('s_1tanmo5'), 'error');
+    toast(t('exhibition.detail.registerRestricted'), 'error');
     return;
   }
   if (!canRegister.value) {
-    toast(t('s_1f0kfjp'));
+    toast(t('exhibition.detail.loginBeforeRegister'));
     return;
   }
   void router.push(`/registration-form/${item.id}`);
@@ -166,15 +166,15 @@ function share(): void {
     String(item.title ?? ''),
     `${formatDateWithWeekday(item.date)} ${item.time}`,
     String(item.venue ?? ''),
-    link ? `${t('s_tvkiif')}${link}` : '',
+    link ? `${t('exhibition.detail.registrationLinkPrefix')}${link}` : '',
   ].filter(Boolean).join('\n');
   openSheet({
-    title: t('s_e1wq8p'),
+    title: t('exhibition.detail.shareExhibition'),
     message: (link ? text : `${text}\n${joinLinkMissing}`).replace(/\n/g, ' · '),
     actions: [
-      { label: t('s_1589w37'), onClick: (close) => close() },
+      { label: t('common.cancel'), onClick: (close) => close() },
       {
-        label: t('s_16wt7o6'),
+        label: t('exhibition.detail.share'),
         variant: 'primary',
         onClick: async (close) => {
           close();
@@ -195,7 +195,7 @@ onMounted(() => { void load(); });
 
 <template>
   <Teleport defer to="#app-top-actions">
-    <button class="icon-button" type="button" :aria-label="t('s_e1wq8p')" :title="t('s_e1wq8p')" @click="share">
+    <button class="icon-button" type="button" :aria-label="t('exhibition.detail.shareExhibition')" :title="t('exhibition.detail.shareExhibition')" @click="share">
       <AppIcon name="share" />
     </button>
   </Teleport>
@@ -205,9 +205,9 @@ onMounted(() => { void load(); });
   <StateBlock
     v-else-if="query.error.value"
     tone="error"
-    :title="t('s_kvpltc')"
+    :title="t('common.loadFailed')"
     :description="query.error.value.message"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
 
@@ -215,9 +215,9 @@ onMounted(() => { void load(); });
   <StateBlock
     v-else-if="!found || !exhibition"
     tone="error"
-    :title="t('s_1vim1qp')"
-    :description="String(query.data.value?.error || t('s_ifhjtv'))"
-    :action-label="t('s_17zyr1e')"
+    :title="t('exhibition.detail.notFound')"
+    :description="String(query.data.value?.error || t('exhibition.detail.removedByExhibitor'))"
+    :action-label="t('exhibition.detail.backHome')"
     @action="router.push('/home')"
   />
 
@@ -237,7 +237,7 @@ onMounted(() => { void load(); });
 
     <div class="stack" data-gap="sm">
       <h2>{{ exhibition.title }}</h2>
-      <p class="muted">{{ exhibition.exhibitor || t('s_1lsc240') }} · {{ exhibition.exhibitorNote }}</p>
+      <p class="muted">{{ exhibition.exhibitor || t('exhibition.detail.brandMark') }} · {{ exhibition.exhibitorNote }}</p>
     </div>
 
     <div class="card" data-tone="fill">
@@ -251,7 +251,7 @@ onMounted(() => { void load(); });
       </div>
       <div class="row" data-gap="md">
         <StatusTag :text="String(exhibition.modeLabel || exhibition.status || '')" />
-        <span class="row-meta">{{ exhibition.openForRegistration ? t('s_1gnart') : t('s_105o66n') }}</span>
+        <span class="row-meta">{{ exhibition.openForRegistration ? t('exhibition.detail.registrationNeeded') : t('exhibition.detail.registrationUnavailable') }}</span>
       </div>
     </div>
 
@@ -268,24 +268,24 @@ onMounted(() => { void load(); });
           <strong class="row-title">{{ exhibition.exhibitor }}</strong>
           <RoleTag :role-code="String(exhibition.exhibitorRole || '')" />
         </span>
-        <span class="row-meta">{{ t('s_1a44i78') }}</span>
+        <span class="row-meta">{{ t('exhibition.detail.viewExhibitorHome') }}</span>
       </span>
       <AppIcon name="chevronRight" />
     </button>
 
     <div class="stack" data-gap="sm">
-      <span class="section-label">{{ t('s_15gixpi') }}</span>
+      <span class="section-label">{{ t('exhibition.detail.introduction') }}</span>
       <div v-if="description.html" class="rich-content" v-html="description.html" />
       <p v-else-if="description.text" class="row-meta">{{ description.text }}</p>
-      <p v-else class="muted">{{ t('s_s61azp') }}</p>
+      <p v-else class="muted">{{ t('exhibition.detail.introductionEmpty') }}</p>
     </div>
 
     <div class="stack" data-gap="sm">
-      <span class="section-label">{{ t('s_vrp4t3') }}</span>
+      <span class="section-label">{{ t('exhibition.detail.registrationInfo') }}</span>
       <p class="row-meta">
         {{ fields.length > 0
           ? `展商配置了 ${fields.length} 项信息：${fields.map((field) => String(field.title)).join('、')}`
-          : t('s_hadtmi') }}
+          : t('exhibition.detail.noExtraRegistrationInfo') }}
       </p>
     </div>
   </template>
@@ -302,13 +302,13 @@ onMounted(() => { void load(); });
             :data-loading="calendarBusy ? 'true' : 'false'"
             @click="toggleCalendar"
           >
-            {{ calendarState.inCalendar ? t('s_dvh8t7') : t('s_1prtpth') }}
+            {{ calendarState.inCalendar ? t('exhibition.detail.removeFromCalendar') : t('exhibition.detail.addToCalendar') }}
           </button>
           <button
             class="cta"
             type="button"
             :disabled="registerBlocked"
-            :title="registerLimited ? t('s_1tanmo5') : undefined"
+            :title="registerLimited ? t('exhibition.detail.registerRestricted') : undefined"
             @click="startRegistration"
           >
             {{ registerLabel }}

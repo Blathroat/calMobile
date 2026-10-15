@@ -83,8 +83,8 @@ let redirectTimer: number | undefined;
 const textFillMax = computed(() => limit('textFill', 200));
 const answerMax = computed(() => limit('answer', 200));
 const submitLabel = computed(() => {
-  if (!success.value) return t('s_1umrk9v');
-  return approved.value ? t('s_f02bjx') : t('s_1vse82y');
+  if (!success.value) return t('registration.form.submit');
+  return approved.value ? t('registration.form.submittedApproved') : t('registration.form.submittedPending');
 });
 
 onMounted(() => {
@@ -150,7 +150,7 @@ function splitOptions(options: unknown): string[] {
   const list = Array.isArray(options)
     ? options.map((item) => String(item).trim()).filter(Boolean)
     : String(options ?? '').split(',').map((item) => item.trim()).filter(Boolean);
-  return list.length > 0 ? list : [t('s_q88a0n')];
+  return list.length > 0 ? list : [t('registration.form.unsetOption')];
 }
 
 function fieldId(field: FieldDef): string {
@@ -221,14 +221,14 @@ async function submit(): Promise<void> {
     return;
   }
   if (item.openForRegistration === false) {
-    error.value = t('s_1b45hrg');
+    error.value = t('registration.form.notAccepting');
     return;
   }
   if (error.value) return;
 
   const profile = session.user;
-  const visitorName = String(profile.nickname || profile.username || t('s_jt5fam'));
-  const visitorType = String(profile.roleLabel || t('s_1cfg610'));
+  const visitorName = String(profile.nickname || profile.username || t('registration.form.fallbackName'));
+  const visitorType = String(profile.roleLabel || t('registration.form.regularUser'));
 
   busy.value = true;
   try {
@@ -243,12 +243,12 @@ async function submit(): Promise<void> {
       answers: document.text,
     });
     if (!result?.ok) {
-      error.value = String(result?.error || t('s_f66edb'));
+      error.value = String(result?.error || t('registration.form.submitFailed'));
       return;
     }
     approved.value = result.autoApproved === true || item.status === EXHIBITION_STATUS.REVIEW_OPTIONAL;
     success.value = true;
-    toast(approved.value ? t('s_17txntc') : t('s_gs61uj'), 'success');
+    toast(approved.value ? t('registration.form.submittedAndApproved') : t('registration.form.submitted'), 'success');
     // 提交成功后的短暂停留：定时器随页面一起取消，用户已经返回时不再被拉回列表。
     redirectTimer = window.setTimeout(() => {
       redirectTimer = undefined;
@@ -267,9 +267,9 @@ async function submit(): Promise<void> {
   <StateBlock
     v-if="registerLimited"
     icon="info"
-    :title="t('s_1tanmo5')"
-    :description="t('s_1yv1vu0')"
-    :action-label="isJoinSurface ? t('s_1m2dh8u') : t('s_dn4ida')"
+    :title="t('exhibition.detail.registerRestricted')"
+    :description="t('exhibition.form.restrictedAccount')"
+    :action-label="isJoinSurface ? t('registration.list.title') : t('exhibition.form.backToExhibitor')"
     @action="router.push(paths.home)"
   />
 
@@ -279,9 +279,9 @@ async function submit(): Promise<void> {
     <StateBlock
       v-else-if="query.error.value && !query.data.value"
       tone="error"
-      :title="t('s_kvpltc')"
+      :title="t('common.loadFailed')"
       :description="query.error.value.message"
-      :action-label="t('s_lswd2v')"
+      :action-label="t('common.retry')"
       @action="load"
     />
 
@@ -289,9 +289,9 @@ async function submit(): Promise<void> {
       v-else-if="query.data.value?.found === false"
       tone="error"
       icon="info"
-      :title="t('s_1vim1qp')"
-      :description="String(query.data.value?.error || t('s_1px91rj'))"
-      :action-label="isJoinSurface ? '' : t('s_17zyr1e')"
+      :title="t('exhibition.detail.notFound')"
+      :description="String(query.data.value?.error || t('registration.form.loadInfoFailed'))"
+      :action-label="isJoinSurface ? '' : t('exhibition.detail.backHome')"
       @action="router.push(paths.home)"
     />
 
@@ -388,8 +388,8 @@ async function submit(): Promise<void> {
         <StateBlock
           v-if="success"
           tone="success"
-          :title="approved ? t('s_hiwq5k') : t('s_gs61uj')"
-          :description="approved ? t('s_1d9en33') : t('s_1qd14sn')"
+          :title="approved ? t('registration.form.approved') : t('registration.form.submitted')"
+          :description="approved ? t('registration.form.autoApprovedHint') : t('registration.form.pendingHint')"
         />
         <p v-if="error" class="field-error" role="alert">{{ error }}</p>
         <button
@@ -401,7 +401,7 @@ async function submit(): Promise<void> {
         >
           {{ submitLabel }}
         </button>
-        <p class="field-hint text-center">{{ t('s_n6zeza') }}</p>
+        <p class="field-hint text-center">{{ t('registration.form.confirmHint') }}</p>
       </div>
     </div>
   </Teleport>

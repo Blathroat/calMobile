@@ -18,15 +18,15 @@ export async function publishImportedMedia(
     void device.discardMedia(fileName).catch(() => undefined);
   };
   try {
-    if (!localUrl) throw new Error(kind === 'video' ? t('s_1xdkilh') : t('s_fhsoqj'));
+    if (!localUrl) throw new Error(kind === 'video' ? t('media.missingVideo') : t('media.missingImage'));
     const response = await fetch(localUrl);
-    if (!response.ok) throw new Error(t('s_1mkhjfu'));
+    if (!response.ok) throw new Error(t('media.unreadableFile'));
     const bytes = new Uint8Array(await response.arrayBuffer());
     const header = response.headers.get('content-type') || '';
     const contentType = header.split(';')[0]?.trim() || (kind === 'video' ? 'video/mp4' : 'image/jpeg');
     const saved = await api.media.upload(bytes, contentType, kind);
     const url = String(saved.url || '');
-    if (!url) throw new Error(t('s_10m3pm3'));
+    if (!url) throw new Error(t('media.missingUploadUrl'));
     discard();
     return url;
   } catch (error) {

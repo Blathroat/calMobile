@@ -49,7 +49,7 @@ const isOwn = computed(() => {
 const identityLine = computed(() => {
   const code = String(profile.value?.roleCode || '');
   const tagged = code === 'exhibitor' || code === 'admin';
-  const own = isOwn.value ? t('s_14nrrfg') : '';
+  const own = isOwn.value ? t('profile.public.ownPage') : '';
   if (tagged) return own;
   const role = String(profile.value?.role || '');
   if (own && role) return `${role} · ${own}`;
@@ -64,18 +64,18 @@ const canHostMeetings = computed(() => {
 const canRequestMeeting = computed(() => found.value && canHostMeetings.value && !isOwn.value);
 const meetingsOpen = computed(() => profile.value?.meetingsOpen === true);
 const canManageMeetings = computed(() => adminView.value && canHostMeetings.value);
-const closedMeetingLabel = t('s_7q6wmd');
-const requestMeetingLabel = t('s_h1cjf4');
-const manageExhibitionsLabel = t('s_1tkl9jl');
-const manageMeetingsLabel = t('s_1lrlx8m');
+const closedMeetingLabel = t('meeting.apply.notAccepting');
+const requestMeetingLabel = t('profile.public.requestMeeting');
+const manageExhibitionsLabel = t('admin.users.manageExhibitions');
+const manageMeetingsLabel = t('admin.users.manageMeetings');
 const visibilityLabel = computed(() => {
-  if (adminView.value) return t('s_iq65l2');
-  return showRegistrations.value ? t('s_q3pv0x') : t('s_ex547b');
+  if (adminView.value) return t('profile.public.statusAdmin');
+  return showRegistrations.value ? t('profile.public.statusPublic') : t('profile.public.statusPartial');
 });
 
 const COPY = {
   /** 展商主页的主区块：这个人自己开办的展会（普通用户没有，整块不渲染）。 */
-  hostedTitle: t('s_pur5qm'),
+  hostedTitle: t('profile.public.hostedExhibitions'),
 };
 
 /** 报名人数的量词放在这里，模板里不出现中文。 */
@@ -99,7 +99,7 @@ function load(): void {
 function requestMeeting(): void {
   if (!meetingsOpen.value) return;
   if (!session.can('register')) {
-    toast(t('s_1tanmo5'), 'error');
+    toast(t('exhibition.detail.registerRestricted'), 'error');
     return;
   }
   const id = String(profile.value?.id || '');
@@ -125,8 +125,8 @@ onMounted(load);
 <template>
   <!-- 管理视角：管理员看得到全部已参加展会，页面明确说明，避免误解为公开范围。 -->
   <div v-if="adminView" class="notice" data-tone="accent">
-    <strong>{{ t('s_1tdesxa') }}</strong>
-    <span>{{ t('s_10tql41') }}</span>
+    <strong>{{ t('profile.public.adminView') }}</strong>
+    <span>{{ t('profile.public.adminNotice') }}</span>
   </div>
 
   <!-- 已有资料时刷新失败：旧资料留在屏幕上，错误只作为附加说明。 -->
@@ -138,18 +138,18 @@ onMounted(load);
   <StateBlock
     v-else-if="!profile"
     tone="error"
-    :title="t('s_kvpltc')"
+    :title="t('common.loadFailed')"
     :description="query.error.value?.message"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
   <!-- 用户可能已被停用或删除：说清原因并给出唯一出口，不留可点的操作。 -->
   <StateBlock
     v-else-if="!found"
     icon="user"
-    :title="t('s_8wvztz')"
-    :description="String(profile.error || t('s_jvqxyf'))"
-    :action-label="t('s_17zyr1e')"
+    :title="t('meeting.apply.noPublicProfile')"
+    :description="String(profile.error || t('profile.public.unavailable'))"
+    :action-label="t('exhibition.detail.backHome')"
     @action="router.push('/home')"
   />
   <template v-else>
@@ -163,21 +163,21 @@ onMounted(load);
           </span>
           <!-- 分隔用的「 · 」留在模板里而不放进文案资源：Android 的 string 资源会裁掉首尾空白。 -->
           <span v-if="identityLine" class="row-meta">{{ identityLine }}</span>
-          <span class="row-meta">{{ profile.bio || t('s_1aifth0') }}</span>
+          <span class="row-meta">{{ profile.bio || t('profile.public.bioEmpty') }}</span>
         </span>
         <StatusTag :text="visibilityLabel" :tone="adminView || showRegistrations ? 'ok' : 'muted'" />
       </div>
     </div>
 
     <div class="card">
-      <span class="section-label">{{ t('s_wkyvc2') }}</span>
+      <span class="section-label">{{ t('profile.public.details') }}</span>
       <div class="row" data-between="true">
-        <span class="row-meta">{{ t('s_11ftk7j') }}</span>
-        <span class="strong truncate">{{ profile.region || t('s_c907jt') }}</span>
+        <span class="row-meta">{{ t('settings.profile.region') }}</span>
+        <span class="strong truncate">{{ profile.region || t('profile.public.regionUndisclosed') }}</span>
       </div>
       <div class="row" data-between="true">
-        <span class="row-meta">{{ t('s_1hnvqec') }}</span>
-        <span class="strong truncate">{{ profile.socialMedia || t('s_lltmb4') }}</span>
+        <span class="row-meta">{{ t('settings.profile.social') }}</span>
+        <span class="strong truncate">{{ profile.socialMedia || t('profile.public.socialHidden') }}</span>
       </div>
     </div>
 
@@ -229,7 +229,7 @@ onMounted(load);
 
     <div class="card">
       <div class="row" data-between="true">
-        <span class="section-label">{{ t('s_6osh3w') }}</span>
+        <span class="section-label">{{ t('profile.public.attendedExhibitions') }}</span>
         <span class="pill">{{ registrations.length }} 条</span>
       </div>
       <div v-if="registrations.length > 0" class="list" data-gap="sm">
@@ -242,7 +242,7 @@ onMounted(load);
           <StatusTag :text="String(record.statusLabel || '')" />
         </div>
       </div>
-      <p v-else class="row-meta">{{ showRegistrations ? t('s_8kqs1o') : t('s_g4uu62') }}</p>
+      <p v-else class="row-meta">{{ showRegistrations ? t('profile.public.noRegistrations') : t('profile.public.registrationsHidden') }}</p>
     </div>
   </template>
 </template>

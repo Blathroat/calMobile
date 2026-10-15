@@ -42,7 +42,7 @@
 
 报名站是第二份构建：`web/join.html` 经 `web/vite.join.config.ts` 输出到 `web/dist-join`，由后端托管，不进 APK。`VITE_SURFACE=join` 只由这份配置注入，不写进 `web/.env`。是否托管见 [`server/README.md`](../server/README.md) 的模式表。
 
-应用用 hash 路由，接口和媒体地址是 `http://127.0.0.1:3000`。报名站用 history 路由，接口走相对的 `/api/v1`，媒体走相对的 `/media`。报名站不预取月历、展会列表、资料和管理数据。应用文案由原生注入。报名站构建时把同一份 `strings_frontend.xml` 写进页面。
+应用用 hash 路由，接口和媒体地址是 `http://127.0.0.1:3000`。报名站用 history 路由，接口走相对的 `/api/v1`，媒体走相对的 `/media`。报名站不预取月历、展会列表、资料和管理数据。界面文案在 `web/src/i18n/strings.ts`，两份构建各自打包。
 
 路径以报名站路由和 `web/src/app/surface.ts` 为准。声明顺序就是匹配顺序，更具体的路径写在前面。
 
@@ -76,6 +76,4 @@
 
 ## 文案
 
-用户可见文案写入 `app/src/main/res/values/strings_frontend.xml`，前端用 `t('key')` 读取。源码变更后的命令见 [`operations.md`](operations.md)。
-
-`extract-strings.js` 只替换 `.vue` 的 `<script>` 段与 `.ts` 里的普通字符串字面量。模板里的中文写成 `:placeholder="t('key')"` 这种绑定。脚本跳过测试文件与格式化常量模块。检查脚本对照源码、资源和 `FrontendStrings.NAMES`。
+界面文案在 `web/src/i18n/strings.ts`，按界面分区分层。前端用 `t('auth.login.title')` 这种点分路径读取。模板里的中文写成 `:placeholder="t('exhibition.form.venuePlaceholder')"` 这种绑定。周几、年月这类格式化常量留在 `web/src/services/format.ts`，不进这张表。邮件正文在后端，不进这张表。

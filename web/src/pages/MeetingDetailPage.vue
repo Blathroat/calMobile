@@ -43,22 +43,22 @@ const allowCancel = computed(() => meeting.value?.allowCancel === true);
 const canCancel = computed(() => pending.value || (approved.value && allowCancel.value));
 
 const COPY = {
-  missingTitle: t('s_ayrmp1'),
-  missingHint: t('s_1l0pgdi'),
-  backToList: t('s_qdioah'),
-  answers: t('s_vrp4t3'),
-  emptyAnswers: t('s_jsf2l3'),
-  status: t('s_c6rjk'),
-  cancel: t('s_f6wghx'),
-  cancelTitle: t('s_24n9uu'),
-  confirm: t('s_zfeh7n'),
-  pendingHint: t('s_e5loml'),
-  approvedHint: t('s_vj0ed7'),
-  approvedLocked: t('s_1d35a7g'),
-  rejectedHint: t('s_1glfkb6'),
-  cancelledHint: t('s_r6lbmi'),
-  cancelFailed: t('s_qqaurb'),
-  cancelDone: t('s_n7nxjq'),
+  missingTitle: t('meeting.detail.privateMeetingMissing'),
+  missingHint: t('meeting.detail.meetingMaybeDeleted'),
+  backToList: t('meeting.detail.backToMyActivities'),
+  answers: t('exhibition.detail.registrationInfo'),
+  emptyAnswers: t('meeting.detail.noOtherContent'),
+  status: t('exhibition.detail.currentStatus'),
+  cancel: t('meeting.detail.cancelMeeting'),
+  cancelTitle: t('meeting.detail.cancelThisMeeting'),
+  confirm: t('exhibition.detail.confirmCancel'),
+  pendingHint: t('meeting.detail.hostReviewPending'),
+  approvedHint: t('meeting.detail.hostApproved'),
+  approvedLocked: t('meeting.detail.approvedMeetingLocked'),
+  rejectedHint: t('meeting.detail.hostRejected'),
+  cancelledHint: t('meeting.detail.meetingAlreadyCancelled'),
+  cancelFailed: t('exhibition.detail.cancelFailed'),
+  cancelDone: t('meeting.detail.meetingCancelDone'),
 };
 
 function statusHint(): string {
@@ -109,9 +109,9 @@ function askCancel(): void {
   <StateBlock
     v-else-if="query.error.value && !query.data.value"
     tone="error"
-    :title="t('s_kvpltc')"
+    :title="t('common.loadFailed')"
     :description="query.error.value.message"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
   <StateBlock
@@ -136,7 +136,7 @@ function askCancel(): void {
       <span class="section-label">{{ COPY.answers }}</span>
       <div v-if="answers.length > 0" class="stack" data-gap="sm">
         <div v-for="(line, index) in answers" :key="`${line.label}-${index}`" class="row" data-between="true">
-          <span class="row-meta">{{ line.label || t('s_otl7kf') }}</span>
+          <span class="row-meta">{{ line.label || t('exhibition.detail.additionalInfo') }}</span>
           <span class="strong">{{ line.value || '—' }}</span>
         </div>
       </div>

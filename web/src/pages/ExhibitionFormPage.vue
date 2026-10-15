@@ -37,7 +37,7 @@ import { t } from '@/i18n';
 
 const MODES = REGISTRATION_MODES.map((value) => ({ value, label: value }));
 /** 分类下拉的占位项：清单由管理员维护，这里只提示「还没选」。 */
-const categoryPlaceholder = t('s_ph3tpb');
+const categoryPlaceholder = t('exhibition.form.chooseCategory');
 
 const route = useRoute();
 const router = useRouter();
@@ -91,25 +91,25 @@ const invalidField = ref('');
 /** 允许的图片后缀：管理员在「管理-设置」里配置，缺省时给一句常见格式。 */
 const formatHint = computed(() => {
   const list = allowedFormats('image');
-  return list.length > 0 ? list.map((item) => `.${item}`).join('/') : t('s_1qnyx3k');
+  return list.length > 0 ? list.map((item) => `.${item}`).join('/') : t('exhibition.form.commonImageFormats');
 });
 
 /** 简介预览：Markdown 先渲染再抽纯文本，摘要与详情页看到的一致。 */
 const descriptionSummary = computed(() => {
-  if (!form.description) return t('s_12ibypn');
-  return plainText(markdownToHtml(form.description), 70) || t('s_1fpy22o');
+  if (!form.description) return t('exhibition.form.emptyDescription');
+  return plainText(markdownToHtml(form.description), 70) || t('exhibition.form.markdownDescriptionSet');
 });
 
-const qrHint = computed(() => (form.qrEnabled ? t('s_mu5yl5') : t('s_3xcdlm')));
-const allowCancelLabel = t('s_7dpqcv');
-const allowCancelHint = t('s_1h0j3w0');
+const qrHint = computed(() => (form.qrEnabled ? t('exhibition.form.checkInQrOn') : t('exhibition.form.checkInQrOff')));
+const allowCancelLabel = t('exhibition.form.allowCancel');
+const allowCancelHint = t('exhibition.form.approvedCancelLocked');
 
 /** 媒体限制说明：数量与大小上限都来自「管理-设置」。 */
 const mediaHint = computed(() => {
   const imageCount = Number(bootstrap.media.imageCount) || 8;
   const imageSize = Number(bootstrap.media.imageSizeMb) || 10;
   return `图片 ${imageCount} 张 / 单张 ${imageSize} MB，`
-    + `视频 ${uploadCountLimit('video')} 个 / 单个不超过 ${uploadSizeLimitMb('video')} MB；${t('s_vkgi23')}`;
+    + `视频 ${uploadCountLimit('video')} 个 / 单个不超过 ${uploadSizeLimitMb('video')} MB；${t('exhibition.editor.mediaUsesShortUrl')}`;
 });
 
 // ── 校验 ─────────────────────────────────────────────────────────
@@ -120,26 +120,26 @@ const mediaHint = computed(() => {
  */
 function fieldChecks(): Array<[string, () => string]> {
   return [
-    ['title', () => check(form.title, { label: t('s_1co82cb'), required: true, max: limit('exhibitionTitle', 60) })],
-    ['venue', () => check(form.venue, { label: t('s_1tlfy5l'), required: true, max: limit('exhibitionVenue', 60) })],
+    ['title', () => check(form.title, { label: t('admin.limits.exhibitionName'), required: true, max: limit('exhibitionTitle', 60) })],
+    ['venue', () => check(form.venue, { label: t('admin.limits.exhibitionVenue'), required: true, max: limit('exhibitionVenue', 60) })],
     ['date', () => check(form.date, {
-      label: t('s_s2nfay'), required: true, pattern: PATTERNS.date, patternMessage: t('s_1appv4n'),
+      label: t('exhibition.form.openDate'), required: true, pattern: PATTERNS.date, patternMessage: t('exhibition.form.openDateRequired'),
     })],
     ['time', () => check(form.time, {
-      label: t('s_kgtsw4'), max: 20, pattern: PATTERNS.timeRange, patternMessage: t('s_1q49p4s'),
+      label: t('exhibition.form.openTime'), max: 20, pattern: PATTERNS.timeRange, patternMessage: t('exhibition.form.openTimeFormat'),
     })],
     ['registrationEnd', () => check(form.registrationEnd, {
-      label: t('s_cbxrmr'),
+      label: t('exhibition.form.registrationEndDate'),
       custom: () => (form.registrationStart && form.registrationEnd && form.registrationEnd < form.registrationStart
-        ? t('s_1gcmqh3') : ''),
+        ? t('exhibition.form.registrationEndBeforeStart') : ''),
     })],
     ['category', () => check(form.category, {
-      label: t('s_9xu72h'), max: limit('category', 20), pattern: PATTERNS.category, patternMessage: t('s_ariomv'),
+      label: t('admin.limits.category'), max: limit('category', 20), pattern: PATTERNS.category, patternMessage: t('exhibition.form.categoryCharacters'),
     })],
     ['registrationStart', () => check(form.registrationStart, {
-      label: t('s_k1e25y'),
+      label: t('exhibition.form.registrationStartDate'),
       custom: () => (form.registrationStart && form.date && form.registrationStart > form.date
-        ? t('s_h8z5hw') : ''),
+        ? t('exhibition.form.registrationStartTooLate') : ''),
     })],
   ];
 }
@@ -279,11 +279,11 @@ async function pickCover(): Promise<void> {
   try {
     const stored = await device.importMedia('image');
     if (!stored?.url) {
-      toast(t('s_1dc9o49'), 'error');
+      toast(t('admin.media.unreadableImage'), 'error');
       return;
     }
     form.imageUri = await publishImportedMedia('image', stored);
-    toast(stored.compressed ? t('s_1bbs6qg') : t('s_1ckoagi'), 'success');
+    toast(stored.compressed ? t('exhibition.form.coverCompressed') : t('exhibition.form.coverUploaded'), 'success');
   } catch (reason) {
     // 用户在系统选择器点了取消：按稳定错误码判断，不匹配文案。
     if (isCancelled(reason)) return;
@@ -315,10 +315,10 @@ async function saveStatusOnly(): Promise<void> {
   try {
     const saved = await api.exhibitions.save(buildPayload());
     if (saved?.ok !== true) {
-      toast(String(saved?.error || t('s_1n4563g')), 'error');
+      toast(String(saved?.error || t('exhibition.form.modeSaveFailed')), 'error');
       return;
     }
-    toast(t('s_i0as17'), 'success');
+    toast(t('exhibition.form.modeUpdated'), 'success');
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
   }
@@ -336,16 +336,16 @@ function editDescription(): void {
 
 function askDelete(): void {
   confirmSheet({
-    title: t('s_1u7mlaq'),
-    message: `删除「${form.title || t('s_1yjopwv')}」后，展会信息与报名收集项都会移除，且无法恢复。`,
-    confirmLabel: t('s_1t2vi4h'),
+    title: t('exhibition.form.deleteExhibition'),
+    message: `删除「${form.title || t('exhibition.form.thisExhibition')}」后，展会信息与报名收集项都会移除，且无法恢复。`,
+    confirmLabel: t('common.delete'),
     tone: 'danger',
     onConfirm: async () => {
       try {
         // 写接口统一返回 { ok, error }，只判断响应本身会把失败当成成功。
         const result = await api.exhibitions.remove(exhibitionId.value);
         const ok = result?.ok === true;
-        toast(String(ok ? t('s_1jj834o') : (result?.error || t('s_1ijrr73'))), ok ? 'success' : 'error');
+        toast(String(ok ? t('exhibition.form.deleted') : (result?.error || t('exhibition.form.deleteFailed'))), ok ? 'success' : 'error');
         if (ok) await router.replace('/exhibitor');
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -395,7 +395,7 @@ async function submit(): Promise<void> {
   try {
     const saved = await api.exhibitions.save(buildPayload());
     if (saved?.ok !== true) {
-      formError.value = String(saved?.error || t('s_1q9u8le'));
+      formError.value = String(saved?.error || t('exhibition.form.saveFailed'));
       toast(formError.value, 'error');
       return;
     }
@@ -403,7 +403,7 @@ async function submit(): Promise<void> {
     createdId.value = String(exhibition.id ?? createdId.value);
     form.description = String(exhibition.description ?? form.description);
     form.imageUri = String(exhibition.imageUri ?? form.imageUri);
-    toast(isCreate.value ? t('s_opaqad') : t('s_1sfkhdl'), 'success');
+    toast(isCreate.value ? t('exhibition.form.created') : t('exhibition.form.saved'), 'success');
     clearExhibitionDraft();
     // 新建成功后换成编辑地址：再点保存就是更新，删除按钮也出现。
     if (isCreate.value) await router.replace(`/exhibition-form/${encodeURIComponent(createdId.value)}`);
@@ -437,9 +437,9 @@ function normalizeOptions(options: unknown): string[] {
     v-if="limited"
     icon="briefcase"
     tone="error"
-    :title="isCreate ? t('s_19wazv8') : t('s_1wwetl9')"
-    :description="t('s_1yv1vu0')"
-    :action-label="t('s_dn4ida')"
+    :title="isCreate ? t('exhibition.form.publishBlocked') : t('exhibition.form.editBlocked')"
+    :description="t('exhibition.form.restrictedAccount')"
+    :action-label="t('exhibition.form.backToExhibitor')"
     @action="router.replace('/exhibitor')"
   />
 
@@ -448,71 +448,71 @@ function normalizeOptions(options: unknown): string[] {
   <StateBlock
     v-else-if="loadFailed"
     tone="error"
-    :title="t('s_kvpltc')"
+    :title="t('common.loadFailed')"
     :description="detail.error.value?.message"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
 
   <StateBlock
     v-else-if="notFound"
     tone="error"
-    :title="t('s_1vim1qp')"
-    :description="String(detail.data.value?.error || t('s_1qfu0ss'))"
-    :action-label="t('s_dn4ida')"
+    :title="t('exhibition.detail.notFound')"
+    :description="String(detail.data.value?.error || t('exhibition.form.loadInfoFailed'))"
+    :action-label="t('exhibition.form.backToExhibitor')"
     @action="router.replace('/exhibitor')"
   />
 
   <template v-else-if="built">
     <div class="form">
       <div class="field" :data-invalid="isInvalid('title') ? 'true' : 'false'">
-        <label for="form-title">{{ t('s_1co82cb') }}<span class="required" aria-hidden="true"> *</span></label>
+        <label for="form-title">{{ t('admin.limits.exhibitionName') }}<span class="required" aria-hidden="true"> *</span></label>
         <input
           id="form-title"
           v-model="form.title"
           class="input"
           type="text"
-          :placeholder="t('s_giboid')"
+          :placeholder="t('exhibition.form.titlePlaceholder')"
           :maxlength="limit('exhibitionTitle', 60)"
         />
       </div>
       <div class="field" :data-invalid="isInvalid('venue') ? 'true' : 'false'">
-        <label for="form-venue">{{ t('s_25fwki') }}<span class="required" aria-hidden="true"> *</span></label>
+        <label for="form-venue">{{ t('admin.exhibitions.venue') }}<span class="required" aria-hidden="true"> *</span></label>
         <input
           id="form-venue"
           v-model="form.venue"
           class="input"
           type="text"
-          :placeholder="t('s_vih0tf')"
+          :placeholder="t('exhibition.form.venuePlaceholder')"
           :maxlength="limit('exhibitionVenue', 60)"
         />
       </div>
       <div class="grid-cols-2">
         <div class="field" :data-invalid="isInvalid('date') ? 'true' : 'false'">
-          <label for="form-date">{{ t('s_s2nfay') }}<span class="required" aria-hidden="true"> *</span></label>
+          <label for="form-date">{{ t('exhibition.form.openDate') }}<span class="required" aria-hidden="true"> *</span></label>
           <input id="form-date" v-model="form.date" class="input" type="date" />
           <p v-if="isInvalid('date')" class="field-error" role="alert">{{ formError }}</p>
         </div>
         <div class="field" :data-invalid="isInvalid('time') ? 'true' : 'false'">
-          <label for="form-time">{{ t('s_kgtsw4') }}</label>
+          <label for="form-time">{{ t('exhibition.form.openTime') }}</label>
           <input id="form-time" v-model="form.time" class="input" type="text" placeholder="09:00-17:00" maxlength="20" />
           <p v-if="isInvalid('time')" class="field-error" role="alert">{{ formError }}</p>
         </div>
       </div>
       <div class="grid-cols-2">
         <div class="field" :data-invalid="isInvalid('registrationStart') ? 'true' : 'false'">
-          <label for="form-reg-start">{{ t('s_4o8ie2') }}</label>
+          <label for="form-reg-start">{{ t('exhibition.form.registrationOpens') }}</label>
           <input id="form-reg-start" v-model="form.registrationStart" class="input" type="date" />
           <p v-if="isInvalid('registrationStart')" class="field-error" role="alert">{{ formError }}</p>
         </div>
         <div class="field" :data-invalid="isInvalid('registrationEnd') ? 'true' : 'false'">
-          <label for="form-reg-end">{{ t('s_60i0xr') }}</label>
+          <label for="form-reg-end">{{ t('exhibition.form.registrationCloses') }}</label>
           <input id="form-reg-end" v-model="form.registrationEnd" class="input" type="date" />
           <p v-if="isInvalid('registrationEnd')" class="field-error" role="alert">{{ formError }}</p>
         </div>
       </div>
       <div class="field" :data-invalid="isInvalid('category') ? 'true' : 'false'">
-        <label for="form-category">{{ t('s_9xu72h') }}</label>
+        <label for="form-category">{{ t('admin.limits.category') }}</label>
         <!-- 分类是管理员在「管理后台-设置」里维护的清单，展商这里只能从清单里选 -->
         <select id="form-category" v-model="form.category" class="select">
           <option value="">{{ categoryPlaceholder }}</option>
@@ -527,16 +527,16 @@ function normalizeOptions(options: unknown): string[] {
     <!-- 封面：1080×1920 竖版海报，可上传 / 更换 / 移除 -->
     <div class="card">
       <div class="row" data-between="true">
-        <span class="section-label">{{ t('s_63jsvx') }}</span>
+        <span class="section-label">{{ t('exhibition.form.cover') }}</span>
         <span class="pill">1080 × 1920</span>
       </div>
       <div v-if="form.imageUri" class="hero ph-img hero-compact">
-        <img :src="form.imageUri" :alt="t('s_63jsvx')" />
+        <img :src="form.imageUri" :alt="t('exhibition.form.cover')" />
       </div>
       <div v-else class="hero ph-img hero-compact" aria-hidden="true" />
       <div class="row" data-gap="md">
         <button class="cta ghost" data-size="small" type="button" style="flex: 1 1 0" @click="pickCover">
-          {{ form.imageUri ? t('s_xocxb0') : t('s_6piprk') }}
+          {{ form.imageUri ? t('admin.media.changeCover') : t('admin.media.uploadCover') }}
         </button>
         <button
           v-if="form.imageUri"
@@ -546,17 +546,17 @@ function normalizeOptions(options: unknown): string[] {
           style="flex: 1 1 0"
           @click="removeCover"
         >
-          {{ t('s_eab5ax') }}
+          {{ t('admin.media.removeCover') }}
         </button>
       </div>
     </div>
 
     <!-- 报名与简介设置：报名方式是三个互斥分段按钮，简介收在这一栏 -->
     <div class="card">
-      <span class="section-label">{{ t('s_1ylv0q2') }}</span>
+      <span class="section-label">{{ t('exhibition.form.registrationSettings') }}</span>
       <div class="field">
-        <span class="field-label">{{ t('s_1vv5l4v') }}</span>
-        <SegControl :model-value="form.status" :items="MODES" :label="t('s_1vv5l4v')" @update:model-value="changeMode" />
+        <span class="field-label">{{ t('exhibition.form.registrationMode') }}</span>
+        <SegControl :model-value="form.status" :items="MODES" :label="t('exhibition.form.registrationMode')" @update:model-value="changeMode" />
       </div>
       <hr class="divider" />
       <div class="stack" data-gap="sm">
@@ -564,7 +564,7 @@ function normalizeOptions(options: unknown): string[] {
              按钮本身就是入口，左边留标题只会让这一行更挤。 -->
         <div class="row">
           <button class="cta ghost" data-size="small" type="button" @click="editDescription">
-            {{ t('s_21ce2x') }}
+            {{ t('exhibition.form.editDescription') }}
           </button>
         </div>
         <p class="row-meta clamp-2">{{ descriptionSummary }}</p>
@@ -572,8 +572,8 @@ function normalizeOptions(options: unknown): string[] {
       <hr class="divider" />
       <div class="switch-row">
         <span class="switch-copy">
-          <strong>{{ t('s_1birmm3') }}</strong>
-          <span class="row-meta">{{ t('s_2ccwmm') }}</span>
+          <strong>{{ t('exhibition.form.enableCheckInQr') }}</strong>
+          <span class="row-meta">{{ t('exhibition.form.checkInQrExplainer') }}</span>
         </span>
         <label class="switch" for="form-qr-enabled">
           <input id="form-qr-enabled" v-model="form.qrEnabled" type="checkbox" />
@@ -597,7 +597,7 @@ function normalizeOptions(options: unknown): string[] {
     <!-- 报名收集项：与私人会议设置共用同一张卡，样式保持一致 -->
     <CollectFieldsCard
       :fields="fields"
-      :label="t('s_s8p5nm')"
+      :label="t('exhibition.form.collectFields')"
       :hint="mediaHint"
       :title-max="limit('fieldTitle', 30)"
       :radio-max="limit('radioOption', 60)"
@@ -606,9 +606,9 @@ function normalizeOptions(options: unknown): string[] {
 
     <!-- 删除放在内容最下，保存仍固定在页脚。新建还没有展会，按钮不可点。 -->
     <div class="card">
-      <span class="section-label">{{ t('s_qtyy0e') }}</span>
+      <span class="section-label">{{ t('exhibition.form.dangerZone') }}</span>
       <button class="cta danger" type="button" :disabled="isCreate" @click="askDelete">
-        {{ isCreate ? t('s_mj5xsg') : t('s_1u7mlaq') }}
+        {{ isCreate ? t('exhibition.form.deleteAfterSave') : t('exhibition.form.deleteExhibition') }}
       </button>
     </div>
   </template>
@@ -618,9 +618,9 @@ function normalizeOptions(options: unknown): string[] {
     <div class="page-foot">
       <div class="stack" data-gap="sm">
         <button class="cta" type="button" :disabled="saving" :data-loading="saving ? 'true' : 'false'" @click="submit">
-          {{ isCreate ? t('s_gya40f') : t('s_10q6dxb') }}
+          {{ isCreate ? t('exhibition.form.createExhibition') : t('exhibition.form.saveExhibition') }}
         </button>
-        <p class="field-hint text-center">{{ t('s_167n8sn') }}</p>
+        <p class="field-hint text-center">{{ t('exhibition.form.confirmOnDetail') }}</p>
       </div>
     </div>
   </Teleport>

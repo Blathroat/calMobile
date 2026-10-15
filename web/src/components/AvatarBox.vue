@@ -9,14 +9,14 @@ const props = withDefaults(defineProps<{ src?: string; name?: string; large?: bo
   large: false,
 });
 
-const initial = (): string => (props.name || t('s_cmla8n')).slice(0, 1);
+const initial = (): string => (props.name || t('profile.avatarInitial')).slice(0, 1);
 </script>
 
 <template>
   <span
     class="avatar"
     :class="{ 'has-image': Boolean(props.src), 'avatar-lg': props.large }"
-    :aria-label="`${props.name || t('s_1in002o')}的头像`"
+    :aria-label="`${props.name || t('admin.users.title')}的头像`"
   >
     <img v-if="props.src" :src="resolveMediaUrl(props.src)" alt="" />
     <span v-else aria-hidden="true">{{ initial() }}</span>

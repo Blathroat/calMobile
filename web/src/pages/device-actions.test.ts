@@ -27,13 +27,6 @@ let app: App | undefined;
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="app-foot"></div><div id="app-top-actions"></div><div id="device-test"></div>';
-  window.CalMobileStrings = {
-    s_dvh8t7: '移出日历',
-    s_1prtpth: '加入日历',
-    s_1splm64: '开启通知',
-    s_j5c9oy: '通知已开启',
-    s_1ya7561: '未获得通知权限',
-  };
   vi.clearAllMocks();
 });
 
@@ -85,12 +78,12 @@ describe('页面与 Android 设备动作的契约', () => {
     };
     await mountPage(UserSettingsPage, '/settings');
     const findButton = () => [...document.querySelectorAll('button')]
-      .find((button) => button.textContent?.trim() === '开启通知');
+      .find((button) => button.textContent?.trim() === '开启系统通知权限');
     await vi.waitFor(() => expect(findButton()).toBeDefined());
     findButton()!.click();
     await vi.waitFor(() => {
       expect(useCapabilitiesStore().values.notifications).toBe(granted);
-      expect(toast).toHaveBeenCalledWith(granted ? '通知已开启' : '未获得通知权限', granted ? 'success' : 'error');
+      expect(toast).toHaveBeenCalledWith(granted ? '已开启通知权限' : '未获得通知权限', granted ? 'success' : 'error');
       expect(Boolean(findButton())).toBe(!granted);
     });
   });

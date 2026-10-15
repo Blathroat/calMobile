@@ -27,28 +27,28 @@ const busyId = ref('');
 const allBusy = ref(false);
 const notice = ref('');
 const copy = {
-  deviceRevocationHint: t('s_1xwid0y'),
-  emptyTitle: t('s_6d2k5f'),
-  emptyDescription: t('s_f346xo'),
-  currentDevice: t('s_4zkefu'),
-  otherDevice: t('s_zlneve'),
-  lastActive: t('s_h25ssx'),
-  firstSeen: t('s_1cd4e3o'),
-  activeSessions: t('s_635d3n'),
-  revokeThisDevice: t('s_pk468e'),
-  unnamedDevice: t('s_6jj3gk'),
-  unknownDate: t('s_1lpnuh4'),
-  processing: t('s_1h3kna'),
-  revokeDeviceTitle: t('s_3r6q30'),
-  confirmRevoke: t('s_1o7jyw3'),
-  confirmSuffix: t('s_qcmnqj'),
-  revokedNotice: t('s_14rkh56'),
-  revokeAllTitle: t('s_mfq1av'),
-  revokeAllMessage: t('s_xdjet7'),
-  revokeAllButton: t('s_mfq1av'),
+  deviceRevocationHint: t('security.devices.accessEnds'),
+  emptyTitle: t('security.devices.noDevices'),
+  emptyDescription: t('security.devices.noSessions'),
+  currentDevice: t('security.devices.currentDevice'),
+  otherDevice: t('security.devices.otherDevice'),
+  lastActive: t('security.devices.recentActivity'),
+  firstSeen: t('security.devices.firstLogin'),
+  activeSessions: t('security.devices.activeSessions'),
+  revokeThisDevice: t('security.devices.signOutThis'),
+  unnamedDevice: t('security.devices.unnamedDevice'),
+  unknownDate: t('admin.users.unknown'),
+  processing: t('security.devices.processing'),
+  revokeDeviceTitle: t('security.devices.signOut'),
+  confirmRevoke: t('security.devices.confirmSignOut'),
+  confirmSuffix: t('security.devices.confirmSuffix'),
+  revokedNotice: t('security.devices.signedOut'),
+  revokeAllTitle: t('security.devices.signOutAll'),
+  revokeAllMessage: t('security.devices.endAllSessions'),
+  revokeAllButton: t('security.devices.signOutAll'),
 };
 
-const errorText = (reason: unknown): string => reason instanceof Error ? reason.message : t('s_osck6n');
+const errorText = (reason: unknown): string => reason instanceof Error ? reason.message : t('auth.register.failed');
 function dateLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return copy.unknownDate;
@@ -90,7 +90,7 @@ function revokeDevice(device: DeviceSession): void {
       busyId.value = device.id;
       try {
         const result = await api.security.revokeSession(device.id);
-        if (result.ok === false) throw new Error(String(result.error || t('s_osck6n')));
+        if (result.ok === false) throw new Error(String(result.error || t('auth.register.failed')));
         if (device.current) signOutLocally();
         else {
           notice.value = copy.revokedNotice;
@@ -115,7 +115,7 @@ function revokeAll(): void {
       allBusy.value = true;
       try {
         const result = await api.security.revokeAllSessions();
-        if (result.ok === false) throw new Error(String(result.error || t('s_osck6n')));
+        if (result.ok === false) throw new Error(String(result.error || t('auth.register.failed')));
         signOutLocally();
       } catch (reason) {
         notice.value = errorText(reason);
@@ -132,9 +132,9 @@ function revokeAll(): void {
   <StateBlock
     v-else-if="loadError"
     tone="error"
-    :title="t('s_1sz2kuw')"
+    :title="t('security.profileLoadFailed')"
     :description="loadError"
-    :action-label="t('s_lswd2v')"
+    :action-label="t('common.retry')"
     @action="load"
   />
   <template v-else>

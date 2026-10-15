@@ -4,7 +4,7 @@
  * 三种通道（`MAIL_TRANSPORT`）：
  * - `console`：把邮件全文（含验证码）打进服务端日志，**本地开发默认**，不碰网络，
  *   不开容器也能把注册全流程走完；
- * - `smtp`：真发信。开发指向 Mailpit（`pwsh -File scripts\mail.ps1 start`，
+ * - `smtp`：真发信。开发指向 Mailpit（`docker compose up -d mailpit`，
  *   SMTP 1025 / 收件箱 8025），生产指向阿里云邮件推送 / 腾讯云 SES / Resend 之类的
  *   SMTP 中继 —— 应用服务器**不自建 SMTP**（25 端口被封、没有 IP 信誉，验证码会进垃圾箱）；
  * - `memory`：仅测试用，邮件留在内存里给用例取（`services/mailer.ts` 的 `outbox()`）。
