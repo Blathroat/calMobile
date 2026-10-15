@@ -55,14 +55,17 @@ function splitChoices(value: string) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
-function validateAnswers(fields: Awaited<ReturnType<typeof loadFields>>, answers: unknown) {
+function validateAnswers(fields: Awaited<ReturnType<typeof loadFields>>, answers: unknown, textFill: number) {
   for (const field of fields) {
     const value = answerValue(answers, field.title);
     if (!value) {
       if (field.required) throw badRequest(`请填写「${field.title}」`);
       continue;
     }
-    if (field.type !== '单选' && field.type !== '多选') continue;
+    if (field.type !== '单选' && field.type !== '多选') {
+      if (textFill > 0 && value.length > textFill) throw badRequest(`「${field.title}」最多 ${textFill} 个字符`);
+      continue;
+    }
     const options = Array.isArray(field.options) ? field.options : [];
     const chosen = field.type === '多选' ? splitChoices(value) : [value];
     if (options.length > 0 && chosen.some((item) => !options.includes(item)))
@@ -105,9 +108,11 @@ app.post('/', authenticateHono, async (c) => {
     if (existing.rows.length > 0) throw badRequest(DUPLICATE_MESSAGE);
     if (exhibition.before_start) throw badRequest('报名尚未开始');
     if (exhibition.after_end) throw badRequest('报名已截止');
-    const answerMax = Number((await readLimits()).answer) || 0;
+    const bounds = await readLimits();
+    const answerMax = Number(bounds.answer) || 0;
+    const textFill = Number(bounds.textFill) || 200;
     const { visitorName, visitorType, answers } = parseSchema(registrationSchema(answerMax), body);
-    validateAnswers(await loadFields(exhibitionId), answers);
+    validateAnswers(await loadFields(exhibitionId), answers, textFill);
     const autoApproved = exhibition.status === 'optional';
     const status = autoApproved ? 'approved' : 'pending';
     const id = `reg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -132,8 +137,11 @@ app.post('/', authenticateHono, async (c) => {
 app.delete('/:id', authenticateHono, async (c) =>
   mutate(c, async () => {
     const user = requireUser({ user: userOf(c) }, '请先登录后再操作');
-    const result = await query<{ id: string; visitor_id: string | null; status: string }>(
-      'SELECT id, visitor_id, status FROM registrations WHERE id = $1',
+    const result = await query<{ id: string; visitor_id: string | null; status: string; allow_cancel: boolean }>(
+      `SELECT r.id, r.visitor_id, r.status, e.allow_cancel
+         FROM registrations r
+         JOIN exhibitions e ON e.id = r.exhibition_id
+        WHERE r.id = $1`,
       [c.req.param('id')],
     );
     const row = result.rows[0];
@@ -141,6 +149,7 @@ app.delete('/:id', authenticateHono, async (c) =>
     if (row.visitor_id !== user.userId) throw forbidden('只能撤销自己的报名');
     if (row.status === 'cancelled') throw badRequest('该报名已撤销，无需重复操作');
     if (row.status === 'attended') throw badRequest('已参加的报名不能再撤销');
+    if (row.status === 'approved' && row.allow_cancel !== true) throw badRequest('展商未允许撤销已通过的报名');
     await query(`UPDATE registrations SET status = 'cancelled', updated_at = now() WHERE id = $1`, [row.id]);
     return {};
   }),

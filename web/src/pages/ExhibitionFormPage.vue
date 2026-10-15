@@ -3,8 +3,8 @@
  * 屏幕 11 · 展会编辑（新建 / 编辑）
  * 线框：docs/newUI/remaining-ui.html #screen-exhibition-form
  *
- * 展商后台卡片上的「报名方式」「编辑简介」「删除展会」都收进本页的「报名与简介设置」栏，
- * 展商从这里统一维护展会配置，卡片只需要两个入口。新建与编辑共用同一页：
+ * 展商后台卡片上的「报名方式」「编辑简介」收进本页的「报名与简介设置」栏。
+ * 「删除展会」放在页面内容最下方。新建与编辑共用同一页：
  * 路由带 `:id` 就是编辑（先取详情），不带就是新建（空表单），保存成功后换成编辑地址。
  *
  * 表单只填一次（`built` 闸）：首屏取数回来才落模型，之后的渲染不再覆盖用户输入。
@@ -24,24 +24,17 @@ import {
 import { EXHIBITION_STATUS, REGISTRATION_MODES } from '@/services/status';
 import { device } from '@/services/device-services';
 import { loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
-import AppIcon from '@/components/AppIcon.vue';
+import CollectFieldsCard, { type CollectField } from '@/components/CollectFieldsCard.vue';
+import { firstCollectFieldError } from '@/services/collect-fields';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import SegControl from '@/components/SegControl.vue';
 import type { ExhibitionDetail, JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
-interface CollectField {
-  title: string;
-  type: string;
-  required: boolean;
-  options: string[];
-}
-
 const MODES = REGISTRATION_MODES.map((value) => ({ value, label: value }));
 /** 分类下拉的占位项：清单由管理员维护，这里只提示「还没选」。 */
 const categoryPlaceholder = t('s_ph3tpb');
-const FIELD_TYPES = ['文本', '单选', '多选'];
 
 const route = useRoute();
 const router = useRouter();
@@ -82,6 +75,7 @@ const form = reactive({
   registrationStart: '',
   registrationEnd: '',
   qrEnabled: false,
+  allowCancel: true,
 });
 const fields = ref<CollectField[]>([]);
 /** 表单只填一次：编辑页的数据到了才落模型，之后渲染不再覆盖用户输入。 */
@@ -104,6 +98,8 @@ const descriptionSummary = computed(() => {
 });
 
 const qrHint = computed(() => (form.qrEnabled ? t('s_mu5yl5') : t('s_3xcdlm')));
+const allowCancelLabel = t('s_7dpqcv');
+const allowCancelHint = t('s_1h0j3w0');
 
 /** 媒体限制说明：数量与大小上限都来自「管理-设置」。 */
 const mediaHint = computed(() => {
@@ -156,14 +152,16 @@ function failFirst(): boolean {
     toast(result.message, 'error');
     return true;
   }
-  const titleMax = limit('fieldTitle', 30);
-  for (const item of fields.value) {
-    if (item.title.trim().length > titleMax) {
-      formError.value = `收集项标题最多 ${titleMax} 个字符`;
-      invalidField.value = 'fields';
-      toast(formError.value, 'error');
-      return true;
-    }
+  const fieldMessage = firstCollectFieldError(fields.value, {
+    title: limit('fieldTitle', 30),
+    radio: limit('radioOption', 60),
+    check: limit('checkOption', 60),
+  });
+  if (fieldMessage) {
+    formError.value = fieldMessage;
+    invalidField.value = 'fields';
+    toast(formError.value, 'error');
+    return true;
   }
   formError.value = '';
   return false;
@@ -189,6 +187,7 @@ function fillFrom(item: JsonObject, data: ExhibitionDetail): void {
   form.registrationStart = String(item.registrationStart ?? '');
   form.registrationEnd = String(item.registrationEnd ?? '');
   form.qrEnabled = item.qrEnabled === true;
+  form.allowCancel = item.allowCancel !== false;
   fields.value = (data.fields ?? []).map((field) => ({
     title: String(field.title ?? ''),
     type: String(field.type ?? '文本'),
@@ -298,34 +297,6 @@ function askDelete(): void {
   });
 }
 
-// ── 报名收集项 ───────────────────────────────────────────────────
-
-function addField(): void {
-  fields.value.push({ title: '', type: '文本', required: false, options: [] });
-}
-
-function removeField(index: number): void {
-  fields.value.splice(index, 1);
-}
-
-function changeFieldType(item: CollectField, type: string): void {
-  item.type = type;
-  // 单选 / 多选至少要两条空选项，避免切过去后没有可填的格子。
-  if (type !== '文本' && item.options.length === 0) item.options = ['', ''];
-}
-
-function addOption(item: CollectField): void {
-  item.options.push('');
-}
-
-function removeOption(item: CollectField, index: number): void {
-  item.options.splice(index, 1);
-}
-
-function isChoice(item: CollectField): boolean {
-  return item.type === '单选' || item.type === '多选';
-}
-
 // ── 保存 ─────────────────────────────────────────────────────────
 
 /** 组装保存用的 payload，「保存」与「报名方式」即时写库共用同一份结构。 */
@@ -345,6 +316,7 @@ function buildPayload(): JsonObject {
     registrationStart: form.registrationStart,
     registrationEnd: form.registrationEnd,
     qrEnabled: form.qrEnabled,
+    allowCancel: form.allowCancel,
     // 空选项不下发，避免保存出无意义的选项条目。
     fields: fields.value
       .filter((item) => item.title.trim() !== '')
@@ -522,7 +494,7 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
       </div>
     </div>
 
-    <!-- 报名与简介设置：报名方式是三个互斥分段按钮，简介与删除入口都收在这一栏 -->
+    <!-- 报名与简介设置：报名方式是三个互斥分段按钮，简介收在这一栏 -->
     <div class="card">
       <span class="section-label">{{ t('s_1ylv0q2') }}</span>
       <div class="field">
@@ -560,86 +532,34 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
       </div>
       <p class="field-hint">{{ qrHint }}</p>
       <hr class="divider" />
-      <div class="stack" data-gap="sm">
-        <span class="section-label">{{ t('s_qtyy0e') }}</span>
-        <button class="cta danger" type="button" :disabled="isCreate" @click="askDelete">
-          {{ isCreate ? t('s_mj5xsg') : t('s_1u7mlaq') }}
-        </button>
+      <div class="switch-row">
+        <span class="switch-copy">
+          <strong>{{ allowCancelLabel }}</strong>
+          <span class="row-meta">{{ allowCancelHint }}</span>
+        </span>
+        <label class="switch" for="form-allow-cancel">
+          <input id="form-allow-cancel" v-model="form.allowCancel" type="checkbox" />
+          <span />
+        </label>
       </div>
     </div>
 
-    <!-- 报名收集项：决定报名页展示的字段 -->
+    <!-- 报名收集项：与私人会议设置共用同一张卡，样式保持一致 -->
+    <CollectFieldsCard
+      :fields="fields"
+      :label="t('s_s8p5nm')"
+      :hint="mediaHint"
+      :title-max="limit('fieldTitle', 30)"
+      :radio-max="limit('radioOption', 60)"
+      :check-max="limit('checkOption', 60)"
+    />
+
+    <!-- 删除放在内容最下，保存仍固定在页脚。新建还没有展会，按钮不可点。 -->
     <div class="card">
-      <div class="row" data-between="true">
-        <span class="section-label">{{ t('s_s8p5nm') }}</span>
-        <span class="pill">{{ `${fields.length} 项` }}</span>
-      </div>
-      <p class="field-hint">{{ mediaHint }}</p>
-      <div class="stack" data-gap="sm">
-        <div v-for="(item, index) in fields" :key="index" class="card" data-tone="fill">
-          <div class="row" data-between="true">
-            <strong>{{ item.title || `收集项 ${index + 1}` }}</strong>
-            <button class="icon-button" type="button" :aria-label="t('s_qa4u6r')" @click="removeField(index)">
-              <AppIcon name="trash" size="icon icon-sm" />
-            </button>
-          </div>
-          <div class="field">
-            <input
-              v-model="item.title"
-              class="input"
-              type="text"
-              :placeholder="t('s_1u3w62u')"
-              :maxlength="limit('fieldTitle', 30)"
-            />
-          </div>
-          <div class="grid-cols-2">
-            <div class="field">
-              <select
-                class="select"
-                :value="item.type"
-                :aria-label="t('s_1u3w62u')"
-                @change="changeFieldType(item, ($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="type in FIELD_TYPES" :key="type" :value="type">{{ type }}</option>
-              </select>
-            </div>
-            <div class="field">
-              <select
-                class="select"
-                :value="item.required ? '必填' : '选填'"
-                :aria-label="t('s_1u3w62u')"
-                @change="item.required = ($event.target as HTMLSelectElement).value === '必填'"
-              >
-                <option value="选填">选填</option>
-                <option value="必填">必填</option>
-              </select>
-            </div>
-          </div>
-          <template v-if="isChoice(item)">
-            <p class="field-hint">{{ item.type === '单选' ? t('s_1y8221p') : t('s_dpy0pe') }}</p>
-            <div v-for="(option, optionIndex) in item.options" :key="optionIndex" class="option-row">
-              <input
-                v-model="item.options[optionIndex]"
-                class="input"
-                type="text"
-                :placeholder="`选项 ${optionIndex + 1}`"
-              />
-              <button
-                class="icon-button option-remove"
-                type="button"
-                :aria-label="`删除选项 ${optionIndex + 1}`"
-                @click="removeOption(item, optionIndex)"
-              >
-                <AppIcon name="trash" size="icon icon-sm" />
-              </button>
-            </div>
-            <button class="cta ghost" data-size="small" type="button" @click="addOption(item)">
-              {{ t('s_1nl5fxw') }}
-            </button>
-          </template>
-        </div>
-      </div>
-      <button class="cta ghost" type="button" @click="addField">{{ t('s_1t5x3h2') }}</button>
+      <span class="section-label">{{ t('s_qtyy0e') }}</span>
+      <button class="cta danger" type="button" :disabled="isCreate" @click="askDelete">
+        {{ isCreate ? t('s_mj5xsg') : t('s_1u7mlaq') }}
+      </button>
     </div>
   </template>
 

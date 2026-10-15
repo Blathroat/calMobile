@@ -21,6 +21,9 @@ export const LIMIT_BOUNDS: Record<keyof ServerSettings['limits'], [number, numbe
   exhibitionVenue: [4, 120],
   category: [2, 60],
   fieldTitle: [2, 60],
+  textFill: [1, 1000],
+  radioOption: [1, 120],
+  checkOption: [1, 120],
   usernameMin: [2, 20],
   usernameMax: [4, 40],
   passwordMin: [4, 24],
@@ -59,6 +62,9 @@ export interface ServerPatch {
   exhibitionVenue?: unknown;
   category?: unknown;
   fieldTitle?: unknown;
+  textFill?: unknown;
+  radioOption?: unknown;
+  checkOption?: unknown;
   usernameMin?: unknown;
   usernameMax?: unknown;
   passwordMin?: unknown;
@@ -69,6 +75,7 @@ export interface ServerPatch {
   answer?: unknown;
   defaultCover?: unknown;
   maxFutureExhibitions?: unknown;
+  maxFutureMeetings?: unknown;
 }
 
 interface SettingRow {
@@ -187,6 +194,14 @@ export async function readServerSettings(): Promise<ServerSettings> {
   }
   settings.media = { ...DEFAULT_SETTINGS.media, ...settings.media };
   settings.upload = { ...DEFAULT_SETTINGS.upload, ...settings.upload };
+  // 老库存的 exhibitor 只有展会额度。新键按默认值补上，避免读出来是 undefined。
+  settings.exhibitor = { ...DEFAULT_SETTINGS.exhibitor, ...settings.exhibitor };
+  // 老库的 limits JSON 没有文本填写和选项上限。缺的键用默认值补上，避免读出来是 undefined。
+  const storedLimits = settings.limits;
+  settings.limits = {
+    ...DEFAULT_SETTINGS.limits,
+    ...(storedLimits && typeof storedLimits === 'object' ? storedLimits : {}),
+  };
   settings.theme = normalizeTheme(settings.theme);
   return settings;
 }
@@ -272,7 +287,8 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     };
   }
   // 字符数上限：逐项收敛，成对的上下限再互相约束一次。
-  const limits = { ...next.limits };
+  // 当前设置可能来自加键之前的库，先用默认值补齐再按提交覆盖。
+  const limits = { ...DEFAULT_SETTINGS.limits, ...next.limits };
   for (const [key, bounds] of Object.entries(LIMIT_BOUNDS) as [keyof ServerSettings['limits'], [number, number]][]) {
     if (Object.prototype.hasOwnProperty.call(source, key)) {
       limits[key] = clampInt(source[key], limits[key], bounds);
@@ -302,6 +318,12 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     next.exhibitor = {
       ...next.exhibitor,
       maxFutureExhibitions: clampInt(source.maxFutureExhibitions, next.exhibitor.maxFutureExhibitions, [0, 100]),
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'maxFutureMeetings')) {
+    next.exhibitor = {
+      ...next.exhibitor,
+      maxFutureMeetings: clampInt(source.maxFutureMeetings, next.exhibitor.maxFutureMeetings, [0, 100]),
     };
   }
 

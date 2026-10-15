@@ -3,7 +3,7 @@
  * 屏幕 10 · 展商后台
  * 线框：docs/newUI/remaining-ui.html #screen-exhibitor-backend
  *
- * 卡片上保留「查看报名」「编辑展会」，并给出「复制报名链接」。报名方式、编辑简介与删除展会
+ * 卡片上「查看报名」「编辑展会」「复制链接」排在同一行。点卡片主体进入展会详情。
  * 都属于展会的配置，统一收进「编辑展会」的二级界面，卡片保持清爽。
  * 顶部提供「核销报名码」，展商在现场扫描用户报名详情里的二维码即可完成核销。
  *
@@ -11,8 +11,8 @@
  * 后端对这些写操作一律 403。入口提前置灰并说明原因，而不是让展商填完表单才吃 403；
  * 受限的展商照样能进后台、查看与审核已有的报名，因此后台本身不封。
  */
-import { computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
 import { useHint } from '@/composables/useHint';
@@ -25,6 +25,8 @@ import { registrationLink } from '@/services/registration-link';
 import { statusTone } from '@/services/status';
 import AppIcon from '@/components/AppIcon.vue';
 import HintNote from '@/components/HintNote.vue';
+import SegControl from '@/components/SegControl.vue';
+import MeetingInbox from '@/components/MeetingInbox.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MediaBox from '@/components/MediaBox.vue';
@@ -33,8 +35,33 @@ import type { Exhibition } from '@/api/types';
 import { t } from '@/i18n';
 
 const router = useRouter();
+const route = useRoute();
 const bootstrap = useBootstrapStore();
 const session = useSessionStore();
+
+/** 分区 id 写进 `?tab=`，从设置页返回时仍停在私人会议。 */
+const TABS = [
+  { value: 'exhibitions', label: t('s_11cd4ta') },
+  { value: 'meetings', label: t('s_zmypci') },
+];
+const tabIds = new Set(TABS.map((item) => item.value));
+const tab = ref(tabFromQuery());
+const partitionLabel = t('s_5yu22q');
+
+function tabFromQuery(): string {
+  const value = String(route.query.tab ?? '');
+  return tabIds.has(value) ? value : 'exhibitions';
+}
+
+function changeTab(value: string): void {
+  if (value === tab.value) return;
+  void router.replace({ query: { ...route.query, tab: value } });
+}
+
+watch(() => route.fullPath, () => {
+  if (route.path !== '/exhibitor') return;
+  tab.value = tabFromQuery();
+});
 const query = useAsync<Exhibition[]>();
 /** 核销提示：与账号绑定的一次性提示，进过一次核销页就不再显示。 */
 const { visible: hintVisible, dismiss: dismissHint } = useHint('exhibitor-checkin');
@@ -115,8 +142,12 @@ onMounted(load);
 </script>
 
 <template>
-  <!-- 顶栏已经写着「展商后台」，正文不再重复中英文品牌行；核销入口在下方按钮里，不放顶栏图标 -->
-  <SkeletonBlock v-if="query.loading.value && !hasContent" :rows="3" />
+  <!-- 顶栏已经写着「展商后台」，正文不再重复标题。分段始终在内容之前，空列表不能把切换按钮盖掉。 -->
+  <SegControl :model-value="tab" :items="TABS" :label="partitionLabel" @update:model-value="changeTab" />
+
+  <MeetingInbox v-if="tab === 'meetings'" mode="exhibitor" />
+
+  <SkeletonBlock v-else-if="query.loading.value && !hasContent" :rows="3" />
 
   <StateBlock
     v-else-if="query.error.value && !hasContent"
@@ -185,7 +216,7 @@ onMounted(load);
           </span>
           <StatusTag :text="String(item.modeLabel || '')" :tone="statusTone(String(item.status || ''))" />
         </button>
-        <div class="grid-cols-2">
+        <div class="action-row">
           <button
             class="cta ghost"
             data-size="small"
@@ -204,10 +235,10 @@ onMounted(load);
           >
             {{ t('s_eutzzb') }}
           </button>
+          <button class="cta ghost" data-size="small" type="button" @click="copyJoinLink(item.id)">
+            {{ joinLinkCopy }}
+          </button>
         </div>
-        <button class="cta ghost" data-size="small" type="button" @click="copyJoinLink(item.id)">
-          {{ joinLinkCopy }}
-        </button>
       </div>
     </div>
 

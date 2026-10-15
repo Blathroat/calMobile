@@ -156,7 +156,7 @@ export interface ApiClient {
     /** 保存自定义字段定义；只失效 `fields`，不动展会本体。 */
     saveFields(id: Id, fields: unknown[]): Promise<ApiResult>;
   };
-  /** 报名：我的报名列表、详情，以及提交/撤销。 */
+  /** 报名：我的活动里的展会报名列表、详情，以及提交/撤销。 */
   registrations: {
     /** 当前用户的报名列表。 */
     list(): Promise<Registration[]>;
@@ -206,6 +206,31 @@ export interface ApiClient {
     saveUiMode(mode: string): Promise<ApiResult>;
     /** 保存本人的强调色：写调用者自己的 `users.ui_theme`，不动全局默认色板。 */
     saveUiTheme(themeIndex: number): Promise<ApiResult>;
+  };
+  /** 私人会议：展商设置、申请、审核和管理员限制。 */
+  meetings: {
+    /** 当前展商的开关与收集项。 */
+    settings(): Promise<JsonObject>;
+    /** 保存开关与收集项；公开页的预约按钮也要跟着变。 */
+    saveSettings(payload: JsonObject): Promise<ApiResult>;
+    /** 当前用户提交过的私人会议。 */
+    mine(): Promise<JsonObject[]>;
+    /** 一场会议的详情。查不到时 `found` 为 false。 */
+    get(id: string): Promise<JsonObject>;
+    /** 展商或管理员看到的申请列表。管理员要带 `exhibitorId`。 */
+    inbox(query?: JsonObject): Promise<JsonObject>;
+    /** 申请页要的展商姓名、是否开放和收集项。 */
+    form(exhibitorId: string): Promise<JsonObject>;
+    /** 提交申请。成功后月历圆点和我的活动都要重取。 */
+    submit(payload: JsonObject): Promise<ApiResult>;
+    /** 申请人撤销。待审核始终可以；已通过要看主办人是否允许。 */
+    cancel(id: string): Promise<ApiResult>;
+    /** 通过或拒绝。 */
+    setStatus(id: string, status: string): Promise<ApiResult>;
+    /** 管理员限制或解除限制。 */
+    setLock(id: string, locked: boolean): Promise<ApiResult>;
+    /** 管理员删除一场会议。 */
+    remove(id: string): Promise<ApiResult>;
   };
   /** 清空整个查询缓存。身份变化时由 `afterAuth` / `logout` 调用，页面通常不需要自己调。 */
   clearCache(): void;
@@ -399,6 +424,19 @@ export function createApi(
       saveUiMode: (mode) => write<ApiResult>('/settings/ui-mode', { method: 'PUT', body: { mode } }, ['settings']),
       // 强调色是个人偏好：写调用者自己的 `users.ui_theme`，不动全局默认色板。
       saveUiTheme: (themeIndex) => write<ApiResult>('/settings/ui-theme', { method: 'PUT', body: { themeIndex } }, ['settings']),
+    },
+    meetings: {
+      settings: () => read<JsonObject>('meetings.settings', '/meetings/settings'),
+      saveSettings: (payload) => write<ApiResult>('/meetings/settings', { method: 'PUT', body: payload }, ['meetings', 'users']),
+      mine: () => read<JsonObject[]>('meetings.mine', '/meetings/mine'),
+      get: (id) => read<JsonObject>('meetings.record', `/meetings/${encodeURIComponent(id)}`),
+      inbox: (query = {}) => read<JsonObject>('meetings.inbox', '/meetings/inbox', { query }),
+      form: (exhibitorId) => read<JsonObject>('meetings.form', `/meetings/apply/${encodeURIComponent(exhibitorId)}`),
+      submit: (payload) => write<ApiResult>('/meetings', { method: 'POST', body: payload }, ['meetings', 'exhibitions']),
+      cancel: (id) => write<ApiResult>(`/meetings/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }, ['meetings', 'exhibitions']),
+      setStatus: (id, status) => write<ApiResult>(`/meetings/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { status } }, ['meetings', 'exhibitions']),
+      setLock: (id, locked) => write<ApiResult>(`/meetings/${encodeURIComponent(id)}/lock`, { method: 'PUT', body: { locked } }, ['meetings']),
+      remove: (id) => write<ApiResult>(`/meetings/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['meetings', 'exhibitions']),
     },
     clearCache: () => cache.clear(),
   };

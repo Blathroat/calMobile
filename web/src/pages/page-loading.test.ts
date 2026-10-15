@@ -110,7 +110,7 @@ describe('管理页搜索', () => {
     ]);
     const { container, router } = await mount(AdminPage, '/admin?tab=users');
     const links = [...container.querySelectorAll<HTMLButtonElement>('button')]
-      .filter((button) => button.textContent?.trim() === 's_gt2gfg');
+      .filter((button) => button.getAttribute('aria-label') === '查看 同名 的公开页');
     const navigated = new Promise<void>((resolve) => router.afterEach(() => resolve()));
     links[1]!.click();
     await navigated;

@@ -10,3 +10,11 @@ export function registrationLink(publicBaseUrl: unknown, exhibitionId: unknown):
   if (!/^https?:\/\/\S+$/i.test(base) || !id) return '';
   return `${base}/e/${encodeURIComponent(id)}`;
 }
+
+/** 展商分享的私人会议申请链接：`{PUBLIC_BASE_URL}/m/{展商 id}`。规则与报名链接相同。 */
+export function meetingLink(publicBaseUrl: unknown, exhibitorId: unknown): string {
+  const base = String(publicBaseUrl ?? '').trim().replace(/\/+$/, '');
+  const id = String(exhibitorId ?? '').trim();
+  if (!/^https?:\/\/\S+$/i.test(base) || !id) return '';
+  return `${base}/m/${encodeURIComponent(id)}`;
+}

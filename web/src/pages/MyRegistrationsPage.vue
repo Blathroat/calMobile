@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * 屏幕 07 · 我的报名（列表）
+ * 屏幕 07 · 我的活动（列表）
  * 线框：docs/newUI/remaining-ui.html #screen-my-registrations
  *
- * 状态文字由后端下发（待审核 / 已通过 / 已撤销），颜色只作辅助线索；
- * 列表项按下即预热报名详情，点进去时数据已在缓存里，不再闪骨架屏。
+ * 展会报名与私人会议申请放在同一页。状态文字由后端下发，颜色只作辅助线索。
+ * 报名和会议卡片都进入各自的详情页。
  */
 import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
@@ -16,8 +16,9 @@ import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MediaBox from '@/components/MediaBox.vue';
 import StatusTag from '@/components/StatusTag.vue';
-import { formatRecordDate, truncate } from '@/services/format';
-import type { Registration } from '@/api/types';
+import RoleTag from '@/components/RoleTag.vue';
+import { formatMeetingWhen, formatRecordDate, truncate } from '@/services/format';
+import type { JsonObject, Registration } from '@/api/types';
 import { isJoinSurface, paths } from '@/app/surface';
 import { t } from '@/i18n';
 
@@ -25,15 +26,24 @@ const router = useRouter();
 const session = useSessionStore();
 const bootstrap = useBootstrapStore();
 
-const query = useAsync<Registration[]>();
-const records = computed(() => query.data.value ?? []);
+interface Activities {
+  registrations: Registration[];
+  meetings: JsonObject[];
+}
+
+const query = useAsync<Activities>();
+const records = computed(() => query.data.value?.registrations ?? []);
+const meetings = computed(() => query.data.value?.meetings ?? []);
 const hasContent = computed(() => query.data.value !== undefined);
+const isEmpty = computed(() => records.value.length === 0 && meetings.value.length === 0);
 /** 条数是派生数据（与首页的「N 场」同类），不占用文案 key；数据到位前保持「—」。 */
 const emptyDescription = t('s_1scjlq7');
+const registrationSection = t('s_1t3bw5g');
+const meetingSection = t('s_zmypci');
 
 const countLabel = computed(() => {
   if (!session.loggedIn) return t('s_1ydrtwl');
-  return hasContent.value ? `${records.value.length} 条记录` : '—';
+  return hasContent.value ? `${records.value.length + meetings.value.length} 条记录` : '—';
 });
 
 onMounted(() => {
@@ -42,7 +52,16 @@ onMounted(() => {
 });
 
 async function load(): Promise<void> {
-  await query.run(() => api.registrations.list());
+  await query.run(async () => {
+    const [registrations, meetings] = await Promise.all([
+      api.registrations.list(),
+      api.meetings.mine(),
+    ]);
+    return {
+      registrations,
+      meetings: Array.isArray(meetings) ? meetings : [],
+    };
+  });
 }
 
 /** 手指按下就预取详情，点进去时不再等首屏。 */
@@ -50,9 +69,17 @@ function warm(id: unknown): void {
   void api.registrations.get(String(id)).catch(() => undefined);
 }
 
+function warmMeeting(id: unknown): void {
+  void api.meetings.get(String(id)).catch(() => undefined);
+}
+
 /** 报名摘要：没有额外信息时沿用旧页面同一句说明。 */
 function summary(record: Registration): string {
   return truncate(record.answers, 34) || t('s_v8pba2');
+}
+
+function meetingSummary(meeting: JsonObject): string {
+  return truncate(meeting.answers, 34) || t('s_1ye52vk');
 }
 
 function openLogin(): void {
@@ -93,7 +120,7 @@ function openLogin(): void {
       />
 
       <StateBlock
-        v-else-if="records.length === 0"
+        v-else-if="isEmpty"
         icon="ticket"
         :title="t('s_a8pyd6')"
         :description="isJoinSurface ? emptyDescription : t('s_yfjo64')"
@@ -102,26 +129,54 @@ function openLogin(): void {
       />
 
       <template v-else>
-        <button
-          v-for="record in records"
-          :key="String(record.id)"
-          class="row-card"
-          type="button"
-          data-pressable="true"
-          :aria-label="`查看 ${record.exhibitionTitle} 的报名详情`"
-          @pointerdown="warm(record.id)"
-          @click="router.push(paths.registrationDetail(String(record.id)))"
-        >
-          <!-- 报名接口不下发展会封面，这里保留线框的斜线占位 -->
-          <MediaBox class-name="thumb" />
-          <span class="row-copy">
-            <strong class="row-title truncate">{{ record.exhibitionTitle }}</strong>
-            <span class="row-meta">{{ formatRecordDate(record) }} {{ record.exhibitionTime }}</span>
-            <span class="row-meta truncate">{{ record.exhibitionVenue }}</span>
-            <span class="row-meta truncate">报名信息：{{ summary(record) }}</span>
-          </span>
-          <StatusTag :text="String(record.statusLabel || record.status || '')" />
-        </button>
+        <template v-if="records.length > 0">
+          <span v-if="meetings.length > 0" class="section-label">{{ registrationSection }}</span>
+          <button
+            v-for="record in records"
+            :key="String(record.id)"
+            class="row-card"
+            type="button"
+            data-pressable="true"
+            :aria-label="`查看 ${record.exhibitionTitle} 的报名详情`"
+            @pointerdown="warm(record.id)"
+            @click="router.push(paths.registrationDetail(String(record.id)))"
+          >
+            <!-- 报名接口不下发展会封面，这里保留线框的斜线占位 -->
+            <MediaBox class-name="thumb" />
+            <span class="row-copy">
+              <strong class="row-title truncate">{{ record.exhibitionTitle }}</strong>
+              <span class="row-meta">{{ formatRecordDate(record) }} {{ record.exhibitionTime }}</span>
+              <span class="row-meta truncate">{{ record.exhibitionVenue }}</span>
+              <span class="row-meta truncate">报名信息：{{ summary(record) }}</span>
+            </span>
+            <StatusTag :text="String(record.statusLabel || record.status || '')" />
+          </button>
+        </template>
+
+        <template v-if="meetings.length > 0">
+          <span v-if="records.length > 0" class="section-label">{{ meetingSection }}</span>
+          <button
+            v-for="meeting in meetings"
+            :key="String(meeting.id)"
+            class="row-card"
+            type="button"
+            data-pressable="true"
+            :aria-label="`查看与 ${meeting.exhibitorName} 的会议详情`"
+            @pointerdown="warmMeeting(meeting.id)"
+            @click="router.push(paths.meetingDetail(String(meeting.id)))"
+          >
+            <span class="avatar" aria-hidden="true">{{ String(meeting.exhibitorName || '展').slice(0, 1) }}</span>
+            <span class="row-copy">
+              <span class="name-line">
+                <strong class="row-title truncate">{{ meeting.exhibitorName }}</strong>
+                <RoleTag :role-code="String(meeting.exhibitorRole || '')" />
+              </span>
+              <span class="row-meta">{{ formatMeetingWhen(meeting.meetingDate, meeting.meetingTime) }}</span>
+              <span class="row-meta truncate">{{ meetingSummary(meeting) }}</span>
+            </span>
+            <StatusTag :text="String(meeting.status || '')" />
+          </button>
+        </template>
       </template>
     </div>
 

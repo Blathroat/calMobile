@@ -30,10 +30,27 @@ describe('join router', () => {
     expect(router.currentRoute.value.meta.title).toBe('s_14frgky');
   });
 
+  it('opens meeting detail on its own path', async () => {
+    const router = createJoinRouter(createMemoryHistory());
+    useSessionStore().applyUser({ id: 'u1', loggedIn: true, guest: false, role: 'user', can: { register: true } });
+    await router.push('/mine/m/meet-1');
+    expect(router.currentRoute.value.path).toBe('/mine/m/meet-1');
+    expect(router.currentRoute.value.meta.title).toBe('s_g1bhp7');
+  });
+
+  it('keeps the private meeting link behind login', async () => {
+    const router = createJoinRouter(createMemoryHistory());
+    await router.push('/m/usr-2');
+    expect(router.currentRoute.value.path).toBe('/login');
+    expect(router.currentRoute.value.query.redirect).toBe('/m/usr-2');
+  });
+
   it('sends a limited account away from the registration form', async () => {
     const router = createJoinRouter(createMemoryHistory());
     useSessionStore().applyUser({ id: 'u1', loggedIn: true, guest: false, role: 'user', can: { register: false } });
     await router.push('/e/exh-1');
+    expect(router.currentRoute.value.path).toBe('/mine');
+    await router.push('/m/usr-2');
     expect(router.currentRoute.value.path).toBe('/mine');
   });
 });

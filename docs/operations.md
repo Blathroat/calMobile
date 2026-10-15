@@ -133,12 +133,12 @@ node scripts/ui-shot.mjs --account demo --routes admin --click 展会
 ```bash
 node scripts/ui-parity.mjs          # 与 Vue 迁移前固定提交 6491a068 对照 t('s_xxx') 覆盖
 node scripts/ui-parity.mjs --full   # 连「搬到了别处」的 key 一起打印
-node scripts/ui-parity.mjs --ref <commit> --max-gone 72  # 显式选择含全部旧页面的参考提交
+node scripts/ui-parity.mjs --ref <commit> --max-gone 75  # 显式选择含全部旧页面的参考提交
 ```
 
 `→ 无` 才是真缺口；`→ web/src/...` 说明那条文案搬到了路由 meta、共享服务或共享组件里。
 
-CI 里这两个脚本都在跑：`ui-parity` 在 `web-and-server` 作业（固定基准 `6491a068f05d8a17ba51e9d3eb073eda4363755f`、`--max-gone 72`，超预算说明有整块界面没搬过来；需要完整 Git 历史，参考提交无效或任一参考页面缺失都失败），
+CI 里这两个脚本都在跑：`ui-parity` 在 `web-and-server` 作业（固定基准 `6491a068f05d8a17ba51e9d3eb073eda4363755f`、`--max-gone 75`，超预算说明有整块界面没搬过来；需要完整 Git 历史，参考提交无效或任一参考页面缺失都失败），
 `ui-shot` 在 `ui-regression` 作业（自带 PostgreSQL 服务、迁移 + 示例数据、后端与 `vite preview`，截图作为 `ui-screenshots` 工件上传）。
 预算值随有意删除的文案调整。`ui-shot` 的 `detail` 别名会从后端公开展会列表选择真实 id，也可指定 `detail/<id>`；没有展会时失败。截图前检查目标路由、顶栏标题、正文和加载状态，登录失败、权限重定向、空白正文或页面错误都报错，并保存 `failure.png`。`--click` 指定的操作不存在时同样失败。
 

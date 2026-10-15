@@ -173,7 +173,7 @@ export function stringListSchema({ label, max = 40, itemMax = 60 }: StringListOp
         : [],
     z.array(item).superRefine((items, ctx) => {
       const invalid = items.find((value) => value.length > itemMax);
-      if (invalid) ctx.addIssue({ code: 'custom', message: `${label || '列表项'}单项最多 ${itemMax} 个字符` });
+      if (invalid) ctx.addIssue({ code: 'custom', message: `${label || '列表项'}最多 ${itemMax} 个字符` });
     }),
   );
 }

@@ -22,6 +22,7 @@ import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
+import RoleTag from '@/components/RoleTag.vue';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -81,8 +82,10 @@ onMounted(load);
 // ── 展示用取值 ────────────────────────────────────────────────────
 
 function identityMeta(): string {
+  const code = String(user.value.role || '');
   const role = String(user.value.roleLabel || '');
   const status = String(user.value.status || t('s_tt5vxa'));
+  if (code === 'exhibitor' || code === 'admin') return status;
   return role ? `${role} · ${status}` : status;
 }
 
@@ -159,7 +162,10 @@ function logout(): void {
         <div class="row" data-gap="md">
           <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || user.username || '')" large />
           <span class="row-copy">
-            <strong class="row-title">{{ user.nickname || user.username }}</strong>
+            <span class="name-line">
+              <strong class="row-title">{{ user.nickname || user.username }}</strong>
+              <RoleTag :role-code="String(user.role || '')" />
+            </span>
             <span class="row-meta">{{ identityMeta() }}</span>
             <span class="row-meta truncate">{{ profileValue('region', 's_15h5nhd') }}</span>
           </span>

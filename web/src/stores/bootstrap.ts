@@ -48,7 +48,7 @@ export interface BootstrapState {
   theme: JsonObject;
   /** 缺省展会封面：`defaultCover` 是媒体短 URL，展会自己没有封面时用它（空串表示继续用占位图） */
   cover: JsonObject;
-  /** 展商端策略：`maxFutureExhibitions` 是单个展商可同时筹备的展会数，0 表示不限 */
+  /** 展商端策略：`maxFutureExhibitions` / `maxFutureMeetings` 为 0 时表示不限 */
   exhibitor: JsonObject;
   /** 报名站根地址（`PUBLIC_BASE_URL`）。空串表示没配域名，分享时不要拼本机地址。 */
   publicBaseUrl: string;

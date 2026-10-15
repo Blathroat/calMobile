@@ -60,7 +60,7 @@ jobs:
         # 验证器（TOTP）、用验证器开启（推荐）、没有新的备用码、重新绑定验证器、
         # 密码已更新、修改失败、暂无可用方式、开启后每次登录都要输一次邮箱验证码）。
         # 每次新增删除都应当在这里把数字往上调，并确认删掉的那几条是有意的。
-        run: node scripts/ui-parity.mjs --max-gone 72
+        run: node scripts/ui-parity.mjs --max-gone 75
       - run: pnpm --dir web typecheck
       - run: pnpm --dir web test
       - run: pnpm --dir web build

@@ -6,12 +6,17 @@
  * 日历卡片支持左右滑动切换月份：拖动时卡片跟手位移，松手超过阈值则滑出并载入相邻月份。
  * 行数按月份实际需要取 5 或 6 行（放得下就 5 行），行高只有一档，所以同一行里的日期不会跳。
  *
- * 点日期**不发请求**：`exhibitions.month` 一次返回整月展会，选中哪一天纯属本地状态，
+ * 点日期**不发请求**：`exhibitions.month` 一次返回整月展会和本人的私人会议，选中哪一天纯属本地状态，
  * 因此既不重新取数，也不重建日历 DOM（重建会让卡片闪一下、圆点动画重放）。
+ *
+ * 有展会的日期把数字加粗。圆点标和当前用户有关的日期：已通过或已参加的报名、
+ * 待审核或已通过的私人会议（申请人与主办人都算）、自己开办的展会。
+ * 已拒绝和已撤销的会议不打点，也不出现在当天列表。访客只有加粗，没有圆点。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, bootApp } from '@/app/runtime';
+import { paths } from '@/app/surface';
 import { preloadAdjacentMonths } from '@/app/preload';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { toast } from '@/services/toast';
@@ -24,7 +29,8 @@ import { useHint } from '@/composables/useHint';
 import { useAsync } from '@/composables/useAsync';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
-import { addMonths, calendarRowCount, daysInMonth, firstWeekdayOffset, monthLabel } from '@/services/format';
+import RoleTag from '@/components/RoleTag.vue';
+import { addMonths, calendarRowCount, daysInMonth, firstWeekdayOffset, formatChineseTime, monthLabel } from '@/services/format';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -62,6 +68,9 @@ interface Cell {
   /** 这一格属于哪个月：补位格子是相邻月份的日期，读屏不能报成当月。 */
   month: number;
   muted: boolean;
+  /** 这一天有展会：数字加粗。和圆点不是一回事。 */
+  bold: boolean;
+  /** 这一天有当前用户的活动：数字下方画圆点。 */
   hasEvent: boolean;
   disabled: boolean;
 }
@@ -81,46 +90,66 @@ const cells = computed<Cell[]>(() => {
   const offset = firstWeekdayOffset(year, month);
   const previous = addMonths(year, month, -1);
   const previousTotal = daysInMonth(previous.year, previous.month);
-  const events = new Set(eventDays());
+  const boldDays = new Set(eventDays());
+  const marked = new Set(markedDays());
   const list: Cell[] = [];
   for (let index = 0; index < offset; index += 1) {
     list.push({
       day: previousTotal - offset + index + 1,
       month: previous.month,
       muted: true,
+      bold: false,
       hasEvent: false,
       disabled: true,
     });
   }
   for (let day = 1; day <= total; day += 1) {
-    list.push({ day, month, muted: false, hasEvent: events.has(day), disabled: false });
+    list.push({
+      day,
+      month,
+      muted: false,
+      bold: boldDays.has(day),
+      hasEvent: marked.has(day),
+      disabled: false,
+    });
   }
   const trailing = (rows.value * 7) - offset - total;
   const next = addMonths(year, month, 1);
   for (let day = 1; day <= trailing; day += 1) {
-    list.push({ day, month: next.month, muted: true, hasEvent: false, disabled: true });
+    list.push({ day, month: next.month, muted: true, bold: false, hasEvent: false, disabled: true });
   }
   return list;
 });
 
-const items = computed<JsonObject[]>(() => {
+const items = computed<JsonObject[]>(() => dayRows('exhibitions'));
+const meetings = computed<JsonObject[]>(() => dayRows('meetings'));
+
+function dayRows(key: 'exhibitions' | 'meetings'): JsonObject[] {
   const day = view.value.day;
   if (day <= 0) return [];
-  const all = Array.isArray(monthData.value?.exhibitions) ? monthData.value?.exhibitions as JsonObject[] : [];
+  const all = Array.isArray(monthData.value?.[key]) ? monthData.value?.[key] as JsonObject[] : [];
   return all.filter((item) => Number(item.day) === day);
-});
+}
+
+function meetingLine(meeting: JsonObject): string {
+  const time = formatChineseTime(meeting.meetingTime);
+  return time ? `${time} · ${t('s_zmypci')}` : t('s_zmypci');
+}
 
 const eventDays = (): number[] => (Array.isArray(monthData.value?.eventDays) ? monthData.value?.eventDays as number[] : []);
+const markedDays = (): number[] => (Array.isArray(monthData.value?.markedDays) ? monthData.value?.markedDays as number[] : []);
+const myActivityMark = t('s_1evxb6');
 
-const selectedMeta = computed(() => (items.value.length > 0
-  ? `${items.value.length} 场`
-  : t('s_xwhfsg')));
+const selectedMeta = computed(() => {
+  const count = items.value.length + meetings.value.length;
+  return count > 0 ? `${count} 场` : t('s_xwhfsg');
+});
 
 /** 启动公告：只在开关打开且本机未读过时显示一次。 */
 const announcement = ref('');
 
 function dayLabel(cell: Cell): string {
-  const suffix = cell.hasEvent ? t('s_1hzbri3') : '';
+  const suffix = `${cell.bold ? t('s_1hzbri3') : ''}${cell.hasEvent ? myActivityMark : ''}`;
   const selected = cell.day === view.value.day && !cell.muted ? t('s_19g8l4d') : '';
   // 用格子自己的月份：补位格子是上/下月的日期，报成当月会让读屏听到错的日期。
   return `${cell.month}月${cell.day}日${suffix}${selected}`;
@@ -388,6 +417,7 @@ onBeforeUnmount(() => {
             type="button"
             :data-day="cell.day"
             :data-muted="cell.muted ? 'true' : 'false'"
+            :data-bold="cell.bold ? 'true' : 'false'"
             :data-has-event="cell.hasEvent ? 'true' : 'false'"
             :aria-pressed="!cell.muted && cell.day === view.day ? 'true' : 'false'"
             :aria-label="dayLabel(cell)"
@@ -405,7 +435,7 @@ onBeforeUnmount(() => {
   <HintNote v-if="hintVisible" :text="t('s_15hmwa0')" @dismiss="dismissHint" />
 
   <div class="row" data-between="true">
-    <strong>{{ view.day > 0 ? `${view.month} 月 ${view.day} 日的展会` : t('s_1e4opb2') }}</strong>
+    <strong>{{ view.day > 0 ? `${view.month} 月 ${view.day} 日的活动` : t('s_1e4opb2') }}</strong>
     <span class="dim">{{ selectedMeta }}</span>
   </div>
 
@@ -416,7 +446,7 @@ onBeforeUnmount(() => {
   <div class="list" data-gap="sm">
     <SkeletonBlock v-if="loading && !hasContent" :rows="2" />
     <StateBlock
-      v-else-if="!loading && !error && items.length === 0"
+      v-else-if="!loading && !error && items.length === 0 && meetings.length === 0"
       :title="t('s_1vtk64c')"
       :description="t('s_1jbzuzw')"
       :action-label="t('s_50ih74')"
@@ -442,6 +472,25 @@ onBeforeUnmount(() => {
           <span class="row-meta">{{ item.time }} · {{ item.venue }}</span>
           <span class="row-meta truncate">{{ item.category || '' }}</span>
         </span>
+      </button>
+      <button
+        v-for="meeting in meetings"
+        :key="String(meeting.id)"
+        class="row-card"
+        type="button"
+        data-pressable="true"
+        :aria-label="`查看与 ${meeting.title} 的会议详情`"
+        @click="router.push(paths.meetingDetail(String(meeting.id)))"
+      >
+        <span class="avatar" aria-hidden="true">{{ String(meeting.title || '会').slice(0, 1) }}</span>
+        <span class="row-copy">
+          <span class="name-line">
+            <strong class="row-title truncate">{{ meeting.title }}</strong>
+            <RoleTag :role-code="String(meeting.titleRole || '')" />
+          </span>
+          <span class="row-meta">{{ meetingLine(meeting) }}</span>
+        </span>
+        <StatusTag :text="String(meeting.status || '')" />
       </button>
     </template>
   </div>

@@ -22,6 +22,7 @@ import AppIcon from '@/components/AppIcon.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import RoleTag from '@/components/RoleTag.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import ImageViewer from '@/components/ImageViewer.vue';
 import { formatDateWithWeekday } from '@/services/format';
@@ -264,7 +265,10 @@ onMounted(() => { void load(); });
     >
       <AvatarBox :name="String(exhibition.exhibitor || '')" />
       <span class="row-copy">
-        <strong class="row-title">{{ exhibition.exhibitor }}</strong>
+        <span class="name-line">
+          <strong class="row-title">{{ exhibition.exhibitor }}</strong>
+          <RoleTag :role-code="String(exhibition.exhibitorRole || '')" />
+        </span>
         <span class="row-meta">{{ t('s_1a44i78') }}</span>
       </span>
       <AppIcon name="chevronRight" />

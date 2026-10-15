@@ -15,6 +15,7 @@ import {
   type ExhibitionInput,
 } from '../domain/schemas.js';
 import { notFound } from '../domain/errors.js';
+import * as labels from '../domain/labels.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { authenticateHono, optionalAuthHono, userOf, type HonoContext, type HonoEnv } from './hono-utils.js';
@@ -40,6 +41,54 @@ async function landingMonth() {
   const now = new Date();
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
+interface MonthMeetingRow {
+  id: string;
+  day: number;
+  meeting_time: string;
+  status: string;
+  exhibitor_id: string;
+  visitor_name: string;
+  exhibitor_name: string;
+  exhibitor_role: string;
+  visitor_role: string;
+}
+
+/** 当天列表里的私人会议：申请人看到主办人，主办人看到申请人。已拒绝、已撤销不返回。 */
+async function monthMeetings(year: number, month: number, userId: string) {
+  const result = await query<MonthMeetingRow>(
+    `SELECT m.id,
+            EXTRACT(DAY FROM m.meeting_date)::int AS day,
+            m.meeting_time,
+            m.status,
+            m.exhibitor_id,
+            COALESCE(m.visitor_name, '') AS visitor_name,
+            COALESCE(eu.nickname, '') AS exhibitor_name,
+            COALESCE(eu.role, '') AS exhibitor_role,
+            COALESCE(vu.role, '') AS visitor_role
+       FROM private_meetings m
+       JOIN users eu ON eu.id = m.exhibitor_id
+       LEFT JOIN users vu ON vu.id = m.visitor_id
+      WHERE m.status IN ('pending', 'approved')
+        AND (m.visitor_id = $3 OR m.exhibitor_id = $3)
+        AND EXTRACT(YEAR FROM m.meeting_date)::int = $1
+        AND EXTRACT(MONTH FROM m.meeting_date)::int = $2
+      ORDER BY m.meeting_date, m.meeting_time, m.id`,
+    [year, month, userId],
+  );
+  return result.rows.map((row) => {
+    const host = row.exhibitor_id === userId;
+    return {
+      id: row.id,
+      day: row.day,
+      meetingTime: row.meeting_time || '',
+      status: labels.REGISTRATION_STATUS[row.status] || '',
+      role: host ? 'host' : 'visitor',
+      title: host ? row.visitor_name : row.exhibitor_name,
+      titleRole: host ? row.visitor_role || '' : row.exhibitor_role || '',
+    };
+  });
+}
+
 function monthSummary(item: ReturnType<typeof exhibitionPayload>) {
   return {
     id: item.id,
@@ -131,13 +180,46 @@ app.get('/month', optionalAuthHono, async (c) => {
   const items = result.rows.map(exhibitionPayload);
   const eventDays = [...new Set(items.map((item) => item.day))].sort((a, b) => Number(a) - Number(b));
   if (day <= 0) day = eventDays[0] || 0;
+  // 圆点只标「和当前用户有关」的日期；有展会的日期仍由 eventDays 表示（日历把日期加粗）。
+  const viewer = userOf(c);
+  let markedDays: number[] = [];
+  if (viewer?.userId) {
+    const marked = await query<{ day: number }>(
+      `SELECT DISTINCT day FROM (
+         SELECT EXTRACT(DAY FROM e.exhibition_date)::int AS day
+           FROM registrations r
+           JOIN exhibitions e ON e.id = r.exhibition_id
+          WHERE r.visitor_id = $3 AND r.status IN ('approved', 'attended')
+            AND EXTRACT(YEAR FROM e.exhibition_date)::int = $1
+            AND EXTRACT(MONTH FROM e.exhibition_date)::int = $2
+         UNION
+         SELECT EXTRACT(DAY FROM e.exhibition_date)::int
+           FROM exhibitions e
+          WHERE e.exhibitor_id = $3
+            AND EXTRACT(YEAR FROM e.exhibition_date)::int = $1
+            AND EXTRACT(MONTH FROM e.exhibition_date)::int = $2
+         UNION
+         SELECT EXTRACT(DAY FROM m.meeting_date)::int
+           FROM private_meetings m
+          WHERE m.status IN ('pending', 'approved') AND (m.visitor_id = $3 OR m.exhibitor_id = $3)
+            AND EXTRACT(YEAR FROM m.meeting_date)::int = $1
+            AND EXTRACT(MONTH FROM m.meeting_date)::int = $2
+       ) days
+       ORDER BY day`,
+      [year, monthNumber, viewer.userId],
+    );
+    markedDays = marked.rows.map((row) => row.day);
+  }
+  const meetings = viewer?.userId ? await monthMeetings(year, monthNumber, viewer.userId) : [];
   return jsonResponse(c, {
     year,
     month: monthNumber,
     day,
     monthLabel: `${year} 年 ${monthNumber} 月`,
     eventDays,
+    markedDays,
     exhibitions: items.map(monthSummary),
+    meetings,
     selected: items.filter((item) => item.day === day).map(monthSummary),
   });
 });
@@ -161,7 +243,7 @@ app.post('/', authenticateHono, async (c) => {
     const id = newId('exh');
     await withExhibitionQuota(user, { exhibitorId: user.userId, date: input.date }, async (client) => {
       await client.query(
-        `INSERT INTO exhibitions (id, title, venue, time, exhibition_date, status, category, description, description_format, image_uri, exhibitor_note, registration_start, registration_end, qr_enabled, exhibitor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        `INSERT INTO exhibitions (id, title, venue, time, exhibition_date, status, category, description, description_format, image_uri, exhibitor_note, registration_start, registration_end, qr_enabled, allow_cancel, exhibitor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
         [
           id,
           input.title,
@@ -177,6 +259,7 @@ app.post('/', authenticateHono, async (c) => {
           input.registrationStart || null,
           input.registrationEnd || null,
           input.qrEnabled,
+          input.allowCancel,
           user.userId,
         ],
       );
@@ -197,7 +280,7 @@ app.put('/:id', authenticateHono, async (c) => {
       { id: existing.id, exhibitorId: existing.exhibitor_id, date: input.date },
       async (client) => {
         await client.query(
-          `UPDATE exhibitions SET title=$2, venue=$3, time=$4, exhibition_date=$5, status=$6, category=$7, description=$8, description_format=$9, image_uri=$10, exhibitor_note=$11, registration_start=$12, registration_end=$13, qr_enabled=$14, updated_at=now() WHERE id=$1`,
+          `UPDATE exhibitions SET title=$2, venue=$3, time=$4, exhibition_date=$5, status=$6, category=$7, description=$8, description_format=$9, image_uri=$10, exhibitor_note=$11, registration_start=$12, registration_end=$13, qr_enabled=$14, allow_cancel=$15, updated_at=now() WHERE id=$1`,
           [
             existing.id,
             input.title,
@@ -213,6 +296,7 @@ app.put('/:id', authenticateHono, async (c) => {
             input.registrationStart || null,
             input.registrationEnd || null,
             input.qrEnabled,
+            input.allowCancel,
           ],
         );
         if (input.fields) await replaceFields(client, existing.id, input.fields);

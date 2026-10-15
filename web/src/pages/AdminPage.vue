@@ -30,6 +30,7 @@ import MediaBox from '@/components/MediaBox.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import RoleTag from '@/components/RoleTag.vue';
 import type { Bootstrap, Exhibition, JsonObject, User } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -50,21 +51,58 @@ const tabIds = new Set(TABS.map((item) => item.value));
 /**
  * 字符数上限的唯一清单：控件的键、提交的字段名与后端 `app_settings.limits` 的键名
  * 都从这里派生，新增一项只加一行。取值范围由后端收敛（超出会被夹到合法区间）。
+ * 按展会、收集项、账号分成三组，方便在同一张卡里查找。
  */
-const TEXT_LIMITS: Array<{ key: string; label: string; hint: string }> = [
-  { key: 'exhibitionTitle', label: t('s_1co82cb'), hint: t('s_1mcmbiu') },
-  { key: 'exhibitionVenue', label: t('s_1tlfy5l'), hint: t('s_1mcmbiu') },
-  { key: 'category', label: t('s_9xu72h'), hint: t('s_1mcmbiu') },
-  { key: 'fieldTitle', label: t('s_1yqwetn'), hint: t('s_1mcmbiu') },
-  { key: 'usernameMin', label: t('s_dtadu0'), hint: t('s_1mcmbiu') },
-  { key: 'usernameMax', label: t('s_196bpby'), hint: t('s_1mcmbiu') },
-  { key: 'passwordMin', label: t('s_e6tqxb'), hint: t('s_1jlgtug') },
-  { key: 'passwordMax', label: t('s_19rf1tx'), hint: t('s_1jlgtug') },
-  { key: 'nickname', label: t('s_jxewei'), hint: t('s_1mcmbiu') },
-  { key: 'bio', label: t('s_euttee'), hint: t('s_1mcmbiu') },
-  { key: 'region', label: t('s_16txual'), hint: t('s_1mcmbiu') },
-  { key: 'answer', label: t('s_1j77by5'), hint: t('s_1mcmbiu') },
+interface LimitItem {
+  key: string;
+  label: string;
+  hint: string;
+  unit: string;
+}
+
+const LIMIT_GROUPS: Array<{ id: string; title: string; items: LimitItem[] }> = [
+  {
+    id: 'exhibition',
+    title: t('s_dy6bvq'),
+    items: [
+      { key: 'exhibitionTitle', label: t('s_1co82cb'), hint: t('s_1dtsr23'), unit: t('s_1mcmbiu') },
+      { key: 'exhibitionVenue', label: t('s_1tlfy5l'), hint: t('s_1um8i41'), unit: t('s_1mcmbiu') },
+      { key: 'category', label: t('s_9xu72h'), hint: t('s_11w7dox'), unit: t('s_1mcmbiu') },
+    ],
+  },
+  {
+    id: 'collect',
+    title: t('s_184z9xu'),
+    items: [
+      { key: 'fieldTitle', label: t('s_1yqwetn'), hint: t('s_1mgsqy2'), unit: t('s_1mcmbiu') },
+      { key: 'textFill', label: t('s_1mq1kio'), hint: t('s_12obyju'), unit: t('s_1mcmbiu') },
+      { key: 'radioOption', label: t('s_1y8221p'), hint: t('s_88zbx0'), unit: t('s_1mcmbiu') },
+      { key: 'checkOption', label: t('s_dpy0pe'), hint: t('s_1xps9s3'), unit: t('s_1mcmbiu') },
+      { key: 'answer', label: t('s_1j77by5'), hint: t('s_1tau3xh'), unit: t('s_1mcmbiu') },
+    ],
+  },
+  {
+    id: 'account',
+    title: t('s_1otzax5'),
+    items: [
+      { key: 'usernameMin', label: t('s_dtadu0'), hint: t('s_1r8v016'), unit: t('s_1mcmbiu') },
+      { key: 'usernameMax', label: t('s_196bpby'), hint: t('s_v3tpu7'), unit: t('s_1mcmbiu') },
+      { key: 'passwordMin', label: t('s_e6tqxb'), hint: t('s_h600z1'), unit: t('s_1jlgtug') },
+      { key: 'passwordMax', label: t('s_19rf1tx'), hint: t('s_o6i8sq'), unit: t('s_1jlgtug') },
+      { key: 'nickname', label: t('s_jxewei'), hint: t('s_105tgz4'), unit: t('s_1mcmbiu') },
+      { key: 'bio', label: t('s_euttee'), hint: t('s_1vqr29w'), unit: t('s_1mcmbiu') },
+      { key: 'region', label: t('s_16txual'), hint: t('s_gzhx13'), unit: t('s_1mcmbiu') },
+    ],
+  },
 ];
+
+const LIMIT_ITEMS = LIMIT_GROUPS.flatMap((group) => group.items);
+
+function pairLimits(items: LimitItem[]): LimitItem[][] {
+  const rows: LimitItem[][] = [];
+  for (let index = 0; index < items.length; index += 2) rows.push(items.slice(index, index + 2));
+  return rows;
+}
 
 const router = useRouter();
 const route = useRoute();
@@ -98,14 +136,21 @@ const form = reactive({
   defaultCover: '',
   /** 展商可同时筹备的展会数；0 表示不限 */
   maxFutureExhibitions: 0,
+  /** 展商可同时筹备的私人会议数；0 表示不限 */
+  maxFutureMeetings: 0,
 });
 
 /** 管理页自己的文案：提示与开关说明放在这里，提取脚本会换成文案 key。 */
 const COPY = {
   coverTitle: t('s_y0ihlw'),
   coverHint: t('s_1rgheyl'),
+  limitIntro: t('s_2kxjse'),
   exhibitorLimit: t('s_17fthq4'),
   exhibitorLimitHint: t('s_13he981'),
+  meetingLimit: t('s_2qdje'),
+  meetingLimitHint: t('s_1g35i71'),
+  manageMeetings: t('s_12wwrng'),
+  adjustStatus: t('s_15y6qev'),
   avatarSection: t('s_ivjnb8'),
   avatarFormats: t('s_14byhwl'),
   avatarFormatsInvalid: t('s_hij4iq'),
@@ -119,16 +164,6 @@ const panelBusy = computed(() => tab.value === 'users' ? users.loading.value
 
 const userItems = computed<User[]>(() => users.data.value ?? []);
 const exhibitionItems = computed<Exhibition[]>(() => exhibitions.data.value ?? []);
-
-/** 前 10 项两两一行，最后两项各占一行（与旧实现的分组一致）。 */
-const limitRows = computed(() => {
-  const rows: Array<Array<{ key: string; label: string; hint: string }>> = [];
-  for (let index = 0; index + 1 < TEXT_LIMITS.length - 1; index += 2) {
-    rows.push(TEXT_LIMITS.slice(index, index + 2));
-  }
-  rows.push(TEXT_LIMITS.slice(-2));
-  return rows;
-});
 
 // ── 分区取数 ─────────────────────────────────────────────────────
 
@@ -220,6 +255,15 @@ onBeforeUnmount(() => {
  * 状态面板只列出状态名，不再附「· 说明」：说明属于顶部那条账号状态提示，
  * 塞进按钮里会让每个选项都变成一句话，选起来反而更慢。
  */
+function openPublic(user: User): void {
+  const nickname = String(user.nickname ?? '');
+  if (!nickname) return;
+  void router.push({
+    path: `/user-public/${encodeURIComponent(nickname)}`,
+    query: { userId: String(user.id ?? '') },
+  });
+}
+
 function manageUser(user: User): void {
   const actions: SheetAction[] = USER_STATUSES.map((status) => ({
     label: status,
@@ -231,7 +275,7 @@ function manageUser(user: User): void {
   }));
   // 不放「取消」：点遮罩、按返回或 Esc 都能关，面板里多一个取消只会让状态选项更不显眼。
   openSheet({
-    title: `管理 ${user.nickname}`,
+    title: `调整 ${user.nickname} 的状态`,
     message: `${user.role} · 注册于 ${user.registrationTime || t('s_1lpnuh4')}`,
     actions,
     layout: 'stack',
@@ -380,11 +424,12 @@ function fillForm(data: JsonObject): void {
   form.imageFormats = (Array.isArray(upload.imageFormats) ? upload.imageFormats : []).map((item) => String(item)).join(',');
   form.videoFormats = (Array.isArray(upload.videoFormats) ? upload.videoFormats : []).map((item) => String(item)).join(',');
   form.limits = {};
-  for (const item of TEXT_LIMITS) form.limits[item.key] = Number(limits[item.key] ?? bootstrap.limits[item.key] ?? 0);
+  for (const item of LIMIT_ITEMS) form.limits[item.key] = Number(limits[item.key] ?? bootstrap.limits[item.key] ?? 0);
   const cover = (data.cover ?? {}) as JsonObject;
   const exhibitor = (data.exhibitor ?? {}) as JsonObject;
   form.defaultCover = String(cover.defaultCover ?? bootstrap.cover.defaultCover ?? '');
   form.maxFutureExhibitions = Number(exhibitor.maxFutureExhibitions ?? bootstrap.exhibitor.maxFutureExhibitions ?? 0);
+  form.maxFutureMeetings = Number(exhibitor.maxFutureMeetings ?? bootstrap.exhibitor.maxFutureMeetings ?? 0);
 }
 
 /**
@@ -467,8 +512,9 @@ async function saveSettings(): Promise<void> {
       videoFormats: form.videoFormats.trim(),
       defaultCover: form.defaultCover.trim(),
       maxFutureExhibitions: Number(form.maxFutureExhibitions) || 0,
+      maxFutureMeetings: Number(form.maxFutureMeetings) || 0,
     };
-    for (const item of TEXT_LIMITS) payload[item.key] = numberField(item.key);
+    for (const item of LIMIT_ITEMS) payload[item.key] = numberField(item.key);
 
     const saved = await api.settings.save(payload);
     if (saved?.ok !== true) {
@@ -500,10 +546,10 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
 </script>
 
 <template>
-  <header class="row" data-between="true">
-    <h2>{{ t('s_cit5ds') }}</h2>
-    <span v-if="panelBusy" class="pill">{{ t('s_1tp8nhc') }}</span>
-  </header>
+  <!-- 顶栏已经写着「管理后台」，正文不再重复这四个字。忙碌时只留一枚状态胶囊。 -->
+  <div v-if="panelBusy" class="row">
+    <span class="pill">{{ t('s_1tp8nhc') }}</span>
+  </div>
 
   <SegControl :model-value="tab" :items="TABS" :label="t('s_y9zw6u')" @update:model-value="changeTab" />
 
@@ -544,28 +590,38 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       />
       <div v-else class="list" data-gap="sm" :data-busy="users.loading.value ? 'true' : undefined">
         <div v-for="user in userItems" :key="String(user.id)" class="card">
-          <div class="row" data-gap="md">
+          <button
+            class="row-card"
+            type="button"
+            data-pressable="true"
+            style="border: 0; padding: 0; background: transparent; width: 100%"
+            :aria-label="`查看 ${user.nickname} 的公开页`"
+            @click="openPublic(user)"
+          >
             <AvatarBox :name="String(user.nickname || '')" />
             <span class="row-copy">
-              <strong class="row-title">{{ `${user.nickname} · ${user.role}` }}</strong>
+              <span class="name-line">
+                <strong class="row-title truncate">{{ user.nickname }}</strong>
+                <RoleTag :role-code="String(user.roleCode || '')" />
+              </span>
               <span class="row-meta">{{ `${user.status} · 最近登录 ${user.lastLoginTime || t('s_1lpnuh4')}` }}</span>
               <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
               <span v-if="user.twoFactorEnabled === true" class="row-meta">{{ t('s_16q73v0') }}</span>
             </span>
             <StatusTag :text="String(user.status || '')" :tone="statusTone(String(user.status || ''))" />
-          </div>
-          <div class="row" data-gap="md">
-            <button class="cta ghost" data-size="small" type="button" style="flex: 1 1 0" @click="manageUser(user)">
-              {{ t('s_pzy8ri') }}
+          </button>
+          <div class="action-row">
+            <button class="cta ghost" data-size="small" type="button" @click="manageUser(user)">
+              {{ COPY.adjustStatus }}
             </button>
             <button
+              v-if="user.roleCode === 'exhibitor' || user.roleCode === 'admin'"
               class="cta ghost"
               data-size="small"
               type="button"
-              style="flex: 1 1 0"
-              @click="router.push({ path: `/user-public/${encodeURIComponent(String(user.nickname ?? ''))}`, query: { userId: String(user.id ?? '') } })"
+              @click="router.push(`/admin/meetings/${encodeURIComponent(String(user.id ?? ''))}`)"
             >
-              {{ t('s_gt2gfg') }}
+              {{ COPY.manageMeetings }}
             </button>
           </div>
           <!-- 兜底出口：用户邮箱用不了（离职、邮箱被回收）时，只有管理员能帮他关掉两步验证 -->
@@ -761,6 +817,21 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
           </div>
           <p class="field-hint">{{ COPY.exhibitorLimitHint }}</p>
         </div>
+        <div class="field">
+          <label for="settings-max-future-meetings">{{ COPY.meetingLimit }}</label>
+          <div class="row" data-gap="md">
+            <input
+              id="settings-max-future-meetings"
+              v-model.number="form.maxFutureMeetings"
+              class="input"
+              type="number"
+              min="0"
+              inputmode="numeric"
+            />
+            <span class="row-meta">{{ t('s_d5a1x9') }}</span>
+          </div>
+          <p class="field-hint">{{ COPY.meetingLimitHint }}</p>
+        </div>
       </div>
 
       <div class="card">
@@ -877,19 +948,28 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
 
       <div class="card">
         <span class="section-label">{{ t('s_rlbden') }}</span>
-        <div v-for="(row, rowIndex) in limitRows" :key="rowIndex" class="grid-cols-2">
-          <div v-for="item in row" :key="item.key" class="field">
-            <label :for="`limit-${item.key}`">{{ item.label }}</label>
-            <div class="row" data-gap="md">
-              <input
-                :id="`limit-${item.key}`"
-                v-model.number="form.limits[item.key]"
-                class="input"
-                type="number"
-                min="0"
-                inputmode="numeric"
-              />
-              <span class="row-meta">{{ item.hint }}</span>
+        <p class="field-hint">{{ COPY.limitIntro }}</p>
+        <div v-for="group in LIMIT_GROUPS" :key="group.id" class="limit-group">
+          <span class="limit-group-title">{{ group.title }}</span>
+          <div
+            v-for="(row, rowIndex) in pairLimits(group.items)"
+            :key="`${group.id}-${rowIndex}`"
+            :class="row.length > 1 ? 'grid-cols-2' : undefined"
+          >
+            <div v-for="item in row" :key="item.key" class="field">
+              <label :for="`limit-${item.key}`">{{ item.label }}</label>
+              <div class="row" data-gap="md">
+                <input
+                  :id="`limit-${item.key}`"
+                  v-model.number="form.limits[item.key]"
+                  class="input"
+                  type="number"
+                  min="0"
+                  inputmode="numeric"
+                />
+                <span class="row-meta">{{ item.unit }}</span>
+              </div>
+              <p class="field-hint">{{ item.hint }}</p>
             </div>
           </div>
         </div>

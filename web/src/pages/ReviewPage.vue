@@ -27,12 +27,14 @@ import RegistrationDetailSheet from '@/components/RegistrationDetailSheet.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import RoleTag from '@/components/RoleTag.vue';
 import type { Exhibition, Registration, ReviewList } from '@/api/types';
 import { t } from '@/i18n';
 
 const COPY = {
   /** 详情面板里的主按钮：详情只读，点它才进状态选择。 */
   adjustStatus: t('s_4hlup6'),
+  detail: t('s_ox3r68'),
 };
 
 const route = useRoute();
@@ -138,6 +140,16 @@ function statusMessage(status: string): string {
  * 状态动作放在同一面板的按钮里：详情只读，改状态要先点「调整审核状态」——
  * 动作数量随状态机变化，摆在详情里会让面板忽长忽短。
  */
+function openVisitor(record: Registration): void {
+  const id = String(record.visitorId || '');
+  if (!id) return;
+  const nickname = String(record.visitorName || 'user');
+  void router.push({
+    path: `/user-public/${encodeURIComponent(nickname)}`,
+    query: { userId: id },
+  });
+}
+
 function openDetail(record: Registration): void {
   const answers = answerLines(record.answers);
   const targets = targetsFor(record);
@@ -218,7 +230,7 @@ async function changeStatus(record: Registration, status: string): Promise<void>
 function askReject(record: Registration): void {
   openSheet({
     title: t('s_1qrntx4'),
-    message: `将「${record.visitorName}」的报名标记为已拒绝？审核结果会同步到用户的“我的报名”。`,
+    message: `将「${record.visitorName}」的报名标记为已拒绝？审核结果会同步到用户的“我的活动”。`,
     actions: [
       { label: t('s_1589w37'), onClick: (close) => close() },
       {
@@ -349,38 +361,47 @@ async function exportCsv(): Promise<void> {
 
     <div v-else class="list" data-gap="sm" :data-busy="review.loading.value ? 'true' : undefined">
       <div v-for="record in filtered" :key="String(record.id)" class="card">
-        <button
-          class="row-card"
-          type="button"
-          data-pressable="true"
-          style="border: 0; padding: 0; background: transparent"
-          :aria-label="`查看 ${record.visitorName} 的报名详情`"
-          @click="openDetail(record)"
-        >
-          <span class="avatar" aria-hidden="true">{{ String(record.visitorName ?? t('s_18ko8bk')).slice(0, 1) }}</span>
-          <span class="row-copy">
-            <strong class="row-title">{{ record.visitorName }}</strong>
-            <span class="row-meta">{{ `报名于 ${record.registrationTime}` }}</span>
-            <span class="row-meta truncate">{{ truncate(record.summary, 34) }}</span>
-          </span>
-          <StatusTag :text="String(record.status || '')" :tone="statusTone(String(record.status || ''))" />
-        </button>
-        <div v-if="targetsFor(record).length > 0" class="grid-cols-2">
+        <div class="row" data-gap="md">
           <button
-            v-for="target in targetsFor(record)"
-            :key="target"
-            class="cta"
-            :class="{ ghost: target !== REGISTRATION_STATUS.APPROVED }"
-            data-size="small"
+            v-if="record.visitorId"
+            class="avatar"
             type="button"
-            @click="target === REGISTRATION_STATUS.REJECTED ? askReject(record) : changeStatus(record, target)"
+            :aria-label="`查看 ${record.visitorName} 的公开页`"
+            @click="openVisitor(record)"
           >
-            {{ targetLabel(target) }}
+            {{ String(record.visitorName ?? t('s_18ko8bk')).slice(0, 1) }}
+          </button>
+          <span v-else class="avatar" aria-hidden="true">{{ String(record.visitorName ?? t('s_18ko8bk')).slice(0, 1) }}</span>
+          <button
+            class="row-card"
+            type="button"
+            data-pressable="true"
+            style="flex: 1 1 auto; min-width: 0; border: 0; padding: 0; background: transparent"
+            :aria-label="`查看 ${record.visitorName} 的报名详情`"
+            @click="openDetail(record)"
+          >
+            <span class="row-copy">
+              <span class="name-line">
+                <strong class="row-title">{{ record.visitorName }}</strong>
+                <RoleTag :role-code="String(record.visitorRole || '')" />
+              </span>
+              <span class="row-meta">{{ `报名于 ${record.registrationTime}` }}</span>
+              <span class="row-meta truncate">{{ truncate(record.summary, 34) }}</span>
+            </span>
+            <StatusTag :text="String(record.status || '')" :tone="statusTone(String(record.status || ''))" />
           </button>
         </div>
-        <p v-else class="field-hint">
-          {{ record.status === REGISTRATION_STATUS.ATTENDED ? t('s_159zzbg') : t('s_1e05tqn') }}
-        </p>
+        <div v-if="record.status === REGISTRATION_STATUS.PENDING" class="action-row">
+          <button class="cta" data-size="small" type="button" @click="changeStatus(record, REGISTRATION_STATUS.APPROVED)">
+            {{ t('s_j666m6') }}
+          </button>
+          <button class="cta ghost" data-size="small" type="button" @click="askReject(record)">
+            {{ t('s_1qrntx4') }}
+          </button>
+        </div>
+        <div v-else class="action-row">
+          <button class="cta ghost" data-size="small" type="button" @click="openDetail(record)">{{ COPY.detail }}</button>
+        </div>
       </div>
     </div>
 

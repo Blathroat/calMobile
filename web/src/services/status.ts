@@ -56,7 +56,7 @@ export function modeHint(status: string): string {
 
 /**
  * 状态 → 标签色调。
- * 颜色不作为唯一线索，标签始终带文字，这里只决定底色语义。
+ * 颜色不作为唯一线索，标签始终带文字。绿、黄、蓝和主题色都是描边加文字。
  */
 export function statusTone(status: unknown): StatusTone {
   switch (status) {

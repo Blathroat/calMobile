@@ -28,6 +28,26 @@ export function formatDateWithWeekday(iso: unknown): string {
   return `${date.month}月${date.day}日（${weekday}）`;
 }
 
+/** 2026-10-22 → 2026年10月22日。非法日期返回空串。 */
+export function formatChineseDate(iso: unknown): string {
+  const date = parseDate(iso);
+  if (!date) return '';
+  return `${date.year}年${date.month}月${date.day}日`;
+}
+
+/** 14:30 → 14时30分。空串或非法时间返回空串。 */
+export function formatChineseTime(value: unknown): string {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(value ?? '').trim());
+  if (!match) return '';
+  return `${Number(match[1])}时${Number(match[2])}分`;
+}
+
+export function formatMeetingWhen(date: unknown, time: unknown): string {
+  const day = formatChineseDate(date) || String(date ?? '');
+  const clock = formatChineseTime(time);
+  return clock ? `${day} ${clock}` : day;
+}
+
 /**
  * 报名 / 参展记录里的展会日期：优先用接口给的 ISO 日期，没有才用年 / 月 / 日字段拼。
  * 页面直接写死月份会在真实数据（跨月展会）上显示成错的日期。

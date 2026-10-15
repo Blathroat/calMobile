@@ -187,6 +187,7 @@
 .toolbar button,
 .link-button,
 .text-action,
+.collect-quiet,
 .swatch,
 .switch span,
 .switch span::after {
@@ -210,7 +211,8 @@
 .check-label:active,
 .toolbar button:active,
 .link-button:active,
-.text-action:active {
+.text-action:active,
+.collect-quiet:active:not(:disabled) {
     transform: scale(var(--press-scale));
 }
 

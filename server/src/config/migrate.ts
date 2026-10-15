@@ -48,6 +48,12 @@ export interface ServerSettings {
     exhibitionVenue: number;
     category: number;
     fieldTitle: number;
+    /** 报名时每个文本收集项最多填多少字。 */
+    textFill: number;
+    /** 每个单选选项最多多少字。 */
+    radioOption: number;
+    /** 每个多选选项最多多少字。 */
+    checkOption: number;
     usernameMin: number;
     usernameMax: number;
     passwordMin: number;
@@ -61,8 +67,8 @@ export interface ServerSettings {
   brand: { zh: string; en: string };
   /** 缺省展会封面：展会自己没有封面时用它，空串表示继续用占位图。 */
   cover: { defaultCover: string };
-  /** 展商端策略：单个展商同时能筹备的展会数上限，0 表示不限。 */
-  exhibitor: { maxFutureExhibitions: number };
+  /** 展商端策略：同时能筹备的展会数、私人会议数上限，0 表示不限。 */
+  exhibitor: { maxFutureExhibitions: number; maxFutureMeetings: number };
 }
 
 /**
@@ -472,6 +478,64 @@ export const STEPS: MigrationStep[] = [
             CHECK (scope IN ('password', 'email', 'totp', 'totp-confirm', 'factor'));
         `,
   },
+  {
+    id: '0013-private-meetings',
+    sql: `
+        -- 展商是否接受私人会议预约。受限或封禁时由业务把这一列强制写成 false。
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS accept_meetings BOOLEAN NOT NULL DEFAULT false;
+
+        CREATE TABLE IF NOT EXISTS meeting_fields (
+            id              TEXT PRIMARY KEY,
+            exhibitor_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            title           TEXT NOT NULL,
+            type            TEXT NOT NULL DEFAULT '文本'
+                            CHECK (type IN ('文本', '单选', '多选')),
+            required        BOOLEAN NOT NULL DEFAULT false,
+            options         JSONB NOT NULL DEFAULT '[]'::jsonb,
+            position        INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS meeting_fields_exhibitor_idx
+            ON meeting_fields (exhibitor_id, position);
+
+        CREATE TABLE IF NOT EXISTS private_meetings (
+            id              TEXT PRIMARY KEY,
+            exhibitor_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            visitor_id      TEXT REFERENCES users(id) ON DELETE SET NULL,
+            visitor_name    TEXT NOT NULL,
+            meeting_date    DATE NOT NULL,
+            meeting_time    TEXT NOT NULL DEFAULT '',
+            answers         TEXT NOT NULL DEFAULT '',
+            status          TEXT NOT NULL DEFAULT 'pending'
+                            CHECK (status IN ('pending', 'approved', 'rejected')),
+            locked          BOOLEAN NOT NULL DEFAULT false,
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
+        CREATE INDEX IF NOT EXISTS private_meetings_exhibitor_idx
+            ON private_meetings (exhibitor_id, meeting_date);
+        CREATE INDEX IF NOT EXISTS private_meetings_visitor_idx
+            ON private_meetings (visitor_id, meeting_date);
+        -- 同一天、同一个人对同一个展商只保留一条未结束的申请。
+        CREATE UNIQUE INDEX IF NOT EXISTS private_meetings_active_idx
+            ON private_meetings (exhibitor_id, visitor_id, meeting_date)
+            WHERE visitor_id IS NOT NULL AND status IN ('pending', 'approved');
+        `,
+  },
+  {
+    id: '0014-cancel-and-meeting-notice',
+    sql: `
+        -- 展会默认允许撤销已通过的报名，避免已有报名突然不能取消。
+        ALTER TABLE exhibitions ADD COLUMN IF NOT EXISTS allow_cancel BOOLEAN NOT NULL DEFAULT true;
+        -- 私人会议以前不能取消，所以默认关闭；待审核仍可撤销，不看这个开关。
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS meeting_allow_cancel BOOLEAN NOT NULL DEFAULT false;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS meeting_notice TEXT NOT NULL DEFAULT '';
+        ALTER TABLE private_meetings DROP CONSTRAINT IF EXISTS private_meetings_status_check;
+        ALTER TABLE private_meetings ADD CONSTRAINT private_meetings_status_check
+            CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled'));
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
@@ -492,6 +556,9 @@ export const DEFAULT_SETTINGS: ServerSettings = {
     exhibitionVenue: 60,
     category: 20,
     fieldTitle: 30,
+    textFill: 200,
+    radioOption: 60,
+    checkOption: 60,
     usernameMin: 3,
     usernameMax: 20,
     passwordMin: 6,
@@ -506,7 +573,7 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   // 缺省封面默认留空：升级后的老库行为不变（没有封面的展会继续显示占位图）。
   cover: { defaultCover: '' },
   // 0 = 不限。演示环境默认放开，部署方按运营策略调小。
-  exhibitor: { maxFutureExhibitions: 0 },
+  exhibitor: { maxFutureExhibitions: 0, maxFutureMeetings: 0 },
 };
 
 function errorMessage(error: unknown): string {

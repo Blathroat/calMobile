@@ -5,7 +5,7 @@
  *
  * 表单按展商配置的收集项动态生成：文本、单选、多选三种类型。必填与字符上限取
  * bootstrap 下发的规则（`services/validate`），校验失败落在字段原位（`.field-error`
- * 加 `.field[data-invalid]`），提交按钮固定在页脚，成功后短暂停留再进「我的报名」。
+ * 加 `.field[data-invalid]`），提交按钮固定在页脚，成功后短暂停留再进「我的活动」。
  *
  * 从报名详情带 `?registrationId=` 进来是「修改报名」：按收集项标题回填已有答案，
  * 提交仍是一次新的报名写入（与旧实现一致）。
@@ -26,6 +26,7 @@ import { formatDateWithWeekday } from '@/services/format';
 import { coverOf } from '@/services/cover';
 import { loadMarkdownParser, markdownToHtml, sanitizeHtml } from '@/services/markdown';
 import MediaBox from '@/components/MediaBox.vue';
+import RadioChoices from '@/components/RadioChoices.vue';
 import type { ExhibitionDetail, Registration } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -80,6 +81,7 @@ let built = false;
 let redirectTimer: number | undefined;
 
 /** 字符上限由管理员在「管理-设置」里配置，缺省与后端一致。 */
+const textFillMax = computed(() => limit('textFill', 200));
 const answerMax = computed(() => limit('answer', 200));
 const submitLabel = computed(() => {
   if (!success.value) return t('s_1umrk9v');
@@ -90,7 +92,7 @@ onMounted(() => {
   if (!registerLimited.value) void load();
 });
 
-// 离开本页时取消尚未触发的跳转，避免把已经返回的用户再拽到「我的报名」。
+// 离开本页时取消尚未触发的跳转，避免把已经返回的用户再拽到「我的活动」。
 onBeforeUnmount(() => {
   if (redirectTimer !== undefined) {
     window.clearTimeout(redirectTimer);
@@ -224,8 +226,8 @@ async function submit(): Promise<void> {
     const message = check(valueOf(field), {
       label: field.title,
       required: field.required === true,
-      // 只有文本项受字符上限约束（与后端 registrationSchema 的答案上限一致）。
-      max: field.type === '文本' ? answerMax.value : 0,
+      // 文本框填写按单项上限；整段报名内容在拼好后再查一次。
+      max: field.type === '文本' ? textFillMax.value : 0,
     });
     if (!message) continue;
     fieldErrors[field.title] = message;
@@ -244,6 +246,11 @@ async function submit(): Promise<void> {
   const visitorName = String(profile.nickname || profile.username || t('s_jt5fam'));
   const visitorType = String(profile.roleLabel || t('s_1cfg610'));
   const lines = fields.value.map((field) => `${field.title}：${valueOf(field) || t('s_15h5nhd')}`);
+  const packed = lines.join('\n');
+  if (answerMax.value > 0 && packed.length > answerMax.value) {
+    error.value = `整段报名内容最多 ${answerMax.value} 个字符`;
+    return;
+  }
 
   busy.value = true;
   try {
@@ -337,19 +344,12 @@ async function submit(): Promise<void> {
             <legend>
               {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
             </legend>
-            <div class="choice-row">
-              <span v-for="(option, index) in splitOptions(field.options)" :key="option" class="choice">
-                <input
-                  :id="`${fieldId(field)}-${index}`"
-                  type="radio"
-                  :name="fieldId(field)"
-                  :value="option"
-                  :checked="textValue(field) === option"
-                  @change="onRadioChange(field, option)"
-                >
-                <label :for="`${fieldId(field)}-${index}`">{{ option }}</label>
-              </span>
-            </div>
+            <RadioChoices
+              :name="fieldId(field)"
+              :options="splitOptions(field.options)"
+              :selected="textValue(field)"
+              @select="onRadioChange(field, $event)"
+            />
             <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
           </fieldset>
 
@@ -376,7 +376,7 @@ async function submit(): Promise<void> {
                   :checked="multiValue(field).includes(option)"
                   @change="onMultiChange(field, option, $event)"
                 >
-                {{ option }}
+                <span class="check-copy">{{ option }}</span>
               </label>
             </div>
             <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
@@ -392,7 +392,7 @@ async function submit(): Promise<void> {
               class="input"
               type="text"
               :placeholder="`请输入${field.title}`"
-              :maxlength="answerMax"
+              :maxlength="textFillMax"
               :value="textValue(field)"
               @input="onTextInput(field, $event)"
             >

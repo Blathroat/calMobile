@@ -16,6 +16,7 @@ function searchUserPayload(row: UserRow) {
     id: row.id,
     nickname: row.nickname,
     role: labels.ROLE_LABEL[row.role] || row.role,
+    roleCode: row.role,
     email: row.email || '',
     status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active,
     registrationTime: row.registration_time || '',

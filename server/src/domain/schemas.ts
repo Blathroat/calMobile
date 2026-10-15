@@ -189,6 +189,9 @@ export const serverSettingsPatchSchema = z
     exhibitionVenue: z.unknown(),
     category: z.unknown(),
     fieldTitle: z.unknown(),
+    textFill: z.unknown(),
+    radioOption: z.unknown(),
+    checkOption: z.unknown(),
     usernameMin: z.unknown(),
     usernameMax: z.unknown(),
     passwordMin: z.unknown(),
@@ -200,6 +203,7 @@ export const serverSettingsPatchSchema = z
     // 缺省展会封面（媒体短 URL）与「展商可同时筹备的展会数」上限（0 = 不限）
     defaultCover: z.unknown(),
     maxFutureExhibitions: z.unknown(),
+    maxFutureMeetings: z.unknown(),
     notify: notifySchema,
   })
   .partial()
@@ -243,13 +247,15 @@ export function fieldSchema(limits: Limits) {
             (labels.EXHIBITION_FIELD_TYPES as readonly string[]).includes(value),
           '收集项类型只能是 文本 / 单选 / 多选',
         ),
-      title: textSchema({ label: '收集项标题', max: limits.fieldTitle }),
+      title: textSchema({ label: '文本框标题', max: limits.fieldTitle }),
       required: boolSchema(false),
       options: z.unknown().optional(),
     })
     .transform((field, ctx) => {
       if (field.type === '文本') return { ...field, options: [] };
-      const options = stringListSchema({ label: '选项' }).safeParse(field.options);
+      const optionMax = field.type === '多选' ? limits.checkOption : limits.radioOption;
+      const optionLabel = field.type === '多选' ? '多选选项' : '单选选项';
+      const options = stringListSchema({ label: optionLabel, itemMax: optionMax }).safeParse(field.options);
       if (!options.success) {
         ctx.addIssue({ code: 'custom', message: options.error.issues[0]?.message || '请求参数不正确' });
         return z.NEVER;
@@ -264,6 +270,26 @@ export function fieldSchema(limits: Limits) {
 
 export function fieldsSchema(limits: Limits) {
   return z.array(fieldSchema(limits), { error: '收集项需为数组' }).max(50, '收集项最多 50 项');
+}
+
+/** 私人会议设置：是否接受预约、通过后能否撤销、申请页说明，以及展商自己的收集项。 */
+export function meetingSettingsSchema(limits: Limits) {
+  return z.object({
+    acceptMeetings: boolSchema(false),
+    allowCancel: boolSchema(false),
+    notice: textSchema({ label: '预约说明', max: 400, required: false }),
+    fields: fieldsSchema(limits),
+  });
+}
+
+/** 私人会议申请：日期必填，时间选填，答案是收集项拼出来的文本。 */
+export function meetingApplySchema(answerMax: number) {
+  return z.object({
+    exhibitorId: textSchema({ label: '展商', max: 80 }),
+    meetingDate: isoDateSchema({ label: '会议日期', required: true }),
+    meetingTime: textSchema({ label: '会议时间', max: 20, required: false }),
+    answers: textSchema({ label: '整段报名内容', max: answerMax, required: false }),
+  });
 }
 
 function descriptionFormatSchema() {
@@ -286,6 +312,7 @@ export function exhibitionInputSchema(
     image_uri?: string | null;
     exhibitor_note?: string | null;
     qr_enabled?: boolean | null;
+    allow_cancel?: boolean | null;
   },
 ) {
   const creating = !existing;
@@ -304,6 +331,11 @@ export function exhibitionInputSchema(
       imageUri: inputString,
       exhibitorNote: inputString,
       qrEnabled: boolSchema(false),
+      allowCancel: z.preprocess((value) => {
+        if (value === undefined || value === null || value === '') return undefined;
+        if (typeof value === 'boolean') return value;
+        return value === 'true' || value === 1 || value === '1';
+      }, z.boolean().optional()),
       fields: z.preprocess((value) => (Array.isArray(value) ? value : null), fieldsSchema(limits).nullable()),
     })
     .partial();
@@ -357,6 +389,7 @@ export function exhibitionInputSchema(
         imageUri: source.imageUri ?? existing?.image_uri ?? '',
         exhibitorNote: source.exhibitorNote ?? (creating ? '主办方公开信息' : (existing?.exhibitor_note ?? '')),
         qrEnabled: source.qrEnabled ?? Boolean(existing?.qr_enabled),
+        allowCancel: source.allowCancel ?? (existing ? existing.allow_cancel !== false : true),
         fields: Array.isArray(source.fields) && source.fields.length > 0 ? source.fields : null,
       };
     });
@@ -370,7 +403,7 @@ export function registrationSchema(answerMax = 0) {
     visitorType: textSchema({ label: '参观身份' }),
     answers: inputString.refine(
       (value) => answerMax <= 0 || value.length <= answerMax,
-      `报名填写内容最多 ${answerMax} 个字符`,
+      `整段报名内容最多 ${answerMax} 个字符`,
     ),
   });
 }

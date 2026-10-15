@@ -1,7 +1,7 @@
 /**
  * 浏览器报名站的路由。
  *
- * 只有登录、注册、找回密码、一条展会报名链接和我的报名。
+ * 只有登录、注册、找回密码、展会报名链接、私人会议申请链接和我的活动。
  * 没有首页日历、展会列表、搜索、资料、展商后台和管理后台。
  * 对不上的地址落到说明页，而不是 App 的 `/home`。
  */
@@ -12,6 +12,8 @@ import ForgotPasswordPage from '@/pages/ForgotPasswordPage.vue';
 import RegistrationFormPage from '@/pages/RegistrationFormPage.vue';
 import MyRegistrationsPage from '@/pages/MyRegistrationsPage.vue';
 import RegistrationDetailPage from '@/pages/RegistrationDetailPage.vue';
+import MeetingApplyPage from '@/pages/MeetingApplyPage.vue';
+import MeetingDetailPage from '@/pages/MeetingDetailPage.vue';
 import LinkOnlyPage from '@/join/LinkOnlyPage.vue';
 import { navigation } from '@/app/navigation';
 import { useSessionStore } from '@/stores/session';
@@ -39,7 +41,13 @@ export function createJoinRouter(history: RouterHistory = createWebHistory()) {
           topAction: { icon: 'lock', label: 's_12hokt7', action: 'logout' },
         },
       },
+      { path: '/mine/m/:id', component: MeetingDetailPage, meta: { title: 's_g1bhp7', back: true, requiresAuth: true } },
       { path: '/mine/:id', component: RegistrationDetailPage, meta: { title: 's_1e7myaa', back: true, requiresAuth: true } },
+      {
+        path: '/m/:exhibitorId',
+        component: MeetingApplyPage,
+        meta: { title: 's_ks6zd8', back: true, bodyGap: 'tight', requiresAuth: true, capability: 'register' },
+      },
       { path: '/:pathMatch(.*)*', name: 'link-only', component: LinkOnlyPage, meta: { title: 's_14frgky' } },
     ],
   });

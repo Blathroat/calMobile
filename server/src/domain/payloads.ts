@@ -22,11 +22,13 @@ export interface ExhibitionRow {
   day?: number | null;
   exhibition_date?: string | null;
   exhibitor?: string | null;
+  exhibitor_role?: string | null;
   exhibitor_note?: string | null;
   image_uri?: string | null;
   registration_start?: string | null;
   registration_end?: string | null;
   qr_enabled?: boolean | null;
+  allow_cancel?: boolean | null;
   exhibitor_id?: string | null;
   registration_count?: number | null;
   field_count?: number | null;
@@ -57,6 +59,7 @@ export interface RegistrationRow {
   answers?: string | null;
   status: string;
   exhibition_qr_enabled?: boolean | null;
+  exhibition_allow_cancel?: boolean | null;
   check_in_time?: string | Date | null;
 }
 
@@ -71,6 +74,7 @@ export interface UserRow {
   social_media?: string | null;
   avatar?: string | null;
   show_registrations?: boolean | null;
+  accept_meetings?: boolean | null;
   /** 已看过的一次性提示 key 列表（见 `domain/settings.ts` 的 `saveSeenHint`）。 */
   seen_hints?: string[] | null;
   status?: string | null;
@@ -114,11 +118,13 @@ export function exhibitionPayload(row: ExhibitionRow) {
     date: row.exhibition_date || '',
     dateLabel: labels.dateLabel(row.exhibition_date),
     exhibitor: row.exhibitor || '',
+    exhibitorRole: row.exhibitor_role || '',
     exhibitorNote: row.exhibitor_note || '',
     imageUri: row.image_uri || '',
     registrationStart: row.registration_start || '',
     registrationEnd: row.registration_end || '',
     qrEnabled: row.qr_enabled === true,
+    allowCancel: row.allow_cancel !== false,
     registrationCount: Number(row.registration_count) || 0,
     fieldCount: Number(row.field_count) || 0,
   };
@@ -161,6 +167,7 @@ export function registrationPayload(row: RegistrationRow) {
     status: labels.REGISTRATION_STATUS[statusCode] || '',
     statusLabel: labels.REGISTRATION_STATUS[statusCode] || '',
     qrEnabled: row.exhibition_qr_enabled === true,
+    allowCancel: row.exhibition_allow_cancel !== false,
     checkInCode: codeAllowed ? labels.checkInCode(row.exhibition_id, row.id) : '',
     checkInTime: row.check_in_time ? new Date(row.check_in_time).toISOString() : '',
   };

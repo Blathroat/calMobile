@@ -30,7 +30,7 @@ export interface ShellMeta {
 
 /**
  * 底部导航项，按角色过滤（与旧版 MainActivity 的标签可见性一致）：
- * 首页与我的报名人人可见，展商后台与管理后台只在后端明确下发能力时出现，
+ * 首页与我的活动人人可见，展商后台与管理后台只在后端明确下发能力时出现，
  * 个人页固定在最后。
  */
 export function tabItems(can: Record<string, boolean> | undefined): TabItem[] {

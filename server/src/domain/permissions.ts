@@ -62,6 +62,11 @@ export function capabilities(role: string, status?: string): Capabilities {
   };
 }
 
+/** 管理员包含展商的全部能力，因此也能开办私人会议、被预约。 */
+export function canHostMeetings(role: string | null | undefined): boolean {
+  return role === 'exhibitor' || role === 'admin';
+}
+
 /** 是不是「受限」账号。管理员不算（否则没人能解除限制）；缺 status 时按未受限处理。 */
 export function isLimited(user: { role?: string; status?: string } | null | undefined): boolean {
   if (!user || user.role === 'admin') {
@@ -84,6 +89,7 @@ export const LIMITED_ACTIONS: Record<string, string> = {
   exhibitionFields: '账号已被限制，不能修改报名设置',
   checkin: '账号已被限制，不能核销',
   profile: '账号已被限制，不能编辑个人信息',
+  meetingSettings: '账号已被限制，不能修改私人会议设置',
 };
 
 /** 受限账号执行被禁操作时抛出 403；返回当前用户便于串起来用。 */

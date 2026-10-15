@@ -12,13 +12,16 @@
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
+import { paths } from '@/app/surface';
 import { useAsync } from '@/composables/useAsync';
 import { useSessionStore } from '@/stores/session';
+import { toast } from '@/services/toast';
 import AvatarBox from '@/components/AvatarBox.vue';
 import MediaBox from '@/components/MediaBox.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import RoleTag from '@/components/RoleTag.vue';
 import { formatRecordDate } from '@/services/format';
 import { coverOf } from '@/services/cover';
 import type { JsonObject } from '@/api/types';
@@ -43,13 +46,32 @@ const isOwn = computed(() => {
   const nickname = String(route.params.nickname ?? '');
   return nickname !== '' && nickname === String(session.user.nickname ?? '');
 });
+/** 展商和管理员的角色改由名字后的标签表达，这里不再重复。 */
+const identityLine = computed(() => {
+  const code = String(profile.value?.roleCode || '');
+  const tagged = code === 'exhibitor' || code === 'admin';
+  const own = isOwn.value ? t('s_14nrrfg') : '';
+  if (tagged) return own;
+  const role = String(profile.value?.role || '');
+  if (own && role) return `${role} · ${own}`;
+  return own || role;
+});
+/** 管理员包含全部展商能力，公开页上同样可以接受会议预约。 */
+const canHostMeetings = computed(() => {
+  const role = profile.value?.roleCode;
+  return role === 'exhibitor' || role === 'admin';
+});
+/** 主办人主页能预约；未开启时按钮仍在，只是置灰并改文案。 */
+const canRequestMeeting = computed(() => found.value && canHostMeetings.value && !isOwn.value);
+const meetingsOpen = computed(() => profile.value?.meetingsOpen === true);
+const canManageMeetings = computed(() => adminView.value && canHostMeetings.value);
+const closedMeetingLabel = t('s_7q6wmd');
+const requestMeetingLabel = t('s_h1cjf4');
+const manageMeetingsLabel = t('s_12wwrng');
 const visibilityLabel = computed(() => {
   if (adminView.value) return t('s_iq65l2');
   return showRegistrations.value ? t('s_q3pv0x') : t('s_ex547b');
 });
-const footLabel = computed(() => (isOwn.value
-  ? t('s_1u66l1')
-  : (adminView.value ? t('s_1m9kuky') : t('s_17zyr1e'))));
 
 const COPY = {
   /** 展商主页的主区块：这个人自己开办的展会（普通用户没有，整块不渲染）。 */
@@ -73,9 +95,22 @@ function load(): void {
   }));
 }
 
-/** 底部出口随视角变化：本人回个人主页，管理员回管理后台，其它访问者回首页。 */
-function leave(): void {
-  void router.push(isOwn.value ? '/profile' : (adminView.value ? '/admin' : '/home'));
+/** 未开启时按钮是 disabled，点不到这里。受限账号不能报名，就地说明，不把人送进会被守卫踢回的申请页。 */
+function requestMeeting(): void {
+  if (!meetingsOpen.value) return;
+  if (!session.can('register')) {
+    toast(t('s_1tanmo5'), 'error');
+    return;
+  }
+  const id = String(profile.value?.id || '');
+  if (!id) return;
+  void router.push(paths.meetingApply(id));
+}
+
+function openMeetingAdmin(): void {
+  const id = String(profile.value?.id || '');
+  if (!id) return;
+  void router.push(`/admin/meetings/${encodeURIComponent(id)}`);
 }
 
 onMounted(load);
@@ -116,9 +151,12 @@ onMounted(load);
       <div class="row" data-gap="md">
         <AvatarBox :src="String(profile.avatar || '')" :name="String(profile.nickname || '')" />
         <span class="row-copy">
-          <strong class="row-title">{{ profile.nickname }}</strong>
+          <span class="name-line">
+            <strong class="row-title">{{ profile.nickname }}</strong>
+            <RoleTag :role-code="String(profile.roleCode || '')" />
+          </span>
           <!-- 分隔用的「 · 」留在模板里而不放进文案资源：Android 的 string 资源会裁掉首尾空白。 -->
-          <span class="row-meta">{{ isOwn ? `${profile.role} · ${t('s_14nrrfg')}` : profile.role }}</span>
+          <span v-if="identityLine" class="row-meta">{{ identityLine }}</span>
           <span class="row-meta">{{ profile.bio || t('s_1aifth0') }}</span>
         </span>
         <StatusTag :text="visibilityLabel" :tone="adminView || showRegistrations ? 'ok' : 'muted'" />
@@ -135,6 +173,21 @@ onMounted(load);
         <span class="row-meta">{{ t('s_1hnvqec') }}</span>
         <span class="strong truncate">{{ profile.socialMedia || t('s_lltmb4') }}</span>
       </div>
+    </div>
+
+    <div v-if="canManageMeetings || canRequestMeeting" class="stack" data-gap="sm">
+      <button v-if="canManageMeetings" class="cta ghost" type="button" @click="openMeetingAdmin">
+        {{ manageMeetingsLabel }}
+      </button>
+      <button
+        v-if="canRequestMeeting"
+        class="cta ghost"
+        type="button"
+        :disabled="!meetingsOpen"
+        @click="requestMeeting"
+      >
+        {{ meetingsOpen ? requestMeetingLabel : closedMeetingLabel }}
+      </button>
     </div>
 
     <!-- 开办的展会：展商主页的主要内容，放在「已参加展会」之前 -->
@@ -181,10 +234,4 @@ onMounted(load);
       <p v-else class="row-meta">{{ showRegistrations ? t('s_8kqs1o') : t('s_g4uu62') }}</p>
     </div>
   </template>
-
-  <Teleport v-if="found" defer to="#app-foot">
-    <div class="page-foot">
-      <button class="cta ghost" type="button" @click="leave">{{ footLabel }}</button>
-    </div>
-  </Teleport>
 </template>

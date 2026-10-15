@@ -37,6 +37,11 @@ const answers = computed(() => answerLines(record.value?.answers));
 const cancelled = computed(() => record.value?.statusLabel === REGISTRATION_STATUS.CANCELLED);
 /** 已参加是终态：后端不允许再撤销，按钮就不要画成可点的。 */
 const attended = computed(() => record.value?.statusLabel === REGISTRATION_STATUS.ATTENDED);
+const approved = computed(() => record.value?.statusLabel === REGISTRATION_STATUS.APPROVED);
+/** 已通过的报名还要看展商是否允许撤销。待审核不受这个开关影响。 */
+const hostBlocksCancel = computed(() => approved.value && record.value?.allowCancel === false);
+const canCancel = computed(() => !cancelled.value && !attended.value && !hostBlocksCancel.value);
+const hostCancelHint = t('s_p4j6oi');
 /** 待审核的报名始终可以改；其余状态由管理员的「是否需要重新审核」决定。 */
 const canRevise = computed(() => bootstrap.review.canRevise === true || record.value?.statusLabel === REGISTRATION_STATUS.PENDING);
 
@@ -199,14 +204,14 @@ function askCancel(): void {
           <button
             class="cta danger"
             type="button"
-            :disabled="cancelled || attended || cancelling"
+            :disabled="!canCancel || cancelling"
             @click="askCancel"
           >
             {{ cancelled ? REGISTRATION_STATUS.CANCELLED : (attended ? REGISTRATION_STATUS.ATTENDED : t('s_1u8rnsb')) }}
           </button>
         </div>
         <p class="field-hint text-center">
-          {{ cancelled ? t('s_ex1lrt') : (attended ? t('s_2vsxvu') : t('s_131vhix')) }}
+          {{ cancelled ? t('s_ex1lrt') : (attended ? t('s_2vsxvu') : (hostBlocksCancel ? hostCancelHint : t('s_131vhix'))) }}
         </p>
       </div>
     </div>
