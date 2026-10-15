@@ -20,8 +20,10 @@ export async function drawQr(node: HTMLCanvasElement, text: string, quiet = 4): 
     for (let column = 0; column < modules; column += 1) {
       if (!model.isDark(row, column)) continue;
       context.fillRect(
-        Math.round((column + quiet) * scale), Math.round((row + quiet) * scale),
-        Math.ceil(scale), Math.ceil(scale),
+        Math.round((column + quiet) * scale),
+        Math.round((row + quiet) * scale),
+        Math.ceil(scale),
+        Math.ceil(scale),
       );
     }
   }

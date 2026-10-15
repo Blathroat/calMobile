@@ -187,7 +187,10 @@ function logout(): void {
             <AppIcon name="edit" />
           </button>
         </div>
-        <p class="row-meta">{{ profileValue('bio', 'profile.bioEmpty') }}<br><br>{{ COPY.socialPrefix }}{{ profileValue('socialMedia', 'profile.notFilled') }}</p>
+        <p class="row-meta">
+          {{ profileValue('bio', 'profile.bioEmpty') }}<br /><br />{{ COPY.socialPrefix
+          }}{{ profileValue('socialMedia', 'profile.notFilled') }}
+        </p>
       </div>
 
       <!-- 设置入口：与顶栏右侧的设置图标进同一页（头像、通知、隐私、安全都在那里） -->

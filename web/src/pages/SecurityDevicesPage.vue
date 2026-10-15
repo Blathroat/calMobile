@@ -48,14 +48,18 @@ const copy = {
   revokeAllButton: t('security.devices.signOutAll'),
 };
 
-const errorText = (reason: unknown): string => reason instanceof Error ? reason.message : t('auth.register.failed');
+const errorText = (reason: unknown): string => (reason instanceof Error ? reason.message : t('auth.register.failed'));
 function dateLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return copy.unknownDate;
   return new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
   }).format(date);
 }
 
@@ -64,7 +68,7 @@ async function load(): Promise<void> {
   loadError.value = '';
   try {
     const result = await api.security.sessions();
-    devices.value = Array.isArray(result.sessions) ? result.sessions as DeviceSession[] : [];
+    devices.value = Array.isArray(result.sessions) ? (result.sessions as DeviceSession[]) : [];
   } catch (reason) {
     loadError.value = errorText(reason);
   } finally {
@@ -152,13 +156,26 @@ function revokeAll(): void {
         <div class="stack" data-gap="xs">
           <span class="row-meta">{{ copy.lastActive }}：{{ dateLabel(device.lastActive) }}</span>
           <span class="row-meta">{{ copy.firstSeen }}：{{ dateLabel(device.firstSeen) }}</span>
-          <span v-if="device.activeSessions > 1" class="row-meta">{{ device.activeSessions }} {{ copy.activeSessions }}</span>
+          <span v-if="device.activeSessions > 1" class="row-meta"
+            >{{ device.activeSessions }} {{ copy.activeSessions }}</span
+          >
         </div>
-        <button class="cta ghost" type="button" :disabled="busyId === device.id || allBusy" @click="revokeDevice(device)">
+        <button
+          class="cta ghost"
+          type="button"
+          :disabled="busyId === device.id || allBusy"
+          @click="revokeDevice(device)"
+        >
           {{ busyId === device.id ? copy.processing : copy.revokeThisDevice }}
         </button>
       </article>
-      <button v-if="devices.length > 0" class="cta danger" type="button" :disabled="allBusy || Boolean(busyId)" @click="revokeAll">
+      <button
+        v-if="devices.length > 0"
+        class="cta danger"
+        type="button"
+        :disabled="allBusy || Boolean(busyId)"
+        @click="revokeAll"
+      >
         {{ allBusy ? copy.processing : copy.revokeAllButton }}
       </button>
     </div>

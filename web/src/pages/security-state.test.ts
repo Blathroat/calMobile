@@ -34,8 +34,13 @@ vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 
 let app: App | undefined;
 const securityInfo = (mode: 'off' | 'email' | 'totp' = 'off', totpConfigured = mode === 'totp') => ({
-  email: 'user@example.com', emailVerified: true, canEnable: true,
-  twoFactorEnabled: mode !== 'off', twoFactorMethod: mode, totpEnabled: totpConfigured, backupCodesLeft: 0,
+  email: 'user@example.com',
+  emailVerified: true,
+  canEnable: true,
+  twoFactorEnabled: mode !== 'off',
+  twoFactorMethod: mode,
+  totpEnabled: totpConfigured,
+  backupCodesLeft: 0,
 });
 
 const TestRoot = defineComponent({
@@ -80,7 +85,12 @@ beforeEach(() => {
   vi.mocked(api.security.identityEmailCode).mockResolvedValue({ ok: true, maskedEmail: 'u***@example.com' });
   vi.mocked(api.security.verifyIdentity).mockResolvedValue({ ok: true, stepUpToken: 'step-up' });
   vi.mocked(api.security.enableTwoFactor).mockResolvedValue({ ok: true, maskedEmail: 'u***@example.com' });
-  vi.mocked(api.security.totpSetup).mockResolvedValue({ ok: true, secret: 'JBSWY3DPEHPK3PXP', otpauthUri: 'otpauth://totp/test', stepUpToken: 'confirm-step' });
+  vi.mocked(api.security.totpSetup).mockResolvedValue({
+    ok: true,
+    secret: 'JBSWY3DPEHPK3PXP',
+    otpauthUri: 'otpauth://totp/test',
+    stepUpToken: 'confirm-step',
+  });
 });
 
 afterEach(async () => {
@@ -157,9 +167,7 @@ describe('安全方式切换与抽屉', () => {
 
   it('邮箱验证通过并经安全状态确认后才切换选项', async () => {
     vi.mocked(api.security.verifyTwoFactor).mockResolvedValue({ ok: true, backupCodes: [] });
-    vi.mocked(api.security.get)
-      .mockResolvedValueOnce(securityInfo('off'))
-      .mockResolvedValueOnce(securityInfo('email'));
+    vi.mocked(api.security.get).mockResolvedValueOnce(securityInfo('off')).mockResolvedValueOnce(securityInfo('email'));
     await mount();
     choice('email').click();
     await flush();

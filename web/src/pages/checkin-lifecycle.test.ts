@@ -30,8 +30,13 @@ beforeEach(() => {
   vi.mocked(createQrDecoder).mockReturnValue(decoder);
   getUserMedia.mockResolvedValue(media);
   vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
-  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { nextFrame = callback; return ++frameId; });
-  vi.stubGlobal('cancelAnimationFrame', () => { nextFrame = undefined; });
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    nextFrame = callback;
+    return ++frameId;
+  });
+  vi.stubGlobal('cancelAnimationFrame', () => {
+    nextFrame = undefined;
+  });
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
   vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(1280);
   vi.spyOn(HTMLVideoElement.prototype, 'videoHeight', 'get').mockReturnValue(960);
@@ -54,14 +59,19 @@ async function mountPage(limited = false): Promise<void> {
   const pinia = createPinia();
   setActivePinia(pinia);
   useSessionStore().applyUser({ id: 'exhibitor-1', role: 'exhibitor', can: { limited } });
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/checkin', component: CheckinPage }] });
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/checkin', component: CheckinPage }],
+  });
   await router.push('/checkin');
   app = createApp(CheckinPage).use(pinia).use(router);
   app.mount('#checkin-test');
   await nextTick();
 }
 
-function scanButton(): HTMLButtonElement { return document.querySelector<HTMLButtonElement>('button.cta')!; }
+function scanButton(): HTMLButtonElement {
+  return document.querySelector<HTMLButtonElement>('button.cta')!;
+}
 
 describe('核销页面的异步识别与相机生命周期', () => {
   it('受限账号不创建解码 Worker 或申请相机', async () => {
@@ -72,7 +82,11 @@ describe('核销页面的异步识别与相机生命周期', () => {
 
   it.each(['stop', 'unmount', 'manual'] as const)('%s 之后的旧帧不会发起核销，解码期间不重复取帧', async (action) => {
     let finish!: (text: string | null) => void;
-    vi.mocked(decoder.decode).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    vi.mocked(decoder.decode).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
     await mountPage();
     scanButton().click();
     await vi.waitFor(() => expect(nextFrame).toBeDefined());
@@ -82,7 +96,10 @@ describe('核销页面的异步识别与相机生命周期', () => {
     expect(decoder.decode).toHaveBeenCalledTimes(1);
     if (action === 'stop') scanButton().click();
     else if (action === 'manual') document.querySelector<HTMLButtonElement>('button.cta.ghost')!.click();
-    else { app?.unmount(); app = undefined; }
+    else {
+      app?.unmount();
+      app = undefined;
+    }
     finish('CALMOBILE-CHECKIN|late-frame');
     await nextTick();
     await Promise.resolve();
@@ -93,15 +110,21 @@ describe('核销页面的异步识别与相机生命周期', () => {
 
   it.each(['unmount', 'manual'] as const)('相机尚未返回时保持忙碌；%s 后新返回的媒体立即释放', async (action) => {
     let finish!: (value: MediaStream) => void;
-    getUserMedia.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    getUserMedia.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
     await mountPage();
     scanButton().click();
     await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
     expect(scanButton().disabled).toBe(true);
     scanButton().click();
     expect(device.ensureCameraPermission).toHaveBeenCalledOnce();
-    if (action === 'unmount') { app?.unmount(); app = undefined; }
-    else document.querySelector<HTMLButtonElement>('button.cta.ghost')!.click();
+    if (action === 'unmount') {
+      app?.unmount();
+      app = undefined;
+    } else document.querySelector<HTMLButtonElement>('button.cta.ghost')!.click();
     finish(media);
     await nextTick();
     expect(stopTrack).toHaveBeenCalledOnce();

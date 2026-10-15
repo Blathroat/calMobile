@@ -41,14 +41,14 @@ const exhibitions = computed(() => asList(results.value?.exhibitions));
 const users = computed(() => asList(results.value?.users));
 const hasContent = computed(() => results.value !== undefined);
 const isEmptyResult = computed(() => hasContent.value && exhibitions.value.length === 0 && users.value.length === 0);
-const countLabel = computed(() => (!keyword.value.trim() || !hasContent.value
-  ? t('search.zeroCount')
-  : `${Number(results.value?.count) || 0} 条结果`));
+const countLabel = computed(() =>
+  !keyword.value.trim() || !hasContent.value ? t('search.zeroCount') : `${Number(results.value?.count) || 0} 条结果`,
+);
 
 let timer: number | undefined;
 
 function asList(value: unknown): JsonObject[] {
-  return Array.isArray(value) ? value as JsonObject[] : [];
+  return Array.isArray(value) ? (value as JsonObject[]) : [];
 }
 
 async function run(text: string): Promise<void> {
@@ -137,7 +137,7 @@ onBeforeUnmount(() => {
       :aria-label="t('search.inputLabel')"
       @input="onInput"
       @keydown.enter.prevent="submitNow"
-    >
+    />
   </div>
 
   <div class="row" data-between="true">
@@ -219,7 +219,11 @@ onBeforeUnmount(() => {
             <AvatarBox :name="String(user.nickname || '')" />
             <span class="row-copy">
               <span class="name-line">
-                <strong class="row-title truncate">{{ user.roleCode === 'exhibitor' || user.roleCode === 'admin' ? user.nickname : `${user.nickname} · ${user.role}` }}</strong>
+                <strong class="row-title truncate">{{
+                  user.roleCode === 'exhibitor' || user.roleCode === 'admin'
+                    ? user.nickname
+                    : `${user.nickname} · ${user.role}`
+                }}</strong>
                 <RoleTag :role-code="String(user.roleCode || '')" />
               </span>
               <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>

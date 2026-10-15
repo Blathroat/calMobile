@@ -119,12 +119,12 @@ export async function syncDevice(): Promise<void> {
   const settings = useSettingsStore();
   const bootstrap = useBootstrapStore();
   try {
-    const result = await device.sync({
+    const result = (await device.sync({
       mode: settings.mode,
       themeIndex: Number(bootstrap.theme.index) || 0,
       media: bootstrap.media,
       upload: bootstrap.server,
-    }) as { notificationsGranted?: boolean } | null | undefined;
+    })) as { notificationsGranted?: boolean } | null | undefined;
     if (result && typeof result.notificationsGranted === 'boolean') {
       useCapabilitiesStore().apply({ notifications: result.notificationsGranted });
     }
@@ -163,7 +163,13 @@ function rgba(color: string, alpha: number): string {
 
 function hex(color: string): [number, number, number] {
   const text = String(color || '').replace('#', '');
-  const full = text.length === 3 ? text.split('').map((character) => character + character).join('') : text;
+  const full =
+    text.length === 3
+      ? text
+          .split('')
+          .map((character) => character + character)
+          .join('')
+      : text;
   const value = Number.parseInt(full.slice(0, 6) || 'c05621', 16);
   return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }

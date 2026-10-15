@@ -10,19 +10,27 @@ import { closeSheet, sheet } from '@/services/sheet';
 
 vi.mock('@/app/runtime', () => ({
   bootApp: async () => undefined,
-  api: { profile: {
-    get: vi.fn(),
-    notifications: vi.fn(),
-    save: vi.fn(),
-    removeAvatar: vi.fn(),
-    saveNotifications: vi.fn(),
-  } },
+  api: {
+    profile: {
+      get: vi.fn(),
+      notifications: vi.fn(),
+      save: vi.fn(),
+      removeAvatar: vi.fn(),
+      saveNotifications: vi.fn(),
+    },
+  },
 }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 
 const PROFILE = {
-  id: 'u1', username: 'user', nickname: '旧昵称', avatar: '/avatar.jpg',
-  bio: '已有简介', region: '上海', socialMedia: '@user', showRegistrations: true,
+  id: 'u1',
+  username: 'user',
+  nickname: '旧昵称',
+  avatar: '/avatar.jpg',
+  bio: '已有简介',
+  region: '上海',
+  socialMedia: '@user',
+  showRegistrations: true,
 };
 let app: App | undefined;
 
@@ -51,9 +59,14 @@ async function mountSettings(): Promise<void> {
   setActivePinia(pinia);
   // 启动身份摘要中有头像，但完整资料必须成功加载后才可覆盖写入。
   useSessionStore().applyUser({ id: PROFILE.id, username: PROFILE.username, avatar: PROFILE.avatar });
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings', component: UserSettingsPage }] });
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/settings', component: UserSettingsPage }],
+  });
   await router.push('/settings');
-  app = createApp({ render: () => [h(UserSettingsPage), h(AppSheet)] }).use(pinia).use(router);
+  app = createApp({ render: () => [h(UserSettingsPage), h(AppSheet)] })
+    .use(pinia)
+    .use(router);
   app.mount('#settings-test');
   await nextTick();
 }
@@ -116,7 +129,9 @@ describe('设置页独立取数状态', () => {
     nickname.value = '新昵称';
     nickname.dispatchEvent(new Event('input', { bubbles: true }));
     button('保存')!.click();
-    await vi.waitFor(() => expect(api.profile.save).toHaveBeenCalledWith(expect.objectContaining({ nickname: '新昵称' })));
+    await vi.waitFor(() =>
+      expect(api.profile.save).toHaveBeenCalledWith(expect.objectContaining({ nickname: '新昵称' })),
+    );
     expect(sheet.current?.closing).toBe(true);
   });
 });

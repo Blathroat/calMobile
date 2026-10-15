@@ -16,12 +16,11 @@
   let timer = null;
 
   function text(value, fallback) {
-    return value === null || value === undefined ? (fallback || '') : String(value);
+    return value === null || value === undefined ? fallback || '' : String(value);
   }
 
   function esc(value) {
-    return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   function setText(id, value) {
@@ -61,10 +60,16 @@
     if (isNaN(date.getTime())) return '—';
     try {
       return new Intl.DateTimeFormat('zh-CN', {
-        timeZone: timeZone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+        timeZone: timeZone || 'UTC',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
       }).format(date);
-    } catch (_error) {
+    } catch {
       return date.toISOString();
     }
   }
@@ -81,20 +86,36 @@
 
   function renderChecks(checks) {
     if (!Array.isArray(checks) || checks.length === 0) {
-      return '<div class="check fail"><span class="state">失败</span>'
-        + '<span class="name">自检项</span><span class="detail">没有拿到任何自检结果</span>'
-        + '<span class="ms">—</span></div>';
+      return (
+        '<div class="check fail"><span class="state">失败</span>' +
+        '<span class="name">自检项</span><span class="detail">没有拿到任何自检结果</span>' +
+        '<span class="ms">—</span></div>'
+      );
     }
-    return checks.map(function (value) {
-      const check = node(value);
-      const status = check.status === 'ok' ? 'ok' : 'fail';
-      const detail = status === 'fail' && !check.detail ? CHECK_ERROR_MESSAGE : text(check.detail);
-      return '<div class="check ' + status + '">'
-        + '<span class="state">' + CHECK_LABELS[status] + '</span>'
-        + '<span class="name">' + esc(check.name) + '</span>'
-        + '<span class="detail">' + esc(detail) + '</span>'
-        + '<span class="ms">' + esc(formatMs(check.ms)) + '</span></div>';
-    }).join('');
+    return checks
+      .map(function (value) {
+        const check = node(value);
+        const status = check.status === 'ok' ? 'ok' : 'fail';
+        const detail = status === 'fail' && !check.detail ? CHECK_ERROR_MESSAGE : text(check.detail);
+        return (
+          '<div class="check ' +
+          status +
+          '">' +
+          '<span class="state">' +
+          CHECK_LABELS[status] +
+          '</span>' +
+          '<span class="name">' +
+          esc(check.name) +
+          '</span>' +
+          '<span class="detail">' +
+          esc(detail) +
+          '</span>' +
+          '<span class="ms">' +
+          esc(formatMs(check.ms)) +
+          '</span></div>'
+        );
+      })
+      .join('');
   }
 
   function groupEndpoints(endpoints) {
@@ -117,14 +138,25 @@
   function renderEndpoints(endpoints) {
     const groups = groupEndpoints(endpoints);
     if (groups.length === 0) return '<p class="muted">没有读到任何路由</p>';
-    return groups.map(function (group) {
-      const rows = group.items.map(function (item) {
-        const method = text(item.method);
-        return '<div class="endpoint"><span class="method ' + esc(method.toLowerCase()) + '">'
-          + esc(method) + '</span><span class="path mono">' + esc(item.path) + '</span></div>';
-      }).join('');
-      return '<div class="group"><p class="group-title mono">' + esc(group.prefix) + '</p>' + rows + '</div>';
-    }).join('');
+    return groups
+      .map(function (group) {
+        const rows = group.items
+          .map(function (item) {
+            const method = text(item.method);
+            return (
+              '<div class="endpoint"><span class="method ' +
+              esc(method.toLowerCase()) +
+              '">' +
+              esc(method) +
+              '</span><span class="path mono">' +
+              esc(item.path) +
+              '</span></div>'
+            );
+          })
+          .join('');
+        return '<div class="group"><p class="group-title mono">' + esc(group.prefix) + '</p>' + rows + '</div>';
+      })
+      .join('');
   }
 
   function renderMigrations(value, timeZone) {
@@ -134,12 +166,20 @@
     setText('migrations-applied-count', applied.length);
     setText('migrations-pending-count', pending.length);
     document.getElementById('migrations-applied').innerHTML = applied.length
-      ? applied.map(function (item) {
-          item = node(item);
-          return chip(text(item.id) + ' · ' + formatTime(item.appliedAt, timeZone));
-        }).join('') : '<span class="muted">无</span>';
+      ? applied
+          .map(function (item) {
+            item = node(item);
+            return chip(text(item.id) + ' · ' + formatTime(item.appliedAt, timeZone));
+          })
+          .join('')
+      : '<span class="muted">无</span>';
     document.getElementById('migrations-pending').innerHTML = pending.length
-      ? pending.map(function (item) { return chip(item, 'warn'); }).join('') : '<span class="muted">无</span>';
+      ? pending
+          .map(function (item) {
+            return chip(item, 'warn');
+          })
+          .join('')
+      : '<span class="muted">无</span>';
     let summary = '已应用 ' + applied.length + ' 项，没有遗漏';
     if (migrations.error && applied.length === 0) summary = MIGRATION_ERROR_MESSAGE;
     else if (pending.length > 0) summary = '已应用 ' + applied.length + ' 项，还有 ' + pending.length + ' 项未应用';
@@ -183,8 +223,15 @@
     document.getElementById('db-version').title = text(database.version);
     setText('db-name', database.database || '—');
     setText('db-host', database.host || '—');
-    setText('db-pool', 'total ' + formatCount(pool.total) + ' / idle ' + formatCount(pool.idle)
-      + ' / waiting ' + formatCount(pool.waiting));
+    setText(
+      'db-pool',
+      'total ' +
+        formatCount(pool.total) +
+        ' / idle ' +
+        formatCount(pool.idle) +
+        ' / waiting ' +
+        formatCount(pool.waiting),
+    );
     dbError.textContent = database.error ? DATABASE_ERROR_MESSAGE : '';
     dbError.hidden = !database.error;
 
@@ -211,7 +258,7 @@
       const response = await fetch('/api/v1/status', { cache: 'no-store' });
       const report = await response.json();
       render(report);
-    } catch (_error) {
+    } catch {
       renderUnreachable();
     } finally {
       refreshButton.disabled = false;
@@ -223,7 +270,10 @@
     timer = autoBox.checked ? setInterval(refresh, AUTO_MS) : null;
   }
 
-  refreshButton.addEventListener('click', function () { refresh(); schedule(); });
+  refreshButton.addEventListener('click', function () {
+    refresh();
+    schedule();
+  });
   autoBox.addEventListener('change', schedule);
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {

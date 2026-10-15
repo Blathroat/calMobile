@@ -199,18 +199,16 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       const limitMb = Math.min(settings.upload.avatarSizeMb, config.maxMb);
       const maxBytes = limitMb * 1024 * 1024;
       const declared = Number(c.req.header('content-length'));
-      const read = await readCappedBytes(
-        c.req.raw.body,
-        maxBytes,
-        Number.isFinite(declared) ? declared : undefined,
-      );
+      const read = await readCappedBytes(c.req.raw.body, maxBytes, Number.isFinite(declared) ? declared : undefined);
       if (!read.ok) throw badRequest(`头像超过 ${limitMb} MB 限制`);
       const inspected = inspectAvatar(read.bytes);
       if (!inspected.ok) {
         throw badRequest(inspected.reason === 'too-large' ? '图片尺寸过大' : '无法识别的图片');
       }
       if (!formatAllowed(inspected.image.extension, settings.upload.avatarFormats)) {
-        throw badRequest(`服务器设置不允许上传 .${inspected.image.extension} 格式，允许：${settings.upload.avatarFormats.join('、')}`);
+        throw badRequest(
+          `服务器设置不允许上传 .${inspected.image.extension} 格式，允许：${settings.upload.avatarFormats.join('、')}`,
+        );
       }
       await ensureRoom(read.bytes.byteLength);
       const previous = await currentAvatar(user.userId);
@@ -319,11 +317,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       }
     }
 
-    const stepUpToken = await issueSecurityStepUp(
-      user.userId,
-      stepUpSessionId(c, user),
-      scope as SecurityStepUpScope,
-    );
+    const stepUpToken = await issueSecurityStepUp(user.userId, stepUpSessionId(c, user), scope as SecurityStepUpScope);
     return jsonResponse(c, { ok: true, error: '', stepUpToken, expiresInSec: 300 });
   });
 
@@ -351,7 +345,9 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const user = requireUser({ user: userOf(c) });
     const body = bodyRecord(await readJsonBody(c));
     const { code } = parseSchema(codeSchema, body);
-    const found = await query<FactorToggleRow>('SELECT email, two_factor_enabled FROM users WHERE id = $1', [user.userId]);
+    const found = await query<FactorToggleRow>('SELECT email, two_factor_enabled FROM users WHERE id = $1', [
+      user.userId,
+    ]);
     const emailRow = found.rows[0];
     if (!emailRow) throw notFound('用户不存在或已删除');
     let consumed;

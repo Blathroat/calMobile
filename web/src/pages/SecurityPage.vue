@@ -15,7 +15,15 @@ import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
 type FactorMode = 'off' | 'totp' | 'email';
-type SheetAction = 'email-factor-start' | 'email-send' | 'email-verify' | 'factor-email' | 'factor-totp' | 'disable' | 'password-change' | 'regenerate';
+type SheetAction =
+  | 'email-factor-start'
+  | 'email-send'
+  | 'email-verify'
+  | 'factor-email'
+  | 'factor-totp'
+  | 'disable'
+  | 'password-change'
+  | 'regenerate';
 type IdentityScope = 'password' | 'email' | 'totp' | 'factor';
 type IdentityMethod = 'email' | 'totp';
 const modeOptions: Array<{ value: FactorMode; label: string }> = [
@@ -54,10 +62,12 @@ const activeMode = computed<FactorMode>(() => {
   if (!enabled.value) return 'off';
   return info.twoFactorMethod === 'totp' ? 'totp' : 'email';
 });
-const availableModeOptions = computed(() => modeOptions.map((option) => ({
-  ...option,
-  disabled: option.value !== 'off' && !canEnable.value && option.value !== activeMode.value,
-})));
+const availableModeOptions = computed(() =>
+  modeOptions.map((option) => ({
+    ...option,
+    disabled: option.value !== 'off' && !canEnable.value && option.value !== activeMode.value,
+  })),
+);
 const emailLabel = computed(() => {
   const email = String(info.email || '');
   if (!email) return t('security.email.unbound');
@@ -128,8 +138,11 @@ function openFormSheet(options: {
       passwordMin: Number(bootstrap.limits.passwordMin) || 6,
       passwordMax: Number(bootstrap.limits.passwordMax) || 32,
       sendIdentityCode: requestIdentityCode,
-      verifyIdentity: (method: IdentityMethod, code: string, scope: IdentityScope) => verifyIdentity(method, code, scope, options.kind),
-      onIdentityFailure: () => { selectedMode.value = activeMode.value; },
+      verifyIdentity: (method: IdentityMethod, code: string, scope: IdentityScope) =>
+        verifyIdentity(method, code, scope, options.kind),
+      onIdentityFailure: () => {
+        selectedMode.value = activeMode.value;
+      },
       submitAction: submitSheetAction,
     },
   });
@@ -147,74 +160,74 @@ async function submitSheetAction(payload: {
   let result: JsonObject;
   try {
     switch (payload.action as SheetAction) {
-    case 'email-factor-start':
-      result = await api.security.enableTwoFactor(String(payload.stepUpToken || ''));
-      assertOk(result);
-      return { maskedEmail: String(result.maskedEmail || maskedCurrentEmail()), close: false };
-    case 'email-send':
-      try {
-        result = await api.security.changeEmail(String(payload.email || ''), String(payload.stepUpToken || ''));
+      case 'email-factor-start':
+        result = await api.security.enableTwoFactor(String(payload.stepUpToken || ''));
         assertOk(result);
-        return { pendingEmail: String(result.email || payload.email || ''), close: false };
-      } catch (reason) {
-        const failed = reason instanceof Error ? reason : new Error(errorText(reason));
-        Object.assign(failed, { pendingEmail: String(payload.email || '') });
-        throw failed;
-      }
-    case 'email-verify':
-      result = await api.security.verifyEmail(String(payload.email || ''), String(payload.code || ''));
-      assertOk(result);
-      session.applyUser({ ...session.user, ...(result.user as JsonObject | undefined ?? {}) });
-      drawerCommitted = true;
-      await refresh();
-      notice.value = t('security.email.changed');
-      toast(t('security.email.changed'), 'success');
-      return { close: true };
-    case 'factor-email':
-      result = await api.security.verifyTwoFactor(String(payload.code || ''));
-      assertOk(result);
-      drawerCommitted = true;
-      await refresh();
-      notice.value = t('security.twoFactorOn');
-      toast(t('security.twoFactorOn'), 'success');
-      return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
-    case 'factor-totp':
-      result = await api.security.totpEnable(String(payload.code || ''), String(payload.stepUpToken || ''));
-      assertOk(result);
-      drawerCommitted = true;
-      await refresh();
-      notice.value = t('security.totp.bound');
-      toast(t('security.totp.bound'), 'success');
-      return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
-    case 'disable':
-      result = await api.security.disableTwoFactor(String(payload.stepUpToken || ''));
-      assertOk(result);
-      drawerCommitted = true;
-      await refresh();
-      notice.value = t('security.twoFactorOff');
-      toast(t('security.twoFactorOff'), 'success');
-      return { close: true };
-    case 'password-change':
-      result = await api.profile.changePassword({
-        newPassword: payload.newPassword,
-        confirmPassword: payload.confirmPassword,
-        stepUpToken: payload.stepUpToken,
-      });
-      assertOk(result);
-      drawerCommitted = true;
-      api.session.clear();
-      session.clear();
-      toast(copy.passwordChanged, 'success');
-      void router.replace('/login');
-      return { close: true };
-    case 'regenerate':
-      result = await api.security.backupCodes(String(payload.password || ''));
-      assertOk(result);
-      drawerCommitted = true;
-      await refresh();
-      return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
-    default:
-      throw new Error(t('auth.register.failed'));
+        return { maskedEmail: String(result.maskedEmail || maskedCurrentEmail()), close: false };
+      case 'email-send':
+        try {
+          result = await api.security.changeEmail(String(payload.email || ''), String(payload.stepUpToken || ''));
+          assertOk(result);
+          return { pendingEmail: String(result.email || payload.email || ''), close: false };
+        } catch (reason) {
+          const failed = reason instanceof Error ? reason : new Error(errorText(reason));
+          Object.assign(failed, { pendingEmail: String(payload.email || '') });
+          throw failed;
+        }
+      case 'email-verify':
+        result = await api.security.verifyEmail(String(payload.email || ''), String(payload.code || ''));
+        assertOk(result);
+        session.applyUser({ ...session.user, ...(result.user as JsonObject | undefined) });
+        drawerCommitted = true;
+        await refresh();
+        notice.value = t('security.email.changed');
+        toast(t('security.email.changed'), 'success');
+        return { close: true };
+      case 'factor-email':
+        result = await api.security.verifyTwoFactor(String(payload.code || ''));
+        assertOk(result);
+        drawerCommitted = true;
+        await refresh();
+        notice.value = t('security.twoFactorOn');
+        toast(t('security.twoFactorOn'), 'success');
+        return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
+      case 'factor-totp':
+        result = await api.security.totpEnable(String(payload.code || ''), String(payload.stepUpToken || ''));
+        assertOk(result);
+        drawerCommitted = true;
+        await refresh();
+        notice.value = t('security.totp.bound');
+        toast(t('security.totp.bound'), 'success');
+        return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
+      case 'disable':
+        result = await api.security.disableTwoFactor(String(payload.stepUpToken || ''));
+        assertOk(result);
+        drawerCommitted = true;
+        await refresh();
+        notice.value = t('security.twoFactorOff');
+        toast(t('security.twoFactorOff'), 'success');
+        return { close: true };
+      case 'password-change':
+        result = await api.profile.changePassword({
+          newPassword: payload.newPassword,
+          confirmPassword: payload.confirmPassword,
+          stepUpToken: payload.stepUpToken,
+        });
+        assertOk(result);
+        drawerCommitted = true;
+        api.session.clear();
+        session.clear();
+        toast(copy.passwordChanged, 'success');
+        void router.replace('/login');
+        return { close: true };
+      case 'regenerate':
+        result = await api.security.backupCodes(String(payload.password || ''));
+        assertOk(result);
+        drawerCommitted = true;
+        await refresh();
+        return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
+      default:
+        throw new Error(t('auth.register.failed'));
     }
   } catch (reason) {
     if (['factor-email', 'factor-totp', 'disable'].includes(payload.action)) selectedMode.value = activeMode.value;
@@ -268,15 +281,23 @@ async function verifyIdentity(method: IdentityMethod, code: string, scope: Ident
 function openEmailChange(): void {
   error.value = '';
   openFormSheet({
-    title: t('security.email.change'), kind: 'change-email', action: 'email-send',
-    identityScope: 'email', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
+    title: t('security.email.change'),
+    kind: 'change-email',
+    action: 'email-send',
+    identityScope: 'email',
+    totpAvailable: totpEnabled.value,
+    maskedEmail: maskedCurrentEmail(),
   });
 }
 
 function openPasswordChange(): void {
   openFormSheet({
-    title: t('security.password.change'), kind: 'change-password', action: 'password-change',
-    identityScope: 'password', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
+    title: t('security.password.change'),
+    kind: 'change-password',
+    action: 'password-change',
+    identityScope: 'password',
+    totpAvailable: totpEnabled.value,
+    maskedEmail: maskedCurrentEmail(),
   });
 }
 
@@ -290,17 +311,30 @@ async function chooseMode(target: FactorMode): Promise<void> {
     openSheet({
       title: t('security.confirmDisable'),
       message: copy.disableDescription,
-      onClose: () => { selectedMode.value = activeMode.value; },
+      onClose: () => {
+        selectedMode.value = activeMode.value;
+      },
       actions: [
-        { label: t('common.cancel'), onClick: (close) => { close(); selectedMode.value = previous; } },
         {
-          label: t('security.confirmDisable'), variant: 'danger',
+          label: t('common.cancel'),
+          onClick: (close) => {
+            close();
+            selectedMode.value = previous;
+          },
+        },
+        {
+          label: t('security.confirmDisable'),
+          variant: 'danger',
           onClick: (close) => {
             close();
             selectedMode.value = 'off';
             openFormSheet({
-              title: t('security.confirmDisable'), kind: 'identity-only', action: 'disable',
-              identityScope: 'factor', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
+              title: t('security.confirmDisable'),
+              kind: 'identity-only',
+              action: 'disable',
+              identityScope: 'factor',
+              totpAvailable: totpEnabled.value,
+              maskedEmail: maskedCurrentEmail(),
             });
           },
         },
@@ -318,8 +352,12 @@ async function chooseMode(target: FactorMode): Promise<void> {
   try {
     if (target === 'email') {
       openFormSheet({
-        title: t('security.email.enableWithCode'), kind: 'email-factor', action: 'factor-email',
-        identityScope: 'factor', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
+        title: t('security.email.enableWithCode'),
+        kind: 'email-factor',
+        action: 'factor-email',
+        identityScope: 'factor',
+        totpAvailable: totpEnabled.value,
+        maskedEmail: maskedCurrentEmail(),
       });
     } else if (totpEnabled.value) {
       const activated = await api.security.activateTotp();
@@ -329,8 +367,12 @@ async function chooseMode(target: FactorMode): Promise<void> {
       toast(t('security.totp.bound'), 'success');
     } else {
       openFormSheet({
-        title: t('security.totp.recommended'), kind: 'totp', action: 'factor-totp',
-        identityScope: 'totp', totpAvailable: false, maskedEmail: maskedCurrentEmail(),
+        title: t('security.totp.recommended'),
+        kind: 'totp',
+        action: 'factor-totp',
+        identityScope: 'totp',
+        totpAvailable: false,
+        maskedEmail: maskedCurrentEmail(),
       });
     }
   } catch (reason) {
@@ -343,21 +385,30 @@ async function chooseMode(target: FactorMode): Promise<void> {
 
 function askRegenerate(): void {
   openSheet({
-    title: t('security.regenerateBackupCodes'), message: t('security.backupCodesInvalidate'),
+    title: t('security.regenerateBackupCodes'),
+    message: t('security.backupCodesInvalidate'),
     actions: [
       { label: t('common.cancel'), onClick: (close) => close() },
-      { label: t('security.generateBackupCodes'), variant: 'danger', onClick: (close) => {
-        close();
-        openFormSheet({ title: t('security.regenerateBackupCodes'), kind: 'password', action: 'regenerate' });
-      } },
+      {
+        label: t('security.generateBackupCodes'),
+        variant: 'danger',
+        onClick: (close) => {
+          close();
+          openFormSheet({ title: t('security.regenerateBackupCodes'), kind: 'password', action: 'regenerate' });
+        },
+      },
     ],
   });
 }
 
 async function rebindTotp(): Promise<void> {
   openFormSheet({
-    title: copy.rotateTotp, kind: 'totp', action: 'factor-totp',
-    identityScope: 'totp', totpAvailable: totpEnabled.value, maskedEmail: maskedCurrentEmail(),
+    title: copy.rotateTotp,
+    kind: 'totp',
+    action: 'factor-totp',
+    identityScope: 'totp',
+    totpAvailable: totpEnabled.value,
+    maskedEmail: maskedCurrentEmail(),
   });
 }
 </script>
@@ -383,18 +434,44 @@ async function rebindTotp(): Promise<void> {
           <span class="row-title">{{ t('auth.register.email') }}</span>
           <span class="row-meta truncate">{{ emailLabel }}</span>
         </span>
-        <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="openEmailChange">{{ copy.changeEmail }}</button>
+        <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="openEmailChange">
+          {{ copy.changeEmail }}
+        </button>
       </div>
 
       <div class="stack" data-gap="xs">
         <span class="row-title">{{ t('auth.login.twoFactor') }}</span>
-        <SegControl :items="availableModeOptions" :model-value="selectedMode" :disabled="busy" :label="t('auth.login.twoFactor')" @update:model-value="(value) => chooseMode(value as FactorMode)" />
+        <SegControl
+          :items="availableModeOptions"
+          :model-value="selectedMode"
+          :disabled="busy"
+          :label="t('auth.login.twoFactor')"
+          @update:model-value="(value) => chooseMode(value as FactorMode)"
+        />
       </div>
       <p class="field-hint">{{ methodHint }}</p>
 
       <div v-if="enabled || totpEnabled" class="row" data-gap="sm">
-        <button v-if="enabled" class="cta ghost" data-size="small" type="button" :disabled="busy" @click="askRegenerate">{{ t('security.regenerateBackupCodes') }}</button>
-        <button v-if="totpEnabled" class="cta ghost" data-size="small" type="button" :disabled="busy" @click="rebindTotp">{{ copy.rotateTotp }}</button>
+        <button
+          v-if="enabled"
+          class="cta ghost"
+          data-size="small"
+          type="button"
+          :disabled="busy"
+          @click="askRegenerate"
+        >
+          {{ t('security.regenerateBackupCodes') }}
+        </button>
+        <button
+          v-if="totpEnabled"
+          class="cta ghost"
+          data-size="small"
+          type="button"
+          :disabled="busy"
+          @click="rebindTotp"
+        >
+          {{ copy.rotateTotp }}
+        </button>
       </div>
     </div>
 
@@ -412,7 +489,9 @@ async function rebindTotp(): Promise<void> {
     <div class="card">
       <span class="section-label">{{ copy.devicesTitle }}</span>
       <p class="field-hint">{{ copy.devicesDescription }}</p>
-      <button class="cta ghost" type="button" @click="router.push('/security/devices')">{{ copy.manageDevices }}</button>
+      <button class="cta ghost" type="button" @click="router.push('/security/devices')">
+        {{ copy.manageDevices }}
+      </button>
     </div>
   </template>
 </template>

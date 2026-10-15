@@ -24,8 +24,9 @@ function mount(fields: CollectField[], extra: { radioMax?: number; checkMax?: nu
 }
 
 function typeButton(label: string): HTMLButtonElement {
-  const button = [...document.querySelectorAll<HTMLButtonElement>('.seg button')]
-    .find((item) => item.textContent?.trim() === label);
+  const button = [...document.querySelectorAll<HTMLButtonElement>('.seg button')].find(
+    (item) => item.textContent?.trim() === label,
+  );
   if (!button) throw new Error(`找不到类型按钮 ${label}`);
   return button;
 }
@@ -34,8 +35,11 @@ describe('报名收集项编辑卡', () => {
   it('类型是滑动分段，切到单选只留一个空选项', async () => {
     const fields: CollectField[] = [{ title: '称呼', type: '文本', required: false, options: [] }];
     mount(fields);
-    expect([...document.querySelectorAll('.seg button')].map((button) => button.textContent?.trim()))
-      .toEqual(['文本', '单选', '多选']);
+    expect([...document.querySelectorAll('.seg button')].map((button) => button.textContent?.trim())).toEqual([
+      '文本',
+      '单选',
+      '多选',
+    ]);
     typeButton('单选').click();
     await nextTick();
     expect(fields[0]?.type).toBe('单选');

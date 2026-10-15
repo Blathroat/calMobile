@@ -103,23 +103,57 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
       { path: '/', redirect: () => (useSessionStore().loggedIn ? '/home' : '/login') },
       // 登录页是未登录时的落点，不显示返回键（没有可返回的上一页）
       { path: '/login', component: LoginPage, meta: { title: 'auth.login.title', bodyGap: 'tight' } },
-      { path: '/register', component: RegisterPage, meta: { title: 'auth.register.title', back: true, bodyGap: 'tight' } },
-      { path: '/forgot-password', component: ForgotPasswordPage, meta: { title: 'auth.forgot.title', back: true, bodyGap: 'tight' } },
+      {
+        path: '/register',
+        component: RegisterPage,
+        meta: { title: 'auth.register.title', back: true, bodyGap: 'tight' },
+      },
+      {
+        path: '/forgot-password',
+        component: ForgotPasswordPage,
+        meta: { title: 'auth.forgot.title', back: true, bodyGap: 'tight' },
+      },
       { path: '/home', component: HomePage, meta: { title: 'nav.home', tab: 'home', bodyGap: 'tight' } },
       // 首页是访客唯一的去处：日历与当天展会对所有人开放，其余页面一律要求登录
       // （访客登录页的「以访客身份浏览」落点就是它）。要放开某一屏，去掉 requiresAuth 即可。
       { path: '/search', component: SearchPage, meta: { title: 'search.title', back: true, requiresAuth: true } },
-      { path: '/user-public/:nickname', component: UserPublicPage, meta: { title: 'profile.public.title', back: true, requiresAuth: true } },
-      { path: '/detail/:id', component: DetailPage, meta: { title: 'exhibition.detail.title', back: true, bodyGap: 'tight', requiresAuth: true } },
+      {
+        path: '/user-public/:nickname',
+        component: UserPublicPage,
+        meta: { title: 'profile.public.title', back: true, requiresAuth: true },
+      },
+      {
+        path: '/detail/:id',
+        component: DetailPage,
+        meta: { title: 'exhibition.detail.title', back: true, bodyGap: 'tight', requiresAuth: true },
+      },
       {
         path: '/registration-form/:id',
         component: RegistrationFormPage,
         // 登录与报名权限都要：requiresAuth 挡住匿名，capability 挡住后端显式禁用的账号
-        meta: { title: 'exhibition.detail.registrationInfo', back: true, bodyGap: 'tight', requiresAuth: true, capability: 'register' },
+        meta: {
+          title: 'exhibition.detail.registrationInfo',
+          back: true,
+          bodyGap: 'tight',
+          requiresAuth: true,
+          capability: 'register',
+        },
       },
-      { path: '/my-registrations', component: MyRegistrationsPage, meta: { title: 'registration.list.title', tab: 'my-registrations', requiresAuth: true } },
-      { path: '/registration-detail/:id', component: RegistrationDetailPage, meta: { title: 'registration.detail.title', back: true, requiresAuth: true } },
-      { path: '/meeting-detail/:id', component: MeetingDetailPage, meta: { title: 'meeting.title', back: true, requiresAuth: true } },
+      {
+        path: '/my-registrations',
+        component: MyRegistrationsPage,
+        meta: { title: 'registration.list.title', tab: 'my-registrations', requiresAuth: true },
+      },
+      {
+        path: '/registration-detail/:id',
+        component: RegistrationDetailPage,
+        meta: { title: 'registration.detail.title', back: true, requiresAuth: true },
+      },
+      {
+        path: '/meeting-detail/:id',
+        component: MeetingDetailPage,
+        meta: { title: 'meeting.title', back: true, requiresAuth: true },
+      },
       {
         path: '/profile',
         component: ProfilePage,
@@ -131,9 +165,17 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
           topAction: { icon: 'settings', to: '/settings', label: 'settings.title' },
         },
       },
-      { path: '/settings', component: UserSettingsPage, meta: { title: 'settings.title', back: true, requiresAuth: true } },
+      {
+        path: '/settings',
+        component: UserSettingsPage,
+        meta: { title: 'settings.title', back: true, requiresAuth: true },
+      },
       { path: '/security', component: SecurityPage, meta: { title: 'security.title', back: true, requiresAuth: true } },
-      { path: '/security/devices', component: SecurityDevicesPage, meta: { title: t('security.devices.title'), back: true, requiresAuth: true } },
+      {
+        path: '/security/devices',
+        component: SecurityDevicesPage,
+        meta: { title: t('security.devices.title'), back: true, requiresAuth: true },
+      },
       // 展商后台与审核 / 核销 / 富文本编辑器同属展商角色，管理员也能进
       {
         path: '/exhibitor',
@@ -150,30 +192,107 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
           queryInPlace: true,
         },
       },
-      { path: '/meeting-settings', component: MeetingSettingsPage, meta: { title: 'meeting.settings.title', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
+      {
+        path: '/meeting-settings',
+        component: MeetingSettingsPage,
+        meta: {
+          title: 'meeting.settings.title',
+          back: true,
+          bodyGap: 'tight',
+          requiresAuth: true,
+          roles: ['exhibitor', 'admin'],
+        },
+      },
       {
         path: '/meeting-apply/:exhibitorId',
         component: MeetingApplyPage,
-        meta: { title: 'meeting.apply.title', back: true, bodyGap: 'tight', requiresAuth: true, capability: 'register' },
+        meta: {
+          title: 'meeting.apply.title',
+          back: true,
+          bodyGap: 'tight',
+          requiresAuth: true,
+          capability: 'register',
+        },
       },
       {
         path: '/admin/meetings/:exhibitorId',
         component: AdminMeetingsPage,
-        meta: { title: 'admin.users.manageMeetings', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['admin'] },
+        meta: {
+          title: 'admin.users.manageMeetings',
+          back: true,
+          bodyGap: 'tight',
+          requiresAuth: true,
+          roles: ['admin'],
+        },
       },
       {
         path: '/admin/exhibitions/:exhibitorId',
         component: AdminExhibitionsPage,
-        meta: { title: 'admin.users.manageExhibitions', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['admin'] },
+        meta: {
+          title: 'admin.users.manageExhibitions',
+          back: true,
+          bodyGap: 'tight',
+          requiresAuth: true,
+          roles: ['admin'],
+        },
       },
-      { path: '/exhibition-form', component: ExhibitionFormPage, meta: { title: 'admin.exhibitions.edit', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
-      { path: '/exhibition-form/:id', component: ExhibitionFormPage, meta: { title: 'admin.exhibitions.edit', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
-      { path: '/review', component: ReviewPage, meta: { title: 'registration.review.title', back: true, requiresAuth: true, roles: ['exhibitor', 'admin'] } },
-      { path: '/checkin', component: CheckinPage, meta: { title: 'exhibitor.checkin', back: true, requiresAuth: true, roles: ['exhibitor', 'admin'] } },
-      { path: '/rich-editor', component: RichEditorPage, meta: { title: 'exhibition.editor.title', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
+      {
+        path: '/exhibition-form',
+        component: ExhibitionFormPage,
+        meta: {
+          title: 'admin.exhibitions.edit',
+          back: true,
+          bodyGap: 'tight',
+          requiresAuth: true,
+          roles: ['exhibitor', 'admin'],
+        },
+      },
+      {
+        path: '/exhibition-form/:id',
+        component: ExhibitionFormPage,
+        meta: {
+          title: 'admin.exhibitions.edit',
+          back: true,
+          bodyGap: 'tight',
+          requiresAuth: true,
+          roles: ['exhibitor', 'admin'],
+        },
+      },
+      {
+        path: '/review',
+        component: ReviewPage,
+        meta: { title: 'registration.review.title', back: true, requiresAuth: true, roles: ['exhibitor', 'admin'] },
+      },
+      {
+        path: '/checkin',
+        component: CheckinPage,
+        meta: { title: 'exhibitor.checkin', back: true, requiresAuth: true, roles: ['exhibitor', 'admin'] },
+      },
+      {
+        path: '/rich-editor',
+        component: RichEditorPage,
+        meta: {
+          title: 'exhibition.editor.title',
+          back: true,
+          bodyGap: 'tight',
+          requiresAuth: true,
+          roles: ['exhibitor', 'admin'],
+        },
+      },
       // 管理后台只对 admin 开放；`tab: 'admin'` 让底部导航出现管理项。
       // `queryInPlace`：三个分区写在同一屏里，切分区不该把整页重新挂载。
-      { path: '/admin', component: AdminPage, meta: { title: 'admin.title', tab: 'admin', bodyGap: 'tight', requiresAuth: true, roles: ['admin'], queryInPlace: true } },
+      {
+        path: '/admin',
+        component: AdminPage,
+        meta: {
+          title: 'admin.title',
+          tab: 'admin',
+          bodyGap: 'tight',
+          requiresAuth: true,
+          roles: ['admin'],
+          queryInPlace: true,
+        },
+      },
     ],
   });
 

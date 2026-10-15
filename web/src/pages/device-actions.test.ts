@@ -11,10 +11,12 @@ import { toast } from '@/services/toast';
 vi.mock('@/app/runtime', () => ({
   bootApp: vi.fn().mockResolvedValue(undefined),
   api: {
-    exhibitions: { get: vi.fn().mockResolvedValue({
-      found: true,
-      exhibition: { id: 'exh-1', title: '秋季展会', date: '2026-09-20' },
-    }) },
+    exhibitions: {
+      get: vi.fn().mockResolvedValue({
+        found: true,
+        exhibition: { id: 'exh-1', title: '秋季展会', date: '2026-09-20' },
+      }),
+    },
     profile: {
       get: vi.fn().mockResolvedValue({ id: 'u1', username: 'user' }),
       notifications: vi.fn().mockResolvedValue({ granted: false }),
@@ -77,8 +79,8 @@ describe('页面与 Android 设备动作的契约', () => {
       },
     };
     await mountPage(UserSettingsPage, '/settings');
-    const findButton = () => [...document.querySelectorAll('button')]
-      .find((button) => button.textContent?.trim() === '开启系统通知权限');
+    const findButton = () =>
+      [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === '开启系统通知权限');
     await vi.waitFor(() => expect(findButton()).toBeDefined());
     findButton()!.click();
     await vi.waitFor(() => {

@@ -90,15 +90,16 @@ function message(reason: unknown): string {
 
 async function submit(): Promise<void> {
   error.value = '';
-  const validated = check(account.value, { label: t('auth.login.account'), required: true, max: ACCOUNT_MAX })
-    || check(password.value, { label: t('auth.login.password'), required: true, max: passwordMax.value });
+  const validated =
+    check(account.value, { label: t('auth.login.account'), required: true, max: ACCOUNT_MAX }) ||
+    check(password.value, { label: t('auth.login.password'), required: true, max: passwordMax.value });
   if (validated) {
     error.value = validated;
     return;
   }
   busy.value = true;
   try {
-    const result = await api.auth.login(account.value.trim(), password.value) as AuthResult;
+    const result = (await api.auth.login(account.value.trim(), password.value)) as AuthResult;
     if (result.twoFactorRequired) {
       // 这一步没有令牌：只有一张票，外加（邮箱是主方式时）一封刚发出的验证码邮件
       ticket.value = String(result.ticket ?? '');
@@ -125,13 +126,16 @@ async function submit(): Promise<void> {
 async function verify(): Promise<void> {
   verifyError.value = '';
   const needsVerification = verifiedSession !== api.session.signal;
-  const invalid = needsVerification && check(code.value, {
-    label: t('auth.login.emailCode'),
-    required: true,
-    max: CODE_MAX,
-    // 第二因子三选一：6 位验证码（验证器或邮箱），或 XXXXX-XXXXX 形式的备用码
-    custom: (value) => (/^\d{6}$/.test(value) || /^[0-9A-Z]{5}-[0-9A-Z]{5}$/i.test(value) ? '' : t('auth.login.codeOrBackupInvalid')),
-  });
+  const invalid =
+    needsVerification &&
+    check(code.value, {
+      label: t('auth.login.emailCode'),
+      required: true,
+      max: CODE_MAX,
+      // 第二因子三选一：6 位验证码（验证器或邮箱），或 XXXXX-XXXXX 形式的备用码
+      custom: (value) =>
+        /^\d{6}$/.test(value) || /^[0-9A-Z]{5}-[0-9A-Z]{5}$/i.test(value) ? '' : t('auth.login.codeOrBackupInvalid'),
+    });
   if (invalid) {
     verifyError.value = invalid;
     return;
@@ -223,7 +227,11 @@ onBeforeUnmount(stopCountdown);
       <p class="muted">{{ t('auth.login.tagline') }}</p>
     </div>
 
-    <div v-if="bootstrap.announcement.enabled === true && bootstrap.announcement.text" class="notice" data-tone="accent">
+    <div
+      v-if="bootstrap.announcement.enabled === true && bootstrap.announcement.text"
+      class="notice"
+      data-tone="accent"
+    >
       <strong>{{ t('auth.login.announcement') }}</strong>
       <span>{{ bootstrap.announcement.text }}</span>
     </div>
@@ -265,7 +273,14 @@ onBeforeUnmount(stopCountdown);
       <button class="cta" type="submit" :disabled="busy" :data-loading="busy ? 'true' : 'false'">
         {{ t('auth.login.title') }}
       </button>
-      <button v-if="!isJoinSurface" class="cta ghost" type="button" :disabled="guestBusy" :data-loading="guestBusy ? 'true' : 'false'" @click="guest">
+      <button
+        v-if="!isJoinSurface"
+        class="cta ghost"
+        type="button"
+        :disabled="guestBusy"
+        :data-loading="guestBusy ? 'true' : 'false'"
+        @click="guest"
+      >
         {{ t('auth.login.browseAsGuest') }}
       </button>
     </form>
@@ -275,7 +290,9 @@ onBeforeUnmount(stopCountdown);
       <div class="stack" data-gap="sm">
         <h2>{{ t('auth.login.twoFactor') }}</h2>
         <!-- 冒号而不是尾随空格：Android 会裁掉 string 资源的首尾空白 -->
-        <p v-if="emailSent" class="muted">{{ t('auth.login.codeSentTo') }}<strong>{{ maskedEmail }}</strong></p>
+        <p v-if="emailSent" class="muted">
+          {{ t('auth.login.codeSentTo') }}<strong>{{ maskedEmail }}</strong>
+        </p>
         <!-- 绑了验证器时第一步不会自动发邮件（省一封多半用不上的信，也避开 60 秒冷却） -->
         <p v-else class="muted">{{ t('auth.login.totpOrEmailHint') }}</p>
         <p class="field-hint">{{ t('auth.login.codeHint') }}</p>
@@ -299,7 +316,7 @@ onBeforeUnmount(stopCountdown);
       </div>
       <div class="check-row">
         <label class="check-label" for="login-trust-device">
-          <input id="login-trust-device" v-model="trustThisDevice" type="checkbox">
+          <input id="login-trust-device" v-model="trustThisDevice" type="checkbox" />
           <span>{{ trustDeviceLabel }}</span>
         </label>
       </div>
@@ -325,10 +342,14 @@ onBeforeUnmount(stopCountdown);
     <div v-if="step === 1" class="stack" data-gap="sm">
       <footer class="row auth-entry">
         <span class="dim">{{ t('auth.login.noAccountYet') }}</span>
-        <button class="text-action" type="button" @click="router.push('/register')">{{ t('auth.login.signUp') }}</button>
+        <button class="text-action" type="button" @click="router.push('/register')">
+          {{ t('auth.login.signUp') }}
+        </button>
       </footer>
       <div class="row auth-entry" data-flush="true">
-        <button class="text-action" type="button" @click="router.push('/forgot-password')">{{ t('auth.login.forgotPassword') }}</button>
+        <button class="text-action" type="button" @click="router.push('/forgot-password')">
+          {{ t('auth.login.forgotPassword') }}
+        </button>
       </div>
     </div>
   </div>

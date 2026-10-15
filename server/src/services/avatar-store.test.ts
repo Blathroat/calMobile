@@ -19,9 +19,7 @@ import {
 
 function jpeg(width: number, height: number): Buffer {
   const bytes = Buffer.from([
-    0xff, 0xd8,
-    0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x11, 0x00,
-    0xff, 0xd9,
+    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x11, 0x00, 0xff, 0xd9,
   ]);
   bytes.writeUInt16BE(height, 7);
   bytes.writeUInt16BE(width, 9);
@@ -96,12 +94,15 @@ test('声明超限时不读流；读到上限后停', async () => {
   assert.equal(gotReader, false);
 
   const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5])];
-  const over = await readCappedBytes(new ReadableStream({
-    start(controller) {
-      chunks.forEach((chunk) => controller.enqueue(chunk));
-      controller.close();
-    },
-  }), 4);
+  const over = await readCappedBytes(
+    new ReadableStream({
+      start(controller) {
+        chunks.forEach((chunk) => controller.enqueue(chunk));
+        controller.close();
+      },
+    }),
+    4,
+  );
   assert.equal(over.ok, false);
 });
 

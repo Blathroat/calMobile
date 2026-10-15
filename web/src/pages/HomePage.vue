@@ -29,11 +29,26 @@ import { useAsync } from '@/composables/useAsync';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
 import RoleTag from '@/components/RoleTag.vue';
-import { addMonths, calendarRowCount, daysInMonth, firstWeekdayOffset, formatChineseTime, monthLabel } from '@/services/format';
+import {
+  addMonths,
+  calendarRowCount,
+  daysInMonth,
+  firstWeekdayOffset,
+  formatChineseTime,
+  monthLabel,
+} from '@/services/format';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
-const WEEK_LABELS = [t('home.weekdayMon'), t('home.weekdayTue'), t('home.weekdayWed'), t('home.weekdayThu'), t('home.weekdayFri'), t('home.weekdaySat'), t('home.weekdaySun')];
+const WEEK_LABELS = [
+  t('home.weekdayMon'),
+  t('home.weekdayTue'),
+  t('home.weekdayWed'),
+  t('home.weekdayThu'),
+  t('home.weekdayFri'),
+  t('home.weekdaySat'),
+  t('home.weekdaySun'),
+];
 const SWIPE_THRESHOLD = 46;
 
 const router = useRouter();
@@ -112,7 +127,7 @@ const cells = computed<Cell[]>(() => {
       disabled: false,
     });
   }
-  const trailing = (rows.value * 7) - offset - total;
+  const trailing = rows.value * 7 - offset - total;
   const next = addMonths(year, month, 1);
   for (let day = 1; day <= trailing; day += 1) {
     list.push({ day, month: next.month, muted: true, bold: false, hasEvent: false, disabled: true });
@@ -126,7 +141,7 @@ const meetings = computed<JsonObject[]>(() => dayRows('meetings'));
 function dayRows(key: 'exhibitions' | 'meetings'): JsonObject[] {
   const day = view.value.day;
   if (day <= 0) return [];
-  const all = Array.isArray(monthData.value?.[key]) ? monthData.value?.[key] as JsonObject[] : [];
+  const all = Array.isArray(monthData.value?.[key]) ? (monthData.value?.[key] as JsonObject[]) : [];
   return all.filter((item) => Number(item.day) === day);
 }
 
@@ -135,8 +150,10 @@ function meetingLine(meeting: JsonObject): string {
   return time ? `${time} · ${t('registration.list.privateMeeting')}` : t('registration.list.privateMeeting');
 }
 
-const eventDays = (): number[] => (Array.isArray(monthData.value?.eventDays) ? monthData.value?.eventDays as number[] : []);
-const markedDays = (): number[] => (Array.isArray(monthData.value?.markedDays) ? monthData.value?.markedDays as number[] : []);
+const eventDays = (): number[] =>
+  Array.isArray(monthData.value?.eventDays) ? (monthData.value?.eventDays as number[]) : [];
+const markedDays = (): number[] =>
+  Array.isArray(monthData.value?.markedDays) ? (monthData.value?.markedDays as number[]) : [];
 const myActivityMark = t('home.hasMyActivity');
 
 const selectedMeta = computed(() => {
@@ -171,11 +188,11 @@ async function load(): Promise<boolean> {
         requested.month = month;
       }
     }
-    const data = await api.exhibitions.month({
+    const data = (await api.exhibitions.month({
       year: requested.year,
       month: requested.month,
       day: requested.day || undefined,
-    }) as JsonObject;
+    })) as JsonObject;
     return { data, year: requested.year, month: requested.month };
   });
   if (!result) return false;
@@ -220,7 +237,9 @@ function shiftMonth(delta: number): void {
     enter.value = delta > 0 ? 'right' : 'left';
     void load().then((applied) => {
       if (!applied) return;
-      enterFrame = requestAnimationFrame(() => { enter.value = ''; });
+      enterFrame = requestAnimationFrame(() => {
+        enter.value = '';
+      });
     });
   };
   if (prefersReducedMotion()) {

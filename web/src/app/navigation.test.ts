@@ -28,7 +28,10 @@ describe('navigation coordinator', () => {
   });
 
   it('标签页之间按底部导航顺序记左右方向，同屏只换 query 时两个信号都不动', () => {
-    navigation.track({ path: '/my-registrations', meta: { tab: 'my-registrations' } }, { path: '/home', meta: { tab: 'home' } });
+    navigation.track(
+      { path: '/my-registrations', meta: { tab: 'my-registrations' } },
+      { path: '/home', meta: { tab: 'home' } },
+    );
     expect(navigation.tabMove.value).toBe('forward');
     navigation.track({ path: '/home', meta: { tab: 'home' } }, { path: '/profile', meta: { tab: 'profile' } });
     expect(navigation.tabMove.value).toBe('back');

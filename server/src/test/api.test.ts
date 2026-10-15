@@ -367,7 +367,12 @@ test('bootstrap 下发前端启动所需的全部配置块', async () => {
     limited: false,
   });
   assert.deepStrictEqual(Object.keys(body.media).sort(), ['imageCount', 'imageSizeMb', 'videoCount', 'videoSizeMb']);
-  assert.deepStrictEqual(Object.keys(body.server).sort(), ['avatarFormats', 'avatarSizeMb', 'imageFormats', 'videoFormats']);
+  assert.deepStrictEqual(Object.keys(body.server).sort(), [
+    'avatarFormats',
+    'avatarSizeMb',
+    'imageFormats',
+    'videoFormats',
+  ]);
 });
 
 test('带令牌的 bootstrap 返回真实用户态与个人外观模式', async () => {
@@ -510,7 +515,10 @@ test('注册是两步的：第一步只发码不建号，验证码通过才建�
 
   const registeredDeviceToken = 'register-device-token-123';
   const created = await post('/api/v1/auth/register/verify', {
-    email, code, deviceToken: registeredDeviceToken, deviceName: 'New Phone',
+    email,
+    code,
+    deviceToken: registeredDeviceToken,
+    deviceName: 'New Phone',
   });
   assert.strictEqual(created.body.ok, true, `验证失败：${JSON.stringify(created.body)}`);
   assert.strictEqual(created.body.user.role, 'user', '自助注册固定为普通用户');
@@ -801,7 +809,10 @@ test('可信设备跳过二步验证，设备管理可立即撤销单台或全�
 
     const deviceToken = 'persistent-device-secret-a1b2c3';
     const challenge = await post('/api/v1/auth/login', {
-      username: 'deviceowner', password: 'password', deviceToken, deviceName: 'QA Laptop',
+      username: 'deviceowner',
+      password: 'password',
+      deviceToken,
+      deviceName: 'QA Laptop',
     });
     assert.strictEqual(challenge.body.twoFactorRequired, true);
     const loginCode = codeFromInbox('devices@example.com').code;
@@ -815,7 +826,10 @@ test('可信设备跳过二步验证，设备管理可立即撤销单台或全�
     assert.strictEqual(verified.body.ok, true);
 
     const trustedLogin = await post('/api/v1/auth/login', {
-      username: 'deviceowner', password: 'password', deviceToken, deviceName: 'QA Laptop',
+      username: 'deviceowner',
+      password: 'password',
+      deviceToken,
+      deviceName: 'QA Laptop',
     });
     assert.strictEqual(trustedLogin.body.ok, true);
     assert.strictEqual(trustedLogin.body.trustedDevice, true);
@@ -828,7 +842,9 @@ test('可信设备跳过二步验证，设备管理可立即撤销单台或全�
     assert.strictEqual(device.current, true);
     assert.ok(!JSON.stringify(listed.body).includes(deviceToken), '设备列表不得泄露可重用的本机凭据');
 
-    const revoked = await del(`/api/v1/profile/sessions/${encodeURIComponent(device.id)}`, { token: trustedLogin.body.token });
+    const revoked = await del(`/api/v1/profile/sessions/${encodeURIComponent(device.id)}`, {
+      token: trustedLogin.body.token,
+    });
     assert.strictEqual(revoked.body.ok, true);
     const invalidated = await get('/api/v1/profile', { token: trustedLogin.body.token });
     assert.strictEqual(invalidated.status, 401, '下线设备后访问令牌也应立即失效');
@@ -841,7 +857,10 @@ test('可信设备跳过二步验证，设备管理可立即撤销单台或全�
     // 清除测试中上一封已消费验证码产生的冷却，模拟下一次真实登录可重新发码。
     await pool.query("DELETE FROM email_codes WHERE user_id = $1 AND purpose = 'login'", ['usr-devices']);
     const relogin = await post('/api/v1/auth/login', {
-      username: 'deviceowner', password: 'password', deviceToken, deviceName: 'QA Laptop',
+      username: 'deviceowner',
+      password: 'password',
+      deviceToken,
+      deviceName: 'QA Laptop',
     });
     assert.strictEqual(relogin.body.twoFactorRequired, true, '全部下线后不应继续信任旧设备凭据');
   } finally {
@@ -871,7 +890,11 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
 
     // 第一轮：换到 after1，验证码被别人拿去用（换了登录身份）应当失败
     const proof1 = await identityTicket(session.token, 'before@example.com', 'email');
-    const asked = await post('/api/v1/profile/email', { email: 'after1@example.com', stepUpToken: proof1 }, { token: session.token });
+    const asked = await post(
+      '/api/v1/profile/email',
+      { email: 'after1@example.com', stepUpToken: proof1 },
+      { token: session.token },
+    );
     assert.strictEqual(asked.body.ok, true, `发码失败：${JSON.stringify(asked.body)}`);
     const stolen = codeFromInbox('after1@example.com');
     const adminSession = await login('demo');
@@ -889,7 +912,11 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
 
     // 第二轮：换到 after2，这一次自己走完
     const proof2 = await identityTicket(session.token, 'before@example.com', 'email');
-    const asked2 = await post('/api/v1/profile/email', { email: 'after2@example.com', stepUpToken: proof2 }, { token: session.token });
+    const asked2 = await post(
+      '/api/v1/profile/email',
+      { email: 'after2@example.com', stepUpToken: proof2 },
+      { token: session.token },
+    );
     assert.strictEqual(asked2.body.ok, true, JSON.stringify(asked2.body));
     const own = codeFromInbox('after2@example.com');
     const done = await post(
@@ -907,7 +934,11 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
 
     // 已被占用的邮箱不能再被改成目标
     const proof3 = await identityTicket(session.token, 'after2@example.com', 'email');
-    const taken = await post('/api/v1/profile/email', { email: 'demo@example.com', stepUpToken: proof3 }, { token: session.token });
+    const taken = await post(
+      '/api/v1/profile/email',
+      { email: 'demo@example.com', stepUpToken: proof3 },
+      { token: session.token },
+    );
     assert.strictEqual(taken.body.ok, false);
     assert.ok(taken.body.error.includes('已被'), taken.body.error);
   } finally {
@@ -922,27 +953,48 @@ test('身份复核票绑定账号、当前会话和单个操作，只能使用�
     const other = await login('stepupuser');
     const proof = await identityTicket(current.token, 'stepup@example.com', 'email');
 
-    const wrongSession = await post('/api/v1/profile/email', {
-      email: 'wrong-session@example.com', stepUpToken: proof,
-    }, { token: other.token });
+    const wrongSession = await post(
+      '/api/v1/profile/email',
+      {
+        email: 'wrong-session@example.com',
+        stepUpToken: proof,
+      },
+      { token: other.token },
+    );
     assert.strictEqual(wrongSession.status, 400, '身份票不能跨设备会话使用');
 
     const wrongScope = await post('/api/v1/profile/2fa/disable', { stepUpToken: proof }, { token: current.token });
     assert.strictEqual(wrongScope.body.ok, false, '换邮箱的票不能用于关闭两步验证');
 
-    const accepted = await post('/api/v1/profile/email', {
-      email: 'accepted@example.com', stepUpToken: proof,
-    }, { token: current.token });
+    const accepted = await post(
+      '/api/v1/profile/email',
+      {
+        email: 'accepted@example.com',
+        stepUpToken: proof,
+      },
+      { token: current.token },
+    );
     assert.strictEqual(accepted.body.ok, true, `正确会话与用途应能使用：${JSON.stringify(accepted.body)}`);
 
-    const replay = await post('/api/v1/profile/email', {
-      email: 'replay@example.com', stepUpToken: proof,
-    }, { token: current.token });
+    const replay = await post(
+      '/api/v1/profile/email',
+      {
+        email: 'replay@example.com',
+        stepUpToken: proof,
+      },
+      { token: current.token },
+    );
     assert.strictEqual(replay.status, 400, '身份票必须是一次性的');
 
-    const noTotp = await post('/api/v1/profile/security/verify', {
-      method: 'totp', scope: 'password', code: '123456',
-    }, { token: current.token });
+    const noTotp = await post(
+      '/api/v1/profile/security/verify',
+      {
+        method: 'totp',
+        scope: 'password',
+        code: '123456',
+      },
+      { token: current.token },
+    );
     assert.strictEqual(noTotp.body.ok, false, '没有配置 TOTP 的账号不能用 TOTP 复核身份');
   } finally {
     await pool.query("DELETE FROM users WHERE id = 'usr-stepup'");
@@ -966,7 +1018,11 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
 
     // 码不对不给绑，开关也不能开
     const farCode = codeFor(setup.body.secret, { at: Date.now() + 5 * 60 * 1000 });
-    const wrong = await post('/api/v1/profile/2fa/totp/enable', { code: farCode, stepUpToken: setup.body.stepUpToken }, { token: session.token });
+    const wrong = await post(
+      '/api/v1/profile/2fa/totp/enable',
+      { code: farCode, stepUpToken: setup.body.stepUpToken },
+      { token: session.token },
+    );
     assert.strictEqual(wrong.body.ok, false, '漂移 5 分钟的码不该通过');
     let security = await get('/api/v1/profile/security', { token: session.token });
     assert.strictEqual(security.body.twoFactorEnabled, false, '没确认之前开关不该被打开');
@@ -987,24 +1043,48 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     // TOTP 身份复核每个会话五次上限；正确码通过后清空失败窗口。
     const wrongIdentityCode = codeFor(setup.body.secret, { at: Date.now() + 5 * 60 * 1000 });
     for (let attempt = 0; attempt < 4; attempt += 1) {
-      const wrongIdentity = await post('/api/v1/profile/security/verify', {
-        method: 'totp', scope: 'password', code: wrongIdentityCode,
-      }, { token: session.token });
+      const wrongIdentity = await post(
+        '/api/v1/profile/security/verify',
+        {
+          method: 'totp',
+          scope: 'password',
+          code: wrongIdentityCode,
+        },
+        { token: session.token },
+      );
       assert.strictEqual(wrongIdentity.body.ok, false);
     }
-    const recoveredIdentity = await post('/api/v1/profile/security/verify', {
-      method: 'totp', scope: 'password', code: codeFor(setup.body.secret),
-    }, { token: session.token });
+    const recoveredIdentity = await post(
+      '/api/v1/profile/security/verify',
+      {
+        method: 'totp',
+        scope: 'password',
+        code: codeFor(setup.body.secret),
+      },
+      { token: session.token },
+    );
     assert.strictEqual(recoveredIdentity.body.ok, true, '正确 TOTP 应可复核并清空失败次数');
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const wrongIdentity = await post('/api/v1/profile/security/verify', {
-        method: 'totp', scope: 'password', code: wrongIdentityCode,
-      }, { token: session.token });
+      const wrongIdentity = await post(
+        '/api/v1/profile/security/verify',
+        {
+          method: 'totp',
+          scope: 'password',
+          code: wrongIdentityCode,
+        },
+        { token: session.token },
+      );
       assert.strictEqual(wrongIdentity.body.ok, false);
     }
-    const limitedIdentity = await post('/api/v1/profile/security/verify', {
-      method: 'totp', scope: 'password', code: wrongIdentityCode,
-    }, { token: session.token });
+    const limitedIdentity = await post(
+      '/api/v1/profile/security/verify',
+      {
+        method: 'totp',
+        scope: 'password',
+        code: wrongIdentityCode,
+      },
+      { token: session.token },
+    );
     assert.strictEqual(limitedIdentity.status, 429, '并发猜码窗口达到上限后必须限流');
     await pool.query("DELETE FROM security_stepup_attempts WHERE user_id = 'usr-totp'");
 
@@ -1059,40 +1139,64 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     assert.strictEqual(stale.body.ok, false, '重新生成之后旧备用码必须失效');
 
     // 轮换前也要复核身份；旧密钥在新密钥确认前继续有效。
-    const noRotateProof = await post('/api/v1/profile/2fa/totp/setup', { stepUpToken: 'wrong-ticket' }, { token: session.token });
+    const noRotateProof = await post(
+      '/api/v1/profile/2fa/totp/setup',
+      { stepUpToken: 'wrong-ticket' },
+      { token: session.token },
+    );
     assert.strictEqual(noRotateProof.status, 400);
     const rotateProof = await identityTicket(session.token, 'totp@example.com', 'totp', {
-      method: 'totp', code: codeFor(setup.body.secret),
+      method: 'totp',
+      code: codeFor(setup.body.secret),
     });
-    const rotatedSetup = await post('/api/v1/profile/2fa/totp/setup', { stepUpToken: rotateProof }, { token: session.token });
+    const rotatedSetup = await post(
+      '/api/v1/profile/2fa/totp/setup',
+      { stepUpToken: rotateProof },
+      { token: session.token },
+    );
     assert.strictEqual(rotatedSetup.body.ok, true);
     assert.notStrictEqual(rotatedSetup.body.secret, setup.body.secret);
-    const wrongRotation = await post('/api/v1/profile/2fa/totp/enable', {
-      code: codeFor(rotatedSetup.body.secret, { at: Date.now() + 5 * 60 * 1000 }),
-      stepUpToken: rotatedSetup.body.stepUpToken,
-    }, { token: session.token });
+    const wrongRotation = await post(
+      '/api/v1/profile/2fa/totp/enable',
+      {
+        code: codeFor(rotatedSetup.body.secret, { at: Date.now() + 5 * 60 * 1000 }),
+        stepUpToken: rotatedSetup.body.stepUpToken,
+      },
+      { token: session.token },
+    );
     assert.strictEqual(wrongRotation.body.ok, false);
     const stillOld = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
     const oldFactorWorks = await post('/api/v1/auth/login/verify', {
-      ticket: stillOld.body.ticket, code: codeFor(setup.body.secret),
+      ticket: stillOld.body.ticket,
+      code: codeFor(setup.body.secret),
     });
     assert.strictEqual(oldFactorWorks.body.ok, true, '新密钥尚未确认时旧验证器仍然可用');
-    const rotated = await post('/api/v1/profile/2fa/totp/enable', {
-      code: codeFor(rotatedSetup.body.secret),
-      stepUpToken: rotatedSetup.body.stepUpToken,
-    }, { token: session.token });
+    const rotated = await post(
+      '/api/v1/profile/2fa/totp/enable',
+      {
+        code: codeFor(rotatedSetup.body.secret),
+        stepUpToken: rotatedSetup.body.stepUpToken,
+      },
+      { token: session.token },
+    );
     assert.strictEqual(rotated.body.ok, true);
     const newFactorLogin = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
     const newFactorWorks = await post('/api/v1/auth/login/verify', {
-      ticket: newFactorLogin.body.ticket, code: codeFor(rotatedSetup.body.secret),
+      ticket: newFactorLogin.body.ticket,
+      code: codeFor(rotatedSetup.body.secret),
     });
     assert.strictEqual(newFactorWorks.body.ok, true, '确认轮换后新验证器立即生效');
 
     // 关闭必须经过身份复核，但保留 TOTP 密钥与备用码，供后续一键恢复。
-    const noDisableProof = await post('/api/v1/profile/2fa/disable', { password: 'password' }, { token: session.token });
+    const noDisableProof = await post(
+      '/api/v1/profile/2fa/disable',
+      { password: 'password' },
+      { token: session.token },
+    );
     assert.strictEqual(noDisableProof.body.ok, false);
     const disableProof = await identityTicket(session.token, 'totp@example.com', 'factor', {
-      method: 'totp', code: codeFor(rotatedSetup.body.secret),
+      method: 'totp',
+      code: codeFor(rotatedSetup.body.secret),
     });
     const disabled = await post('/api/v1/profile/2fa/disable', { stepUpToken: disableProof }, { token: session.token });
     assert.strictEqual(disabled.body.ok, true, JSON.stringify(disabled.body));
@@ -1109,7 +1213,11 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     assert.strictEqual(security.body.backupCodesLeft, 10, '一键开启不应轮换备用码');
 
     const finalProof = await identityTicket(session.token, 'totp@example.com', 'factor');
-    const finalDisable = await post('/api/v1/profile/2fa/disable', { stepUpToken: finalProof }, { token: session.token });
+    const finalDisable = await post(
+      '/api/v1/profile/2fa/disable',
+      { stepUpToken: finalProof },
+      { token: session.token },
+    );
     assert.strictEqual(finalDisable.body.ok, true);
     security = await get('/api/v1/profile/security', { token: session.token });
     assert.strictEqual(security.body.twoFactorEnabled, false);
@@ -2605,9 +2713,7 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
 /** 8×8 的最小 JPEG：带 SOI、SOF0 和 EOI，上传校验认得出。 */
 function minimalJpeg(): Buffer {
   return Buffer.from([
-    0xff, 0xd8,
-    0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x08, 0x00, 0x08, 0x01, 0x01, 0x11, 0x00,
-    0xff, 0xd9,
+    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x08, 0x00, 0x08, 0x01, 0x01, 0x11, 0x00, 0xff, 0xd9,
   ]);
 }
 
@@ -2677,9 +2783,13 @@ test('头像上传落到服务器，并遵守大小与格式设置', async () =>
     assert.strictEqual(image.headers?.['cross-origin-resource-policy'], 'cross-origin');
     assert.ok(image.raw.equals(jpeg));
 
-    const replaced = await put('/api/v1/profile', { avatar: 'https://appassets.androidplatform.net/media/local.jpg' }, {
-      token: tokens.user.token,
-    });
+    const replaced = await put(
+      '/api/v1/profile',
+      { avatar: 'https://appassets.androidplatform.net/media/local.jpg' },
+      {
+        token: tokens.user.token,
+      },
+    );
     assert.strictEqual(replaced.body.ok, false);
     const kept = await get('/api/v1/profile', { token: tokens.user.token });
     assert.strictEqual(kept.body.avatar, url, '资料保存不能把设备路径写回头像');
@@ -2698,7 +2808,11 @@ test('头像上传落到服务器，并遵守大小与格式设置', async () =>
     assert.strictEqual(bogus.body.ok, false);
     assert.match(String(bogus.body.error), /jpg、jpeg、png、webp/);
 
-    const restored = await put('/api/v1/settings', { avatarFormats: 'jpg,jpeg,png,webp' }, { token: tokens.admin.token });
+    const restored = await put(
+      '/api/v1/settings',
+      { avatarFormats: 'jpg,jpeg,png,webp' },
+      { token: tokens.admin.token },
+    );
     assert.strictEqual(restored.body.ok, true);
     const removed = await del('/api/v1/profile/avatar', { token: tokens.user.token });
     assert.strictEqual(removed.body.ok, true);
@@ -2709,7 +2823,9 @@ test('头像上传落到服务器，并遵守大小与格式设置', async () =>
     if (previousDir === undefined) delete process.env.UPLOAD_DIR;
     else process.env.UPLOAD_DIR = previousDir;
     await rm(directory, { recursive: true, force: true });
-    await put('/api/v1/settings', { avatarFormats: 'jpg,jpeg,png,webp' }, { token: tokens.admin.token }).catch(() => undefined);
+    await put('/api/v1/settings', { avatarFormats: 'jpg,jpeg,png,webp' }, { token: tokens.admin.token }).catch(
+      () => undefined,
+    );
     await del('/api/v1/profile/avatar', { token: tokens.user.token }).catch(() => undefined);
   }
 });
@@ -2763,15 +2879,19 @@ test('展会媒体上传到服务器，打不开或不再引用的文件会被�
     await writeFile(linkedPath, jpeg);
     const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
     await utimes(linkedPath, old, old);
-    const created = await post('/api/v1/exhibitions', {
-      title: '媒体清理测试',
-      venue: '测试展馆',
-      time: '09:00-17:00',
-      date: '2026-09-20',
-      status: '需审核',
-      category: '智能家居',
-      description: `![图](${linkedUrl})`,
-    }, { token: tokens.exhibitor.token });
+    const created = await post(
+      '/api/v1/exhibitions',
+      {
+        title: '媒体清理测试',
+        venue: '测试展馆',
+        time: '09:00-17:00',
+        date: '2026-09-20',
+        status: '需审核',
+        category: '智能家居',
+        description: `![图](${linkedUrl})`,
+      },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
     exhibitionId = String(created.body.exhibition.id);
 
@@ -2783,7 +2903,11 @@ test('展会媒体上传到服务器，打不开或不再引用的文件会被�
     const settings = await get('/api/v1/settings', { token: tokens.admin.token });
     assert.equal(await exists(orphanPath), false, '超过一小时且没人引用的文件应被清掉');
     assert.equal(await exists(linkedPath), true, '仍被简介引用的文件要留下');
-    assert.equal(await exists(path.join(filesDir, url.slice(url.lastIndexOf('/') + 1))), true, '刚上传、还没写进正文的文件先留着');
+    assert.equal(
+      await exists(path.join(filesDir, url.slice(url.lastIndexOf('/') + 1))),
+      true,
+      '刚上传、还没写进正文的文件先留着',
+    );
     assert.equal(settings.body.storage.whenFull, 'reject');
     assert.equal(settings.body.storage.fileCount, 2);
     assert.equal(settings.body.storage.usedBytes, jpeg.length * 2);
@@ -2791,14 +2915,22 @@ test('展会媒体上传到服务器，打不开或不再引用的文件会被�
     const viewer = await get('/api/v1/settings', { token: tokens.user.token });
     assert.equal(viewer.body.storage, undefined);
 
-    const cleared = await put(`/api/v1/exhibitions/${exhibitionId}`, {
-      title: '媒体清理测试',
-      description: '清理后',
-    }, { token: tokens.exhibitor.token });
+    const cleared = await put(
+      `/api/v1/exhibitions/${exhibitionId}`,
+      {
+        title: '媒体清理测试',
+        description: '清理后',
+      },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(cleared.body.ok, true, JSON.stringify(cleared.body));
     assert.equal(await exists(linkedPath), false, '从简介里拿掉的文件应马上删除');
 
-    const saved = await put('/api/v1/settings', { storageMb: 128, whenFull: 'evict-oldest' }, { token: tokens.admin.token });
+    const saved = await put(
+      '/api/v1/settings',
+      { storageMb: 128, whenFull: 'evict-oldest' },
+      { token: tokens.admin.token },
+    );
     assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
     assert.equal(saved.body.settings.upload.storageMb, 128);
     assert.equal(saved.body.settings.upload.whenFull, 'evict-oldest');
@@ -2811,7 +2943,9 @@ test('展会媒体上传到服务器，打不开或不再引用的文件会被�
     if (exhibitionId) {
       await del(`/api/v1/exhibitions/${exhibitionId}`, { token: tokens.exhibitor.token }).catch(() => undefined);
     }
-    await put('/api/v1/settings', { storageMb: 1024, whenFull: 'reject' }, { token: tokens.admin.token }).catch(() => undefined);
+    await put('/api/v1/settings', { storageMb: 1024, whenFull: 'reject' }, { token: tokens.admin.token }).catch(
+      () => undefined,
+    );
     if (previousDir === undefined) delete process.env.UPLOAD_DIR;
     else process.env.UPLOAD_DIR = previousDir;
     await rm(directory, { recursive: true, force: true });
@@ -2834,9 +2968,15 @@ test('改密码需要身份复核，成功后旧刷新令牌失效', async () =>
   const session = await login('user');
   const profile = await get('/api/v1/profile', { token: session.token });
   const email = String(profile.body.email);
-  const noProof = await post('/api/v1/profile/password', {
-    currentPassword: 'password', newPassword: 'newpassword', confirmPassword: 'newpassword',
-  }, { token: session.token });
+  const noProof = await post(
+    '/api/v1/profile/password',
+    {
+      currentPassword: 'password',
+      newPassword: 'newpassword',
+      confirmPassword: 'newpassword',
+    },
+    { token: session.token },
+  );
   assert.strictEqual(noProof.body.ok, false, '仅有当前密码不能修改密码');
 
   const mismatch = await post(
@@ -3687,14 +3827,29 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     assert.strictEqual(approved.body.ok, true, JSON.stringify(approved.body));
     assert.strictEqual(approved.body.meeting.status, '已通过');
     const mine = await get('/api/v1/meetings/mine', { token: tokens.user.token });
-    assert.ok(mine.body.some((item: { id: string; status: string }) => item.id === meetingId && item.status === '已通过'));
+    assert.ok(
+      mine.body.some((item: { id: string; status: string }) => item.id === meetingId && item.status === '已通过'),
+    );
 
     const userMonth = await get('/api/v1/exhibitions/month?year=2099&month=6', { token: tokens.user.token });
     assert.deepStrictEqual(userMonth.body.markedDays, [15, 16]);
-    assert.ok(userMonth.body.meetings.some((item: { id?: string; status?: string; role?: string; titleRole?: string }) => item.id === meetingId && item.status === '已通过' && item.role === 'visitor' && item.titleRole === 'exhibitor'));
+    assert.ok(
+      userMonth.body.meetings.some(
+        (item: { id?: string; status?: string; role?: string; titleRole?: string }) =>
+          item.id === meetingId &&
+          item.status === '已通过' &&
+          item.role === 'visitor' &&
+          item.titleRole === 'exhibitor',
+      ),
+    );
     const hostMonth = await get('/api/v1/exhibitions/month?year=2099&month=6', { token: tokens.exhibitor.token });
     assert.deepStrictEqual(hostMonth.body.markedDays, [15]);
-    assert.ok(hostMonth.body.meetings.some((item: { id?: string; role?: string; titleRole?: string }) => item.id === meetingId && item.role === 'host' && item.titleRole === 'user'));
+    assert.ok(
+      hostMonth.body.meetings.some(
+        (item: { id?: string; role?: string; titleRole?: string }) =>
+          item.id === meetingId && item.role === 'host' && item.titleRole === 'user',
+      ),
+    );
     assert.deepStrictEqual(hostMonth.body.eventDays, []);
 
     const quota = await put('/api/v1/settings', { maxFutureMeetings: 1 }, { token: tokens.admin.token });
@@ -3710,11 +3865,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     assert.strictEqual(blocked.body.ok, false);
     assert.match(String(blocked.body.error), /最多 1 个/);
 
-    const locked = await put(
-      `/api/v1/meetings/${meetingId}/lock`,
-      { locked: true },
-      { token: tokens.admin.token },
-    );
+    const locked = await put(`/api/v1/meetings/${meetingId}/lock`, { locked: true }, { token: tokens.admin.token });
     assert.strictEqual(locked.body.ok, true);
     assert.strictEqual(locked.body.meeting.locked, true);
     const exhibitorBlocked = await put(
@@ -3731,13 +3882,12 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     assert.strictEqual(adminStatus.body.meeting.status, '已拒绝');
     const rejectedMonth = await get('/api/v1/exhibitions/month?year=2099&month=6', { token: tokens.user.token });
     assert.ok(!rejectedMonth.body.markedDays.includes(15), '已拒绝的会议不打点');
-    assert.ok(!rejectedMonth.body.meetings.some((item: { id?: string }) => item.id === meetingId), '已拒绝的会议不进当天列表');
-    assert.deepStrictEqual(rejectedMonth.body.markedDays, [16]);
-    const unlocked = await put(
-      `/api/v1/meetings/${meetingId}/lock`,
-      { locked: false },
-      { token: tokens.admin.token },
+    assert.ok(
+      !rejectedMonth.body.meetings.some((item: { id?: string }) => item.id === meetingId),
+      '已拒绝的会议不进当天列表',
     );
+    assert.deepStrictEqual(rejectedMonth.body.markedDays, [16]);
+    const unlocked = await put(`/api/v1/meetings/${meetingId}/lock`, { locked: false }, { token: tokens.admin.token });
     assert.strictEqual(unlocked.body.meeting.locked, false);
     const exhibitorAgain = await put(
       `/api/v1/meetings/${meetingId}/status`,
@@ -3795,7 +3945,11 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     assert.strictEqual(removed.body.ok, true);
     const afterDelete = await get('/api/v1/exhibitions/month?year=2099&month=6', { token: tokens.user.token });
     assert.deepStrictEqual(afterDelete.body.markedDays, [16]);
-    assert.ok(afterDelete.body.meetings.every((item: { status?: string }) => item.status === '待审核' || item.status === '已通过'));
+    assert.ok(
+      afterDelete.body.meetings.every(
+        (item: { status?: string }) => item.status === '待审核' || item.status === '已通过',
+      ),
+    );
 
     await put('/api/v1/settings', { maxFutureMeetings: 0 }, { token: tokens.admin.token });
     const limited = await put('/api/v1/users/usr-2/status', { status: '受限' }, { token: tokens.admin.token });

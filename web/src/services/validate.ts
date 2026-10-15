@@ -121,15 +121,7 @@ export interface CheckOptions {
 
 /** 逐条执行规则，返回第一条错误；通过时返回空串。 */
 export function check(value: unknown, options: CheckOptions = {}): string {
-  const {
-    label = t('form.thisField'),
-    required = false,
-    min = 0,
-    max = 0,
-    pattern,
-    patternMessage,
-    custom,
-  } = options;
+  const { label = t('form.thisField'), required = false, min = 0, max = 0, pattern, patternMessage, custom } = options;
   const trimmed = String(value ?? '').trim();
   if (required && trimmed === '') return MESSAGES.required(label);
   if (trimmed === '') return '';

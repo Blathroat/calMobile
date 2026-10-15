@@ -4,7 +4,9 @@ import { createApi } from './client';
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 
@@ -17,10 +19,13 @@ afterEach(() => {
 describe('会话身份隔离', () => {
   it('敏感安全操作只提交用途限定身份复核票', async () => {
     const requests: Array<{ url: string; body: unknown }> = [];
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      requests.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
-      return response({ ok: true, stepUpToken: 'step-up', email: 'new@example.com' });
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        requests.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+        return response({ ok: true, stepUpToken: 'step-up', email: 'new@example.com' });
+      }),
+    );
     const api = createApi('http://test/api/v1');
     api.session.setTokens({ token: 'access' });
 
@@ -31,7 +36,11 @@ describe('会话身份隔离', () => {
     await api.security.activateTotp();
     await api.security.disableTwoFactor('factor-proof');
     await api.security.changeEmail('new@example.com', 'email-proof');
-    await api.profile.changePassword({ newPassword: 'secret-123', confirmPassword: 'secret-123', stepUpToken: 'password-proof' });
+    await api.profile.changePassword({
+      newPassword: 'secret-123',
+      confirmPassword: 'secret-123',
+      stepUpToken: 'password-proof',
+    });
 
     expect(requests.map(({ url }) => new URL(url).pathname)).toEqual([
       '/api/v1/profile/security/email-code',
@@ -53,8 +62,9 @@ describe('会话身份隔离', () => {
 
   it('退出后未完成的刷新不能恢复旧令牌或重放旧请求', async () => {
     const renewal = deferred<Response>();
-    const fetcher = vi.fn(async (url: string) => url.endsWith('/auth/refresh')
-      ? renewal.promise : response({ error: '过期' }, 401));
+    const fetcher = vi.fn(async (url: string) =>
+      url.endsWith('/auth/refresh') ? renewal.promise : response({ error: '过期' }, 401),
+    );
     vi.stubGlobal('fetch', fetcher);
     const api = createApi('http://test');
     api.session.setTokens({ token: 'old', refreshToken: 'refresh-old' });
@@ -69,8 +79,10 @@ describe('会话身份隔离', () => {
 
   it('换号后旧查询不能作为新账号数据返回', async () => {
     const oldProfile = deferred<Response>();
-    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => (init?.headers as Record<string, string>).Authorization === 'Bearer a'
-      ? oldProfile.promise : response({ username: 'b' }));
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const authorization = (init?.headers as Record<string, string> | undefined)?.Authorization;
+      return authorization === 'Bearer a' ? oldProfile.promise : response({ username: 'b' });
+    });
     vi.stubGlobal('fetch', fetcher);
     const api = createApi('http://test');
     api.session.setTokens({ token: 'a' });
@@ -92,7 +104,9 @@ describe('会话身份隔离', () => {
     const pending = api.auth.logout();
     const tokenDuringRevocation = api.session.token;
     let exited = false;
-    void pending.then(() => { exited = true; });
+    void pending.then(() => {
+      exited = true;
+    });
     await Promise.resolve();
     const exitedBeforeRevocation = exited;
     revocation.resolve(response({ error: '过期' }, 401));
@@ -105,7 +119,8 @@ describe('会话身份隔离', () => {
 
   it('刷新凭据被拒绝后，不能再命中上一身份的资料缓存', async () => {
     const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.endsWith('/profile')) return Response.json({ username: (init?.headers as Record<string, string>).Authorization ? 'a' : 'guest' });
+      const authorization = (init?.headers as Record<string, string> | undefined)?.Authorization;
+      if (url.endsWith('/profile')) return Response.json({ username: authorization ? 'a' : 'guest' });
       return response({ error: '过期' }, 401);
     });
     vi.stubGlobal('fetch', fetcher);
@@ -127,7 +142,12 @@ describe('会话身份隔离', () => {
     expect(rejectedApi.session.token).toBeUndefined();
     expect(expired).toHaveBeenCalledTimes(1);
 
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline'); }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('offline');
+      }),
+    );
     const transientExpired = vi.fn();
     const transientApi = createApi('http://test', transientExpired);
     transientApi.session.setTokens({ token: 'old', refreshToken: 'refresh-old' });
@@ -155,10 +175,12 @@ describe('会话身份隔离', () => {
 
   it('设备恢复回包迟于退出时不再恢复身份', async () => {
     let loadId = '';
-    window.CalMobileNative = { invoke: (action, _payload, callbackId) => {
-      if (action === 'session.load') loadId = callbackId;
-      else window.CalMobileBridge?.onResult(callbackId, true, {}, null, null);
-    } };
+    window.CalMobileNative = {
+      invoke: (action, _payload, callbackId) => {
+        if (action === 'session.load') loadId = callbackId;
+        else window.CalMobileBridge?.onResult(callbackId, true, {}, null, null);
+      },
+    };
     const fetcher = vi.fn(async () => response({ token: 'late' }));
     vi.stubGlobal('fetch', fetcher);
     const api = createApi('http://test');

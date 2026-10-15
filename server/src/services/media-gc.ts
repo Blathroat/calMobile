@@ -81,10 +81,11 @@ async function stripMissing(keys: readonly string[]): Promise<void> {
     const description = withoutKeys(row.description || '', keys);
     const imageUri = withoutKeys(row.image_uri || '', keys);
     if (description === (row.description || '') && imageUri === (row.image_uri || '')) continue;
-    await query(
-      'UPDATE exhibitions SET description = $2, image_uri = $3, updated_at = now() WHERE id = $1',
-      [row.id, description, imageUri],
-    );
+    await query('UPDATE exhibitions SET description = $2, image_uri = $3, updated_at = now() WHERE id = $1', [
+      row.id,
+      description,
+      imageUri,
+    ]);
   }
   const avatars = await query<AvatarRow & { id: string }>("SELECT id, avatar FROM users WHERE avatar <> ''");
   for (const row of avatars.rows) {
@@ -97,10 +98,10 @@ async function stripMissing(keys: readonly string[]): Promise<void> {
   const current = typeof value?.defaultCover === 'string' ? value.defaultCover : '';
   const nextCover = withoutKeys(current, keys);
   if (nextCover !== current && value && typeof value === 'object') {
-    await query(
-      `UPDATE app_settings SET value = $2, updated_at = now() WHERE key = 'cover'`,
-      ['cover', JSON.stringify({ ...value, defaultCover: nextCover })],
-    );
+    await query(`UPDATE app_settings SET value = $2, updated_at = now() WHERE key = 'cover'`, [
+      'cover',
+      JSON.stringify({ ...value, defaultCover: nextCover }),
+    ]);
   }
 }
 
@@ -150,7 +151,10 @@ export async function forgetTexts(texts: readonly string[]): Promise<void> {
 }
 
 /** 展会保存或删除之后：旧正文里不再被引用的文件马上清掉，再做一轮常规清理。 */
-export async function releaseExhibitionMedia(previous: { description?: string | null; image_uri?: string | null }): Promise<void> {
+export async function releaseExhibitionMedia(previous: {
+  description?: string | null;
+  image_uri?: string | null;
+}): Promise<void> {
   try {
     await forgetTexts([previous.description || '', previous.image_uri || '']);
     await sweepMedia();

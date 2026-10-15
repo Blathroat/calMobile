@@ -18,7 +18,9 @@ self.onmessage = async (event: MessageEvent<QrWorkerRequest>) => {
   try {
     await ready;
     const results = await readBarcodes(event.data.image, {
-      formats: ['QRCode'], maxNumberOfSymbols: 1, tryInvert: false,
+      formats: ['QRCode'],
+      maxNumberOfSymbols: 1,
+      tryInvert: false,
     });
     reply({ type: 'result', id: event.data.id, text: results[0]?.text || null });
   } catch {

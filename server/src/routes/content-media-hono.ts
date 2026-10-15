@@ -32,11 +32,7 @@ app.post('/', authenticateHono, async (c) => {
     const limitMb = kind === 'video' ? settings.media.videoSizeMb : settings.media.imageSizeMb;
     const maxBytes = limitMb * 1024 * 1024;
     const declared = Number(c.req.header('content-length'));
-    const read = await readCappedBytes(
-      c.req.raw.body,
-      maxBytes,
-      Number.isFinite(declared) ? declared : undefined,
-    );
+    const read = await readCappedBytes(c.req.raw.body, maxBytes, Number.isFinite(declared) ? declared : undefined);
     if (!read.ok || read.bytes.byteLength === 0) {
       throw badRequest(`${kind === 'video' ? '视频' : '图片'}超过 ${limitMb} MB 限制`);
     }

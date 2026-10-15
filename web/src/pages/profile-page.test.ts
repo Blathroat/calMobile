@@ -16,9 +16,17 @@ vi.mock('@/app/runtime', () => ({
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 
 const PROFILE = {
-  id: 'u1', username: 'user', nickname: '旧昵称', email: 'user@example.com',
-  avatar: '/avatar.jpg', bio: '已有简介', region: '上海', socialMedia: '@user',
-  roleLabel: '普通用户', status: '正常', showRegistrations: true,
+  id: 'u1',
+  username: 'user',
+  nickname: '旧昵称',
+  email: 'user@example.com',
+  avatar: '/avatar.jpg',
+  bio: '已有简介',
+  region: '上海',
+  socialMedia: '@user',
+  roleLabel: '普通用户',
+  status: '正常',
+  showRegistrations: true,
 };
 let app: App | undefined;
 
@@ -43,12 +51,20 @@ async function mountProfile(): Promise<void> {
   const pinia = createPinia();
   setActivePinia(pinia);
   useSessionStore().applyUser({
-    id: PROFILE.id, username: PROFILE.username, nickname: PROFILE.nickname,
-    email: PROFILE.email, avatar: PROFILE.avatar,
+    id: PROFILE.id,
+    username: PROFILE.username,
+    nickname: PROFILE.nickname,
+    email: PROFILE.email,
+    avatar: PROFILE.avatar,
   });
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/profile', component: ProfilePage }] });
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/profile', component: ProfilePage }],
+  });
   await router.push('/profile');
-  app = createApp({ render: () => [h(ProfilePage), h(AppSheet)] }).use(pinia).use(router);
+  app = createApp({ render: () => [h(ProfilePage), h(AppSheet)] })
+    .use(pinia)
+    .use(router);
   app.mount('#profile-test');
   await nextTick();
 }
@@ -85,9 +101,17 @@ describe('个人页资料展示与编辑', () => {
     region.value = '杭州';
     region.dispatchEvent(new Event('input', { bubbles: true }));
     [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === '保存')?.click();
-    await vi.waitFor(() => expect(api.profile.save).toHaveBeenCalledWith(expect.objectContaining({
-      nickname: '旧昵称', bio: '已有简介', region: '杭州', socialMedia: '@user', showRegistrations: true,
-    })));
+    await vi.waitFor(() =>
+      expect(api.profile.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nickname: '旧昵称',
+          bio: '已有简介',
+          region: '杭州',
+          socialMedia: '@user',
+          showRegistrations: true,
+        }),
+      ),
+    );
     expect(sheet.current?.closing).toBe(true);
     await vi.waitFor(() => expect(cards()[0]?.textContent).toContain('杭州'));
     expect(cards()[1]?.textContent).not.toContain('杭州');

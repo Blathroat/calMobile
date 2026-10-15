@@ -2,7 +2,14 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { canonicalRedirect, isJoinPagePath, joinSiteMissingMessage, joinSiteReady, lookupJoinFile, requestHost } from './join-site.js';
+import {
+  canonicalRedirect,
+  isJoinPagePath,
+  joinSiteMissingMessage,
+  joinSiteReady,
+  lookupJoinFile,
+  requestHost,
+} from './join-site.js';
 
 test('报名页和接口路径分开', () => {
   assert.equal(isJoinPagePath('/e/exh-1'), true);
@@ -15,26 +22,41 @@ test('报名页和接口路径分开', () => {
 });
 
 test('没配域名不跳转，Host 不一致才跳到 PUBLIC_BASE_URL', () => {
-  assert.equal(canonicalRedirect({
-    requestHost: 'localhost:3000',
-    publicBaseUrl: '',
-    pathAndQuery: '/e/exh-1',
-  }), null);
-  assert.equal(canonicalRedirect({
-    requestHost: 'app.example.com',
-    publicBaseUrl: 'https://app.example.com',
-    pathAndQuery: '/e/exh-1',
-  }), null);
-  assert.equal(canonicalRedirect({
-    requestHost: 'localhost:3000',
-    publicBaseUrl: 'https://app.example.com/',
-    pathAndQuery: '/e/exh-1?from=share',
-  }), 'https://app.example.com/e/exh-1?from=share');
+  assert.equal(
+    canonicalRedirect({
+      requestHost: 'localhost:3000',
+      publicBaseUrl: '',
+      pathAndQuery: '/e/exh-1',
+    }),
+    null,
+  );
+  assert.equal(
+    canonicalRedirect({
+      requestHost: 'app.example.com',
+      publicBaseUrl: 'https://app.example.com',
+      pathAndQuery: '/e/exh-1',
+    }),
+    null,
+  );
+  assert.equal(
+    canonicalRedirect({
+      requestHost: 'localhost:3000',
+      publicBaseUrl: 'https://app.example.com/',
+      pathAndQuery: '/e/exh-1?from=share',
+    }),
+    'https://app.example.com/e/exh-1?from=share',
+  );
 });
 
 test('只有打开 TRUST_PROXY 才采信 X-Forwarded-Host', () => {
-  assert.equal(requestHost({ host: '127.0.0.1:3000', forwardedHost: 'app.example.com', trustProxy: false }), '127.0.0.1:3000');
-  assert.equal(requestHost({ host: '127.0.0.1:3000', forwardedHost: 'app.example.com, proxy.internal', trustProxy: 1 }), 'app.example.com');
+  assert.equal(
+    requestHost({ host: '127.0.0.1:3000', forwardedHost: 'app.example.com', trustProxy: false }),
+    '127.0.0.1:3000',
+  );
+  assert.equal(
+    requestHost({ host: '127.0.0.1:3000', forwardedHost: 'app.example.com, proxy.internal', trustProxy: 1 }),
+    'app.example.com',
+  );
 });
 
 test('报名站文件落在目录内，缺的脚本不回退成页面', () => {

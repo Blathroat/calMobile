@@ -19,7 +19,7 @@ import { navigation } from './navigation';
 
 // 外壳结构使用下面的固定身份；启动数据与认证流程由 runtime 测试覆盖。
 vi.mock('@/app/runtime', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/app/runtime')>(),
+  ...(await importOriginal<typeof import('@/app/runtime')>()),
   bootApp: async () => undefined,
 }));
 
@@ -94,7 +94,10 @@ describe('app shell', () => {
     document.body.innerHTML = '';
     navigation.direction.value = 'none';
     // 门禁只看结构，不连后端：让所有请求立刻失败，页面走各自的错误态。
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('offline'))),
+    );
   });
 
   it.each(ROUTES)('%s 渲染在外壳的内容区里', async (path) => {
@@ -127,7 +130,9 @@ describe('app shell', () => {
       if (path !== '/login' && !TAB_ROUTES.has(path)) {
         const back = container.querySelector<HTMLButtonElement>('.topbar > .icon-button');
         expect(back, `${path} 缺少左上角返回按钮`).not.toBeNull();
-        expect(back?.querySelector('svg path')?.getAttribute('d'), `${path} 返回按钮不是左尖括号`).toBe('m14 5-7 7 7 7');
+        expect(back?.querySelector('svg path')?.getAttribute('d'), `${path} 返回按钮不是左尖括号`).toBe(
+          'm14 5-7 7 7 7',
+        );
       }
     } finally {
       unmount(container, app);
@@ -184,8 +189,9 @@ describe('app shell', () => {
       await nextTick();
       const foot = settings.container.querySelector('#app-foot');
       expect(foot?.childElementCount).toBe(0);
-      const entry = [...settings.container.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent?.trim() === '编辑资料');
+      const entry = [...settings.container.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent?.trim() === '编辑资料',
+      );
       expect(entry, '/settings 没有资料编辑入口').not.toBeUndefined();
       entry?.click();
       await nextTick();
@@ -194,12 +200,12 @@ describe('app shell', () => {
       expect(settings.container.querySelector('.sheet-panel #settings-nickname')).not.toBeNull();
       expect(settings.container.querySelector('.app-body #settings-nickname')).toBeNull();
 
-      const cancel = [...settings.container.querySelectorAll<HTMLButtonElement>('.sheet-panel button')]
-        .find((button) => button.textContent?.trim() === '取消');
+      const cancel = [...settings.container.querySelectorAll<HTMLButtonElement>('.sheet-panel button')].find(
+        (button) => button.textContent?.trim() === '取消',
+      );
       cancel?.click();
       await new Promise((resolve) => setTimeout(resolve, 260));
       await nextTick();
-
     } finally {
       unmount(settings.container, settings.app);
       profileSpy.mockRestore();
@@ -208,19 +214,28 @@ describe('app shell', () => {
 
     // 修改密码归入安全设置，打开后先通过身份复核。
     const securitySpy = vi.spyOn(api.security, 'get').mockResolvedValue({
-      email: 'user@example.com', emailVerified: true, canEnable: true,
-      twoFactorEnabled: false, twoFactorMethod: 'off', totpEnabled: false,
+      email: 'user@example.com',
+      emailVerified: true,
+      canEnable: true,
+      twoFactorEnabled: false,
+      twoFactorMethod: 'off',
+      totpEnabled: false,
     });
-    const passwordCodeSpy = vi.spyOn(api.security, 'identityEmailCode').mockResolvedValue({ ok: true, maskedEmail: 'u***@example.com' });
+    const passwordCodeSpy = vi
+      .spyOn(api.security, 'identityEmailCode')
+      .mockResolvedValue({ ok: true, maskedEmail: 'u***@example.com' });
     const security = await mountRoute('/security');
     try {
-      const passwordEntry = [...security.container.querySelectorAll<HTMLButtonElement>('.page-surface button')]
-        .find((button) => button.textContent?.includes('修改密码'));
+      const passwordEntry = [...security.container.querySelectorAll<HTMLButtonElement>('.page-surface button')].find(
+        (button) => button.textContent?.includes('修改密码'),
+      );
       expect(passwordEntry, '/security 没有修改密码入口').not.toBeUndefined();
       passwordEntry?.click();
       await nextTick();
       security.container.querySelector<HTMLButtonElement>('.sheet-panel .cta.ghost')?.click();
-      await vi.waitFor(() => expect(security.container.querySelector('.sheet-panel #security-identity-code')).not.toBeNull());
+      await vi.waitFor(() =>
+        expect(security.container.querySelector('.sheet-panel #security-identity-code')).not.toBeNull(),
+      );
       expect(security.container.querySelector('.sheet-panel #security-identity-code')).not.toBeNull();
       expect(security.container.querySelector('.app-body #security-sheet-new-password')).toBeNull();
     } finally {
@@ -242,18 +257,29 @@ describe('app shell', () => {
 
   it('安全方式在抽屉关闭或验证失败时回到服务器确认的选项', async () => {
     const securitySpy = vi.spyOn(api.security, 'get').mockResolvedValue({
-      email: 'user@example.com', emailVerified: true, canEnable: true,
-      twoFactorEnabled: false, twoFactorMethod: 'off', backupCodesLeft: 0,
+      email: 'user@example.com',
+      emailVerified: true,
+      canEnable: true,
+      twoFactorEnabled: false,
+      twoFactorMethod: 'off',
+      backupCodesLeft: 0,
     });
-    const emailCodeSpy = vi.spyOn(api.security, 'identityEmailCode').mockResolvedValue({ ok: true, maskedEmail: 'u***@example.com' });
-    const identitySpy = vi.spyOn(api.security, 'verifyIdentity').mockResolvedValue({ ok: true, stepUpToken: 'step-up' });
+    const emailCodeSpy = vi
+      .spyOn(api.security, 'identityEmailCode')
+      .mockResolvedValue({ ok: true, maskedEmail: 'u***@example.com' });
+    const identitySpy = vi
+      .spyOn(api.security, 'verifyIdentity')
+      .mockResolvedValue({ ok: true, stepUpToken: 'step-up' });
     const setupSpy = vi.spyOn(api.security, 'totpSetup').mockResolvedValue({
-      secret: 'JBSWY3DPEHPK3PXP', otpauthUri: 'otpauth://totp/test', stepUpToken: 'confirm-step',
+      secret: 'JBSWY3DPEHPK3PXP',
+      otpauthUri: 'otpauth://totp/test',
+      stepUpToken: 'confirm-step',
     });
     const enableSpy = vi.spyOn(api.security, 'totpEnable').mockResolvedValue({ ok: false, error: '验证码不正确' });
     const { container, app } = await mountRoute('/security');
     try {
-      const selected = (mode: string) => container.querySelector<HTMLButtonElement>(`.seg button[data-value="${mode}"]`)?.getAttribute('aria-pressed');
+      const selected = (mode: string) =>
+        container.querySelector<HTMLButtonElement>(`.seg button[data-value="${mode}"]`)?.getAttribute('aria-pressed');
       await vi.waitFor(() => expect(selected('off')).toBe('true'));
       container.querySelector<HTMLButtonElement>('.seg button[data-value="totp"]')?.click();
       await vi.waitFor(() => expect(container.querySelector('.sheet-panel')).not.toBeNull());
@@ -268,7 +294,8 @@ describe('app shell', () => {
       await vi.waitFor(() => expect(container.querySelector('.sheet-panel #security-sheet-totp-code')).not.toBeNull());
 
       [...container.querySelectorAll<HTMLButtonElement>('.sheet-panel button')]
-        .find((button) => button.classList.contains('ghost'))?.click();
+        .find((button) => button.classList.contains('ghost'))
+        ?.click();
       await new Promise((resolve) => setTimeout(resolve, 260));
       await nextTick();
       expect(selected('off')).toBe('true');
@@ -287,7 +314,9 @@ describe('app shell', () => {
       code.value = '123456';
       code.dispatchEvent(new Event('input', { bubbles: true }));
       container.querySelector<HTMLButtonElement>('.sheet-panel .cta:not(.ghost)')?.click();
-      await vi.waitFor(() => expect(container.querySelector('.sheet-panel [role="alert"]')?.textContent).toContain('验证码不正确'));
+      await vi.waitFor(() =>
+        expect(container.querySelector('.sheet-panel [role="alert"]')?.textContent).toContain('验证码不正确'),
+      );
       expect(selected('off')).toBe('true');
       expect(identitySpy).toHaveBeenCalledWith('email', '123456', 'totp');
       expect(enableSpy).toHaveBeenCalledTimes(1);

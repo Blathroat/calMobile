@@ -39,9 +39,9 @@ const query = useAsync<ExhibitionDetail>();
 const exhibitionId = computed(() => String(route.params.id ?? route.query.id ?? ''));
 const draftMode = computed(() => !exhibitionId.value && String(route.query.draft ?? '') === '1');
 const exhibition = computed<JsonObject>(() => (query.data.value?.exhibition ?? {}) as JsonObject);
-const notFound = computed(() => (draftMode.value
-  ? readExhibitionDraft() == null
-  : !exhibitionId.value || query.data.value?.found === false));
+const notFound = computed(() =>
+  draftMode.value ? readExhibitionDraft() === null : !exhibitionId.value || query.data.value?.found === false,
+);
 const loadFailed = computed(() => query.error.value !== undefined && query.data.value === undefined);
 
 const content = ref('');
@@ -50,8 +50,14 @@ const showPreview = ref(false);
 const editor = ref<HTMLTextAreaElement>();
 /** 内容只从取回的详情写一次，之后预览 / 打字都不再被覆盖。 */
 const seeded = ref(false);
-const canSave = computed(() => seeded.value && !query.loading.value && !loadFailed.value
-  && !notFound.value && (draftMode.value || Boolean(exhibition.value.id)));
+const canSave = computed(
+  () =>
+    seeded.value &&
+    !query.loading.value &&
+    !loadFailed.value &&
+    !notFound.value &&
+    (draftMode.value || Boolean(exhibition.value.id)),
+);
 const previewLabel = t('exhibition.editor.preview');
 const continueLabel = t('exhibition.editor.continueEditing');
 
@@ -84,8 +90,10 @@ const media = computed<MediaTile[]>(() => {
 const mediaHint = computed(() => {
   const imageCount = Number(bootstrap.media.imageCount) || 8;
   const imageSize = Number(bootstrap.media.imageSizeMb) || 10;
-  return `媒体数量与大小受服务器设置限制：图片 ${imageCount} 张 / 单张 ${imageSize} MB，`
-    + `视频 ${uploadCountLimit('video')} 个 / 单个不超过 ${uploadSizeLimitMb('video')} MB；${t('exhibition.editor.mediaUsesShortUrl')}`;
+  return (
+    `媒体数量与大小受服务器设置限制：图片 ${imageCount} 张 / 单张 ${imageSize} MB，` +
+    `视频 ${uploadCountLimit('video')} 个 / 单个不超过 ${uploadSizeLimitMb('video')} MB；${t('exhibition.editor.mediaUsesShortUrl')}`
+  );
 });
 
 // ── 取数 ─────────────────────────────────────────────────────────
@@ -132,7 +140,9 @@ async function load(): Promise<void> {
   seeded.value = true;
 }
 
-onMounted(() => { void load(); });
+onMounted(() => {
+  void load();
+});
 
 // ── 编辑区与工具条 ───────────────────────────────────────────────
 
@@ -258,9 +268,10 @@ async function insertVideo(): Promise<void> {
 /** 删除媒体：从正文里摘掉这条引用，网格随之少一格。 */
 function removeMedia(tile: MediaTile): void {
   const url = escapeRegExp(tile.url);
-  content.value = tile.kind === 'image'
-    ? content.value.replace(new RegExp(`!\\[[^\\]]*\\]\\(${url}\\)`, 'g'), '')
-    : content.value.replace(new RegExp(`<video\\b[^>]*src="${url}"[^>]*></video>`, 'gi'), '');
+  content.value =
+    tile.kind === 'image'
+      ? content.value.replace(new RegExp(`!\\[[^\\]]*\\]\\(${url}\\)`, 'g'), '')
+      : content.value.replace(new RegExp(`<video\\b[^>]*src="${url}"[^>]*></video>`, 'gi'), '');
 }
 
 // ── 粘贴 / 清空 / 保存 ───────────────────────────────────────────
@@ -283,8 +294,21 @@ function openPasteSheet(): void {
     },
     actions: [
       { label: t('common.cancel'), onClick: (close) => close() },
-      { label: t('exhibition.editor.append'), onClick: (close) => { applyPaste(false); close(); } },
-      { label: t('exhibition.editor.replace'), variant: 'primary', onClick: (close) => { applyPaste(true); close(); } },
+      {
+        label: t('exhibition.editor.append'),
+        onClick: (close) => {
+          applyPaste(false);
+          close();
+        },
+      },
+      {
+        label: t('exhibition.editor.replace'),
+        variant: 'primary',
+        onClick: (close) => {
+          applyPaste(true);
+          close();
+        },
+      },
     ],
   });
 }
@@ -405,17 +429,45 @@ function escapeRegExp(value: string): string {
 
     <!-- 工具条只留格式。预览和粘贴在编辑区下方，避免同一颗粘贴出现两次。 -->
     <div class="toolbar" role="toolbar" :aria-label="t('exhibition.editor.title')">
-      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.heading')" @click="prefixLine('## ')">H2</button>
-      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.bold')" @click="surround('**', '**', '文本')">
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.heading')" @click="prefixLine('## ')">
+        H2
+      </button>
+      <button
+        type="button"
+        :aria-pressed="false"
+        :title="t('exhibition.editor.bold')"
+        @click="surround('**', '**', '文本')"
+      >
         <strong>B</strong>
       </button>
-      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.italic')" @click="surround('*', '*', '文本')">
+      <button
+        type="button"
+        :aria-pressed="false"
+        :title="t('exhibition.editor.italic')"
+        @click="surround('*', '*', '文本')"
+      >
         <em>I</em>
       </button>
-      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.quote')" @click="prefixLine('> ')">&gt;</button>
-      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.bulletList')" @click="prefixLine('- ')">•</button>
-      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.numberedList')" @click="prefixLine('1. ')">1.</button>
-      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.link')" @click="surround('[', '](https://)', '链接文字')">
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.quote')" @click="prefixLine('> ')">
+        &gt;
+      </button>
+      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.bulletList')" @click="prefixLine('- ')">
+        •
+      </button>
+      <button
+        type="button"
+        :aria-pressed="false"
+        :title="t('exhibition.editor.numberedList')"
+        @click="prefixLine('1. ')"
+      >
+        1.
+      </button>
+      <button
+        type="button"
+        :aria-pressed="false"
+        :title="t('exhibition.editor.link')"
+        @click="surround('[', '](https://)', '链接文字')"
+      >
         <AppIcon name="share" size="icon icon-sm" />
       </button>
       <button type="button" :aria-pressed="false" :title="t('exhibition.editor.insertImage')" @click="insertImage">
@@ -424,7 +476,12 @@ function escapeRegExp(value: string): string {
       <button type="button" :aria-pressed="false" :title="t('exhibition.editor.insertVideo')" @click="insertVideo">
         <AppIcon name="video" size="icon icon-sm" />
       </button>
-      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.table')" @click="appendText(t('exhibition.editor.tableTemplate'))">
+      <button
+        type="button"
+        :aria-pressed="false"
+        :title="t('exhibition.editor.table')"
+        @click="appendText(t('exhibition.editor.tableTemplate'))"
+      >
         <AppIcon name="list" size="icon icon-sm" />
       </button>
       <button type="button" :aria-pressed="false" :title="t('exhibition.editor.clearContent')" @click="clearAll">
@@ -449,7 +506,9 @@ function escapeRegExp(value: string): string {
 
     <div class="row" data-between="true">
       <span class="field-hint">{{ stats }}</span>
-      <span class="field-hint">{{ showPreview ? t('exhibition.editor.preview') : t('exhibition.editor.placeholder') }}</span>
+      <span class="field-hint">{{
+        showPreview ? t('exhibition.editor.preview') : t('exhibition.editor.placeholder')
+      }}</span>
     </div>
 
     <!-- 这一行只放预览和粘贴。插入图片、插入视频留在上面的工具条。 -->
@@ -481,7 +540,12 @@ function escapeRegExp(value: string): string {
       <p v-if="media.length === 0" class="field-hint">{{ t('exhibition.form.emptyDescription') }}</p>
       <div v-else class="media-grid">
         <div v-for="tile in media" :key="tile.url" class="media-tile">
-          <img v-if="tile.kind === 'image'" :src="tile.url" :alt="t('exhibition.editor.insertImage')" @error="removeMedia(tile)" />
+          <img
+            v-if="tile.kind === 'image'"
+            :src="tile.url"
+            :alt="t('exhibition.editor.insertImage')"
+            @error="removeMedia(tile)"
+          />
           <!-- 视频用同一套槽位：`.media-tile img` 的铺满规则同样适用于 video -->
           <video v-else :src="tile.url" muted playsinline preload="metadata" @error="removeMedia(tile)" />
           <button type="button" :aria-label="t('exhibition.editor.clearContent')" @click="removeMedia(tile)">×</button>
@@ -494,7 +558,13 @@ function escapeRegExp(value: string): string {
   <Teleport v-if="!loadFailed && !notFound" defer to="#app-foot">
     <div class="page-foot">
       <div class="stack" data-gap="sm">
-        <button class="cta" type="button" :disabled="saving || !canSave" :data-loading="saving ? 'true' : 'false'" @click="save">
+        <button
+          class="cta"
+          type="button"
+          :disabled="saving || !canSave"
+          :data-loading="saving ? 'true' : 'false'"
+          @click="save"
+        >
           {{ t('exhibition.editor.saveDescription') }}
         </button>
         <p class="field-hint text-center">{{ t('exhibition.editor.rendersAsMarkdown') }}</p>

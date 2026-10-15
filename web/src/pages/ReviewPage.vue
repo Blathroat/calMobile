@@ -60,15 +60,17 @@ const hasRecords = computed(() => review.data.value !== undefined);
 const reviewLoading = computed(() => review.loading.value && !hasRecords.value);
 
 /** 筛选条顺序沿用 `REVIEW_FILTERS`；数量优先用后端统计，缺失时按已取到的记录算。 */
-const filterItems = computed(() => REVIEW_FILTERS.map((value) => ({
-  value,
-  label: `${value} ${countOf(value)}`,
-})));
+const filterItems = computed(() =>
+  REVIEW_FILTERS.map((value) => ({
+    value,
+    label: `${value} ${countOf(value)}`,
+  })),
+);
 
 /** 当前筛选下的记录：`全部` 不过滤，其余按状态。 */
-const filtered = computed<Registration[]>(() => (
-  filter.value === '全部' ? records.value : records.value.filter((item) => item.status === filter.value)
-));
+const filtered = computed<Registration[]>(() =>
+  filter.value === '全部' ? records.value : records.value.filter((item) => item.status === filter.value),
+);
 
 const pendingCount = computed(() => countOf(REGISTRATION_STATUS.PENDING));
 
@@ -103,14 +105,8 @@ onMounted(load);
  * 关闭时不能动已审核的记录，管理员不受该策略限制，但仍受状态机限制。
  */
 const TRANSITIONS: Record<string, string[]> = {
-  [REGISTRATION_STATUS.PENDING]: [
-    REGISTRATION_STATUS.APPROVED,
-    REGISTRATION_STATUS.REJECTED,
-  ],
-  [REGISTRATION_STATUS.APPROVED]: [
-    REGISTRATION_STATUS.ATTENDED,
-    REGISTRATION_STATUS.REJECTED,
-  ],
+  [REGISTRATION_STATUS.PENDING]: [REGISTRATION_STATUS.APPROVED, REGISTRATION_STATUS.REJECTED],
+  [REGISTRATION_STATUS.APPROVED]: [REGISTRATION_STATUS.ATTENDED, REGISTRATION_STATUS.REJECTED],
   [REGISTRATION_STATUS.REJECTED]: [REGISTRATION_STATUS.APPROVED],
   [REGISTRATION_STATUS.CANCELLED]: [REGISTRATION_STATUS.APPROVED],
 };
@@ -153,9 +149,10 @@ function openVisitor(record: Registration): void {
 function openDetail(record: Registration): void {
   const answers = answerDocument({ source: { text: record.answers } }).lines;
   const targets = targetsFor(record);
-  const hint = record.status === REGISTRATION_STATUS.ATTENDED
-    ? t('registration.review.attendedLocked')
-    : t('registration.review.reviseDenied');
+  const hint =
+    record.status === REGISTRATION_STATUS.ATTENDED
+      ? t('registration.review.attendedLocked')
+      : t('registration.review.reviseDenied');
   const actions: SheetAction[] = [];
   if (targets.length > 0) {
     actions.push({
@@ -200,15 +197,17 @@ function openActions(record: Registration): void {
     message: `当前：${record.status}`,
     // 与用户状态面板同一套排布：选项竖排，选中/主推动作一眼可辨。
     layout: 'stack',
-    actions: targets.map((target): SheetAction => ({
-      label: targetLabel(target),
-      variant: target === REGISTRATION_STATUS.APPROVED ? 'primary' : 'ghost',
-      onClick: async (close) => {
-        close();
-        if (target === REGISTRATION_STATUS.REJECTED) askReject(record);
-        else await changeStatus(record, target);
-      },
-    })).concat([{ label: t('common.cancel'), onClick: (close) => close() }]),
+    actions: targets
+      .map((target): SheetAction => ({
+        label: targetLabel(target),
+        variant: target === REGISTRATION_STATUS.APPROVED ? 'primary' : 'ghost',
+        onClick: async (close) => {
+          close();
+          if (target === REGISTRATION_STATUS.REJECTED) askReject(record);
+          else await changeStatus(record, target);
+        },
+      }))
+      .concat([{ label: t('common.cancel'), onClick: (close) => close() }]),
   });
 }
 
@@ -259,7 +258,12 @@ function csvCell(value: unknown): string {
 
 async function exportCsv(): Promise<void> {
   const rows = [
-    [t('registration.detail.registrant'), t('registration.detail.registeredAt'), t('admin.exhibitions.status'), t('registration.review.filledAnswers')],
+    [
+      t('registration.detail.registrant'),
+      t('registration.detail.registeredAt'),
+      t('admin.exhibitions.status'),
+      t('registration.review.filledAnswers'),
+    ],
     ...filtered.value.map((record) => [
       String(record.visitorName ?? ''),
       String(record.registrationTime ?? ''),
@@ -371,7 +375,9 @@ async function exportCsv(): Promise<void> {
           >
             {{ String(record.visitorName ?? t('registration.review.initialFallback')).slice(0, 1) }}
           </button>
-          <span v-else class="avatar" aria-hidden="true">{{ String(record.visitorName ?? t('registration.review.initialFallback')).slice(0, 1) }}</span>
+          <span v-else class="avatar" aria-hidden="true">{{
+            String(record.visitorName ?? t('registration.review.initialFallback')).slice(0, 1)
+          }}</span>
           <button
             class="row-card"
             type="button"
@@ -392,7 +398,12 @@ async function exportCsv(): Promise<void> {
           </button>
         </div>
         <div v-if="record.status === REGISTRATION_STATUS.PENDING" class="action-row">
-          <button class="cta" data-size="small" type="button" @click="changeStatus(record, REGISTRATION_STATUS.APPROVED)">
+          <button
+            class="cta"
+            data-size="small"
+            type="button"
+            @click="changeStatus(record, REGISTRATION_STATUS.APPROVED)"
+          >
             {{ t('registration.review.approve') }}
           </button>
           <button class="cta ghost" data-size="small" type="button" @click="askReject(record)">
@@ -400,7 +411,9 @@ async function exportCsv(): Promise<void> {
           </button>
         </div>
         <div v-else class="action-row">
-          <button class="cta ghost" data-size="small" type="button" @click="openDetail(record)">{{ COPY.detail }}</button>
+          <button class="cta ghost" data-size="small" type="button" @click="openDetail(record)">
+            {{ COPY.detail }}
+          </button>
         </div>
       </div>
     </div>

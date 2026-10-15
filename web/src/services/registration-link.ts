@@ -5,7 +5,9 @@
  * 不要自己拼 `127.0.0.1`——那是 App 访问本机 API 的地址，不是给访客打开的链接。
  */
 export function registrationLink(publicBaseUrl: unknown, exhibitionId: unknown): string {
-  const base = String(publicBaseUrl ?? '').trim().replace(/\/+$/, '');
+  const base = String(publicBaseUrl ?? '')
+    .trim()
+    .replace(/\/+$/, '');
   const id = String(exhibitionId ?? '').trim();
   if (!/^https?:\/\/\S+$/i.test(base) || !id) return '';
   return `${base}/e/${encodeURIComponent(id)}`;
@@ -13,7 +15,9 @@ export function registrationLink(publicBaseUrl: unknown, exhibitionId: unknown):
 
 /** 展商分享的私人会议申请链接：`{PUBLIC_BASE_URL}/m/{展商 id}`。规则与报名链接相同。 */
 export function meetingLink(publicBaseUrl: unknown, exhibitorId: unknown): string {
-  const base = String(publicBaseUrl ?? '').trim().replace(/\/+$/, '');
+  const base = String(publicBaseUrl ?? '')
+    .trim()
+    .replace(/\/+$/, '');
   const id = String(exhibitorId ?? '').trim();
   if (!/^https?:\/\/\S+$/i.test(base) || !id) return '';
   return `${base}/m/${encodeURIComponent(id)}`;

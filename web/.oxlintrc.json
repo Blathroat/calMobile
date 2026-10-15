@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["unicorn", "vue"],
+  "env": {
+    "browser": true
+  },
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "eqeqeq": "error"
+  },
+  "ignorePatterns": ["pnpm-lock.yaml", "node_modules", "dist", "dist-join"],
+  "overrides": [
+    {
+      "files": ["src/**/*.test.ts"],
+      "env": {
+        "browser": true,
+        "node": true,
+        "vitest": true
+      }
+    },
+    {
+      "files": ["vite.config.ts", "vite.join.config.ts", "vitest.config.ts", "api-endpoints.mjs"],
+      "env": {
+        "node": true
+      }
+    }
+  ]
+}

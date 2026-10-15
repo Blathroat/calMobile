@@ -119,7 +119,9 @@ function requestIp(c: Context, trustProxy: TrustProxy): string {
 function sessionDevice(token: unknown, name: unknown): SessionDevice {
   return {
     deviceHash: hashDeviceToken(token),
-    deviceName: String(name ?? '').trim().slice(0, 80),
+    deviceName: String(name ?? '')
+      .trim()
+      .slice(0, 80),
   };
 }
 
@@ -194,20 +196,25 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
       if (await useTrustedDevice(account.id, device.deviceHash)) {
         await query('UPDATE users SET last_login_time = now() WHERE id = $1', [account.id]);
         const session = await issueSession(account as unknown as Parameters<typeof issueSession>[0], device);
-        return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(account.id), trustedDevice: true });
+        return jsonResponse(c, {
+          ok: true,
+          error: '',
+          ...session,
+          user: await loadUser(account.id),
+          trustedDevice: true,
+        });
       }
       const ticket = await issueTicket(account.id);
       const factors = await secondFactorState(account.id);
       const emailUsable = Boolean(factors && factors.method === 'email' && factors.emailVerified && factors.email);
-      const sent =
-        emailUsable
-          ? await issueCode({
-              purpose: 'login',
-              email: account.email,
-              userId: account.id,
-              ip: requestIp(c, options.trustProxy),
-            })
-          : null;
+      const sent = emailUsable
+        ? await issueCode({
+            purpose: 'login',
+            email: account.email,
+            userId: account.id,
+            ip: requestIp(c, options.trustProxy),
+          })
+        : null;
       return jsonResponse(c, {
         ok: true,
         error: '',
@@ -266,9 +273,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     if (!found) return failureResponse(c, '验证已过期，请重新登录');
     const account = await query<LoginCodeRow>(
       'SELECT id, email, email_verified, two_factor_enabled, two_factor_method FROM users WHERE id = $1',
-      [
-      found.userId,
-      ],
+      [found.userId],
     );
     const row = account.rows[0];
     if (!row || row.email_verified !== true || !row.email)

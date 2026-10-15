@@ -80,7 +80,9 @@ const registerLimited = computed(() => session.loggedIn === true && session.user
 const registerBlocked = computed(() => exhibition.value?.openForRegistration === false || registerLimited.value);
 const registerLabel = computed(() => {
   if (exhibition.value?.openForRegistration === false) return t('exhibition.detail.registrationClosed');
-  return registerLimited.value || canRegister.value ? t('exhibition.detail.registerNow') : t('exhibition.detail.registerAfterLogin');
+  return registerLimited.value || canRegister.value
+    ? t('exhibition.detail.registerNow')
+    : t('exhibition.detail.registerAfterLogin');
 });
 
 function footerHint(): string {
@@ -167,7 +169,9 @@ function share(): void {
     `${formatDateWithWeekday(item.date)} ${item.time}`,
     String(item.venue ?? ''),
     link ? `${t('exhibition.detail.registrationLinkPrefix')}${link}` : '',
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
   openSheet({
     title: t('exhibition.detail.shareExhibition'),
     message: (link ? text : `${text}\n${joinLinkMissing}`).replace(/\n/g, ' · '),
@@ -190,12 +194,20 @@ function share(): void {
 }
 
 // 会话只用于判断「能不能报名」，取到即可。
-onMounted(() => { void load(); });
+onMounted(() => {
+  void load();
+});
 </script>
 
 <template>
   <Teleport defer to="#app-top-actions">
-    <button class="icon-button" type="button" :aria-label="t('exhibition.detail.shareExhibition')" :title="t('exhibition.detail.shareExhibition')" @click="share">
+    <button
+      class="icon-button"
+      type="button"
+      :aria-label="t('exhibition.detail.shareExhibition')"
+      :title="t('exhibition.detail.shareExhibition')"
+      @click="share"
+    >
       <AppIcon name="share" />
     </button>
   </Teleport>
@@ -237,7 +249,9 @@ onMounted(() => { void load(); });
 
     <div class="stack" data-gap="sm">
       <h2>{{ exhibition.title }}</h2>
-      <p class="muted">{{ exhibition.exhibitor || t('exhibition.detail.brandMark') }} · {{ exhibition.exhibitorNote }}</p>
+      <p class="muted">
+        {{ exhibition.exhibitor || t('exhibition.detail.brandMark') }} · {{ exhibition.exhibitorNote }}
+      </p>
     </div>
 
     <div class="card" data-tone="fill">
@@ -251,7 +265,11 @@ onMounted(() => { void load(); });
       </div>
       <div class="row" data-gap="md">
         <StatusTag :text="String(exhibition.modeLabel || exhibition.status || '')" />
-        <span class="row-meta">{{ exhibition.openForRegistration ? t('exhibition.detail.registrationNeeded') : t('exhibition.detail.registrationUnavailable') }}</span>
+        <span class="row-meta">{{
+          exhibition.openForRegistration
+            ? t('exhibition.detail.registrationNeeded')
+            : t('exhibition.detail.registrationUnavailable')
+        }}</span>
       </div>
     </div>
 
@@ -283,9 +301,11 @@ onMounted(() => { void load(); });
     <div class="stack" data-gap="sm">
       <span class="section-label">{{ t('exhibition.detail.registrationInfo') }}</span>
       <p class="row-meta">
-        {{ fields.length > 0
-          ? `展商配置了 ${fields.length} 项信息：${fields.map((field) => String(field.title)).join('、')}`
-          : t('exhibition.detail.noExtraRegistrationInfo') }}
+        {{
+          fields.length > 0
+            ? `展商配置了 ${fields.length} 项信息：${fields.map((field) => String(field.title)).join('、')}`
+            : t('exhibition.detail.noExtraRegistrationInfo')
+        }}
       </p>
     </div>
   </template>
@@ -302,7 +322,11 @@ onMounted(() => { void load(); });
             :data-loading="calendarBusy ? 'true' : 'false'"
             @click="toggleCalendar"
           >
-            {{ calendarState.inCalendar ? t('exhibition.detail.removeFromCalendar') : t('exhibition.detail.addToCalendar') }}
+            {{
+              calendarState.inCalendar
+                ? t('exhibition.detail.removeFromCalendar')
+                : t('exhibition.detail.addToCalendar')
+            }}
           </button>
           <button
             class="cta"

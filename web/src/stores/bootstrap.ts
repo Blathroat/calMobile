@@ -108,5 +108,5 @@ export const useBootstrapStore = defineStore('bootstrap', {
  * @returns 可安全展开的对象（原对象或空对象）
  */
 function asObject(value: unknown): JsonObject {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonObject : {};
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonObject) : {};
 }

@@ -36,7 +36,7 @@ export const useSettingsStore = defineStore('settings', {
      * @param settings bootstrap 里的 `{ ui }`；缺省时是空操作
      */
     apply(settings: JsonObject = {}) {
-      if (settings.ui && typeof settings.ui === 'object') this.ui = { ...this.ui, ...settings.ui as JsonObject };
+      if (settings.ui && typeof settings.ui === 'object') this.ui = { ...this.ui, ...(settings.ui as JsonObject) };
     },
     /**
      * 只改内存里的模式（本地先生效，界面立刻变）。

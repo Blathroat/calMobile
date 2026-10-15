@@ -639,9 +639,7 @@ export async function migrate(): Promise<void> {
 /** 示例数据：账号、展会（含收集项）、报名、服务器设置。可重复执行。生产环境拒绝执行。 */
 export async function seed(): Promise<void> {
   if (runtime.isProduction) {
-    throw new Error(
-      '生产环境不写入示例账号。管理员由 ADMIN_USERNAME、ADMIN_PASSWORD、ADMIN_EMAIL 在启动时创建。',
-    );
+    throw new Error('生产环境不写入示例账号。管理员由 ADMIN_USERNAME、ADMIN_PASSWORD、ADMIN_EMAIL 在启动时创建。');
   }
   const client = await pool.connect();
   try {

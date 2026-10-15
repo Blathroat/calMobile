@@ -11,7 +11,8 @@ import { closeSheet, sheet } from '@/services/sheet';
 const panel = ref<HTMLElement | null>(null);
 let restoreFocus: HTMLElement | null = null;
 
-const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE =
+  'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 function run(action: { onClick?: (close: () => void) => void | Promise<void> }): void {
   void action.onClick?.(closeSheet);
@@ -43,18 +44,21 @@ onMounted(() => document.addEventListener('keydown', onKey));
 onBeforeUnmount(() => document.removeEventListener('keydown', onKey));
 
 // 打开时把焦点交给面板里的第一个可操作元素，键盘与读屏软件因此能接着走。
-watch(() => sheet.current, (current, previous) => {
-  if (current) {
-    if (!previous) restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    requestAnimationFrame(() => {
-      const target = panel.value?.querySelector<HTMLElement>(FOCUSABLE);
-      (target ?? panel.value)?.focus();
-    });
-    return;
-  }
-  if (restoreFocus) requestAnimationFrame(() => restoreFocus?.isConnected && restoreFocus.focus());
-  restoreFocus = null;
-});
+watch(
+  () => sheet.current,
+  (current, previous) => {
+    if (current) {
+      if (!previous) restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      requestAnimationFrame(() => {
+        const target = panel.value?.querySelector<HTMLElement>(FOCUSABLE);
+        (target ?? panel.value)?.focus();
+      });
+      return;
+    }
+    if (restoreFocus) requestAnimationFrame(() => restoreFocus?.isConnected && restoreFocus.focus());
+    restoreFocus = null;
+  },
+);
 </script>
 
 <template>
@@ -84,7 +88,10 @@ watch(() => sheet.current, (current, previous) => {
           v-for="(action, index) in sheet.current.actions"
           :key="index"
           class="cta"
-          :class="{ ghost: action.variant !== 'primary' && action.variant !== 'danger', danger: action.variant === 'danger' }"
+          :class="{
+            ghost: action.variant !== 'primary' && action.variant !== 'danger',
+            danger: action.variant === 'danger',
+          }"
           type="button"
           :disabled="typeof action.disabled === 'function' ? action.disabled() : action.disabled"
           @click="run(action)"

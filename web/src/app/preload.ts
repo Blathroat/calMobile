@@ -89,7 +89,7 @@ export function preloadTabs(): void {
 /** 相邻月份：左右滑动切月时目标月份已经在缓存里。 */
 export function preloadAdjacentMonths(year: number, month: number): void {
   for (const delta of [1, -1]) {
-    const total = (year * 12) + (month - 1) + delta;
+    const total = year * 12 + (month - 1) + delta;
     const target = { year: Math.floor(total / 12), month: (total % 12) + 1 };
     enqueue(`month-${target.year}-${target.month}`, () => api.exhibitions.month(target));
   }

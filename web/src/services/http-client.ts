@@ -139,11 +139,12 @@ export class HttpClient {
     try {
       controller.signal.throwIfAborted();
       const token = this.options.getAccessToken?.();
-      const payload = request.bytes !== undefined
-        ? copyBytes(request.bytes)
-        : request.body === undefined
-          ? undefined
-          : JSON.stringify(request.body);
+      const payload =
+        request.bytes !== undefined
+          ? copyBytes(request.bytes)
+          : request.body === undefined
+            ? undefined
+            : JSON.stringify(request.body);
       const response = await this.fetcher(url, {
         method: request.method ?? 'GET',
         headers: {
@@ -151,7 +152,10 @@ export class HttpClient {
           // 只有带请求体时才发 Content-Type：GET 带它没有意义，还可能触发多余的预检。
           ...(payload === undefined
             ? {}
-            : { 'Content-Type': request.bytes !== undefined ? (request.contentType || 'application/octet-stream') : 'application/json' }),
+            : {
+                'Content-Type':
+                  request.bytes !== undefined ? request.contentType || 'application/octet-stream' : 'application/json',
+              }),
           // 未登录干脆不发 Authorization，后端据此回 401，而不是把空令牌当成非法令牌。
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
@@ -196,9 +200,10 @@ export class HttpClient {
           this.options.onSessionExpired?.();
         }
         // 4xx：优先用后端给的 error 文案，没有就退回状态码。
-        const message = typeof data === 'object' && data !== null && 'error' in data
-          ? String(data.error)
-          : `请求失败（${response.status}）`;
+        const message =
+          typeof data === 'object' && data !== null && 'error' in data
+            ? String(data.error)
+            : `请求失败（${response.status}）`;
         throw new ApiError(message, response.status);
       }
       // 200 + ok:false 是后端的规则失败约定，同样按业务失败抛出，不让页面去判 ok。
@@ -213,7 +218,8 @@ export class HttpClient {
         // 以本请求的信号判定来源，兼容 fetch 与页面来自不同 realm 的异常对象。
         // AbortError 只有两个来源：这里掐的超时，或者调用方传进来的 signal。
         // 调用方的 signal 上带 aborted 标记，据此分开报：文案是排障用的，不是给用户看的业务提示。
-        if (request.signal?.aborted || sessionSignal?.aborted) throw new TransportError(t('app.requestCancelled'), 'aborted');
+        if (request.signal?.aborted || sessionSignal?.aborted)
+          throw new TransportError(t('app.requestCancelled'), 'aborted');
         throw new TransportError(`后端响应超时（超过 ${timeoutMs / 1000} 秒）`, 'timeout');
       }
       // 其余都是网络层的原生错误（DNS、证书、连接被拒等），后端状态未知。

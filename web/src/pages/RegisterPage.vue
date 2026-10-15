@@ -68,9 +68,9 @@ const codeError = ref('');
 const account = computed(() => usernameRule());
 const secret = computed(() => passwordRule());
 const strength = computed(() => passwordStrength(password.value));
-const resendLabel = computed(() => (remaining.value > 0
-  ? `${remaining.value} ${t('auth.login.secondsUntilResend')}`
-  : t('auth.login.resendCode')));
+const resendLabel = computed(() =>
+  remaining.value > 0 ? `${remaining.value} ${t('auth.login.secondsUntilResend')}` : t('auth.login.resendCode'),
+);
 
 const RULES: Record<FieldName, () => CheckOptions> = {
   username: () => ({ required: true, ...account.value }),
@@ -182,12 +182,14 @@ async function submitAccount(): Promise<void> {
 async function verifyAccount(): Promise<void> {
   verifyError.value = '';
   const needsVerification = verifiedSession !== api.session.signal;
-  codeError.value = needsVerification ? check(code.value, {
-    label: t('auth.login.emailCode'),
-    required: true,
-    pattern: PATTERNS.verificationCode,
-    patternMessage: t('auth.register.enterSixDigits'),
-  }) : '';
+  codeError.value = needsVerification
+    ? check(code.value, {
+        label: t('auth.login.emailCode'),
+        required: true,
+        pattern: PATTERNS.verificationCode,
+        patternMessage: t('auth.register.enterSixDigits'),
+      })
+    : '';
   if (codeError.value) return;
   verifyBusy.value = true;
   try {
@@ -258,10 +260,12 @@ function messageOf(reason: unknown): string {
         :placeholder="t('auth.register.usernamePlaceholder')"
         @input="onFieldInput('username')"
         @blur="validateField('username')"
-      >
+      />
       <p class="field-hint">{{ t('auth.register.usernameHint') }}</p>
       <p v-if="fieldErrors.username" class="field-error" role="alert">{{ fieldErrors.username }}</p>
-      <span class="field-counter" :data-over="username.length > (account.max ?? 0) ? 'true' : 'false'">{{ username.length }}/{{ account.max }}</span>
+      <span class="field-counter" :data-over="username.length > (account.max ?? 0) ? 'true' : 'false'"
+        >{{ username.length }}/{{ account.max }}</span
+      >
     </div>
 
     <div class="field" :data-invalid="fieldErrors.email ? 'true' : undefined">
@@ -276,9 +280,11 @@ function messageOf(reason: unknown): string {
         :placeholder="t('auth.register.emailPlaceholder')"
         @input="onFieldInput('email')"
         @blur="validateField('email')"
-      >
+      />
       <p v-if="fieldErrors.email" class="field-error" role="alert">{{ fieldErrors.email }}</p>
-      <span class="field-counter" :data-over="email.length > EMAIL_MAX ? 'true' : 'false'">{{ email.length }}/{{ EMAIL_MAX }}</span>
+      <span class="field-counter" :data-over="email.length > EMAIL_MAX ? 'true' : 'false'"
+        >{{ email.length }}/{{ EMAIL_MAX }}</span
+      >
     </div>
 
     <div class="field" :data-invalid="fieldErrors.password ? 'true' : undefined">
@@ -293,10 +299,12 @@ function messageOf(reason: unknown): string {
         :placeholder="t('auth.register.setPassword')"
         @input="onFieldInput('password')"
         @blur="validateField('password')"
-      >
+      />
       <p class="field-hint">至少 {{ secret.min }} 个字符</p>
       <p v-if="fieldErrors.password" class="field-error" role="alert">{{ fieldErrors.password }}</p>
-      <span class="field-counter" :data-over="password.length > (secret.max ?? 0) ? 'true' : 'false'">{{ password.length }}/{{ secret.max }}</span>
+      <span class="field-counter" :data-over="password.length > (secret.max ?? 0) ? 'true' : 'false'"
+        >{{ password.length }}/{{ secret.max }}</span
+      >
     </div>
 
     <div class="field" :data-invalid="fieldErrors.confirm ? 'true' : undefined">
@@ -311,9 +319,11 @@ function messageOf(reason: unknown): string {
         :placeholder="t('auth.register.reenterPassword')"
         @input="onFieldInput('confirm')"
         @blur="validateField('confirm')"
-      >
+      />
       <p v-if="fieldErrors.confirm" class="field-error" role="alert">{{ fieldErrors.confirm }}</p>
-      <span class="field-counter" :data-over="confirm.length > (secret.max ?? 0) ? 'true' : 'false'">{{ confirm.length }}/{{ secret.max }}</span>
+      <span class="field-counter" :data-over="confirm.length > (secret.max ?? 0) ? 'true' : 'false'"
+        >{{ confirm.length }}/{{ secret.max }}</span
+      >
     </div>
 
     <div class="row" data-between="true">
@@ -331,7 +341,9 @@ function messageOf(reason: unknown): string {
   <form v-else class="form" novalidate @submit.prevent="verifyAccount">
     <div class="stack" data-gap="sm">
       <!-- 冒号放在文案资源里而不是尾随空格：Android 的 string 资源会裁掉首尾空白。 -->
-      <p class="muted">{{ t('auth.login.codeSentTo') }}<strong>{{ sentTo }}</strong></p>
+      <p class="muted">
+        {{ t('auth.login.codeSentTo') }}<strong>{{ sentTo }}</strong>
+      </p>
       <p class="field-hint">{{ t('auth.register.codeHint') }}</p>
     </div>
 
@@ -348,7 +360,7 @@ function messageOf(reason: unknown): string {
         autocomplete="one-time-code"
         :placeholder="t('auth.register.sixDigits')"
         @input="codeError = ''"
-      >
+      />
       <p v-if="codeError" class="field-error" role="alert">{{ codeError }}</p>
     </div>
 
@@ -368,5 +380,7 @@ function messageOf(reason: unknown): string {
     <button class="cta ghost" type="button" @click="showStep(1)">{{ t('auth.register.backToEdit') }}</button>
   </form>
 
-  <button class="cta ghost" type="button" @click="router.replace('/login')">{{ t('auth.register.backToLogin') }}</button>
+  <button class="cta ghost" type="button" @click="router.replace('/login')">
+    {{ t('auth.register.backToLogin') }}
+  </button>
 </template>

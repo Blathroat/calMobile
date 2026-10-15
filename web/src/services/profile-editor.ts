@@ -49,7 +49,10 @@ export function openProfileEditor(profile: JsonObject, options?: { blocked?: () 
     });
     const bioError = check(editForm.bio, { label: t('profile.bio'), max: limit('bio', 200) });
     const regionError = check(editForm.region, { label: t('settings.profile.region'), max: limit('region', 40) });
-    const socialError = check(editForm.socialMedia, { label: t('settings.profile.social'), max: limit('socialMedia', 40) });
+    const socialError = check(editForm.socialMedia, {
+      label: t('settings.profile.social'),
+      max: limit('socialMedia', 40),
+    });
 
     editInvalid.nickname = nicknameError !== '';
     editInvalid.bio = bioError !== '';

@@ -64,33 +64,108 @@ const LIMIT_GROUPS: Array<{ id: string; title: string; items: LimitItem[] }> = [
     id: 'exhibition',
     title: t('admin.limits.exhibitionInfo'),
     items: [
-      { key: 'exhibitionTitle', label: t('admin.limits.exhibitionName'), hint: t('admin.limits.exhibitionNameMax'), unit: t('admin.limits.chars') },
-      { key: 'exhibitionVenue', label: t('admin.limits.exhibitionVenue'), hint: t('admin.limits.exhibitionVenueMax'), unit: t('admin.limits.chars') },
-      { key: 'category', label: t('admin.limits.category'), hint: t('admin.limits.categoryMax'), unit: t('admin.limits.chars') },
+      {
+        key: 'exhibitionTitle',
+        label: t('admin.limits.exhibitionName'),
+        hint: t('admin.limits.exhibitionNameMax'),
+        unit: t('admin.limits.chars'),
+      },
+      {
+        key: 'exhibitionVenue',
+        label: t('admin.limits.exhibitionVenue'),
+        hint: t('admin.limits.exhibitionVenueMax'),
+        unit: t('admin.limits.chars'),
+      },
+      {
+        key: 'category',
+        label: t('admin.limits.category'),
+        hint: t('admin.limits.categoryMax'),
+        unit: t('admin.limits.chars'),
+      },
     ],
   },
   {
     id: 'collect',
     title: t('admin.limits.collectFields'),
     items: [
-      { key: 'fieldTitle', label: t('admin.limits.fieldHeading'), hint: t('admin.limits.sharedFieldHeading'), unit: t('admin.limits.chars') },
-      { key: 'textFill', label: t('admin.limits.textFill'), hint: t('admin.limits.textFillMax'), unit: t('admin.limits.chars') },
-      { key: 'radioOption', label: t('admin.limits.radioOption'), hint: t('admin.limits.radioOptionMax'), unit: t('admin.limits.chars') },
-      { key: 'checkOption', label: t('admin.limits.checkOption'), hint: t('admin.limits.checkOptionMax'), unit: t('admin.limits.chars') },
-      { key: 'answer', label: t('admin.limits.fullAnswer'), hint: t('admin.limits.fullAnswerTotal'), unit: t('admin.limits.chars') },
+      {
+        key: 'fieldTitle',
+        label: t('admin.limits.fieldHeading'),
+        hint: t('admin.limits.sharedFieldHeading'),
+        unit: t('admin.limits.chars'),
+      },
+      {
+        key: 'textFill',
+        label: t('admin.limits.textFill'),
+        hint: t('admin.limits.textFillMax'),
+        unit: t('admin.limits.chars'),
+      },
+      {
+        key: 'radioOption',
+        label: t('admin.limits.radioOption'),
+        hint: t('admin.limits.radioOptionMax'),
+        unit: t('admin.limits.chars'),
+      },
+      {
+        key: 'checkOption',
+        label: t('admin.limits.checkOption'),
+        hint: t('admin.limits.checkOptionMax'),
+        unit: t('admin.limits.chars'),
+      },
+      {
+        key: 'answer',
+        label: t('admin.limits.fullAnswer'),
+        hint: t('admin.limits.fullAnswerTotal'),
+        unit: t('admin.limits.chars'),
+      },
     ],
   },
   {
     id: 'account',
     title: t('admin.limits.account'),
     items: [
-      { key: 'usernameMin', label: t('admin.limits.usernameMin'), hint: t('admin.limits.usernameMinChars'), unit: t('admin.limits.chars') },
-      { key: 'usernameMax', label: t('admin.limits.usernameMax'), hint: t('admin.limits.usernameMaxChars'), unit: t('admin.limits.chars') },
-      { key: 'passwordMin', label: t('admin.limits.passwordMin'), hint: t('admin.limits.passwordMinChars'), unit: t('admin.limits.passwordPlaces') },
-      { key: 'passwordMax', label: t('admin.limits.passwordMax'), hint: t('admin.limits.passwordMaxChars'), unit: t('admin.limits.passwordPlaces') },
-      { key: 'nickname', label: t('admin.limits.nicknameMax'), hint: t('admin.limits.nicknameMaxChars'), unit: t('admin.limits.chars') },
-      { key: 'bio', label: t('admin.limits.bioMax'), hint: t('admin.limits.bioMaxChars'), unit: t('admin.limits.chars') },
-      { key: 'region', label: t('admin.limits.regionMax'), hint: t('admin.limits.regionMaxChars'), unit: t('admin.limits.chars') },
+      {
+        key: 'usernameMin',
+        label: t('admin.limits.usernameMin'),
+        hint: t('admin.limits.usernameMinChars'),
+        unit: t('admin.limits.chars'),
+      },
+      {
+        key: 'usernameMax',
+        label: t('admin.limits.usernameMax'),
+        hint: t('admin.limits.usernameMaxChars'),
+        unit: t('admin.limits.chars'),
+      },
+      {
+        key: 'passwordMin',
+        label: t('admin.limits.passwordMin'),
+        hint: t('admin.limits.passwordMinChars'),
+        unit: t('admin.limits.passwordPlaces'),
+      },
+      {
+        key: 'passwordMax',
+        label: t('admin.limits.passwordMax'),
+        hint: t('admin.limits.passwordMaxChars'),
+        unit: t('admin.limits.passwordPlaces'),
+      },
+      {
+        key: 'nickname',
+        label: t('admin.limits.nicknameMax'),
+        hint: t('admin.limits.nicknameMaxChars'),
+        unit: t('admin.limits.chars'),
+      },
+      {
+        key: 'bio',
+        label: t('admin.limits.bioMax'),
+        hint: t('admin.limits.bioMaxChars'),
+        unit: t('admin.limits.chars'),
+      },
+      {
+        key: 'region',
+        label: t('admin.limits.regionMax'),
+        hint: t('admin.limits.regionMaxChars'),
+        unit: t('admin.limits.chars'),
+      },
     ],
   },
 ];
@@ -174,8 +249,13 @@ const coverBusy = ref(false);
 const settingsError = ref('');
 const settingsSaving = ref(false);
 const loaded = ref(false);
-const panelBusy = computed(() => tab.value === 'users' ? users.loading.value
-  : tab.value === 'exhibitions' ? exhibitions.loading.value : settingsQuery.loading.value);
+const panelBusy = computed(() =>
+  tab.value === 'users'
+    ? users.loading.value
+    : tab.value === 'exhibitions'
+      ? exhibitions.loading.value
+      : settingsQuery.loading.value,
+);
 
 const userItems = computed<User[]>(() => users.data.value ?? []);
 const exhibitionItems = computed<Exhibition[]>(() => exhibitions.data.value ?? []);
@@ -229,17 +309,20 @@ function tabFromQuery(): string {
 }
 
 // 从二级页返回、或用户直接改地址栏时，让分区跟着 URL 走。
-watch(() => route.fullPath, () => {
-  window.clearTimeout(searchTimer);
-  if (route.path !== '/admin') return;
-  const next = tabFromQuery();
-  if (next !== tab.value) {
-    tab.value = next;
-    // 搜索词跟着分区走：换分区后旧的筛选不再适用。
-    query.value = '';
-  }
-  loadPanel();
-});
+watch(
+  () => route.fullPath,
+  () => {
+    window.clearTimeout(searchTimer);
+    if (route.path !== '/admin') return;
+    const next = tabFromQuery();
+    if (next !== tab.value) {
+      tab.value = next;
+      // 搜索词跟着分区走：换分区后旧的筛选不再适用。
+      query.value = '';
+    }
+    loadPanel();
+  },
+);
 
 /**
  * 预热另外两个分区：切分区时才第一次取数，会先画一段加载态（整页闪一下）。
@@ -302,7 +385,10 @@ async function updateUserStatus(user: User, status: string): Promise<void> {
     // 写接口统一返回 { ok, error }：只判断整个响应是否为真会把失败也当成成功。
     const result = await api.users.setStatus(String(user.id ?? ''), status);
     const ok = result?.ok === true;
-    toast(String(ok ? `已将 ${user.nickname} 设为${status}` : (result?.error || t('admin.users.updateFailed'))), ok ? 'success' : 'error');
+    toast(
+      String(ok ? `已将 ${user.nickname} 设为${status}` : result?.error || t('admin.users.updateFailed')),
+      ok ? 'success' : 'error',
+    );
     if (ok) await loadUsers();
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -324,7 +410,7 @@ function disableTwoFactor(user: User): void {
         const result = await api.users.disableTwoFactor(String(user.id ?? ''));
         const ok = result?.ok === true;
         toast(
-          String(ok ? `已关闭 ${user.nickname} 的两步验证` : (result?.error || t('admin.users.updateFailed'))),
+          String(ok ? `已关闭 ${user.nickname} 的两步验证` : result?.error || t('admin.users.updateFailed')),
           ok ? 'success' : 'error',
         );
         if (ok) await loadUsers();
@@ -345,7 +431,15 @@ function csvCell(value: unknown): string {
 
 async function exportCsv(): Promise<void> {
   const rows = [
-    [t('admin.limits.exhibitionName'), t('admin.exhibitions.venue'), t('admin.exhibitions.date'), t('admin.exhibitions.time'), t('admin.exhibitions.status'), t('admin.exhibitions.category'), t('admin.exhibitions.summary')],
+    [
+      t('admin.limits.exhibitionName'),
+      t('admin.exhibitions.venue'),
+      t('admin.exhibitions.date'),
+      t('admin.exhibitions.time'),
+      t('admin.exhibitions.status'),
+      t('admin.exhibitions.category'),
+      t('admin.exhibitions.summary'),
+    ],
     ...exhibitionItems.value.map((item) => [
       String(item.title ?? ''),
       String(item.venue ?? ''),
@@ -411,8 +505,12 @@ function fillForm(data: JsonObject): void {
       ? bootstrap.server.avatarFormats
       : ['jpg', 'jpeg', 'png', 'webp'];
   form.avatarFormats = avatarFormats.map((item) => String(item)).join(',');
-  form.imageFormats = (Array.isArray(upload.imageFormats) ? upload.imageFormats : []).map((item) => String(item)).join(',');
-  form.videoFormats = (Array.isArray(upload.videoFormats) ? upload.videoFormats : []).map((item) => String(item)).join(',');
+  form.imageFormats = (Array.isArray(upload.imageFormats) ? upload.imageFormats : [])
+    .map((item) => String(item))
+    .join(',');
+  form.videoFormats = (Array.isArray(upload.videoFormats) ? upload.videoFormats : [])
+    .map((item) => String(item))
+    .join(',');
   form.limits = {};
   for (const item of LIMIT_ITEMS) form.limits[item.key] = Number(limits[item.key] ?? bootstrap.limits[item.key] ?? 0);
   const cover = (data.cover ?? {}) as JsonObject;
@@ -437,14 +535,17 @@ function formatStorage(bytes: number): string {
   return `${bytes} B`;
 }
 
-const storageFull = computed(() => storageUsage.value.limitBytes > 0 && storageUsage.value.usedBytes >= storageUsage.value.limitBytes);
+const storageFull = computed(
+  () => storageUsage.value.limitBytes > 0 && storageUsage.value.usedBytes >= storageUsage.value.limitBytes,
+);
 const storagePercent = computed(() => {
   const limit = storageUsage.value.limitBytes;
   if (limit <= 0) return 0;
   return Math.min(100, Math.round((storageUsage.value.usedBytes / limit) * 100));
 });
 const storageCaption = computed(
-  () => `${t('admin.media.used')} ${formatStorage(storageUsage.value.usedBytes)} / ${formatStorage(storageUsage.value.limitBytes)}`,
+  () =>
+    `${t('admin.media.used')} ${formatStorage(storageUsage.value.usedBytes)} / ${formatStorage(storageUsage.value.limitBytes)}`,
 );
 
 /**
@@ -477,29 +578,56 @@ function numberField(key: string): number {
 async function saveSettings(): Promise<void> {
   settingsError.value = '';
   const checks: Array<[string, string]> = [
-    [t('admin.settings.brandZh'), check(form.brand.zh, { label: t('admin.settings.brandZh'), required: true, max: 20 })],
-    [t('admin.settings.brandEn'), check(form.brand.en, {
-      label: t('admin.settings.brandEn'), required: true, max: 24, pattern: titleEnPattern, patternMessage: t('admin.settings.brandEnCharset'),
-    })],
-    [COPY.avatarFormats, check(form.avatarFormats, {
-      label: COPY.avatarFormats,
-      required: true,
-      max: 80,
-      pattern: formatPattern,
-      patternMessage: t('admin.media.imageSuffixPattern'),
-      custom: (value) => value.split(',')
-        .map((item) => item.trim().toLowerCase().replace(/^\./, ''))
-        .filter(Boolean)
-        .some((item) => !/^(jpg|jpeg|png|webp)$/.test(item))
-        ? COPY.avatarFormatsInvalid
-        : '',
-    })],
-    [t('admin.media.imageFormats'), check(form.imageFormats, {
-      label: t('admin.media.imageFormats'), max: 120, pattern: formatPattern, patternMessage: t('admin.media.imageSuffixPattern'),
-    })],
-    [t('admin.media.videoFormats'), check(form.videoFormats, {
-      label: t('admin.media.videoFormats'), max: 120, pattern: formatPattern, patternMessage: t('admin.media.videoSuffixPattern'),
-    })],
+    [
+      t('admin.settings.brandZh'),
+      check(form.brand.zh, { label: t('admin.settings.brandZh'), required: true, max: 20 }),
+    ],
+    [
+      t('admin.settings.brandEn'),
+      check(form.brand.en, {
+        label: t('admin.settings.brandEn'),
+        required: true,
+        max: 24,
+        pattern: titleEnPattern,
+        patternMessage: t('admin.settings.brandEnCharset'),
+      }),
+    ],
+    [
+      COPY.avatarFormats,
+      check(form.avatarFormats, {
+        label: COPY.avatarFormats,
+        required: true,
+        max: 80,
+        pattern: formatPattern,
+        patternMessage: t('admin.media.imageSuffixPattern'),
+        custom: (value) =>
+          value
+            .split(',')
+            .map((item) => item.trim().toLowerCase().replace(/^\./, ''))
+            .filter(Boolean)
+            .some((item) => !/^(jpg|jpeg|png|webp)$/.test(item))
+            ? COPY.avatarFormatsInvalid
+            : '',
+      }),
+    ],
+    [
+      t('admin.media.imageFormats'),
+      check(form.imageFormats, {
+        label: t('admin.media.imageFormats'),
+        max: 120,
+        pattern: formatPattern,
+        patternMessage: t('admin.media.imageSuffixPattern'),
+      }),
+    ],
+    [
+      t('admin.media.videoFormats'),
+      check(form.videoFormats, {
+        label: t('admin.media.videoFormats'),
+        max: 120,
+        pattern: formatPattern,
+        patternMessage: t('admin.media.videoSuffixPattern'),
+      }),
+    ],
   ];
   for (const [, message] of checks) {
     if (message) {
@@ -515,7 +643,10 @@ async function saveSettings(): Promise<void> {
       appTitleEn: form.brand.en.trim(),
       announcement: form.announcement.trim(),
       announcementEnabled: form.announcementEnabled,
-      categories: form.categories.split('\n').map((item) => item.trim()).filter(Boolean),
+      categories: form.categories
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean),
       canRevise: form.canRevise,
       imageCount: Number(form.imageCount) || 0,
       imageSizeMb: Number(form.imageSizeMb) || 0,
@@ -542,7 +673,7 @@ async function saveSettings(): Promise<void> {
     const settings = (saved.settings ?? {}) as JsonObject;
     // 设置接口的上传段叫 `upload`，启动数据里同一段叫 `server`。裁剪导出要立刻读到新的头像格式。
     const upload = settings.upload;
-    const uploadObject = upload && typeof upload === 'object' && !Array.isArray(upload) ? upload as JsonObject : null;
+    const uploadObject = upload && typeof upload === 'object' && !Array.isArray(upload) ? (upload as JsonObject) : null;
     const server = uploadObject
       ? {
           avatarFormats: uploadObject.avatarFormats,
@@ -629,9 +760,13 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
                 <strong class="row-title truncate">{{ user.nickname }}</strong>
                 <RoleTag :role-code="String(user.roleCode || '')" />
               </span>
-              <span class="row-meta">{{ `${user.status} · 最近登录 ${user.lastLoginTime || t('admin.users.unknown')}` }}</span>
+              <span class="row-meta">{{
+                `${user.status} · 最近登录 ${user.lastLoginTime || t('admin.users.unknown')}`
+              }}</span>
               <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
-              <span v-if="user.twoFactorEnabled === true" class="row-meta">{{ t('admin.users.twoFactorEnabled') }}</span>
+              <span v-if="user.twoFactorEnabled === true" class="row-meta">{{
+                t('admin.users.twoFactorEnabled')
+              }}</span>
             </span>
             <StatusTag :text="String(user.status || '')" :tone="statusTone(String(user.status || ''))" />
           </button>
@@ -904,28 +1039,56 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
         <div class="field">
           <label for="settings-image-count">{{ t('admin.media.imagesPerPost') }}</label>
           <div class="row" data-gap="md">
-            <input id="settings-image-count" v-model.number="form.imageCount" class="input" type="number" min="0" inputmode="numeric" />
+            <input
+              id="settings-image-count"
+              v-model.number="form.imageCount"
+              class="input"
+              type="number"
+              min="0"
+              inputmode="numeric"
+            />
             <span class="row-meta">{{ t('admin.media.sheets') }}</span>
           </div>
         </div>
         <div class="field">
           <label for="settings-image-size">{{ t('admin.media.imageSize') }}</label>
           <div class="row" data-gap="md">
-            <input id="settings-image-size" v-model.number="form.imageSizeMb" class="input" type="number" min="0" inputmode="numeric" />
+            <input
+              id="settings-image-size"
+              v-model.number="form.imageSizeMb"
+              class="input"
+              type="number"
+              min="0"
+              inputmode="numeric"
+            />
             <span class="row-meta">MB</span>
           </div>
         </div>
         <div class="field">
           <label for="settings-video-count">{{ t('admin.media.videoCount') }}</label>
           <div class="row" data-gap="md">
-            <input id="settings-video-count" v-model.number="form.videoCount" class="input" type="number" min="0" inputmode="numeric" />
+            <input
+              id="settings-video-count"
+              v-model.number="form.videoCount"
+              class="input"
+              type="number"
+              min="0"
+              inputmode="numeric"
+            />
             <span class="row-meta">{{ t('admin.limits.items') }}</span>
           </div>
         </div>
         <div class="field">
           <label for="settings-video-size">{{ t('admin.media.videoSize') }}</label>
           <div class="row" data-gap="md">
-            <input id="settings-video-size" v-model.number="form.videoSizeMb" class="input" type="number" min="0" inputmode="numeric" />
+            <input
+              id="settings-video-size"
+              v-model.number="form.videoSizeMb"
+              class="input"
+              type="number"
+              min="0"
+              inputmode="numeric"
+            />
             <span class="row-meta">MB</span>
           </div>
         </div>
@@ -962,7 +1125,15 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
         <div class="field">
           <label for="settings-avatar-size">{{ t('admin.media.avatarSize') }}</label>
           <div class="row" data-gap="md">
-            <input id="settings-avatar-size" v-model.number="form.avatarSizeMb" class="input" type="number" min="1" max="20" inputmode="numeric" />
+            <input
+              id="settings-avatar-size"
+              v-model.number="form.avatarSizeMb"
+              class="input"
+              type="number"
+              min="1"
+              max="20"
+              inputmode="numeric"
+            />
             <span class="row-meta">MB</span>
           </div>
         </div>

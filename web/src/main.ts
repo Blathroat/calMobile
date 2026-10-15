@@ -21,10 +21,7 @@ import { useSessionStore } from '@/stores/session';
 import '@/styles/tokens.css';
 import '@/styles/motion.css';
 
-createApp(App)
-  .use(createPinia())
-  .use(router)
-  .mount('#app');
+createApp(App).use(createPinia()).use(router).mount('#app');
 
 /**
  * 首帧**不等** bootstrap：bootstrap 是一次远端请求，等它会把启动拖成白屏。

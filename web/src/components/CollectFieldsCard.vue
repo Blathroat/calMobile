@@ -91,7 +91,6 @@ function optionMax(item: CollectField): number {
 function itemLabel(index: number): string {
   return `${COPY.ordinal} ${index + 1} ${COPY.unit}`;
 }
-
 </script>
 
 <template>
@@ -174,6 +173,8 @@ function itemLabel(index: number): string {
         </div>
       </div>
     </div>
-    <button class="cta ghost" type="button" :disabled="disabled" @click="addField">{{ t('registration.fields.addField') }}</button>
+    <button class="cta ghost" type="button" :disabled="disabled" @click="addField">
+      {{ t('registration.fields.addField') }}
+    </button>
   </div>
 </template>

@@ -7,14 +7,17 @@
  */
 import { t } from '@/i18n';
 
-const props = withDefaults(defineProps<{
-  model: { code: string; error?: string };
-  hint?: string;
-  placeholder?: string;
-}>(), {
-  hint: '',
-  placeholder: '',
-});
+const props = withDefaults(
+  defineProps<{
+    model: { code: string; error?: string };
+    hint?: string;
+    placeholder?: string;
+  }>(),
+  {
+    hint: '',
+    placeholder: '',
+  },
+);
 </script>
 
 <template>

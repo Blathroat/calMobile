@@ -151,7 +151,9 @@ app.get('/', optionalAuthHono, async (c) => {
   if (keyword) {
     params.push(likePattern(keyword));
     const slot = `$${params.length}`;
-    clauses.push(`(e.title ILIKE ${slot} OR e.venue ILIKE ${slot} OR e.category ILIKE ${slot} OR e.description ILIKE ${slot})`);
+    clauses.push(
+      `(e.title ILIKE ${slot} OR e.venue ILIKE ${slot} OR e.category ILIKE ${slot} OR e.description ILIKE ${slot})`,
+    );
   }
   if (exhibitorId) {
     params.push(exhibitorId);

@@ -49,12 +49,7 @@ watch(exhibitorId, load);
       :description="t('admin.exhibitions.shownWhenCreated')"
     />
     <div v-else class="list" data-gap="sm" :data-busy="query.loading.value ? 'true' : undefined">
-      <AdminExhibitionCard
-        v-for="item in items"
-        :key="String(item.id)"
-        :item="item"
-        @changed="load"
-      />
+      <AdminExhibitionCard v-for="item in items" :key="String(item.id)" :item="item" @changed="load" />
     </div>
   </template>
 </template>

@@ -8,17 +8,20 @@
  */
 import { t } from '@/i18n';
 
-const props = withDefaults(defineProps<{
-  /** 由调用方传入的响应式对象：面板写 `model.text`，调用方在按钮回调里读它 */
-  model: { text: string };
-  rows?: number;
-  placeholder?: string;
-  hint?: string;
-}>(), {
-  rows: 8,
-  placeholder: '',
-  hint: '',
-});
+const props = withDefaults(
+  defineProps<{
+    /** 由调用方传入的响应式对象：面板写 `model.text`，调用方在按钮回调里读它 */
+    model: { text: string };
+    rows?: number;
+    placeholder?: string;
+    hint?: string;
+  }>(),
+  {
+    rows: 8,
+    placeholder: '',
+    hint: '',
+  },
+);
 </script>
 
 <template>

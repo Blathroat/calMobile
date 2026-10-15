@@ -126,10 +126,7 @@ function meetingsOpen(row: ExhibitorGate): boolean {
 }
 
 async function loadMeeting(id: string) {
-  const result = await query<MeetingRow>(
-    `SELECT ${MEETING_SELECT} ${MEETING_FROM} WHERE m.id = $1`,
-    [id],
-  );
+  const result = await query<MeetingRow>(`SELECT ${MEETING_SELECT} ${MEETING_FROM} WHERE m.id = $1`, [id]);
   return result.rows[0] || null;
 }
 
@@ -242,7 +239,7 @@ app.get('/apply/:exhibitorId', authenticateHono, async (c) => {
     exhibitorName: exhibitor.nickname,
     roleCode: exhibitor.role,
     notice: exhibitor.meeting_notice || '',
-    message: self ? '不能向自己预约私人会议' : (open ? '' : CLOSED_MESSAGE),
+    message: self ? '不能向自己预约私人会议' : open ? '' : CLOSED_MESSAGE,
     fields: open ? await loadFields(exhibitor.id) : [],
   });
 });
@@ -273,7 +270,9 @@ app.post('/', authenticateHono, async (c) => {
         const exhibitor = locked.rows[0];
         if (!exhibitor) throw badRequest('用户不存在或已删除');
         if (!meetingsOpen(exhibitor)) throw badRequest(CLOSED_MESSAGE);
-        const past = await client.query<{ past: boolean }>('SELECT $1::date < CURRENT_DATE AS past', [input.meetingDate]);
+        const past = await client.query<{ past: boolean }>('SELECT $1::date < CURRENT_DATE AS past', [
+          input.meetingDate,
+        ]);
         if (past.rows[0]?.past) throw badRequest('会议日期不能早于今天');
         if (maxFutureMeetings > 0) {
           const counted = await client.query<{ total: number }>(
@@ -285,7 +284,9 @@ app.post('/', authenticateHono, async (c) => {
             throw badRequest(`同时筹备的私人会议最多 ${maxFutureMeetings} 个`);
           }
         }
-        const visitor = await client.query<{ nickname: string }>('SELECT nickname FROM users WHERE id = $1', [user.userId]);
+        const visitor = await client.query<{ nickname: string }>('SELECT nickname FROM users WHERE id = $1', [
+          user.userId,
+        ]);
         await client.query(
           `INSERT INTO private_meetings
              (id, exhibitor_id, visitor_id, visitor_name, meeting_date, meeting_time, answers, status)

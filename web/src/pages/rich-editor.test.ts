@@ -34,11 +34,14 @@ afterEach(() => {
 async function mountEditor(path = '/rich-editor?id=exh-1'): Promise<void> {
   const pinia = createPinia();
   setActivePinia(pinia);
-  const router = createRouter({ history: createMemoryHistory(), routes: [
-    { path: '/rich-editor', component: RichEditorPage },
-    { path: '/exhibition-form', component: { template: '<div />' } },
-    { path: '/exhibition-form/:id', component: { template: '<div />' } },
-  ] });
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/rich-editor', component: RichEditorPage },
+      { path: '/exhibition-form', component: { template: '<div />' } },
+      { path: '/exhibition-form/:id', component: { template: '<div />' } },
+    ],
+  });
   await router.push('/exhibition-form');
   await router.push(path);
   app = createApp(RichEditorPage).use(pinia).use(router);
@@ -56,26 +59,41 @@ describe('简介加载、编辑与保存', () => {
 
   it('取回原简介前不能保存空正文', async () => {
     let resolveDetail!: (value: ExhibitionDetail) => void;
-    vi.mocked(api.exhibitions.get).mockReturnValue(new Promise((resolve) => { resolveDetail = resolve; }));
+    vi.mocked(api.exhibitions.get).mockReturnValue(
+      new Promise((resolve) => {
+        resolveDetail = resolve;
+      }),
+    );
     await mountEditor();
     const save = document.querySelector<HTMLButtonElement>('#app-foot button');
     expect(save?.disabled).toBe(true);
     save?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(api.exhibitions.save).not.toHaveBeenCalled();
-    resolveDetail({ found: true, exhibition: { id: 'exh-1', title: '秋季展会', description: '原简介', descriptionFormat: 'md' } });
+    resolveDetail({
+      found: true,
+      exhibition: { id: 'exh-1', title: '秋季展会', description: '原简介', descriptionFormat: 'md' },
+    });
     await vi.waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('原简介'));
     expect(document.querySelector<HTMLButtonElement>('#app-foot button')?.disabled).toBe(false);
   });
 
   it('历史 HTML 打开再保存仍保留链接、图片、视频和格式', async () => {
-    vi.mocked(api.exhibitions.get).mockResolvedValue({ found: true, exhibition: {
-      id: 'exh-1', title: '秋季展会', descriptionFormat: 'html',
-      description: '<h2>展会亮点</h2><p><em>欢迎</em> <a href="https://example.com/info">详情</a></p>'
-        + '<p><img src="https://example.com/cover.jpg" alt="封面"></p>'
-        + '<video controls src="https://example.com/demo.mp4"></video>',
-    } });
+    vi.mocked(api.exhibitions.get).mockResolvedValue({
+      found: true,
+      exhibition: {
+        id: 'exh-1',
+        title: '秋季展会',
+        descriptionFormat: 'html',
+        description:
+          '<h2>展会亮点</h2><p><em>欢迎</em> <a href="https://example.com/info">详情</a></p>' +
+          '<p><img src="https://example.com/cover.jpg" alt="封面"></p>' +
+          '<video controls src="https://example.com/demo.mp4"></video>',
+      },
+    });
     await mountEditor();
-    await vi.waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('textarea')?.value).toContain('https://example.com/info'));
+    await vi.waitFor(() =>
+      expect(document.querySelector<HTMLTextAreaElement>('textarea')?.value).toContain('https://example.com/info'),
+    );
     const preview = document.querySelector<HTMLButtonElement>('button[title="预览"]');
     expect(preview?.classList.contains('ghost')).toBe(true);
     expect(document.querySelector('.toolbar')?.textContent).not.toContain('粘贴');

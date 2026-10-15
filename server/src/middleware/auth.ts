@@ -51,9 +51,13 @@ export async function resolveUser(token: string): Promise<AuthedUser | null> {
   }
   let decoded: { userId?: unknown; sid?: unknown };
   try {
-    const verified = await jwtVerify<{ userId?: unknown; sid?: unknown }>(token, new TextEncoder().encode(accessSecret), {
-      algorithms: ['HS256'],
-    });
+    const verified = await jwtVerify<{ userId?: unknown; sid?: unknown }>(
+      token,
+      new TextEncoder().encode(accessSecret),
+      {
+        algorithms: ['HS256'],
+      },
+    );
     decoded = verified.payload;
   } catch {
     return null;

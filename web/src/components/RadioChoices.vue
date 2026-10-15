@@ -55,9 +55,12 @@ onMounted(() => {
 
 onBeforeUnmount(() => observer?.disconnect());
 
-watch(() => props.options.join('\u0000'), () => {
-  void nextTick(measure);
-});
+watch(
+  () => props.options.join('\u0000'),
+  () => {
+    void nextTick(measure);
+  },
+);
 </script>
 
 <template>
@@ -70,8 +73,10 @@ watch(() => props.options.join('\u0000'), () => {
         :value="option"
         :checked="selected === option"
         @change="emit('select', option)"
+      />
+      <label :for="`${name}-${index}`"
+        ><span class="choice-copy">{{ option }}</span></label
       >
-      <label :for="`${name}-${index}`"><span class="choice-copy">{{ option }}</span></label>
     </span>
   </div>
 </template>

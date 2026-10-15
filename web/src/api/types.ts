@@ -78,7 +78,10 @@ export interface ExhibitionDetail extends JsonObject {
 }
 
 /** 报名记录。`status` 是英文代码（待审 / 通过 / 驳回），中文映射只在服务端 labels 里做。 */
-export interface Registration extends JsonObject { id: Id; status?: string; }
+export interface Registration extends JsonObject {
+  id: Id;
+  status?: string;
+}
 /** 报名详情，同 `ExhibitionDetail`：用 `found` 表达查不到，不是抛异常。 */
 export interface RegistrationDetail extends JsonObject {
   found: boolean;
@@ -90,7 +93,10 @@ export interface RegistrationDetail extends JsonObject {
  * `ok: false` 的规则失败已经被 `HttpClient` 抛成 `ApiError`，所以 resolve 出来的结果通常 `ok` 为真；
  * 保留这个字段只是为了兼容仍然直接读它的调用点。
  */
-export interface ApiResult extends JsonObject { ok?: boolean; error?: string; }
+export interface ApiResult extends JsonObject {
+  ok?: boolean;
+  error?: string;
+}
 
 /** 搜索一次返回展会与用户两组结果（见 server/src/routes/search-hono.ts）。 */
 export interface SearchResult extends JsonObject {

@@ -52,10 +52,7 @@ onMounted(() => {
 
 async function load(): Promise<void> {
   await query.run(async () => {
-    const [registrations, meetings] = await Promise.all([
-      api.registrations.list(),
-      api.meetings.mine(),
-    ]);
+    const [registrations, meetings] = await Promise.all([api.registrations.list(), api.meetings.mine()]);
     return {
       registrations,
       meetings: Array.isArray(meetings) ? meetings : [],

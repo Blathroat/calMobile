@@ -95,7 +95,14 @@ export interface NativeActionResults {
   'calendar.toggle': { granted: boolean; inCalendar: boolean; message?: string };
   'notify.requestPermission': boolean;
   'media.pickImage': { dataUrl: string };
-  'media.import': { url: string; kind: string; fileName?: string; bytes?: number; mimeType?: string; compressed?: boolean };
+  'media.import': {
+    url: string;
+    kind: string;
+    fileName?: string;
+    bytes?: number;
+    mimeType?: string;
+    compressed?: boolean;
+  };
   'media.store': { url: string };
   'media.discard': { ok: boolean };
   // shared 为 false 等价于用户放弃分享，不是错误。
@@ -144,7 +151,11 @@ declare global {
 // 会停在系统 UI 上等用户操作的动作：这类动作的「慢」是正常的，超时只作为
 // 「原生一声不响」的兜底，因此给足时间，不能用普通动作的 30 秒。
 const INTERACTIVE_ACTIONS = new Set<NativeAction>([
-  'media.pickImage', 'media.import', 'export.csv', 'camera.ensurePermission', 'notify.requestPermission',
+  'media.pickImage',
+  'media.import',
+  'export.csv',
+  'camera.ensurePermission',
+  'notify.requestPermission',
 ]);
 
 /** 交互动作的兜底超时：5 分钟。选图、保存文件这类操作可能被用户撂在一边很久。 */
@@ -169,7 +180,10 @@ export interface NativeBridgeOptions {
  */
 export class NativeBridge {
   // 回调 id → 等待中的 Promise（含超时定时器）；原生回调、超时或 dispose 时从这里删除。
-  private readonly pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void; timer?: ReturnType<typeof setTimeout> }>();
+  private readonly pending = new Map<
+    string,
+    { resolve(value: unknown): void; reject(error: Error): void; timer?: ReturnType<typeof setTimeout> }
+  >();
   // 回调 id 自增，保证同一次会话内不重号。
   private sequence = 1;
   private readonly timeoutMs: number;
@@ -195,7 +209,11 @@ export class NativeBridge {
   /** 把错误交给原生日志。上报本身失败也要吞掉：日志不能盖住原始异常。 */
   report(error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
-    try { this.windowLike?.CalMobileNative?.report?.(message); } catch { /* logging must not mask the original error */ }
+    try {
+      this.windowLike?.CalMobileNative?.report?.(message);
+    } catch {
+      /* logging must not mask the original error */
+    }
   }
 
   /**
@@ -212,7 +230,11 @@ export class NativeBridge {
     if (!this.hasNative()) return Promise.reject(new NativeBridgeError(t('device.noBridge')));
     const callbackId = `cb-${this.sequence++}`;
     return new Promise<NativeActionResults[A]>((resolve, reject) => {
-      const entry = { resolve: resolve as (value: unknown) => void, reject, timer: undefined as ReturnType<typeof setTimeout> | undefined };
+      const entry = {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        timer: undefined as ReturnType<typeof setTimeout> | undefined,
+      };
       // 交互动作给的是兜底超时（默认 5 分钟），不是普通动作的 30 秒：
       // 用户可能把系统选择器撂在一边很久，但「原生永远不回」也必须有个终点，
       // 否则这个 Promise 会一直挂着，页面停在「加载中」。

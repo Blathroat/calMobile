@@ -18,7 +18,13 @@ import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
 import {
-  PATTERNS, allowedFormats, check, limit, uploadCountLimit, uploadSizeLimitMb, validateAll,
+  PATTERNS,
+  allowedFormats,
+  check,
+  limit,
+  uploadCountLimit,
+  uploadSizeLimitMb,
+  validateAll,
 } from '@/services/validate';
 import { EXHIBITION_STATUS, REGISTRATION_MODES } from '@/services/status';
 import { device } from '@/services/device-services';
@@ -27,7 +33,10 @@ import { loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdo
 import CollectFieldsCard, { type CollectField } from '@/components/CollectFieldsCard.vue';
 import { firstCollectFieldError } from '@/services/collect-fields';
 import {
-  clearExhibitionDraft, readExhibitionDraft, stashExhibitionDraft, type ExhibitionDraft,
+  clearExhibitionDraft,
+  readExhibitionDraft,
+  stashExhibitionDraft,
+  type ExhibitionDraft,
 } from '@/services/exhibition-draft';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -63,7 +72,9 @@ const detail = useAsync<ExhibitionDetail>();
 const saving = ref(false);
 /** 新建保存成功后换成编辑地址，删除按钮据此出现。简介在新建时就能编辑。 */
 const createdId = ref('');
-const notFound = computed(() => !isCreate.value && detail.data.value !== undefined && detail.data.value.found === false);
+const notFound = computed(
+  () => !isCreate.value && detail.data.value !== undefined && detail.data.value.found === false,
+);
 const loadFailed = computed(() => detail.error.value !== undefined && detail.data.value === undefined);
 
 const form = reactive({
@@ -108,8 +119,10 @@ const allowCancelHint = t('exhibition.form.approvedCancelLocked');
 const mediaHint = computed(() => {
   const imageCount = Number(bootstrap.media.imageCount) || 8;
   const imageSize = Number(bootstrap.media.imageSizeMb) || 10;
-  return `图片 ${imageCount} 张 / 单张 ${imageSize} MB，`
-    + `视频 ${uploadCountLimit('video')} 个 / 单个不超过 ${uploadSizeLimitMb('video')} MB；${t('exhibition.editor.mediaUsesShortUrl')}`;
+  return (
+    `图片 ${imageCount} 张 / 单张 ${imageSize} MB，` +
+    `视频 ${uploadCountLimit('video')} 个 / 单个不超过 ${uploadSizeLimitMb('video')} MB；${t('exhibition.editor.mediaUsesShortUrl')}`
+  );
 });
 
 // ── 校验 ─────────────────────────────────────────────────────────
@@ -120,27 +133,76 @@ const mediaHint = computed(() => {
  */
 function fieldChecks(): Array<[string, () => string]> {
   return [
-    ['title', () => check(form.title, { label: t('admin.limits.exhibitionName'), required: true, max: limit('exhibitionTitle', 60) })],
-    ['venue', () => check(form.venue, { label: t('admin.limits.exhibitionVenue'), required: true, max: limit('exhibitionVenue', 60) })],
-    ['date', () => check(form.date, {
-      label: t('exhibition.form.openDate'), required: true, pattern: PATTERNS.date, patternMessage: t('exhibition.form.openDateRequired'),
-    })],
-    ['time', () => check(form.time, {
-      label: t('exhibition.form.openTime'), max: 20, pattern: PATTERNS.timeRange, patternMessage: t('exhibition.form.openTimeFormat'),
-    })],
-    ['registrationEnd', () => check(form.registrationEnd, {
-      label: t('exhibition.form.registrationEndDate'),
-      custom: () => (form.registrationStart && form.registrationEnd && form.registrationEnd < form.registrationStart
-        ? t('exhibition.form.registrationEndBeforeStart') : ''),
-    })],
-    ['category', () => check(form.category, {
-      label: t('admin.limits.category'), max: limit('category', 20), pattern: PATTERNS.category, patternMessage: t('exhibition.form.categoryCharacters'),
-    })],
-    ['registrationStart', () => check(form.registrationStart, {
-      label: t('exhibition.form.registrationStartDate'),
-      custom: () => (form.registrationStart && form.date && form.registrationStart > form.date
-        ? t('exhibition.form.registrationStartTooLate') : ''),
-    })],
+    [
+      'title',
+      () =>
+        check(form.title, {
+          label: t('admin.limits.exhibitionName'),
+          required: true,
+          max: limit('exhibitionTitle', 60),
+        }),
+    ],
+    [
+      'venue',
+      () =>
+        check(form.venue, {
+          label: t('admin.limits.exhibitionVenue'),
+          required: true,
+          max: limit('exhibitionVenue', 60),
+        }),
+    ],
+    [
+      'date',
+      () =>
+        check(form.date, {
+          label: t('exhibition.form.openDate'),
+          required: true,
+          pattern: PATTERNS.date,
+          patternMessage: t('exhibition.form.openDateRequired'),
+        }),
+    ],
+    [
+      'time',
+      () =>
+        check(form.time, {
+          label: t('exhibition.form.openTime'),
+          max: 20,
+          pattern: PATTERNS.timeRange,
+          patternMessage: t('exhibition.form.openTimeFormat'),
+        }),
+    ],
+    [
+      'registrationEnd',
+      () =>
+        check(form.registrationEnd, {
+          label: t('exhibition.form.registrationEndDate'),
+          custom: () =>
+            form.registrationStart && form.registrationEnd && form.registrationEnd < form.registrationStart
+              ? t('exhibition.form.registrationEndBeforeStart')
+              : '',
+        }),
+    ],
+    [
+      'category',
+      () =>
+        check(form.category, {
+          label: t('admin.limits.category'),
+          max: limit('category', 20),
+          pattern: PATTERNS.category,
+          patternMessage: t('exhibition.form.categoryCharacters'),
+        }),
+    ],
+    [
+      'registrationStart',
+      () =>
+        check(form.registrationStart, {
+          label: t('exhibition.form.registrationStartDate'),
+          custom: () =>
+            form.registrationStart && form.date && form.registrationStart > form.date
+              ? t('exhibition.form.registrationStartTooLate')
+              : '',
+        }),
+    ],
   ];
 }
 
@@ -345,7 +407,10 @@ function askDelete(): void {
         // 写接口统一返回 { ok, error }，只判断响应本身会把失败当成成功。
         const result = await api.exhibitions.remove(exhibitionId.value);
         const ok = result?.ok === true;
-        toast(String(ok ? t('exhibition.form.deleted') : (result?.error || t('exhibition.form.deleteFailed'))), ok ? 'success' : 'error');
+        toast(
+          String(ok ? t('exhibition.form.deleted') : result?.error || t('exhibition.form.deleteFailed')),
+          ok ? 'success' : 'error',
+        );
         if (ok) await router.replace('/exhibitor');
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -381,9 +446,7 @@ function buildPayload(): JsonObject {
         title: item.title.trim(),
         type: item.type,
         required: item.required,
-        options: item.type === '文本'
-          ? []
-          : item.options.map((option) => option.trim()).filter(Boolean),
+        options: item.type === '文本' ? [] : item.options.map((option) => option.trim()).filter(Boolean),
       })),
   };
 }
@@ -428,7 +491,6 @@ function normalizeOptions(options: unknown): string[] {
     .map((item) => item.trim())
     .filter(Boolean);
 }
-
 </script>
 
 <template>
@@ -466,7 +528,9 @@ function normalizeOptions(options: unknown): string[] {
   <template v-else-if="built">
     <div class="form">
       <div class="field" :data-invalid="isInvalid('title') ? 'true' : 'false'">
-        <label for="form-title">{{ t('admin.limits.exhibitionName') }}<span class="required" aria-hidden="true"> *</span></label>
+        <label for="form-title"
+          >{{ t('admin.limits.exhibitionName') }}<span class="required" aria-hidden="true"> *</span></label
+        >
         <input
           id="form-title"
           v-model="form.title"
@@ -477,7 +541,9 @@ function normalizeOptions(options: unknown): string[] {
         />
       </div>
       <div class="field" :data-invalid="isInvalid('venue') ? 'true' : 'false'">
-        <label for="form-venue">{{ t('admin.exhibitions.venue') }}<span class="required" aria-hidden="true"> *</span></label>
+        <label for="form-venue"
+          >{{ t('admin.exhibitions.venue') }}<span class="required" aria-hidden="true"> *</span></label
+        >
         <input
           id="form-venue"
           v-model="form.venue"
@@ -489,13 +555,22 @@ function normalizeOptions(options: unknown): string[] {
       </div>
       <div class="grid-cols-2">
         <div class="field" :data-invalid="isInvalid('date') ? 'true' : 'false'">
-          <label for="form-date">{{ t('exhibition.form.openDate') }}<span class="required" aria-hidden="true"> *</span></label>
+          <label for="form-date"
+            >{{ t('exhibition.form.openDate') }}<span class="required" aria-hidden="true"> *</span></label
+          >
           <input id="form-date" v-model="form.date" class="input" type="date" />
           <p v-if="isInvalid('date')" class="field-error" role="alert">{{ formError }}</p>
         </div>
         <div class="field" :data-invalid="isInvalid('time') ? 'true' : 'false'">
           <label for="form-time">{{ t('exhibition.form.openTime') }}</label>
-          <input id="form-time" v-model="form.time" class="input" type="text" placeholder="09:00-17:00" maxlength="20" />
+          <input
+            id="form-time"
+            v-model="form.time"
+            class="input"
+            type="text"
+            placeholder="09:00-17:00"
+            maxlength="20"
+          />
           <p v-if="isInvalid('time')" class="field-error" role="alert">{{ formError }}</p>
         </div>
       </div>
@@ -556,7 +631,12 @@ function normalizeOptions(options: unknown): string[] {
       <span class="section-label">{{ t('exhibition.form.registrationSettings') }}</span>
       <div class="field">
         <span class="field-label">{{ t('exhibition.form.registrationMode') }}</span>
-        <SegControl :model-value="form.status" :items="MODES" :label="t('exhibition.form.registrationMode')" @update:model-value="changeMode" />
+        <SegControl
+          :model-value="form.status"
+          :items="MODES"
+          :label="t('exhibition.form.registrationMode')"
+          @update:model-value="changeMode"
+        />
       </div>
       <hr class="divider" />
       <div class="stack" data-gap="sm">

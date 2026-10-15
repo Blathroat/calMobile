@@ -69,7 +69,9 @@ type JsonLike = Record<string, unknown> | undefined | null;
 
 /** 裁剪文本，用于列表摘要。 */
 export function truncate(value: unknown, max = 42): string {
-  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  const text = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
@@ -98,7 +100,7 @@ export function calendarRowCount(year: number, month: number): number {
 }
 
 export function addMonths(year: number, month: number, delta: number): { year: number; month: number } {
-  const total = (year * 12) + (month - 1) + delta;
+  const total = year * 12 + (month - 1) + delta;
   return { year: Math.floor(total / 12), month: (total % 12) + 1 };
 }
 

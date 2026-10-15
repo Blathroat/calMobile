@@ -18,7 +18,9 @@ export async function reserveSecurityStepUpAttempt(userId: string, sessionId: st
     );
     if (Number(result.rows[0]?.attempts) >= 5) throw new ApiError(429, '验证尝试过多，请 15 分钟后再试');
     await client.query('INSERT INTO security_stepup_attempts (id, user_id, session_id) VALUES ($1, $2, $3)', [
-      crypto.randomUUID(), userId, sessionId,
+      crypto.randomUUID(),
+      userId,
+      sessionId,
     ]);
   });
 }

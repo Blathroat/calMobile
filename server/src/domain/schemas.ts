@@ -148,7 +148,12 @@ export type PasswordChangeInput = z.infer<ReturnType<typeof passwordChangeSchema
 export const securityIdentitySchema = z.object({
   method: z.enum(['email', 'totp']),
   scope: z.enum(['password', 'email', 'totp', 'totp-confirm', 'factor']),
-  code: inputString.pipe(z.string().trim().regex(/^\d{6}$/, '请输入 6 位数字验证码')),
+  code: inputString.pipe(
+    z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/, '请输入 6 位数字验证码'),
+  ),
 });
 
 export const passwordOnlySchema = z.object({ password: inputString }).superRefine(({ password }, ctx) => {

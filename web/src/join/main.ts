@@ -12,10 +12,7 @@ import { router } from '@/join/router';
 import '@/styles/tokens.css';
 import '@/styles/motion.css';
 
-createApp(App)
-  .use(createPinia())
-  .use(router)
-  .mount('#app');
+createApp(App).use(createPinia()).use(router).mount('#app');
 
 void bootApp()
   .then(() => {

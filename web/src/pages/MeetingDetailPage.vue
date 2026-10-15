@@ -32,7 +32,7 @@ const meeting = computed<JsonObject | undefined>(() => {
   const data = query.data.value;
   if (!data || data.found === false) return undefined;
   const record = data.meeting;
-  return record && typeof record === 'object' ? record as JsonObject : undefined;
+  return record && typeof record === 'object' ? (record as JsonObject) : undefined;
 });
 const answers = computed(() => answerDocument({ source: { text: meeting.value?.answers } }).lines);
 const status = computed(() => String(meeting.value?.status || ''));

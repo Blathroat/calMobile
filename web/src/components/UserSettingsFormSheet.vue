@@ -17,7 +17,7 @@ const emit = defineEmits<{
   submit: [];
 }>();
 
-const errorMessage = computed(() => typeof props.error === 'function' ? props.error() : props.error);
+const errorMessage = computed(() => (typeof props.error === 'function' ? props.error() : props.error));
 
 function update(field: string, event: Event): void {
   emit('update', field, (event.target as HTMLInputElement | HTMLTextAreaElement).value);
@@ -37,7 +37,7 @@ function update(field: string, event: Event): void {
           :value="form.nickname"
           :maxlength="limits.nickname"
           @input="update('nickname', $event)"
-        >
+        />
       </div>
       <div class="field" :data-invalid="invalid.bio ? 'true' : 'false'">
         <label for="settings-bio">{{ t('profile.bio') }}</label>
@@ -61,7 +61,7 @@ function update(field: string, event: Event): void {
           :maxlength="limits.region"
           :placeholder="t('settings.profile.regionPlaceholder')"
           @input="update('region', $event)"
-        >
+        />
       </div>
       <div class="field" :data-invalid="invalid.socialMedia ? 'true' : 'false'">
         <label for="settings-social">{{ t('settings.profile.social') }}</label>
@@ -72,7 +72,7 @@ function update(field: string, event: Event): void {
           :value="form.socialMedia"
           :maxlength="limits.socialMedia"
           @input="update('socialMedia', $event)"
-        >
+        />
       </div>
     </template>
 

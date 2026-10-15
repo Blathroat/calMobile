@@ -12,7 +12,10 @@ test('只认出本服务的媒体地址', () => {
     '/media/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpg',
     '/media/files/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.mp4',
   ]);
-  assert.equal(storedMediaKey('/media/avatars/cccccccccccccccccccccccccccccccc.png'), 'avatars/cccccccccccccccccccccccccccccccc.png');
+  assert.equal(
+    storedMediaKey('/media/avatars/cccccccccccccccccccccccccccccccc.png'),
+    'avatars/cccccccccccccccccccccccccccccccc.png',
+  );
   assert.equal(storedMediaKey('https://appassets.androidplatform.net/media/local.jpg'), null);
 });
 

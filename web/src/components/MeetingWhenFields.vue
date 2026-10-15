@@ -39,26 +39,12 @@ function onTime(event: Event): void {
   <div class="grid-cols-2">
     <div class="field" :data-invalid="dateError ? 'true' : 'false'">
       <label for="meeting-date">{{ dateLabel }}<span class="required" aria-hidden="true"> *</span></label>
-      <input
-        id="meeting-date"
-        class="input"
-        type="date"
-        :min="today()"
-        :value="props.date"
-        @input="onDate"
-      />
+      <input id="meeting-date" class="input" type="date" :min="today()" :value="props.date" @input="onDate" />
       <p v-if="dateError" class="field-error" role="alert">{{ dateError }}</p>
     </div>
     <div class="field">
       <label for="meeting-time">{{ timeLabel }}</label>
-      <input
-        id="meeting-time"
-        class="input"
-        type="time"
-        step="60"
-        :value="props.time"
-        @input="onTime"
-      />
+      <input id="meeting-time" class="input" type="time" step="60" :value="props.time" @input="onTime" />
       <p class="field-hint">{{ timeHint }}</p>
     </div>
   </div>

@@ -1,5 +1,10 @@
-export interface QrWorkerRequest { id: number; image: ImageData }
-export type QrWorkerResponse = { type: 'ready' } | { type: 'error' }
+export interface QrWorkerRequest {
+  id: number;
+  image: ImageData;
+}
+export type QrWorkerResponse =
+  | { type: 'ready' }
+  | { type: 'error' }
   | { type: 'result'; id: number; text: string | null };
 
 export interface QrDecoder {
@@ -17,7 +22,10 @@ export function createQrDecoder(): QrDecoder {
   let pending: { id: number; resolve: (text: string | null) => void; reject: (error: Error) => void } | null = null;
   let resolveReady!: () => void;
   let rejectReady!: (error: Error) => void;
-  const ready = new Promise<void>((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
   let timer = setTimeout(() => fail(new Error('QR decoder initialization timed out')), 15_000);
 
   function fail(error: Error): void {
@@ -45,7 +53,10 @@ export function createQrDecoder(): QrDecoder {
       resolve(message.text);
     }
   };
-  worker.onerror = (event) => { event.preventDefault(); fail(new Error('QR worker failed')); };
+  worker.onerror = (event) => {
+    event.preventDefault();
+    fail(new Error('QR worker failed'));
+  };
   worker.onmessageerror = () => fail(new Error('QR worker message failed'));
 
   return {

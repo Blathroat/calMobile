@@ -56,7 +56,12 @@ export async function signAccessToken(
   user: Pick<SessionUser, 'id' | 'username' | 'role'>,
   sessionId?: string,
 ): Promise<string> {
-  return new SignJWT({ userId: user.id, username: user.username, role: user.role, ...(sessionId ? { sid: sessionId } : {}) })
+  return new SignJWT({
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    ...(sessionId ? { sid: sessionId } : {}),
+  })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuedAt()
     .setExpirationTime(accessExpiresIn)
@@ -67,14 +72,26 @@ export async function signAccessToken(
  * 新建一个刷新令牌并落库。
  * 刷新令牌本身是随机串，不是 JWT：它必须能被撤销，落在数据库里才作数。
  */
-export async function issueRefreshToken(userId: string, sessionId: string, device: SessionDevice = { deviceHash: '', deviceName: '' }): Promise<string> {
+export async function issueRefreshToken(
+  userId: string,
+  sessionId: string,
+  device: SessionDevice = { deviceHash: '', deviceName: '' },
+): Promise<string> {
   const token = crypto.randomBytes(32).toString('hex');
   await query(
     `
         INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, session_id, device_hash, device_name)
         VALUES ($1, $2, $3, now() + ($4 || ' days')::interval, $5, $6, $7)
     `,
-    [crypto.randomUUID(), userId, hashToken(token), String(refreshDays()), sessionId, device.deviceHash, device.deviceName],
+    [
+      crypto.randomUUID(),
+      userId,
+      hashToken(token),
+      String(refreshDays()),
+      sessionId,
+      device.deviceHash,
+      device.deviceName,
+    ],
   );
   // 顺手清掉过期与已撤销的：不清的话这张表会随每次登录一直长。
   void purgeStaleTokens();

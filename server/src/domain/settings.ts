@@ -279,7 +279,11 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
       videoSizeMb: clampNumber(source.videoSizeMb, fallback.videoSizeMb, 1, 500),
     };
   }
-  if (['avatarSizeMb', 'avatarFormats', 'imageFormats', 'videoFormats', 'storageMb', 'whenFull'].some((key) => key in source)) {
+  if (
+    ['avatarSizeMb', 'avatarFormats', 'imageFormats', 'videoFormats', 'storageMb', 'whenFull'].some(
+      (key) => key in source,
+    )
+  ) {
     // 老库的 upload JSON 里还没有 avatarFormats / storageMb：以默认值为底再盖库里的键。
     const fallback = { ...DEFAULT_SETTINGS.upload, ...next.upload };
     next.upload = {

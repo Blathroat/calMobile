@@ -10,10 +10,7 @@ import type { QueryResultRow } from 'pg';
 import type { AdminIdentity } from './production.js';
 
 export interface AdminDb {
-  query<T extends QueryResultRow = QueryResultRow>(
-    text: string,
-    params?: unknown[],
-  ): Promise<{ rows: T[] }>;
+  query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
 }
 
 /** 开发 seed 写入的三个账号。生产库里只要还能用示例口令登录就拒绝启动。 */
@@ -68,9 +65,7 @@ export async function ensureProductionAdmin(db: AdminDb, admin: AdminIdentity): 
     const winner = await roleOf(db, admin.username);
     if (winner === 'admin') return 'exists';
     throw new Error(
-      winner
-        ? `ADMIN_USERNAME=${admin.username} 已被非管理员占用，不会把这个账号提权`
-        : 'ADMIN_EMAIL 已被其他账号使用',
+      winner ? `ADMIN_USERNAME=${admin.username} 已被非管理员占用，不会把这个账号提权` : 'ADMIN_EMAIL 已被其他账号使用',
     );
   }
   return 'created';

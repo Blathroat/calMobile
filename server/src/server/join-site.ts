@@ -97,9 +97,7 @@ export interface JoinFile {
   cache: string;
 }
 
-export type JoinLookup =
-  | { kind: 'file'; file: JoinFile }
-  | { kind: 'missing' };
+export type JoinLookup = { kind: 'file'; file: JoinFile } | { kind: 'missing' };
 
 /** 有对应文件就返回文件；报名站路由回退到 `join.html`；跳出目录或以 `/assets/` 开头却找不到的，404。 */
 export function lookupJoinFile(root: string, pathname: string): JoinLookup {

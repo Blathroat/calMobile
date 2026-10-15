@@ -2,12 +2,13 @@
   "name": "calmobile-web",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": "^24.15.0 || >=26.0.0"
-  },
   "scripts": {
     "dev": "vite",
     "typecheck": "vue-tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
     "test": "vitest run",
     "build": "vite build",
     "build:join": "vite build --config vite.join.config.ts"
@@ -28,9 +29,14 @@
     "@vitejs/plugin-vue": "6.0.10",
     "@vue/tsconfig": "0.9.1",
     "jsdom": "30.1.2",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.88.0",
     "typescript": "6.0.3",
     "vite": "8.3.4",
     "vitest": "5.0.4",
     "vue-tsc": "3.3.13"
+  },
+  "engines": {
+    "node": "^24.15.0 || >=26.0.0"
   }
 }

@@ -17,12 +17,15 @@ const COPY = {
   hint: t('media.viewerHint'),
 };
 
-const props = withDefaults(defineProps<{
-  src: string;
-  alt?: string;
-}>(), {
-  alt: '',
-});
+const props = withDefaults(
+  defineProps<{
+    src: string;
+    alt?: string;
+  }>(),
+  {
+    alt: '',
+  },
+);
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -36,7 +39,10 @@ const stage = ref<HTMLElement>();
 const scale = ref(1);
 const offset = ref({ x: 0, y: 0 });
 
-interface Point { x: number; y: number }
+interface Point {
+  x: number;
+  y: number;
+}
 
 /** 进行中的指针：单指拖动用它，双指缩放用它的两条记录算间距与中点。 */
 const pointers = new Map<number, Point>();

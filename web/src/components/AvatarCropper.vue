@@ -149,8 +149,8 @@ function bindGestures(): () => void {
     const [a, b] = [...pointers.values()];
     if (!a || !b) return { x: 0, y: 0 };
     return {
-      x: ((a.x + b.x) / 2) - rect.left - (rect.width / 2),
-      y: ((a.y + b.y) / 2) - rect.top - (rect.height / 2),
+      x: (a.x + b.x) / 2 - rect.left - rect.width / 2,
+      y: (a.y + b.y) / 2 - rect.top - rect.height / 2,
     };
   };
 
@@ -201,8 +201,8 @@ function bindGestures(): () => void {
       // 不这么做的话，放大时画面会朝图片中心跑，手指下面的细节会滑走。
       const grow = next / pinchStartZoom;
       state.zoom = next;
-      state.x = pinchFocal.x - ((pinchFocal.x - pinchStartX) * grow);
-      state.y = pinchFocal.y - ((pinchFocal.y - pinchStartY) * grow);
+      state.x = pinchFocal.x - (pinchFocal.x - pinchStartX) * grow;
+      state.y = pinchFocal.y - (pinchFocal.y - pinchStartY) * grow;
       paint();
       return;
     }
@@ -235,13 +235,13 @@ function bindGestures(): () => void {
     event.preventDefault();
     const rect = stage.getBoundingClientRect();
     const focal = {
-      x: event.clientX - rect.left - (rect.width / 2),
-      y: event.clientY - rect.top - (rect.height / 2),
+      x: event.clientX - rect.left - rect.width / 2,
+      y: event.clientY - rect.top - rect.height / 2,
     };
     const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, state.zoom + (event.deltaY < 0 ? WHEEL_STEP : -WHEEL_STEP)));
     const grow = next / state.zoom;
-    state.x = focal.x - ((focal.x - state.x) * grow);
-    state.y = focal.y - ((focal.y - state.y) * grow);
+    state.x = focal.x - (focal.x - state.x) * grow;
+    state.y = focal.y - (focal.y - state.y) * grow;
     state.zoom = next;
     paint();
   };
@@ -277,10 +277,13 @@ function onKeydown(event: KeyboardEvent): void {
 function requestClose(): void {
   if (closing.value) return;
   closing.value = true;
-  closeTimer = window.setTimeout(() => {
-    closeTimer = undefined;
-    emit('close');
-  }, prefersReducedMotion() ? 0 : LEAVE_MS);
+  closeTimer = window.setTimeout(
+    () => {
+      closeTimer = undefined;
+      emit('close');
+    },
+    prefersReducedMotion() ? 0 : LEAVE_MS,
+  );
 }
 
 /**
@@ -294,8 +297,8 @@ function exportCrop(): string {
   if (!image) throw new Error(t('media.imageStillLoading'));
   const scale = imageScale.value;
   const sourceSize = stageEdge / scale;
-  const left = ((stageEdge / 2) + state.x) - ((state.width * scale) / 2);
-  const top = ((stageEdge / 2) + state.y) - ((state.height * scale) / 2);
+  const left = stageEdge / 2 + state.x - (state.width * scale) / 2;
+  const top = stageEdge / 2 + state.y - (state.height * scale) / 2;
   const canvas = document.createElement('canvas');
   canvas.width = CROP_OUTPUT_SIZE;
   canvas.height = CROP_OUTPUT_SIZE;
@@ -305,8 +308,14 @@ function exportCrop(): string {
   context.fillRect(0, 0, CROP_OUTPUT_SIZE, CROP_OUTPUT_SIZE);
   context.drawImage(
     image,
-    -left / scale, -top / scale, sourceSize, sourceSize,
-    0, 0, CROP_OUTPUT_SIZE, CROP_OUTPUT_SIZE,
+    -left / scale,
+    -top / scale,
+    sourceSize,
+    sourceSize,
+    0,
+    0,
+    CROP_OUTPUT_SIZE,
+    CROP_OUTPUT_SIZE,
   );
   const mime = props.mime === 'image/png' || props.mime === 'image/webp' ? props.mime : 'image/jpeg';
   return canvas.toDataURL(mime, 0.9);
@@ -370,7 +379,7 @@ onBeforeUnmount(() => {
             alt=""
             @load="onImageLoad"
             @error="onImageError"
-          >
+          />
         </div>
       </div>
       <div class="row" data-between="true">

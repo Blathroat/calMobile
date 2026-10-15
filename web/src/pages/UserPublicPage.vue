@@ -84,15 +84,17 @@ function registrationCountLabel(item: JsonObject): string {
 }
 
 function asList(value: unknown): JsonObject[] {
-  return Array.isArray(value) ? value as JsonObject[] : [];
+  return Array.isArray(value) ? (value as JsonObject[]) : [];
 }
 
 /** 用户公开页读 nickname + userId：搜索页预热用的是同一份参数，缓存键才对得上。 */
 function load(): void {
-  void query.run(() => api.users.publicProfile({
-    nickname: String(route.params.nickname ?? ''),
-    userId: String(route.query.userId ?? ''),
-  }));
+  void query.run(() =>
+    api.users.publicProfile({
+      nickname: String(route.params.nickname ?? ''),
+      userId: String(route.query.userId ?? ''),
+    }),
+  );
 }
 
 /** 未开启时按钮是 disabled，点不到这里。受限账号不能报名，就地说明，不把人送进会被守卫踢回的申请页。 */
@@ -242,7 +244,9 @@ onMounted(load);
           <StatusTag :text="String(record.statusLabel || '')" />
         </div>
       </div>
-      <p v-else class="row-meta">{{ showRegistrations ? t('profile.public.noRegistrations') : t('profile.public.registrationsHidden') }}</p>
+      <p v-else class="row-meta">
+        {{ showRegistrations ? t('profile.public.noRegistrations') : t('profile.public.registrationsHidden') }}
+      </p>
     </div>
   </template>
 </template>

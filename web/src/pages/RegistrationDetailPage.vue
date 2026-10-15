@@ -43,13 +43,17 @@ const hostBlocksCancel = computed(() => approved.value && record.value?.allowCan
 const canCancel = computed(() => !cancelled.value && !attended.value && !hostBlocksCancel.value);
 const hostCancelHint = t('registration.detail.approvedCancelBlocked');
 /** 待审核的报名始终可以改；其余状态由管理员的「是否需要重新审核」决定。 */
-const canRevise = computed(() => bootstrap.review.canRevise === true || record.value?.statusLabel === REGISTRATION_STATUS.PENDING);
+const canRevise = computed(
+  () => bootstrap.review.canRevise === true || record.value?.statusLabel === REGISTRATION_STATUS.PENDING,
+);
 
 const cancelling = ref(false);
 /** 二维码绘制失败的原因：留在二维码旁边说明，同时给出手动输入的退路。 */
 const qrError = ref('');
 
-onMounted(() => { void load(); });
+onMounted(() => {
+  void load();
+});
 
 async function load(): Promise<void> {
   qrError.value = '';
@@ -59,7 +63,9 @@ async function load(): Promise<void> {
 function statusHint(status: unknown): string {
   if (status === REGISTRATION_STATUS.PENDING) return t('registration.detail.pendingExhibitorReview');
   if (status === REGISTRATION_STATUS.APPROVED) {
-    return bootstrap.review.canRevise === true ? t('registration.detail.reviewStillEditable') : t('registration.detail.reviewFinished');
+    return bootstrap.review.canRevise === true
+      ? t('registration.detail.reviewStillEditable')
+      : t('registration.detail.reviewFinished');
   }
   if (status === REGISTRATION_STATUS.ATTENDED) return t('registration.detail.checkInWish');
   if (status === REGISTRATION_STATUS.CANCELLED) return t('registration.detail.cancelledByYou');
@@ -172,7 +178,10 @@ function askCancel(): void {
     <div v-if="record.checkInCode" class="card">
       <div class="row" data-between="true">
         <span class="section-label">{{ t('registration.detail.checkInCode') }}</span>
-        <StatusTag :text="attended ? t('registration.detail.checkedIn') : t('registration.detail.pendingCheckIn')" :tone="attended ? 'ok' : 'pending'" />
+        <StatusTag
+          :text="attended ? t('registration.detail.checkedIn') : t('registration.detail.pendingCheckIn')"
+          :tone="attended ? 'ok' : 'pending'"
+        />
       </div>
       <div class="qr-wrap">
         <QrCanvas
@@ -201,17 +210,26 @@ function askCancel(): void {
           >
             {{ t('registration.detail.changeRegistration') }}
           </button>
-          <button
-            class="cta danger"
-            type="button"
-            :disabled="!canCancel || cancelling"
-            @click="askCancel"
-          >
-            {{ cancelled ? REGISTRATION_STATUS.CANCELLED : (attended ? REGISTRATION_STATUS.ATTENDED : t('registration.detail.cancelRegistration')) }}
+          <button class="cta danger" type="button" :disabled="!canCancel || cancelling" @click="askCancel">
+            {{
+              cancelled
+                ? REGISTRATION_STATUS.CANCELLED
+                : attended
+                  ? REGISTRATION_STATUS.ATTENDED
+                  : t('registration.detail.cancelRegistration')
+            }}
           </button>
         </div>
         <p class="field-hint text-center">
-          {{ cancelled ? t('registration.detail.cancelledLeavesReview') : (attended ? t('registration.detail.attendedCannotCancel') : (hostBlocksCancel ? hostCancelHint : t('registration.detail.reapplyToAttend'))) }}
+          {{
+            cancelled
+              ? t('registration.detail.cancelledLeavesReview')
+              : attended
+                ? t('registration.detail.attendedCannotCancel')
+                : hostBlocksCancel
+                  ? hostCancelHint
+                  : t('registration.detail.reapplyToAttend')
+          }}
         </p>
       </div>
     </div>

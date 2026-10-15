@@ -31,7 +31,20 @@ import { HttpClient } from '@/services/http-client';
 import { QueryCache } from '@/services/query-cache';
 import { SessionClient } from '@/services/session-client';
 import { nativeBridge } from '@/services/native-bridge';
-import type { ApiResult, AuthResult, Bootstrap, Exhibition, ExhibitionDetail, Id, JsonObject, Registration, RegistrationDetail, ReviewList, SearchResult, User } from './types';
+import type {
+  ApiResult,
+  AuthResult,
+  Bootstrap,
+  Exhibition,
+  ExhibitionDetail,
+  Id,
+  JsonObject,
+  Registration,
+  RegistrationDetail,
+  ReviewList,
+  SearchResult,
+  User,
+} from './types';
 
 /**
  * 稳定序列化：对象键排序后递归拼接，保证同样内容得到同样的字符串，用作缓存键的一部分。
@@ -40,8 +53,10 @@ import type { ApiResult, AuthResult, Bootstrap, Exhibition, ExhibitionDetail, Id
 function stableKey(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableKey).join(',')}]`;
-  return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableKey(item)}`).join(',')}}`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stableKey(item)}`)
+    .join(',')}}`;
 }
 
 /**
@@ -117,7 +132,11 @@ export interface ApiClient {
     /** 向当前邮箱发送一次身份复核码。 */
     identityEmailCode(): Promise<JsonObject>;
     /** 用 TOTP 或邮箱码换取限定操作、五分钟有效的一次性身份复核票。 */
-    verifyIdentity(method: 'email' | 'totp', code: string, scope: 'password' | 'email' | 'totp' | 'factor'): Promise<JsonObject>;
+    verifyIdentity(
+      method: 'email' | 'totp',
+      code: string,
+      scope: 'password' | 'email' | 'totp' | 'factor',
+    ): Promise<JsonObject>;
     /** 关闭两步验证需要先通过身份复核。 */
     disableTwoFactor(stepUpToken: string): Promise<JsonObject>;
     /** 更换邮箱第一步：给新地址发验证码，此时还没真正更换。 */
@@ -250,10 +269,7 @@ export interface ApiClient {
 /** App 写死本机地址（WebView 不能用相对路径）。报名站与页面同源。 */
 const DEFAULT_API_BASE = import.meta.env.VITE_SURFACE === 'join' ? '/api/v1' : 'http://127.0.0.1:3000/api/v1';
 
-export function createApi(
-  baseUrl = DEFAULT_API_BASE,
-  onSessionExpired?: () => void,
-): ApiClient {
+export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => void): ApiClient {
   // 先声明后用：HttpClient 的取令牌与刷新回调都引用 session，构造顺序上只能这样解环。
   let session!: SessionClient;
   let cache!: QueryCache;
@@ -266,7 +282,9 @@ export function createApi(
     notifySessionExpired();
   };
   const http = new HttpClient({
-    baseUrl, getAccessToken: () => session.token, getSessionSignal: () => session.signal,
+    baseUrl,
+    getAccessToken: () => session.token,
+    getSessionSignal: () => session.signal,
     refresh: () => session.refresh(),
     onSessionExpired: expireSession,
   });
@@ -292,10 +310,7 @@ export function createApi(
     // 只有真带回令牌才更新会话：两步验证中间结果的 token 是空的，那时还不能算登录。
     if (result.token) {
       const user = (result.user ?? {}) as JsonObject;
-      session.setTokens(
-        { token: result.token, refreshToken: result.refreshToken },
-        String(user.username ?? ''),
-      );
+      session.setTokens({ token: result.token, refreshToken: result.refreshToken }, String(user.username ?? ''));
     }
     // 无论有没有令牌都清缓存：身份可能已经变了，任何键都可能属于上一个用户。
     cache.clear();
@@ -303,14 +318,24 @@ export function createApi(
   };
   const devicePayload = async (): Promise<JsonObject> => {
     let userAgent = '';
-    try { userAgent = navigator.userAgent; } catch { /* SSR 与测试环境使用默认名称 */ }
+    try {
+      userAgent = navigator.userAgent;
+    } catch {
+      /* SSR 与测试环境使用默认名称 */
+    }
     const deviceName = nativeBridge.hasNative()
       ? 'Android App'
-      : /iPhone|iPad/i.test(userAgent) ? 'iPhone / iPad'
-        : /Android/i.test(userAgent) ? 'Android Browser'
-          : /Windows/i.test(userAgent) ? 'Windows Browser'
-            : /Mac OS/i.test(userAgent) ? 'Mac Browser'
-              : /Linux/i.test(userAgent) ? 'Linux Browser' : 'Browser';
+      : /iPhone|iPad/i.test(userAgent)
+        ? 'iPhone / iPad'
+        : /Android/i.test(userAgent)
+          ? 'Android Browser'
+          : /Windows/i.test(userAgent)
+            ? 'Windows Browser'
+            : /Mac OS/i.test(userAgent)
+              ? 'Mac Browser'
+              : /Linux/i.test(userAgent)
+                ? 'Linux Browser'
+                : 'Browser';
     return { deviceToken: await session.deviceToken(), deviceName };
   };
 
@@ -319,17 +344,29 @@ export function createApi(
     // 不走 read()：身份来源必须是最新的，不能命中缓存。
     bootstrap: () => http.request<Bootstrap>('/bootstrap'),
     auth: {
-      login: async (username, password) => afterAuth(await http.request<AuthResult>('/auth/login', {
-        method: 'POST', body: { username, password, ...await devicePayload() },
-      })),
-      loginVerify: async (payload) => afterAuth(await http.request<AuthResult>('/auth/login/verify', {
-        method: 'POST', body: { ...payload, ...await devicePayload() },
-      })),
+      login: async (username, password) =>
+        afterAuth(
+          await http.request<AuthResult>('/auth/login', {
+            method: 'POST',
+            body: { username, password, ...(await devicePayload()) },
+          }),
+        ),
+      loginVerify: async (payload) =>
+        afterAuth(
+          await http.request<AuthResult>('/auth/login/verify', {
+            method: 'POST',
+            body: { ...payload, ...(await devicePayload()) },
+          }),
+        ),
       loginCode: (ticket) => http.request<ApiResult>('/auth/login/code', { method: 'POST', body: { ticket } }),
       register: (payload) => http.request<ApiResult>('/auth/register', { method: 'POST', body: payload }),
-      registerVerify: async (payload) => afterAuth(await http.request<AuthResult>('/auth/register/verify', {
-        method: 'POST', body: { ...payload, ...await devicePayload() },
-      })),
+      registerVerify: async (payload) =>
+        afterAuth(
+          await http.request<AuthResult>('/auth/register/verify', {
+            method: 'POST',
+            body: { ...payload, ...(await devicePayload()) },
+          }),
+        ),
       forgotPassword: (email) => http.request<ApiResult>('/auth/password/forgot', { method: 'POST', body: { email } }),
       resetPassword: (payload) => http.request<ApiResult>('/auth/password/reset', { method: 'POST', body: payload }),
       guest: async () => {
@@ -349,43 +386,64 @@ export function createApi(
     profile: {
       get: () => read<JsonObject>('profile', '/profile'),
       save: (payload) => write<ApiResult>('/profile', { method: 'PUT', body: payload }, ['profile', 'users.public']),
-      uploadAvatar: (bytes, contentType) => write<ApiResult>('/profile/avatar', {
-        method: 'POST', bytes, contentType, timeoutMs: 20_000,
-      }, ['profile', 'users.public']),
+      uploadAvatar: (bytes, contentType) =>
+        write<ApiResult>(
+          '/profile/avatar',
+          {
+            method: 'POST',
+            bytes,
+            contentType,
+            timeoutMs: 20_000,
+          },
+          ['profile', 'users.public'],
+        ),
       removeAvatar: () => write<ApiResult>('/profile/avatar', { method: 'DELETE' }, ['profile', 'users.public']),
       changePassword: (payload) => http.request<ApiResult>('/profile/password', { method: 'POST', body: payload }),
       notifications: () => read<JsonObject>('notifications', '/profile/notifications'),
-      saveNotifications: (payload) => write<ApiResult>('/profile/notifications', { method: 'PUT', body: payload }, ['notifications']),
+      saveNotifications: (payload) =>
+        write<ApiResult>('/profile/notifications', { method: 'PUT', body: payload }, ['notifications']),
       // 提示状态只进用户态（bootstrap 的 user 段），没有对应的读缓存需要失效。
       markHint: (hint) => http.request<JsonObject>('/profile/hints', { method: 'PUT', body: { hint } }),
     },
     media: {
-      upload: (bytes, contentType, kind) => write<ApiResult>('/media', {
-        method: 'POST',
-        bytes,
-        contentType,
-        query: { kind },
-        timeoutMs: kind === 'video' ? 60_000 : 20_000,
-      }),
+      upload: (bytes, contentType, kind) =>
+        write<ApiResult>('/media', {
+          method: 'POST',
+          bytes,
+          contentType,
+          query: { kind },
+          timeoutMs: kind === 'video' ? 60_000 : 20_000,
+        }),
     },
     security: {
       // 安全相关全部直连 http：验证码与备用码是一次性的，进缓存既没用也危险。
       get: () => http.request<JsonObject>('/profile/security'),
       identityEmailCode: () => http.request<JsonObject>('/profile/security/email-code', { method: 'POST' }),
-      verifyIdentity: (method, code, scope) => http.request<JsonObject>('/profile/security/verify', {
-        method: 'POST', body: { method, code, scope },
-      }),
-      enableTwoFactor: (stepUpToken) => http.request<JsonObject>('/profile/2fa/enable', { method: 'POST', body: { stepUpToken } }),
-      verifyTwoFactor: (code) => http.request<JsonObject>('/profile/2fa/enable/verify', { method: 'POST', body: { code } }),
-      disableTwoFactor: (stepUpToken) => http.request<JsonObject>('/profile/2fa/disable', { method: 'POST', body: { stepUpToken } }),
-      changeEmail: (email, stepUpToken) => http.request<JsonObject>('/profile/email', { method: 'POST', body: { email, stepUpToken } }),
-      verifyEmail: (email, code) => write<JsonObject>('/profile/email/verify', { method: 'POST', body: { email, code } }, ['profile']),
-      totpSetup: (stepUpToken) => http.request<JsonObject>('/profile/2fa/totp/setup', { method: 'POST', body: { stepUpToken } }),
+      verifyIdentity: (method, code, scope) =>
+        http.request<JsonObject>('/profile/security/verify', {
+          method: 'POST',
+          body: { method, code, scope },
+        }),
+      enableTwoFactor: (stepUpToken) =>
+        http.request<JsonObject>('/profile/2fa/enable', { method: 'POST', body: { stepUpToken } }),
+      verifyTwoFactor: (code) =>
+        http.request<JsonObject>('/profile/2fa/enable/verify', { method: 'POST', body: { code } }),
+      disableTwoFactor: (stepUpToken) =>
+        http.request<JsonObject>('/profile/2fa/disable', { method: 'POST', body: { stepUpToken } }),
+      changeEmail: (email, stepUpToken) =>
+        http.request<JsonObject>('/profile/email', { method: 'POST', body: { email, stepUpToken } }),
+      verifyEmail: (email, code) =>
+        write<JsonObject>('/profile/email/verify', { method: 'POST', body: { email, code } }, ['profile']),
+      totpSetup: (stepUpToken) =>
+        http.request<JsonObject>('/profile/2fa/totp/setup', { method: 'POST', body: { stepUpToken } }),
       activateTotp: () => http.request<JsonObject>('/profile/2fa/totp/activate', { method: 'POST' }),
-      totpEnable: (code, stepUpToken) => http.request<JsonObject>('/profile/2fa/totp/enable', { method: 'POST', body: { code, stepUpToken } }),
-      backupCodes: (password) => http.request<JsonObject>('/profile/2fa/backup-codes', { method: 'POST', body: { password } }),
+      totpEnable: (code, stepUpToken) =>
+        http.request<JsonObject>('/profile/2fa/totp/enable', { method: 'POST', body: { code, stepUpToken } }),
+      backupCodes: (password) =>
+        http.request<JsonObject>('/profile/2fa/backup-codes', { method: 'POST', body: { password } }),
       sessions: () => http.request<JsonObject>('/profile/sessions'),
-      revokeSession: (deviceId) => write<ApiResult>(`/profile/sessions/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }),
+      revokeSession: (deviceId) =>
+        write<ApiResult>(`/profile/sessions/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }),
       revokeAllSessions: () => write<ApiResult>('/profile/sessions/revoke-all', { method: 'POST' }),
     },
     exhibitions: {
@@ -394,38 +452,80 @@ export function createApi(
       // 键的前缀是 `exhibitions`，因此展会写操作失效 `exhibitions` 时详情也一起作废。
       get: (id) => read<ExhibitionDetail>('exhibitions.get', `/exhibitions/${encodeURIComponent(id)}`),
       // 有 id 就是更新、没有就是新建；失效 `search` 是因为展会标题/日期会出现在搜索结果里。
-      save: (payload) => write<ApiResult>(payload.id ? `/exhibitions/${encodeURIComponent(String(payload.id))}` : '/exhibitions', { method: payload.id ? 'PUT' : 'POST', body: payload }, ['exhibitions', 'search']),
+      save: (payload) =>
+        write<ApiResult>(
+          payload.id ? `/exhibitions/${encodeURIComponent(String(payload.id))}` : '/exhibitions',
+          { method: payload.id ? 'PUT' : 'POST', body: payload },
+          ['exhibitions', 'search'],
+        ),
       // 删展会会连带影响报名与审核记录，所以四个前缀都要失效。
-      remove: (id) => write<ApiResult>(`/exhibitions/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['exhibitions', 'registrations', 'review', 'search']),
-      setStatus: (id, status) => write<ApiResult>(`/exhibitions/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { id, status } }, ['exhibitions', 'registrations', 'review', 'search']),
+      remove: (id) =>
+        write<ApiResult>(`/exhibitions/${encodeURIComponent(id)}`, { method: 'DELETE' }, [
+          'exhibitions',
+          'registrations',
+          'review',
+          'search',
+        ]),
+      setStatus: (id, status) =>
+        write<ApiResult>(`/exhibitions/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { id, status } }, [
+          'exhibitions',
+          'registrations',
+          'review',
+          'search',
+        ]),
       categories: () => read<unknown[]>('categories', '/exhibitions/categories'),
       // 字段定义按展会分，键里带上 id 才能区分不同展会；失效前缀是 `fields`。
       fields: (id) => read<unknown[]>('fields', `/exhibitions/${encodeURIComponent(id)}/fields`),
-      saveFields: (id, fields) => write<ApiResult>(`/exhibitions/${encodeURIComponent(id)}/fields`, { method: 'PUT', body: { id, fields } }, ['fields']),
+      saveFields: (id, fields) =>
+        write<ApiResult>(`/exhibitions/${encodeURIComponent(id)}/fields`, { method: 'PUT', body: { id, fields } }, [
+          'fields',
+        ]),
     },
     registrations: {
       list: () => read<Registration[]>('registrations', '/registrations'),
       // 缓存键前缀必须与写接口的 invalidates 前缀同一族：撤销报名失效的是
       // `registrations`，键写成 `registration` 会匹配不上，撤销后再取详情会拿到旧状态。
       get: (id) => read<RegistrationDetail>('registrations.record', `/registrations/${encodeURIComponent(id)}`),
-      submit: (payload) => write<ApiResult>('/registrations', { method: 'POST', body: payload }, ['registrations', 'review', 'exhibitions']),
-      cancel: (id) => write<ApiResult>(`/registrations/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['registrations', 'review', 'exhibitions']),
+      submit: (payload) =>
+        write<ApiResult>('/registrations', { method: 'POST', body: payload }, [
+          'registrations',
+          'review',
+          'exhibitions',
+        ]),
+      cancel: (id) =>
+        write<ApiResult>(`/registrations/${encodeURIComponent(id)}`, { method: 'DELETE' }, [
+          'registrations',
+          'review',
+          'exhibitions',
+        ]),
     },
     review: {
       // `/review` 一次返回记录与各状态数量（见 server/src/routes/review-hono.ts），不是数组。
       list: (query = {}) => read<ReviewList>('review', '/review', { query }),
       // 键 `review.record` 落在 `review` 前缀下，审核改状态后详情才会一起失效。
       get: (id) => read<Registration>('review.record', `/review/${encodeURIComponent(id)}`),
-      updateStatus: (id, status) => write<ApiResult>(`/review/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { id, status } }, ['review', 'registrations', 'users.public']),
+      updateStatus: (id, status) =>
+        write<ApiResult>(`/review/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { id, status } }, [
+          'review',
+          'registrations',
+          'users.public',
+        ]),
     },
     // 核销改的是报名状态，因此连带失效审核与用户公开资料。
-    checkIn: (code) => write<ApiResult>('/checkin', { method: 'POST', body: { code } }, ['review', 'registrations', 'users.public']),
+    checkIn: (code) =>
+      write<ApiResult>('/checkin', { method: 'POST', body: { code } }, ['review', 'registrations', 'users.public']),
     users: {
       list: (query = {}) => read<User[]>('users', '/users', { query }),
       // 同上：写接口失效的是 `users`，键也要落在同一个前缀下。
       get: (id) => read<User>('users.record', `/users/${encodeURIComponent(id)}`),
-      setStatus: (id, status) => write<ApiResult>(`/users/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { id, status } }, ['users']),
-      disableTwoFactor: (id) => write<ApiResult>(`/users/${encodeURIComponent(id)}/two-factor`, { method: 'PUT', body: { id, enabled: false } }, ['users']),
+      setStatus: (id, status) =>
+        write<ApiResult>(`/users/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { id, status } }, ['users']),
+      disableTwoFactor: (id) =>
+        write<ApiResult>(
+          `/users/${encodeURIComponent(id)}/two-factor`,
+          { method: 'PUT', body: { id, enabled: false } },
+          ['users'],
+        ),
       publicProfile: (query) => read<JsonObject>('users.public', '/users/public', { query }),
     },
     // 搜索一次返回展会与用户两组结果，返回体是对象而不是数组。
@@ -436,20 +536,33 @@ export function createApi(
       save: (payload) => write<ApiResult>('/settings', { method: 'PUT', body: payload }, ['settings', 'categories']),
       saveUiMode: (mode) => write<ApiResult>('/settings/ui-mode', { method: 'PUT', body: { mode } }, ['settings']),
       // 强调色是个人偏好：写调用者自己的 `users.ui_theme`，不动全局默认色板。
-      saveUiTheme: (themeIndex) => write<ApiResult>('/settings/ui-theme', { method: 'PUT', body: { themeIndex } }, ['settings']),
+      saveUiTheme: (themeIndex) =>
+        write<ApiResult>('/settings/ui-theme', { method: 'PUT', body: { themeIndex } }, ['settings']),
     },
     meetings: {
       settings: () => read<JsonObject>('meetings.settings', '/meetings/settings'),
-      saveSettings: (payload) => write<ApiResult>('/meetings/settings', { method: 'PUT', body: payload }, ['meetings', 'users']),
+      saveSettings: (payload) =>
+        write<ApiResult>('/meetings/settings', { method: 'PUT', body: payload }, ['meetings', 'users']),
       mine: () => read<JsonObject[]>('meetings.mine', '/meetings/mine'),
       get: (id) => read<JsonObject>('meetings.record', `/meetings/${encodeURIComponent(id)}`),
       inbox: (query = {}) => read<JsonObject>('meetings.inbox', '/meetings/inbox', { query }),
       form: (exhibitorId) => read<JsonObject>('meetings.form', `/meetings/apply/${encodeURIComponent(exhibitorId)}`),
-      submit: (payload) => write<ApiResult>('/meetings', { method: 'POST', body: payload }, ['meetings', 'exhibitions']),
-      cancel: (id) => write<ApiResult>(`/meetings/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }, ['meetings', 'exhibitions']),
-      setStatus: (id, status) => write<ApiResult>(`/meetings/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { status } }, ['meetings', 'exhibitions']),
-      setLock: (id, locked) => write<ApiResult>(`/meetings/${encodeURIComponent(id)}/lock`, { method: 'PUT', body: { locked } }, ['meetings']),
-      remove: (id) => write<ApiResult>(`/meetings/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['meetings', 'exhibitions']),
+      submit: (payload) =>
+        write<ApiResult>('/meetings', { method: 'POST', body: payload }, ['meetings', 'exhibitions']),
+      cancel: (id) =>
+        write<ApiResult>(`/meetings/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }, [
+          'meetings',
+          'exhibitions',
+        ]),
+      setStatus: (id, status) =>
+        write<ApiResult>(`/meetings/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { status } }, [
+          'meetings',
+          'exhibitions',
+        ]),
+      setLock: (id, locked) =>
+        write<ApiResult>(`/meetings/${encodeURIComponent(id)}/lock`, { method: 'PUT', body: { locked } }, ['meetings']),
+      remove: (id) =>
+        write<ApiResult>(`/meetings/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['meetings', 'exhibitions']),
     },
     clearCache: () => cache.clear(),
   };

@@ -8,7 +8,16 @@ import { ApiError, TransportError } from '@/services/http-client';
 
 const settingsApi = vi.hoisted(() => ({ saveUiMode: vi.fn(), saveUiTheme: vi.fn() }));
 const session = vi.hoisted(() => ({ lifetime: new AbortController() }));
-vi.mock('@/app/runtime', () => ({ api: { settings: settingsApi, session: { get signal() { return session.lifetime.signal; } } } }));
+vi.mock('@/app/runtime', () => ({
+  api: {
+    settings: settingsApi,
+    session: {
+      get signal() {
+        return session.lifetime.signal;
+      },
+    },
+  },
+}));
 vi.mock('@/services/device-services', () => ({ device: { sync: vi.fn().mockResolvedValue({}) } }));
 
 const colors = ['#c05621', '#2563eb', '#16a34a'];
@@ -34,7 +43,10 @@ function accentState() {
 function deferred() {
   let resolve!: (result: { ok: boolean; error?: string }) => void;
   let reject!: (reason: unknown) => void;
-  const promise = new Promise<{ ok: boolean; error?: string }>((yes, no) => { resolve = yes; reject = no; });
+  const promise = new Promise<{ ok: boolean; error?: string }>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
   return { promise, resolve, reject };
 }
 
@@ -59,8 +71,22 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe.each([
-  { name: '明暗模式', first: 'dark', second: 'light', save: (value: string | number) => saveUiMode(String(value)), api: settingsApi.saveUiMode, state: modeState },
-  { name: '强调色', first: 1, second: 2, save: (value: string | number) => saveAccentIndex(Number(value)), api: settingsApi.saveUiTheme, state: accentState },
+  {
+    name: '明暗模式',
+    first: 'dark',
+    second: 'light',
+    save: (value: string | number) => saveUiMode(String(value)),
+    api: settingsApi.saveUiMode,
+    state: modeState,
+  },
+  {
+    name: '强调色',
+    first: 1,
+    second: 2,
+    save: (value: string | number) => saveAccentIndex(Number(value)),
+    api: settingsApi.saveUiTheme,
+    state: accentState,
+  },
 ])('$name', ({ first, second, save, api, state }) => {
   it('立即应用选择，成功后保持 Pinia、页面与首帧缓存一致', async () => {
     const request = deferred();

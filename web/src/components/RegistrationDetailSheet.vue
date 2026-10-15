@@ -23,21 +23,24 @@ const COPY = {
   summary: t('registration.detail.summary'),
 };
 
-withDefaults(defineProps<{
-  status: string;
-  /** 与列表里同一个状态色调，抽屉和列表不会对同一条报名给出两种颜色。 */
-  statusTone?: StatusTone;
-  registrationTime?: string;
-  summary?: string;
-  answers: { label: string; value: string }[];
-  /** 终态说明：没有可调整的动作时由调用方传进来。 */
-  hint?: string;
-}>(), {
-  statusTone: 'muted',
-  registrationTime: '',
-  summary: '',
-  hint: '',
-});
+withDefaults(
+  defineProps<{
+    status: string;
+    /** 与列表里同一个状态色调，抽屉和列表不会对同一条报名给出两种颜色。 */
+    statusTone?: StatusTone;
+    registrationTime?: string;
+    summary?: string;
+    answers: { label: string; value: string }[];
+    /** 终态说明：没有可调整的动作时由调用方传进来。 */
+    hint?: string;
+  }>(),
+  {
+    statusTone: 'muted',
+    registrationTime: '',
+    summary: '',
+    hint: '',
+  },
+);
 </script>
 
 <template>

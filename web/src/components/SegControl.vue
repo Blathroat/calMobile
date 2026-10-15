@@ -13,7 +13,10 @@ export interface SegItem {
   disabled?: boolean;
 }
 
-const props = withDefaults(defineProps<{ items: SegItem[]; modelValue: string; label?: string; disabled?: boolean }>(), { label: '', disabled: false });
+const props = withDefaults(
+  defineProps<{ items: SegItem[]; modelValue: string; label?: string; disabled?: boolean }>(),
+  { label: '', disabled: false },
+);
 const emit = defineEmits<{ 'update:modelValue': [string] }>();
 
 const indicator = ref<HTMLElement>();
@@ -45,8 +48,14 @@ function select(value: string): void {
   emit('update:modelValue', value);
 }
 
-watch(() => props.modelValue, () => position(true));
-watch(() => props.items, () => requestAnimationFrame(() => position(false)));
+watch(
+  () => props.modelValue,
+  () => position(true),
+);
+watch(
+  () => props.items,
+  () => requestAnimationFrame(() => position(false)),
+);
 
 // 挂载后才知道真实宽度，因此在下一帧再定位。
 onMounted(() => requestAnimationFrame(() => position(false)));

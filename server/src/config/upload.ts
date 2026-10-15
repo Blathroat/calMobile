@@ -29,7 +29,9 @@ export interface UploadConfig {
  */
 export function resolveUploadConfig(env: EnvLike = process.env): UploadConfig {
   const configured = String(env.UPLOAD_DIR || '').trim();
-  const rawBase = String(env.MEDIA_BASE_URL || '').trim().replace(/\/+$/, '');
+  const rawBase = String(env.MEDIA_BASE_URL || '')
+    .trim()
+    .replace(/\/+$/, '');
   const max = Number(env.UPLOAD_MAX_MB);
   return {
     dir: configured ? path.resolve(configured) : DEFAULT_DIR,

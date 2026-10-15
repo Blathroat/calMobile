@@ -47,9 +47,9 @@ const passwordError = ref('');
 const confirmError = ref('');
 
 const secret = computed(() => passwordRule());
-const resendLabel = computed(() => (remaining.value > 0
-  ? `${remaining.value} ${t('auth.login.secondsUntilResend')}`
-  : t('auth.login.resendCode')));
+const resendLabel = computed(() =>
+  remaining.value > 0 ? `${remaining.value} ${t('auth.login.secondsUntilResend')}` : t('auth.login.resendCode'),
+);
 
 let timer: number | undefined;
 
@@ -227,7 +227,7 @@ function messageOf(reason: unknown): string {
         :placeholder="t('auth.register.emailPlaceholder')"
         @input="onEmailInput"
         @blur="emailError = validateEmail()"
-      >
+      />
       <p class="field-hint">{{ t('auth.forgot.spamHint') }}</p>
       <p v-if="emailError" class="field-error" role="alert">{{ emailError }}</p>
     </div>
@@ -242,7 +242,9 @@ function messageOf(reason: unknown): string {
   <form v-else class="form" novalidate @submit.prevent="submitReset">
     <div class="stack" data-gap="sm">
       <!-- 冒号放在文案资源里而不是尾随空格：Android 的 string 资源会裁掉首尾空白。 -->
-      <p class="muted">{{ t('auth.forgot.sentIfRegistered') }}<strong>{{ sentTo }}</strong></p>
+      <p class="muted">
+        {{ t('auth.forgot.sentIfRegistered') }}<strong>{{ sentTo }}</strong>
+      </p>
       <p class="field-hint">{{ t('auth.forgot.doNotForward') }}</p>
     </div>
 
@@ -260,12 +262,14 @@ function messageOf(reason: unknown): string {
         :placeholder="t('auth.register.sixDigits')"
         @input="codeError = ''"
         @blur="codeError = validateCode()"
-      >
+      />
       <p v-if="codeError" class="field-error" role="alert">{{ codeError }}</p>
     </div>
 
     <div class="field" :data-invalid="passwordError ? 'true' : undefined">
-      <label for="forgot-password">{{ t('auth.forgot.newPassword') }}（{{ secret.min }}–{{ secret.max }} 个字符）</label>
+      <label for="forgot-password"
+        >{{ t('auth.forgot.newPassword') }}（{{ secret.min }}–{{ secret.max }} 个字符）</label
+      >
       <input
         id="forgot-password"
         v-model="password"
@@ -276,7 +280,7 @@ function messageOf(reason: unknown): string {
         :placeholder="t('auth.register.setPassword')"
         @input="passwordError = ''"
         @blur="passwordError = validatePassword()"
-      >
+      />
       <p v-if="passwordError" class="field-error" role="alert">{{ passwordError }}</p>
     </div>
 
@@ -292,7 +296,7 @@ function messageOf(reason: unknown): string {
         :placeholder="t('auth.register.reenterPassword')"
         @input="confirmError = ''"
         @blur="confirmError = validateConfirm()"
-      >
+      />
       <p v-if="confirmError" class="field-error" role="alert">{{ confirmError }}</p>
     </div>
 
@@ -312,5 +316,7 @@ function messageOf(reason: unknown): string {
     <button class="cta ghost" type="button" @click="showStep(1)">{{ t('auth.forgot.changeEmail') }}</button>
   </form>
 
-  <button class="cta ghost" type="button" @click="router.replace('/login')">{{ t('auth.register.backToLogin') }}</button>
+  <button class="cta ghost" type="button" @click="router.replace('/login')">
+    {{ t('auth.register.backToLogin') }}
+  </button>
 </template>

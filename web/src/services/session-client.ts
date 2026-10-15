@@ -2,7 +2,10 @@
 import { nativeBridge } from './native-bridge';
 import { ApiError, type HttpClient } from './http-client';
 
-export interface SessionTokens { token: string; refreshToken?: string; }
+export interface SessionTokens {
+  token: string;
+  refreshToken?: string;
+}
 
 /**
  * 会话令牌。
@@ -20,12 +23,21 @@ export class SessionClient {
   private stableDeviceToken = '';
   private lifetime = new AbortController();
 
-  constructor(private readonly http: HttpClient, private readonly onExpired?: () => void) {}
+  constructor(
+    private readonly http: HttpClient,
+    private readonly onExpired?: () => void,
+  ) {}
 
-  get token(): string | undefined { return this.accessToken || undefined; }
-  get refreshTokenValue(): string | undefined { return this.refreshToken || undefined; }
+  get token(): string | undefined {
+    return this.accessToken || undefined;
+  }
+  get refreshTokenValue(): string | undefined {
+    return this.refreshToken || undefined;
+  }
   /** 身份变化时取消；普通令牌续期仍属于同一会话。 */
-  get signal(): AbortSignal { return this.lifetime.signal; }
+  get signal(): AbortSignal {
+    return this.lifetime.signal;
+  }
 
   /** 同一安装始终用同一个随机凭据，让后端识别已记住的设备。 */
   async deviceToken(): Promise<string> {
@@ -104,9 +116,14 @@ export class SessionClient {
     }
     const signal = this.signal;
     try {
-      const result = await this.http.request<SessionTokens>('/auth/refresh', {
-        method: 'POST', body: { refreshToken: this.refreshToken },
-      }, false);
+      const result = await this.http.request<SessionTokens>(
+        '/auth/refresh',
+        {
+          method: 'POST',
+          body: { refreshToken: this.refreshToken },
+        },
+        false,
+      );
       if (signal.aborted) return false;
       if (!result.token) {
         this.expire();
@@ -170,7 +187,7 @@ export class SessionClient {
   private readBrowserSession(): { refreshToken: string; username: string } {
     try {
       const raw = window.localStorage.getItem(BROWSER_SESSION_KEY);
-      const stored = raw ? JSON.parse(raw) as { refreshToken?: unknown; username?: unknown } : {};
+      const stored = raw ? (JSON.parse(raw) as { refreshToken?: unknown; username?: unknown }) : {};
       return {
         refreshToken: String(stored.refreshToken ?? ''),
         username: String(stored.username ?? ''),
@@ -180,10 +197,12 @@ export class SessionClient {
     }
   }
 
-  private writeBrowserSession(value: { refreshToken: string; username: string } | null = {
-    refreshToken: this.refreshToken,
-    username: this.username,
-  }): void {
+  private writeBrowserSession(
+    value: { refreshToken: string; username: string } | null = {
+      refreshToken: this.refreshToken,
+      username: this.username,
+    },
+  ): void {
     try {
       if (!value?.refreshToken) window.localStorage.removeItem(BROWSER_SESSION_KEY);
       else window.localStorage.setItem(BROWSER_SESSION_KEY, JSON.stringify(value));

@@ -57,10 +57,13 @@ function changeTab(value: string): void {
   void router.replace({ query: { ...route.query, tab: value } });
 }
 
-watch(() => route.fullPath, () => {
-  if (route.path !== '/exhibitor') return;
-  tab.value = tabFromQuery();
-});
+watch(
+  () => route.fullPath,
+  () => {
+    if (route.path !== '/exhibitor') return;
+    tab.value = tabFromQuery();
+  },
+);
 const query = useAsync<Exhibition[]>();
 /** 核销提示：与账号绑定的一次性提示，进过一次核销页就不再显示。 */
 const { visible: hintVisible, dismiss: dismissHint } = useHint('exhibitor-checkin');
@@ -71,10 +74,9 @@ const hasContent = computed(() => query.data.value !== undefined);
 const limited = computed(() => session.user.can?.limited === true);
 
 /** 卡片上的报名总数：列表里每行都带 registrationCount。 */
-const registrationTotal = computed(() => items.value.reduce(
-  (sum, item) => sum + (Number(item.registrationCount) || 0),
-  0,
-));
+const registrationTotal = computed(() =>
+  items.value.reduce((sum, item) => sum + (Number(item.registrationCount) || 0), 0),
+);
 
 function load(): void {
   void query.run(() => api.exhibitions.list());

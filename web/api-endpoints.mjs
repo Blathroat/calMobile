@@ -27,7 +27,10 @@ export const ENDPOINTS = {
   'security.identityEmailCode': () => ({ method: 'POST', path: '/profile/security/email-code' }),
   'security.verifyIdentity': () => ({ method: 'POST', path: '/profile/security/verify' }),
   'security.sessions': () => ({ method: 'GET', path: '/profile/sessions' }),
-  'security.revokeSession': (payload) => ({ method: 'DELETE', path: `/profile/sessions/${encodeURIComponent(payload.id)}` }),
+  'security.revokeSession': (payload) => ({
+    method: 'DELETE',
+    path: `/profile/sessions/${encodeURIComponent(payload.id)}`,
+  }),
   'security.revokeAllSessions': () => ({ method: 'POST', path: '/profile/sessions/revoke-all' }),
   'security.enable2fa': () => ({ method: 'POST', path: '/profile/2fa/enable' }),
   'security.verify2fa': () => ({ method: 'POST', path: '/profile/2fa/enable/verify' }),
@@ -42,13 +45,17 @@ export const ENDPOINTS = {
   'exhibitions.month': (payload) => ({ method: 'GET', path: '/exhibitions/month', query: payload }),
   'exhibitions.categories': () => ({ method: 'GET', path: '/exhibitions/categories' }),
   'exhibitions.get': (payload) => ({ method: 'GET', path: `/exhibitions/${encodeURIComponent(payload.id)}` }),
-  'exhibitions.save': (payload) => payload.id
-    ? { method: 'PUT', path: `/exhibitions/${encodeURIComponent(payload.id)}` }
-    : { method: 'POST', path: '/exhibitions' },
+  'exhibitions.save': (payload) =>
+    payload.id
+      ? { method: 'PUT', path: `/exhibitions/${encodeURIComponent(payload.id)}` }
+      : { method: 'POST', path: '/exhibitions' },
   'exhibitions.delete': (payload) => ({ method: 'DELETE', path: `/exhibitions/${encodeURIComponent(payload.id)}` }),
   'exhibitions.status': (payload) => ({ method: 'PUT', path: `/exhibitions/${encodeURIComponent(payload.id)}/status` }),
   'exhibitions.fields': (payload) => ({ method: 'GET', path: `/exhibitions/${encodeURIComponent(payload.id)}/fields` }),
-  'exhibitions.saveFields': (payload) => ({ method: 'PUT', path: `/exhibitions/${encodeURIComponent(payload.id)}/fields` }),
+  'exhibitions.saveFields': (payload) => ({
+    method: 'PUT',
+    path: `/exhibitions/${encodeURIComponent(payload.id)}/fields`,
+  }),
   'registrations.list': () => ({ method: 'GET', path: '/registrations' }),
   'registrations.get': (payload) => ({ method: 'GET', path: `/registrations/${encodeURIComponent(payload.id)}` }),
   'registrations.submit': () => ({ method: 'POST', path: '/registrations' }),
@@ -71,11 +78,30 @@ export const ENDPOINTS = {
   'meetings.saveSettings': () => ({ method: 'PUT', path: '/meetings/settings' }),
   'meetings.mine': () => ({ method: 'GET', path: '/meetings/mine' }),
   'meetings.get': (payload) => ({ method: 'GET', path: `/meetings/${encodeURIComponent(payload.id || 'sample-id')}` }),
-  'meetings.inbox': (payload) => ({ method: 'GET', path: '/meetings/inbox', query: payload.exhibitorId ? { exhibitorId: payload.exhibitorId } : undefined }),
-  'meetings.form': (payload) => ({ method: 'GET', path: `/meetings/apply/${encodeURIComponent(payload.exhibitorId || payload.id || 'sample-id')}` }),
+  'meetings.inbox': (payload) => ({
+    method: 'GET',
+    path: '/meetings/inbox',
+    query: payload.exhibitorId ? { exhibitorId: payload.exhibitorId } : undefined,
+  }),
+  'meetings.form': (payload) => ({
+    method: 'GET',
+    path: `/meetings/apply/${encodeURIComponent(payload.exhibitorId || payload.id || 'sample-id')}`,
+  }),
   'meetings.submit': () => ({ method: 'POST', path: '/meetings' }),
-  'meetings.cancel': (payload) => ({ method: 'POST', path: `/meetings/${encodeURIComponent(payload.id || 'sample-id')}/cancel` }),
-  'meetings.setStatus': (payload) => ({ method: 'PUT', path: `/meetings/${encodeURIComponent(payload.id || 'sample-id')}/status` }),
-  'meetings.setLock': (payload) => ({ method: 'PUT', path: `/meetings/${encodeURIComponent(payload.id || 'sample-id')}/lock` }),
-  'meetings.remove': (payload) => ({ method: 'DELETE', path: `/meetings/${encodeURIComponent(payload.id || 'sample-id')}` }),
+  'meetings.cancel': (payload) => ({
+    method: 'POST',
+    path: `/meetings/${encodeURIComponent(payload.id || 'sample-id')}/cancel`,
+  }),
+  'meetings.setStatus': (payload) => ({
+    method: 'PUT',
+    path: `/meetings/${encodeURIComponent(payload.id || 'sample-id')}/status`,
+  }),
+  'meetings.setLock': (payload) => ({
+    method: 'PUT',
+    path: `/meetings/${encodeURIComponent(payload.id || 'sample-id')}/lock`,
+  }),
+  'meetings.remove': (payload) => ({
+    method: 'DELETE',
+    path: `/meetings/${encodeURIComponent(payload.id || 'sample-id')}`,
+  }),
 };

@@ -44,7 +44,7 @@ let redirectTimer: number | undefined;
 
 const form = computed(() => query.data.value);
 const open = computed(() => form.value?.open === true);
-const fields = computed<FieldDef[]>(() => (Array.isArray(form.value?.fields) ? form.value.fields as FieldDef[] : []));
+const fields = computed<FieldDef[]>(() => (Array.isArray(form.value?.fields) ? (form.value.fields as FieldDef[]) : []));
 const textFillMax = computed(() => limit('textFill', 200));
 const answerMax = computed(() => limit('answer', 200));
 const closedMessage = computed(() => String(form.value?.message || t('meeting.apply.notAccepting')));
@@ -77,9 +77,7 @@ onBeforeUnmount(() => {
 });
 
 function splitOptions(options: unknown): string[] {
-  const list = Array.isArray(options)
-    ? options.map((item) => String(item).trim()).filter(Boolean)
-    : [];
+  const list = Array.isArray(options) ? options.map((item) => String(item).trim()).filter(Boolean) : [];
   return list.length > 0 ? list : [t('registration.form.unsetOption')];
 }
 
@@ -209,7 +207,11 @@ async function submit(): Promise<void> {
       />
 
       <template v-for="field in fields" :key="field.title">
-        <fieldset v-if="field.type === '单选'" class="choice-group" :data-invalid="fieldErrors[field.title] ? 'true' : undefined">
+        <fieldset
+          v-if="field.type === '单选'"
+          class="choice-group"
+          :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
+        >
           <legend>{{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span></legend>
           <RadioChoices
             :name="fieldId(field)"
@@ -219,23 +221,34 @@ async function submit(): Promise<void> {
           />
           <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
         </fieldset>
-        <fieldset v-else-if="field.type === '多选'" class="choice-group" :data-invalid="fieldErrors[field.title] ? 'true' : undefined">
+        <fieldset
+          v-else-if="field.type === '多选'"
+          class="choice-group"
+          :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
+        >
           <legend>{{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span></legend>
           <div class="check-row">
-            <label v-for="(option, index) in splitOptions(field.options)" :key="option" class="check-label" :for="`${fieldId(field)}-${index}`">
+            <label
+              v-for="(option, index) in splitOptions(field.options)"
+              :key="option"
+              class="check-label"
+              :for="`${fieldId(field)}-${index}`"
+            >
               <input
                 :id="`${fieldId(field)}-${index}`"
                 type="checkbox"
                 :checked="multiValue(field).includes(option)"
                 @change="onMultiChange(field, option, $event)"
-              >
+              />
               <span class="check-copy">{{ option }}</span>
             </label>
           </div>
           <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
         </fieldset>
         <div v-else class="field" :data-invalid="fieldErrors[field.title] ? 'true' : undefined">
-          <label :for="fieldId(field)">{{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span></label>
+          <label :for="fieldId(field)"
+            >{{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span></label
+          >
           <input
             :id="fieldId(field)"
             class="input"
@@ -243,7 +256,7 @@ async function submit(): Promise<void> {
             :maxlength="textFillMax"
             :value="textValue(field)"
             @input="onTextInput(field, $event)"
-          >
+          />
           <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
         </div>
       </template>
@@ -255,7 +268,13 @@ async function submit(): Promise<void> {
       <div class="stack" data-gap="sm">
         <StateBlock v-if="success" tone="success" :title="COPY.success" :description="COPY.pendingHint" />
         <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-        <button class="cta" type="submit" form="meeting-apply-form" :disabled="busy || success" :data-loading="busy ? 'true' : 'false'">
+        <button
+          class="cta"
+          type="submit"
+          form="meeting-apply-form"
+          :disabled="busy || success"
+          :data-loading="busy ? 'true' : 'false'"
+        >
           {{ COPY.submit }}
         </button>
       </div>

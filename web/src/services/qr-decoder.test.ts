@@ -8,14 +8,24 @@ class TestWorker {
   onmessageerror: (() => void) | null = null;
   postMessage = vi.fn();
   terminate = vi.fn();
-  constructor() { TestWorker.latest = this; }
-  reply(data: QrWorkerResponse): void { this.onmessage?.({ data } as MessageEvent<QrWorkerResponse>); }
+  constructor() {
+    TestWorker.latest = this;
+  }
+  reply(data: QrWorkerResponse): void {
+    this.onmessage?.({ data } as MessageEvent<QrWorkerResponse>);
+  }
 }
 
-const frame = () => ({ data: new Uint8ClampedArray(16), width: 2, height: 2, colorSpace: 'srgb' } as ImageData);
+const frame = () => ({ data: new Uint8ClampedArray(16), width: 2, height: 2, colorSpace: 'srgb' }) as ImageData;
 
-beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('Worker', TestWorker); });
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.stubGlobal('Worker', TestWorker);
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe('扫码 Worker 的页面生命周期', () => {
   it('等待 WASM 就绪才传帧，解码期间跳过新帧，结果只完成对应请求', async () => {
@@ -49,29 +59,40 @@ describe('扫码 Worker 的页面生命周期', () => {
     expect(worker.terminate).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['error', 'messageerror', 'init-timeout', 'dispose'] as const)('初始化时 %s 会结束等待并释放 Worker', async (failure) => {
-    const decoder = createQrDecoder();
-    const worker = TestWorker.latest;
-    const rejected = expect(decoder.ready).rejects.toMatchObject({ name: failure === 'dispose' ? 'AbortError' : 'Error' });
-    if (failure === 'error') worker.onerror?.(new ErrorEvent('error', { cancelable: true }));
-    if (failure === 'messageerror') worker.onmessageerror?.();
-    if (failure === 'init-timeout') await vi.advanceTimersByTimeAsync(15_000);
-    if (failure === 'dispose') decoder.dispose();
-    await rejected;
-    expect(worker.terminate).toHaveBeenCalledOnce();
-  });
+  it.each(['error', 'messageerror', 'init-timeout', 'dispose'] as const)(
+    '初始化时 %s 会结束等待并释放 Worker',
+    async (failure) => {
+      const decoder = createQrDecoder();
+      const worker = TestWorker.latest;
+      const rejected = expect(decoder.ready).rejects.toMatchObject({
+        name: failure === 'dispose' ? 'AbortError' : 'Error',
+      });
+      if (failure === 'error') worker.onerror?.(new ErrorEvent('error', { cancelable: true }));
+      if (failure === 'messageerror') worker.onmessageerror?.();
+      if (failure === 'init-timeout') await vi.advanceTimersByTimeAsync(15_000);
+      if (failure === 'dispose') decoder.dispose();
+      await rejected;
+      expect(worker.terminate).toHaveBeenCalledOnce();
+    },
+  );
 
-  it.each(['decode-error', 'decode-timeout', 'transfer-error'] as const)('识别时 %s 会明确失败，不永远保持忙碌', async (failure) => {
-    const decoder = createQrDecoder();
-    const worker = TestWorker.latest;
-    worker.reply({ type: 'ready' });
-    if (failure === 'transfer-error') worker.postMessage.mockImplementation(() => { throw new Error('transfer'); });
-    const decoding = decoder.decode(frame());
-    const rejected = expect(decoding).rejects.toBeInstanceOf(Error);
-    await decoder.ready;
-    if (failure === 'decode-error') worker.reply({ type: 'error' });
-    if (failure === 'decode-timeout') await vi.advanceTimersByTimeAsync(5_000);
-    await rejected;
-    expect(worker.terminate).toHaveBeenCalledOnce();
-  });
+  it.each(['decode-error', 'decode-timeout', 'transfer-error'] as const)(
+    '识别时 %s 会明确失败，不永远保持忙碌',
+    async (failure) => {
+      const decoder = createQrDecoder();
+      const worker = TestWorker.latest;
+      worker.reply({ type: 'ready' });
+      if (failure === 'transfer-error')
+        worker.postMessage.mockImplementation(() => {
+          throw new Error('transfer');
+        });
+      const decoding = decoder.decode(frame());
+      const rejected = expect(decoding).rejects.toBeInstanceOf(Error);
+      await decoder.ready;
+      if (failure === 'decode-error') worker.reply({ type: 'error' });
+      if (failure === 'decode-timeout') await vi.advanceTimersByTimeAsync(5_000);
+      await rejected;
+      expect(worker.terminate).toHaveBeenCalledOnce();
+    },
+  );
 });

@@ -37,14 +37,21 @@ export async function loadHtmlConverter(): Promise<void> {
     codeBlockStyle: 'fenced',
     emDelimiter: '*',
     // Turndown 的空白规则优先于 keep；没有字幕的视频也必须保留。
-    blankReplacement: (_content, node) => node.nodeName === 'VIDEO'
-      ? `\n\n${node.outerHTML}\n\n` : ((node as HTMLElement & { isBlock: boolean }).isBlock ? '\n\n' : ''),
+    blankReplacement: (_content, node) =>
+      node.nodeName === 'VIDEO'
+        ? `\n\n${node.outerHTML}\n\n`
+        : (node as HTMLElement & { isBlock: boolean }).isBlock
+          ? '\n\n'
+          : '',
   });
   converter.keep(['video', 'table', 'u', 's', 'del', 'sub', 'sup']);
 }
 
 export function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] || character));
+  return value.replace(
+    /[&<>"']/g,
+    (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || character,
+  );
 }
 
 export function sanitizeUrl(value: string): string {
@@ -60,9 +67,43 @@ export function markdownToHtml(source: string): string {
 // ── HTML 清洗 ─────────────────────────────────────────────────────
 
 const ALLOWED_TAGS = new Set([
-  'p', 'br', 'div', 'span', 'strong', 'b', 'em', 'i', 'u', 's', 'del', 'sub', 'sup', 'pre', 'code',
-  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote',
-  'a', 'img', 'video', 'hr', 'figure', 'figcaption', 'table', 'thead', 'tbody', 'tr', 'td', 'th',
+  'p',
+  'br',
+  'div',
+  'span',
+  'strong',
+  'b',
+  'em',
+  'i',
+  'u',
+  's',
+  'del',
+  'sub',
+  'sup',
+  'pre',
+  'code',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'ul',
+  'ol',
+  'li',
+  'blockquote',
+  'a',
+  'img',
+  'video',
+  'hr',
+  'figure',
+  'figcaption',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'td',
+  'th',
 ]);
 
 const ALLOWED_ATTRS = new Set(['href', 'src', 'alt', 'title', 'width', 'height', 'colspan', 'rowspan', 'start']);

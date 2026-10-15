@@ -55,7 +55,9 @@ const joinDescription = computed(() => {
   }
   return markdownToHtml(raw);
 });
-const fields = computed<FieldDef[]>(() => (Array.isArray(query.data.value?.fields) ? query.data.value?.fields as FieldDef[] : []));
+const fields = computed<FieldDef[]>(() =>
+  Array.isArray(query.data.value?.fields) ? (query.data.value?.fields as FieldDef[]) : [],
+);
 const exhibitionId = computed(() => String(route.params.id ?? ''));
 const registrationId = computed(() => String(route.query.registrationId ?? ''));
 
@@ -133,7 +135,9 @@ function seed(list: unknown[], existing: Registration | null): void {
       const value = typeof stored === 'string' ? stored : '';
       answers[title] = existing
         ? (options.find((option) => option === value) ?? '')
-        : (field.required === true ? (options[0] ?? '') : '');
+        : field.required === true
+          ? (options[0] ?? '')
+          : '';
       continue;
     }
     if (field.type === '多选') {
@@ -149,7 +153,10 @@ function seed(list: unknown[], existing: Registration | null): void {
 function splitOptions(options: unknown): string[] {
   const list = Array.isArray(options)
     ? options.map((item) => String(item).trim()).filter(Boolean)
-    : String(options ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+    : String(options ?? '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
   return list.length > 0 ? list : [t('registration.form.unsetOption')];
 }
 
@@ -305,7 +312,9 @@ async function submit(): Promise<void> {
       <!-- 展会摘要：提交前确认名称与报名方式 -->
       <div class="card" data-tone="fill">
         <strong>{{ exhibition.title }}</strong>
-        <span class="row-meta">{{ formatDateWithWeekday(exhibition.date) }} {{ exhibition.time }} · {{ exhibition.venue }}</span>
+        <span class="row-meta"
+          >{{ formatDateWithWeekday(exhibition.date) }} {{ exhibition.time }} · {{ exhibition.venue }}</span
+        >
         <StatusTag :text="String(exhibition.modeLabel || exhibition.status || '')" />
       </div>
 
@@ -319,9 +328,7 @@ async function submit(): Promise<void> {
             class="choice-group"
             :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
           >
-            <legend>
-              {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
-            </legend>
+            <legend>{{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span></legend>
             <RadioChoices
               :name="fieldId(field)"
               :options="splitOptions(field.options)"
@@ -337,9 +344,7 @@ async function submit(): Promise<void> {
             class="choice-group"
             :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
           >
-            <legend>
-              {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
-            </legend>
+            <legend>{{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span></legend>
             <div class="check-row">
               <label
                 v-for="(option, index) in splitOptions(field.options)"
@@ -353,7 +358,7 @@ async function submit(): Promise<void> {
                   :value="option"
                   :checked="multiValue(field).includes(option)"
                   @change="onMultiChange(field, option, $event)"
-                >
+                />
                 <span class="check-copy">{{ option }}</span>
               </label>
             </div>
@@ -373,7 +378,7 @@ async function submit(): Promise<void> {
               :maxlength="textFillMax"
               :value="textValue(field)"
               @input="onTextInput(field, $event)"
-            >
+            />
             <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
           </div>
         </template>

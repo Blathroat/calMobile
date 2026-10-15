@@ -190,13 +190,7 @@ async function save(): Promise<void> {
     </div>
     <div class="field">
       <label for="meeting-notice">{{ COPY.noticeLabel }}</label>
-      <textarea
-        id="meeting-notice"
-        v-model="notice"
-        class="textarea"
-        maxlength="400"
-        :disabled="locked"
-      />
+      <textarea id="meeting-notice" v-model="notice" class="textarea" maxlength="400" :disabled="locked" />
       <p class="field-hint">{{ COPY.noticeHint }}</p>
     </div>
     <CollectFieldsCard

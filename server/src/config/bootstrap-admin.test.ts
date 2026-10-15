@@ -65,10 +65,14 @@ test('没有管理员时创建，已有管理员时不改密码', async () => {
 });
 
 test('用户名或邮箱被别人占用时不提权', async () => {
-  const takenName = memoryDb([{ id: 'usr-1', username: 'opsadmin', role: 'user', email: 'other@mail.example.com', password_hash: 'x' }]);
+  const takenName = memoryDb([
+    { id: 'usr-1', username: 'opsadmin', role: 'user', email: 'other@mail.example.com', password_hash: 'x' },
+  ]);
   await assert.rejects(() => ensureProductionAdmin(takenName, admin), /不会把这个账号提权/);
 
-  const takenEmail = memoryDb([{ id: 'usr-2', username: 'someone', role: 'user', email: 'ops@mail.example.com', password_hash: 'x' }]);
+  const takenEmail = memoryDb([
+    { id: 'usr-2', username: 'someone', role: 'user', email: 'ops@mail.example.com', password_hash: 'x' },
+  ]);
   await assert.rejects(() => ensureProductionAdmin(takenEmail, admin), /ADMIN_EMAIL 已被其他账号使用/);
 });
 

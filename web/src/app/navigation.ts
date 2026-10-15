@@ -22,7 +22,9 @@ export interface NavigationScope {
 
 /** 路径深度：`/detail/3` 比 `/home` 深一层，用来判断是进入还是返回。 */
 function depth(path: string): number {
-  return String(path || '').split('/').filter(Boolean).length;
+  return String(path || '')
+    .split('/')
+    .filter(Boolean).length;
 }
 
 class NavigationCoordinator {
@@ -88,9 +90,8 @@ class NavigationCoordinator {
       const next = TAB_ORDER.indexOf(toTab);
       const previous = TAB_ORDER.indexOf(fromTab);
       // 顺序表里认不出的 id（新增了标签页却忘了登记）就不动，避免算出反方向。
-      this.tabMove.value = next < 0 || previous < 0 || next === previous
-        ? 'none'
-        : (next > previous ? 'forward' : 'back');
+      this.tabMove.value =
+        next < 0 || previous < 0 || next === previous ? 'none' : next > previous ? 'forward' : 'back';
       return;
     }
     this.tabMove.value = 'none';

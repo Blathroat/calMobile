@@ -7,12 +7,15 @@ import { useRouter } from 'vue-router';
 import AppIcon from './AppIcon.vue';
 import { t } from '@/i18n';
 
-const props = withDefaults(defineProps<{
-  title?: string;
-  showBack?: boolean;
-  /** 没有历史可退时（深链进入）回落到这个路由 */
-  backTo?: string;
-}>(), { title: '', showBack: false, backTo: '/home' });
+const props = withDefaults(
+  defineProps<{
+    title?: string;
+    showBack?: boolean;
+    /** 没有历史可退时（深链进入）回落到这个路由 */
+    backTo?: string;
+  }>(),
+  { title: '', showBack: false, backTo: '/home' },
+);
 
 const router = useRouter();
 

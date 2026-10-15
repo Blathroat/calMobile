@@ -20,7 +20,10 @@
  */
 
 /** 缓存条目：值与写入时间（用来算 TTL 是否新鲜）。 */
-interface CacheEntry<T> { value: T; at: number; }
+interface CacheEntry<T> {
+  value: T;
+  at: number;
+}
 
 /** 一个进程内、按 TTL 生效的内存缓存。只缓存读接口结果，写接口负责失效。 */
 export class QueryCache {
@@ -68,14 +71,16 @@ export class QueryCache {
     // 记下发起时的代数与这一键的作废次数：期间 clear 过或 invalidate 过，结果都不能写回。
     const generation = this.generation;
     const epoch = this.epochOf(key);
-    const task = read().then((value) => {
-      const valid = generation === this.generation && epoch === this.epochOf(key);
-      if (valid) this.values.set(key, { value, at: Date.now() });
-      return value;
-    }).finally(() => {
-      // 只删自己这一条：期间被 clear 掉或已换成新任务时，别误删别人的在途记录。
-      if (this.inflight.get(key) === task) this.inflight.delete(key);
-    });
+    const task = read()
+      .then((value) => {
+        const valid = generation === this.generation && epoch === this.epochOf(key);
+        if (valid) this.values.set(key, { value, at: Date.now() });
+        return value;
+      })
+      .finally(() => {
+        // 只删自己这一条：期间被 clear 掉或已换成新任务时，别误删别人的在途记录。
+        if (this.inflight.get(key) === task) this.inflight.delete(key);
+      });
     // 先登记再返回：调用方拿到 Promise 后可能立刻再发一次同样的读。
     this.inflight.set(key, task);
     return task;
@@ -89,8 +94,8 @@ export class QueryCache {
   invalidate(prefix?: string): void {
     const matches = (key: string) => !prefix || key.startsWith(prefix);
     // 匹配的是拼好的完整键，所以前缀必须落在键的起始处才对得上。
-    for (const key of [...this.values.keys()]) if (matches(key)) this.values.delete(key);
-    for (const key of [...this.inflight.keys()]) {
+    for (const key of this.values.keys()) if (matches(key)) this.values.delete(key);
+    for (const key of this.inflight.keys()) {
       if (!matches(key)) continue;
       // 从在途表里摘掉：下一次读要重新发起，而不是搭上这趟「写操作之前」的车。
       this.inflight.delete(key);

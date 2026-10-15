@@ -7,13 +7,16 @@
  */
 import AppIcon from './AppIcon.vue';
 
-const props = withDefaults(defineProps<{
-  tone?: 'neutral' | 'error' | 'success';
-  title?: string;
-  description?: string;
-  icon?: string;
-  actionLabel?: string;
-}>(), { tone: 'neutral', title: '', description: '', icon: '', actionLabel: '' });
+const props = withDefaults(
+  defineProps<{
+    tone?: 'neutral' | 'error' | 'success';
+    title?: string;
+    description?: string;
+    icon?: string;
+    actionLabel?: string;
+  }>(),
+  { tone: 'neutral', title: '', description: '', icon: '', actionLabel: '' },
+);
 
 const emit = defineEmits<{ action: [] }>();
 

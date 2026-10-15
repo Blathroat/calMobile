@@ -40,12 +40,14 @@ const session = useSessionStore();
 const query = useAsync<JsonObject>();
 
 const data = computed(() => query.data.value);
-const records = computed<JsonObject[]>(() => (Array.isArray(data.value?.records) ? data.value.records as JsonObject[] : []));
+const records = computed<JsonObject[]>(() =>
+  Array.isArray(data.value?.records) ? (data.value.records as JsonObject[]) : [],
+);
 const hasRecords = computed(() => data.value !== undefined);
 const pendingCount = computed(() => records.value.filter((record) => String(record.status || '') === '待审核').length);
-const exhibitorId = computed(() => String(
-  data.value?.exhibitorId || props.exhibitorId || (props.mode === 'exhibitor' ? session.user.id : '') || '',
-));
+const exhibitorId = computed(() =>
+  String(data.value?.exhibitorId || props.exhibitorId || (props.mode === 'exhibitor' ? session.user.id : '') || ''),
+);
 const link = computed(() => meetingLink(bootstrap.publicBaseUrl, exhibitorId.value));
 
 const COPY = {
@@ -75,9 +77,12 @@ function load(): void {
 }
 
 onMounted(load);
-watch(() => props.exhibitorId, () => {
-  if (props.mode === 'admin') load();
-});
+watch(
+  () => props.exhibitorId,
+  () => {
+    if (props.mode === 'admin') load();
+  },
+);
 
 function summary(record: JsonObject): string {
   return truncate(record.answers, 34) || t('registration.list.noCollectFields');
@@ -120,8 +125,20 @@ function askStatus(record: JsonObject): void {
     message: `为「${name}」的私人会议选择通过或拒绝。`,
     layout: 'stack',
     actions: [
-      { label: COPY.approve, onClick: (close) => { close(); void changeStatus(record, '已通过'); } },
-      { label: COPY.reject, onClick: (close) => { close(); void changeStatus(record, '已拒绝'); } },
+      {
+        label: COPY.approve,
+        onClick: (close) => {
+          close();
+          void changeStatus(record, '已通过');
+        },
+      },
+      {
+        label: COPY.reject,
+        onClick: (close) => {
+          close();
+          void changeStatus(record, '已拒绝');
+        },
+      },
     ],
   });
 }
@@ -230,12 +247,7 @@ async function copyLink(): Promise<void> {
     <span class="section-label">{{ COPY.section }}</span>
     <span v-if="hasRecords" class="pill">{{ `待审核 ${pendingCount} · 共 ${records.length} 条` }}</span>
   </div>
-  <button
-    v-if="mode === 'exhibitor'"
-    class="cta ghost"
-    type="button"
-    @click="router.push('/meeting-settings')"
-  >
+  <button v-if="mode === 'exhibitor'" class="cta ghost" type="button" @click="router.push('/meeting-settings')">
     {{ COPY.settings }}
   </button>
 
@@ -287,7 +299,9 @@ async function copyLink(): Promise<void> {
         </div>
 
         <div v-if="reviewed(record)" class="action-row">
-          <button class="cta ghost" data-size="small" type="button" @click="openDetail(record)">{{ COPY.detail }}</button>
+          <button class="cta ghost" data-size="small" type="button" @click="openDetail(record)">
+            {{ COPY.detail }}
+          </button>
         </div>
         <template v-else>
           <div class="action-row">

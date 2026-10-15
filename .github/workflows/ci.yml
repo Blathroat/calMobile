@@ -47,8 +47,12 @@ jobs:
       - run: pnpm --dir server install --frozen-lockfile
 
       - run: pnpm --dir web typecheck
+      - run: pnpm --dir web lint
+      - run: pnpm --dir web fmt:check
       - run: pnpm --dir web test
       - run: pnpm --dir web build
+      - run: pnpm --dir server lint
+      - run: pnpm --dir server fmt:check
       - run: pnpm --dir server typecheck
       - run: pnpm --dir server test
       - run: pnpm --dir server test:contract

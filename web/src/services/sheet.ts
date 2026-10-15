@@ -38,9 +38,11 @@ const state = reactive<{ current: SheetState | null }>({ current: null });
 const LEAVE_MS = 220;
 
 function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
 }
 
 /** 打开面板：`message` 是一句话说明，`component` 用于带输入框的富内容。 */
@@ -73,9 +75,12 @@ export function closeSheet(): void {
   if (!current || current.closing) return;
   current.closing = true;
   current.onClose?.();
-  window.setTimeout(() => {
-    if (state.current === current) state.current = null;
-  }, prefersReducedMotion() ? 0 : LEAVE_MS);
+  window.setTimeout(
+    () => {
+      if (state.current === current) state.current = null;
+    },
+    prefersReducedMotion() ? 0 : LEAVE_MS,
+  );
 }
 
 /** 二次确认：用于删除、撤销这类不可逆操作。 */

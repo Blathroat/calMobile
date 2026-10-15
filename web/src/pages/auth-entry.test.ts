@@ -16,9 +16,12 @@ async function loginScreen(options: { bootstrapFailures?: number; twoFactor?: bo
   let verified = false;
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
     const loggedIn = (init?.headers as Record<string, string>)?.Authorization === 'Bearer b';
-    if (url.endsWith('/auth/login')) return Response.json(options.twoFactor
-      ? { ok: true, twoFactorRequired: true, ticket: 'one-use-ticket', methods: { email: true } }
-      : { ok: true, token: 'b', user: { id: 'b', username: 'b' } });
+    if (url.endsWith('/auth/login'))
+      return Response.json(
+        options.twoFactor
+          ? { ok: true, twoFactorRequired: true, ticket: 'one-use-ticket', methods: { email: true } }
+          : { ok: true, token: 'b', user: { id: 'b', username: 'b' } },
+      );
     if (url.endsWith('/auth/register')) return Response.json({ ok: true, email: 'b@example.com', resendAfterSec: 60 });
     if (url.endsWith('/auth/login/verify') || url.endsWith('/auth/register/verify')) {
       if (verified) return Response.json({ error: '验证码已使用' }, { status: 400 });
@@ -29,7 +32,8 @@ async function loginScreen(options: { bootstrapFailures?: number; twoFactor?: bo
     if (loggedIn && bootstrapFailures-- > 0) return Response.json({ error: '暂不可用' }, { status: 503 });
     return Response.json({
       user: loggedIn ? { id: 'b', username: 'b', role: 'user' } : { guest: true },
-      ui: { mode: 'light' }, theme: { colors: ['#112233', '#445566'], index: loggedIn ? 1 : 0 },
+      ui: { mode: 'light' },
+      theme: { colors: ['#112233', '#445566'], index: loggedIn ? 1 : 0 },
     });
   });
   vi.stubGlobal('fetch', fetcher);
@@ -38,17 +42,22 @@ async function loginScreen(options: { bootstrapFailures?: number; twoFactor?: bo
   const runtime = await import('@/app/runtime');
   await runtime.bootApp();
   runtime.applyRuntimeBootstrap({ user: { id: 'a' }, ui: { mode: 'dark' }, theme: { index: 0 } });
-  const router = createRouter({ history: createMemoryHistory(), routes: [
-    { path: '/login', component: { template: '<div />' } },
-    { path: '/home', component: { template: '<div />' } },
-    { path: '/detail/one', component: { template: '<div />' } },
-    { path: '/register', component: { template: '<div />' } },
-    { path: '/forgot-password', component: { template: '<div />' } },
-  ] });
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/login', component: { template: '<div />' } },
+      { path: '/home', component: { template: '<div />' } },
+      { path: '/detail/one', component: { template: '<div />' } },
+      { path: '/register', component: { template: '<div />' } },
+      { path: '/forgot-password', component: { template: '<div />' } },
+    ],
+  });
   await router.push(options.register ? '/register' : '/login?redirect=/detail/one');
   const container = document.createElement('div');
   document.body.append(container);
-  app = createApp(options.register ? (await import('./RegisterPage.vue')).default : (await import('./LoginPage.vue')).default);
+  app = createApp(
+    options.register ? (await import('./RegisterPage.vue')).default : (await import('./LoginPage.vue')).default,
+  );
   app.use(pinia).use(router).mount(container);
   return { container, router, runtime, fetcher };
 }
@@ -118,7 +127,10 @@ describe('入口身份初始化', () => {
     expect(router.currentRoute.value.path).toBe('/login');
   }, 20_000);
 
-  describe.each([{ name: '两步验证', register: false }, { name: '注册验证', register: true }])('$name', ({ register }) => {
+  describe.each([
+    { name: '两步验证', register: false },
+    { name: '注册验证', register: true },
+  ])('$name', ({ register }) => {
     it('凭据验证后落新账号偏好，再进入目标页面', async () => {
       const { container, router, runtime } = await loginScreen({ register, twoFactor: !register });
       await enterVerification(container, register);
@@ -132,7 +144,11 @@ describe('入口身份初始化', () => {
     }, 20_000);
 
     it('启动数据失败后可重试，不重复提交已消费的一次性凭据', async () => {
-      const { container, router, runtime, fetcher } = await loginScreen({ register, twoFactor: !register, bootstrapFailures: 1 });
+      const { container, router, runtime, fetcher } = await loginScreen({
+        register,
+        twoFactor: !register,
+        bootstrapFailures: 1,
+      });
       await enterVerification(container, register);
       fill(container, register ? '#register-code' : '#login-code', '123456');
       await submitForm(container);

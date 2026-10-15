@@ -25,9 +25,7 @@ export interface InspectedAvatar {
   height: number;
 }
 
-export type AvatarInspect =
-  | { ok: true; image: InspectedAvatar }
-  | { ok: false; reason: 'unknown' | 'too-large' };
+export type AvatarInspect = { ok: true; image: InspectedAvatar } | { ok: false; reason: 'unknown' | 'too-large' };
 
 export interface CappedRead {
   ok: boolean;
@@ -113,7 +111,11 @@ export async function readCappedBytes(
 }
 
 /** 写入一张新头像，返回对外路径用的文件名（不含目录）。 */
-export async function writeAvatarFile(bytes: Buffer, extension: AvatarExtension, config: UploadConfig): Promise<string> {
+export async function writeAvatarFile(
+  bytes: Buffer,
+  extension: AvatarExtension,
+  config: UploadConfig,
+): Promise<string> {
   const fileName = `${randomBytes(16).toString('hex')}.${extension}`;
   const directory = path.join(config.dir, 'avatars');
   await mkdir(directory, { recursive: true });

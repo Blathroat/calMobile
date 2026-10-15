@@ -22,7 +22,8 @@ const VIDEO_MIME: Record<string, string> = {
 export function contentContentType(extension: string): string {
   if (extension === 'png') return 'image/png';
   if (extension === 'webp') return 'image/webp';
-  if (extension === 'mp4' || extension === 'mov' || extension === 'webm') return VIDEO_MIME[extension] ?? 'application/octet-stream';
+  if (extension === 'mp4' || extension === 'mov' || extension === 'webm')
+    return VIDEO_MIME[extension] ?? 'application/octet-stream';
   return 'image/jpeg';
 }
 
@@ -53,11 +54,8 @@ export function inspectContent(bytes: Buffer, kind: ContentKind, formats: readon
   }
   const sniffed = sniffVideo(bytes);
   if (!sniffed) return { ok: false, reason: 'unknown' };
-  const extension = sniffed === 'webm'
-    ? 'webm'
-    : formats.map((item) => item.toLowerCase()).includes('mp4')
-      ? 'mp4'
-      : 'mov';
+  const extension =
+    sniffed === 'webm' ? 'webm' : formats.map((item) => item.toLowerCase()).includes('mp4') ? 'mp4' : 'mov';
   if (!formats.map((item) => item.toLowerCase()).includes(extension)) return { ok: false, reason: 'format' };
   return { ok: true, extension };
 }

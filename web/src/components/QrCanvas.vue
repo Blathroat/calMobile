@@ -23,7 +23,7 @@ async function render(): Promise<void> {
   const node = canvas.value;
   if (!node || !props.text) return;
   try {
-    if (!await drawQr(node, props.text, props.quiet)) emit('error', t('checkin.qrGenerateFailed'));
+    if (!(await drawQr(node, props.text, props.quiet))) emit('error', t('checkin.qrGenerateFailed'));
   } catch (reason) {
     emit('error', reason instanceof Error ? reason.message : String(reason));
   }

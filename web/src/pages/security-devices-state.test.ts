@@ -14,10 +14,18 @@ let app: App | undefined;
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(api.security.sessions).mockResolvedValue({ sessions: [{
-    id: 'device-1', deviceName: '测试设备', current: true, activeSessions: 1,
-    firstSeen: '2024-01-02T03:04:00.000Z', lastActive: '2024-01-02T03:04:00.000Z',
-  }] });
+  vi.mocked(api.security.sessions).mockResolvedValue({
+    sessions: [
+      {
+        id: 'device-1',
+        deviceName: '测试设备',
+        current: true,
+        activeSessions: 1,
+        firstSeen: '2024-01-02T03:04:00.000Z',
+        lastActive: '2024-01-02T03:04:00.000Z',
+      },
+    ],
+  });
   document.body.innerHTML = '<div id="security-devices-test"></div>';
 });
 

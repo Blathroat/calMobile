@@ -304,7 +304,10 @@ async function requestNotification(): Promise<void> {
     notify.granted = granted;
     // 拿到结果后同步到设备能力，按钮的显隐以它为准（见 notificationsGranted）。
     capabilities.apply({ notifications: granted });
-    toast(granted ? t('settings.notify.permissionGranted') : t('settings.notify.permissionDenied'), granted ? 'success' : 'error');
+    toast(
+      granted ? t('settings.notify.permissionGranted') : t('settings.notify.permissionDenied'),
+      granted ? 'success' : 'error',
+    );
   } catch (reason) {
     toast(errorText(reason), 'error');
   }
@@ -463,7 +466,7 @@ async function changeMode(value: string): Promise<void> {
               :checked="notify.exhibitionReminder"
               :disabled="!notifyReady || savingPreference === 'exhibitionReminder'"
               @change="savePreferences({ exhibitionReminder: ($event.target as HTMLInputElement).checked })"
-            >
+            />
             <span />
           </label>
         </div>
@@ -478,7 +481,7 @@ async function changeMode(value: string): Promise<void> {
               :checked="notify.registrationUpdates"
               :disabled="!notifyReady || savingPreference === 'registrationUpdates'"
               @change="savePreferences({ registrationUpdates: ($event.target as HTMLInputElement).checked })"
-            >
+            />
             <span />
           </label>
         </div>
@@ -533,7 +536,7 @@ async function changeMode(value: string): Promise<void> {
               :checked="profile.showRegistrations === true"
               :disabled="limited || !profileReady || privacyBusy"
               @change="savePrivacy(($event.target as HTMLInputElement).checked)"
-            >
+            />
             <span />
           </label>
         </div>

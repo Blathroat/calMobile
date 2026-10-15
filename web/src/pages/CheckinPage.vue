@@ -92,7 +92,11 @@ onMounted(() => {
   if (limited.value) return;
   try {
     decoder = createQrDecoder();
-    void decoder.ready.then(() => { if (alive) decoderReady.value = true; }).catch(decoderUnavailable);
+    void decoder.ready
+      .then(() => {
+        if (alive) decoderReady.value = true;
+      })
+      .catch(decoderUnavailable);
   } catch {
     decoderUnavailable();
   }
@@ -166,9 +170,10 @@ async function toggleScan(): Promise<void> {
     decoderUnavailable();
     return;
   }
-  const supported = typeof navigator !== 'undefined'
-    && Boolean(navigator.mediaDevices)
-    && typeof navigator.mediaDevices.getUserMedia === 'function';
+  const supported =
+    typeof navigator !== 'undefined' &&
+    Boolean(navigator.mediaDevices) &&
+    typeof navigator.mediaDevices.getUserMedia === 'function';
   if (!supported) {
     showNotice(t('checkin.scan.unsupported'), 'error');
     return;
@@ -212,7 +217,11 @@ async function startScan(): Promise<void> {
   } catch (reason) {
     const message = reason instanceof Error ? reason.message : '';
     if (!alive || epoch !== scanEpoch) return;
-    setStage('error', t('checkin.scan.openFailed'), `${message || t('checkin.scan.previewFailed')}。可以改用“手动输入报名码”。`);
+    setStage(
+      'error',
+      t('checkin.scan.openFailed'),
+      `${message || t('checkin.scan.previewFailed')}。可以改用“手动输入报名码”。`,
+    );
     clearStatus();
     return;
   }
@@ -286,16 +295,22 @@ async function decodeFrame(): Promise<void> {
   const height = node.videoHeight;
   if (!width || !height) return;
 
-  const cropWidth = Math.min(width, Math.round(height * 4 / 3));
-  const cropHeight = Math.min(height, Math.round(cropWidth * 3 / 4));
+  const cropWidth = Math.min(width, Math.round((height * 4) / 3));
+  const cropHeight = Math.min(height, Math.round((cropWidth * 3) / 4));
   const context = target.getContext('2d', { willReadFrequently: true });
   if (!context) return;
   target.width = DECODE_WIDTH;
-  target.height = Math.round(DECODE_WIDTH * cropHeight / cropWidth);
+  target.height = Math.round((DECODE_WIDTH * cropHeight) / cropWidth);
   context.drawImage(
     node,
-    (width - cropWidth) / 2, (height - cropHeight) / 2, cropWidth, cropHeight,
-    0, 0, target.width, target.height,
+    (width - cropWidth) / 2,
+    (height - cropHeight) / 2,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    target.width,
+    target.height,
   );
   let image: ImageData;
   try {
@@ -387,7 +402,13 @@ function openManual(): void {
     size: 'full',
     actions: [
       { label: t('common.cancel'), onClick: (close) => close() },
-      { label: t('checkin.manual.checkIn'), variant: 'primary', onClick: (close) => { void submitManual(close); } },
+      {
+        label: t('checkin.manual.checkIn'),
+        variant: 'primary',
+        onClick: (close) => {
+          void submitManual(close);
+        },
+      },
     ],
   });
 }
@@ -441,12 +462,7 @@ async function submitManual(close: () => void): Promise<void> {
     </div>
 
     <SkeletonBlock v-if="statusLoading" :rows="1" />
-    <div
-      v-else-if="statusText"
-      class="notice"
-      :data-tone="statusTone === 'error' ? 'error' : undefined"
-      role="status"
-    >
+    <div v-else-if="statusText" class="notice" :data-tone="statusTone === 'error' ? 'error' : undefined" role="status">
       <span>{{ statusText }}</span>
     </div>
     <StateBlock
