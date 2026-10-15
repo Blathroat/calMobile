@@ -1,6 +1,8 @@
 # pnpm 10+ 用 allowBuilds 批准安装脚本；onlyBuiltDependencies 限制「允许跑脚本」的包。
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - dotenv@18.0.8
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - esbuild

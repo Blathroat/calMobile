@@ -2,7 +2,6 @@
   "name": "calmobile-web",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.34.6",
   "engines": {
     "node": "^24.15.0 || >=26.0.0"
   },
@@ -14,24 +13,24 @@
     "build:join": "vite build --config vite.join.config.ts"
   },
   "dependencies": {
-    "dompurify": "3.4.16",
-    "marked": "18.0.14",
-    "pinia": "4.0.3",
+    "dompurify": "3.4.17",
+    "marked": "18.1.1",
+    "pinia": "4.1.0",
     "qrcode-generator": "2.0.4",
     "turndown": "7.2.4",
     "vue": "3.5.43",
-    "vue-router": "5.3.1",
-    "zxing-wasm": "3.1.4"
+    "vue-router": "5.4.0",
+    "zxing-wasm": "3.1.5"
   },
   "devDependencies": {
-    "@types/node": "26.6.4",
+    "@types/node": "26.6.5",
     "@types/turndown": "5.0.6",
-    "@vitejs/plugin-vue": "6.0.9",
+    "@vitejs/plugin-vue": "6.0.10",
     "@vue/tsconfig": "0.9.1",
-    "jsdom": "30.1.1",
-    "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vite": "8.3.2",
-    "vitest": "5.0.3",
-    "vue-tsc": "3.3.12"
+    "jsdom": "30.1.2",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.4",
+    "vue-tsc": "3.3.13"
   }
 }
