@@ -56,7 +56,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/app.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
 
-    client_max_body_size 12m;              # 与 app_settings.upload / media 的上限对齐
+    client_max_body_size 64m;              # 要盖住视频单文件上限，默认 50MB
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -72,7 +72,7 @@ server {
 }
 ```
 
-**上传与媒体**：头像在设备上裁剪后由 `POST /api/v1/profile/avatar` 上传，文件落在 `UPLOAD_DIR`（默认 `server/data/uploads`），经 `GET /media/avatars/:file` 分发。库里存 `/media/avatars/...`；配了 `MEDIA_BASE_URL`（`http(s)://主机[:端口]`，不含路径）时存绝对地址。移除走 `DELETE /api/v1/profile/avatar`。单文件上限是 `min(upload.avatarSizeMb, UPLOAD_MAX_MB)`，`UPLOAD_MAX_MB` 缺省并封顶 20。这一路不走 2MB 的 JSON 体积守卫。展会封面、简介里的图片与视频仍由设备侧处理，落在设备私有目录，换设备看不到。nginx 的 `client_max_body_size` 要盖住头像上限；默认 2MB 时现有的 `12m` 够用，把头像上限调到 20 时要一并调大。
+**上传与媒体**：头像、展会封面和简介里的图片、视频都上传到服务器，文件在 `UPLOAD_DIR`（默认 `server/data/uploads`）。头像经 `POST /api/v1/profile/avatar` 写入 `avatars/`，由 `GET /media/avatars/:file` 分发，移除走 `DELETE /api/v1/profile/avatar`。封面和简介媒体经 `POST /api/v1/media` 写入 `files/`，由 `GET /media/files/:file` 分发。库里存 `/media/...`；配了 `MEDIA_BASE_URL`（`http(s)://主机[:端口]`，不含路径）时存绝对地址。头像单文件上限是 `min(upload.avatarSizeMb, UPLOAD_MAX_MB)`，`UPLOAD_MAX_MB` 缺省并封顶 20。封面和简介的单文件上限是管理设置里的 `imageSizeMb` / `videoSizeMb`（视频默认 50MB），不走这道 20MB 硬顶。这两路都不走 2MB 的 JSON 体积守卫。没有被引用，或文件已经不在的地址会删掉；刚上传还没写进正文的文件保留一小时。存储总量默认 1024MB，可在管理设置里改。存满后默认拒绝新上传，也可以改成删掉最早的文件。nginx 的 `client_max_body_size` 要盖住视频单文件上限；默认 50MB 时至少要 `64m`，`12m` 只够头像。
 
 ## 验证顺序
 
@@ -133,12 +133,12 @@ node scripts/ui-shot.mjs --account demo --routes admin --click 展会
 ```bash
 node scripts/ui-parity.mjs          # 与 Vue 迁移前固定提交 6491a068 对照 t('s_xxx') 覆盖
 node scripts/ui-parity.mjs --full   # 连「搬到了别处」的 key 一起打印
-node scripts/ui-parity.mjs --ref <commit> --max-gone 75  # 显式选择含全部旧页面的参考提交
+node scripts/ui-parity.mjs --ref <commit> --max-gone 76  # 显式选择含全部旧页面的参考提交
 ```
 
 `→ 无` 才是真缺口；`→ web/src/...` 说明那条文案搬到了路由 meta、共享服务或共享组件里。
 
-CI 里这两个脚本都在跑：`ui-parity` 在 `web-and-server` 作业（固定基准 `6491a068f05d8a17ba51e9d3eb073eda4363755f`、`--max-gone 75`，超预算说明有整块界面没搬过来；需要完整 Git 历史，参考提交无效或任一参考页面缺失都失败），
+CI 里这两个脚本都在跑：`ui-parity` 在 `web-and-server` 作业（固定基准 `6491a068f05d8a17ba51e9d3eb073eda4363755f`、`--max-gone 76`，超预算说明有整块界面没搬过来；需要完整 Git 历史，参考提交无效或任一参考页面缺失都失败）。76 里包含新建展会不再使用的「保存后可编辑」。
 `ui-shot` 在 `ui-regression` 作业（自带 PostgreSQL 服务、迁移 + 示例数据、后端与 `vite preview`，截图作为 `ui-screenshots` 工件上传）。
 预算值随有意删除的文案调整。`ui-shot` 的 `detail` 别名会从后端公开展会列表选择真实 id，也可指定 `detail/<id>`；没有展会时失败。截图前检查目标路由、顶栏标题、正文和加载状态，登录失败、权限重定向、空白正文或页面错误都报错，并保存 `failure.png`。`--click` 指定的操作不存在时同样失败。
 
@@ -158,7 +158,7 @@ pwsh -File scripts\emu.ps1 motion
 - 生产状态页、`/health` 和报名站默认关闭。状态页临时打开时用反代 Basic Auth 或 IP 白名单。公网探活只使用 `/ping`。初始管理员写在 `ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL`，不要使用示例账号。
 - 使用 Node.js 24.15+（24.x）或 26+，在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，再执行 `pnpm db:migrate:prod` 并重启生产进程；迁移完成后才切流量。
 - 数据库启用 `Asia/Shanghai` 时区，配置备份、恢复演练和日志轮转。
-- 上传媒体仍在客户端私有目录；上线前确认这符合产品范围，或先完成对象存储和上传接口。
+- 头像、展会封面和简介媒体存在服务器 `UPLOAD_DIR`。nginx `client_max_body_size` 要盖住视频单文件上限（默认 50MB），`12m` 只够头像。
 - 注册和安全邮件涉及个人信息，注册页需要隐私告知；营销或提醒邮件需要退订机制。
 
 ## 上线限制

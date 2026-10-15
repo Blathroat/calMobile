@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 细线图标：与 `docs/newUI` 的 `.icon` 规格一致（24 视窗、1.5 描边、无填充）。
+ * 细线图标：24 视窗、1.5 描边、无填充。
  * 图标只在这里维护一份，页面写 `<AppIcon name="home" />`。
  */
 import { computed } from 'vue';

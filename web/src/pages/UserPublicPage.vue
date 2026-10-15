@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 14 · 用户公开页
- * 线框：docs/newUI/remaining-ui.html #screen-user-public
  * 业务：展示昵称、简介、所在地区、社交账号与已参加展会。
  *
  * 普通访问者按用户的「展示我的报名」策略过滤；管理员从管理后台进入时不受该策略影响，
@@ -67,7 +66,8 @@ const meetingsOpen = computed(() => profile.value?.meetingsOpen === true);
 const canManageMeetings = computed(() => adminView.value && canHostMeetings.value);
 const closedMeetingLabel = t('s_7q6wmd');
 const requestMeetingLabel = t('s_h1cjf4');
-const manageMeetingsLabel = t('s_12wwrng');
+const manageExhibitionsLabel = t('s_1tkl9jl');
+const manageMeetingsLabel = t('s_1lrlx8m');
 const visibilityLabel = computed(() => {
   if (adminView.value) return t('s_iq65l2');
   return showRegistrations.value ? t('s_q3pv0x') : t('s_ex547b');
@@ -105,6 +105,12 @@ function requestMeeting(): void {
   const id = String(profile.value?.id || '');
   if (!id) return;
   void router.push(paths.meetingApply(id));
+}
+
+function openExhibitionAdmin(): void {
+  const id = String(profile.value?.id || '');
+  if (!id) return;
+  void router.push(`/admin/exhibitions/${encodeURIComponent(id)}`);
 }
 
 function openMeetingAdmin(): void {
@@ -176,9 +182,14 @@ onMounted(load);
     </div>
 
     <div v-if="canManageMeetings || canRequestMeeting" class="stack" data-gap="sm">
-      <button v-if="canManageMeetings" class="cta ghost" type="button" @click="openMeetingAdmin">
-        {{ manageMeetingsLabel }}
-      </button>
+      <div v-if="canManageMeetings" class="grid-cols-2">
+        <button class="cta ghost" type="button" @click="openExhibitionAdmin">
+          {{ manageExhibitionsLabel }}
+        </button>
+        <button class="cta ghost" type="button" @click="openMeetingAdmin">
+          {{ manageMeetingsLabel }}
+        </button>
+      </div>
       <button
         v-if="canRequestMeeting"
         class="cta ghost"

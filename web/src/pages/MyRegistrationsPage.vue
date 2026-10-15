@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 07 · 我的活动（列表）
- * 线框：docs/newUI/remaining-ui.html #screen-my-registrations
  *
  * 展会报名与私人会议申请放在同一页。状态文字由后端下发，颜色只作辅助线索。
  * 报名和会议卡片都进入各自的详情页。

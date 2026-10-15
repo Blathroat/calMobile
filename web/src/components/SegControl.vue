@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 分段控件（newUI `.seg`）：选中滑块由一个元素滑到目标按钮。
+ * 分段控件：选中滑块由一个元素滑到目标按钮。
  *
  * 首次定位不加过渡，避免滑块从左侧滑过来；切换时交给 motion.css 的
  * `.seg-indicator[data-animate="true"]`。

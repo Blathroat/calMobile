@@ -16,6 +16,7 @@ import {
 } from '../domain/schemas.js';
 import { notFound } from '../domain/errors.js';
 import * as labels from '../domain/labels.js';
+import { releaseExhibitionMedia } from '../services/media-gc.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { authenticateHono, optionalAuthHono, userOf, type HonoContext, type HonoEnv } from './hono-utils.js';
@@ -144,12 +145,19 @@ async function manageableRow(c: HonoContext, id: string) {
 
 app.get('/', optionalAuthHono, async (c) => {
   const keyword = String(c.req.query('query') || '').trim();
+  const exhibitorId = String(c.req.query('exhibitorId') || '').trim();
   const params: string[] = [];
-  let where = '';
+  const clauses: string[] = [];
   if (keyword) {
     params.push(likePattern(keyword));
-    where = 'WHERE e.title ILIKE $1 OR e.venue ILIKE $1 OR e.category ILIKE $1 OR e.description ILIKE $1';
+    const slot = `$${params.length}`;
+    clauses.push(`(e.title ILIKE ${slot} OR e.venue ILIKE ${slot} OR e.category ILIKE ${slot} OR e.description ILIKE ${slot})`);
   }
+  if (exhibitorId) {
+    params.push(exhibitorId);
+    clauses.push(`e.exhibitor_id = $${params.length}`);
+  }
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   const result = await query<ExhibitionRow>(
     `SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM} ${where} ORDER BY e.exhibition_date, e.id`,
     params,
@@ -265,6 +273,7 @@ app.post('/', authenticateHono, async (c) => {
       );
       if (input.fields) await replaceFields(client, id, input.fields);
     });
+    await releaseExhibitionMedia({});
     return { exhibition: exhibitionPayload((await findRow(id))!) };
   });
 });
@@ -302,6 +311,7 @@ app.put('/:id', authenticateHono, async (c) => {
         if (input.fields) await replaceFields(client, existing.id, input.fields);
       },
     );
+    await releaseExhibitionMedia({ description: existing.description, image_uri: existing.image_uri });
     return { exhibition: exhibitionPayload((await findRow(existing.id))!) };
   });
 });
@@ -311,6 +321,7 @@ app.delete('/:id', authenticateHono, async (c) => {
   const existing = await manageableRow(c, c.req.param('id'));
   return mutate(c, async () => {
     await query('DELETE FROM exhibitions WHERE id = $1', [existing.id]);
+    await releaseExhibitionMedia({ description: existing.description, image_uri: existing.image_uri });
     return {};
   });
 });

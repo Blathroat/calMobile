@@ -118,6 +118,7 @@ export function exhibitionPayload(row: ExhibitionRow) {
     date: row.exhibition_date || '',
     dateLabel: labels.dateLabel(row.exhibition_date),
     exhibitor: row.exhibitor || '',
+    exhibitorId: row.exhibitor_id || '',
     exhibitorRole: row.exhibitor_role || '',
     exhibitorNote: row.exhibitor_note || '',
     imageUri: row.image_uri || '',

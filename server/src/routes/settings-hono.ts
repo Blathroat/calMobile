@@ -13,6 +13,7 @@ import {
   saveUiTheme,
 } from '../domain/settings.js';
 import { jsonResponse, mutate } from '../http/respond.js';
+import { forgetTexts, storageReport } from '../services/media-gc.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { parseSchema } from '../domain/validation.js';
 import { notifySchema, serverSettingsPatchSchema, uiModeSchema, uiThemeSchema } from '../domain/schemas.js';
@@ -24,8 +25,9 @@ function bodyRecord(value: unknown): Record<string, unknown> {
 function has(body: object | null | undefined, key: string) {
   return Object.prototype.hasOwnProperty.call(body || {}, key);
 }
-async function settingsPayload(userId: string | null | undefined) {
+async function settingsPayload(userId: string | null | undefined, role?: string | null) {
   const settings = await readServerSettings();
+  const storage = role === 'admin' ? await storageReport() : undefined;
   // `theme.index` 下发的是**调用者实际生效**的下标（个人选择优先于全局默认）：
   // 页面据此画选中环，不必自己判断「我有没有单独选过配色」。
   const themeIndex = await readUiTheme(userId, settings.theme.index, settings.theme.colors);
@@ -42,9 +44,13 @@ async function settingsPayload(userId: string | null | undefined) {
     cover: settings.cover,
     exhibitor: settings.exhibitor,
     notify: await readNotificationPreferences(userId),
+    ...(storage ? { storage } : {}),
   };
 }
-app.get('/', optionalAuthHono, async (c) => jsonResponse(c, await settingsPayload(userOf(c)?.userId)));
+app.get('/', optionalAuthHono, async (c) => {
+  const user = userOf(c);
+  return jsonResponse(c, await settingsPayload(user?.userId, user?.role));
+});
 app.put('/', authenticateHono, async (c) => {
   const user = requireAdmin({ user: userOf(c) });
   const rawBody = bodyRecord(await readJsonBody(c));
@@ -53,8 +59,13 @@ app.put('/', authenticateHono, async (c) => {
     const current = await readServerSettings();
     const next = applyServerPatch(current, body);
     await saveServerSettings(current, next);
+    if (current.cover.defaultCover !== next.cover.defaultCover) {
+      await forgetTexts([current.cover.defaultCover]).catch(() => {
+        console.error('清理未引用媒体失败');
+      });
+    }
     if (has(body, 'notify')) await saveNotificationPreferences(user.userId, parseSchema(notifySchema, body.notify));
-    return { settings: await settingsPayload(user.userId) };
+    return { settings: await settingsPayload(user.userId, user.role) };
   });
 });
 app.put('/ui-mode', authenticateHono, async (c) => {

@@ -37,6 +37,7 @@ describe('router guards', () => {
       '/search', '/detail/exh-1', '/registration-form/exh-1', '/user-public/exhibitor',
       '/my-registrations', '/registration-detail/reg-1', '/meeting-detail/meet-1', '/profile', '/settings', '/security',
       '/exhibitor', '/meeting-settings', '/meeting-apply/exhibitor-1', '/admin/meetings/exhibitor-1',
+      '/admin/exhibitions/exhibitor-1',
       '/exhibition-form', '/exhibition-form/exh-1', '/review', '/checkin', '/rich-editor', '/admin',
     ];
     for (const path of protectedPaths) {

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 11 · 展会编辑（新建 / 编辑）
- * 线框：docs/newUI/remaining-ui.html #screen-exhibition-form
  *
  * 展商后台卡片上的「报名方式」「编辑简介」收进本页的「报名与简介设置」栏。
  * 「删除展会」放在页面内容最下方。新建与编辑共用同一页：
@@ -11,7 +10,7 @@
  * 校验规则与上限统一走 `@/services/validate`，错误就地显示在 `.field-error` 并标 `data-invalid`。
  */
 import { computed, onMounted, reactive, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
 import { useBootstrapStore } from '@/stores/bootstrap';
@@ -23,9 +22,13 @@ import {
 } from '@/services/validate';
 import { EXHIBITION_STATUS, REGISTRATION_MODES } from '@/services/status';
 import { device } from '@/services/device-services';
+import { publishImportedMedia } from '@/services/publish-media';
 import { loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
 import CollectFieldsCard, { type CollectField } from '@/components/CollectFieldsCard.vue';
 import { firstCollectFieldError } from '@/services/collect-fields';
+import {
+  clearExhibitionDraft, readExhibitionDraft, stashExhibitionDraft, type ExhibitionDraft,
+} from '@/services/exhibition-draft';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import SegControl from '@/components/SegControl.vue';
@@ -58,7 +61,7 @@ const categoryOptions = computed<string[]>(() => {
 
 const detail = useAsync<ExhibitionDetail>();
 const saving = ref(false);
-/** 新建保存成功后 `id` 才有值：简介入口与删除按钮据此从置灰切到可用。 */
+/** 新建保存成功后换成编辑地址，删除按钮据此出现。简介在新建时就能编辑。 */
 const createdId = ref('');
 const notFound = computed(() => !isCreate.value && detail.data.value !== undefined && detail.data.value.found === false);
 const loadFailed = computed(() => detail.error.value !== undefined && detail.data.value === undefined);
@@ -197,7 +200,46 @@ function fillFrom(item: JsonObject, data: ExhibitionDetail): void {
   }));
 }
 
-/** 新建展会没有要取的数据，直接出空表单（受限账号已在上面拦掉）。 */
+function applyDraft(draft: ExhibitionDraft): void {
+  form.title = draft.title;
+  form.venue = draft.venue;
+  form.date = draft.date;
+  form.time = draft.time;
+  form.status = MODES.some((mode) => mode.value === draft.status) ? draft.status : EXHIBITION_STATUS.REVIEW_REQUIRED;
+  form.category = draft.category;
+  form.description = draft.description;
+  form.imageUri = draft.imageUri;
+  form.registrationStart = draft.registrationStart;
+  form.registrationEnd = draft.registrationEnd;
+  form.qrEnabled = draft.qrEnabled;
+  form.allowCancel = draft.allowCancel;
+  fields.value = draft.fields.map((field) => ({
+    title: field.title,
+    type: field.type,
+    required: field.required,
+    options: [...field.options],
+  }));
+}
+
+function currentDraft(): ExhibitionDraft {
+  return {
+    title: form.title,
+    venue: form.venue,
+    date: form.date,
+    time: form.time,
+    status: form.status,
+    category: form.category,
+    description: form.description,
+    imageUri: form.imageUri,
+    registrationStart: form.registrationStart,
+    registrationEnd: form.registrationEnd,
+    qrEnabled: form.qrEnabled,
+    allowCancel: form.allowCancel,
+    fields: fields.value,
+  };
+}
+
+/** 新建展会没有要取的数据。从简介页返回时把内存里的稿填回来。 */
 async function load(): Promise<void> {
   if (isCreate.value) {
     built.value = true;
@@ -214,19 +256,33 @@ async function load(): Promise<void> {
   fillFrom(data.exhibition ?? {}, data);
 }
 
-onMounted(() => { void load(); });
+if (isCreate.value) {
+  const draft = readExhibitionDraft();
+  if (draft) applyDraft(draft);
+  built.value = true;
+}
+
+onMounted(() => {
+  if (!built.value) void load();
+});
+
+/** 离开新建页时丢掉内存稿。去简介编辑器除外，否则返回后填不回表单。 */
+onBeforeRouteLeave((to) => {
+  if (!isCreate.value || to.path === '/rich-editor') return;
+  clearExhibitionDraft();
+});
 
 // ── 封面 ─────────────────────────────────────────────────────────
 
-/** 封面直接落盘成短 URL，避免把图片塞进简介或展会记录。 */
+/** 封面先在设备上选择，再上传到服务器，表单里只留服务器地址。 */
 async function pickCover(): Promise<void> {
   try {
-    const stored = await device.importMedia('image') as { url?: string; compressed?: boolean };
+    const stored = await device.importMedia('image');
     if (!stored?.url) {
       toast(t('s_1dc9o49'), 'error');
       return;
     }
-    form.imageUri = stored.url;
+    form.imageUri = await publishImportedMedia('image', stored);
     toast(stored.compressed ? t('s_1bbs6qg') : t('s_1ckoagi'), 'success');
   } catch (reason) {
     // 用户在系统选择器点了取消：按稳定错误码判断，不匹配文案。
@@ -271,7 +327,8 @@ async function saveStatusOnly(): Promise<void> {
 function editDescription(): void {
   const id = createdId.value || exhibitionId.value;
   if (!id) {
-    toast(t('s_1wz04v2'), 'error');
+    stashExhibitionDraft(currentDraft());
+    void router.push('/rich-editor?draft=1');
     return;
   }
   void router.push(`/rich-editor?id=${encodeURIComponent(id)}`);
@@ -347,7 +404,8 @@ async function submit(): Promise<void> {
     form.description = String(exhibition.description ?? form.description);
     form.imageUri = String(exhibition.imageUri ?? form.imageUri);
     toast(isCreate.value ? t('s_opaqad') : t('s_1sfkhdl'), 'success');
-    // 新建成功后换成编辑地址：简介入口与删除按钮随之可用，再点保存就是更新。
+    clearExhibitionDraft();
+    // 新建成功后换成编辑地址：再点保存就是更新，删除按钮也出现。
     if (isCreate.value) await router.replace(`/exhibition-form/${encodeURIComponent(createdId.value)}`);
     else await router.replace('/exhibitor');
   } catch (reason) {
@@ -371,7 +429,6 @@ function normalizeOptions(options: unknown): string[] {
     .filter(Boolean);
 }
 
-const canEditDescription = computed(() => !isCreate.value || createdId.value !== '');
 </script>
 
 <template>
@@ -506,15 +563,8 @@ const canEditDescription = computed(() => !isCreate.value || createdId.value !==
         <!-- 不再重复「展会简介」小标题：这一栏的「报名与简介设置」已经说明了用途，
              按钮本身就是入口，左边留标题只会让这一行更挤。 -->
         <div class="row">
-          <button
-            class="cta ghost"
-            data-size="small"
-            type="button"
-            :disabled="!canEditDescription"
-            :title="canEditDescription ? undefined : t('s_1wz04v2')"
-            @click="editDescription"
-          >
-            {{ canEditDescription ? t('s_21ce2x') : t('s_1wz04v2') }}
+          <button class="cta ghost" data-size="small" type="button" @click="editDescription">
+            {{ t('s_21ce2x') }}
           </button>
         </div>
         <p class="row-meta clamp-2">{{ descriptionSummary }}</p>

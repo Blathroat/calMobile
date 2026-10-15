@@ -12,7 +12,7 @@
 
 - `app/` 是 Java 25 的 WebView 容器；页面源码在 `web/`，构建后由 Gradle 同步到 generated assets。原生只实现设备能力，数据和业务规则留在后端。
 - `server/` 是独立的 Hono + PostgreSQL Node 服务，不是 Gradle 模块。数据库是唯一业务数据源；旧 Room、Retrofit、本机 SQLite 和 legacy 页面不再引入。
-- `docs/newUI/` 的 HTML、JSON、`ui-spec.md` 和 `DESIGN-HANDOFF.md` 是界面来源；实现与设计冲突时，把未决项记入 [`docs/product.md`](docs/product.md)。
+- 界面以 `web/src/styles/tokens.css` 和 `styles/motion.css` 为准。实现与产品行为冲突时，把未决项记入 [`docs/product.md`](docs/product.md)。
 
 ## 前端硬约束
 
@@ -43,7 +43,7 @@
 ## 界面、文档与提交
 
 - 触控命中区域至少 44px；状态同时用文字和视觉差异表达；详细界面规则见 [`docs/engineering.md`](docs/engineering.md)。回归界面前运行 `pwsh -File scripts\emu.ps1`；动效异常先运行 `pwsh -File scripts\emu.ps1 motion check`。
-- 文档只描述当前状态；新增或更新需求按 `product.md`、`engineering.md`、`operations.md` 分流，不创建重复主题文档。ADR 和协作配置按需阅读。
+- 文档只描述当前状态；新增或更新需求按 `product.md`、`engineering.md`、`operations.md` 分流，不创建重复主题文档。协作配置在 `docs/agents/`。
 - Java 四空格、PascalCase 类名、camelCase 成员、`snake_case` 资源；前端 class 与页面文件用 kebab-case；注释和文档用中文。提交使用简洁中文动词短句，只提交本次路径。
 
 ## Agent skills
@@ -58,4 +58,4 @@
 
 ### Domain docs
 
-布局为 single-context（根目录没有 `CONTEXT.md` 时继续工作，ADR 在 `docs/adr/`）。详见 [`docs/agents/domain.md`](docs/agents/domain.md)。
+布局为 single-context（根目录没有 `CONTEXT.md` 时继续工作）。详见 [`docs/agents/domain.md`](docs/agents/domain.md)。

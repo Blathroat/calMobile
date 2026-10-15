@@ -16,7 +16,7 @@
 
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Client } from 'pg';
@@ -63,6 +63,9 @@ interface DeclaredRoute {
 }
 
 let server: ReturnType<typeof listen> | undefined;
+/** 契约测试单独使用的上传目录，避免清理逻辑删到开发库里的头像。 */
+let contractUploadDir = '';
+const contractUploadDirPrevious = process.env.UPLOAD_DIR;
 
 /** 前端 `api.js` 导出的 `ENDPOINTS`。在 beforeAll 里导入，用例里直接调用。 */
 let frontendEndpointMap!: EndpointMap;
@@ -283,6 +286,8 @@ async function createVerifiedAccount(
 }
 
 beforeAll(async () => {
+  contractUploadDir = await mkdtemp(path.join(tmpdir(), 'calmobile-contract-uploads-'));
+  process.env.UPLOAD_DIR = contractUploadDir;
   // 每次运行都重建测试库：连接维护库（postgres）后 drop/create。
   const admin = new Client({
     host,
@@ -314,6 +319,9 @@ afterAll(async () => {
     await new Promise((resolve) => server!.close(resolve));
   }
   await pool.end();
+  if (contractUploadDirPrevious === undefined) delete process.env.UPLOAD_DIR;
+  else process.env.UPLOAD_DIR = contractUploadDirPrevious;
+  if (contractUploadDir) await rm(contractUploadDir, { recursive: true, force: true });
 });
 
 // ── 连通性与启动数据 ─────────────────────────────────────────────
@@ -1209,6 +1217,11 @@ test('展会可按关键词搜索，分类来自服务器设置', async () => {
   );
   const miss = await get('/api/v1/exhibitions?query=不存在的关键词');
   assert.deepStrictEqual(miss.body, []);
+  const hosted = await get('/api/v1/exhibitions?exhibitorId=usr-2');
+  assert.ok(hosted.body.length > 0, '主办人筛选没有返回展会');
+  assert.ok(hosted.body.every((item: { exhibitorId?: string }) => item.exhibitorId === 'usr-2'));
+  const otherHost = await get('/api/v1/exhibitions?exhibitorId=usr-3');
+  assert.deepStrictEqual(otherHost.body, []);
 
   const categories = await get('/api/v1/exhibitions/categories');
   assert.ok(Array.isArray(categories.body) && categories.body.length > 0);
@@ -2701,6 +2714,110 @@ test('头像上传落到服务器，并遵守大小与格式设置', async () =>
   }
 });
 
+test('展会媒体上传到服务器，打不开或不再引用的文件会被清掉', async () => {
+  const previousDir = process.env.UPLOAD_DIR;
+  const directory = await mkdtemp(path.join(tmpdir(), 'calmobile-media-'));
+  process.env.UPLOAD_DIR = directory;
+  const jpeg = minimalJpeg();
+  const linkedName = `${'b'.repeat(32)}.jpg`;
+  const orphanName = `${'c'.repeat(32)}.jpg`;
+  const linkedUrl = `/media/files/${linkedName}`;
+  const filesDir = path.join(directory, 'files');
+  let exhibitionId = '';
+  const exists = async (target: string) => {
+    try {
+      await stat(target);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  try {
+    const anonymous = await requestBytes('POST', '/api/v1/media?kind=image', jpeg, {
+      headers: { 'Content-Type': 'image/jpeg' },
+    });
+    assert.strictEqual(anonymous.status, 401);
+
+    const asUser = await requestBytes('POST', '/api/v1/media?kind=image', jpeg, {
+      token: tokens.user.token,
+      headers: { 'Content-Type': 'image/jpeg' },
+    });
+    assert.strictEqual(asUser.status, 403);
+
+    const uploaded = await requestBytes('POST', '/api/v1/media?kind=image', jpeg, {
+      token: tokens.exhibitor.token,
+      headers: { 'Content-Type': 'image/jpeg' },
+    });
+    assert.strictEqual(uploaded.status, 200);
+    assert.strictEqual(uploaded.body.ok, true, JSON.stringify(uploaded.body));
+    const url = String(uploaded.body.url);
+    assert.match(url, /^\/media\/files\/[a-f0-9]{32}\.jpg$/);
+    const image = await requestBytes('GET', url, Buffer.alloc(0));
+    assert.strictEqual(image.status, 200);
+    assert.strictEqual(image.headers?.['content-type'], 'image/jpeg');
+    assert.strictEqual(image.headers?.['cross-origin-resource-policy'], 'cross-origin');
+    assert.ok(image.raw.equals(jpeg));
+
+    await mkdir(filesDir, { recursive: true });
+    const linkedPath = path.join(filesDir, linkedName);
+    await writeFile(linkedPath, jpeg);
+    const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await utimes(linkedPath, old, old);
+    const created = await post('/api/v1/exhibitions', {
+      title: '媒体清理测试',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: '2026-09-20',
+      status: '需审核',
+      category: '智能家居',
+      description: `![图](${linkedUrl})`,
+    }, { token: tokens.exhibitor.token });
+    assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
+    exhibitionId = String(created.body.exhibition.id);
+
+    const orphanPath = path.join(filesDir, orphanName);
+    await writeFile(orphanPath, jpeg);
+    await utimes(orphanPath, old, old);
+    assert.equal(await exists(orphanPath), true);
+
+    const settings = await get('/api/v1/settings', { token: tokens.admin.token });
+    assert.equal(await exists(orphanPath), false, '超过一小时且没人引用的文件应被清掉');
+    assert.equal(await exists(linkedPath), true, '仍被简介引用的文件要留下');
+    assert.equal(await exists(path.join(filesDir, url.slice(url.lastIndexOf('/') + 1))), true, '刚上传、还没写进正文的文件先留着');
+    assert.equal(settings.body.storage.whenFull, 'reject');
+    assert.equal(settings.body.storage.fileCount, 2);
+    assert.equal(settings.body.storage.usedBytes, jpeg.length * 2);
+    assert.equal(settings.body.storage.limitBytes, 1024 * 1024 * 1024);
+    const viewer = await get('/api/v1/settings', { token: tokens.user.token });
+    assert.equal(viewer.body.storage, undefined);
+
+    const cleared = await put(`/api/v1/exhibitions/${exhibitionId}`, {
+      title: '媒体清理测试',
+      description: '清理后',
+    }, { token: tokens.exhibitor.token });
+    assert.strictEqual(cleared.body.ok, true, JSON.stringify(cleared.body));
+    assert.equal(await exists(linkedPath), false, '从简介里拿掉的文件应马上删除');
+
+    const saved = await put('/api/v1/settings', { storageMb: 128, whenFull: 'evict-oldest' }, { token: tokens.admin.token });
+    assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+    assert.equal(saved.body.settings.upload.storageMb, 128);
+    assert.equal(saved.body.settings.upload.whenFull, 'evict-oldest');
+    assert.equal(saved.body.settings.storage.whenFull, 'evict-oldest');
+    assert.equal(saved.body.settings.storage.limitBytes, 128 * 1024 * 1024);
+    const clamped = await put('/api/v1/settings', { storageMb: 1, whenFull: 'nope' }, { token: tokens.admin.token });
+    assert.equal(clamped.body.settings.upload.storageMb, 64);
+    assert.equal(clamped.body.settings.upload.whenFull, 'evict-oldest');
+  } finally {
+    if (exhibitionId) {
+      await del(`/api/v1/exhibitions/${exhibitionId}`, { token: tokens.exhibitor.token }).catch(() => undefined);
+    }
+    await put('/api/v1/settings', { storageMb: 1024, whenFull: 'reject' }, { token: tokens.admin.token }).catch(() => undefined);
+    if (previousDir === undefined) delete process.env.UPLOAD_DIR;
+    else process.env.UPLOAD_DIR = previousDir;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('资料保存只改提交过的字段', async () => {
   const before = await get('/api/v1/profile', { token: tokens.user.token });
   const saved = await put('/api/v1/profile', { bio: '契约测试改的简介' }, { token: tokens.user.token });
@@ -3768,7 +3885,7 @@ function backendRoutes(): DeclaredRoute[] {
 /**
  * 前端每个数据动作都必须能在后端找到对应路由。
  *
- * 这条断言是「71 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
+ * 这条断言是「72 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
  * 同步 `ENDPOINTS`，都会在这里失败，而不是等到某个页面在真机上静默报错。
  */
 test('前端每个数据动作都对应后端已注册的路由', () => {
@@ -3776,8 +3893,8 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
   const actions = Object.keys(endpoints);
   assert.strictEqual(
     actions.length,
-    71,
-    `前端数据动作数量变了（期望 71）：${actions.length} 个 —— ${actions.join(', ')}`,
+    72,
+    `前端数据动作数量变了（期望 72）：${actions.length} 个 —— ${actions.join(', ')}`,
   );
 
   const declared = backendRoutes();

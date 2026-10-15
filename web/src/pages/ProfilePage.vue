@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 09 · 个人主页（身份卡 + 资料展示 + 设置入口）
- * 线框：docs/newUI/remaining-ui.html #screen-profile
  * 旧实现：app/src/main/assets/web/js/pages/profile.js（`git show 5e3d9ab^`）
  *
  * 这一屏回答「我是谁、我公开了什么」。头像卡片下方展示地区；简介标题右侧的铅笔

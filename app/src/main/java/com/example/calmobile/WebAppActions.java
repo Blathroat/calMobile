@@ -21,7 +21,7 @@ import java.util.Map;
  * | `camera.ensurePermission` | 运行时权限 |
  * | `calendar.status` / `calendar.toggle` | 写系统日历（CalendarContract） |
  * | `notify.requestPermission` | 通知运行时权限 |
- * | `media.pickImage` / `media.import` / `media.store` | 系统选择器与私有目录落盘 |
+ * | `media.pickImage` / `media.import` / `media.store` / `media.discard` | 系统选择器、私有目录落盘与删掉临时文件 |
  * | `share.text` | 系统分享面板 |
  * | `export.csv` | 系统「另存为」面板 |
  * | `session.save` / `session.load` / `session.clear` / `session.device` | 会话与可信设备凭据属于设备状态，存应用私有目录（{@link SessionStore}） |
@@ -61,6 +61,9 @@ final class WebAppActions {
                 return;
             case "media.store":
                 callback.success(MediaActions.storeDataUrl(activity, payload));
+                return;
+            case "media.discard":
+                callback.success(MediaActions.discard(activity, payload));
                 return;
             case "share.text":
                 MediaActions.shareText(activity, payload, callback);

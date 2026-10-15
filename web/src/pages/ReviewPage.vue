@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 13 · 报名管理 / 审核
- * 线框：docs/newUI/remaining-ui.html #screen-registration-management
  *
  * 状态为待审核 / 已通过 / 已拒绝 / 已参加；展商能否重新审核由管理员设置决定
  * （`bootstrap.review.canRevise`），管理员自己不受该开关限制。
@@ -33,7 +32,7 @@ import { t } from '@/i18n';
 
 const COPY = {
   /** 详情面板里的主按钮：详情只读，点它才进状态选择。 */
-  adjustStatus: t('s_4hlup6'),
+  adjustStatus: t('s_15y6qev'),
   detail: t('s_ox3r68'),
 };
 
@@ -137,7 +136,7 @@ function statusMessage(status: string): string {
 /**
  * 报名详情：结构化面板（状态 / 时间 / 收集项分组），而不是把内容拼成一段文字。
  *
- * 状态动作放在同一面板的按钮里：详情只读，改状态要先点「调整审核状态」——
+ * 状态动作放在同一面板的按钮里：详情只读，改状态要先点「调整状态」——
  * 动作数量随状态机变化，摆在详情里会让面板忽长忽短。
  */
 function openVisitor(record: Registration): void {

@@ -1,9 +1,8 @@
 /* ============================================================================
- * calMobile · 设计令牌（源自 docs/newUI/index.html、docs/newUI/remaining-ui.html）
+ * calMobile · 设计令牌
  *
- * newUI 的线框以 216×480 的手机框绘制，生产版以 390dp 逻辑宽度为基准，
- * 缩放系数 k ≈ 1.8。下列 px 值即线框值的等比例换算结果，字号保持整数、
- * 间距统一到 4px 栅格，触控区域不小于 44px（newUI `.od-touch`）。
+ * 生产版以 390dp 逻辑宽度为基准。字号按 9/10/12/14/17 × 1.8 取整，
+ * 间距统一到 4px 栅格，触控区域不小于 44px。
  * ==========================================================================*/
 
 :root {
@@ -35,7 +34,7 @@
     --info-ink: #2f6f8f;        /* 仅展示等中性状态 */
     --info-tint: #e6eef3;
 
-    /* ── 字号（newUI 9/10/12/14/17px × 1.8） ─────────────────────────── */
+    /* ── 字号（9/10/12/14/17px × 1.8） ───────────────────────────────── */
     --fs-eyebrow: 13px;
     --fs-meta: 14px;
     --fs-body: 16px;
@@ -66,7 +65,7 @@
     /* ── 阴影与描边 ──────────────────────────────────────────────────── */
     --hairline: 1px;
 
-    /* ── 动效（newUI --motion-fast 150ms / --ease-standard） ─────────── */
+    /* ── 动效（快反馈 150ms） ───────────────────────────────────────── */
     --motion-fast: 150ms;
     --motion-base: 220ms;
     --ease: cubic-bezier(.2, 0, 0, 1);
@@ -1105,6 +1104,24 @@ button.avatar {
     color: var(--accent-ink);
 }
 
+.storage-meter {
+    height: 8px;
+    overflow: hidden;
+    border-radius: var(--r-pill);
+    background: var(--f1);
+}
+
+.storage-meter > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+}
+
+.storage-meter[data-full="true"] > span {
+    background: var(--danger-ink);
+}
+
 /* 配色色板 */
 .swatch {
     width: 46px;
@@ -1261,7 +1278,7 @@ button.avatar {
     }
 }
 
-/* 单一底部操作：右下角圆形按钮（newUI 11/12/16/17） */
+/* 右下角圆形按钮 */
 .round-action {
     width: 58px;
     height: 58px;
@@ -1839,7 +1856,7 @@ button.avatar {
 }
 
 /* ============================================================================
- * 分段控件（newUI .seg）
+ * 分段控件
  * ==========================================================================*/
 
 .seg {
@@ -2207,9 +2224,9 @@ button.avatar {
     text-align: center;
 }
 
-/* 一排并排的文字按钮（富文本编辑器的「粘贴 Markdown / 插入图片 / 视频」）：
-   文案必须一行显示。按钮按内容取宽，窄屏放不下时整行横向滚动 ——
-   均分宽度会把「粘贴 Markdown」压成两行，读起来像排版坏了。 */
+/* 一排并排的文字按钮（富文本编辑器的「预览 / 粘贴 Markdown」）：
+   文案必须一行显示。按钮按内容取宽。
+   `.cta` 默认 width:100%，这里要改回按内容取宽，否则每颗都占满一行。 */
 .action-row {
     display: flex;
     align-items: center;
@@ -2224,6 +2241,7 @@ button.avatar {
 
 .action-row > .cta {
     flex: 0 0 auto;
+    width: auto;
     padding-inline: var(--s2);
     white-space: nowrap;
 }
@@ -2277,6 +2295,24 @@ button.avatar {
 .sheet-actions[data-layout="stack"] .cta {
     width: 100%;
     min-width: 0;
+}
+
+/* 最后一颗（关闭）独占下一行。上面的操作均分，避免四颗按钮被挤出屏幕。 */
+.sheet-actions[data-layout="close-below"] {
+    flex-wrap: wrap;
+    justify-content: stretch;
+}
+
+.sheet-actions[data-layout="close-below"] .cta {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.sheet-actions[data-layout="close-below"] .cta:last-child {
+    flex: 1 1 100%;
+    width: 100%;
 }
 
 @keyframes fade-in {

@@ -18,6 +18,7 @@ export const ENDPOINTS = {
   'profile.save': () => ({ method: 'PUT', path: '/profile' }),
   'profile.uploadAvatar': () => ({ method: 'POST', path: '/profile/avatar' }),
   'profile.removeAvatar': () => ({ method: 'DELETE', path: '/profile/avatar' }),
+  'media.upload': () => ({ method: 'POST', path: '/media' }),
   'profile.password': () => ({ method: 'POST', path: '/profile/password' }),
   'notify.preferences': () => ({ method: 'GET', path: '/profile/notifications' }),
   'notify.savePreferences': () => ({ method: 'PUT', path: '/profile/notifications' }),

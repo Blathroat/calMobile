@@ -185,6 +185,8 @@ export const serverSettingsPatchSchema = z
     avatarFormats: z.unknown(),
     imageFormats: z.unknown(),
     videoFormats: z.unknown(),
+    storageMb: z.unknown(),
+    whenFull: z.unknown(),
     exhibitionTitle: z.unknown(),
     exhibitionVenue: z.unknown(),
     category: z.unknown(),

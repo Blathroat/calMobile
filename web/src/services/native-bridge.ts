@@ -37,6 +37,7 @@ export type NativeAction =
   | 'media.pickImage'
   | 'media.import'
   | 'media.store'
+  | 'media.discard'
   | 'share.text'
   | 'export.csv'
   | 'session.save'
@@ -71,6 +72,8 @@ export interface NativeActionPayloads {
   'media.import': { kind: 'image' | 'video' };
   // dataUrl 落盘成文件；kind 决定存储目录。
   'media.store': { dataUrl: string; kind: 'avatar' | 'image' | 'video' };
+  /** 删掉选择器刚落盘的临时文件。只接受媒体目录下的单层文件名。 */
+  'media.discard': { fileName: string };
   // 内容由调用方拼好，原生只负责唤起系统分享面板。
   'share.text': { title: string; text: string };
   // CSV 正文由调用方生成，原生只负责写文件。
@@ -92,8 +95,9 @@ export interface NativeActionResults {
   'calendar.toggle': { granted: boolean; inCalendar: boolean; message?: string };
   'notify.requestPermission': boolean;
   'media.pickImage': { dataUrl: string };
-  'media.import': { url: string; kind: string };
+  'media.import': { url: string; kind: string; fileName?: string; bytes?: number; mimeType?: string; compressed?: boolean };
   'media.store': { url: string };
+  'media.discard': { ok: boolean };
   // shared 为 false 等价于用户放弃分享，不是错误。
   'share.text': { shared: boolean };
   // exported 为 false 表示没写成（权限或存储），不是异常。

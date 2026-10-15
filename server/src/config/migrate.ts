@@ -42,7 +42,16 @@ export interface ServerSettings {
   categories: string[];
   review: { canRevise: boolean; statuses: string[] };
   media: { imageCount: number; imageSizeMb: number; videoCount: number; videoSizeMb: number };
-  upload: { avatarSizeMb: number; avatarFormats: string[]; imageFormats: string[]; videoFormats: string[] };
+  upload: {
+    avatarSizeMb: number;
+    avatarFormats: string[];
+    imageFormats: string[];
+    videoFormats: string[];
+    /** 上传目录总上限（MB）。头像、封面和简介媒体都算在里面。 */
+    storageMb: number;
+    /** 满了以后清最早的文件，或拒绝新上传。 */
+    whenFull: 'reject' | 'evict-oldest';
+  };
   limits: {
     exhibitionTitle: number;
     exhibitionVenue: number;
@@ -550,6 +559,8 @@ export const DEFAULT_SETTINGS: ServerSettings = {
     avatarFormats: ['jpg', 'jpeg', 'png', 'webp'],
     imageFormats: ['jpg', 'jpeg', 'png', 'webp'],
     videoFormats: ['mp4', 'mov', 'webm'],
+    storageMb: 1024,
+    whenFull: 'reject',
   },
   limits: {
     exhibitionTitle: 60,

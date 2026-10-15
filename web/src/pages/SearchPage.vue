@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 06 · 搜索
- * 线框：docs/newUI/remaining-ui.html #screen-search
  * 业务：GET /search 在展会与用户之间按关键词检索，响应是 `{ query, exhibitions, users, count }`。
  *
  * 输入停止 220ms 才发请求（防抖），回车立即搜。结果进 api 的查询缓存：改回上次的关键词

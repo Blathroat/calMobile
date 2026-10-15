@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 08 · 报名详情
- * 线框：docs/newUI/remaining-ui.html #screen-registration-detail
  *
  * 展商在展会设置里开启「启用报名二维码」后，审核通过的报名会由后端下发报名码，
  * 用户现场出示、展商扫码后状态变为「已参加」；二维码按需加载生成器，画不出来时

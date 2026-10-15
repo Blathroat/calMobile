@@ -9,7 +9,7 @@
  * - 收集项按「标签 / 内容」两行分组，长内容自然换行，不与标签抢行；
  * - 终态（已参加这类不能再调整的状态）的原因单独一行说明，不混进收集项里。
  *
- * 面板只负责内容：关闭与「调整审核状态」仍由 `ReviewPage` 通过 `actions` 控制。
+ * 面板只负责内容：关闭与「调整状态」仍由 `ReviewPage` 通过 `actions` 控制。
  */
 import StatusTag from './StatusTag.vue';
 import AppIcon from './AppIcon.vue';

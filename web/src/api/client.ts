@@ -102,6 +102,10 @@ export interface ApiClient {
      */
     markHint(hint: string): Promise<JsonObject>;
   };
+  /** 展会封面和简介媒体。字节上传后返回可写入正文的地址。 */
+  media: {
+    upload(bytes: Uint8Array, contentType: string, kind: 'image' | 'video'): Promise<ApiResult>;
+  };
   /** 安全设置：两步验证与邮箱变更。全部不走缓存（一次性凭据多，缓存无益且有风险）。 */
   security: {
     /** 安全设置概览：两步验证开关、当前邮箱、是否已绑定验证器。 */
@@ -354,6 +358,15 @@ export function createApi(
       saveNotifications: (payload) => write<ApiResult>('/profile/notifications', { method: 'PUT', body: payload }, ['notifications']),
       // 提示状态只进用户态（bootstrap 的 user 段），没有对应的读缓存需要失效。
       markHint: (hint) => http.request<JsonObject>('/profile/hints', { method: 'PUT', body: { hint } }),
+    },
+    media: {
+      upload: (bytes, contentType, kind) => write<ApiResult>('/media', {
+        method: 'POST',
+        bytes,
+        contentType,
+        query: { kind },
+        timeoutMs: kind === 'video' ? 60_000 : 20_000,
+      }),
     },
     security: {
       // 安全相关全部直连 http：验证码与备用码是一次性的，进缓存既没用也危险。

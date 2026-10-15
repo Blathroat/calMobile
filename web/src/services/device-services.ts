@@ -49,6 +49,10 @@ export const device = {
   storeMedia(payload: Parameters<typeof nativeBridge.call<'media.store'>>[1]) {
     return nativeBridge.call('media.store', payload);
   },
+  /** 删掉选择器刚写入的临时文件。上传成功或失败都要调，避免设备上留下没人引用的副本。 */
+  discardMedia(fileName: string) {
+    return nativeBridge.call('media.discard', { fileName });
+  },
   /** 调系统分享面板分享一段文字；`shared: false` 表示用户没选任何目标，不是错误。 */
   shareText(title: string, text: string) {
     return nativeBridge.call('share.text', { title, text });

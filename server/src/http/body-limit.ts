@@ -21,13 +21,16 @@ export const TOO_LARGE_MESSAGE = '请求体超过大小上限';
 export const PARSE_FAILED_MESSAGE = '请求体不是合法的 JSON';
 
 /**
- * 头像上传不走 2MB 的 JSON 上限。
+ * 头像和展会媒体上传不走 2MB 的 JSON 上限。
  *
- * 它的正文是图片字节，上限是 `min(avatarSizeMb, UPLOAD_MAX_MB)`，由上传路由自己读并拒绝。
+ * 正文是文件字节。头像上限是 `min(avatarSizeMb, UPLOAD_MAX_MB)`，
+ * 展会图片和视频用管理设置里的单文件上限，由上传路由自己读并拒绝。
  * 挂在全局守卫里的话，管理员把上限调到 2MB 以上时请求会先被 413 挡掉。
  */
 export function skipsJsonBodyLimit(method: string, path: string): boolean {
-  return method === 'POST' && path === '/api/v1/profile/avatar';
+  if (method !== 'POST') return false;
+  const normalized = path.replace(/\/$/, '');
+  return normalized === '/api/v1/profile/avatar' || normalized === '/api/v1/media';
 }
 
 /** 声明的 Content-Length 是否已经超限（没有声明 / 非法值都算没超）。 */

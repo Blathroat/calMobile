@@ -25,9 +25,7 @@ pnpm dev
 | [`docs/product.md`](docs/product.md) | 产品行为、验收场景、当前限制和未决项 |
 | [`docs/engineering.md`](docs/engineering.md) | 前后端边界、页面映射、界面实现规则 |
 | [`docs/operations.md`](docs/operations.md) | 测试、模拟器回归、构建与上线检查 |
-| [`server/README.md`](server/README.md) | 后端接口、数据库、环境变量和服务骨架 |
-| [`docs/newUI/`](docs/newUI/) | 视觉设计源和机器可读交付件 |
-| [`docs/adr/`](docs/adr/) | 不可轻易反转的技术决策 |
+| [`server/README.md`](server/README.md) | 后端接口、数据库、环境变量、服务骨架和依赖取舍 |
 | [`docs/agents/`](docs/agents/) | Issue、分流标签和领域文档约定 |
 
 ## 常用验证

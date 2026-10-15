@@ -1,6 +1,6 @@
 # 工程边界与界面实现
 
-本文件是客户端、前后端边界和界面实现规则的来源。后端完整接口、数据模型和错误细节见 [`server/README.md`](../server/README.md)；视觉交付件见 [`newUI/`](newUI/)。
+本文件是客户端、前后端边界和界面实现规则的来源。后端完整接口、数据模型和错误细节见 [`server/README.md`](../server/README.md)。颜色、字号、间距、圆角在 `web/src/styles/tokens.css`，动效在 `web/src/styles/motion.css`。
 
 ## 系统边界
 
@@ -43,7 +43,7 @@ web/
 - 页面需要固定操作区时用 `<Teleport defer to="#app-foot">` 投递 `.page-foot`，它落在网格第三行；`defer` 让目标元素与页面在同一次渲染里创建时也能找到。入口页（01）是例外：注册 / 忘记密码两个文字入口按旧版版式跟在表单后面随内容滚动，不占页脚槽。
 - 页面不要自建 `.page` / `.topbar` / `.app-body` / `.tabbar`，也不要声明颜色、字号、间距与圆角。
 - 内容区的左右内距由外壳给两道（`.app-body` 与路由容器 `.page-surface` 各 `var(--s4)`，合计 32px，与旧版实机一致），页面不要再自己加左右内距；确需通栏的页面用路由 `meta.bodyPad: 'none'`，两道一起去掉。
-- 底部面板统一走 `web/src/services/sheet.ts`：一句话加按钮用 `title / message / actions`；带输入框或列表的用 `component` + `props`（面板组件只负责内容，关闭与动作仍由服务管，例如手动输入报名码与粘贴 Markdown）；选项多于两个时 `layout: 'stack'` 竖排。页面不再自建 `.sheet` 结构。个人页与用户设置的「编辑资料」共用 `web/src/services/profile-editor.ts`。
+- 底部面板统一走 `web/src/services/sheet.ts`：一句话加按钮用 `title / message / actions`；带输入框或列表的用 `component` + `props`（面板组件只负责内容，关闭与动作仍由服务管，例如手动输入报名码与粘贴 Markdown）；选项多于两个时 `layout: 'stack'` 竖排。会议详情抽屉用 `layout: 'close-below'`，关闭独占下一行的大按钮。页面不再自建 `.sheet` 结构。个人页与用户设置的「编辑资料」共用 `web/src/services/profile-editor.ts`。
 - 列表型页面的分区/筛选写进地址栏（`?tab=`），从二级页返回时才能回到同一分区。
 - 切换方向由 `web/src/app/navigation.ts` 算出：二级页按路径深度写 `.app[data-direction]`（前进 / 后退 / 原地替换），底部导航之间按导航顺序写 `.app[data-tab-move]`，`motion.css` 据此选过渡；冷启动的第一次跳转按原地替换处理，首帧静态落地。
 - 标签页之间的过渡是**只位移不淡入**的横向滑动：淡入期间新页面还是透明的，露出来的是外壳背景，浅色模式下就是「切标签页闪一下白」。同一屏只换 query（管理页的分区）时方向信号一个都不动，否则动画名会被换成淡入、同一个元素重放一次淡入。
@@ -78,8 +78,9 @@ web/
 | — | `web/src/pages/MeetingSettingsPage.vue` | 私人会议申请地址、开关、撤销开关、预约说明与报名收集项 |
 | — | `web/src/pages/MeetingApplyPage.vue` | 私人会议申请（应用内与报名站共用）。日期与时间同一行 |
 | — | `web/src/pages/AdminMeetingsPage.vue` | 管理员处理某一展商或管理员的私人会议 |
+| — | `web/src/pages/AdminExhibitionsPage.vue` | 管理员查看某一展商或管理员开办的展会。卡片按钮与管理后台展会分区相同 |
 
-设计稿的 16、17 屏已内联到管理后台与用户设置；核销属于展商后台入口，不新增二级页面。应用配色与明暗模式是**个人偏好**（用户在「用户设置」里自己选），管理后台只维护全局默认色板与品牌文案。新增**应用**页面时在 `web/src/app/router.ts` 注册路由，同时更新本表与 `web/src/app/shell.test.ts` 的 `ROUTES`（该用例逐屏挂载外壳并断言顶栏、内容区、底部导航与页脚槽）。报名站不进入这张表，也不写入 `ROUTES`。
+展会管理与系统设置内联在管理后台，不单独成屏。核销属于展商后台入口。应用配色与明暗模式是**个人偏好**（用户在「用户设置」里自己选），管理后台只维护全局默认色板与品牌文案。新增**应用**页面时在 `web/src/app/router.ts` 注册路由，同时更新本表与 `web/src/app/shell.test.ts` 的 `ROUTES`（该用例逐屏挂载外壳并断言顶栏、内容区、底部导航与页脚槽）。报名站不进入这张表，也不写入 `ROUTES`。实现和产品行为冲突时，只把未决决策写入 [`docs/product.md`](product.md)，不要另建主题文档。
 
 ### 浏览器报名站
 
@@ -110,11 +111,13 @@ web/
 
 原生只处理以下设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出，以及会话刷新令牌与可信设备凭据的设备内存存储（`session.save` / `session.load` / `session.clear` / `session.device`，见 `SessionStore.java`）。`AppSettings` 是后端设置的设备镜像；日历用后端下发的 ISO 日期定位，失败必须回调失败。
 
-头像裁剪后上传到服务器（`POST /api/v1/profile/avatar`，文件在 `GET /media/avatars/:file`）。大小和格式由管理设置里的 `avatarSizeMb`、`avatarFormats` 控制，格式只接受 jpg、jpeg、png、webp。其余媒体落在应用私有目录 `files/media`，前端只保存短 URL；资源路径只允许单层文件名。业务数据动作不加入原生动作表。
+头像、展会封面和简介里的图片、视频上传到服务器。头像走 `POST /api/v1/profile/avatar`，文件在 `GET /media/avatars/:file`；封面和简介媒体走 `POST /api/v1/media`，文件在 `GET /media/files/:file`。大小、格式和存储上限由管理设置控制。头像格式只接受 jpg、jpeg、png、webp。设备只负责选择和压缩，选完就把临时文件删掉；资源路径只允许单层文件名。没有被引用或已经打不开的文件会从正文和磁盘清掉。业务数据动作不加入原生动作表。
 
 ## 界面规则
 
-- `docs/newUI/` 是视觉来源；生产样式集中在 `styles/tokens.css` 和 `styles/motion.css`，页面不重复写颜色、字号、间距或圆角。
+- 生产样式只写在 `styles/tokens.css` 和 `styles/motion.css`。页面不重复写颜色、字号、间距或圆角。
+- 每个字段有可见标签，不能只靠占位文字。标签和内容左对齐，不整组居中。
+- 图标是 24 视窗、1.5 描边、无填充的细线，不用 emoji。顶栏图标没有圆底；底部导航是图标加文字。
 - 触控命中区域至少 44px；状态同时使用文字与颜色或描边；空、加载、错误、成功和禁用状态在原位置给出下一步。
 - 顶栏使用 `--topbar-h`，再叠 `--safe-top`；有底部导航时内容区叠 `--safe-bottom`。Android WebView 里这两项 `env()` 经常是 0，因此 `WebShellActivity` 按系统栏 inset 缩小页面，避免顶栏压住状态栏、底栏贴进导航栏。展会图保持 9:16；并排字段使用等高布局；日期、时间和状态使用选择器、分段控件或面板。
 - 强调色使用 `--accent*`；二维码保持白底黑点；Markdown / HTML 渲染前经过 `web/src/services/markdown.ts`。
@@ -125,12 +128,3 @@ web/
 ## 文案与资源
 
 用户可见文案写入 `app/src/main/res/values/strings_frontend.xml`，前端用 `t('key')` 读取。源码变更后运行 `node scripts/extract-strings.js --write`，再运行 `node scripts/check-strings.js` 检查源码、资源和 `FrontendStrings.NAMES`。资源首尾不得有空白。脚本只替换 `.vue` 的 `<script>` 段与 `.ts` 里的普通字符串字面量（模板里的中文靠 `:placeholder="t('key')"` 这类绑定书写），并跳过测试文件与格式化常量模块。
-
-## 设计来源
-
-- `newUI/index.html` 和 `remaining-ui.html` 是流程线框源。
-- `newUI/ui-spec.md` 是灰盒组件、表单、屏幕和交互规则。
-- `newUI/DESIGN-HANDOFF.md` 是实现保真、响应式和可访问性合同。
-- `newUI/DESIGN-MANIFEST.json` 是机器可读的屏幕和交互索引。
-
-发生设计稿与实现冲突时，只把未决决策写入 [`docs/product.md`](product.md)；不要在多个文档重复解释同一条规则。

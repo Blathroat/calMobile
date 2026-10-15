@@ -8,6 +8,7 @@
  *   因此收回到一个组件里（核销手动输入、富文本粘贴都是这么接的）。
  *
  * `layout: 'stack'` 把按钮竖着排（选项多、文字长短不一时比并排更好读）。
+ * `layout: 'close-below'` 把最后一颗按钮独占下一行并拉满宽度，用来放「关闭」。
  */
 import { markRaw, reactive, readonly, type Component } from 'vue';
 import { t } from '@/i18n';
@@ -26,7 +27,7 @@ export interface SheetState {
   /** 自定义内容组件；与 `message` 二选一，通常只用其中一个 */
   component: Component | null;
   props: Record<string, unknown>;
-  layout: 'row' | 'stack';
+  layout: 'row' | 'stack' | 'close-below';
   size: 'auto' | 'full';
   closing: boolean;
   onClose?: () => void;
@@ -49,7 +50,7 @@ export function openSheet(options: {
   actions?: SheetAction[];
   component?: Component;
   props?: Record<string, unknown>;
-  layout?: 'row' | 'stack';
+  layout?: 'row' | 'stack' | 'close-below';
   size?: 'auto' | 'full';
   onClose?: () => void;
 }): void {

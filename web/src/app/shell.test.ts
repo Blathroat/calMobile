@@ -43,6 +43,7 @@ const ROUTES = [
   '/meeting-settings',
   '/meeting-apply/exhibitor-1',
   '/admin/meetings/exhibitor-1',
+  '/admin/exhibitions/exhibitor-1',
   '/exhibition-form',
   '/exhibition-form/exh-1',
   '/review',

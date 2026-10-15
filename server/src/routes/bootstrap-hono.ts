@@ -52,7 +52,12 @@ app.get('/bootstrap', optionalAuthHono, async (c) => {
     announcement: settings.announcement,
     brand: settings.brand,
     limits: settings.limits,
-    server: settings.upload,
+    server: {
+      avatarFormats: settings.upload.avatarFormats,
+      avatarSizeMb: settings.upload.avatarSizeMb,
+      imageFormats: settings.upload.imageFormats,
+      videoFormats: settings.upload.videoFormats,
+    },
     // 缺省展会封面（展会自己没有封面时用它兜底）与展商端的「可同时筹备的展会数」上限：
     // 前者给列表 / 详情做兜底图，后者给展商表单做提示与前端预校验。
     cover: settings.cover,

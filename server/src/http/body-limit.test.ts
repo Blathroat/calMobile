@@ -63,6 +63,9 @@ test('体积守卫放过头像上传，其它路径仍按 2MB 拒绝', async () 
   assert.equal(skipsJsonBodyLimit('POST', '/api/v1/profile/avatar'), true);
   assert.equal(skipsJsonBodyLimit('DELETE', '/api/v1/profile/avatar'), false);
   assert.equal(skipsJsonBodyLimit('POST', '/api/v1/profile'), false);
+  assert.equal(skipsJsonBodyLimit('POST', '/api/v1/media'), true);
+  assert.equal(skipsJsonBodyLimit('POST', '/api/v1/media/'), true);
+  assert.equal(skipsJsonBodyLimit('GET', '/api/v1/media'), false);
 
   const app = new Hono();
   let reached = false;

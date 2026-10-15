@@ -23,8 +23,7 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
-        <!-- WebView 前端容器：唯一入口，承载 newUI 的全部页面。
-             旧的原生页面已随 WebView 迁移一并删除，界面只有这一处入口。 -->
+        <!-- WebView 前端容器：唯一入口，承载应用的全部页面。 -->
         <activity
             android:name=".WebShellActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 04 · 报名信息
- * 线框：docs/newUI/index.html #screen-register
  *
  * 表单按展商配置的收集项动态生成：文本、单选、多选三种类型。必填与字符上限取
  * bootstrap 下发的规则（`services/validate`），校验失败落在字段原位（`.field-error`

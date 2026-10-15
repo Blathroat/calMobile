@@ -13,6 +13,7 @@ import type { Context } from 'hono';
 import { resolveUploadConfig } from '../config/upload.js';
 import { notFound } from '../domain/errors.js';
 import { avatarContentType, readAvatarFile } from '../services/avatar-store.js';
+import { contentContentType, readContentFile } from '../services/content-media.js';
 import { applyHeaders } from '../server/node-middleware.js';
 
 const MEDIA_HEADERS: [string, string][] = [
@@ -29,6 +30,14 @@ export function createMediaRoutes(): Hono {
     const bytes = await readAvatarFile(fileName, resolveUploadConfig());
     if (!bytes) throw notFound();
     const type = avatarContentType(fileName.slice(fileName.lastIndexOf('.') + 1));
+    return imageResponse(c, bytes, type);
+  });
+
+  app.get('/files/:name', async (c) => {
+    const fileName = c.req.param('name');
+    const bytes = await readContentFile(fileName, resolveUploadConfig());
+    if (!bytes) throw notFound();
+    const type = contentContentType(fileName.slice(fileName.lastIndexOf('.') + 1));
     return imageResponse(c, bytes, type);
   });
 

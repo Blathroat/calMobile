@@ -312,6 +312,39 @@ final class MediaActions {
                 + "." + extension;
     }
 
+    /**
+     * 删掉选择器刚写入的临时文件。
+     *
+     * 只接受媒体目录下的单层文件名，避免调用方用 {@code ..} 删到别的地方。
+     */
+    static Map<String, Object> discard(Context context, Map<String, Object> payload) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        Object raw = payload == null ? null : payload.get("fileName");
+        String fileName = raw == null ? "" : String.valueOf(raw);
+        if (!fileName.matches("^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")) {
+            result.put("ok", false);
+            return result;
+        }
+        try {
+            java.io.File dir = WebShellActivity.mediaDir(context).getCanonicalFile();
+            java.io.File target = new java.io.File(dir, fileName).getCanonicalFile();
+            java.io.File parent = target.getParentFile();
+            if (parent == null || !parent.getCanonicalPath().equals(dir.getCanonicalPath())) {
+                result.put("ok", false);
+                return result;
+            }
+            if (!target.isFile()) {
+                result.put("ok", true);
+                return result;
+            }
+            result.put("ok", target.delete());
+        } catch (Exception error) {
+            Log.w(TAG, "删除临时媒体失败", error);
+            result.put("ok", false);
+        }
+        return result;
+    }
+
     static boolean writeFile(Context context, String fileName, byte[] bytes) {
         try (java.io.FileOutputStream output =
                      new java.io.FileOutputStream(new java.io.File(WebShellActivity.mediaDir(context), fileName))) {

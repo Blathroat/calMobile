@@ -58,7 +58,7 @@ const COPY = {
   approve: t('s_j666m6'),
   reject: t('s_1qrntx4'),
   detail: t('s_ox3r68'),
-  adjust: t('s_4hlup6'),
+  adjust: t('s_15y6qev'),
   close: t('s_g0fanx'),
   copy: t('s_1xbipwq'),
   missing: t('s_18o1cfv'),
@@ -171,6 +171,7 @@ function openDetail(record: JsonObject): void {
       })),
       hint: canChange(record) ? '' : COPY.lockedHint,
     },
+    layout: 'close-below',
     actions,
   });
 }

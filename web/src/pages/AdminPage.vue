@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 15 · 管理后台（用户 / 展会 / 设置）
- * 线框：docs/newUI/remaining-ui.html #screen-admin-backend、#screen-admin-settings
  *
  * 展会卡片与展商后台保持一致；搜索、暂停与导出直接内联在本页。
  * 启动公告、展会分类、审核策略、媒体与上传限制、字符数上限都属于服务器设置，
@@ -20,13 +19,13 @@ import { toast } from '@/services/toast';
 import { confirmSheet, openSheet } from '@/services/sheet';
 import type { SheetAction } from '@/services/sheet';
 import { check } from '@/services/validate';
-import { EXHIBITION_STATUS, statusTone } from '@/services/status';
-import { coverOf } from '@/services/cover';
-import { formatDateWithWeekday, truncate } from '@/services/format';
+import { statusTone } from '@/services/status';
+import { truncate } from '@/services/format';
 import { device } from '@/services/device-services';
+import { publishImportedMedia } from '@/services/publish-media';
 import SegControl from '@/components/SegControl.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
-import MediaBox from '@/components/MediaBox.vue';
+import AdminExhibitionCard from '@/components/AdminExhibitionCard.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
@@ -138,6 +137,10 @@ const form = reactive({
   maxFutureExhibitions: 0,
   /** 展商可同时筹备的私人会议数；0 表示不限 */
   maxFutureMeetings: 0,
+  /** 服务器存储上限，单位 MB */
+  storageMb: 1024,
+  /** 存满以后：拒绝新上传，或删掉最早的文件 */
+  whenFull: 'reject' as 'reject' | 'evict-oldest',
 });
 
 /** 管理页自己的文案：提示与开关说明放在这里，提取脚本会换成文案 key。 */
@@ -149,12 +152,24 @@ const COPY = {
   exhibitorLimitHint: t('s_13he981'),
   meetingLimit: t('s_2qdje'),
   meetingLimitHint: t('s_1g35i71'),
-  manageMeetings: t('s_12wwrng'),
+  manageExhibitions: t('s_1tkl9jl'),
+  manageMeetings: t('s_1lrlx8m'),
   adjustStatus: t('s_15y6qev'),
   avatarSection: t('s_ivjnb8'),
   avatarFormats: t('s_14byhwl'),
   avatarFormatsInvalid: t('s_hij4iq'),
+  storageTitle: t('s_gabp1m'),
+  storageHint: t('s_12py9wp'),
+  storageLimit: t('s_5lv7y7'),
+  storageWhenFull: t('s_1hkkwf5'),
+  storageEvict: t('s_1c52fd4'),
+  storageReject: t('s_8tcweh'),
 };
+const storageUsage = ref({ usedBytes: 0, limitBytes: 1024 * 1024 * 1024, fileCount: 0 });
+const storagePolicies = [
+  { value: 'reject', label: COPY.storageReject },
+  { value: 'evict-oldest', label: COPY.storageEvict },
+];
 const coverBusy = ref(false);
 const settingsError = ref('');
 const settingsSaving = ref(false);
@@ -322,31 +337,6 @@ function disableTwoFactor(user: User): void {
 
 // ── 展会管理 ─────────────────────────────────────────────────────
 
-/** 暂停 / 恢复报名：管理员暂停后普通用户不能报名，展商不能自行恢复。 */
-function toggleLock(item: Exhibition): void {
-  const closing = item.openForRegistration === true;
-  const title = closing ? t('s_2fmcqd') : t('s_1w55sta');
-  const nextStatus = closing ? EXHIBITION_STATUS.CLOSED : EXHIBITION_STATUS.REVIEW_REQUIRED;
-  const message = closing
-    ? `暂停后「${item.title}」不可报名，展商不能自行恢复。`
-    : `恢复后「${item.title}」将重新按需审核的方式收集报名。`;
-  confirmSheet({
-    title,
-    message,
-    confirmLabel: title,
-    onConfirm: async () => {
-      try {
-        const result = await api.exhibitions.setStatus(String(item.id), nextStatus);
-        const ok = result?.ok === true;
-        toast(String(ok ? `已${title}` : (result?.error || t('s_ydow7a'))), ok ? 'success' : 'error');
-        if (ok) await loadExhibitions();
-      } catch (reason) {
-        toast(reason instanceof Error ? reason.message : String(reason), 'error');
-      }
-    },
-  });
-}
-
 /** CSV 字段转义：含逗号、引号或换行时用双引号包住，内部引号翻倍。 */
 function csvCell(value: unknown): string {
   const text = String(value ?? '');
@@ -430,21 +420,46 @@ function fillForm(data: JsonObject): void {
   form.defaultCover = String(cover.defaultCover ?? bootstrap.cover.defaultCover ?? '');
   form.maxFutureExhibitions = Number(exhibitor.maxFutureExhibitions ?? bootstrap.exhibitor.maxFutureExhibitions ?? 0);
   form.maxFutureMeetings = Number(exhibitor.maxFutureMeetings ?? bootstrap.exhibitor.maxFutureMeetings ?? 0);
+  form.storageMb = Number(upload.storageMb ?? 1024);
+  form.whenFull = upload.whenFull === 'evict-oldest' ? 'evict-oldest' : 'reject';
+  const storage = (data.storage ?? {}) as JsonObject;
+  const limitBytes = Number(storage.limitBytes);
+  storageUsage.value = {
+    usedBytes: Number(storage.usedBytes) || 0,
+    limitBytes: Number.isFinite(limitBytes) && limitBytes > 0 ? limitBytes : form.storageMb * 1024 * 1024,
+    fileCount: Number(storage.fileCount) || 0,
+  };
 }
 
+function formatStorage(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+const storageFull = computed(() => storageUsage.value.limitBytes > 0 && storageUsage.value.usedBytes >= storageUsage.value.limitBytes);
+const storagePercent = computed(() => {
+  const limit = storageUsage.value.limitBytes;
+  if (limit <= 0) return 0;
+  return Math.min(100, Math.round((storageUsage.value.usedBytes / limit) * 100));
+});
+const storageCaption = computed(
+  () => `${t('s_y7lj0n')} ${formatStorage(storageUsage.value.usedBytes)} / ${formatStorage(storageUsage.value.limitBytes)}`,
+);
+
 /**
- * 缺省封面：走与展会封面同一条路径（原生选图 → 落盘 → 存短 URL），
+ * 缺省封面：先在设备上选择，再上传到服务器。
  * 只改表单里的值，点「保存设置」才落库。
  */
 async function pickDefaultCover(): Promise<void> {
   coverBusy.value = true;
   try {
-    const stored = await device.importMedia('image') as { url?: string };
+    const stored = await device.importMedia('image');
     if (!stored?.url) {
       toast(t('s_1dc9o49'), 'error');
       return;
     }
-    form.defaultCover = stored.url;
+    form.defaultCover = await publishImportedMedia('image', stored);
   } catch (reason) {
     // 用户在系统选择器点了取消：按稳定错误码判断，不提示错误。
     if (reason && typeof reason === 'object' && (reason as { code?: unknown }).code === 'cancelled') return;
@@ -513,6 +528,8 @@ async function saveSettings(): Promise<void> {
       defaultCover: form.defaultCover.trim(),
       maxFutureExhibitions: Number(form.maxFutureExhibitions) || 0,
       maxFutureMeetings: Number(form.maxFutureMeetings) || 0,
+      storageMb: Number(form.storageMb) || 0,
+      whenFull: form.whenFull,
     };
     for (const item of LIMIT_ITEMS) payload[item.key] = numberField(item.key);
 
@@ -525,7 +542,15 @@ async function saveSettings(): Promise<void> {
     const settings = (saved.settings ?? {}) as JsonObject;
     // 设置接口的上传段叫 `upload`，启动数据里同一段叫 `server`。裁剪导出要立刻读到新的头像格式。
     const upload = settings.upload;
-    const server = upload && typeof upload === 'object' && !Array.isArray(upload) ? upload : settings.server;
+    const uploadObject = upload && typeof upload === 'object' && !Array.isArray(upload) ? upload as JsonObject : null;
+    const server = uploadObject
+      ? {
+          avatarFormats: uploadObject.avatarFormats,
+          avatarSizeMb: uploadObject.avatarSizeMb,
+          imageFormats: uploadObject.imageFormats,
+          videoFormats: uploadObject.videoFormats,
+        }
+      : settings.server;
     applyRuntimeBootstrap({
       ...settings,
       server,
@@ -614,15 +639,24 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
             <button class="cta ghost" data-size="small" type="button" @click="manageUser(user)">
               {{ COPY.adjustStatus }}
             </button>
-            <button
-              v-if="user.roleCode === 'exhibitor' || user.roleCode === 'admin'"
-              class="cta ghost"
-              data-size="small"
-              type="button"
-              @click="router.push(`/admin/meetings/${encodeURIComponent(String(user.id ?? ''))}`)"
-            >
-              {{ COPY.manageMeetings }}
-            </button>
+            <template v-if="user.roleCode === 'exhibitor' || user.roleCode === 'admin'">
+              <button
+                class="cta ghost"
+                data-size="small"
+                type="button"
+                @click="router.push(`/admin/exhibitions/${encodeURIComponent(String(user.id ?? ''))}`)"
+              >
+                {{ COPY.manageExhibitions }}
+              </button>
+              <button
+                class="cta ghost"
+                data-size="small"
+                type="button"
+                @click="router.push(`/admin/meetings/${encodeURIComponent(String(user.id ?? ''))}`)"
+              >
+                {{ COPY.manageMeetings }}
+              </button>
+            </template>
           </div>
           <!-- 兜底出口：用户邮箱用不了（离职、邮箱被回收）时，只有管理员能帮他关掉两步验证 -->
           <button
@@ -677,46 +711,12 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
         :description="query ? t('s_1kmur0r') : t('s_1tsjagr')"
       />
       <div v-else class="list" data-gap="sm" :data-busy="exhibitions.loading.value ? 'true' : undefined">
-        <div v-for="item in exhibitionItems" :key="String(item.id)" class="card">
-          <button
-            class="row-card"
-            type="button"
-            data-pressable="true"
-            style="border: 0; padding: 0; background: transparent"
-            :aria-label="`查看 ${item.title} 详情`"
-            @click="router.push(`/detail/${item.id}`)"
-          >
-            <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
-            <span class="row-copy">
-              <strong class="row-title truncate">{{ item.title }}</strong>
-              <span class="row-meta">{{ `${formatDateWithWeekday(item.date)} ${item.time}` }}</span>
-              <span class="row-meta truncate">{{ item.venue }}</span>
-              <span class="row-meta">{{ `${item.status} · ${item.registrationCount ?? 0} 条报名` }}</span>
-            </span>
-            <StatusTag :text="String(item.modeLabel || item.status || '')" :tone="statusTone(String(item.status || ''))" />
-          </button>
-          <div class="grid-cols-2">
-            <button
-              class="cta ghost"
-              data-size="small"
-              type="button"
-              @click="router.push(`/review?exhibitionId=${encodeURIComponent(String(item.id))}`)"
-            >
-              {{ t('s_j8kyoz') }}
-            </button>
-            <button
-              class="cta ghost"
-              data-size="small"
-              type="button"
-              @click="router.push(`/exhibition-form/${String(item.id)}`)"
-            >
-              {{ t('s_eutzzb') }}
-            </button>
-            <button class="cta ghost" data-size="small" type="button" @click="toggleLock(item)">
-              {{ item.openForRegistration === true ? t('s_2fmcqd') : t('s_1w55sta') }}
-            </button>
-          </div>
-        </div>
+        <AdminExhibitionCard
+          v-for="item in exhibitionItems"
+          :key="String(item.id)"
+          :item="item"
+          @changed="loadExhibitions"
+        />
       </div>
 
       <button class="cta ghost" type="button" :disabled="exhibitionItems.length === 0" @click="exportCsv">
@@ -740,6 +740,39 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       <div class="notice" data-tone="accent">
         <strong>{{ t('s_1l8hptt') }}</strong>
         <span>{{ t('s_3fdon3') }}</span>
+      </div>
+
+      <div class="card">
+        <span class="section-label">{{ COPY.storageTitle }}</span>
+        <div class="storage-meter" :data-full="storageFull ? 'true' : 'false'">
+          <span :style="{ width: `${storagePercent}%` }" />
+        </div>
+        <p class="field-hint">{{ storageCaption }}</p>
+        <p class="field-hint">{{ COPY.storageHint }}</p>
+        <div class="field">
+          <label for="settings-storage-mb">{{ COPY.storageLimit }}</label>
+          <div class="row" data-gap="md">
+            <input
+              id="settings-storage-mb"
+              v-model.number="form.storageMb"
+              class="input"
+              type="number"
+              min="64"
+              max="10240"
+              inputmode="numeric"
+            />
+            <span class="row-meta">MB</span>
+          </div>
+        </div>
+        <div class="field">
+          <label id="settings-storage-policy">{{ COPY.storageWhenFull }}</label>
+          <SegControl
+            :model-value="form.whenFull"
+            :items="storagePolicies"
+            :label="COPY.storageWhenFull"
+            @update:model-value="form.whenFull = $event === 'evict-oldest' ? 'evict-oldest' : 'reject'"
+          />
+        </div>
       </div>
 
       <div class="card">

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 03 · 展会详情
- * 线框：docs/newUI/index.html #screen-detail、docs/newUI/remaining-ui.html #screen-detail
  *
  * 业务：展会信息 + 报名收集项 + 系统日历 + 分享。
  * 简介可能是展商编辑器产出的 HTML，也可能是 Markdown，两种格式都在渲染前过清洗入口。

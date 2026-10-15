@@ -61,6 +61,22 @@ test('头像大小夹在 1..20，头像格式只接受画布能导出的后缀',
   assert.deepEqual(next.upload.videoFormats, ['mp4']);
 });
 
+test('存储上限夹在 64..10240，存满策略只接受两种', () => {
+  assert.equal(defaults().upload.storageMb, 1024);
+  assert.equal(defaults().upload.whenFull, 'reject');
+  assert.equal(applyServerPatch(defaults(), { storageMb: 10 }).upload.storageMb, 64);
+  assert.equal(applyServerPatch(defaults(), { storageMb: 99999 }).upload.storageMb, 10240);
+  assert.equal(applyServerPatch(defaults(), { storageMb: '128' }).upload.storageMb, 128);
+  assert.equal(applyServerPatch(defaults(), { whenFull: 'evict-oldest' }).upload.whenFull, 'evict-oldest');
+  assert.equal(applyServerPatch(defaults(), { whenFull: 'wipe' }).upload.whenFull, 'reject');
+
+  const current = defaults();
+  current.upload.whenFull = 'evict-oldest';
+  const next = applyServerPatch(current, { storageMb: 200 });
+  assert.equal(next.upload.storageMb, 200);
+  assert.equal(next.upload.whenFull, 'evict-oldest', '没提交的策略保持原值');
+});
+
 test('imageSizeMb 仍然是 1..50，且与 videoSizeMb 各自独立收敛', () => {
   const next = applyServerPatch(defaults(), { imageSizeMb: 9999, videoSizeMb: 9999 });
   assert.equal(next.media.imageSizeMb, 50);

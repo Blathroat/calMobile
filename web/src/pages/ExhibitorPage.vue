@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 10 · 展商后台
- * 线框：docs/newUI/remaining-ui.html #screen-exhibitor-backend
  *
  * 卡片上「查看报名」「编辑展会」「复制链接」排在同一行。点卡片主体进入展会详情。
  * 都属于展会的配置，统一收进「编辑展会」的二级界面，卡片保持清爽。

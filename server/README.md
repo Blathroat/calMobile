@@ -35,7 +35,16 @@
 
 响应一律带一套安全头（`X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`Referrer-Policy: no-referrer`、`Strict-Transport-Security`、`Cross-Origin-Opener-Policy`、`Cross-Origin-Resource-Policy`、`Origin-Agent-Cluster`、`X-DNS-Prefetch-Control`、`X-Download-Options`、`X-Permitted-Cross-Domain-Policies`、`X-XSS-Protection`），取值与 Hono 自带的 `secureHeaders` 默认集一致；服务不广播 `X-Powered-By`。
 
-每一步的取舍与替代方案记在 `docs/adr/0001-server-hono-typescript.md`。
+### 依赖取舍
+
+这些是当前实现，不要为了换库而重写：
+
+- 数据库用 `pg` 手写 SQL。日期用 `to_char`，事务手写 `BEGIN` / `COMMIT`，迁移在 `config/migrate.ts`。
+- 密码用 `bcryptjs`。邮件用 `nodemailer` 的 `console` / `smtp` / `memory` 三种通道。
+- 限流、TOTP 和迁移保持自研。登录限流在中间件 `await next()` 之后用 `c.res.clone()` 看信封的 `ok === false`，只记失败。
+- 请求校验用 Zod，类型从 schema 推导。
+- 访问令牌用 `jose`，固定 HS256。刷新令牌是随机串，只存哈希。
+- 不引入 `hono/compress`。状态页在 `status-page/` 分开维护，构建后运行时仍是单文件 HTML，样式不复用应用的 `tokens.css`。
 
 `src/` 的模块图是**无环**的：`config/auth.ts` 只导纯函数，进程级的那份配置由 `config/env.ts` 统一解析（`loadProcessConfig()`），要用密钥的模块自己去取，谁也不依赖谁。
 
@@ -235,7 +244,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 
 | 方法与路径 | 动作 | 权限与说明 |
 | --- | --- | --- |
-| `GET /exhibitions` | `exhibitions.list` | 可匿名。`?query=` 模糊匹配标题 / 地点 / 分类 / 简介。每条带 `exhibitorRole`（主办人角色代码，没有主办人时为空） |
+| `GET /exhibitions` | `exhibitions.list` | 可匿名。`?query=` 模糊匹配标题 / 地点 / 分类 / 简介。`?exhibitorId=` 只返回该主办人的展会，可与关键词一起用。每条带 `exhibitorId` 与 `exhibitorRole`（没有主办人时为空） |
 | `GET /exhibitions/month` | `exhibitions.month` | 可匿名。`?year=&month=&day=`，返回 `{ year, month, day, monthLabel, eventDays, markedDays, exhibitions, meetings, selected }`。`eventDays` 是有展会的日期；`markedDays` 只在已登录时返回和该用户有关的日期，匿名为空数组。`meetings` 是该用户作为申请人或主办人的待审核、已通过私人会议，已拒绝和已撤销不返回；未登录为空数组。每条会议的 `role` 是 `host` 或 `visitor`，`titleRole` 是标题里那个人的角色代码 |
 | `GET /exhibitions/categories` | `exhibitions.categories` | 可匿名。管理员配置的分类 |
 | `GET /exhibitions/:id` | `exhibitions.get` | 可匿名。返回 `{ found, exhibition, fields }` |
@@ -439,6 +448,6 @@ pnpm format               # oxfmt
 - **不要把状态页对公网打开**：它给出迁移清单、各表行数与接口清单；需要启用时仍应由反代加 Basic Auth / IP 白名单，`/ping` 才是给外部探活用的事实源；
 - **不要在服务器上跑 Mailpit**：`docker-compose.yml` 的 `mailpit` 服务与 `MAIL_SMTP_HOST=127.0.0.1` 只用于本地开发；生产要指向托管中继，并用专用子域配好 SPF / DKIM / DMARC（启动自检对 127.0.0.1 / 1025 会警告）；
 - 生产环境不要把 `MAIL_TRANSPORT` 配成 `console`：那样验证码只写日志，用户永远收不到（`resolveMailConfig` 会拦截 `memory`，但 `console` 是合法通道，只能靠部署时确认）；
-- 头像已经上传到服务器本地目录（`UPLOAD_DIR`，默认 `server/data/uploads`，由 `GET /media/avatars/:file` 分发）。展会封面和简介里的图片、视频仍在客户端私有目录（`files/media`）；
+- 头像、展会封面和简介里的图片、视频上传到服务器本地目录（`UPLOAD_DIR`，默认 `server/data/uploads`）。头像由 `GET /media/avatars/:file` 分发，封面和简介媒体由 `GET /media/files/:file` 分发。没有被引用或已经打不开的文件会清掉；存储满了以后按管理设置拒绝新上传或删掉最早的文件；
 - 通知只有数据库落点，还没有推送通道；
-- 系统日历、分享、摄像头属于设备能力，永远留在客户端（`ui.sync`、`calendar.status` / `calendar.toggle` 等 10 个动作不进 API）。
+- 系统日历、分享、摄像头属于设备能力，永远留在客户端（`ui.sync`、`calendar.status` / `calendar.toggle`、`media.discard` 等动作不进 API）。

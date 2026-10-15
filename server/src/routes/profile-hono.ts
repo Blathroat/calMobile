@@ -56,6 +56,7 @@ import {
   storedAvatarUrl,
   writeAvatarFile,
 } from '../services/avatar-store.js';
+import { ensureRoom } from '../services/media-gc.js';
 import { hashToken, revokeAllDevicesForUser, revokeDeviceForUser } from '../domain/session.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { clientIp } from '../http/client-ip.js';
@@ -211,6 +212,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       if (!formatAllowed(inspected.image.extension, settings.upload.avatarFormats)) {
         throw badRequest(`服务器设置不允许上传 .${inspected.image.extension} 格式，允许：${settings.upload.avatarFormats.join('、')}`);
       }
+      await ensureRoom(read.bytes.byteLength);
       const previous = await currentAvatar(user.userId);
       const fileName = await writeAvatarFile(read.bytes, inspected.image.extension, config);
       const url = storedAvatarUrl(fileName, config);

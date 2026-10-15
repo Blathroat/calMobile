@@ -13,6 +13,7 @@
 import { query } from '../config/pool.js';
 import { DEFAULT_SETTINGS, type ServerSettings } from '../config/migrate.js';
 import { badRequest } from './errors.js';
+import { normalizeWhenFull } from '../services/media-quota.js';
 import { toUserStatus } from './labels.js';
 
 /** 表单字符数上限的取值范围：前端 `core/validate.js` 的 `limit()` 按同一批键取值。 */
@@ -58,6 +59,8 @@ export interface ServerPatch {
   avatarFormats?: unknown;
   imageFormats?: unknown;
   videoFormats?: unknown;
+  storageMb?: unknown;
+  whenFull?: unknown;
   exhibitionTitle?: unknown;
   exhibitionVenue?: unknown;
   category?: unknown;
@@ -276,14 +279,16 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
       videoSizeMb: clampNumber(source.videoSizeMb, fallback.videoSizeMb, 1, 500),
     };
   }
-  if (['avatarSizeMb', 'avatarFormats', 'imageFormats', 'videoFormats'].some((key) => key in source)) {
-    // 老库的 upload JSON 里还没有 avatarFormats：以默认值为底再盖库里的键。
+  if (['avatarSizeMb', 'avatarFormats', 'imageFormats', 'videoFormats', 'storageMb', 'whenFull'].some((key) => key in source)) {
+    // 老库的 upload JSON 里还没有 avatarFormats / storageMb：以默认值为底再盖库里的键。
     const fallback = { ...DEFAULT_SETTINGS.upload, ...next.upload };
     next.upload = {
       avatarSizeMb: clampNumber(source.avatarSizeMb, fallback.avatarSizeMb, 1, 20),
       avatarFormats: avatarFormatList(source.avatarFormats, fallback.avatarFormats),
       imageFormats: formatList(source.imageFormats, fallback.imageFormats),
       videoFormats: formatList(source.videoFormats, fallback.videoFormats),
+      storageMb: clampNumber(source.storageMb, fallback.storageMb, 64, 10240),
+      whenFull: normalizeWhenFull(source.whenFull, fallback.whenFull),
     };
   }
   // 字符数上限：逐项收敛，成对的上下限再互相约束一次。

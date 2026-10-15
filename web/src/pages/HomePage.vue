@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 02 · 首页（月视图 + 当天展会列表）
- * 线框：docs/newUI/index.html #screen-home、docs/newUI/remaining-ui.html #screen-home
  *
  * 日历卡片支持左右滑动切换月份：拖动时卡片跟手位移，松手超过阈值则滑出并载入相邻月份。
  * 行数按月份实际需要取 5 或 6 行（放得下就 5 行），行高只有一档，所以同一行里的日期不会跳。

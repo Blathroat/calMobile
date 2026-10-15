@@ -1,7 +1,7 @@
 /* ============================================================================
  * calMobile · 动效层
  *
- * 参照 docs/newUI/remaining-ui.html 的交互语义：状态必须可见、过渡必须平滑，
+ * 状态必须可见、过渡必须平滑，
  * 但只动画 transform / opacity / filter 等合成属性，保证 WebView 中 60fps。
  * 所有动画都受 prefers-reduced-motion 保护。
  * ==========================================================================*/
@@ -635,7 +635,7 @@
     display: grid;
     gap: var(--s2);
     animation: item-in var(--motion-normal) var(--ease-out) both;
-    /* 覆盖 EasyMDE 自带的橙色主题变量，统一走 newUI 令牌 */
+    /* 覆盖 EasyMDE 自带的橙色主题变量，统一走设计令牌 */
     --editor-background: var(--screen);
     --editor-border: var(--stroke);
     --editor-border-radius: var(--r-input);

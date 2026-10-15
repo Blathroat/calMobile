@@ -53,6 +53,7 @@ import MeetingSettingsPage from '@/pages/MeetingSettingsPage.vue';
 import MeetingApplyPage from '@/pages/MeetingApplyPage.vue';
 import MeetingDetailPage from '@/pages/MeetingDetailPage.vue';
 import AdminMeetingsPage from '@/pages/AdminMeetingsPage.vue';
+import AdminExhibitionsPage from '@/pages/AdminExhibitionsPage.vue';
 import type { BodyGap } from '@/app/shell';
 import { navigation } from './navigation';
 import { useSessionStore } from '@/stores/session';
@@ -158,7 +159,12 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
       {
         path: '/admin/meetings/:exhibitorId',
         component: AdminMeetingsPage,
-        meta: { title: 's_2zq5xl', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['admin'] },
+        meta: { title: 's_1lrlx8m', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['admin'] },
+      },
+      {
+        path: '/admin/exhibitions/:exhibitorId',
+        component: AdminExhibitionsPage,
+        meta: { title: 's_1tkl9jl', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['admin'] },
       },
       { path: '/exhibition-form', component: ExhibitionFormPage, meta: { title: 's_eutzzb', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
       { path: '/exhibition-form/:id', component: ExhibitionFormPage, meta: { title: 's_eutzzb', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },

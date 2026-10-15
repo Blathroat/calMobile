@@ -1,11 +1,10 @@
 <script setup lang="ts">
 /**
  * 屏幕 12 · 展会简介（Markdown 编辑）
- * 线框：docs/newUI/remaining-ui.html #screen-rich-editor
  *
  * 保存的是 Markdown 源码，详情页按 Markdown 渲染；预览走 `@/services/markdown`
  * 的渲染入口（与详情页同一套清洗），不自行拼 HTML。
- * 图片与视频先由原生落盘换成短 URL 再写进正文，正文不会因为内联 base64 变长。
+ * 图片与视频先由原生选择，再上传到服务器，正文只写服务器地址。
  */
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -16,7 +15,9 @@ import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
 import { allowedFormats, uploadCountLimit, uploadSizeLimitMb, uploadSizeError } from '@/services/validate';
 import { device } from '@/services/device-services';
+import { publishImportedMedia } from '@/services/publish-media';
 import { htmlToMarkdown, loadHtmlConverter, loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
+import { patchExhibitionDraft, readExhibitionDraft } from '@/services/exhibition-draft';
 import AppIcon from '@/components/AppIcon.vue';
 import PasteTextPanel from '@/components/PasteTextPanel.vue';
 import StateBlock from '@/components/StateBlock.vue';
@@ -34,10 +35,13 @@ const router = useRouter();
 const bootstrap = useBootstrapStore();
 const query = useAsync<ExhibitionDetail>();
 
-/** 路由只带 id：`/rich-editor?id=…`（旧实现的 hash 参数一并兜住）。 */
+/** 已有展会走 `?id=`。新建还没有 id 时走 `?draft=1`，正文先记在内存稿里。 */
 const exhibitionId = computed(() => String(route.params.id ?? route.query.id ?? ''));
+const draftMode = computed(() => !exhibitionId.value && String(route.query.draft ?? '') === '1');
 const exhibition = computed<JsonObject>(() => (query.data.value?.exhibition ?? {}) as JsonObject);
-const notFound = computed(() => !exhibitionId.value || query.data.value?.found === false);
+const notFound = computed(() => (draftMode.value
+  ? readExhibitionDraft() == null
+  : !exhibitionId.value || query.data.value?.found === false));
 const loadFailed = computed(() => query.error.value !== undefined && query.data.value === undefined);
 
 const content = ref('');
@@ -47,7 +51,9 @@ const editor = ref<HTMLTextAreaElement>();
 /** 内容只从取回的详情写一次，之后预览 / 打字都不再被覆盖。 */
 const seeded = ref(false);
 const canSave = computed(() => seeded.value && !query.loading.value && !loadFailed.value
-  && !notFound.value && Boolean(exhibition.value.id));
+  && !notFound.value && (draftMode.value || Boolean(exhibition.value.id)));
+const previewLabel = t('s_k2jp4x');
+const continueLabel = t('s_ajd5o');
 
 const previewHtml = computed(() => markdownToHtml(content.value));
 
@@ -91,6 +97,26 @@ function initialContent(item: JsonObject): string {
 }
 
 async function load(): Promise<void> {
+  if (draftMode.value) {
+    const draft = readExhibitionDraft();
+    if (!draft || seeded.value) return;
+    await query.run(async () => {
+      await loadMarkdownParser();
+      return {
+        found: true,
+        exhibition: {
+          id: '',
+          title: draft.title,
+          description: draft.description,
+          descriptionFormat: 'md',
+        },
+      };
+    });
+    if (seeded.value || !query.data.value) return;
+    content.value = draft.description;
+    seeded.value = true;
+    return;
+  }
   if (!exhibitionId.value) {
     return;
   }
@@ -175,7 +201,7 @@ function formatsHint(kind: 'image' | 'video'): string {
   return formats.length > 0 ? formats.map((item) => `.${item}`).join('/') : t('s_1ylglbm');
 }
 
-/** 插入图片：交给原生落盘后只写入短 URL。 */
+/** 插入图片：设备选完后上传，正文只留下服务器地址。 */
 async function insertImage(): Promise<void> {
   const max = Number(bootstrap.media.imageCount) || 8;
   const current = media.value.filter((item) => item.kind === 'image').length;
@@ -184,12 +210,13 @@ async function insertImage(): Promise<void> {
     return;
   }
   try {
-    const result = await device.importMedia('image') as { url?: string; bytes?: unknown; compressed?: boolean };
+    const result = await device.importMedia('image');
     if (!result?.url) {
       toast(t('s_1dc9o49'), 'error');
       return;
     }
-    appendText(`\n\n![展会图片](${result.url})\n\n`);
+    const url = await publishImportedMedia('image', result);
+    appendText(`\n\n![展会图片](${url})\n\n`);
     const size = formatBytes(result.bytes);
     toast(result.compressed ? `图片已压缩为 ${size} 并插入` : `图片已插入（${size}）`, 'success');
   } catch (reason) {
@@ -207,18 +234,20 @@ async function insertVideo(): Promise<void> {
     return;
   }
   try {
-    const result = await device.importMedia('video') as { url?: string; bytes?: unknown };
+    const result = await device.importMedia('video');
     if (!result?.url) {
       toast(t('s_s0oos7'), 'error');
       return;
     }
-    // 视频不像图片那样会被原生压缩：超过服务器设置的上限时不要插进正文。
+    // 视频不像图片那样会被原生压缩：超过服务器设置的上限时不要上传。
     const oversized = uploadSizeError('video', result.bytes);
     if (oversized) {
+      if (result.fileName) void device.discardMedia(result.fileName).catch(() => undefined);
       toast(oversized, 'error');
       return;
     }
-    appendText(`\n\n<video controls src="${result.url}"></video>\n\n`);
+    const url = await publishImportedMedia('video', result);
+    appendText(`\n\n<video controls src="${url}"></video>\n\n`);
     toast(`视频已插入（${formatBytes(result.bytes)}）`, 'success');
   } catch (reason) {
     if (isCancelled(reason)) return;
@@ -294,6 +323,18 @@ function clearAll(): void {
 async function save(): Promise<void> {
   if (saving.value || !canSave.value) return;
   const markdown = content.value.trim();
+  if (draftMode.value) {
+    saving.value = true;
+    try {
+      patchExhibitionDraft(markdown);
+      const summary = plainText(markdownToHtml(markdown), 20);
+      toast(markdown ? `简介已保存（${summary}）` : t('s_1lylgf9'), 'success');
+      await router.back();
+    } finally {
+      saving.value = false;
+    }
+    return;
+  }
   saving.value = true;
   try {
     // 只改简介：其余字段原样回传，避免把详情页里没有的字段清空。
@@ -359,10 +400,10 @@ function escapeRegExp(value: string): string {
 
   <template v-else>
     <div class="card" data-tone="fill">
-      <strong>{{ exhibition.title }}</strong>
+      <strong>{{ exhibition.title || t('s_p9fllo') }}</strong>
     </div>
 
-    <!-- 工具条：格式按钮作用在光标处，预览按钮就地切换渲染结果 -->
+    <!-- 工具条只留格式。预览和粘贴在编辑区下方，避免同一颗粘贴出现两次。 -->
     <div class="toolbar" role="toolbar" :aria-label="t('s_28v8q')">
       <button type="button" :aria-pressed="false" :title="t('s_4okt0a')" @click="prefixLine('## ')">H2</button>
       <button type="button" :aria-pressed="false" :title="t('s_1e57pa0')" @click="surround('**', '**', '文本')">
@@ -385,17 +426,6 @@ function escapeRegExp(value: string): string {
       </button>
       <button type="button" :aria-pressed="false" :title="t('s_1kll7do')" @click="appendText(t('s_spr4u2'))">
         <AppIcon name="list" size="icon icon-sm" />
-      </button>
-      <button
-        type="button"
-        :aria-pressed="showPreview ? 'true' : 'false'"
-        :title="t('s_k2jp4x')"
-        @click="showPreview = !showPreview"
-      >
-        {{ t('s_k2jp4x') }}
-      </button>
-      <button type="button" :aria-pressed="false" :title="t('s_7zi2sm')" @click="openPasteSheet">
-        {{ t('s_7zi2sm') }}
       </button>
       <button type="button" :aria-pressed="false" :title="t('s_14ggq2g')" @click="clearAll">
         <AppIcon name="trash" size="icon icon-sm" />
@@ -422,19 +452,22 @@ function escapeRegExp(value: string): string {
       <span class="field-hint">{{ showPreview ? t('s_k2jp4x') : t('s_1jvhwb1') }}</span>
     </div>
 
-    <!-- 三个入口并排：文案必须一行显示，窄屏时整行横向滚动而不是把字拆成两行 -->
+    <!-- 这一行只放预览和粘贴。插入图片、插入视频留在上面的工具条。 -->
     <div class="action-row">
+      <button
+        class="cta"
+        :class="{ ghost: !showPreview }"
+        data-size="small"
+        type="button"
+        :aria-pressed="showPreview ? 'true' : 'false'"
+        :title="showPreview ? continueLabel : previewLabel"
+        @click="showPreview = !showPreview"
+      >
+        {{ showPreview ? continueLabel : previewLabel }}
+      </button>
       <button class="cta ghost" data-size="small" type="button" @click="openPasteSheet">
         <AppIcon name="edit" size="icon icon-sm" />
         {{ t('s_7zi2sm') }}
-      </button>
-      <button class="cta ghost" data-size="small" type="button" @click="insertImage">
-        <AppIcon name="image" size="icon icon-sm" />
-        {{ t('s_1w5fs53') }}
-      </button>
-      <button class="cta ghost" data-size="small" type="button" @click="insertVideo">
-        <AppIcon name="video" size="icon icon-sm" />
-        {{ t('s_1aj4gvd') }}
       </button>
     </div>
     <p class="field-hint">{{ mediaHint }}</p>
@@ -448,9 +481,9 @@ function escapeRegExp(value: string): string {
       <p v-if="media.length === 0" class="field-hint">{{ t('s_12ibypn') }}</p>
       <div v-else class="media-grid">
         <div v-for="tile in media" :key="tile.url" class="media-tile">
-          <img v-if="tile.kind === 'image'" :src="tile.url" :alt="t('s_1w5fs53')" />
+          <img v-if="tile.kind === 'image'" :src="tile.url" :alt="t('s_1w5fs53')" @error="removeMedia(tile)" />
           <!-- 视频用同一套槽位：`.media-tile img` 的铺满规则同样适用于 video -->
-          <video v-else :src="tile.url" muted playsinline preload="metadata" />
+          <video v-else :src="tile.url" muted playsinline preload="metadata" @error="removeMedia(tile)" />
           <button type="button" :aria-label="t('s_14ggq2g')" @click="removeMedia(tile)">×</button>
         </div>
       </div>

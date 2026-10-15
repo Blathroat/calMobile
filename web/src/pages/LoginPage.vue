@@ -1,7 +1,6 @@
 <script setup lang="ts">
 /**
  * 屏幕 01 · 入口（登录 / 访客 / 两步验证）
- * 线框：docs/newUI/index.html #screen-login
  *
  * 账号开了两步验证时，`POST /auth/login` **不回令牌**，只回一张 5 分钟有效的预认证票
  * 并把验证码发到邮箱；这一步拿票 + 码换真正的会话。也就是说：密码对了但码没过，
