@@ -419,6 +419,12 @@ label {
     border-top: var(--hairline) solid var(--stroke);
 }
 
+/* 私人会议分享链接只占一小行，不要跟主操作按钮一样高。 */
+.page-foot[data-compact="true"] {
+    padding-top: var(--s2);
+    padding-bottom: var(--s2);
+}
+
 /* 卡片内的次级按钮：比标准 .cta 矮一档，字号也更小 */
 .cta[data-size="small"] {
     min-height: var(--touch);
@@ -539,6 +545,77 @@ label {
 .grid-cols-2 > * {
     flex: 1 1 0;
     min-width: 0;
+}
+
+/* 卡片底部的两三个操作并排。子项自己拉伸，不要再套一层 grid-cols-2。 */
+.action-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--s2);
+}
+
+.action-row > * {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.action-row > .cta {
+    padding-inline: var(--s2);
+}
+
+/* 地址只占一行：文字在左，右侧是 44px 的复制图标。 */
+.copy-line {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    min-width: 0;
+}
+
+.copy-line .truncate {
+    flex: 1 1 auto;
+}
+
+.icon-hit {
+    flex: none;
+    width: var(--touch);
+    height: var(--touch);
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: var(--r-chip);
+    background: transparent;
+    color: var(--ink-2);
+}
+
+.icon-hit:active {
+    background: var(--f3);
+}
+
+.icon-hit:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* 中文日期：年 / 月 / 日各一个选择框，单位写在框外。 */
+.pick-row {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+}
+
+.pick-row .select {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: var(--touch);
+    padding-inline: var(--s2);
+    padding-inline-end: var(--s5);
+    font-size: var(--fs-label);
+}
+
+.pick-unit {
+    flex: none;
+    color: var(--ink-2);
+    font-size: var(--fs-label);
 }
 
 .grid-cols-2 > .field {
@@ -808,6 +885,20 @@ label {
     font-weight: 700;
 }
 
+/* 名字和后面的身份小标签排在同一行，长名字先省略，标签不被挤掉。 */
+.name-line {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    min-width: 0;
+}
+
+.name-line > .row-title,
+.name-line > .truncate,
+.name-line > strong {
+    min-width: 0;
+}
+
 .row-meta {
     color: var(--ink-2);
     font-size: var(--fs-meta);
@@ -824,6 +915,12 @@ label {
     background: var(--f3);
     object-fit: cover;
     overflow: hidden;
+}
+
+button.avatar {
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
 }
 
 .avatar {
@@ -1282,6 +1379,10 @@ label {
     font-size: var(--fs-meta);
 }
 
+.field-hint[data-one-line="true"] {
+    white-space: nowrap;
+}
+
 .field-static {
     min-height: var(--ctrl);
     display: flex;
@@ -1380,23 +1481,251 @@ label {
     background: var(--screen);
 }
 
-/* 收集项选项目：输入框 + 删除按钮并排 */
+/* 收集项：同一张卡里按分隔线排列，选项行比标题更紧、更淡。 */
+.collect-list {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    /* 分隔线贴着卡片左右边缘；内容仍与卡片标题对齐。 */
+    margin-inline: calc(var(--s4) * -1);
+    /* 第一项的浮动标题要伸出输入框上沿，留出这一截避免被裁切。 */
+    padding-top: var(--s2);
+}
+
+.collect-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    min-width: 0;
+    padding-inline: var(--s4);
+    padding-bottom: var(--s2);
+}
+
+.collect-item + .collect-item {
+    border-top: var(--hairline) solid var(--stroke);
+    padding-top: var(--s3);
+}
+
+.collect-primary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    min-width: 0;
+}
+
+.collect-note {
+    margin: 0;
+    color: var(--ink-3);
+    font-size: var(--fs-tag);
+    line-height: 1.35;
+}
+
+.collect-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s1);
+    min-width: 0;
+}
+
+.collect-options > .collect-quiet {
+    padding-inline-start: calc(var(--fs-tag) * 1.5 + var(--s1));
+}
+
 .option-row {
     display: flex;
     align-items: center;
-    gap: var(--s2);
+    gap: var(--s1);
+    min-width: 0;
 }
 
-.option-row .input {
+.option-index {
+    flex: none;
+    width: 1.5em;
+    color: var(--ink-3);
+    font-size: var(--fs-tag);
+    font-weight: 700;
+    text-align: center;
+}
+
+.option-row .input,
+.option-row > .notch {
     flex: 1 1 auto;
+    width: auto;
     min-width: 0;
+}
+
+.option-input {
+    min-height: var(--touch);
+    padding-inline: var(--s2);
+    background: transparent;
+    color: var(--ink-2);
+    font-size: var(--fs-label);
 }
 
 .option-remove {
     flex: none;
+    border: 0;
+    background: transparent;
+    color: var(--ink-3);
+}
+
+.collect-quiet {
+    min-height: var(--touch);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-start;
+    padding: 0 var(--s2);
+    border: 0;
+    background: transparent;
+    color: var(--ink-2);
+    font-size: var(--fs-label);
+    font-weight: 600;
+}
+
+.collect-quiet:disabled {
+    color: var(--ink-3);
+    cursor: not-allowed;
+}
+
+.notch {
+    position: relative;
+    display: block;
+    min-width: 0;
     border: var(--hairline) solid var(--stroke);
+    border-radius: var(--r-input);
+    background: var(--f3);
+}
+
+.notch-label {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    inset-inline-start: var(--s3);
+    transform: translateY(-50%);
+    padding: 0 var(--s1);
     background: var(--screen);
+    color: var(--ink-2);
+    font-size: var(--fs-meta);
+    font-weight: 700;
+    line-height: 1.2;
+    pointer-events: none;
+}
+
+.notch-input {
+    width: 100%;
+    height: var(--ctrl);
+    min-height: var(--ctrl);
+    padding: 0 var(--s3);
+    border: 0;
+    border-radius: var(--r-input);
+    background: transparent;
+    color: var(--ink);
+    font-size: var(--fs-body);
+    line-height: var(--ctrl);
+    text-align: start;
+}
+
+.notch-input::placeholder {
+    color: var(--ink-3);
+}
+
+.notch-input:focus-visible {
+    outline: none;
+}
+
+.notch:focus-within {
+    border-color: var(--accent);
+    background-color: var(--screen);
+}
+
+.notch:focus-within .notch-label {
+    background: var(--screen);
+    color: var(--accent-ink);
+}
+
+.notch:has(:disabled) {
+    opacity: .55;
+}
+
+.collect-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s2);
+    min-width: 0;
+}
+
+.collect-ordinal {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink-3);
+    font-size: var(--fs-tag);
+    line-height: 1.35;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.collect-foot > .collect-quiet {
+    flex: none;
+    align-self: center;
+}
+
+.collect-remove {
     color: var(--danger-ink);
+    font-weight: 700;
+}
+
+.tick {
+    min-height: var(--touch);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
+    flex: none;
+    color: var(--ink-2);
+    font-size: var(--fs-label);
+    font-weight: 700;
+}
+
+.tick[data-on="true"] {
+    color: var(--accent-ink);
+}
+
+.tick input {
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    flex: none;
+    border: var(--hairline) solid var(--stroke);
+    border-radius: var(--r-chip);
+    background: var(--screen);
+    display: grid;
+    place-items: center;
+}
+
+.tick input:checked {
+    border-color: var(--accent);
+    background: var(--accent);
+}
+
+.tick input:checked::after {
+    content: "";
+    width: 5px;
+    height: 9px;
+    border: solid var(--on-dark);
+    border-width: 0 2px 2px 0;
+    transform: translateY(-1px) rotate(45deg);
+}
+
+.tick input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.tick input:disabled {
+    opacity: .5;
 }
 
 .switch-row .switch-copy {
@@ -1846,6 +2175,18 @@ label {
     white-space: nowrap;
 }
 
+/* 卡片里的操作要同时看见，不能沿用上面的横向滚动：
+   `.cta` 默认 width:100%，再加 flex:0 0 auto 时每颗按钮都占满一行，后面的按钮被滑出屏幕。 */
+.card .action-row {
+    overflow: visible;
+}
+
+.card .action-row > .cta {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+}
+
 /* 一次性提示条：文案占满剩余宽度，右侧关闭入口不换行 */
 .hint-note {
     align-items: center;
@@ -2166,6 +2507,13 @@ label {
     transition: border-color var(--motion-fast) var(--ease);
 }
 
+/* 有展会的日期：更粗、略大，并用主题色。圆点另由 data-has-event 表示「我的活动」。 */
+.cal-day[data-bold="true"] .cal-day-num {
+    font-weight: 800;
+    font-size: 1.12em;
+    color: var(--accent);
+}
+
 /* 圆点是 flex 子项，宽度固定为 6px，不参与绝对定位，因此与数字严格对齐。 */
 .cal-day[data-has-event="true"]::after {
     content: "";
@@ -2193,6 +2541,8 @@ label {
 
 .cal-day[aria-pressed="true"] .cal-day-num {
     border-bottom-color: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 800;
 }
 
 /* 选中日期若同时有展会，圆点用深一档的强调色，与文字一起构成选中线索 */

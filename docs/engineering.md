@@ -39,7 +39,7 @@ web/
 外壳在 `web/src/app/App.vue`：`.app` 网格 = 顶栏 + 可滚动的内容区 + 底部导航（或页面页脚）。页面只往内容区放内容。
 
 - 顶栏标题、返回键、底部导航项与内容区密度都由路由 `meta` 决定（`title` / `back` / `tab` / `bodyGap` / `bodyPad` / `bodyAlign` / `queryInPlace`），导航项按角色过滤（`web/src/app/shell.ts`）。
-- 页面级顶栏操作也写在 `meta.topAction`（`{ icon, to, label }`，或 `{ icon, label, action: 'logout' }`），外壳据此渲染右上角图标按钮（个人页的「设置」入口、报名站「我的报名」的退出登录就是这么来的）。
+- 页面级顶栏操作也写在 `meta.topAction`（`{ icon, to, label }`，或 `{ icon, label, action: 'logout' }`），外壳据此渲染右上角图标按钮（个人页的「设置」入口、报名站「我的活动」的退出登录就是这么来的）。
 - 页面需要固定操作区时用 `<Teleport defer to="#app-foot">` 投递 `.page-foot`，它落在网格第三行；`defer` 让目标元素与页面在同一次渲染里创建时也能找到。入口页（01）是例外：注册 / 忘记密码两个文字入口按旧版版式跟在表单后面随内容滚动，不占页脚槽。
 - 页面不要自建 `.page` / `.topbar` / `.app-body` / `.tabbar`，也不要声明颜色、字号、间距与圆角。
 - 内容区的左右内距由外壳给两道（`.app-body` 与路由容器 `.page-surface` 各 `var(--s4)`，合计 32px，与旧版实机一致），页面不要再自己加左右内距；确需通栏的页面用路由 `meta.bodyPad: 'none'`，两道一起去掉。
@@ -61,12 +61,13 @@ web/
 | 05 | `web/src/pages/RegisterPage.vue` | 两步注册 |
 | — | `web/src/pages/ForgotPasswordPage.vue` | 找回密码 |
 | 06 | `web/src/pages/SearchPage.vue` | 搜索展会、地点和用户 |
-| 07 | `web/src/pages/MyRegistrationsPage.vue` | 我的报名 |
+| 07 | `web/src/pages/MyRegistrationsPage.vue` | 我的活动（展会报名与私人会议） |
 | 08 | `web/src/pages/RegistrationDetailPage.vue` | 报名详情、报名码与撤销 |
+| — | `web/src/pages/MeetingDetailPage.vue` | 私人会议详情与撤销 |
 | 09 | `web/src/pages/ProfilePage.vue` | 个人资料展示（身份卡显示地区；简介标题旁的铅笔打开编辑资料抽屉）与设置卡片 |
 | — | `web/src/pages/UserSettingsPage.vue` | 用户设置（头像、资料、通知、配色、明暗、隐私、安全入口），入口在个人页顶栏右侧与设置卡片 |
-| 10 | `web/src/pages/ExhibitorPage.vue` | 展商后台 |
-| 11 | `web/src/pages/ExhibitionFormPage.vue` | 展会编辑 |
+| 10 | `web/src/pages/ExhibitorPage.vue` | 展商后台（展会 / 私人会议） |
+| 11 | `web/src/pages/ExhibitionFormPage.vue` | 展会编辑。删除展会在页面内容最下方 |
 | 12 | `web/src/pages/RichEditorPage.vue` | Markdown 简介与媒体 |
 | 13 | `web/src/pages/ReviewPage.vue` | 报名审核 |
 | 14 | `web/src/pages/UserPublicPage.vue` | 用户公开页 |
@@ -74,6 +75,9 @@ web/
 | — | `web/src/pages/SecurityPage.vue` | 密码、邮箱、身份复核与两步验证 |
 | — | `web/src/pages/SecurityDevicesPage.vue` | 查看并撤销已登录设备 |
 | — | `web/src/pages/CheckinPage.vue` | 现场核销工具 |
+| — | `web/src/pages/MeetingSettingsPage.vue` | 私人会议申请地址、开关、撤销开关、预约说明与报名收集项 |
+| — | `web/src/pages/MeetingApplyPage.vue` | 私人会议申请（应用内与报名站共用）。日期与时间同一行 |
+| — | `web/src/pages/AdminMeetingsPage.vue` | 管理员处理某一展商或管理员的私人会议 |
 
 设计稿的 16、17 屏已内联到管理后台与用户设置；核销属于展商后台入口，不新增二级页面。应用配色与明暗模式是**个人偏好**（用户在「用户设置」里自己选），管理后台只维护全局默认色板与品牌文案。新增**应用**页面时在 `web/src/app/router.ts` 注册路由，同时更新本表与 `web/src/app/shell.test.ts` 的 `ROUTES`（该用例逐屏挂载外壳并断言顶栏、内容区、底部导航与页脚槽）。报名站不进入这张表，也不写入 `ROUTES`。
 
@@ -85,7 +89,9 @@ web/
 | --- | --- | --- |
 | `/login`、`/register`、`/forgot-password` | 与应用相同的入口页 | 注册、登录、找回密码和两步验证 |
 | `/e/:id` | `RegistrationFormPage.vue` | 只通过分享链接进入；表单上方多一段展会简介 |
-| `/mine` | `MyRegistrationsPage.vue` | 我的报名；顶栏退出登录 |
+| `/mine` | `MyRegistrationsPage.vue` | 我的活动；顶栏退出登录 |
+| `/mine/m/:id` | `MeetingDetailPage.vue` | 私人会议详情。必须写在 `/mine/:id` 之前 |
+| `/m/:exhibitorId` | `MeetingApplyPage.vue` | 私人会议申请，只通过展商分享的链接进入，仍须登录 |
 | `/mine/:id` | `RegistrationDetailPage.vue` | 状态、回答、二维码、修改和撤销 |
 | 其它 | `web/src/join/LinkOnlyPage.vue` | 说明请使用展商分享的链接 |
 

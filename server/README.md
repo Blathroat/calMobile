@@ -235,8 +235,8 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 
 | 方法与路径 | 动作 | 权限与说明 |
 | --- | --- | --- |
-| `GET /exhibitions` | `exhibitions.list` | 可匿名。`?query=` 模糊匹配标题 / 地点 / 分类 / 简介 |
-| `GET /exhibitions/month` | `exhibitions.month` | 可匿名。`?year=&month=&day=`，返回 `{ year, month, day, monthLabel, eventDays, exhibitions, selected }` |
+| `GET /exhibitions` | `exhibitions.list` | 可匿名。`?query=` 模糊匹配标题 / 地点 / 分类 / 简介。每条带 `exhibitorRole`（主办人角色代码，没有主办人时为空） |
+| `GET /exhibitions/month` | `exhibitions.month` | 可匿名。`?year=&month=&day=`，返回 `{ year, month, day, monthLabel, eventDays, markedDays, exhibitions, meetings, selected }`。`eventDays` 是有展会的日期；`markedDays` 只在已登录时返回和该用户有关的日期，匿名为空数组。`meetings` 是该用户作为申请人或主办人的待审核、已通过私人会议，已拒绝和已撤销不返回；未登录为空数组。每条会议的 `role` 是 `host` 或 `visitor`，`titleRole` 是标题里那个人的角色代码 |
 | `GET /exhibitions/categories` | `exhibitions.categories` | 可匿名。管理员配置的分类 |
 | `GET /exhibitions/:id` | `exhibitions.get` | 可匿名。返回 `{ found, exhibition, fields }` |
 | `POST /exhibitions` | `exhibitions.save` | 展商 / 管理员。受限账号 403 |
@@ -253,11 +253,27 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `GET /registrations` | `registrations.list` | 登录。**只返回自己的报名**（展商看别人报名走 `/review`） |
 | `GET /registrations/:id` | `registrations.get` | 本人或管理员 |
 | `POST /registrations` | `registrations.submit` | 登录。见下面「报名规则」 |
-| `DELETE /registrations/:id` | `registrations.cancel` | 本人，且只能撤销未撤销的报名 |
-| `GET /review` | `review.list` | 展商本人或管理员。`?exhibitionId=&status=`，返回 `{ records, counts }` |
+| `DELETE /registrations/:id` | `registrations.cancel` | 本人。待审核可撤销；已通过还要展会 `allow_cancel` 为真；已参加不能撤销 |
+| `GET /review` | `review.list` | 展商本人或管理员。`?exhibitionId=&status=`，返回 `{ records, counts }`。记录带 `visitorRole`（报名人角色代码，账号已删除时为空） |
 | `GET /review/:id` | `review.get` | 同上 |
 | `PUT /review/:id/status` | `review.updateStatus` | 同上 |
 | `POST /checkin` | `checkin.scan` | 展商本人或管理员。`{ code }`；受限账号 403 |
+
+### 私人会议
+
+| 方法与路径 | 动作 | 权限与说明 |
+| --- | --- | --- |
+| `GET /meetings/settings` | `meetings.settings` | 展商或管理员。返回接受开关、撤销开关、预约说明、是否被强制关闭、收集项 |
+| `PUT /meetings/settings` | `meetings.saveSettings` | 展商或管理员。`{ acceptMeetings, allowCancel, notice, fields }`。受限或封禁 403，并强制关闭接受开关 |
+| `GET /meetings/mine` | `meetings.mine` | 登录。只返回自己提交的申请，含已撤销。每条带 `exhibitorRole` 与 `visitorRole` |
+| `GET /meetings/:id` | `meetings.get` | 申请人、主办人或管理员。查不到时 `{ found:false }` |
+| `GET /meetings/inbox` | `meetings.inbox` | 不带 `exhibitorId` 时看自己的收件箱（展商或管理员）；管理员带 `?exhibitorId=` 看指定的展商或管理员。记录带 `visitorRole` |
+| `GET /meetings/apply/:exhibitorId` | `meetings.form` | 登录。返回是否开放、主办人 `roleCode`、预约说明和收集项；未开放时不返回收集项 |
+| `POST /meetings` | `meetings.submit` | 登录且可报名。`{ exhibitorId, meetingDate, meetingTime, answers }`。规则失败 200 + `ok:false` |
+| `POST /meetings/:id/cancel` | `meetings.cancel` | 申请人。待审核可撤销；已通过还要主办人允许；已拒绝不能撤销 |
+| `PUT /meetings/:id/status` | `meetings.setStatus` | 展商本人或管理员。被限制的会议展商改不了（403） |
+| `PUT /meetings/:id/lock` | `meetings.setLock` | 管理员。`{ locked }` |
+| `DELETE /meetings/:id` | `meetings.remove` | 管理员 |
 
 ### 用户、搜索与设置
 
@@ -268,7 +284,7 @@ pwsh -File ..\scripts\mail.ps1 clear     # 跑回归前清空，免得看错邮�
 | `PUT /users/:id/status` | `users.status` | 管理员。不能改自己的状态 |
 | `PUT /users/:id/two-factor` | `users.disable2fa` | 管理员。`{ enabled:false }` 关闭他人两步验证 —— 用户邮箱用不了时**唯一的兜底出口**（幂等；想开启只能由本人过码，所以传 `enabled:true` 会被拒） |
 | `GET /users/public` | `users.public` | 可匿名。`?userId=` 或 `?nickname=`；按隐私开关决定是否返回报名记录 |
-| `GET /search` | `search.query` | 可匿名。`?query=`，返回 `{ query, exhibitions, users, count }` |
+| `GET /search` | `search.query` | 可匿名。`?query=`，返回 `{ query, exhibitions, users, count }`。用户带中文 `role` 和英文 `roleCode` |
 | `GET /settings` | `settings.get` | 可匿名。服务器设置 + 当前用户通知偏好 + 个人外观模式与配色（`theme.index` 是调用者**实际生效**的下标） |
 | `PUT /settings` | `settings.save` | 管理员。扁平字段补丁，只改出现过的项（`themeIndex` 改的是**全局默认**） |
 | `PUT /settings/ui-mode` | `settings.uiMode` | **登录**。个人外观模式，只接受 `auto / light / dark`；未登录 401（服务器级默认外观不可以被匿名改写） |

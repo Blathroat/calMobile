@@ -26,6 +26,7 @@ import { toast } from '@/services/toast';
 import { avatarExportMime } from '@/services/validate';
 import { openProfileEditor } from '@/services/profile-editor';
 import AvatarBox from '@/components/AvatarBox.vue';
+import RoleTag from '@/components/RoleTag.vue';
 import AvatarCropper from '@/components/AvatarCropper.vue';
 import SegControl from '@/components/SegControl.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -394,7 +395,10 @@ async function changeMode(value: string): Promise<void> {
         <div class="row" data-gap="md">
           <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || user.username || '')" large />
           <span class="row-copy">
-            <strong class="row-title">{{ user.nickname || user.username }}</strong>
+            <span class="name-line">
+              <strong class="row-title">{{ user.nickname || user.username }}</strong>
+              <RoleTag :role-code="String(user.role || '')" />
+            </span>
             <span class="row-meta truncate">{{ user.email || t('s_1hhb6bo') }}</span>
           </span>
         </div>

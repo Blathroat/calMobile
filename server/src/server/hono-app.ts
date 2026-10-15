@@ -17,6 +17,7 @@ import { readStatusReport } from '../routes/status.js';
 import { renderStatusPage, renderStatusFallbackPage } from '../status-page.js';
 import { createAuthRoutes } from '../routes/auth-hono.js';
 import { createExhibitionsRoutes } from '../routes/exhibitions-hono.js';
+import { createMeetingsRoutes } from '../routes/meetings-hono.js';
 import { createRegistrationsRoutes } from '../routes/registrations-hono.js';
 import { createReviewRoutes } from '../routes/review-hono.js';
 import { createCheckinRoutes } from '../routes/checkin-hono.js';
@@ -132,6 +133,7 @@ export function createApp(options: AppOptions): Hono {
   app.route('/api/v1/settings', createSettingsRoutes());
 
   app.route('/api/v1/exhibitions', createExhibitionsRoutes());
+  app.route('/api/v1/meetings', createMeetingsRoutes());
   app.route('/api/v1/registrations', createRegistrationsRoutes());
   app.route('/api/v1/review', createReviewRoutes());
   app.route('/api/v1/checkin', createCheckinRoutes());

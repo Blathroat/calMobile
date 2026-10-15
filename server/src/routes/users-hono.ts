@@ -18,7 +18,7 @@ import {
   type UserRow,
 } from '../domain/payloads.js';
 import * as labels from '../domain/labels.js';
-import { requireAdmin, type Actor } from '../domain/permissions.js';
+import { canHostMeetings, requireAdmin, type Actor } from '../domain/permissions.js';
 import { badRequest, notFound } from '../domain/errors.js';
 import { revokeAllDevicesForUser } from '../domain/session.js';
 import { jsonResponse, mutate } from '../http/respond.js';
@@ -72,8 +72,11 @@ async function publicProfile(viewer: Actor | null, target: UserRow | null) {
     registrations = result.rows.map(publicRegistrationPayload);
   }
   const profile = {
+    id: target.id,
     nickname: target.nickname,
     role: labels.ROLE_LABEL[target.role] || target.role,
+    roleCode: target.role,
+    meetingsOpen: canHostMeetings(target.role) && target.status === 'active' && target.accept_meetings === true,
     bio: target.bio || '',
     region: target.region || '',
     avatar: target.avatar || '',
@@ -139,7 +142,14 @@ app.put('/:id/status', authenticateHono, async (c) => {
     const status = body.status;
     const row = await findUserById(id);
     if (!row) throw notFound('用户不存在或已删除');
-    await query('UPDATE users SET status = $2, updated_at = now() WHERE id = $1', [id, status]);
+    // 受限或封禁不能再接受新的私人会议，开关一并关掉，避免状态恢复前仍有人能提交。
+    await query(
+      `UPDATE users SET status = $2,
+              accept_meetings = CASE WHEN $2 IN ('limited', 'banned') THEN false ELSE accept_meetings END,
+              updated_at = now()
+        WHERE id = $1`,
+      [id, status],
+    );
     if (status === 'banned') await revokeAllDevicesForUser(id);
     return { user: statusPayload((await findUserById(id)) || row) };
   });

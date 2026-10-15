@@ -19,6 +19,7 @@ import MediaBox from '@/components/MediaBox.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import RoleTag from '@/components/RoleTag.vue';
 import { truncate } from '@/services/format';
 import { coverOf } from '@/services/cover';
 import type { JsonObject } from '@/api/types';
@@ -218,7 +219,10 @@ onBeforeUnmount(() => {
           >
             <AvatarBox :name="String(user.nickname || '')" />
             <span class="row-copy">
-              <strong class="row-title">{{ user.nickname }} · {{ user.role }}</strong>
+              <span class="name-line">
+                <strong class="row-title truncate">{{ user.roleCode === 'exhibitor' || user.roleCode === 'admin' ? user.nickname : `${user.nickname} · ${user.role}` }}</strong>
+                <RoleTag :role-code="String(user.roleCode || '')" />
+              </span>
               <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
             </span>
             <StatusTag :text="String(user.status || '')" />

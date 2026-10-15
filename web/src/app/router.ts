@@ -49,6 +49,10 @@ import DetailPage from '@/pages/DetailPage.vue';
 import RegistrationDetailPage from '@/pages/RegistrationDetailPage.vue';
 import RegistrationFormPage from '@/pages/RegistrationFormPage.vue';
 import MyRegistrationsPage from '@/pages/MyRegistrationsPage.vue';
+import MeetingSettingsPage from '@/pages/MeetingSettingsPage.vue';
+import MeetingApplyPage from '@/pages/MeetingApplyPage.vue';
+import MeetingDetailPage from '@/pages/MeetingDetailPage.vue';
+import AdminMeetingsPage from '@/pages/AdminMeetingsPage.vue';
 import type { BodyGap } from '@/app/shell';
 import { navigation } from './navigation';
 import { useSessionStore } from '@/stores/session';
@@ -114,6 +118,7 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
       },
       { path: '/my-registrations', component: MyRegistrationsPage, meta: { title: 's_1m2dh8u', tab: 'my-registrations', requiresAuth: true } },
       { path: '/registration-detail/:id', component: RegistrationDetailPage, meta: { title: 's_1e7myaa', back: true, requiresAuth: true } },
+      { path: '/meeting-detail/:id', component: MeetingDetailPage, meta: { title: 's_g1bhp7', back: true, requiresAuth: true } },
       {
         path: '/profile',
         component: ProfilePage,
@@ -141,7 +146,19 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
           // 顶栏右侧的加号：与页面里的「新建展会」进同一处，展会多起来时不用先滚到底部。
           // 受限账号点进来也会被那一页的受限态挡住（后端同样 403），这里不额外判断。
           topAction: { icon: 'plus', to: '/exhibition-form', label: 's_p9fllo' },
+          queryInPlace: true,
         },
+      },
+      { path: '/meeting-settings', component: MeetingSettingsPage, meta: { title: 's_1dfgo2m', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
+      {
+        path: '/meeting-apply/:exhibitorId',
+        component: MeetingApplyPage,
+        meta: { title: 's_ks6zd8', back: true, bodyGap: 'tight', requiresAuth: true, capability: 'register' },
+      },
+      {
+        path: '/admin/meetings/:exhibitorId',
+        component: AdminMeetingsPage,
+        meta: { title: 's_2zq5xl', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['admin'] },
       },
       { path: '/exhibition-form', component: ExhibitionFormPage, meta: { title: 's_eutzzb', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },
       { path: '/exhibition-form/:id', component: ExhibitionFormPage, meta: { title: 's_eutzzb', back: true, bodyGap: 'tight', requiresAuth: true, roles: ['exhibitor', 'admin'] } },

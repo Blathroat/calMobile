@@ -21,11 +21,13 @@ const REGISTRATION_TRANSITIONS: Record<string, readonly string[]> = {
 interface ReviewRecordRow {
   id: string;
   exhibition_id: string;
+  visitor_id: string | null;
   visitor_name: string;
   answers: string | null;
   status: string;
   registration_time: string | null;
   exhibition_exhibitor_id: string | null;
+  visitor_role?: string | null;
 }
 interface StatusCountRow {
   status: string;
@@ -35,8 +37,8 @@ interface ExhibitionScopeRow {
   id: string;
   exhibitor_id: string | null;
 }
-const REVIEW_COLUMNS = `r.id, r.exhibition_id, r.visitor_name, r.answers, r.status, to_char(r.created_at, 'MM-DD HH24:MI') AS registration_time, e.exhibitor_id AS exhibition_exhibitor_id`;
-const REVIEW_FROM = `FROM registrations r JOIN exhibitions e ON e.id = r.exhibition_id`;
+const REVIEW_COLUMNS = `r.id, r.exhibition_id, r.visitor_id, r.visitor_name, r.answers, r.status, to_char(r.created_at, 'MM-DD HH24:MI') AS registration_time, e.exhibitor_id AS exhibition_exhibitor_id, COALESCE(vu.role, '') AS visitor_role`;
+const REVIEW_FROM = `FROM registrations r JOIN exhibitions e ON e.id = r.exhibition_id LEFT JOIN users vu ON vu.id = r.visitor_id`;
 async function canReviseByExhibitor() {
   const review = await readSection('review');
   return Boolean(review && review.canRevise === true);
@@ -50,7 +52,9 @@ function reviewPayload(row: ReviewRecordRow) {
   return {
     id: row.id,
     exhibitionId: row.exhibition_id,
+    visitorId: row.visitor_id || '',
     visitorName: row.visitor_name,
+    visitorRole: row.visitor_role || '',
     registrationTime: row.registration_time || '',
     answers: row.answers || '',
     summary: summaryOf(row.answers),

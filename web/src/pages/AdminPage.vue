@@ -30,6 +30,7 @@ import MediaBox from '@/components/MediaBox.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import RoleTag from '@/components/RoleTag.vue';
 import type { Bootstrap, Exhibition, JsonObject, User } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -98,6 +99,8 @@ const form = reactive({
   defaultCover: '',
   /** 展商可同时筹备的展会数；0 表示不限 */
   maxFutureExhibitions: 0,
+  /** 展商可同时筹备的私人会议数；0 表示不限 */
+  maxFutureMeetings: 0,
 });
 
 /** 管理页自己的文案：提示与开关说明放在这里，提取脚本会换成文案 key。 */
@@ -106,6 +109,10 @@ const COPY = {
   coverHint: t('s_1rgheyl'),
   exhibitorLimit: t('s_17fthq4'),
   exhibitorLimitHint: t('s_13he981'),
+  meetingLimit: t('s_2qdje'),
+  meetingLimitHint: t('s_1g35i71'),
+  manageMeetings: t('s_12wwrng'),
+  adjustStatus: t('s_15y6qev'),
   avatarSection: t('s_ivjnb8'),
   avatarFormats: t('s_14byhwl'),
   avatarFormatsInvalid: t('s_hij4iq'),
@@ -220,6 +227,15 @@ onBeforeUnmount(() => {
  * 状态面板只列出状态名，不再附「· 说明」：说明属于顶部那条账号状态提示，
  * 塞进按钮里会让每个选项都变成一句话，选起来反而更慢。
  */
+function openPublic(user: User): void {
+  const nickname = String(user.nickname ?? '');
+  if (!nickname) return;
+  void router.push({
+    path: `/user-public/${encodeURIComponent(nickname)}`,
+    query: { userId: String(user.id ?? '') },
+  });
+}
+
 function manageUser(user: User): void {
   const actions: SheetAction[] = USER_STATUSES.map((status) => ({
     label: status,
@@ -231,7 +247,7 @@ function manageUser(user: User): void {
   }));
   // 不放「取消」：点遮罩、按返回或 Esc 都能关，面板里多一个取消只会让状态选项更不显眼。
   openSheet({
-    title: `管理 ${user.nickname}`,
+    title: `调整 ${user.nickname} 的状态`,
     message: `${user.role} · 注册于 ${user.registrationTime || t('s_1lpnuh4')}`,
     actions,
     layout: 'stack',
@@ -385,6 +401,7 @@ function fillForm(data: JsonObject): void {
   const exhibitor = (data.exhibitor ?? {}) as JsonObject;
   form.defaultCover = String(cover.defaultCover ?? bootstrap.cover.defaultCover ?? '');
   form.maxFutureExhibitions = Number(exhibitor.maxFutureExhibitions ?? bootstrap.exhibitor.maxFutureExhibitions ?? 0);
+  form.maxFutureMeetings = Number(exhibitor.maxFutureMeetings ?? bootstrap.exhibitor.maxFutureMeetings ?? 0);
 }
 
 /**
@@ -467,6 +484,7 @@ async function saveSettings(): Promise<void> {
       videoFormats: form.videoFormats.trim(),
       defaultCover: form.defaultCover.trim(),
       maxFutureExhibitions: Number(form.maxFutureExhibitions) || 0,
+      maxFutureMeetings: Number(form.maxFutureMeetings) || 0,
     };
     for (const item of TEXT_LIMITS) payload[item.key] = numberField(item.key);
 
@@ -500,10 +518,10 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
 </script>
 
 <template>
-  <header class="row" data-between="true">
-    <h2>{{ t('s_cit5ds') }}</h2>
-    <span v-if="panelBusy" class="pill">{{ t('s_1tp8nhc') }}</span>
-  </header>
+  <!-- 顶栏已经写着「管理后台」，正文不再重复这四个字。忙碌时只留一枚状态胶囊。 -->
+  <div v-if="panelBusy" class="row">
+    <span class="pill">{{ t('s_1tp8nhc') }}</span>
+  </div>
 
   <SegControl :model-value="tab" :items="TABS" :label="t('s_y9zw6u')" @update:model-value="changeTab" />
 
@@ -544,28 +562,38 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
       />
       <div v-else class="list" data-gap="sm" :data-busy="users.loading.value ? 'true' : undefined">
         <div v-for="user in userItems" :key="String(user.id)" class="card">
-          <div class="row" data-gap="md">
+          <button
+            class="row-card"
+            type="button"
+            data-pressable="true"
+            style="border: 0; padding: 0; background: transparent; width: 100%"
+            :aria-label="`查看 ${user.nickname} 的公开页`"
+            @click="openPublic(user)"
+          >
             <AvatarBox :name="String(user.nickname || '')" />
             <span class="row-copy">
-              <strong class="row-title">{{ `${user.nickname} · ${user.role}` }}</strong>
+              <span class="name-line">
+                <strong class="row-title truncate">{{ user.nickname }}</strong>
+                <RoleTag :role-code="String(user.roleCode || '')" />
+              </span>
               <span class="row-meta">{{ `${user.status} · 最近登录 ${user.lastLoginTime || t('s_1lpnuh4')}` }}</span>
               <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
               <span v-if="user.twoFactorEnabled === true" class="row-meta">{{ t('s_16q73v0') }}</span>
             </span>
             <StatusTag :text="String(user.status || '')" :tone="statusTone(String(user.status || ''))" />
-          </div>
-          <div class="row" data-gap="md">
-            <button class="cta ghost" data-size="small" type="button" style="flex: 1 1 0" @click="manageUser(user)">
-              {{ t('s_pzy8ri') }}
+          </button>
+          <div class="action-row">
+            <button class="cta ghost" data-size="small" type="button" @click="manageUser(user)">
+              {{ COPY.adjustStatus }}
             </button>
             <button
+              v-if="user.roleCode === 'exhibitor' || user.roleCode === 'admin'"
               class="cta ghost"
               data-size="small"
               type="button"
-              style="flex: 1 1 0"
-              @click="router.push({ path: `/user-public/${encodeURIComponent(String(user.nickname ?? ''))}`, query: { userId: String(user.id ?? '') } })"
+              @click="router.push(`/admin/meetings/${encodeURIComponent(String(user.id ?? ''))}`)"
             >
-              {{ t('s_gt2gfg') }}
+              {{ COPY.manageMeetings }}
             </button>
           </div>
           <!-- 兜底出口：用户邮箱用不了（离职、邮箱被回收）时，只有管理员能帮他关掉两步验证 -->
@@ -760,6 +788,21 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
             <span class="row-meta">{{ t('s_d5a1x9') }}</span>
           </div>
           <p class="field-hint">{{ COPY.exhibitorLimitHint }}</p>
+        </div>
+        <div class="field">
+          <label for="settings-max-future-meetings">{{ COPY.meetingLimit }}</label>
+          <div class="row" data-gap="md">
+            <input
+              id="settings-max-future-meetings"
+              v-model.number="form.maxFutureMeetings"
+              class="input"
+              type="number"
+              min="0"
+              inputmode="numeric"
+            />
+            <span class="row-meta">{{ t('s_d5a1x9') }}</span>
+          </div>
+          <p class="field-hint">{{ COPY.meetingLimitHint }}</p>
         </div>
       </div>
 

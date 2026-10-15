@@ -69,6 +69,7 @@ export interface ServerPatch {
   answer?: unknown;
   defaultCover?: unknown;
   maxFutureExhibitions?: unknown;
+  maxFutureMeetings?: unknown;
 }
 
 interface SettingRow {
@@ -187,6 +188,8 @@ export async function readServerSettings(): Promise<ServerSettings> {
   }
   settings.media = { ...DEFAULT_SETTINGS.media, ...settings.media };
   settings.upload = { ...DEFAULT_SETTINGS.upload, ...settings.upload };
+  // 老库存的 exhibitor 只有展会额度。新键按默认值补上，避免读出来是 undefined。
+  settings.exhibitor = { ...DEFAULT_SETTINGS.exhibitor, ...settings.exhibitor };
   settings.theme = normalizeTheme(settings.theme);
   return settings;
 }
@@ -302,6 +305,12 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     next.exhibitor = {
       ...next.exhibitor,
       maxFutureExhibitions: clampInt(source.maxFutureExhibitions, next.exhibitor.maxFutureExhibitions, [0, 100]),
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'maxFutureMeetings')) {
+    next.exhibitor = {
+      ...next.exhibitor,
+      maxFutureMeetings: clampInt(source.maxFutureMeetings, next.exhibitor.maxFutureMeetings, [0, 100]),
     };
   }
 

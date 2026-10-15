@@ -132,8 +132,11 @@ app.post('/', authenticateHono, async (c) => {
 app.delete('/:id', authenticateHono, async (c) =>
   mutate(c, async () => {
     const user = requireUser({ user: userOf(c) }, '请先登录后再操作');
-    const result = await query<{ id: string; visitor_id: string | null; status: string }>(
-      'SELECT id, visitor_id, status FROM registrations WHERE id = $1',
+    const result = await query<{ id: string; visitor_id: string | null; status: string; allow_cancel: boolean }>(
+      `SELECT r.id, r.visitor_id, r.status, e.allow_cancel
+         FROM registrations r
+         JOIN exhibitions e ON e.id = r.exhibition_id
+        WHERE r.id = $1`,
       [c.req.param('id')],
     );
     const row = result.rows[0];
@@ -141,6 +144,7 @@ app.delete('/:id', authenticateHono, async (c) =>
     if (row.visitor_id !== user.userId) throw forbidden('只能撤销自己的报名');
     if (row.status === 'cancelled') throw badRequest('该报名已撤销，无需重复操作');
     if (row.status === 'attended') throw badRequest('已参加的报名不能再撤销');
+    if (row.status === 'approved' && row.allow_cancel !== true) throw badRequest('展商未允许撤销已通过的报名');
     await query(`UPDATE registrations SET status = 'cancelled', updated_at = now() WHERE id = $1`, [row.id]);
     return {};
   }),

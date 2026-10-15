@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 报名站的兜底页：地址对不上任何报名链接时停在这里。
- * 不提供展会列表或日历，只把人送去登录或「我的报名」。
+ * 不提供展会列表或日历，只把人送去登录或「我的活动」。
  */
 import { useRouter } from 'vue-router';
 import { paths } from '@/app/surface';

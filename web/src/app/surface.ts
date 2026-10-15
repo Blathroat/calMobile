@@ -12,6 +12,8 @@ export interface SurfacePaths {
   registrations: string;
   registrationForm: (id: string) => string;
   registrationDetail: (id: string) => string;
+  meetingDetail: (id: string) => string;
+  meetingApply: (id: string) => string;
 }
 
 /** 两套路径。测试直接传入 `join`，页面用下面的 `paths`。 */
@@ -22,6 +24,8 @@ export function surfacePaths(join: boolean): SurfacePaths {
       registrations: '/my-registrations',
       registrationForm: (id) => `/registration-form/${encodeURIComponent(id)}`,
       registrationDetail: (id) => `/registration-detail/${encodeURIComponent(id)}`,
+      meetingDetail: (id) => `/meeting-detail/${encodeURIComponent(id)}`,
+      meetingApply: (id) => `/meeting-apply/${encodeURIComponent(id)}`,
     };
   }
   return {
@@ -29,6 +33,8 @@ export function surfacePaths(join: boolean): SurfacePaths {
     registrations: '/mine',
     registrationForm: (id) => `/e/${encodeURIComponent(id)}`,
     registrationDetail: (id) => `/mine/${encodeURIComponent(id)}`,
+    meetingDetail: (id) => `/mine/m/${encodeURIComponent(id)}`,
+    meetingApply: (id) => `/m/${encodeURIComponent(id)}`,
   };
 }
 

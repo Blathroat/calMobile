@@ -5,7 +5,7 @@
  *
  * 表单按展商配置的收集项动态生成：文本、单选、多选三种类型。必填与字符上限取
  * bootstrap 下发的规则（`services/validate`），校验失败落在字段原位（`.field-error`
- * 加 `.field[data-invalid]`），提交按钮固定在页脚，成功后短暂停留再进「我的报名」。
+ * 加 `.field[data-invalid]`），提交按钮固定在页脚，成功后短暂停留再进「我的活动」。
  *
  * 从报名详情带 `?registrationId=` 进来是「修改报名」：按收集项标题回填已有答案，
  * 提交仍是一次新的报名写入（与旧实现一致）。
@@ -90,7 +90,7 @@ onMounted(() => {
   if (!registerLimited.value) void load();
 });
 
-// 离开本页时取消尚未触发的跳转，避免把已经返回的用户再拽到「我的报名」。
+// 离开本页时取消尚未触发的跳转，避免把已经返回的用户再拽到「我的活动」。
 onBeforeUnmount(() => {
   if (redirectTimer !== undefined) {
     window.clearTimeout(redirectTimer);

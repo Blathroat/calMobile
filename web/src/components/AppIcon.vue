@@ -11,6 +11,7 @@ const PATHS: Record<string, string> = {
   chevronRight: '<path d="m10 5 7 7-7 7"/>',
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
   share: '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6.5A1.5 1.5 0 0 1 6.5 5H15"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3.5v3M16 3.5v3M3.5 10h17"/>',
   check: '<path d="m5 12.5 4.5 4.5 9-10"/>',
   close: '<path d="m6 6 12 12M18 6 6 18"/>',

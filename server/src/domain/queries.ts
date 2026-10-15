@@ -9,7 +9,7 @@
 /** 展会：字段 + 展商昵称 + 报名数 + 收集项数。 */
 export const EXHIBITION_COLUMNS = `
     e.id, e.title, e.venue, e.time, e.category, e.description, e.description_format,
-    e.image_uri, e.exhibitor_note, e.qr_enabled, e.exhibitor_id, e.status,
+    e.image_uri, e.exhibitor_note, e.qr_enabled, e.allow_cancel, e.exhibitor_id, e.status,
     to_char(e.exhibition_date, 'YYYY-MM-DD')                AS exhibition_date,
     EXTRACT(YEAR FROM e.exhibition_date)::int               AS year,
     EXTRACT(MONTH FROM e.exhibition_date)::int              AS month,
@@ -17,6 +17,7 @@ export const EXHIBITION_COLUMNS = `
     to_char(e.registration_start, 'YYYY-MM-DD')             AS registration_start,
     to_char(e.registration_end, 'YYYY-MM-DD')             AS registration_end,
     COALESCE(u.nickname, '')                                AS exhibitor,
+    COALESCE(u.role, '')                                    AS exhibitor_role,
     (SELECT count(*)::int FROM registrations r
       WHERE r.exhibition_id = e.id AND r.status <> 'cancelled')  AS registration_count,
     (SELECT count(*)::int FROM exhibition_fields f
@@ -36,6 +37,7 @@ export const REGISTRATION_COLUMNS = `
     e.venue                 AS exhibition_venue,
     e.time                  AS exhibition_time,
     e.qr_enabled            AS exhibition_qr_enabled,
+    e.allow_cancel          AS exhibition_allow_cancel,
     e.exhibitor_id          AS exhibition_exhibitor_id,
     EXTRACT(DAY FROM e.exhibition_date)::int    AS exhibition_day,
     EXTRACT(MONTH FROM e.exhibition_date)::int  AS exhibition_month,
@@ -51,7 +53,7 @@ export const REGISTRATION_FROM = `
 /** 用户：对外字段（绝不带 password_hash）。 */
 export const USER_COLUMNS = `
     u.id, u.username, u.email, u.nickname, u.role, u.status, u.bio, u.region,
-    u.avatar, u.social_media, u.show_registrations, u.seen_hints,
+    u.avatar, u.social_media, u.show_registrations, u.seen_hints, u.accept_meetings,
     u.email_verified, u.two_factor_enabled,
     to_char(u.registration_time, 'YYYY-MM-DD')  AS registration_time,
     to_char(u.last_login_time, 'YYYY-MM-DD')    AS last_login_time
