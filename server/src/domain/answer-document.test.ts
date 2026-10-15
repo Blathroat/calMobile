@@ -27,6 +27,26 @@ test('空白原文没有展示行', () => {
   assert.deepEqual(answerDocument({ source: { text: '  \n' } }).lines, []);
 });
 
+test('收集项为空时保留原文，只卡整段长度', () => {
+  const text = '姓名 / 公司名称：公开页用例\n参观身份：专业观众';
+  const kept = answerDocument({
+    fields: [],
+    source: { text },
+    limits: { textFill: 2, answer: 200 },
+  });
+  assert.equal(kept.text, text);
+  assert.equal(kept.message, '');
+  assert.equal(kept.lines[0]?.value, '公开页用例');
+
+  const tooLong = answerDocument({
+    fields: [],
+    source: { text: '太长了' },
+    limits: { textFill: 200, answer: 2 },
+  });
+  assert.equal(tooLong.message, '整段报名内容最多 2 个字符');
+  assert.equal(tooLong.text, '太长了');
+});
+
 test('按字段编码：空项写成未填写，多选用顿号', () => {
   const result = answerDocument({
     fields,

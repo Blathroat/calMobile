@@ -3,7 +3,7 @@
  *
  * 两张申请页和两条报名路由共用这一处：编码、按标题解码、必填、文本长度、选项和整段上限。
  * 空项在文稿里写成「未填写」，调用方拿到的值是空字符串。不传收集项时只按行切开，供详情展示历史原文。
- * 带上限校验时必须同时传入收集项；没有收集项就只解码。
+ * 带上限校验时必须同时传入收集项。一份都没有时保留原文，只检查整段长度。
  */
 
 const EMPTY = '未填写';
@@ -64,6 +64,16 @@ export function answerDocument(input: {
   }
 
   const fields = normalizeFields(input.fields);
+  // 展会可以没有收集项。此时答案就是调用方交来的原文，不能按空字段表改写成空串。
+  if (fields.length === 0) {
+    const text = sourceText(input.source);
+    const problems =
+      input.limits && input.limits.answer > 0 && text.length > input.limits.answer
+        ? [{ message: `整段报名内容最多 ${input.limits.answer} 个字符` }]
+        : [];
+    return { values: {}, lines: displayLines(text), text, problems, message: problems[0]?.message ?? '' };
+  }
+
   const values =
     'values' in input.source
       ? valuesFromMap(fields, input.source.values)
