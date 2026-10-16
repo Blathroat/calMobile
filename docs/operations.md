@@ -64,9 +64,9 @@ server {
 
 推送到 `master` 并且 CI 成功之后，`.github/workflows/release.yml` 构建正式包，把 APK 放到 GitHub Release。`versionCode` 是这个工作流自己的运行编号，`versionName` 是 `0.1.` 加同一个编号，标签是 `v0.1.<编号>`。删掉或换掉这个工作流文件会让编号从 1 重新计。功能分支和拉取请求不发布。
 
-没配 `DEPLOY_HOST` 时只发布 APK。配了 `DEPLOY_HOST`、`DEPLOY_USER` 和 `DEPLOY_SSH_KEY` 之后，同一次还会同步服务器：`server/dist`、`server/package.json`、`server/pnpm-lock.yaml` 和 `web/dist-join` 放到 `DEPLOY_PATH`（默认 `/opt/calmobile`）。报名站在部署目录的 `web/dist-join`，和 `server/dist` 同级。同步前把现有 `server/dist` 复制为 `server/dist.prev`。然后补齐 `/etc/calmobile.env`，在服务器上执行 `pnpm install --frozen-lockfile --prod` 和 `pnpm db:migrate:prod`，再重启 `calmobile.service`。
+没把 `DEPLOY_ENABLED` 设成 `true` 时只发布 APK。设成 `true`，并且配了 `DEPLOY_HOST`、`DEPLOY_USER` 和 `DEPLOY_SSH_KEY` 之后，同一次还会同步服务器：`server/dist`、`server/package.json`、`server/pnpm-lock.yaml` 和 `web/dist-join` 放到 `DEPLOY_PATH`（默认 `/opt/calmobile`）。报名站在部署目录的 `web/dist-join`，和 `server/dist` 同级。同步前把现有 `server/dist` 复制为 `server/dist.prev`。然后补齐 `/etc/calmobile.env`，在服务器上执行 `pnpm install --frozen-lockfile --prod` 和 `pnpm db:migrate:prod`，再重启 `calmobile.service`。
 
-环境文件只补还没有的键。服务器上已有的非空值不会被覆盖，文件里多出来的键会保留。空的密钥不会写入。`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL` 在服务器和 GitHub Secrets 里都没有时，部署失败，也不会把空值写进去。要改一个已经存在的值，直接改服务器上的 `/etc/calmobile.env`。只改同名的 GitHub Secret 或 Variable 不会替换它。固定的非密钥项在 `deploy/production.env`。域名、数据库主机和发件人地址放在 GitHub Variables。
+环境文件只补还没有的键。服务器上已有的非空值不会被覆盖，文件里多出来的键会保留。空的密钥不会写入。`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL` 在服务器和 GitHub Secrets 里都没有时，部署失败，也不会把空值写进去。要改一个已经存在的值，直接改服务器上的 `/etc/calmobile.env`。只改同名的 GitHub Secret 或 Variable 不会替换它。固定的非密钥项在 `deploy/production.env`。域名、数据库主机和发件人地址放在 GitHub Variables。服务器地址不要放进 Variables：变量值会原样写进 Actions 日志，仓库一旦公开，日志也公开。地址放在 Secret `DEPLOY_HOST`，日志里会打成星号。口令、签名和 SSH 私钥同样只放 Secrets，不进仓库。
 
 进程里已有的非空变量仍然优先于 `server/.env`。生产单元用 `EnvironmentFile=/etc/calmobile.env` 把这份文件注进进程。部署目录里不要再放一份开发用的 `.env`。上传目录用绝对路径，放在部署目录外面。
 
@@ -88,9 +88,9 @@ keytool -genkeypair -v -keystore calmobile-release.jks -alias upload -keyalg RSA
 
 把 `calmobile-release.jks` 做一次 base64，放进 GitHub Secret `ANDROID_KEYSTORE_BASE64`。口令和别名放进下面的 Secrets。不要把密钥文件或口令提交进仓库。
 
-GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`）、`PUBLIC_BASE_URL`（`https://域名`）、`PRIVACY_POLICY_URL`。要部署服务器时再加 `DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_PATH`，以及实际用到的 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_SSL`、`MAIL_SMTP_HOST`、`MAIL_SMTP_PORT`、`MAIL_SMTP_SECURE`、`MAIL_SMTP_TLS_REJECT_UNAUTHORIZED`、`MAIL_SMTP_USER`、`MAIL_FROM_ADDRESS`、`MAIL_REPLY_TO`、`FORCE_HTTPS`、`HSTS_MAX_AGE`、`UPLOAD_DIR`、`MEDIA_BASE_URL`、`UPLOAD_MAX_MB`、`JWT_EXPIRES_IN`、`REFRESH_TOKEN_TTL`。
+GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`）、`PUBLIC_BASE_URL`（`https://域名`）、`PRIVACY_POLICY_URL`。要部署服务器时再加 `DEPLOY_ENABLED`（`true` 才部署）、`DEPLOY_USER`、`DEPLOY_PATH`，以及实际用到的 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_SSL`、`MAIL_SMTP_HOST`、`MAIL_SMTP_PORT`、`MAIL_SMTP_SECURE`、`MAIL_SMTP_TLS_REJECT_UNAUTHORIZED`、`MAIL_SMTP_USER`、`MAIL_FROM_ADDRESS`、`MAIL_REPLY_TO`、`FORCE_HTTPS`、`HSTS_MAX_AGE`、`UPLOAD_DIR`、`MEDIA_BASE_URL`、`UPLOAD_MAX_MB`、`JWT_EXPIRES_IN`、`REFRESH_TOKEN_TTL`。这些值会出现在 Actions 日志里，不要把服务器地址或口令写进来。
 
-GitHub Secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。要部署服务器时再加 `DEPLOY_SSH_KEY`、`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL`。
+GitHub Secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。要部署服务器时再加 `DEPLOY_HOST`、`DEPLOY_SSH_KEY`、`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL`。
 
 新增一个要下发的键时，非密钥的固定项写进 `deploy/production.env`；密钥或按机器变化的值写进 `scripts/sync-production-env.mjs` 的 `SERVER_VALUE_KEYS`，并在 `release.yml` 的部署步骤里传入。下一次部署只会把它补进还没有这个键的服务器。
 
