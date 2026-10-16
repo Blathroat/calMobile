@@ -4,6 +4,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
+    "allowJs": true,
     "paths": {
       "@/*": ["./src/*"],
       "@domain/answer-document": ["../server/src/domain/answer-document.ts"]
