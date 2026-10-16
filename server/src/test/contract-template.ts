@@ -26,7 +26,11 @@ export function contractTemplateName(): string {
  * 超长时截断并补一段短哈希，避免两个文件撞名。
  */
 export function contractDatabaseFor(testPath: string | undefined): string {
-  const stem = (testPath ?? 'unknown').split(/[\\/]/).pop()?.replace(/\.test\.ts$/, '') ?? 'unknown';
+  const stem =
+    (testPath ?? 'unknown')
+      .split(/[\\/]/)
+      .pop()
+      ?.replace(/\.test\.ts$/, '') ?? 'unknown';
   const slug =
     stem
       .toLowerCase()
