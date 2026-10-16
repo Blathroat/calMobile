@@ -1,9 +1,9 @@
 /**
  * 开发期把设备端口反接到开发机（`adb reverse`）。
  *
- * 页面里的接口地址写死 `http://127.0.0.1:3000`（见 `web/src/api/client.ts`），而设备里的
- * `127.0.0.1` 指的是设备自己，所以模拟器与真机必须靠 `adb reverse tcp:3000 tcp:3000`
- * 才能连上后端。这个映射**不写盘**：adb server 重启、设备重连、换一台设备、机器重启都会丢，
+ * 开发包的接口地址默认是 `http://127.0.0.1:<PORT>`（见 `scripts/client-target.mjs`），而设备里的
+ * `127.0.0.1` 指的是设备自己，所以模拟器与真机必须靠 `adb reverse` 才能连上后端。
+ * 这个映射**不写盘**：adb server 重启、设备重连、换一台设备、机器重启都会丢，
  * 丢了以后应用里每个请求都失败，看起来像「后端没起」——这就是「只跑了 `pnpm dev`，
  * 模拟器连不上」的全部原因。
  *
@@ -50,7 +50,7 @@ export interface ReverseAttempt {
 }
 
 export interface AdbReverseOptions {
-  /** 后端端口；应用侧写死 3000，改端口只有浏览器调试用得上。 */
+  /** 应用接口所在的本机端口。调用方从 `APP_API_BASE` 或 `PORT` 算出来。 */
   port: number;
   /** 默认按 `ADB` / Android SDK 目录 / PATH 依次找。 */
   adbPath?: string;

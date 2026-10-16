@@ -28,6 +28,7 @@ import {
 import type { JsonObject } from '@/api/types';
 import { paths } from '@/app/surface';
 import { t } from '@/i18n';
+import { useBootstrapStore } from '@/stores/bootstrap';
 
 /** 邮箱长度上限：注册接口对邮箱的字段长度限制，与后端保持一致。 */
 const EMAIL_MAX = 60;
@@ -35,6 +36,12 @@ const EMAIL_MAX = 60;
 type FieldName = 'username' | 'email' | 'password' | 'confirm';
 
 const router = useRouter();
+const bootstrap = useBootstrapStore();
+/** 只接受 https，避免把后端误发的地址当成可点链接。 */
+const privacyPolicyUrl = computed(() => {
+  const value = bootstrap.privacyPolicyUrl.trim();
+  return value.startsWith('https://') ? value : '';
+});
 
 const step = ref<1 | 2>(1);
 const username = ref('');
@@ -332,6 +339,12 @@ function messageOf(reason: unknown): string {
     </div>
 
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+    <p class="field-hint">
+      {{ t('auth.register.privacy') }}
+      <a v-if="privacyPolicyUrl" :href="privacyPolicyUrl" target="_blank" rel="noopener noreferrer">{{
+        t('auth.register.privacyPolicy')
+      }}</a>
+    </p>
     <button class="cta" type="submit" :data-loading="accountBusy ? 'true' : undefined" :disabled="accountBusy">
       {{ t('auth.register.createAccount') }}
     </button>

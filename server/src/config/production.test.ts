@@ -100,6 +100,48 @@ test('可疑但可能有意为之的只给警告，不拦启动', () => {
   assert.match(text, /报名站/);
 });
 
+test('正式包地址、报名站开关和隐私政策链接只警告', () => {
+  const missing = productionProblems(readyEnv()).warnings.join('；');
+  assert.match(missing, /APP_API_BASE 没有配置/);
+  assert.match(missing, /PRIVACY_POLICY_URL 没有配置/);
+
+  const wrong = productionProblems(
+    readyEnv({
+      APP_API_BASE: 'http://127.0.0.1:3000/api/v1',
+      PUBLIC_BASE_URL: 'https://app.example.com',
+      PRIVACY_POLICY_URL: 'http://app.example.com/privacy',
+    }),
+  ).warnings.join('；');
+  assert.match(wrong, /不是 https/);
+  assert.match(wrong, /ENABLE_WEB/);
+  assert.match(wrong, /PRIVACY_POLICY_URL/);
+
+  const split = productionProblems(
+    readyEnv({
+      APP_API_BASE: 'https://api.example.com/api/v1',
+      PUBLIC_BASE_URL: 'https://app.example.com',
+      ENABLE_WEB: 'true',
+      PRIVACY_POLICY_URL: 'https://app.example.com/privacy',
+    }),
+  ).warnings.join('；');
+  assert.match(split, /不是同一个源/);
+  assert.doesNotMatch(split, /ENABLE_WEB/);
+
+  const ready = productionProblems(
+    readyEnv({
+      APP_API_BASE: 'https://app.example.com/api/v1',
+      PUBLIC_BASE_URL: 'https://app.example.com',
+      ENABLE_WEB: 'true',
+      PRIVACY_POLICY_URL: 'https://app.example.com/privacy',
+    }),
+  );
+  assert.deepEqual(ready.fatal, []);
+  assert.equal(
+    ready.warnings.some((item) => /APP_API_BASE|PRIVACY_POLICY_URL|ENABLE_WEB/.test(item)),
+    false,
+  );
+});
+
 test('远端数据库没开 SSL 会提醒（同机 Docker 不提醒）', () => {
   const remote = productionProblems(readyEnv({ DB_HOST: 'db.internal.example.com' })).warnings.join('；');
   assert.match(remote, /DB_SSL/);

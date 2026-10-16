@@ -141,6 +141,15 @@ test('对外部署的三项配置：域名归一化、FORCE_HTTPS 与 HSTS 取�
 
   // 非法域名当没配：宁可状态页不显示，也不要显示半截地址
   assert.equal(parseEnv(validEnv({ PUBLIC_BASE_URL: 'app.example.com' })).runtime.publicBaseUrl, '');
+  assert.equal(parseEnv(validEnv()).runtime.privacyPolicyUrl, '');
+  assert.equal(
+    parseEnv(validEnv({ PRIVACY_POLICY_URL: 'https://app.example.com/privacy/' })).runtime.privacyPolicyUrl,
+    'https://app.example.com/privacy',
+  );
+  assert.equal(
+    parseEnv(validEnv({ PRIVACY_POLICY_URL: 'http://app.example.com/privacy' })).runtime.privacyPolicyUrl,
+    '',
+  );
   // 0 / off 表示不下发 HSTS 头（域名还没定、或本地 http 调试）
   assert.equal(parseEnv(validEnv({ HSTS_MAX_AGE: '0' })).runtime.hstsMaxAge, 0);
   assert.equal(parseEnv(validEnv({ HSTS_MAX_AGE: 'off' })).runtime.hstsMaxAge, 0);

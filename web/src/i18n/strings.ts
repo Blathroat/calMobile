@@ -214,6 +214,8 @@ export const strings = {
       failed: '注册失败',
       intro: '几步完成，马上开始安排你的展会之旅',
       passwordStrength: '密码强度',
+      privacy: '注册会收集用户名、邮箱和密码，用于创建账号和发送验证码。',
+      privacyPolicy: '隐私政策',
       reenterPassword: '再次输入密码',
       setPassword: '设置登录密码',
       sixDigits: '6 位数字',

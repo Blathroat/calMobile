@@ -12,16 +12,14 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- 访问演示后端（HTTP）：模拟器用 10.0.2.2，真机用 adb reverse 的 127.0.0.1。
-         接入正式后端并改用 HTTPS 后应当去掉这一行。 -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".CalMobileApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="@string/app_name"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="${allowCleartext}">
 
         <!-- WebView 前端容器：唯一入口，承载应用的全部页面。 -->
         <activity

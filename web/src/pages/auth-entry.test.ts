@@ -163,6 +163,18 @@ describe('入口身份初始化', () => {
     }, 20_000);
   });
 
+  it('注册页说明收集的资料，并只在 https 政策地址存在时给出链接', async () => {
+    const { container, runtime } = await loginScreen({ register: true });
+    expect(container.textContent).toContain('注册会收集用户名、邮箱和密码');
+    expect(container.querySelector('a')).toBeNull();
+    runtime.applyRuntimeBootstrap({ privacyPolicyUrl: 'https://app.example.com/privacy' });
+    await nextTick();
+    expect(container.querySelector('a')?.getAttribute('href')).toBe('https://app.example.com/privacy');
+    runtime.applyRuntimeBootstrap({ privacyPolicyUrl: 'javascript:alert(1)' });
+    await nextTick();
+    expect(container.querySelector('a')).toBeNull();
+  });
+
   it('登录二步验证可选择记住当前设备', async () => {
     const { container, fetcher, router } = await loginScreen({ twoFactor: true });
     await enterVerification(container, false);

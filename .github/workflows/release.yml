@@ -1,0 +1,257 @@
+# master 上的 CI 成功后才运行。功能分支和拉取请求不发布。
+# versionCode / versionName 用本工作流的运行编号。删掉或换掉这个文件会让编号从 1 重新计。
+# 没配 DEPLOY_HOST 时只发布 APK。配了才同步服务器。
+
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-master
+  cancel-in-progress: false
+
+jobs:
+  release-apk:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - run: pnpm --dir web install --frozen-lockfile
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: 写入签名文件
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "缺少 GitHub Secret ANDROID_KEYSTORE_BASE64" >&2
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/calmobile-release.jks"
+          chmod 600 "$RUNNER_TEMP/calmobile-release.jks"
+
+      - name: 构建正式包
+        env:
+          ANDROID_APPLICATION_ID: com.blathroat.calmobile
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_VERSION_NAME: 0.1.${{ github.run_number }}
+          APP_API_BASE: ${{ vars.APP_API_BASE }}
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/calmobile-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          node --input-type=module <<'EOF'
+          import { resolveClientTarget } from './scripts/client-target.mjs';
+
+          const target = resolveClientTarget({
+            APP_API_BASE: process.env.APP_API_BASE,
+            ANDROID_APPLICATION_ID: process.env.ANDROID_APPLICATION_ID,
+            ANDROID_VERSION_CODE: process.env.ANDROID_VERSION_CODE,
+            ANDROID_VERSION_NAME: process.env.ANDROID_VERSION_NAME,
+          });
+          if (target.allowCleartext || target.loopbackPort != null) {
+            process.stderr.write(`正式包的 APP_API_BASE 必须是公网 https，当前是 ${target.apiBase}\n`);
+            process.exit(1);
+          }
+          if (target.applicationId !== 'com.blathroat.calmobile') {
+            process.stderr.write(`包名必须是 com.blathroat.calmobile，当前是 ${target.applicationId}\n`);
+            process.exit(1);
+          }
+          const pub = String(process.env.PUBLIC_BASE_URL ?? '').trim().replace(/\/+$/, '');
+          let origin = '';
+          try {
+            const url = new URL(pub);
+            const path = url.pathname.replace(/\/+$/, '') || '/';
+            if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || path !== '/') {
+              throw new Error('bad');
+            }
+            origin = url.origin;
+          } catch {
+            process.stderr.write('PUBLIC_BASE_URL 必须是不带路径的 https 源\n');
+            process.exit(1);
+          }
+          if (target.mediaOrigin !== origin) {
+            process.stderr.write(`APP_API_BASE 与 PUBLIC_BASE_URL 不是同一个源：${target.mediaOrigin} / ${origin}\n`);
+            process.exit(1);
+          }
+          EOF
+          ./gradlew :app:assembleRelease --no-daemon
+
+      - name: 删除签名文件
+        if: always()
+        run: rm -f "$RUNNER_TEMP/calmobile-release.jks"
+
+      - name: 发布 APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="0.1.${GITHUB_RUN_NUMBER}"
+          tag="v${version}"
+          asset="calmobile-${version}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$asset"
+          sha="${{ github.event.workflow_run.head_sha }}"
+          notes=$(printf '%s\n' "包名 com.blathroat.calmobile" "提交 ${sha}")
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --clobber
+          else
+            gh release create "$tag" "$asset" --title "calMobile ${version}" --notes "$notes" --target "$sha"
+          fi
+
+  deploy-server:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && vars.DEPLOY_HOST != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: |
+            web/pnpm-lock.yaml
+            server/pnpm-lock.yaml
+
+      - run: pnpm --dir web install --frozen-lockfile
+      - run: pnpm --dir server install --frozen-lockfile
+      - run: pnpm --dir server build
+
+      - name: 同步服务器
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          TOTP_SECRET_KEY: ${{ secrets.TOTP_SECRET_KEY }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          MAIL_SMTP_PASSWORD: ${{ secrets.MAIL_SMTP_PASSWORD }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          APP_API_BASE: ${{ vars.APP_API_BASE }}
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+          PRIVACY_POLICY_URL: ${{ vars.PRIVACY_POLICY_URL }}
+          DB_HOST: ${{ vars.DB_HOST }}
+          DB_PORT: ${{ vars.DB_PORT }}
+          DB_NAME: ${{ vars.DB_NAME }}
+          DB_USER: ${{ vars.DB_USER }}
+          DB_SSL: ${{ vars.DB_SSL }}
+          MAIL_SMTP_HOST: ${{ vars.MAIL_SMTP_HOST }}
+          MAIL_SMTP_PORT: ${{ vars.MAIL_SMTP_PORT }}
+          MAIL_SMTP_SECURE: ${{ vars.MAIL_SMTP_SECURE }}
+          MAIL_SMTP_TLS_REJECT_UNAUTHORIZED: ${{ vars.MAIL_SMTP_TLS_REJECT_UNAUTHORIZED }}
+          MAIL_SMTP_USER: ${{ vars.MAIL_SMTP_USER }}
+          MAIL_FROM_ADDRESS: ${{ vars.MAIL_FROM_ADDRESS }}
+          MAIL_REPLY_TO: ${{ vars.MAIL_REPLY_TO }}
+          FORCE_HTTPS: ${{ vars.FORCE_HTTPS }}
+          HSTS_MAX_AGE: ${{ vars.HSTS_MAX_AGE }}
+          UPLOAD_DIR: ${{ vars.UPLOAD_DIR }}
+          MEDIA_BASE_URL: ${{ vars.MEDIA_BASE_URL }}
+          UPLOAD_MAX_MB: ${{ vars.UPLOAD_MAX_MB }}
+          JWT_EXPIRES_IN: ${{ vars.JWT_EXPIRES_IN }}
+          REFRESH_TOKEN_TTL: ${{ vars.REFRESH_TOKEN_TTL }}
+        run: |
+          set -euo pipefail
+          path="${DEPLOY_PATH:-/opt/calmobile}"
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "部署需要 DEPLOY_HOST、DEPLOY_USER 和 DEPLOY_SSH_KEY" >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_HOST" =~ ^[A-Za-z0-9.-]+$ ]]; then
+            echo "DEPLOY_HOST 含有不能用的字符" >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+            echo "DEPLOY_USER 含有不能用的字符" >&2
+            exit 1
+          fi
+          if [[ ! "$path" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
+            echo "DEPLOY_PATH 必须是绝对路径" >&2
+            exit 1
+          fi
+
+          key="$RUNNER_TEMP/calmobile_deploy"
+          current="$RUNNER_TEMP/calmobile.current.env"
+          merged="$RUNNER_TEMP/calmobile.merged.env"
+          copied=0
+          umask 077
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$key"
+          chmod 600 "$key"
+          ssh_opts=(-i "$key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new)
+          remote=(ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST")
+          copy=(scp "${ssh_opts[@]}")
+          cleanup() {
+            status=$?
+            rm -f "$key" "$current" "$merged"
+            if [ "$copied" = 1 ]; then
+              ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" rm -f /tmp/calmobile-remote-release.sh /tmp/calmobile.env.new || true
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+
+          copied=1
+          "${copy[@]}" scripts/remote-release.sh "$DEPLOY_USER@$DEPLOY_HOST:/tmp/calmobile-remote-release.sh"
+          "${remote[@]}" bash /tmp/calmobile-remote-release.sh prepare "$path" "$DEPLOY_USER"
+
+          "${remote[@]}" bash -s > "$current" <<'EOF'
+          if [ -f /etc/calmobile.env ]; then
+            if [ "$(id -u)" -eq 0 ]; then
+              cat /etc/calmobile.env
+            else
+              sudo -n cat /etc/calmobile.env
+            fi
+          fi
+          EOF
+          node scripts/sync-production-env.mjs --current "$current" --template deploy/production.env --out "$merged"
+          "${remote[@]}" "umask 077; cat > /tmp/calmobile.env.new; chmod 600 /tmp/calmobile.env.new" < "$merged"
+
+          rsh=$(printf 'ssh -i %q -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new' "$key")
+          rsync -az --delete -e "$rsh" server/dist/ "$DEPLOY_USER@$DEPLOY_HOST:$path/server/dist/"
+          rsync -az -e "$rsh" server/package.json server/pnpm-lock.yaml "$DEPLOY_USER@$DEPLOY_HOST:$path/server/"
+          rsync -az --delete -e "$rsh" web/dist-join/ "$DEPLOY_USER@$DEPLOY_HOST:$path/web/dist-join/"
+
+          "${remote[@]}" bash /tmp/calmobile-remote-release.sh finish "$path" /tmp/calmobile.env.new
+
+      - name: 删除本机密钥副本
+        if: always()
+        run: rm -f "$RUNNER_TEMP/calmobile_deploy" "$RUNNER_TEMP/calmobile.current.env" "$RUNNER_TEMP/calmobile.merged.env"

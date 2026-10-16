@@ -167,6 +167,28 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
     );
   } else if (!/^https:\/\//i.test(publicBaseUrl)) {
     warnings.push(`PUBLIC_BASE_URL=${publicBaseUrl} 不是 https：对外地址应当是 https`);
+  } else if (explicitSwitch(env.ENABLE_WEB) !== 'on') {
+    warnings.push('PUBLIC_BASE_URL 已配置，但 ENABLE_WEB 没有打开：生产默认不托管报名站，分享链接打不开');
+  }
+  const appApiProblem = appApiBaseProblem(String(env.APP_API_BASE || ''));
+  if (appApiProblem) {
+    warnings.push(appApiProblem);
+  } else if (publicBaseUrl && /^https:\/\//i.test(publicBaseUrl)) {
+    try {
+      const appOrigin = new URL(String(env.APP_API_BASE || '')).origin;
+      const siteOrigin = new URL(publicBaseUrl).origin;
+      if (appOrigin !== siteOrigin) {
+        warnings.push('APP_API_BASE 与 PUBLIC_BASE_URL 不是同一个源：客户端和分享链接会指向两台主机');
+      }
+    } catch {
+      warnings.push('APP_API_BASE 与 PUBLIC_BASE_URL 无法比较来源');
+    }
+  }
+  const privacy = String(env.PRIVACY_POLICY_URL || '').trim();
+  if (!privacy) {
+    warnings.push('PRIVACY_POLICY_URL 没有配置：注册页只有收集说明，没有隐私政策链接');
+  } else if (!/^https:\/\/[^\s]+$/i.test(privacy.replace(/\/+$/, ''))) {
+    warnings.push(`PRIVACY_POLICY_URL=${privacy} 不是 https 绝对地址：注册页不会给出这个链接`);
   }
   // HSTS 显式关掉多半是「域名还没定」，但也可能是漏配，提示一句。
   const hsts = String(env.HSTS_MAX_AGE || '')
@@ -205,4 +227,37 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
   }
 
   return { fatal, warnings };
+}
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
+/**
+ * 正式包要连上的接口地址。规则与 `scripts/client-target.mjs` 一致，这里只警告、不拒绝启动：
+ * 服务器可以先于安装包上线，真正拦住明文包的是 `assembleRelease`。
+ */
+function appApiBaseProblem(value: string): string | null {
+  const text = value.trim();
+  if (!text) {
+    return 'APP_API_BASE 没有配置：正式包会退回本机 http 地址，用户手机连不上这台服务器';
+  }
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    return `APP_API_BASE 不是合法地址（${text}）`;
+  }
+  if (url.protocol !== 'https:') {
+    return `APP_API_BASE=${text} 不是 https：正式包只接受 https`;
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    return `APP_API_BASE=${text} 不能带用户信息、查询或片段`;
+  }
+  if (LOOPBACK_HOSTS.has(url.hostname)) {
+    return `APP_API_BASE=${text} 指向本机：正式包要写成公网 https 地址`;
+  }
+  const path = url.pathname.replace(/\/+$/, '') || '/';
+  if (path !== '/api/v1') {
+    return `APP_API_BASE 的路径必须是 /api/v1（当前是 ${path}）`;
+  }
+  return null;
 }

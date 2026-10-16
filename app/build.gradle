@@ -2,16 +2,49 @@ plugins {
     id 'com.android.application'
 }
 
+// 与 Vite 读同一份构建目标：进程环境变量优先于 server/.env。
+def clientTargetJson = providers.exec {
+    workingDir rootProject.projectDir
+    commandLine 'node', 'scripts/client-target.mjs'
+}.standardOutput.asText.get().trim()
+def clientTarget = new groovy.json.JsonSlurper().parseText(clientTargetJson)
+
 android {
     namespace = 'com.example.calmobile'
     compileSdk = 36.1
 
     defaultConfig {
-        applicationId = 'com.example.calmobile'
+        applicationId = clientTarget.applicationId
         minSdk = 24
         targetSdk = 36.1
-        versionCode = 1
-        versionName = '0.1.0'
+        versionCode = clientTarget.versionCode as int
+        versionName = clientTarget.versionName
+        manifestPlaceholders = [allowCleartext: clientTarget.allowCleartext ? 'true' : 'false']
+        buildConfigField 'boolean', 'ALLOW_CLEARTEXT', clientTarget.allowCleartext ? 'true' : 'false'
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    def keystorePath = String.valueOf(clientTarget.signing.storeFile ?: '')
+    if (keystorePath) {
+        signingConfigs {
+            release {
+                storeFile rootProject.file(keystorePath)
+                storePassword String.valueOf(clientTarget.signing.storePassword ?: '')
+                keyAlias String.valueOf(clientTarget.signing.keyAlias ?: '')
+                keyPassword String.valueOf(clientTarget.signing.keyPassword ?: '')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (keystorePath) {
+                signingConfig signingConfigs.release
+            }
+        }
     }
 
     compileOptions {
@@ -27,6 +60,7 @@ def webDir = file("../web")
 def pnpmCommand = System.getProperty("os.name").toLowerCase().contains("windows") ? "pnpm.cmd" : "pnpm"
 tasks.register("buildWeb", Exec) {
     workingDir webDir
+    environment 'APP_API_BASE', clientTarget.apiBase
     commandLine pnpmCommand, "build"
 }
 
@@ -55,4 +89,29 @@ dependencies {
 
     // 测试
     testImplementation 'junit:junit:4.13.2'
+}
+
+// 放在 android 块之后：配置还没写完就抛错，AGP 会另报一条「没有 compileSdk」。
+def releaseRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
+if (releaseRequested) {
+    def problems = []
+    if (clientTarget.allowCleartext || clientTarget.loopbackPort != null) {
+        problems << "正式包的 APP_API_BASE 必须是公网 https，当前是 ${clientTarget.apiBase}"
+    }
+    def applicationId = String.valueOf(clientTarget.applicationId)
+    if (applicationId == 'com.example' || applicationId.startsWith('com.example.')) {
+        problems << '正式包不能使用 com.example 包名，请设置 ANDROID_APPLICATION_ID'
+    }
+    def store = String.valueOf(clientTarget.signing.storeFile ?: '')
+    def storePassword = String.valueOf(clientTarget.signing.storePassword ?: '')
+    def keyAlias = String.valueOf(clientTarget.signing.keyAlias ?: '')
+    def keyPassword = String.valueOf(clientTarget.signing.keyPassword ?: '')
+    if (!store || !storePassword || !keyAlias || !keyPassword) {
+        problems << '正式包需要 ANDROID_KEYSTORE_PATH、ANDROID_KEYSTORE_PASSWORD、ANDROID_KEY_ALIAS、ANDROID_KEY_PASSWORD'
+    } else if (!rootProject.file(store).isFile()) {
+        problems << "找不到签名文件：${store}"
+    }
+    if (!problems.isEmpty()) {
+        throw new GradleException(problems.join('\n'))
+    }
 }

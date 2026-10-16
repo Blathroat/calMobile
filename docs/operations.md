@@ -56,6 +56,44 @@ server {
 }
 ```
 
+应用包里的接口地址来自 `APP_API_BASE`（`server/.env`，进程里已有的同名变量优先）。没配时是 `http://127.0.0.1:<PORT>/api/v1`。报名站不读它，接口仍是相对的 `/api/v1`。明文流量和混合内容只在这个地址是 `http` 时打开。改地址后要重新构建 APK。
+
+包名默认 `com.blathroat.calmobile`。Java 源码仍在 `com.example.calmobile`。调试包和正式包都用这个包名。手机上已经装过 `com.example.calmobile` 的，是另一个应用，要先卸掉。
+
+`./gradlew :app:assembleDebug` 使用当前这份配置，不要求公网地址或签名。`./gradlew :app:assembleRelease` 会拒绝：地址不是公网 https、包名是 `com.example`、签名四项缺一或密钥文件不存在。
+
+推送到 `master` 并且 CI 成功之后，`.github/workflows/release.yml` 构建正式包，把 APK 放到 GitHub Release。`versionCode` 是这个工作流自己的运行编号，`versionName` 是 `0.1.` 加同一个编号，标签是 `v0.1.<编号>`。删掉或换掉这个工作流文件会让编号从 1 重新计。功能分支和拉取请求不发布。
+
+没配 `DEPLOY_HOST` 时只发布 APK。配了 `DEPLOY_HOST`、`DEPLOY_USER` 和 `DEPLOY_SSH_KEY` 之后，同一次还会同步服务器：`server/dist`、`server/package.json`、`server/pnpm-lock.yaml` 和 `web/dist-join` 放到 `DEPLOY_PATH`（默认 `/opt/calmobile`）。报名站在部署目录的 `web/dist-join`，和 `server/dist` 同级。同步前把现有 `server/dist` 复制为 `server/dist.prev`。然后补齐 `/etc/calmobile.env`，在服务器上执行 `pnpm install --frozen-lockfile --prod` 和 `pnpm db:migrate:prod`，再重启 `calmobile.service`。
+
+环境文件只补还没有的键。服务器上已有的非空值不会被覆盖，文件里多出来的键会保留。空的密钥不会写入。`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL` 在服务器和 GitHub Secrets 里都没有时，部署失败，也不会把空值写进去。要改一个已经存在的值，直接改服务器上的 `/etc/calmobile.env`。只改同名的 GitHub Secret 或 Variable 不会替换它。固定的非密钥项在 `deploy/production.env`。域名、数据库主机和发件人地址放在 GitHub Variables。
+
+进程里已有的非空变量仍然优先于 `server/.env`。生产单元用 `EnvironmentFile=/etc/calmobile.env` 把这份文件注进进程。部署目录里不要再放一份开发用的 `.env`。上传目录用绝对路径，放在部署目录外面。
+
+服务器上要已经有 `calmobile.service`。部署不会创建它。单元里要有这三处：
+
+```
+WorkingDirectory=/opt/calmobile/server
+EnvironmentFile=/etc/calmobile.env
+ExecStart=/usr/bin/node dist/index.js --production
+```
+
+`WorkingDirectory` 跟实际的 `DEPLOY_PATH` 走。部署账号对 `DEPLOY_PATH` 可写；不是 root 时还要能免密 `sudo`，用来安装环境文件和重启。服务器上的 Node 要满足 `engines`，并且部署账号的 `PATH` 里有 `node` 和 `pnpm`。失败时旧进程继续跑，磁盘上的 `server/dist` 可能已经换成新的，上一份在 `server/dist.prev`。数据库要另外从备份恢复。
+
+正式签名只生成一次，密钥文件自己保管。丢了就不能给已经安装的 `com.blathroat.calmobile` 发更新。
+
+```
+keytool -genkeypair -v -keystore calmobile-release.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000
+```
+
+把 `calmobile-release.jks` 做一次 base64，放进 GitHub Secret `ANDROID_KEYSTORE_BASE64`。口令和别名放进下面的 Secrets。不要把密钥文件或口令提交进仓库。
+
+GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`）、`PUBLIC_BASE_URL`（`https://域名`）、`PRIVACY_POLICY_URL`。要部署服务器时再加 `DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_PATH`，以及实际用到的 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_SSL`、`MAIL_SMTP_HOST`、`MAIL_SMTP_PORT`、`MAIL_SMTP_SECURE`、`MAIL_SMTP_TLS_REJECT_UNAUTHORIZED`、`MAIL_SMTP_USER`、`MAIL_FROM_ADDRESS`、`MAIL_REPLY_TO`、`FORCE_HTTPS`、`HSTS_MAX_AGE`、`UPLOAD_DIR`、`MEDIA_BASE_URL`、`UPLOAD_MAX_MB`、`JWT_EXPIRES_IN`、`REFRESH_TOKEN_TTL`。
+
+GitHub Secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。要部署服务器时再加 `DEPLOY_SSH_KEY`、`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL`。
+
+新增一个要下发的键时，非密钥的固定项写进 `deploy/production.env`；密钥或按机器变化的值写进 `scripts/sync-production-env.mjs` 的 `SERVER_VALUE_KEYS`，并在 `release.yml` 的部署步骤里传入。下一次部署只会把它补进还没有这个键的服务器。
+
 发布前下面每一项都成立：
 
 1. `pnpm start` 的自检通过。生产不跑 `pnpm db:seed`。自检会拒绝启动的项和只警告的项，见 [`server/README.md`](../server/README.md) 的模式表。
@@ -63,9 +101,9 @@ server {
 3. 确认 https 全站可用之后，再开 `FORCE_HTTPS` 和长 `HSTS_MAX_AGE`。
 4. `CORS_ORIGIN` 写成真实来源。
 5. 状态页保持关闭，或在反代上加 Basic Auth 并只允许内网访问。公网探活只用 `/ping`。
-6. `JWT_SECRET` 与 `TOTP_SECRET_KEY` 各自至少 32 个随机字符。数据库口令不是示例值。`MAIL_FROM_ADDRESS` 已显式配置。邮件走托管 SMTP。
+6. `JWT_SECRET` 与 `TOTP_SECRET_KEY` 各自至少 32 个随机字符。数据库口令不是示例值。`MAIL_FROM_ADDRESS` 已显式配置。出站 25 端口开着时用本机 Postfix，并配好 SPF 和 DKIM；出站 25 被封时改用托管中继。反解析和域名不一致时，对方仍可能拒信。
 7. Node 版本满足 `engines`。在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，再执行 `pnpm db:migrate:prod`，迁移完成后再切流量。
 8. 数据库时区是 `Asia/Shanghai`。原因写在仓库根 `docker-compose.yml`。备份和恢复演练已经做过。
 9. `client_max_body_size` 盖住视频单文件上限。视频默认 50MB 时至少写 `64m`。头像那一道传输硬顶盖不住视频。上传目录和开关见 `server/.env.example`。存满之后的产品行为见 [`product.md`](product.md)。
-10. 注册和安全邮件涉及个人信息，注册页有隐私告知。营销或提醒邮件有退订。
-11. 客户端生产构建关闭明文放行：`usesCleartextTraffic` 与 `MIXED_CONTENT_ALWAYS_ALLOW`。
+10. 注册页有收集说明。`PRIVACY_POLICY_URL` 是 https 政策地址。当前邮件只有验证码，没有营销信。
+11. 正式包用 `./gradlew :app:assembleRelease`，或由上面的 Release 工作流在 `master` 的 CI 成功后构建。`APP_API_BASE` 是与 `PUBLIC_BASE_URL` 同一个源的 `https://域名/api/v1`。包名是 `com.blathroat.calmobile`。签名四项指向正式密钥。`ENABLE_WEB=true`，并且 `web/dist-join` 已构建。

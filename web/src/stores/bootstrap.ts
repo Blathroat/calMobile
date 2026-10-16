@@ -52,6 +52,8 @@ export interface BootstrapState {
   exhibitor: JsonObject;
   /** 报名站根地址（`PUBLIC_BASE_URL`）。空串表示没配域名，分享时不要拼本机地址。 */
   publicBaseUrl: string;
+  /** 隐私政策地址（`PRIVACY_POLICY_URL`）。空串表示没配，注册页只显示收集说明。 */
+  privacyPolicyUrl: string;
 }
 
 /**
@@ -75,6 +77,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
     cover: {},
     exhibitor: {},
     publicBaseUrl: '',
+    privacyPolicyUrl: '',
   }),
   actions: {
     /**
@@ -98,6 +101,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
       this.cover = { ...this.cover, ...asObject(data.cover) };
       this.exhibitor = { ...this.exhibitor, ...asObject(data.exhibitor) };
       if (typeof data.publicBaseUrl === 'string') this.publicBaseUrl = data.publicBaseUrl;
+      if (typeof data.privacyPolicyUrl === 'string') this.privacyPolicyUrl = data.privacyPolicyUrl;
     },
   },
 });

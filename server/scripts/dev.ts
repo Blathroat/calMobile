@@ -4,14 +4,17 @@ await import('./build-status-page.ts');
 const { buildJoinSite, watchJoinSite } = await import('./build-join.ts');
 await buildJoinSite();
 const { adbReverseDisabled, watchAdbReverse } = await import('../src/dev/adb-reverse.ts');
-const { resolveProcessSettings } = await import('../src/config/env.ts');
+const { loadBuildEnv, resolveClientTarget } = await import('../../scripts/client-target.mjs');
 
 // 模拟器/真机连不上后端的常见原因不是服务没起，而是 `adb reverse` 的映射丢了（见模块注释）。
-// 这里顺手接上并持续看护，让「只跑 pnpm dev」也能直接用应用调试。
-// 只取端口，不做完整的启动自检——那是 `start()` 的事。
-const { port } = resolveProcessSettings(process.env);
+// 端口跟应用包里的接口地址走：没配 APP_API_BASE 时就是 PORT。公网地址不需要这条映射。
+const target = resolveClientTarget(loadBuildEnv());
+const port = target.loopbackPort;
 if (adbReverseDisabled(process.env)) {
-  console.log(`ADB_REVERSE 已关闭：需要时手动运行 adb reverse tcp:${port} tcp:${port}`);
+  const shown = port ?? '端口';
+  console.log(`ADB_REVERSE 已关闭：需要时手动运行 adb reverse tcp:${shown} tcp:${shown}`);
+} else if (port === null) {
+  console.log(`APP_API_BASE=${target.apiBase} 不是本机地址，跳过 adb reverse`);
 } else {
   watchAdbReverse({ port });
 }

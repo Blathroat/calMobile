@@ -127,10 +127,11 @@ public class WebShellActivity extends Activity {
         // 核销页的摄像头预览由脚本在授权后自行 play()，因此不再要求用户手势。
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        // 页面运行在 https://appassets.androidplatform.net 上下文里，访问明文后端
-        // （本机服务 http://127.0.0.1:3000）会被判定为混合内容。后端改用 HTTPS
-        // 后应当把这一行改回 MIXED_CONTENT_NEVER_ALLOW。
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        // 页面在 https://appassets.androidplatform.net。接口是 http 时必须允许混合内容，
+        // 接口是 https 时关闭。取值跟构建时的 APP_API_BASE 一致。
+        settings.setMixedContentMode(BuildConfig.ALLOW_CLEARTEXT
+                ? WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                : WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // 深色模式由前端令牌控制。setForceDark 在 targetSdk ≥ 33 已是空操作，
             // 这里关掉 WebView 的算法反色，避免系统把页面再涂一遍。

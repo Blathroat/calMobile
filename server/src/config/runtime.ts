@@ -47,6 +47,8 @@ export interface Runtime {
   startedBy: string;
   /** 对外访问地址（`PUBLIC_BASE_URL`，已去掉尾斜杠）：域名/端口对外暴露的那一个。 */
   publicBaseUrl: string;
+  /** 注册页隐私政策链接（`PRIVACY_POLICY_URL`）。只接受 https，否则为空。 */
+  privacyPolicyUrl: string;
   /** 反代已终止 TLS 时，把明文请求跳到 https（`FORCE_HTTPS=1`）。 */
   forceHttps: boolean;
   /** HSTS 的 max-age（秒）；0 表示不下发这个头。默认 180 天。 */
@@ -117,6 +119,7 @@ export function resolveRuntime(argv: string[] = [], env: EnvLike = {}): Runtime 
     startedBy: String(env.npm_lifecycle_event || '').trim(),
     // 对外地址：给状态页与 /ping 显示，也是以后邮件里绝对链接的基址。
     publicBaseUrl: normalizeBaseUrl(env.PUBLIC_BASE_URL),
+    privacyPolicyUrl: privacyPolicyUrlOf(env.PRIVACY_POLICY_URL),
     // 反代终止 TLS 的部署里打开它：明文请求 308 跳到 https（见 node-middleware 的 requireHttps）。
     // 直连（没有反代）时不要开：那会把所有请求跳到一个并不存在的 https 端口上。
     forceHttps: bool(env.FORCE_HTTPS),
@@ -124,6 +127,12 @@ export function resolveRuntime(argv: string[] = [], env: EnvLike = {}): Runtime 
     // 只应当在**已确认全站 HTTPS 可用**之后才下发长 max-age，否则浏览器会长期拒绝 http 访问。
     hstsMaxAge: parseHstsMaxAge(env.HSTS_MAX_AGE),
   };
+}
+
+/** 隐私政策只接受 https 绝对地址。http 或写错的值当没配。 */
+export function privacyPolicyUrlOf(value: unknown): string {
+  const text = normalizeBaseUrl(value);
+  return /^https:\/\//i.test(text) ? text : '';
 }
 
 /** 对外地址归一化：去空白与尾斜杠，非法值当没配（宁可不显示，也不要显示半截地址）。 */
@@ -157,5 +166,6 @@ export const webEnabled = resolved.webEnabled;
 export const trustProxy = resolved.trustProxy;
 export const startedBy = resolved.startedBy;
 export const publicBaseUrl = resolved.publicBaseUrl;
+export const privacyPolicyUrl = resolved.privacyPolicyUrl;
 export const forceHttps = resolved.forceHttps;
 export const hstsMaxAge = resolved.hstsMaxAge;

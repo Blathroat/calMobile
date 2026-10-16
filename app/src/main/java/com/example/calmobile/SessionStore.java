@@ -18,8 +18,8 @@ import java.util.UUID;
  * 迟早会出现「同步设置顺手把会话清了」或「清会话顺手把配色重置了」的串味问题，
  * 因此各存各的文件，各有一个 clear 入口。
  *
- * 写文件用的是应用私有目录（{@code Context.MODE_PRIVATE}），不导出、不进备份目录，
- * 卸载即随之消失；访问令牌按设计只留在内存里（见前端 `session-client.ts`），
+ * 写文件用的是应用私有目录（{@code Context.MODE_PRIVATE}）。清单里 {@code allowBackup=false}，
+ * 刷新令牌不会进系统备份，卸载即随之消失。访问令牌按设计只留在内存里（见前端 `session-client.ts`），
  * 冷启动时用这里的刷新令牌换回新的访问令牌。
  */
 public final class SessionStore {
