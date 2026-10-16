@@ -11,7 +11,7 @@
     "typecheck": "tsx scripts/build-status-page.ts && tsc --noEmit",
     "pretest": "tsx scripts/build-status-page.ts",
     "pretest:contract": "tsx scripts/build-status-page.ts",
-    "test": "vitest run --project unit && node --test ../scripts/client-target.test.mjs ../scripts/sync-production-env.test.mjs",
+    "test": "vitest run --project unit && node --test ../scripts/client-target.test.mjs ../scripts/sync-production-env.test.mjs ../scripts/release-scope.test.mjs",
     "test:contract": "vitest run --project contract",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",

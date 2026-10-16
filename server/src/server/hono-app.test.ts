@@ -149,6 +149,50 @@ test('报名站页面按 Host 跳转，接口与缺失脚本仍不是页面', as
   }
 });
 
+test('应用页面在 /app，报名站不会把它吞掉', async () => {
+  const root = mkdtempSync(nodePath.join(tmpdir(), 'app-shell-'));
+  const join = mkdtempSync(nodePath.join(tmpdir(), 'join-beside-app-'));
+  writeFileSync(nodePath.join(root, 'index.html'), '<!doctype html><title>应用</title>', 'utf8');
+  mkdirSync(nodePath.join(root, 'assets'));
+  writeFileSync(nodePath.join(root, 'assets', 'app.js'), 'console.log(1)', 'utf8');
+  writeFileSync(nodePath.join(root, 'release.json'), '{"id":"abc"}', 'utf8');
+  writeFileSync(nodePath.join(join, 'join.html'), '<!doctype html><title>报名</title>', 'utf8');
+  try {
+    const redirected = await serve({ appRoot: root, publicBaseUrl: 'https://app.example.com' });
+    const away = await hit(redirected.port, 'GET', '/app/index.html', undefined, { host: 'localhost' });
+    assert.equal(away.status, 308);
+    assert.equal(away.headers.location, 'https://app.example.com/app/index.html');
+
+    const local = await serve({ appRoot: root, joinRoot: join });
+    const page = await hit(local.port, 'GET', '/app');
+    assert.equal(page.status, 200);
+    assert.match(page.body, /应用/);
+    assert.equal(page.headers['cache-control'], 'no-cache');
+
+    const script = await hit(local.port, 'GET', '/app/assets/app.js');
+    assert.equal(script.status, 200);
+    assert.match(String(script.headers['cache-control']), /immutable/);
+
+    const manifest = await hit(local.port, 'GET', '/app/release.json');
+    assert.equal(manifest.status, 200);
+    assert.equal(manifest.headers['cache-control'], 'no-cache');
+
+    const missing = await hit(local.port, 'GET', '/app/assets/missing.js');
+    assert.equal(missing.status, 404);
+    assert.equal(missing.body, '资源不存在');
+
+    const signup = await hit(local.port, 'GET', '/e/exh-1');
+    assert.equal(signup.status, 200);
+    assert.match(signup.body, /报名/);
+
+    const api = await hit(local.port, 'GET', '/api/v1/ping');
+    assert.equal(api.status, 200);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(join, { recursive: true, force: true });
+  }
+});
+
 test('公共 JSON 体积守卫拒绝超限正文', async () => {
   const server = await serve();
   const body = `{"pad":"${'x'.repeat(2 * 1024 * 1024 + 10)}"}`;

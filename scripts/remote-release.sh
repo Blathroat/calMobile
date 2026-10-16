@@ -71,6 +71,9 @@ case "$phase" in
     if [ -d "$path/web/dist-join" ]; then
       as_root chown -R "$account:$account" "$path/web/dist-join"
     fi
+    if [ -d "$path/web/dist" ]; then
+      as_root chown -R "$account:$account" "$path/web/dist"
+    fi
     ;;
   finish)
     src="${3:-}"

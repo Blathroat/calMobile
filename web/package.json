@@ -9,7 +9,7 @@
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "test": "vitest run",
+    "test": "vitest run && node --test release-manifest.test.mjs",
     "build": "vite build",
     "build:join": "vite build --config vite.join.config.ts"
   },

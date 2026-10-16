@@ -100,6 +100,17 @@ test('可疑但可能有意为之的只给警告，不拦启动', () => {
   assert.match(text, /报名站/);
 });
 
+test('默认语言包名称不在下载列表里时只警告，不拒绝启动', () => {
+  const { fatal, warnings } = productionProblems(
+    readyEnv({
+      LANG_PACK_DEFAULT: 'en',
+      LANG_PACK_URLS: 'ja=https://example.com/ja.json',
+    }),
+  );
+  assert.deepEqual(fatal, []);
+  assert.match(warnings.join('；'), /报名站继续用中文/);
+});
+
 test('正式包地址、报名站开关和隐私政策链接只警告', () => {
   const missing = productionProblems(readyEnv()).warnings.join('；');
   assert.match(missing, /APP_API_BASE 没有配置/);

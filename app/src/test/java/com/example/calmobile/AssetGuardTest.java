@@ -13,8 +13,9 @@ import org.junit.Test;
  */
 public class AssetGuardTest {
 
+    /** 资源路径只放行 web 目录。 */
     @Test
-    public void 资源路径只放行web目录() {
+    public void allowsOnlyWebAssetPaths() {
         assertEquals("web/index.html", AssetGuard.resolveAssetPath("/assets/web/index.html"));
         assertEquals("web/assets/index.js", AssetGuard.resolveAssetPath("/assets/web/assets/index.js"));
         assertEquals("web/assets/qr-reader-abc123.js",
@@ -27,8 +28,9 @@ public class AssetGuardTest {
         assertNull(AssetGuard.resolveAssetPath(null));
     }
 
+    /** 路径穿越一律拒绝，包括编码后的点。 */
     @Test
-    public void 路径穿越一律拒绝() {
+    public void rejectsPathTraversal() {
         assertNull(AssetGuard.resolveAssetPath("/assets/web/../../res/values/strings.xml"));
         assertNull(AssetGuard.resolveAssetPath("/assets/web/..%2f..%2fres/x"));
         // %2e 编码的点也要被解开后再判
@@ -38,8 +40,24 @@ public class AssetGuardTest {
         assertNull(AssetGuard.resolveAssetPath("/assets/web/assets/..%5c..%5cworker.js"));
     }
 
+    /** 应用页面路径只解析到 /app 目录内。 */
     @Test
-    public void 媒体文件名只放单层() {
+    public void resolvesAppPagesInsideAppDirectory() {
+        assertEquals("index.html", AssetGuard.resolveAppRelativePath("/app"));
+        assertEquals("index.html", AssetGuard.resolveAppRelativePath("/app/"));
+        assertEquals("index.html", AssetGuard.resolveAppRelativePath("/app/index.html"));
+        assertEquals("assets/index-abc.js", AssetGuard.resolveAppRelativePath("/app/assets/index-abc.js"));
+        assertEquals("release.json", AssetGuard.resolveAppRelativePath("/app/release.json"));
+        assertNull(AssetGuard.resolveAppRelativePath("/media/a.jpg"));
+        assertNull(AssetGuard.resolveAppRelativePath("/app/../secret"));
+        assertNull(AssetGuard.resolveAppRelativePath("/app/%2e%2e/secret"));
+        assertNull(AssetGuard.resolveAppRelativePath("/app/assets/%2e%2e/decoder.wasm"));
+        assertNull(AssetGuard.resolveAppRelativePath(null));
+    }
+
+    /** 媒体文件名只放单层，编码后的分隔符同样拒绝。 */
+    @Test
+    public void allowsOnlySingleSegmentMediaNames() {
         assertTrue(AssetGuard.isMediaFileAllowed("cover-abc123.jpg"));
         assertTrue(AssetGuard.isMediaFileAllowed("name.with.dots.png"));
         assertFalse(AssetGuard.isMediaFileAllowed(""));

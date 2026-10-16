@@ -1,9 +1,8 @@
 /**
  * 把头像和展会媒体的站内路径补成 WebView 能请求到的地址。
  *
- * 页面跑在 `https://appassets.androidplatform.net`，相对路径会打到那个源，而不是后端。
- * 源跟 `APP_API_BASE` 相同。报名站与页面同源，保持相对路径。
- * 已经是绝对地址的原样返回。
+ * 应用页面和报名站都开在接口所在的源上，站内 `/media/` 补到这个源。
+ * 设备上临时选中的文件仍用 appassets 绝对地址，这里原样返回。
  */
 
 import { mediaOriginFromApiBase, resolveApiBase } from './api-base';

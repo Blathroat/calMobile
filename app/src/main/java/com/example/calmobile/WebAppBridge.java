@@ -87,15 +87,32 @@ public class WebAppBridge {
         mainHandler.post(new Runnable() {
             @Override
             public void run() {
+                if (!pageAllowed()) {
+                    respond(callbackId, false, null, "当前页面不能使用设备能力", null);
+                    return;
+                }
                 dispatch(action, payload, callbackId);
             }
         });
     }
 
-    /** 前端上报的异常，仅用于日志排查。 */
+    /** 前端上报的异常，仅用于日志排查。不是应用页面时丢弃。 */
     @JavascriptInterface
-    public void report(String message) {
-        Log.w(TAG, "web error: " + message);
+    public void report(final String message) {
+        mainHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (pageAllowed()) {
+                    Log.w(TAG, "web error: " + message);
+                }
+            }
+        });
+    }
+
+    /** 桥只对应用页面文档开放。必须在主线程读 WebView 的当前地址。 */
+    private boolean pageAllowed() {
+        String url = webView == null ? null : webView.getUrl();
+        return PageOrigin.isAppDocument(url, BuildConfig.APP_ORIGIN);
     }
 
     private void dispatch(String action, Map<String, Object> payload, final String callbackId) {

@@ -20,6 +20,7 @@ import { isEntry } from './entry.js';
 
 import { createAdaptorServer } from '@hono/node-server';
 import { createApp } from './server/hono-app.js';
+import { appShellReady, defaultAppRoot } from './server/app-shell.js';
 import { defaultJoinRoot, joinSiteMissingMessage, joinSiteReady } from './server/join-site.js';
 import { adminIdentity, productionProblems } from './config/production.js';
 import { demoAccountsUsingExamplePassword, ensureProductionAdmin } from './config/bootstrap-admin.js';
@@ -39,6 +40,8 @@ const PORT = config.port;
  */
 const joinRoot = defaultJoinRoot();
 const joinReady = joinSiteReady(joinRoot);
+const appRoot = defaultAppRoot();
+const appReady = appShellReady(appRoot);
 
 /** 骨架：公共层、探针、状态页、业务路由、报名站和统一错误处理。 */
 const app = createApp({
@@ -52,6 +55,7 @@ const app = createApp({
   hstsMaxAge: runtime.hstsMaxAge,
   forceHttps: runtime.forceHttps,
   joinRoot: runtime.webEnabled && joinReady ? joinRoot : undefined,
+  appRoot: appReady ? appRoot : undefined,
   publicBaseUrl: runtime.publicBaseUrl,
 });
 
@@ -88,6 +92,11 @@ async function start() {
   if (runtime.webEnabled && !joinReady) {
     console.error(joinSiteMissingMessage(joinRoot));
     process.exit(1);
+  }
+  if (runtime.isProduction && !appReady) {
+    console.warn(
+      `应用页面产物缺失：没有找到 ${appRoot} 里的 index.html。已安装的客户端继续用包内页面，热更新暂时不可用。`,
+    );
   }
 
   const startedBy = runtime.startedBy ? `（pnpm ${runtime.startedBy}）` : '';

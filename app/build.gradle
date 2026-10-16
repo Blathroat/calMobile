@@ -21,6 +21,8 @@ android {
         versionName = clientTarget.versionName
         manifestPlaceholders = [allowCleartext: clientTarget.allowCleartext ? 'true' : 'false']
         buildConfigField 'boolean', 'ALLOW_CLEARTEXT', clientTarget.allowCleartext ? 'true' : 'false'
+        buildConfigField 'String', 'APP_ORIGIN', '"' + clientTarget.mediaOrigin + '"'
+        buildConfigField 'String', 'APP_PAGE_URL', '"' + clientTarget.mediaOrigin + '/app/index.html"'
     }
 
     buildFeatures {

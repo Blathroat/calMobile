@@ -4,8 +4,8 @@
  * 不挂在 `/api/v1` 下：`<img>` 不会带 Authorization，公开主页也要能显示头像。
  * 文件名是随机串，这里不列目录、不接受调用方给的路径。
  *
- * 页面跑在 `appassets.androidplatform.net`，图片在 `127.0.0.1`，因此这一路的
- * `Cross-Origin-Resource-Policy` 必须是 `cross-origin`，否则 WebView 会把图拦掉。
+ * 应用页面和报名站与接口同源，图片也能直接显示。
+ * `Cross-Origin-Resource-Policy` 仍是 `cross-origin`，别的页面嵌这张图时不会被浏览器拦住。
  */
 
 import { Hono } from 'hono';

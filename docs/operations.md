@@ -62,9 +62,23 @@ server {
 
 `./gradlew :app:assembleDebug` 使用当前这份配置，不要求公网地址或签名。`./gradlew :app:assembleRelease` 会拒绝：地址不是公网 https、包名是 `com.example`、签名四项缺一或密钥文件不存在。
 
-推送到 `master` 并且 CI 成功之后，`.github/workflows/release.yml` 构建正式包，把 APK 放到 GitHub Release。`versionCode` 是这个工作流自己的运行编号，`versionName` 是 `0.1.` 加同一个编号，标签是 `v0.1.<编号>`。删掉或换掉这个工作流文件会让编号从 1 重新计。功能分支和拉取请求不发布。
+推送到 `master` 的合并提交在 CI 成功之后，`.github/workflows/release.yml` 按这次推送的路径发布。普通提交跳过发布和部署。功能分支和拉取请求不发布。会触发发布、部署或页面同步的改动走 PR，用合并提交合入，不要直接推到 `master`。
 
-没把 `DEPLOY_ENABLED` 设成 `true` 时只发布 APK。设成 `true`，并且配了 `DEPLOY_HOST`、`DEPLOY_USER` 和 `DEPLOY_SSH_KEY` 之后，同一次还会同步服务器：`server/dist`、`server/package.json`、`server/pnpm-lock.yaml` 和 `web/dist-join` 放到 `DEPLOY_PATH`（默认 `/opt/calmobile`）。报名站在部署目录的 `web/dist-join`，和 `server/dist` 同级。同步前把现有 `server/dist` 复制为 `server/dist.prev`。然后补齐 `/etc/calmobile.env`，在服务器上执行 `pnpm install --frozen-lockfile --prod` 和 `pnpm db:migrate:prod`，再重启 `calmobile.service`。
+`versionCode` 是这个工作流自己的运行编号，`versionName` 是 `0.1.` 加同一个编号，标签是 `v0.1.<编号>`。只有这次真的发布 APK 才占用这个编号建 Release，中间跳过的运行不会建标签，编号可以不连续。删掉或换掉这个工作流文件会让编号从 1 重新计。
+
+路径归类在 `scripts/release-scope.mjs`。CI 在 push 时记下 `before..after` 的文件清单，Release 读取它：
+
+- 原生外壳（`app/src/main`、`app/build.gradle`、Gradle、`scripts/client-target.mjs`）发布 APK。`client-target.mjs` 同时同步应用页面。
+- 服务端运行时代码、依赖锁、`deploy/`、`scripts/remote-release.sh`、`scripts/sync-production-env.mjs` 部署并重启。
+- 只进应用页面包的源（例如 `web/src/pages/HomePage.vue`、`web/src/main.ts`、`web/vite.config.ts`、`web/release-manifest.mjs`）同步 `web/dist` 到 `/app/`，不发 APK，不重启。
+- 报名站专有源（`web/src/join/`、`web/join.html`、`web/vite.join.config.ts`、`server/scripts/build-join.ts`）只同步 `web/dist-join`，不重启。服务按请求读文件。
+- 两边都会打进去的 `web/src`（文案、外壳、组件，以及报名站用到的页面）两份一起同步。同步的是构建产物，不是源文件。
+- `server/src/domain/answer-document.ts` 重启服务，并同步两份页面。
+- 文档、测试、`server/src/dev/` 不触发。
+
+没把 `DEPLOY_ENABLED` 设成 `true` 时，只有 APK 会发布；页面、报名站和服务端都不同步。设成 `true`，并且配了 `DEPLOY_HOST`、`DEPLOY_USER` 和 `DEPLOY_SSH_KEY` 之后：需要重启的那次把 `server/dist`、`server/package.json`、`server/pnpm-lock.yaml` 放到 `DEPLOY_PATH`（默认 `/opt/calmobile`），并带上这次构建出来的 `web/dist-join`；应用页面有改动时再同步 `web/dist`。只改页面时只同步对应目录，不安装依赖、不迁移、不重启。报名站在部署目录的 `web/dist-join`，应用页面在 `web/dist`，都和 `server/dist` 同级。`web/src` 不上传。`web/src/i18n/zh.json` 在构建时打进这两份产物的脚本里，服务器上没有这个源文件。同步用 `rsync --delete`，会换掉对应目录里的旧脚本。用户安装的语言包在各自浏览器或应用的本机存储里，不在 `web/dist` 中，这次同步不会删除它们。需要重启时，同步前把现有 `server/dist` 复制为 `server/dist.prev`，然后补齐 `/etc/calmobile.env`，在服务器上执行 `pnpm install --frozen-lockfile --prod` 和 `pnpm db:migrate:prod`，再重启 `calmobile.service`。
+
+应用页面打进 APK 一份。正式包打开接口所在源的 `/app/index.html`，WebView 把这个路径拦截到本机快照，页面切换不访问网络。快照没有，或不是当前 `versionCode`，就用包内那份。首屏出来之后才后台拉取 `/app/release.json`；有新版本才下到待用目录，下次冷启动再换上，使用中不重载。调试包（接口是 http）不热更新。改 `APP_API_BASE` 仍要重新构建 APK：文档源写在外壳里。页面包在同步时用同一个 `APP_API_BASE` 构建。
 
 环境文件只补还没有的键。服务器上已有的非空值不会被覆盖，文件里多出来的键会保留。空的密钥不会写入。`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL` 在服务器和 GitHub Secrets 里都没有时，部署失败，也不会把空值写进去。要改一个已经存在的值，直接改服务器上的 `/etc/calmobile.env`。只改同名的 GitHub Secret 或 Variable 不会替换它。固定的非密钥项在 `deploy/production.env`。域名、数据库主机和发件人地址放在 GitHub Variables。服务器地址不要放进 Variables：变量值会原样写进 Actions 日志，仓库一旦公开，日志也公开。地址放在 Secret `DEPLOY_HOST`，日志里会打成星号。口令、签名和 SSH 私钥同样只放 Secrets，不进仓库。
 
@@ -88,7 +102,7 @@ keytool -genkeypair -v -keystore calmobile-release.jks -alias upload -keyalg RSA
 
 把 `calmobile-release.jks` 做一次 base64，放进 GitHub Secret `ANDROID_KEYSTORE_BASE64`。口令和别名放进下面的 Secrets。不要把密钥文件或口令提交进仓库。
 
-GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`）、`PUBLIC_BASE_URL`（`https://域名`）、`PRIVACY_POLICY_URL`。要部署服务器时再加 `DEPLOY_ENABLED`（`true` 才部署）、`DEPLOY_USER`、`DEPLOY_PATH`，以及实际用到的 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_SSL`、`MAIL_SMTP_HOST`、`MAIL_SMTP_PORT`、`MAIL_SMTP_SECURE`、`MAIL_SMTP_TLS_REJECT_UNAUTHORIZED`、`MAIL_SMTP_USER`、`MAIL_FROM_ADDRESS`、`MAIL_REPLY_TO`、`FORCE_HTTPS`、`HSTS_MAX_AGE`、`UPLOAD_DIR`、`MEDIA_BASE_URL`、`UPLOAD_MAX_MB`、`JWT_EXPIRES_IN`、`REFRESH_TOKEN_TTL`。这些值会出现在 Actions 日志里，不要把服务器地址或口令写进来。
+GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`）、`PUBLIC_BASE_URL`（`https://域名`）、`PRIVACY_POLICY_URL`、`LANG_PACK_DEFAULT`（默认语言包名称）、`LANG_PACK_URLS`（`名称=链接`，逗号或空白分开）。报名站只有在默认名称非空、且这个名称写在 `LANG_PACK_URLS` 里时才用该语言，否则用中文。部署只把这两个键补进还没有它们的环境文件，不会改服务器上已有的值；改已有值要直接改 `/etc/calmobile.env` 并重启。要部署服务器时再加 `DEPLOY_ENABLED`（`true` 才部署）、`DEPLOY_USER`、`DEPLOY_PATH`，以及实际用到的 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_SSL`、`MAIL_SMTP_HOST`、`MAIL_SMTP_PORT`、`MAIL_SMTP_SECURE`、`MAIL_SMTP_TLS_REJECT_UNAUTHORIZED`、`MAIL_SMTP_USER`、`MAIL_FROM_ADDRESS`、`MAIL_REPLY_TO`、`FORCE_HTTPS`、`HSTS_MAX_AGE`、`UPLOAD_DIR`、`MEDIA_BASE_URL`、`UPLOAD_MAX_MB`、`JWT_EXPIRES_IN`、`REFRESH_TOKEN_TTL`。这些值会出现在 Actions 日志里，不要把服务器地址或口令写进来。
 
 GitHub Secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。要部署服务器时再加 `DEPLOY_HOST`、`DEPLOY_SSH_KEY`、`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL`。
 
@@ -101,9 +115,9 @@ GitHub Secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDR
 3. 确认 https 全站可用之后，再开 `FORCE_HTTPS` 和长 `HSTS_MAX_AGE`。
 4. `CORS_ORIGIN` 写成真实来源。
 5. 状态页保持关闭，或在反代上加 Basic Auth 并只允许内网访问。公网探活只用 `/ping`。
-6. `JWT_SECRET` 与 `TOTP_SECRET_KEY` 各自至少 32 个随机字符。数据库口令不是示例值。`MAIL_FROM_ADDRESS` 已显式配置。出站 25 端口开着时用本机 Postfix，并配好 SPF 和 DKIM；出站 25 被封时改用托管中继。反解析和域名不一致时，对方仍可能拒信。
+6. `JWT_SECRET` 与 `TOTP_SECRET_KEY` 各自至少 32 个随机字符。数据库口令不是示例值。`MAIL_FROM_ADDRESS` 已显式配置。生产发信走托管中继，SPF 只 include 中继方，不把源站地址写进 DNS。中继的登录口令放在 Secret `MAIL_SMTP_PASSWORD`。本地开发用 Mailpit。
 7. Node 版本满足 `engines`。在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，再执行 `pnpm db:migrate:prod`，迁移完成后再切流量。
 8. 数据库时区是 `Asia/Shanghai`。原因写在仓库根 `docker-compose.yml`。备份和恢复演练已经做过。
 9. `client_max_body_size` 盖住视频单文件上限。视频默认 50MB 时至少写 `64m`。头像那一道传输硬顶盖不住视频。上传目录和开关见 `server/.env.example`。存满之后的产品行为见 [`product.md`](product.md)。
 10. 注册页有收集说明。`PRIVACY_POLICY_URL` 是 https 政策地址。当前邮件只有验证码，没有营销信。
-11. 正式包用 `./gradlew :app:assembleRelease`，或由上面的 Release 工作流在 `master` 的 CI 成功后构建。`APP_API_BASE` 是与 `PUBLIC_BASE_URL` 同一个源的 `https://域名/api/v1`。包名是 `com.blathroat.calmobile`。签名四项指向正式密钥。`ENABLE_WEB=true`，并且 `web/dist-join` 已构建。
+11. 外壳有改动时，正式包用 `./gradlew :app:assembleRelease`，或由上面的 Release 工作流在 `master` 的合并提交通过 CI 后构建。`APP_API_BASE` 是与 `PUBLIC_BASE_URL` 同一个源的 `https://域名/api/v1`。包名是 `com.blathroat.calmobile`。签名四项指向正式密钥。`ENABLE_WEB=true`，`web/dist-join` 已构建，并且 `web/dist` 已放到站点的 `/app/`。

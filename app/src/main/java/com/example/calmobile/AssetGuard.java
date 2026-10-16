@@ -32,6 +32,37 @@ final class AssetGuard {
     }
 
     /**
+     * 把 {@code /app/...} 归一化成页面快照里的相对路径。{@code /app} 与 {@code /app/} 是入口。
+     * 越出这个前缀或出现 {@code ..} 时返回 null。
+     */
+    static String resolveAppRelativePath(String rawPath) {
+        if (rawPath == null) {
+            return null;
+        }
+        String decoded = percentDecode(rawPath);
+        if (decoded.indexOf('\\') >= 0 || decoded.indexOf('\0') >= 0) {
+            return null;
+        }
+        if ("/app".equals(decoded)) {
+            return "index.html";
+        }
+        if (!decoded.startsWith("/app/")) {
+            return null;
+        }
+        String rest = decoded.substring("/app/".length());
+        if (rest.isEmpty() || "index.html".equals(rest)) {
+            return "index.html";
+        }
+        String[] parts = rest.split("/", -1);
+        for (String part : parts) {
+            if (part.isEmpty() || ".".equals(part) || "..".equals(part)) {
+                return null;
+            }
+        }
+        return rest;
+    }
+
+    /**
      * 媒体短 URL 的文件名：只允许单层文件名，分隔符与 {@code ..} 一律拒绝，
      * 避免通过 URL 读到应用私有目录里的其它文件。
      */

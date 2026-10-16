@@ -53,6 +53,20 @@ export interface Runtime {
   forceHttps: boolean;
   /** HSTS 的 max-age（秒）；0 表示不下发这个头。默认 180 天。 */
   hstsMaxAge: number;
+  /** 语言包：默认名称，以及 `名称=链接` 列表。正文不在这里。 */
+  langPacks: LangPackConfig;
+}
+
+/** 下发给客户端的语言包目录。只含名称和链接。 */
+export interface LangPackOffer {
+  id: string;
+  url: string;
+}
+
+export interface LangPackConfig {
+  defaultPack: string;
+  packs: LangPackOffer[];
+  warnings: string[];
 }
 
 export function bool(value: unknown): boolean {
@@ -126,7 +140,68 @@ export function resolveRuntime(argv: string[] = [], env: EnvLike = {}): Runtime 
     // HSTS：默认 180 天。填 0 表示不下发（例如域名还没定、或本地用 http 调试）。
     // 只应当在**已确认全站 HTTPS 可用**之后才下发长 max-age，否则浏览器会长期拒绝 http 访问。
     hstsMaxAge: parseHstsMaxAge(env.HSTS_MAX_AGE),
+    langPacks: resolveLangPacks(env, !isProduction),
   };
+}
+
+const LANG_PACK_ID = /^[a-z0-9-]{1,32}$/;
+const LANG_PACK_LIMIT = 8;
+
+/**
+ * 解析 `LANG_PACK_DEFAULT` 和 `LANG_PACK_URLS`。
+ *
+ * 列表用逗号或空白分开，每一条是 `名称=链接`。链接里不要再写逗号。
+ * 写错的条目丢掉，不拒绝启动。默认名称不在列表里时，报名站继续用中文。
+ */
+export function resolveLangPacks(env: EnvLike, allowHttp: boolean): LangPackConfig {
+  const warnings: string[] = [];
+  const rawDefault = String(env.LANG_PACK_DEFAULT ?? '').trim();
+  let defaultPack = '';
+  if (rawDefault) {
+    if (LANG_PACK_ID.test(rawDefault)) defaultPack = rawDefault;
+    else warnings.push('LANG_PACK_DEFAULT 不是合法的语言包名称，已忽略');
+  }
+
+  const packs: LangPackOffer[] = [];
+  const seen = new Set<string>();
+  const rawList = String(env.LANG_PACK_URLS ?? '').trim();
+  if (rawList) {
+    for (const item of rawList.split(/[\s,]+/).filter((part) => part.length > 0)) {
+      if (packs.length >= LANG_PACK_LIMIT) {
+        warnings.push('LANG_PACK_URLS 超过 8 条，多出来的已忽略');
+        break;
+      }
+      const eq = item.indexOf('=');
+      const id = eq > 0 ? item.slice(0, eq).trim() : '';
+      const url = eq > 0 ? langPackUrl(item.slice(eq + 1).trim(), allowHttp) : '';
+      if (!LANG_PACK_ID.test(id) || !url) {
+        warnings.push(`LANG_PACK_URLS 有无法使用的条目，已忽略：${item.slice(0, 80)}`);
+        continue;
+      }
+      if (seen.has(id)) {
+        warnings.push(`LANG_PACK_URLS 里的 ${id} 重复，已保留第一条`);
+        continue;
+      }
+      seen.add(id);
+      packs.push({ id, url });
+    }
+  }
+  if (defaultPack && !seen.has(defaultPack)) {
+    warnings.push(`LANG_PACK_DEFAULT=${defaultPack} 不在 LANG_PACK_URLS 里：报名站继续用中文`);
+  }
+  return { defaultPack, packs, warnings };
+}
+
+function langPackUrl(value: string, allowHttp: boolean): string {
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.hash) return '';
+    if (url.protocol !== 'https:' && !(allowHttp && url.protocol === 'http:')) return '';
+    return url.toString();
+  } catch {
+    return '';
+  }
 }
 
 /** 隐私政策只接受 https 绝对地址。http 或写错的值当没配。 */
@@ -169,3 +244,7 @@ export const publicBaseUrl = resolved.publicBaseUrl;
 export const privacyPolicyUrl = resolved.privacyPolicyUrl;
 export const forceHttps = resolved.forceHttps;
 export const hstsMaxAge = resolved.hstsMaxAge;
+export const langPacks = {
+  defaultPack: resolved.langPacks.defaultPack,
+  packs: resolved.langPacks.packs,
+};

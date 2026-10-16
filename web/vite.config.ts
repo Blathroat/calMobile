@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, URL } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { writeReleaseManifest } from './release-manifest.mjs';
 
 // 与 Gradle 读同一份脚本，避免在这里再解析一遍 .env。
 const clientTarget = JSON.parse(
@@ -11,13 +12,23 @@ const clientTarget = JSON.parse(
   }),
 ) as { apiBase: string };
 
+function releaseManifest(): Plugin {
+  return {
+    name: 'calmobile-release-manifest',
+    apply: 'build',
+    closeBundle() {
+      writeReleaseManifest(fileURLToPath(new URL('./dist', import.meta.url)));
+    },
+  };
+}
+
 export default defineConfig({
-  // Android WebView 只从 /assets/web/ 提供打包资源，必须让 Vite 生成同一前缀。
-  base: '/assets/web/',
+  // 正式包把页面挂在站点的 /app/，WebView 再拦截到本机快照。前缀必须一致。
+  base: '/app/',
   define: {
     'import.meta.env.VITE_API_BASE': JSON.stringify(clientTarget.apiBase),
   },
-  plugins: [vue()],
+  plugins: [vue(), releaseManifest()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
