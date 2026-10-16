@@ -24,7 +24,7 @@ Java 四空格，类名 PascalCase，成员 camelCase，资源 `snake_case`。�
 
 ## 发布
 
-会让 CD 发布客户端、部署服务或同步页面的提交不要直接推到 `master`。走 PR，用合并提交合入。直接推上去的普通提交不会发布。文档和测试不触发 CD。哪些路径会触发，见 [docs/operations.md](docs/operations.md)。已经在 `master` 上且 CI 通过的提交要补发时，在 Actions 里手动运行 Release。不要撤回合并，也不要为了凑路径去改文件。
+会让 CD 发布客户端、部署服务或同步页面的提交不要直接推到 `master`。走 PR，用合并提交合入。合入前要等这个 PR 自己的 CI 跑完并且成功。检查还在跑或失败时不要合并。直接推上去的普通提交不会发布。文档和测试不触发 CD。哪些路径会触发，见 [docs/operations.md](docs/operations.md)。已经在 `master` 上且 CI 通过的提交要补发时，在 Actions 里手动运行 Release。不要撤回合并，也不要为了凑路径去改文件。
 
 ## 文档
 
