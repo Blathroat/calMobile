@@ -1,5 +1,8 @@
 # master 上的 CI 成功后才运行。功能分支、拉取请求和普通提交不发布。
-# 只有合并提交才发布。发不发 APK、重启不重启服务，看 CI 记下的路径清单。
+# 只有合并提交才按路径自动发布。浅克隆里 rev-list 看不到父提交，用提交对象的 parent 行判断。
+# Actions 里手动运行是强制发布：不看路径，构建当时的 master。四个开关默认都开。
+# 发 APK 时总会同步应用页面。重启服务时总会同步报名站。
+# 这个提交还没有成功的 master CI 时，强制发布拒绝执行。
 # versionCode / versionName 用本工作流的运行编号。删掉或换掉这个文件会让编号从 1 重新计。
 # 没开 DEPLOY_ENABLED 时只可能发布 APK。开了才同步服务器或页面。
 # 服务器地址放在 Secret DEPLOY_HOST。不要放进 Variables：变量值会写进 Actions 日志。
@@ -11,6 +14,24 @@ on:
     workflows: ["CI"]
     types: [completed]
     branches: [master]
+  workflow_dispatch:
+    inputs:
+      apk:
+        description: 发布 APK。打开时总会同步应用页面。
+        type: boolean
+        default: true
+      server:
+        description: 部署并重启服务。打开时总会同步报名站。
+        type: boolean
+        default: true
+      app:
+        description: 同步应用页面
+        type: boolean
+        default: true
+      join:
+        description: 同步报名站
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -22,7 +43,7 @@ concurrency:
 
 jobs:
   scope:
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -30,27 +51,44 @@ jobs:
       server: ${{ steps.decide.outputs.server }}
       app: ${{ steps.decide.outputs.app }}
       join: ${{ steps.decide.outputs.join }}
+      sha: ${{ steps.gate.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
           fetch-depth: 1
 
-      - name: 判断是不是合并提交
-        id: merge
+      - name: 确认可以发布
+        id: gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_REF: ${{ github.ref }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          parents="$(git rev-list --parents -n 1 HEAD)"
-          set -- $parents
-          if [ "$#" -ge 3 ]; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$FORCE_REF" != "refs/heads/master" ]; then
+              echo "只能在 master 上强制发布。" >&2
+              exit 1
+            fi
+            gh run list --commit "$sha" --workflow CI --limit 20 --json conclusion,status,event,headBranch > "$RUNNER_TEMP/ci-runs.json"
+            node scripts/release-scope.mjs --ci-ok "$RUNNER_TEMP/ci-runs.json"
+            echo "mode=force" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git cat-file -p HEAD > "$RUNNER_TEMP/commit.txt"
+          kind=$(node scripts/release-scope.mjs --merge-commit "$RUNNER_TEMP/commit.txt")
+          if [ "$kind" = "merge" ]; then
+            echo "mode=merge" >> "$GITHUB_OUTPUT"
           else
-            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
             echo "不是合并提交，跳过发布和部署。"
           fi
 
       - uses: actions/download-artifact@v4
-        if: steps.merge.outputs.ok == 'true'
+        if: steps.gate.outputs.mode == 'merge'
         with:
           name: changed-files
           run-id: ${{ github.event.workflow_run.id }}
@@ -58,13 +96,27 @@ jobs:
 
       - name: 判断发布范围
         id: decide
+        env:
+          FORCE_APK: ${{ inputs.apk }}
+          FORCE_SERVER: ${{ inputs.server }}
+          FORCE_APP: ${{ inputs.app }}
+          FORCE_JOIN: ${{ inputs.join }}
         run: |
           set -euo pipefail
-          if [ "${{ steps.merge.outputs.ok }}" != "true" ]; then
-            printf '%s\n' "apk=false" "server=false" "app=false" "join=false" >> "$GITHUB_OUTPUT"
+          mode="${{ steps.gate.outputs.mode }}"
+          if [ "$mode" = "skip" ]; then
+            printf '%s\n' "apk=false" "server=false" "app=false" "join=false" | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
-          node scripts/release-scope.mjs changed-files.txt >> "$GITHUB_OUTPUT"
+          if [ "$mode" = "force" ]; then
+            node scripts/release-scope.mjs --force \
+              "apk=${FORCE_APK}" \
+              "server=${FORCE_SERVER}" \
+              "app=${FORCE_APP}" \
+              "join=${FORCE_JOIN}" | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node scripts/release-scope.mjs changed-files.txt | tee -a "$GITHUB_OUTPUT"
 
   release-apk:
     needs: scope
@@ -76,7 +128,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.scope.outputs.sha }}
 
       - uses: pnpm/action-setup@v6
         with:
@@ -170,7 +222,7 @@ jobs:
           tag="v${version}"
           asset="calmobile-${version}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$asset"
-          sha="${{ github.event.workflow_run.head_sha }}"
+          sha="${{ needs.scope.outputs.sha }}"
           notes=$(printf '%s\n' "包名 com.blathroat.calmobile" "提交 ${sha}")
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --clobber
@@ -186,7 +238,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.scope.outputs.sha }}
 
       - uses: pnpm/action-setup@v6
         with:

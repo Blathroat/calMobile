@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { releaseScope } from './release-scope.mjs';
+import { forceReleaseScope, isMergeCommit, masterCiGate, releaseScope } from './release-scope.mjs';
 
 function flags(paths) {
   return releaseScope(paths);
@@ -102,6 +102,65 @@ test('文档、测试和开发脚本不触发 CD', () => {
       '.github/workflows/ci.yml',
     ]),
     { apk: false, server: false, app: false, join: false },
+  );
+});
+
+test('提交对象里有两个 parent 才是合并提交', () => {
+  assert.equal(
+    isMergeCommit('tree abc\nparent 111\nparent 222\n\nMerge pull request\nparent 在正文里不算'),
+    true,
+  );
+  assert.equal(isMergeCommit('tree abc\nparent 111\n\n普通提交'), false);
+  assert.equal(isMergeCommit('tree abc\n\n没有父提交'), false);
+});
+
+test('强制发布按开关来，发 APK 带上应用页面，重启带上报名站', () => {
+  assert.deepEqual(forceReleaseScope({ apk: 'true', server: 'false', app: 'false', join: 'false' }), {
+    apk: true,
+    server: false,
+    app: true,
+    join: false,
+  });
+  assert.deepEqual(forceReleaseScope({ apk: 'false', server: 'true', app: 'false', join: 'false' }), {
+    apk: false,
+    server: true,
+    app: false,
+    join: true,
+  });
+  assert.deepEqual(forceReleaseScope({ apk: false, server: false, app: true, join: false }), {
+    apk: false,
+    server: false,
+    app: true,
+    join: false,
+  });
+});
+
+test('强制发布没有选择或开关写错时拒绝', () => {
+  assert.throws(() => forceReleaseScope({ apk: 'false', server: 'false', app: 'false', join: 'false' }), /至少要选一项/);
+  assert.throws(() => forceReleaseScope({ apk: 'yes', server: 'false', app: 'false', join: 'false' }), /必须是 true 或 false/);
+  assert.throws(() => forceReleaseScope({ server: 'true' }), /缺少 apk/);
+});
+
+test('强制发布只认 master 上已经成功的推送检查', () => {
+  assert.deepEqual(
+    masterCiGate([{ event: 'push', headBranch: 'master', status: 'completed', conclusion: 'success' }]),
+    { ok: true, reason: '' },
+  );
+  assert.equal(
+    masterCiGate([{ event: 'push', headBranch: 'master', status: 'in_progress', conclusion: '' }]).ok,
+    false,
+  );
+  assert.match(
+    masterCiGate([{ event: 'push', headBranch: 'master', status: 'in_progress', conclusion: '' }]).reason,
+    /还在跑/,
+  );
+  assert.match(
+    masterCiGate([{ event: 'pull_request', headBranch: 'master', status: 'completed', conclusion: 'success' }]).reason,
+    /还没有成功的 CI/,
+  );
+  assert.match(
+    masterCiGate([{ event: 'push', headBranch: 'master', status: 'completed', conclusion: 'failure' }]).reason,
+    /还没有成功的 CI/,
   );
 });
 
