@@ -1,6 +1,8 @@
 import { createApi } from '@/api/client';
 import type { Bootstrap } from '@/api/types';
 import { applyAccentIndex, applyMode } from '@/app/theme';
+import { applyOfferedLang, currentLanguageId, downloadMissingPacks, reloadForLanguage, type LangOffer } from '@/i18n';
+import { toast } from '@/services/toast';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useCapabilitiesStore } from '@/stores/capabilities';
 import { useSessionStore } from '@/stores/session';
@@ -52,6 +54,33 @@ export function applyRuntimeBootstrap(data: Bootstrap): void {
   applyMode(String(useSettingsStore().mode || 'auto'));
   // 强调色也缓存一份到本机：下次冷启动的首帧直接是用户选的颜色。
   applyAccentIndex(Number(useBootstrapStore().theme.index) || 0);
+  // 语言包在本机。这里只记下服务器给的名称和链接，缺的包在后台补，不挡住这次启动。
+  const lang = offeredLang(data.lang);
+  if (!lang) return;
+  if (applyOfferedLang(lang.defaultPack, lang.offers)) {
+    reloadForLanguage();
+    return;
+  }
+  const before = currentLanguageId();
+  void downloadMissingPacks(lang.offers).then((errors) => {
+    if (errors.length > 0) toast(errors.join('；'), 'error');
+    if (currentLanguageId() !== before) reloadForLanguage();
+  });
+}
+
+function offeredLang(value: unknown): { defaultPack: string; offers: LangOffer[] } | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as { defaultPack?: unknown; packs?: unknown };
+  const offers: LangOffer[] = [];
+  if (Array.isArray(record.packs)) {
+    for (const item of record.packs) {
+      if (!item || typeof item !== 'object') continue;
+      const id = (item as { id?: unknown }).id;
+      const url = (item as { url?: unknown }).url;
+      if (typeof id === 'string' && typeof url === 'string') offers.push({ id, url });
+    }
+  }
+  return { defaultPack: typeof record.defaultPack === 'string' ? record.defaultPack : '', offers };
 }
 
 function asObject(value: unknown): Record<string, unknown> {

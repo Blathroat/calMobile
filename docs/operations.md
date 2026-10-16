@@ -76,7 +76,7 @@ server {
 - `server/src/domain/answer-document.ts` 重启服务，并同步两份页面。
 - 文档、测试、`server/src/dev/` 不触发。
 
-没把 `DEPLOY_ENABLED` 设成 `true` 时，只有 APK 会发布；页面、报名站和服务端都不同步。设成 `true`，并且配了 `DEPLOY_HOST`、`DEPLOY_USER` 和 `DEPLOY_SSH_KEY` 之后：需要重启的那次把 `server/dist`、`server/package.json`、`server/pnpm-lock.yaml` 放到 `DEPLOY_PATH`（默认 `/opt/calmobile`），并带上这次构建出来的 `web/dist-join`；应用页面有改动时再同步 `web/dist`。只改页面时只同步对应目录，不安装依赖、不迁移、不重启。报名站在部署目录的 `web/dist-join`，应用页面在 `web/dist`，都和 `server/dist` 同级。`web/src` 不上传。`web/src/i18n/strings.ts` 在构建时打进这两份产物的脚本里，服务器上没有这个源文件。同步用 `rsync --delete`，会换掉对应目录里的旧脚本。需要重启时，同步前把现有 `server/dist` 复制为 `server/dist.prev`，然后补齐 `/etc/calmobile.env`，在服务器上执行 `pnpm install --frozen-lockfile --prod` 和 `pnpm db:migrate:prod`，再重启 `calmobile.service`。
+没把 `DEPLOY_ENABLED` 设成 `true` 时，只有 APK 会发布；页面、报名站和服务端都不同步。设成 `true`，并且配了 `DEPLOY_HOST`、`DEPLOY_USER` 和 `DEPLOY_SSH_KEY` 之后：需要重启的那次把 `server/dist`、`server/package.json`、`server/pnpm-lock.yaml` 放到 `DEPLOY_PATH`（默认 `/opt/calmobile`），并带上这次构建出来的 `web/dist-join`；应用页面有改动时再同步 `web/dist`。只改页面时只同步对应目录，不安装依赖、不迁移、不重启。报名站在部署目录的 `web/dist-join`，应用页面在 `web/dist`，都和 `server/dist` 同级。`web/src` 不上传。`web/src/i18n/zh.json` 在构建时打进这两份产物的脚本里，服务器上没有这个源文件。同步用 `rsync --delete`，会换掉对应目录里的旧脚本。用户安装的语言包在各自浏览器或应用的本机存储里，不在 `web/dist` 中，这次同步不会删除它们。需要重启时，同步前把现有 `server/dist` 复制为 `server/dist.prev`，然后补齐 `/etc/calmobile.env`，在服务器上执行 `pnpm install --frozen-lockfile --prod` 和 `pnpm db:migrate:prod`，再重启 `calmobile.service`。
 
 应用页面打进 APK 一份。正式包打开接口所在源的 `/app/index.html`，WebView 把这个路径拦截到本机快照，页面切换不访问网络。快照没有，或不是当前 `versionCode`，就用包内那份。首屏出来之后才后台拉取 `/app/release.json`；有新版本才下到待用目录，下次冷启动再换上，使用中不重载。调试包（接口是 http）不热更新。改 `APP_API_BASE` 仍要重新构建 APK：文档源写在外壳里。页面包在同步时用同一个 `APP_API_BASE` 构建。
 
@@ -102,7 +102,7 @@ keytool -genkeypair -v -keystore calmobile-release.jks -alias upload -keyalg RSA
 
 把 `calmobile-release.jks` 做一次 base64，放进 GitHub Secret `ANDROID_KEYSTORE_BASE64`。口令和别名放进下面的 Secrets。不要把密钥文件或口令提交进仓库。
 
-GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`）、`PUBLIC_BASE_URL`（`https://域名`）、`PRIVACY_POLICY_URL`。要部署服务器时再加 `DEPLOY_ENABLED`（`true` 才部署）、`DEPLOY_USER`、`DEPLOY_PATH`，以及实际用到的 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_SSL`、`MAIL_SMTP_HOST`、`MAIL_SMTP_PORT`、`MAIL_SMTP_SECURE`、`MAIL_SMTP_TLS_REJECT_UNAUTHORIZED`、`MAIL_SMTP_USER`、`MAIL_FROM_ADDRESS`、`MAIL_REPLY_TO`、`FORCE_HTTPS`、`HSTS_MAX_AGE`、`UPLOAD_DIR`、`MEDIA_BASE_URL`、`UPLOAD_MAX_MB`、`JWT_EXPIRES_IN`、`REFRESH_TOKEN_TTL`。这些值会出现在 Actions 日志里，不要把服务器地址或口令写进来。
+GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`）、`PUBLIC_BASE_URL`（`https://域名`）、`PRIVACY_POLICY_URL`、`LANG_PACK_DEFAULT`（默认语言包名称）、`LANG_PACK_URLS`（`名称=链接`，逗号或空白分开）。报名站只有在默认名称非空、且这个名称写在 `LANG_PACK_URLS` 里时才用该语言，否则用中文。部署只把这两个键补进还没有它们的环境文件，不会改服务器上已有的值；改已有值要直接改 `/etc/calmobile.env` 并重启。要部署服务器时再加 `DEPLOY_ENABLED`（`true` 才部署）、`DEPLOY_USER`、`DEPLOY_PATH`，以及实际用到的 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_SSL`、`MAIL_SMTP_HOST`、`MAIL_SMTP_PORT`、`MAIL_SMTP_SECURE`、`MAIL_SMTP_TLS_REJECT_UNAUTHORIZED`、`MAIL_SMTP_USER`、`MAIL_FROM_ADDRESS`、`MAIL_REPLY_TO`、`FORCE_HTTPS`、`HSTS_MAX_AGE`、`UPLOAD_DIR`、`MEDIA_BASE_URL`、`UPLOAD_MAX_MB`、`JWT_EXPIRES_IN`、`REFRESH_TOKEN_TTL`。这些值会出现在 Actions 日志里，不要把服务器地址或口令写进来。
 
 GitHub Secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。要部署服务器时再加 `DEPLOY_HOST`、`DEPLOY_SSH_KEY`、`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL`。
 

@@ -54,6 +54,8 @@ export interface BootstrapState {
   publicBaseUrl: string;
   /** 隐私政策地址（`PRIVACY_POLICY_URL`）。空串表示没配，注册页只显示收集说明。 */
   privacyPolicyUrl: string;
+  /** 服务器建议的默认语言包，以及要自动下载的链接。正文不在这里。 */
+  lang: { defaultPack: string; packs: { id: string; url: string }[] };
 }
 
 /**
@@ -78,6 +80,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
     exhibitor: {},
     publicBaseUrl: '',
     privacyPolicyUrl: '',
+    lang: { defaultPack: '', packs: [] },
   }),
   actions: {
     /**
@@ -102,6 +105,8 @@ export const useBootstrapStore = defineStore('bootstrap', {
       this.exhibitor = { ...this.exhibitor, ...asObject(data.exhibitor) };
       if (typeof data.publicBaseUrl === 'string') this.publicBaseUrl = data.publicBaseUrl;
       if (typeof data.privacyPolicyUrl === 'string') this.privacyPolicyUrl = data.privacyPolicyUrl;
+      const lang = asLang(data.lang);
+      if (lang) this.lang = lang;
     },
   },
 });
@@ -113,4 +118,19 @@ export const useBootstrapStore = defineStore('bootstrap', {
  */
 function asObject(value: unknown): JsonObject {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonObject) : {};
+}
+
+function asLang(value: unknown): { defaultPack: string; packs: { id: string; url: string }[] } | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as { defaultPack?: unknown; packs?: unknown };
+  const packs: { id: string; url: string }[] = [];
+  if (Array.isArray(record.packs)) {
+    for (const item of record.packs) {
+      if (!item || typeof item !== 'object') continue;
+      const id = (item as { id?: unknown }).id;
+      const url = (item as { url?: unknown }).url;
+      if (typeof id === 'string' && typeof url === 'string') packs.push({ id, url });
+    }
+  }
+  return { defaultPack: typeof record.defaultPack === 'string' ? record.defaultPack : '', packs };
 }

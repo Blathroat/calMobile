@@ -44,7 +44,7 @@
 
 报名站是第二份构建：`web/join.html` 经 `web/vite.join.config.ts` 输出到 `web/dist-join`，由后端托管，不进 APK。`VITE_SURFACE=join` 只由这份配置注入，不写进 `web/.env`。是否托管见 [`server/README.md`](../server/README.md) 的模式表。
 
-应用用 hash 路由。接口基址是构建时的 `APP_API_BASE`，没配则是 `http://127.0.0.1:<PORT>/api/v1`，媒体相对路径补到同一源。报名站用 history 路由，接口走相对的 `/api/v1`，媒体走相对的 `/media`。报名站不预取月历、展会列表、资料和管理数据。界面文案在 `web/src/i18n/strings.ts`，两份构建各自打包。
+应用用 hash 路由。接口基址是构建时的 `APP_API_BASE`，没配则是 `http://127.0.0.1:<PORT>/api/v1`，媒体相对路径补到同一源。报名站用 history 路由，接口走相对的 `/api/v1`，媒体走相对的 `/media`。报名站不预取月历、展会列表、资料和管理数据。界面文案在 `web/src/i18n/zh.json`，两份构建各自打包。用户安装的语言包在本机，不在这两份包里。
 
 路径以报名站路由和 `web/src/app/surface.ts` 为准。声明顺序就是匹配顺序，更具体的路径写在前面。
 
@@ -77,4 +77,6 @@
 
 ## 文案
 
-界面文案在 `web/src/i18n/strings.ts`，按界面分区分层。前端用 `t('auth.login.title')` 这种点分路径读取。模板里的中文写成 `:placeholder="t('exhibition.form.venuePlaceholder')"` 这种绑定。周几、年月这类格式化常量留在 `web/src/services/format.ts`，不进这张表。邮件正文在后端，不进这张表。构建时这份表打进应用页面包和报名站包，不单独部署源文件。
+界面文案在 `web/src/i18n/zh.json`，一条一个点分路径。前端用 `t('auth.login.title')` 读取。模板里的中文写成 `:placeholder="t('exhibition.form.venuePlaceholder')"` 这种绑定。别的语言缺哪条，就用中文那条。周几、年月留在 `web/src/services/format.ts`，不进这张表。邮件正文在后端，不进这张表。构建时中文表打进应用页面包和报名站包，不单独部署源文件。
+
+用户自己的语言包记在本机 `localStorage`，不在 `web/dist` 或客户端快照里。个人设置可以切换语言，也可以粘贴链接或选择 JSON 文件安装。应用里选过的语言优先；没选过，且本机已有服务器默认名称对应的包时，用那个包。报名站不看个人设置：只有 `LANG_PACK_DEFAULT` 非空，并且这个名称写在 `LANG_PACK_URLS` 里、包也已经下载成功时，才用该语言，否则用中文。自动下载不会覆盖已经安装的同名包。切换语言后整页重新加载。

@@ -10,6 +10,8 @@
  * 纯函数：用例直接把环境对象喂进来，不需要真的改 `process.env` 再重新 require。
  */
 
+import { resolveLangPacks } from './runtime.js';
+
 type EnvLike = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
 /** 一眼能看出是「开发用」的密钥特征。 */
@@ -190,6 +192,8 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
   } else if (!/^https:\/\/[^\s]+$/i.test(privacy.replace(/\/+$/, ''))) {
     warnings.push(`PRIVACY_POLICY_URL=${privacy} 不是 https 绝对地址：注册页不会给出这个链接`);
   }
+  // 语言包配错只影响报名站的默认语言，不该让服务起不来。
+  warnings.push(...resolveLangPacks(env, false).warnings);
   // HSTS 显式关掉多半是「域名还没定」，但也可能是漏配，提示一句。
   const hsts = String(env.HSTS_MAX_AGE || '')
     .trim()

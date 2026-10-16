@@ -75,6 +75,43 @@ test('trust proxy 默认关闭，只有显式声明才打开', () => {
   assert.equal(resolveRuntime(argv(), { TRUST_PROXY: 'loopback' }).trustProxy, 'loopback', '也接受常见的来源写法');
 });
 
+test('语言包列表按名称收录，默认名称不在列表里时报名站用中文', () => {
+  const matched = resolveRuntime(argv('--production'), {
+    LANG_PACK_DEFAULT: 'en',
+    LANG_PACK_URLS: 'en=https://example.com/en.json, ja=https://example.com/ja.json',
+  }).langPacks;
+  assert.equal(matched.defaultPack, 'en');
+  assert.deepEqual(
+    matched.packs.map((item) => item.id),
+    ['en', 'ja'],
+  );
+  assert.deepEqual(matched.warnings, []);
+
+  const absent = resolveRuntime(argv('--production'), {
+    LANG_PACK_DEFAULT: 'en',
+    LANG_PACK_URLS: 'ja=https://example.com/ja.json',
+  }).langPacks;
+  assert.equal(absent.defaultPack, 'en');
+  assert.match(absent.warnings.join('；'), /报名站继续用中文/);
+
+  const broken = resolveRuntime(argv('--production'), {
+    LANG_PACK_DEFAULT: 'EN',
+    LANG_PACK_URLS: 'en=http://example.com/en.json nope',
+  }).langPacks;
+  assert.equal(broken.defaultPack, '');
+  assert.deepEqual(broken.packs, []);
+  assert.match(broken.warnings.join('；'), /不是合法的语言包名称/);
+  assert.match(broken.warnings.join('；'), /无法使用/);
+
+  const devHttp = resolveRuntime(argv(), {
+    NODE_ENV: 'development',
+    LANG_PACK_DEFAULT: 'en',
+    LANG_PACK_URLS: 'en=http://127.0.0.1:9/en.json',
+  }).langPacks;
+  assert.equal(devHttp.packs[0]?.url.startsWith('http://127.0.0.1:9/'), true);
+  assert.deepEqual(devHttp.warnings, []);
+});
+
 test('--prod 是 --production 的简写，npm_lifecycle_event 只用于日志', () => {
   assert.equal(resolveRuntime(argv('--prod'), {}).isProduction, true);
   assert.equal(resolveRuntime(argv(), { npm_lifecycle_event: 'start' }).startedBy, 'start');

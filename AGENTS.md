@@ -15,7 +15,7 @@
 
 - 数据只走 `web/src/api/client.ts`。页面取数用 feature composable，失败必须可见。
 - 查询缓存只放 `web/src/services/query-cache.ts`。写接口的失效前缀与读接口的缓存键前缀同族（`registrations` ↔ `registrations.record`）。
-- 界面文案写入 `web/src/i18n/strings.ts` 的分层表，用 `t('auth.login.title')` 这种点分路径读取。邮件正文写在后端，不进这张表。部署不上传这个源文件，文案在构建时打进页面包。
+- 界面文案写入 `web/src/i18n/zh.json`，用 `t('auth.login.title')` 这种点分路径读取。邮件正文写在后端，不进这张表。部署不上传这个源文件，文案在构建时打进页面包。用户安装的语言包在本机，更新页面不会覆盖。
 - 写接口返回 `{ ok, error, ... }`。规则失败用 200 + `ok:false`，认证授权用 4xx，数据库不可用用 503。响应只用给用户看的文案。
 
 ## 命名与提交

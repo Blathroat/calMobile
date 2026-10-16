@@ -1,6 +1,6 @@
 /**
  * 报名站入口。启动顺序与 `src/main.ts` 相同，落点换成「我的活动」。
- * 界面文案随这份构建打进页面，`t()` 直接读 `web/src/i18n/strings.ts`。
+ * 内置中文随这份构建打进页面。报名站不读个人设置里的语言选择。
  */
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';

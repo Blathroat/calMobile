@@ -46,7 +46,7 @@ test('只改 App 页面时同步应用页面，不发 APK、不重启', () => {
 });
 
 test('报名站和 App 共用的源两份一起同步', () => {
-  assert.deepEqual(flags(['web/src/i18n/strings.ts']), {
+  assert.deepEqual(flags(['web/src/i18n/zh.json']), {
     apk: false,
     server: false,
     app: true,

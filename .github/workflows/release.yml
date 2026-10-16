@@ -243,6 +243,8 @@ jobs:
           APP_API_BASE: ${{ vars.APP_API_BASE }}
           PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
           PRIVACY_POLICY_URL: ${{ vars.PRIVACY_POLICY_URL }}
+          LANG_PACK_DEFAULT: ${{ vars.LANG_PACK_DEFAULT }}
+          LANG_PACK_URLS: ${{ vars.LANG_PACK_URLS }}
           DB_HOST: ${{ vars.DB_HOST }}
           DB_PORT: ${{ vars.DB_PORT }}
           DB_NAME: ${{ vars.DB_NAME }}

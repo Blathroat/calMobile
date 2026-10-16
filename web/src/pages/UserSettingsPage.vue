@@ -3,7 +3,8 @@
  * 用户设置：头像、通知偏好、应用配色、深色模式、隐私开关与安全入口。
  *
  * 编辑资料与个人页简介标题旁的铅笔共用 `services/profile-editor.ts` 的同一抽屉。
- * 头像、通知、配色、明暗、隐私和安全入口留在这里，因为它们各自写不同的接口。
+ * 头像、通知、配色、明暗、语言、隐私和安全入口留在这里，因为它们各自写不同的接口。
+ * 语言包在本机，不写后端。
  *
  * 头像链路：`media.pickImage` 选图 → 共享组件 `AvatarCropper`（单指拖动 + 双指捏合裁剪）
  * → `POST /profile/avatar` 把方图传到服务器。手势、取景与导出都在组件里，本页只负责
@@ -25,6 +26,7 @@ import { device } from '@/services/device-services';
 import { toast } from '@/services/toast';
 import { avatarExportMime } from '@/services/validate';
 import { openProfileEditor } from '@/services/profile-editor';
+import LanguagePackCard from '@/components/LanguagePackCard.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import RoleTag from '@/components/RoleTag.vue';
 import AvatarCropper from '@/components/AvatarCropper.vue';
@@ -490,6 +492,8 @@ async function changeMode(value: string): Promise<void> {
           {{ t('settings.notify.requestPermission') }}
         </button>
       </div>
+
+      <LanguagePackCard />
 
       <!-- 应用配色：点一下就换，没有「保存配色」这一步；色板里不放文字，选中只靠描边 -->
       <div class="card">
