@@ -705,3 +705,24 @@ function normalizeOptions(options: unknown): string[] {
     </div>
   </Teleport>
 </template>
+
+<style>
+.clamp-2 {
+  -webkit-line-clamp: 2;
+}
+
+.select {
+  appearance: none;
+  padding-inline-end: var(--s6);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) 50%,
+    calc(100% - 14px) 50%;
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-repeat: no-repeat;
+}
+</style>

@@ -47,3 +47,20 @@ function goBack(): void {
     </div>
   </header>
 </template>
+
+<style>
+.topbar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  text-align: center;
+}
+
+.topbar-side {
+  flex: none;
+  min-width: var(--touch);
+  display: inline-flex;
+  justify-content: flex-end;
+}
+</style>

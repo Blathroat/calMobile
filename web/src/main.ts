@@ -10,15 +10,19 @@
  *    成功后按下面的规则纠正入口；失败只记日志，登录页照常可用。
  *
  * 全局样式只在这里引一次（`tokens.css` 提供变量、`motion.css` 提供动效），
- * 页面与组件不再自己 import 全局样式。
+ * 页面与组件不再自己 import 全局样式；组件专用的样式写在各自 SFC 的 `<style>` 里。
+ *
+ * 导入顺序就是 CSS 的产出顺序，别调换：先 `tokens.css`（变量与公共类），
+ * 中间是 App.vue 与各页面的 `<style>`（组件样式要能盖住公共类），
+ * 最后 `motion.css`（动效覆盖在上）。
  */
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
+import '@/styles/tokens.css';
 import App from '@/app/App.vue';
 import { router } from '@/app/router';
 import { bootApp } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
-import '@/styles/tokens.css';
 import '@/styles/motion.css';
 
 createApp(App).use(createPinia()).use(router).mount('#app');

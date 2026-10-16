@@ -4,12 +4,13 @@
  */
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
+// 与 src/main.ts 同一套顺序：tokens.css → 组件样式 → motion.css。
+import '@/styles/tokens.css';
 import App from '@/app/App.vue';
 import { paths } from '@/app/surface';
 import { bootApp } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
 import { router } from '@/join/router';
-import '@/styles/tokens.css';
 import '@/styles/motion.css';
 
 createApp(App).use(createPinia()).use(router).mount('#app');

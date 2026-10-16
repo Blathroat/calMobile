@@ -37,3 +37,54 @@ function iconName(): string {
     <slot />
   </div>
 </template>
+
+<style>
+.state {
+  display: grid;
+  gap: var(--s2);
+  justify-items: center;
+  padding: var(--s5) var(--s4);
+  border: var(--hairline) dashed var(--stroke);
+  border-radius: var(--r-card);
+  background: var(--f3);
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.state strong {
+  color: var(--ink);
+  font-size: var(--fs-body);
+}
+
+.state .state-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--ink-3);
+  border-radius: var(--r-pill);
+  color: var(--ink-2);
+}
+
+.state[data-tone='success'] {
+  border-color: var(--ok-ink);
+  border-style: solid;
+  background: var(--ok);
+  color: var(--ok-ink);
+}
+
+.state[data-tone='success'] strong {
+  color: var(--ok-ink);
+}
+
+.state[data-tone='error'] {
+  border-color: var(--danger-ink);
+  border-style: solid;
+  background: var(--danger-tint);
+  color: var(--danger-ink);
+}
+
+.state[data-tone='error'] strong {
+  color: var(--danger-ink);
+}
+</style>

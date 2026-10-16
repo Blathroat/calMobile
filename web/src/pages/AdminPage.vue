@@ -19,17 +19,12 @@ import { toast } from '@/services/toast';
 import { confirmSheet, openSheet } from '@/services/sheet';
 import type { SheetAction } from '@/services/sheet';
 import { check } from '@/services/validate';
-import { statusTone } from '@/services/status';
-import { truncate } from '@/services/format';
 import { device } from '@/services/device-services';
 import { publishImportedMedia } from '@/services/publish-media';
 import SegControl from '@/components/SegControl.vue';
-import AvatarBox from '@/components/AvatarBox.vue';
-import AdminExhibitionCard from '@/components/AdminExhibitionCard.vue';
-import StateBlock from '@/components/StateBlock.vue';
-import SkeletonBlock from '@/components/SkeletonBlock.vue';
-import StatusTag from '@/components/StatusTag.vue';
-import RoleTag from '@/components/RoleTag.vue';
+import AdminUsersSection from './AdminUsersSection.vue';
+import AdminExhibitionsSection from './AdminExhibitionsSection.vue';
+import AdminSettingsSection from './AdminSettingsSection.vue';
 import type { Bootstrap, Exhibition, JsonObject, User } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -240,6 +235,32 @@ const COPY = {
   storageEvict: t('admin.media.evictOldest'),
   storageReject: t('admin.media.rejectUpload'),
 };
+
+/**
+ * 分区文案：整块下传给对应分区，子组件不再自己拼文案。
+ * 表单校验、提示语等本页仍在用的文案留在 COPY 里。
+ */
+const usersCopy = {
+  adjustStatus: COPY.adjustStatus,
+  manageExhibitions: COPY.manageExhibitions,
+  manageMeetings: COPY.manageMeetings,
+};
+
+const settingsCopy = {
+  coverTitle: COPY.coverTitle,
+  coverHint: COPY.coverHint,
+  limitIntro: COPY.limitIntro,
+  exhibitorLimit: COPY.exhibitorLimit,
+  exhibitorLimitHint: COPY.exhibitorLimitHint,
+  meetingLimit: COPY.meetingLimit,
+  meetingLimitHint: COPY.meetingLimitHint,
+  avatarSection: COPY.avatarSection,
+  avatarFormats: COPY.avatarFormats,
+  storageTitle: COPY.storageTitle,
+  storageHint: COPY.storageHint,
+  storageLimit: COPY.storageLimit,
+  storageWhenFull: COPY.storageWhenFull,
+};
 const storageUsage = ref({ usedBytes: 0, limitBytes: 1024 * 1024 * 1024, fileCount: 0 });
 const storagePolicies = [
   { value: 'reject', label: COPY.storageReject },
@@ -378,6 +399,16 @@ function manageUser(user: User): void {
     actions,
     layout: 'stack',
   });
+}
+
+/** 「管理展会」跳到以该用户为展商的二级管理页。 */
+function openUserExhibitions(user: User): void {
+  void router.push(`/admin/exhibitions/${encodeURIComponent(String(user.id ?? ''))}`);
+}
+
+/** 同上，「管理私人会议」。 */
+function openUserMeetings(user: User): void {
+  void router.push(`/admin/meetings/${encodeURIComponent(String(user.id ?? ''))}`);
 }
 
 async function updateUserStatus(user: User, status: string): Promise<void> {
@@ -710,485 +741,52 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
   <SegControl :model-value="tab" :items="TABS" :label="t('admin.sections')" @update:model-value="changeTab" />
 
   <!-- ── 用户管理 ─────────────────────────────────────────────── -->
-  <template v-if="tab === 'users'">
-    <SkeletonBlock v-if="users.loading.value && users.data.value === undefined" :rows="3" />
-    <StateBlock
-      v-else-if="users.error.value && users.data.value === undefined"
-      tone="error"
-      :title="t('common.loadFailed')"
-      :description="users.error.value.message"
-      :action-label="t('common.retry')"
-      @action="loadUsers"
-    />
-    <template v-else>
-      <div class="row" data-between="true">
-        <span class="section-label">{{ t('admin.users.manage') }}</span>
-        <span class="pill">{{ `${userItems.length} 位用户` }}</span>
-      </div>
-      <div class="field">
-        <label for="admin-user-search">{{ t('admin.users.search') }}</label>
-        <input
-          id="admin-user-search"
-          class="input"
-          type="search"
-          autocomplete="off"
-          :placeholder="t('admin.users.searchPlaceholder')"
-          @input="onSearch(($event.target as HTMLInputElement).value)"
-        />
-      </div>
-      <div v-if="users.error.value" class="notice" data-tone="accent">
-        <span>{{ users.error.value.message }}</span>
-      </div>
-
-      <StateBlock
-        v-if="userItems.length === 0"
-        :title="query ? `没有找到与“${query}”相关的用户` : t('admin.users.empty')"
-      />
-      <div v-else class="list" data-gap="sm" :data-busy="users.loading.value ? 'true' : undefined">
-        <div v-for="user in userItems" :key="String(user.id)" class="card">
-          <button
-            class="row-card"
-            type="button"
-            data-pressable="true"
-            style="border: 0; padding: 0; background: transparent; width: 100%"
-            :aria-label="`查看 ${user.nickname} 的公开页`"
-            @click="openPublic(user)"
-          >
-            <AvatarBox :name="String(user.nickname || '')" />
-            <span class="row-copy">
-              <span class="name-line">
-                <strong class="row-title truncate">{{ user.nickname }}</strong>
-                <RoleTag :role-code="String(user.roleCode || '')" />
-              </span>
-              <span class="row-meta">{{
-                `${user.status} · 最近登录 ${user.lastLoginTime || t('admin.users.unknown')}`
-              }}</span>
-              <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
-              <span v-if="user.twoFactorEnabled === true" class="row-meta">{{
-                t('admin.users.twoFactorEnabled')
-              }}</span>
-            </span>
-            <StatusTag :text="String(user.status || '')" :tone="statusTone(String(user.status || ''))" />
-          </button>
-          <div class="action-row">
-            <button class="cta ghost" data-size="small" type="button" @click="manageUser(user)">
-              {{ COPY.adjustStatus }}
-            </button>
-            <template v-if="user.roleCode === 'exhibitor' || user.roleCode === 'admin'">
-              <button
-                class="cta ghost"
-                data-size="small"
-                type="button"
-                @click="router.push(`/admin/exhibitions/${encodeURIComponent(String(user.id ?? ''))}`)"
-              >
-                {{ COPY.manageExhibitions }}
-              </button>
-              <button
-                class="cta ghost"
-                data-size="small"
-                type="button"
-                @click="router.push(`/admin/meetings/${encodeURIComponent(String(user.id ?? ''))}`)"
-              >
-                {{ COPY.manageMeetings }}
-              </button>
-            </template>
-          </div>
-          <!-- 兜底出口：用户邮箱用不了（离职、邮箱被回收）时，只有管理员能帮他关掉两步验证 -->
-          <button
-            v-if="user.twoFactorEnabled === true"
-            class="cta ghost"
-            data-size="small"
-            type="button"
-            @click="disableTwoFactor(user)"
-          >
-            {{ t('admin.users.disableTwoFactor') }}
-          </button>
-        </div>
-      </div>
-    </template>
-  </template>
+  <AdminUsersSection
+    v-if="tab === 'users'"
+    :users="users"
+    :user-items="userItems"
+    :query="query"
+    :copy="usersCopy"
+    @retry="loadUsers"
+    @search="onSearch"
+    @open-public="openPublic"
+    @manage="manageUser"
+    @disable-two-factor="disableTwoFactor"
+    @open-exhibitions="openUserExhibitions"
+    @open-meetings="openUserMeetings"
+  />
 
   <!-- ── 展会管理 ─────────────────────────────────────────────── -->
-  <template v-else-if="tab === 'exhibitions'">
-    <SkeletonBlock v-if="exhibitions.loading.value && exhibitions.data.value === undefined" :rows="3" />
-    <StateBlock
-      v-else-if="exhibitions.error.value && exhibitions.data.value === undefined"
-      tone="error"
-      :title="t('common.loadFailed')"
-      :description="exhibitions.error.value.message"
-      :action-label="t('common.retry')"
-      @action="loadExhibitions"
-    />
-    <template v-else>
-      <div class="field">
-        <label for="admin-exhibition-search">{{ t('admin.exhibitions.search') }}</label>
-        <input
-          id="admin-exhibition-search"
-          class="input"
-          type="search"
-          autocomplete="off"
-          :placeholder="t('admin.exhibitions.searchPlaceholder')"
-          @input="onSearch(($event.target as HTMLInputElement).value)"
-        />
-      </div>
-      <div class="row" data-between="true">
-        <span class="section-label">{{ t('admin.exhibitions.all') }}</span>
-        <span class="pill">{{ `${exhibitionItems.length} 个展会` }}</span>
-      </div>
-      <div v-if="exhibitions.error.value" class="notice" data-tone="accent">
-        <span>{{ exhibitions.error.value.message }}</span>
-      </div>
-
-      <StateBlock
-        v-if="exhibitionItems.length === 0"
-        icon="search"
-        :title="query ? `没有找到与“${query}”相关的展会` : t('admin.exhibitions.empty')"
-        :description="query ? t('admin.exhibitions.tryAnotherKeyword') : t('admin.exhibitions.shownWhenCreated')"
-      />
-      <div v-else class="list" data-gap="sm" :data-busy="exhibitions.loading.value ? 'true' : undefined">
-        <AdminExhibitionCard
-          v-for="item in exhibitionItems"
-          :key="String(item.id)"
-          :item="item"
-          @changed="loadExhibitions"
-        />
-      </div>
-
-      <button class="cta ghost" type="button" :disabled="exhibitionItems.length === 0" @click="exportCsv">
-        {{ t('admin.exhibitions.exportCsv') }}
-      </button>
-    </template>
-  </template>
+  <AdminExhibitionsSection
+    v-else-if="tab === 'exhibitions'"
+    :exhibitions="exhibitions"
+    :exhibition-items="exhibitionItems"
+    :query="query"
+    @retry="loadExhibitions"
+    @search="onSearch"
+    @export="exportCsv"
+    @changed="loadExhibitions"
+  />
 
   <!-- ── 服务器设置 ───────────────────────────────────────────── -->
-  <template v-else>
-    <SkeletonBlock v-if="settingsQuery.loading.value && !loaded" :rows="4" />
-    <StateBlock
-      v-else-if="settingsQuery.error.value && !loaded"
-      tone="error"
-      :title="t('common.loadFailed')"
-      :description="settingsQuery.error.value.message"
-      :action-label="t('common.retry')"
-      @action="loadSettings"
-    />
-    <template v-else>
-      <div class="notice" data-tone="accent">
-        <strong>{{ t('admin.settings.server') }}</strong>
-        <span>{{ t('admin.settings.serverScope') }}</span>
-      </div>
-
-      <div class="card">
-        <span class="section-label">{{ COPY.storageTitle }}</span>
-        <div class="storage-meter" :data-full="storageFull ? 'true' : 'false'">
-          <span :style="{ width: `${storagePercent}%` }" />
-        </div>
-        <p class="field-hint">{{ storageCaption }}</p>
-        <p class="field-hint">{{ COPY.storageHint }}</p>
-        <div class="field">
-          <label for="settings-storage-mb">{{ COPY.storageLimit }}</label>
-          <div class="row" data-gap="md">
-            <input
-              id="settings-storage-mb"
-              v-model.number="form.storageMb"
-              class="input"
-              type="number"
-              min="64"
-              max="10240"
-              inputmode="numeric"
-            />
-            <span class="row-meta">MB</span>
-          </div>
-        </div>
-        <div class="field">
-          <label id="settings-storage-policy">{{ COPY.storageWhenFull }}</label>
-          <SegControl
-            :model-value="form.whenFull"
-            :items="storagePolicies"
-            :label="COPY.storageWhenFull"
-            @update:model-value="form.whenFull = $event === 'evict-oldest' ? 'evict-oldest' : 'reject'"
-          />
-        </div>
-      </div>
-
-      <div class="card">
-        <span class="section-label">{{ t('admin.settings.brand') }}</span>
-        <div class="field">
-          <label for="settings-title-zh">{{ t('admin.settings.brandZh') }}</label>
-          <input
-            id="settings-title-zh"
-            v-model="form.brand.zh"
-            class="input"
-            type="text"
-            maxlength="20"
-            :placeholder="t('admin.settings.brandZhPlaceholder')"
-          />
-        </div>
-        <div class="field">
-          <label for="settings-title-en">{{ t('admin.settings.brandEn') }}</label>
-          <input
-            id="settings-title-en"
-            v-model="form.brand.en"
-            class="input"
-            type="text"
-            maxlength="24"
-            :placeholder="t('admin.settings.brandEnPlaceholder')"
-          />
-        </div>
-      </div>
-
-      <!-- 缺省展会封面：展会自己没有封面时用它替掉占位图；留空即回到占位图 -->
-      <div class="card">
-        <span class="section-label">{{ COPY.coverTitle }}</span>
-        <div class="hero ph-img hero-compact">
-          <img v-if="form.defaultCover" :src="form.defaultCover" :alt="COPY.coverTitle" />
-        </div>
-        <div class="row" data-gap="md">
-          <button
-            class="cta ghost"
-            data-size="small"
-            type="button"
-            style="flex: 1 1 0"
-            :disabled="coverBusy"
-            :data-loading="coverBusy ? 'true' : 'false'"
-            @click="pickDefaultCover"
-          >
-            {{ form.defaultCover ? t('admin.media.changeCover') : t('admin.media.uploadCover') }}
-          </button>
-          <button
-            v-if="form.defaultCover"
-            class="cta ghost"
-            data-size="small"
-            type="button"
-            style="flex: 1 1 0"
-            @click="form.defaultCover = ''"
-          >
-            {{ t('admin.media.removeCover') }}
-          </button>
-        </div>
-        <p class="field-hint">{{ COPY.coverHint }}</p>
-      </div>
-
-      <!-- 展商端策略：单个展商可同时筹备的展会数 -->
-      <div class="card">
-        <span class="section-label">{{ COPY.exhibitorLimit }}</span>
-        <div class="field">
-          <div class="row" data-gap="md">
-            <input
-              id="settings-max-future-exhibitions"
-              v-model.number="form.maxFutureExhibitions"
-              class="input"
-              type="number"
-              min="0"
-              inputmode="numeric"
-            />
-            <span class="row-meta">{{ t('admin.limits.items') }}</span>
-          </div>
-          <p class="field-hint">{{ COPY.exhibitorLimitHint }}</p>
-        </div>
-        <div class="field">
-          <label for="settings-max-future-meetings">{{ COPY.meetingLimit }}</label>
-          <div class="row" data-gap="md">
-            <input
-              id="settings-max-future-meetings"
-              v-model.number="form.maxFutureMeetings"
-              class="input"
-              type="number"
-              min="0"
-              inputmode="numeric"
-            />
-            <span class="row-meta">{{ t('admin.limits.items') }}</span>
-          </div>
-          <p class="field-hint">{{ COPY.meetingLimitHint }}</p>
-        </div>
-      </div>
-
-      <div class="card">
-        <span class="section-label">{{ t('admin.announce.entry') }}</span>
-        <textarea id="settings-announcement" v-model="form.announcement" class="textarea" rows="3" />
-        <div class="switch-row">
-          <span class="switch-copy">
-            <strong>{{ t('admin.announce.showOnEntry') }}</strong>
-          </span>
-          <label class="switch" for="settings-announcement-enabled">
-            <input id="settings-announcement-enabled" v-model="form.announcementEnabled" type="checkbox" />
-            <span />
-          </label>
-        </div>
-      </div>
-
-      <div class="card">
-        <span class="section-label">{{ t('admin.settings.categories') }}</span>
-        <textarea id="settings-categories" v-model="form.categories" class="textarea" rows="4" />
-      </div>
-
-      <div class="card">
-        <span class="section-label">{{ t('admin.settings.reviewPolicy') }}</span>
-        <div class="switch-row">
-          <span class="switch-copy">
-            <strong>{{ t('admin.settings.allowReviseDecided') }}</strong>
-          </span>
-          <label class="switch" for="settings-revise">
-            <input id="settings-revise" v-model="form.canRevise" type="checkbox" />
-            <span />
-          </label>
-        </div>
-      </div>
-
-      <div class="card">
-        <span class="section-label">{{ t('admin.media.richMedia') }}</span>
-        <div class="field">
-          <label for="settings-image-count">{{ t('admin.media.imagesPerPost') }}</label>
-          <div class="row" data-gap="md">
-            <input
-              id="settings-image-count"
-              v-model.number="form.imageCount"
-              class="input"
-              type="number"
-              min="0"
-              inputmode="numeric"
-            />
-            <span class="row-meta">{{ t('admin.media.sheets') }}</span>
-          </div>
-        </div>
-        <div class="field">
-          <label for="settings-image-size">{{ t('admin.media.imageSize') }}</label>
-          <div class="row" data-gap="md">
-            <input
-              id="settings-image-size"
-              v-model.number="form.imageSizeMb"
-              class="input"
-              type="number"
-              min="0"
-              inputmode="numeric"
-            />
-            <span class="row-meta">MB</span>
-          </div>
-        </div>
-        <div class="field">
-          <label for="settings-video-count">{{ t('admin.media.videoCount') }}</label>
-          <div class="row" data-gap="md">
-            <input
-              id="settings-video-count"
-              v-model.number="form.videoCount"
-              class="input"
-              type="number"
-              min="0"
-              inputmode="numeric"
-            />
-            <span class="row-meta">{{ t('admin.limits.items') }}</span>
-          </div>
-        </div>
-        <div class="field">
-          <label for="settings-video-size">{{ t('admin.media.videoSize') }}</label>
-          <div class="row" data-gap="md">
-            <input
-              id="settings-video-size"
-              v-model.number="form.videoSizeMb"
-              class="input"
-              type="number"
-              min="0"
-              inputmode="numeric"
-            />
-            <span class="row-meta">MB</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <span class="section-label">{{ t('admin.media.uploadFormats') }}</span>
-        <div class="field">
-          <label for="settings-image-formats">{{ t('admin.media.imageSuffixes') }}</label>
-          <input
-            id="settings-image-formats"
-            v-model="form.imageFormats"
-            class="input"
-            type="text"
-            maxlength="120"
-            placeholder="jpg,jpeg,png,webp"
-          />
-        </div>
-        <div class="field">
-          <label for="settings-video-formats">{{ t('admin.media.videoSuffixes') }}</label>
-          <input
-            id="settings-video-formats"
-            v-model="form.videoFormats"
-            class="input"
-            type="text"
-            maxlength="120"
-            placeholder="mp4,mov,webm"
-          />
-        </div>
-      </div>
-
-      <div class="card">
-        <span class="section-label">{{ COPY.avatarSection }}</span>
-        <div class="field">
-          <label for="settings-avatar-size">{{ t('admin.media.avatarSize') }}</label>
-          <div class="row" data-gap="md">
-            <input
-              id="settings-avatar-size"
-              v-model.number="form.avatarSizeMb"
-              class="input"
-              type="number"
-              min="1"
-              max="20"
-              inputmode="numeric"
-            />
-            <span class="row-meta">MB</span>
-          </div>
-        </div>
-        <div class="field">
-          <label for="settings-avatar-formats">{{ COPY.avatarFormats }}</label>
-          <input
-            id="settings-avatar-formats"
-            v-model="form.avatarFormats"
-            class="input"
-            type="text"
-            maxlength="80"
-            placeholder="jpg,jpeg,png,webp"
-          />
-        </div>
-      </div>
-
-      <div class="card">
-        <span class="section-label">{{ t('admin.limits.formChars') }}</span>
-        <p class="field-hint">{{ COPY.limitIntro }}</p>
-        <div v-for="group in LIMIT_GROUPS" :key="group.id" class="limit-group">
-          <span class="limit-group-title">{{ group.title }}</span>
-          <div
-            v-for="(row, rowIndex) in pairLimits(group.items)"
-            :key="`${group.id}-${rowIndex}`"
-            :class="row.length > 1 ? 'grid-cols-2' : undefined"
-          >
-            <div v-for="item in row" :key="item.key" class="field">
-              <label :for="`limit-${item.key}`">{{ item.label }}</label>
-              <div class="row" data-gap="md">
-                <input
-                  :id="`limit-${item.key}`"
-                  v-model.number="form.limits[item.key]"
-                  class="input"
-                  type="number"
-                  min="0"
-                  inputmode="numeric"
-                />
-                <span class="row-meta">{{ item.unit }}</span>
-              </div>
-              <p class="field-hint">{{ item.hint }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <p v-if="settingsError" class="field-error" role="alert">{{ settingsError }}</p>
-      <button
-        class="cta"
-        type="button"
-        :disabled="settingsSaving || !canEditSettings"
-        :data-loading="settingsSaving ? 'true' : 'false'"
-        @click="saveSettings"
-      >
-        {{ t('admin.settings.save') }}
-      </button>
-    </template>
-  </template>
+  <AdminSettingsSection
+    v-else
+    :form="form"
+    :settings-query="settingsQuery"
+    :loaded="loaded"
+    :settings-error="settingsError"
+    :settings-saving="settingsSaving"
+    :cover-busy="coverBusy"
+    :can-edit-settings="canEditSettings"
+    :storage-full="storageFull"
+    :storage-percent="storagePercent"
+    :storage-caption="storageCaption"
+    :storage-policies="storagePolicies"
+    :limit-groups="LIMIT_GROUPS"
+    :pair-limits="pairLimits"
+    :copy="settingsCopy"
+    @retry="loadSettings"
+    @save="saveSettings"
+    @pick-cover="pickDefaultCover"
+  />
 </template>

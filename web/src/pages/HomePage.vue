@@ -513,3 +513,115 @@ onBeforeUnmount(() => {
     </template>
   </div>
 </template>
+
+<style>
+.calendar {
+  padding: var(--s2);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-panel);
+  background: var(--f3);
+  will-change: transform;
+}
+
+.week-row,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--s1);
+}
+
+.week-row {
+  margin-bottom: var(--s1);
+  color: var(--ink-3);
+  font-size: var(--fs-tag);
+  font-weight: 600;
+  text-align: center;
+}
+
+.cal-day {
+  position: relative;
+  min-width: 0;
+  /* 行高只有一档：日历按月份排 5 或 6 行（放得下就 5 行），行距与字号因此完全一致。
+       46px 也保证触控命中区不小于 44px。 */
+  min-height: 46px;
+  /* 数字与“有展会”圆点共用同一条居中轴：flex 纵向排列 + align-items: center，
+       圆点因此始终落在数字正下方，不再因为绝对定位与列宽换算而偏右。 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: var(--s1) 0;
+  /* 选中态只改文字与圆点，不再给整格加背景框或描边 */
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  transition: color var(--motion-fast) var(--ease);
+}
+
+.cal-day[data-muted='true'] {
+  color: var(--ink-3);
+}
+
+/* 日期数字：选中时在数字正下方画一小段下划线，不使用方框 */
+.cal-day-num {
+  display: inline-block;
+  padding-bottom: 2px;
+  border-bottom: 2px solid transparent;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  transition: border-color var(--motion-fast) var(--ease);
+}
+
+/* 有展会的日期：更粗、略大，并用主题色。圆点另由 data-has-event 表示「我的活动」。 */
+.cal-day[data-bold='true'] .cal-day-num {
+  font-weight: 800;
+  font-size: 1.12em;
+  color: var(--accent);
+}
+
+/* 圆点是 flex 子项，宽度固定为 6px，不参与绝对定位，因此与数字严格对齐。 */
+.cal-day[data-has-event='true']::after {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+/* 没有展会时仍占住圆点的位置，避免同一行日期上下跳动。 */
+.cal-day[data-has-event='false']::after {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+
+.cal-day[aria-pressed='true'] {
+  background: transparent;
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.cal-day[aria-pressed='true'] .cal-day-num {
+  border-bottom-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+
+/* 选中日期若同时有展会，圆点用深一档的强调色，与文字一起构成选中线索 */
+.cal-day[aria-pressed='true'][data-has-event='true']::after {
+  background: var(--accent-ink);
+}
+
+/* 键盘导航时保留焦点环，鼠标/触摸点击不会出现方框 */
+.cal-day:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--r-chip);
+}
+</style>

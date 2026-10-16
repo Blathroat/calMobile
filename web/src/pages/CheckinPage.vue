@@ -523,3 +523,45 @@ async function submitManual(close: () => void): Promise<void> {
     </div>
   </template>
 </template>
+
+<style>
+.scan-wrap {
+  width: 100%;
+}
+
+/* 取景框：正方形并居中，二维码放进去即可被识别 */
+.scan-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-card);
+  background: #000;
+  overflow: hidden;
+}
+
+.scan-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.scan-canvas {
+  display: none;
+}
+
+/* 取景提示框：细线方框加四角强调色，不影响识别区域 */
+.scan-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 62%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--accent);
+  border-radius: var(--r-input);
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+</style>

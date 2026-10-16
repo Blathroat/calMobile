@@ -22,3 +22,11 @@ const initial = (): string => (props.name || t('profile.avatarInitial')).slice(0
     <span v-else aria-hidden="true">{{ initial() }}</span>
   </span>
 </template>
+
+<style>
+.avatar-lg {
+  width: 64px;
+  height: 64px;
+  font-size: 24px;
+}
+</style>

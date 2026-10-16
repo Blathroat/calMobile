@@ -2,7 +2,7 @@
 
 本文件是客户端、前后端边界和界面实现规则的来源。用户可见行为见 [`product.md`](product.md)。响应约定、服务端规则和数据模型见 [`server/README.md`](../server/README.md)。接口路径以各路由模块的注册表和 `web/api-endpoints.mjs` 为准。
 
-颜色、字号、间距、圆角在 `web/src/styles/tokens.css`。动效在 `web/src/styles/motion.css`。
+颜色、字号、间距、圆角的取值在 `web/src/styles/tokens.css`，动效在 `web/src/styles/motion.css`。只被一个组件使用的样式写在该组件的 `<style>` 里，不加 `scoped`：选择器保持全局，不依赖父子组件的渲染边界。全局样式的导入顺序见 `web/src/main.ts`。
 
 ## 系统边界
 
@@ -18,7 +18,7 @@
 
 页面不直接 `fetch`，也不通过原生桥接取业务数据。读取接口直接返回数据。写接口按响应约定返回信封。
 
-新接口同时改 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由和 `server/src/test/api.test.ts`。表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`。后端再校验一次。
+新接口同时改 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由和 `server/src/test/` 下的契约测试。表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`。后端再校验一次。
 
 ## 应用外壳
 
@@ -64,7 +64,6 @@
 
 ## 界面规则
 
-- 生产样式只写在 `styles/tokens.css` 和 `styles/motion.css`。
 - 每个字段有可见标签。标签和内容左对齐。
 - 图标是 24 视窗、1.5 描边、无填充的细线。顶栏图标没有圆底。底部导航是图标加文字。
 - 触控命中区域至少 44px。状态同时用文字和颜色或描边表达。空、加载、错误、成功和禁用状态在原位置给出下一步。

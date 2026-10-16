@@ -36,7 +36,9 @@ export default defineConfig({
           globals: true,
           execArgv: ['--import', 'tsx'],
           setupFiles: ['./test/setup-contract.ts'],
-          fileParallelism: false,
+          // 建一次模板库，各文件从它克隆出自己的库（见 test/global-setup-contract.ts），
+          // 因此文件之间互不干扰，可以并行跑。
+          globalSetup: ['./test/global-setup-contract.ts'],
           testTimeout: 30000,
           hookTimeout: 60000,
         },

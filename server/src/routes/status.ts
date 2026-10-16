@@ -10,7 +10,7 @@
  * 1. **不抛异常**：数据库挂了要给 `ok:false` + 通用错误提示，而不是 500 —— 探针自己炸了就没法排查；
  * 2. **不编数据**：每一项都来自真实测量（SQL、进程信息、环境变量），自检项失败必须指得到出处；
  * 3. **不固化清单**：`endpoints` 直接读取 Hono 应用的真实注册表
- *    （与 `src/test/api.test.ts` 的 `backendRoutes()` 同一套来源），新增路由不会漏登记。
+ *    （与 `src/test/contract-harness.ts` 的 `backendRoutes()` 同一套来源），新增路由不会漏登记。
  */
 
 import { pool } from '../config/pool.js';

@@ -1,0 +1,442 @@
+<script setup lang="ts">
+/**
+ * 管理后台「设置」分区。
+ *
+ * 纯展示 + 事件回抛：取数、校验、保存与上传都留在 AdminPage。
+ * 表单是 AdminPage 里的 reactive 对象，作为普通 prop 下传；子组件只改它的嵌套字段，
+ * 不整体替换，因此父组件不需要处理 update:modelValue（也避免 v-model 对 const 绑定的改写）。
+ */
+import SegControl from '@/components/SegControl.vue';
+import SkeletonBlock from '@/components/SkeletonBlock.vue';
+import StateBlock from '@/components/StateBlock.vue';
+import type { Ref } from 'vue';
+import type { JsonObject } from '@/api/types';
+import { t } from '@/i18n';
+
+interface LimitItem {
+  key: string;
+  label: string;
+  hint: string;
+  unit: string;
+}
+
+/** 与 AdminPage 里那份 reactive 表单同形；嵌套字段由子组件直接改。 */
+interface AdminSettingsForm {
+  brand: { zh: string; en: string };
+  announcement: string;
+  announcementEnabled: boolean;
+  categories: string;
+  canRevise: boolean;
+  imageCount: number;
+  imageSizeMb: number;
+  videoCount: number;
+  videoSizeMb: number;
+  avatarSizeMb: number;
+  avatarFormats: string;
+  imageFormats: string;
+  videoFormats: string;
+  limits: Record<string, number>;
+  defaultCover: string;
+  maxFutureExhibitions: number;
+  maxFutureMeetings: number;
+  storageMb: number;
+  whenFull: 'reject' | 'evict-oldest';
+}
+
+defineProps<{
+  form: AdminSettingsForm;
+  settingsQuery: { data: Ref<JsonObject | undefined>; error: Ref<Error | undefined>; loading: Ref<boolean> };
+  loaded: boolean;
+  settingsError: string;
+  settingsSaving: boolean;
+  coverBusy: boolean;
+  canEditSettings: boolean;
+  storageFull: boolean;
+  storagePercent: number;
+  storageCaption: string;
+  storagePolicies: { value: string; label: string }[];
+  limitGroups: Array<{ id: string; title: string; items: LimitItem[] }>;
+  pairLimits: (items: LimitItem[]) => LimitItem[][];
+  copy: {
+    coverTitle: string;
+    coverHint: string;
+    limitIntro: string;
+    exhibitorLimit: string;
+    exhibitorLimitHint: string;
+    meetingLimit: string;
+    meetingLimitHint: string;
+    avatarSection: string;
+    avatarFormats: string;
+    storageTitle: string;
+    storageHint: string;
+    storageLimit: string;
+    storageWhenFull: string;
+  };
+}>();
+const emit = defineEmits<{ retry: []; save: []; 'pick-cover': [] }>();
+</script>
+
+<template>
+  <SkeletonBlock v-if="settingsQuery.loading.value && !loaded" :rows="4" />
+  <StateBlock
+    v-else-if="settingsQuery.error.value && !loaded"
+    tone="error"
+    :title="t('common.loadFailed')"
+    :description="settingsQuery.error.value.message"
+    :action-label="t('common.retry')"
+    @action="emit('retry')"
+  />
+  <template v-else>
+    <div class="notice" data-tone="accent">
+      <strong>{{ t('admin.settings.server') }}</strong>
+      <span>{{ t('admin.settings.serverScope') }}</span>
+    </div>
+
+    <div class="card">
+      <span class="section-label">{{ copy.storageTitle }}</span>
+      <div class="storage-meter" :data-full="storageFull ? 'true' : 'false'">
+        <span :style="{ width: `${storagePercent}%` }" />
+      </div>
+      <p class="field-hint">{{ storageCaption }}</p>
+      <p class="field-hint">{{ copy.storageHint }}</p>
+      <div class="field">
+        <label for="settings-storage-mb">{{ copy.storageLimit }}</label>
+        <div class="row" data-gap="md">
+          <input
+            id="settings-storage-mb"
+            v-model.number="form.storageMb"
+            class="input"
+            type="number"
+            min="64"
+            max="10240"
+            inputmode="numeric"
+          />
+          <span class="row-meta">MB</span>
+        </div>
+      </div>
+      <div class="field">
+        <label id="settings-storage-policy">{{ copy.storageWhenFull }}</label>
+        <SegControl
+          :model-value="form.whenFull"
+          :items="storagePolicies"
+          :label="copy.storageWhenFull"
+          @update:model-value="form.whenFull = $event === 'evict-oldest' ? 'evict-oldest' : 'reject'"
+        />
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="section-label">{{ t('admin.settings.brand') }}</span>
+      <div class="field">
+        <label for="settings-title-zh">{{ t('admin.settings.brandZh') }}</label>
+        <input
+          id="settings-title-zh"
+          v-model="form.brand.zh"
+          class="input"
+          type="text"
+          maxlength="20"
+          :placeholder="t('admin.settings.brandZhPlaceholder')"
+        />
+      </div>
+      <div class="field">
+        <label for="settings-title-en">{{ t('admin.settings.brandEn') }}</label>
+        <input
+          id="settings-title-en"
+          v-model="form.brand.en"
+          class="input"
+          type="text"
+          maxlength="24"
+          :placeholder="t('admin.settings.brandEnPlaceholder')"
+        />
+      </div>
+    </div>
+
+    <!-- 缺省展会封面：展会自己没有封面时用它替掉占位图；留空即回到占位图 -->
+    <div class="card">
+      <span class="section-label">{{ copy.coverTitle }}</span>
+      <div class="hero ph-img hero-compact">
+        <img v-if="form.defaultCover" :src="form.defaultCover" :alt="copy.coverTitle" />
+      </div>
+      <div class="row" data-gap="md">
+        <button
+          class="cta ghost"
+          data-size="small"
+          type="button"
+          style="flex: 1 1 0"
+          :disabled="coverBusy"
+          :data-loading="coverBusy ? 'true' : 'false'"
+          @click="emit('pick-cover')"
+        >
+          {{ form.defaultCover ? t('admin.media.changeCover') : t('admin.media.uploadCover') }}
+        </button>
+        <button
+          v-if="form.defaultCover"
+          class="cta ghost"
+          data-size="small"
+          type="button"
+          style="flex: 1 1 0"
+          @click="form.defaultCover = ''"
+        >
+          {{ t('admin.media.removeCover') }}
+        </button>
+      </div>
+      <p class="field-hint">{{ copy.coverHint }}</p>
+    </div>
+
+    <!-- 展商端策略：单个展商可同时筹备的展会数 -->
+    <div class="card">
+      <span class="section-label">{{ copy.exhibitorLimit }}</span>
+      <div class="field">
+        <div class="row" data-gap="md">
+          <input
+            id="settings-max-future-exhibitions"
+            v-model.number="form.maxFutureExhibitions"
+            class="input"
+            type="number"
+            min="0"
+            inputmode="numeric"
+          />
+          <span class="row-meta">{{ t('admin.limits.items') }}</span>
+        </div>
+        <p class="field-hint">{{ copy.exhibitorLimitHint }}</p>
+      </div>
+      <div class="field">
+        <label for="settings-max-future-meetings">{{ copy.meetingLimit }}</label>
+        <div class="row" data-gap="md">
+          <input
+            id="settings-max-future-meetings"
+            v-model.number="form.maxFutureMeetings"
+            class="input"
+            type="number"
+            min="0"
+            inputmode="numeric"
+          />
+          <span class="row-meta">{{ t('admin.limits.items') }}</span>
+        </div>
+        <p class="field-hint">{{ copy.meetingLimitHint }}</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="section-label">{{ t('admin.announce.entry') }}</span>
+      <textarea id="settings-announcement" v-model="form.announcement" class="textarea" rows="3" />
+      <div class="switch-row">
+        <span class="switch-copy">
+          <strong>{{ t('admin.announce.showOnEntry') }}</strong>
+        </span>
+        <label class="switch" for="settings-announcement-enabled">
+          <input id="settings-announcement-enabled" v-model="form.announcementEnabled" type="checkbox" />
+          <span />
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="section-label">{{ t('admin.settings.categories') }}</span>
+      <textarea id="settings-categories" v-model="form.categories" class="textarea" rows="4" />
+    </div>
+
+    <div class="card">
+      <span class="section-label">{{ t('admin.settings.reviewPolicy') }}</span>
+      <div class="switch-row">
+        <span class="switch-copy">
+          <strong>{{ t('admin.settings.allowReviseDecided') }}</strong>
+        </span>
+        <label class="switch" for="settings-revise">
+          <input id="settings-revise" v-model="form.canRevise" type="checkbox" />
+          <span />
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="section-label">{{ t('admin.media.richMedia') }}</span>
+      <div class="field">
+        <label for="settings-image-count">{{ t('admin.media.imagesPerPost') }}</label>
+        <div class="row" data-gap="md">
+          <input
+            id="settings-image-count"
+            v-model.number="form.imageCount"
+            class="input"
+            type="number"
+            min="0"
+            inputmode="numeric"
+          />
+          <span class="row-meta">{{ t('admin.media.sheets') }}</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="settings-image-size">{{ t('admin.media.imageSize') }}</label>
+        <div class="row" data-gap="md">
+          <input
+            id="settings-image-size"
+            v-model.number="form.imageSizeMb"
+            class="input"
+            type="number"
+            min="0"
+            inputmode="numeric"
+          />
+          <span class="row-meta">MB</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="settings-video-count">{{ t('admin.media.videoCount') }}</label>
+        <div class="row" data-gap="md">
+          <input
+            id="settings-video-count"
+            v-model.number="form.videoCount"
+            class="input"
+            type="number"
+            min="0"
+            inputmode="numeric"
+          />
+          <span class="row-meta">{{ t('admin.limits.items') }}</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="settings-video-size">{{ t('admin.media.videoSize') }}</label>
+        <div class="row" data-gap="md">
+          <input
+            id="settings-video-size"
+            v-model.number="form.videoSizeMb"
+            class="input"
+            type="number"
+            min="0"
+            inputmode="numeric"
+          />
+          <span class="row-meta">MB</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="section-label">{{ t('admin.media.uploadFormats') }}</span>
+      <div class="field">
+        <label for="settings-image-formats">{{ t('admin.media.imageSuffixes') }}</label>
+        <input
+          id="settings-image-formats"
+          v-model="form.imageFormats"
+          class="input"
+          type="text"
+          maxlength="120"
+          placeholder="jpg,jpeg,png,webp"
+        />
+      </div>
+      <div class="field">
+        <label for="settings-video-formats">{{ t('admin.media.videoSuffixes') }}</label>
+        <input
+          id="settings-video-formats"
+          v-model="form.videoFormats"
+          class="input"
+          type="text"
+          maxlength="120"
+          placeholder="mp4,mov,webm"
+        />
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="section-label">{{ copy.avatarSection }}</span>
+      <div class="field">
+        <label for="settings-avatar-size">{{ t('admin.media.avatarSize') }}</label>
+        <div class="row" data-gap="md">
+          <input
+            id="settings-avatar-size"
+            v-model.number="form.avatarSizeMb"
+            class="input"
+            type="number"
+            min="1"
+            max="20"
+            inputmode="numeric"
+          />
+          <span class="row-meta">MB</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="settings-avatar-formats">{{ copy.avatarFormats }}</label>
+        <input
+          id="settings-avatar-formats"
+          v-model="form.avatarFormats"
+          class="input"
+          type="text"
+          maxlength="80"
+          placeholder="jpg,jpeg,png,webp"
+        />
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="section-label">{{ t('admin.limits.formChars') }}</span>
+      <p class="field-hint">{{ copy.limitIntro }}</p>
+      <div v-for="group in limitGroups" :key="group.id" class="limit-group">
+        <span class="limit-group-title">{{ group.title }}</span>
+        <div
+          v-for="(row, rowIndex) in pairLimits(group.items)"
+          :key="`${group.id}-${rowIndex}`"
+          :class="row.length > 1 ? 'grid-cols-2' : undefined"
+        >
+          <div v-for="item in row" :key="item.key" class="field">
+            <label :for="`limit-${item.key}`">{{ item.label }}</label>
+            <div class="row" data-gap="md">
+              <input
+                :id="`limit-${item.key}`"
+                v-model.number="form.limits[item.key]"
+                class="input"
+                type="number"
+                min="0"
+                inputmode="numeric"
+              />
+              <span class="row-meta">{{ item.unit }}</span>
+            </div>
+            <p class="field-hint">{{ item.hint }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p v-if="settingsError" class="field-error" role="alert">{{ settingsError }}</p>
+    <button
+      class="cta"
+      type="button"
+      :disabled="settingsSaving || !canEditSettings"
+      :data-loading="settingsSaving ? 'true' : 'false'"
+      @click="emit('save')"
+    >
+      {{ t('admin.settings.save') }}
+    </button>
+  </template>
+</template>
+
+<style>
+/* 管理设置里的文字长度分组：同一张卡里用分隔线隔开，方便按展会、收集项、账号查找。 */
+.limit-group {
+  display: grid;
+  gap: var(--s3);
+  padding-top: var(--s3);
+  border-top: var(--hairline) solid var(--stroke);
+}
+
+.limit-group-title {
+  color: var(--ink);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.storage-meter {
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: var(--f1);
+}
+
+.storage-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.storage-meter[data-full='true'] > span {
+  background: var(--danger-ink);
+}
+</style>

@@ -26,3 +26,16 @@ const emit = defineEmits<{ dismiss: [] }>();
     </button>
   </div>
 </template>
+
+<style>
+/* 一次性提示条：文案占满剩余宽度，右侧关闭入口不换行 */
+.hint-note {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hint-note > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+</style>

@@ -160,12 +160,12 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 
 - `ok` 只表示进程还在、并且数据库答得上。迁移没跑完和自检失败写在 `checks` 与 `migrations` 里，不进状态码。
 - 数据库连不上时，`data` 是 `null`，迁移按全部未应用处理，响应使用通用提示。状态页这一路仍返回 HTTP 200。`/api/v1/status` 返回 503。
-- `endpoints` 读取各路由模块导出的注册表，与 `src/test/api.test.ts` 的 `backendRoutes()` 同一来源。这两个状态接口本身不进前端动作表。
+- `endpoints` 读取各路由模块导出的注册表，与 `src/test/contract-harness.ts` 的 `backendRoutes()` 同一来源。这两个状态接口本身不进前端动作表。
 - 两个路径都带 `Cache-Control: no-store`。服务端在 1.5 秒内复用报告。探测用 `pool.connect()`，超时后 `release(true)` 销毁那条连接。连接池另有 `statement_timeout: 10s`。
 - 探针自己出错时走 `fallbackReport()`，返回 `{ ok:false }` 和一条失败的自检项。
 
 ## 验证
 
-脚本在 `package.json`。契约测试会自己起一个服务并连接真实数据库。字段漂移在这里失败。
+脚本在 `package.json`。契约测试会自己起一个服务并连接真实数据库，库由 `test/global-setup-contract.ts` 建成的模板克隆而来（每个文件一份干净数据）。字段漂移在这里失败。
 
 数据库不可用这条路径要换端口起一个真进程：`DB_PORT=6543 PORT=3011 npx tsx src/index.ts`。业务接口返回 503，正文不含内网地址和堆栈。`/api/v1/status` 返回 503。`/status` 和 `/ping` 返回 200。

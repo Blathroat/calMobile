@@ -75,3 +75,34 @@ withDefaults(
     <p v-if="hint" class="field-hint">{{ hint }}</p>
   </div>
 </template>
+
+<style>
+/* 详情型面板里的「标签 / 内容」列表：标签独占一行、内容另起一行自然换行。
+   报名详情原来把标签和值拼成一段文字，多几项就挤成一坨；分开写才读得清。 */
+.detail-list {
+  display: grid;
+  gap: var(--s2);
+}
+
+.detail-item {
+  display: grid;
+  gap: var(--s1);
+  padding: var(--s3);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--f3);
+}
+
+.detail-label {
+  color: var(--ink-3);
+  font-size: var(--fs-tag);
+  font-weight: 600;
+}
+
+.detail-value {
+  color: var(--ink);
+  font-size: var(--fs-body);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+</style>

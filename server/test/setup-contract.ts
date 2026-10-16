@@ -5,8 +5,10 @@
  * 这里只负责设变量：ESM 下没有 CJS 的 `tsx/cjs/api` 注册表可挂，
  * .ts 的加载由 vitest 的 `execArgv: ['--import', 'tsx']` 统一负责。
  */
+import { contractDatabaseFor } from '../src/test/contract-template.js';
 vi.stubEnv('NODE_ENV', 'test');
-vi.stubEnv('DB_NAME', process.env.TEST_DB_NAME || 'calmobile_test');
+// 每个测试文件一份自己的库（见 src/test/contract-template.ts）：文件之间不共享数据，可以并行跑。
+vi.stubEnv('DB_NAME', contractDatabaseFor(expect.getState().testPath));
 vi.stubEnv('LOG_LEVEL', 'quiet');
 vi.stubEnv('MAIL_TRANSPORT', 'memory');
 vi.stubEnv('JWT_SECRET', process.env.JWT_SECRET || 'calmobile-test-access-secret-32-characters');

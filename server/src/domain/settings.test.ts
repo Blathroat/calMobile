@@ -162,7 +162,7 @@ test('themeIndex 采用补齐后的色板长度夹取', () => {
  * 个人配色（`users.ui_theme`）与全局默认不同：越界**不夹取**，按规则失败。
  *
  * 这几条都在 `query()` 之前抛错，因此不连数据库也能跑（unit 项目不碰库）；
- * 合法值落库与 bootstrap 生效由契约测试覆盖（`src/test/api.test.ts`）。
+ * 合法值落库与 bootstrap 生效由契约测试覆盖（`server/src/test/`）。
  */
 test('个人配色的非法下标按规则失败，不静默夹取', async () => {
   await assert.rejects(() => saveUiTheme(null, 3), /请先登录/, '未登录不能写个人配色');

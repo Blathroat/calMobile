@@ -1,0 +1,21 @@
+# 仓库内统一存 LF，检出也用 LF：Windows 上不因 CRLF 让 oxfmt --check 假失败。
+* text=auto eol=lf
+
+# Windows 批处理保留 CRLF。
+*.bat text eol=crlf
+
+# 二进制：不做行尾转换，也不参与文本 diff。
+*.jar binary
+*.apk binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.wasm binary
+*.mp4 binary

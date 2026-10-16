@@ -11,3 +11,19 @@ withDefaults(defineProps<{ rows?: number }>(), { rows: 3 });
     <div v-for="row in rows" :key="row" class="skeleton-row" />
   </div>
 </template>
+
+<style>
+.skeleton {
+  display: grid;
+  gap: var(--s3);
+  padding: var(--s4);
+}
+
+.skeleton-row {
+  height: 72px;
+  border-radius: var(--r-card);
+  background: linear-gradient(90deg, var(--f1) 25%, var(--f3) 37%, var(--f1) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+</style>

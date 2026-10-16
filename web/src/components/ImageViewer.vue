@@ -231,3 +231,57 @@ onBeforeUnmount(() => {
     </div>
   </Teleport>
 </template>
+
+<style>
+.viewer {
+  position: fixed;
+  inset: 0;
+  /* 高于底部面板（40），低于 toast（60）：查看大图时提示仍可见。 */
+  z-index: 50;
+  background: rgb(8 10 13 / 92%);
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+.viewer-stage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.viewer-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.viewer-close {
+  position: absolute;
+  top: calc(var(--s4) + var(--safe-top));
+  right: var(--s4);
+  width: var(--touch);
+  height: var(--touch);
+  display: grid;
+  place-items: center;
+  border: var(--hairline) solid rgb(255 255 255 / 28%);
+  border-radius: var(--r-pill);
+  background: rgb(0 0 0 / 42%);
+  color: var(--on-dark);
+}
+
+.viewer-hint {
+  position: absolute;
+  inset-inline: 0;
+  bottom: calc(var(--s4) + var(--safe-bottom));
+  color: rgb(255 255 255 / 72%);
+  font-size: var(--fs-meta);
+  text-align: center;
+}
+</style>

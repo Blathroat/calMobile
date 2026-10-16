@@ -351,3 +351,15 @@ onMounted(() => {
     @close="viewerOpen = false"
   />
 </template>
+
+<style>
+/* 可点开的封面：清掉按钮自带的内边距 / 字体 / 居中，只保留 .hero 的尺寸与描边 */
+.hero-button {
+  display: block;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  appearance: none;
+}
+</style>

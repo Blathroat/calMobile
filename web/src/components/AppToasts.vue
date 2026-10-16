@@ -16,3 +16,35 @@ import { toasts } from '@/services/toast';
     </div>
   </div>
 </template>
+
+<style>
+.toast-host {
+  position: fixed;
+  inset-inline: 0;
+  bottom: calc(var(--s6) + var(--safe-bottom));
+  z-index: 60;
+  display: grid;
+  justify-items: center;
+  gap: var(--s2);
+  pointer-events: none;
+}
+
+.toast {
+  max-width: min(88vw, 460px);
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r-pill);
+  background: var(--toast-bg);
+  color: var(--on-dark);
+  font-size: var(--fs-label);
+  box-shadow: var(--shadow-float);
+  animation: toast-in var(--motion-base) var(--ease) both;
+}
+
+.toast[data-tone='error'] {
+  background: var(--toast-error);
+}
+
+.toast[data-tone='success'] {
+  background: var(--toast-ok);
+}
+</style>

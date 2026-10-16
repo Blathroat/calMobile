@@ -567,3 +567,31 @@ async function changeMode(value: string): Promise<void> {
     @error="onCropError"
   />
 </template>
+
+<style>
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+}
+
+/* 配色色板 */
+.swatch {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-pill);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.swatch[aria-pressed='true'] {
+  border: 3px solid var(--ink);
+  box-shadow: 0 0 0 3px var(--accent-edge);
+}
+</style>

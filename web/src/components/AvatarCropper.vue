@@ -394,3 +394,53 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style>
+/* 圆形头像裁剪 */
+.crop-wrap {
+  display: grid;
+  place-items: center;
+  padding: var(--s3) 0;
+}
+
+.crop-stage {
+  position: relative;
+  border-radius: var(--r-pill);
+  background: var(--f3);
+  box-shadow:
+    0 0 0 2px var(--accent-edge),
+    var(--shadow-float);
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+}
+
+.crop-stage[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+/* 双指捏合时给裁剪框一点内描边反馈，明确当前处于缩放状态 */
+.crop-stage[data-pinching='true'] {
+  box-shadow:
+    0 0 0 3px var(--accent),
+    var(--shadow-float);
+}
+
+.crop-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 当前缩放倍数：捏合时实时更新，替代原来的滑块 */
+.crop-scale {
+  color: var(--accent-ink);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+</style>

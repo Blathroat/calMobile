@@ -19,3 +19,35 @@ defineProps<{ items: TabItem[] }>();
     </RouterLink>
   </nav>
 </template>
+
+<style>
+.tab {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s1);
+  padding: var(--s1);
+  border-radius: var(--r-chip);
+  /* 底部导航是 RouterLink（`<a>`），浏览器默认给链接加下划线；
+       选中线索只用 motion.css 的主题色指示条，不要文字下划线。 */
+  text-decoration: none;
+  color: var(--ink-3);
+  font-size: var(--fs-tag);
+  font-weight: 600;
+  transition: color var(--motion-fast) var(--ease);
+}
+
+.tab svg {
+  width: 22px;
+  height: 22px;
+}
+
+.tab[aria-current='page'] {
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+</style>

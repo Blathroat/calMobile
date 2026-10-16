@@ -384,3 +384,27 @@ function messageOf(reason: unknown): string {
     {{ t('auth.register.backToLogin') }}
   </button>
 </template>
+
+<style>
+.password-meter {
+  min-width: 56px;
+  padding: 2px var(--s2);
+  border-radius: var(--r-chip);
+  background: var(--f1);
+  color: var(--ink-2);
+  font-size: var(--fs-tag);
+  font-weight: 700;
+  text-align: center;
+}
+
+.password-meter[data-level='2'] {
+  background: var(--warn-tint);
+  color: var(--warn-ink);
+}
+
+.password-meter[data-level='3'] {
+  background: var(--screen);
+  border: var(--hairline) solid var(--accent-edge);
+  color: var(--accent-ink);
+}
+</style>

@@ -78,3 +78,29 @@ onMounted(() => requestAnimationFrame(() => position(false)));
     </button>
   </div>
 </template>
+
+<style>
+/* 选中滑块：由脚本定位到当前按钮，切换时平滑滑动过去 */
+.seg-indicator {
+  position: absolute;
+  top: var(--s1);
+  left: 0;
+  bottom: var(--s1);
+  width: 0;
+  z-index: 0;
+  border-radius: var(--r-chip);
+  background: var(--accent);
+  box-shadow: var(--shadow-panel);
+  pointer-events: none;
+}
+
+.seg-indicator[data-animate='true'] {
+  transition:
+    transform var(--motion-normal) var(--ease-out),
+    width var(--motion-normal) var(--ease-out);
+}
+
+.seg-indicator[data-hidden='true'] {
+  opacity: 0;
+}
+</style>

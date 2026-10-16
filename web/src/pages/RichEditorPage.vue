@@ -572,3 +572,91 @@ function escapeRegExp(value: string): string {
     </div>
   </Teleport>
 </template>
+
+<style>
+.editor-surface {
+  min-height: 220px;
+  padding: var(--s3);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--screen);
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.editor-surface:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.editor-surface:empty::before {
+  content: attr(data-placeholder);
+  color: var(--ink-3);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  padding: var(--s2);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--f3);
+}
+
+.toolbar button {
+  min-width: 44px;
+  min-height: 40px;
+  padding: 0 var(--s2);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-chip);
+  background: var(--screen);
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.toolbar button[aria-pressed='true'] {
+  background: var(--dark);
+  border-color: var(--dark);
+  color: var(--on-dark);
+}
+
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: var(--s2);
+}
+
+.media-tile {
+  position: relative;
+  aspect-ratio: 1;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--f3);
+  overflow: hidden;
+}
+
+.media-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.media-tile button {
+  position: absolute;
+  top: var(--s1);
+  inset-inline-end: var(--s1);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  background: var(--media-scrim);
+  color: var(--on-dark);
+  font-size: 16px;
+  line-height: 1;
+}
+</style>

@@ -354,3 +354,30 @@ onBeforeUnmount(stopCountdown);
     </div>
   </div>
 </template>
+
+<style>
+/* 入口页的文字入口行（注册 / 忘记密码）：居中，并保持旧版的上下留白。
+   `data-flush` 是第二行，只留左右内距，避免两行之间被撑开。 */
+.auth-entry {
+  justify-content: center;
+  padding: var(--s3);
+}
+
+.auth-entry[data-flush='true'] {
+  padding: 0 var(--s3);
+}
+
+/* 入口页的品牌标记：线框的 .brand-mark（圆角方底 + 品牌首字）。
+   旧版的入口 hero 用的是 `.ph-img`（无描边、只填底色），这里保持一致。 */
+.brand-mark {
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-panel);
+  background: var(--f2);
+  color: var(--frame);
+  font-size: 34px;
+  font-weight: 800;
+}
+</style>

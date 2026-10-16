@@ -80,3 +80,79 @@ watch(
     </span>
   </div>
 </template>
+
+<style>
+.choice-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s2);
+}
+
+.choice-row > .choice {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* 有选项在一行里放不下时，每项独占一行。 */
+.choice-row[data-stack='true'] {
+  flex-direction: column;
+}
+
+.choice-row[data-stack='true'] > .choice {
+  flex: none;
+  width: 100%;
+}
+
+.choice {
+  position: relative;
+  min-width: 0;
+}
+
+.choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice label {
+  min-height: var(--ctrl);
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--screen);
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  line-height: 1.35;
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  transition:
+    border-color var(--motion-fast) var(--ease),
+    background var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+.choice-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.choice input:checked + label {
+  border-color: var(--accent);
+  background: var(--accent-glow, rgba(192, 86, 33, 0.14));
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.choice input:focus-visible + label {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+</style>

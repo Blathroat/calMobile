@@ -15,6 +15,8 @@
 | 后端规则或响应 | `pnpm --dir server lint`、`pnpm --dir server fmt:check`、`pnpm --dir server test`，以及 `pnpm --dir server test:contract`（需要 PostgreSQL）。改了已加载的 `server/src` 后重启不用 watch 起的进程 |
 | Java 或桥接 | `gradlew.bat :app:testDebugUnitTest`。出包或资源变更再跑 `gradlew.bat :app:assembleDebug` |
 
+契约测试先由 `server/test/global-setup-contract.ts` 建一个模板库，每个测试文件从它克隆一份自己的库：文件之间互不干扰，因此可以并行跑，迁移与示例数据只跑一次。行尾由根目录 `.gitattributes` 统一成 LF，检出后不用手工调整。
+
 设备连不上后端时，先读 `server/src/dev/adb-reverse.ts` 开头。`pnpm dev` 会维护 `adb reverse tcp:3000 tcp:3000`。服务不是它起的时候，自己执行这条命令。
 
 动效全部静止时，先看三枚系统动画 scale。都为 1 之后，再改代码：
