@@ -17,6 +17,7 @@
  * - `pingEnabled`：`ENABLE_PING`。两种环境都默认打开，这是对外的存活探针；
  * - `healthEnabled`：`ENABLE_HEALTH`。开发默认打开，生产默认关闭（响应里有进程运行时间）；
  * - `webEnabled`：`ENABLE_WEB`。开发默认托管报名站，生产默认不托管；
+ * - `langPacks`：`LANG_PACK_DEFAULT` 与 `LANG_PACK_URLS`。只下发名称和链接，不带正文；
  * - `trustProxy`：反代后面必须显式打开，否则 `req.ip` 会是代理地址，
  *   按 IP 的验证码限流会退化成「全体用户共用一个 1 小时 20 条」的额度；
  * - `startedBy`：给启动日志用，一眼看出这次是 `pnpm start` 还是 `pnpm dev` 起的。

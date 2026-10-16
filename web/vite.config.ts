@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import vue from '@vitejs/plugin-vue';
+// 这份脚本的类型来自 JSDoc，靠 tsconfig 的 allowJs 读进来。
 import { writeReleaseManifest } from './release-manifest.mjs';
 
 // 与 Gradle 读同一份脚本，避免在这里再解析一遍 .env。
