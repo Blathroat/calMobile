@@ -19,6 +19,8 @@ test('报名页和接口路径分开', () => {
   assert.equal(isJoinPagePath('/ping'), false);
   assert.equal(isJoinPagePath('/health'), false);
   assert.equal(isJoinPagePath('/status'), false);
+  assert.equal(isJoinPagePath('/app'), false);
+  assert.equal(isJoinPagePath('/app/index.html'), false);
 });
 
 test('没配域名不跳转，Host 不一致才跳到 PUBLIC_BASE_URL', () => {

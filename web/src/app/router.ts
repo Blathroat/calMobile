@@ -91,8 +91,8 @@ declare module 'vue-router' {
 
 /**
  * 创建路由实例并注册守卫。
- * @param history 历史实现；默认 hash 历史（`#/home`），便于 WebView 直接加载本地文件、
- *   刷新不依赖服务端回退路由；只有测试会传 `createMemoryHistory()`
+ * @param history 历史实现；默认 hash 历史（`#/home`）。文档固定在 `/app/index.html`，
+ *   切换页面不向服务端要新文档；只有测试会传 `createMemoryHistory()`
  * @returns 已注册守卫但尚未 `app.use()` 挂载的路由实例
  */
 export function createAppRouter(history: RouterHistory = createWebHashHistory()) {

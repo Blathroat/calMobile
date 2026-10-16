@@ -15,12 +15,16 @@
 
 - 数据只走 `web/src/api/client.ts`。页面取数用 feature composable，失败必须可见。
 - 查询缓存只放 `web/src/services/query-cache.ts`。写接口的失效前缀与读接口的缓存键前缀同族（`registrations` ↔ `registrations.record`）。
-- 界面文案写入 `web/src/i18n/strings.ts` 的分层表，用 `t('auth.login.title')` 这种点分路径读取。邮件正文写在后端，不进这张表。
+- 界面文案写入 `web/src/i18n/strings.ts` 的分层表，用 `t('auth.login.title')` 这种点分路径读取。邮件正文写在后端，不进这张表。部署不上传这个源文件，文案在构建时打进页面包。
 - 写接口返回 `{ ok, error, ... }`。规则失败用 200 + `ok:false`，认证授权用 4xx，数据库不可用用 503。响应只用给用户看的文案。
 
 ## 命名与提交
 
 Java 四空格，类名 PascalCase，成员 camelCase，资源 `snake_case`。前端 class 与页面文件用 kebab-case。注释和文档用中文。提交用简洁中文动词短句，只提交本次路径。
+
+## 发布
+
+会让 CD 发布客户端、部署服务或同步页面的提交不要直接推到 `master`。走 PR，用合并提交合入。直接推上去的普通提交不会发布。文档和测试不触发 CD。哪些路径会触发，见 [docs/operations.md](docs/operations.md)。
 
 ## 文档
 

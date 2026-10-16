@@ -149,7 +149,7 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
 
   const cors = String(env.CORS_ORIGIN || '').trim();
   if (!cors || cors === '*') {
-    warnings.push('CORS_ORIGIN 是 * 或没配：建议收紧到 WebView 的起源 https://appassets.androidplatform.net');
+    warnings.push('CORS_ORIGIN 是 * 或没配：应用页面和报名站与接口同源，其它跨源调用请收紧到来源本身');
   }
 
   // trust proxy 与限流的关系：反代后面不开，按 IP 的限流会变成全体用户共用额度。

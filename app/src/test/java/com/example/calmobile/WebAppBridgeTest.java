@@ -32,8 +32,9 @@ public class WebAppBridgeTest {
         return payload;
     }
 
+    /** 文本为空或缺失时用默认值。纯空白仍原样返回。 */
     @Test
-    public void 文本为空或缺失时用默认值() {
+    public void usesDefaultWhenTextIsEmptyOrMissing() {
         assertEquals("智能家居展", WebAppBridge.text(payload(), "title", "默认"));
         assertEquals("默认", WebAppBridge.text(payload(), "empty", "默认"));
         assertEquals("默认", WebAppBridge.text(payload(), "missing", "默认"));
@@ -41,8 +42,9 @@ public class WebAppBridgeTest {
         assertEquals("   ", WebAppBridge.text(payload(), "blank", "默认"));
     }
 
+    /** 布尔值只认布尔和字符串 true。数字 1 不算真。 */
     @Test
-    public void 布尔值只认布尔与字符串_true() {
+    public void acceptsBooleanAndTrueString() {
         assertTrue(WebAppBridge.flag(payload(), "enabled", false));
         assertFalse(WebAppBridge.flag(payload(), "disabled", true));
         assertTrue(WebAppBridge.flag(payload(), "missing", true));
@@ -57,8 +59,9 @@ public class WebAppBridgeTest {
         assertFalse(WebAppBridge.flag(map, "one", true));
     }
 
+    /** 数字接受小数和数字字符串，并截断成整数。 */
     @Test
-    public void 数字接受小数与数字字符串并截断() {
+    public void truncatesDecimalAndNumericText() {
         assertEquals(8, WebAppBridge.number(payload(), "count", 0));
         assertEquals(12, WebAppBridge.number(payload(), "numericText", 0));
         assertEquals(3, WebAppBridge.number(payload(), "missing", 3));
@@ -67,15 +70,17 @@ public class WebAppBridgeTest {
         assertEquals(0, WebAppBridge.number(payload(), "title", 0));
     }
 
+    /** 取值不是列表时给空表。 */
     @Test
-    public void 列表不是列表时给空表() {
+    public void returnsEmptyListWhenValueIsNotAList() {
         assertEquals(2, WebAppBridge.list(payload(), "rows").size());
         assertTrue(WebAppBridge.list(payload(), "title").isEmpty());
         assertTrue(WebAppBridge.list(payload(), "missing").isEmpty());
     }
 
+    /** 嵌套对象取不到时给空表。 */
     @Test
-    public void 嵌套对象取不到时给空表() {
+    public void returnsEmptyMapWhenNestedObjectIsMissing() {
         Map<String, Object> nested = WebAppBridge.map(payload(), "media");
         assertEquals(1, nested.size());
         assertEquals(6, WebAppBridge.number(nested, "imageCount", 0));
@@ -90,7 +95,7 @@ public class WebAppBridgeTest {
      * 这样新增错误码不会让既有实现（或第三方实现）漏掉回调、把 promise 挂死。
      */
     @Test
-    public void 未实现带码失败的回调会退化成按文案失败() {
+    public void fallsBackToMessageWhenCodedFailureIsUnimplemented() {
         final String[] received = new String[2];
         WebAppBridge.ResultCallback legacy = new WebAppBridge.ResultCallback() {
             @Override
@@ -110,7 +115,7 @@ public class WebAppBridgeTest {
 
     /** 错误码是前后端约定的字面量，改名会让前端的取消静默分支失效，因此钉住。 */
     @Test
-    public void 错误码字面量固定() {
+    public void errorCodeLiteralsStayFixed() {
         assertEquals("cancelled", WebAppBridge.CODE_CANCELLED);
         assertEquals("timeout", WebAppBridge.CODE_TIMEOUT);
     }

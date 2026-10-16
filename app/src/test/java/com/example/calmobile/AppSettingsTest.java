@@ -17,34 +17,39 @@ import org.junit.Test;
  */
 public class AppSettingsTest {
 
+    /** 外观模式只接受 light、dark、auto。 */
     @Test
-    public void 外观模式只接受三个取值() {
+    public void acceptsOnlyThreeAppearanceModes() {
         assertEquals(AppSettings.MODE_LIGHT, AppSettings.normalizeMode("light"));
         assertEquals(AppSettings.MODE_DARK, AppSettings.normalizeMode("dark"));
         assertEquals(AppSettings.MODE_AUTO, AppSettings.normalizeMode("auto"));
     }
 
+    /** 非法外观模式回落到跟随系统。 */
     @Test
-    public void 非法外观模式回落到跟随系统() {
+    public void fallsBackToSystemAppearance() {
         assertEquals(AppSettings.MODE_AUTO, AppSettings.normalizeMode("乱填"));
         assertEquals(AppSettings.MODE_AUTO, AppSettings.normalizeMode(""));
         assertEquals(AppSettings.MODE_AUTO, AppSettings.normalizeMode(null));
         assertEquals(AppSettings.MODE_AUTO, AppSettings.normalizeMode("DARK"));
     }
 
+    /** 后缀列表会去掉点号和空格，并转成小写。 */
     @Test
-    public void 后缀列表会去点号空格并转小写() {
+    public void stripsDotsSpacesAndLowercasesFormats() {
         List<String> formats = AppSettings.splitFormats(" .JPG, png ,,JPEG ");
         assertEquals(Arrays.asList("jpg", "png", "jpeg"), formats);
     }
 
+    /** 后缀列表去重，并保持第一次出现的顺序。 */
     @Test
-    public void 后缀列表去重且保持顺序() {
+    public void dedupesFormatsInOrder() {
         assertEquals(Arrays.asList("png", "jpg"), AppSettings.splitFormats("png,jpg,png"));
     }
 
+    /** 空的后缀列表返回空表。 */
     @Test
-    public void 空的后缀列表返回空表() {
+    public void returnsEmptyFormatList() {
         assertTrue(AppSettings.splitFormats(null).isEmpty());
         assertTrue(AppSettings.splitFormats("").isEmpty());
         assertTrue(AppSettings.splitFormats(" , ").isEmpty());
@@ -56,7 +61,7 @@ public class AppSettingsTest {
      * （真机上表现为选完视频提示「服务器设置不允许上传 .mp4 格式」）。
      */
     @Test
-    public void 后缀列表能容忍数组括号与顿号分隔() {
+    public void acceptsBracketedAndEnumerationFormats() {
         assertEquals(Arrays.asList("mp4", "mov", "webm"), AppSettings.splitFormats("[mp4,mov,webm]"));
         assertEquals(Arrays.asList("jpg", "png"), AppSettings.splitFormats("[jpg, png]"));
         assertEquals(Arrays.asList("mp4", "mov"), AppSettings.splitFormats("mp4、mov"));
@@ -64,8 +69,9 @@ public class AppSettingsTest {
         assertEquals(Arrays.asList("jpg", "png"), AppSettings.splitFormats("JPG; PNG"));
     }
 
+    /** 默认格式非空，并且不含点号。 */
     @Test
-    public void 默认格式非空且不含点号() {
+    public void defaultFormatsAreNonEmptyAndUnprefixed() {
         List<String> images = AppSettings.splitFormats(AppSettings.DEFAULT_IMAGE_FORMATS);
         List<String> videos = AppSettings.splitFormats(AppSettings.DEFAULT_VIDEO_FORMATS);
         assertFalse(images.isEmpty());
@@ -80,7 +86,7 @@ public class AppSettingsTest {
      * 后端是权威，原生这边只把越界值收敛到同一个区间。
      */
     @Test
-    public void 媒体上限越界时收敛到与后端一致的区间() {
+    public void clampsMediaLimitsToServerRange() {
         assertEquals(1, AppSettings.clampImageCount(0));
         assertEquals(30, AppSettings.clampImageCount(999));
         assertEquals(8, AppSettings.clampImageCount(8));
@@ -107,7 +113,7 @@ public class AppSettingsTest {
      * 8 色色板的下标 0..7 都要有值，且不能有两种下标撞成同一个颜色。
      */
     @Test
-    public void 强调色下标与后端八色色板逐位对应() {
+    public void accentIndexesMatchServerPalette() {
         int[] expected = {
                 0xFFC05621, 0xFF48515D, 0xFF245D3C, 0xFF2F6F8F,
                 0xFF334E7D, 0xFF0E6E62, 0xFF6B3FA0, 0xFFA32C5E,

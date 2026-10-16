@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import type { TrustProxy } from '../config/runtime.js';
 import { normalizeBaseUrl } from '../config/runtime.js';
 
-const RESERVED_PREFIXES = ['/api', '/media', '/status', '/ping', '/health'];
+const RESERVED_PREFIXES = ['/api', '/media', '/status', '/ping', '/health', '/app'];
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',

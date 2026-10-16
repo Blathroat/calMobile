@@ -36,14 +36,12 @@ import java.util.Map;
 /**
  * WebView 前端容器。
  * <p>
- * 页面资源来自 Gradle 生成的 WebView assets，映射到 {@code https://appassets.androidplatform.net/assets/web/}，
- * 保持标准 Web 安全上下文（便于 fetch 与 ES 模块加载）。所有业务调用统一走 {@link WebAppBridge}。
+ * 文档地址是接口所在源的 {@code /app/index.html}。{@code /app/} 的请求由本机快照或包内页面应答，
+ * 页面切换不再访问网络。正式包在首屏出来之后才后台核对热更新，新文件留到下次冷启动。
+ * 设备上选中的媒体仍映射到 {@code https://appassets.androidplatform.net/media/}。
+ * 所有业务调用统一走 {@link WebAppBridge}。
  */
 public class WebShellActivity extends Activity {
-
-    /** 前端资源根地址，页面之间使用相对路径互相导航。 */
-    public static final String BASE_URL =
-            "https://appassets.androidplatform.net/assets/web/";
 
     /** 用户上传的图片与视频的虚拟目录：内容存放在应用私有目录，URL 里只出现文件名。 */
     public static final String MEDIA_URL = "https://appassets.androidplatform.net/media/";
@@ -87,6 +85,9 @@ public class WebShellActivity extends Activity {
 
     private WebView webView;
     private WebAppBridge bridge;
+    /** 这次进程读的页面目录。null 表示用 APK 里的那份。进程内不替换。 */
+    private File pageFiles;
+    private boolean hotUpdateStarted;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -126,9 +127,10 @@ public class WebShellActivity extends Activity {
         settings.setDisplayZoomControls(false);
         // 核销页的摄像头预览由脚本在授权后自行 play()，因此不再要求用户手势。
         settings.setMediaPlaybackRequiresUserGesture(false);
+        // 页面脚本由下面的拦截从本机快照读取，不进 WebView 的 HTTP 缓存。
+        // 接口和 /media 仍按各自的响应头缓存，避免头像每次切换都重新下载。
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        // 页面在 https://appassets.androidplatform.net。接口是 http 时必须允许混合内容，
-        // 接口是 https 时关闭。取值跟构建时的 APP_API_BASE 一致。
+        // 接口是 http 时必须允许混合内容，接口是 https 时关闭。取值跟构建时的 APP_API_BASE 一致。
         settings.setMixedContentMode(BuildConfig.ALLOW_CLEARTEXT
                 ? WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 : WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -141,13 +143,13 @@ public class WebShellActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                return serveAsset(request.getUrl());
+                return serve(request.getUrl());
             }
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
-                if (uri.toString().startsWith(BASE_URL)) {
+                if (PageOrigin.staysInWebView(uri.toString(), BuildConfig.APP_ORIGIN)) {
                     return false;
                 }
                 try {
@@ -160,9 +162,13 @@ public class WebShellActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                if (!PageOrigin.isAppDocument(url, BuildConfig.APP_ORIGIN)) {
+                    return;
+                }
                 // 页面脚本加载完成后通知前端，前端据此拉取 bootstrap 数据。
                 view.evaluateJavascript("window.CalMobileWeb&&window.CalMobileWeb.ready&&"
                         + "window.CalMobileWeb.ready();", null);
+                scheduleHotUpdate();
             }
         });
 
@@ -208,14 +214,65 @@ public class WebShellActivity extends Activity {
 
         bridge = new WebAppBridge(this, webView, new Gson());
         webView.addJavascriptInterface(bridge, "CalMobileNative");
+        pageFiles = openPageSnapshot();
 
         if (savedInstanceState == null) {
-            webView.loadUrl(BASE_URL + "index.html");
+            webView.loadUrl(BuildConfig.APP_PAGE_URL);
         } else {
             webView.restoreState(savedInstanceState);
-            if (webView.getUrl() == null) {
-                webView.loadUrl(BASE_URL + "index.html");
+            // 覆盖安装后可能恢复成旧的 appassets 文档。那份地址不能调用桥，脚本也不是同源。
+            if (!PageOrigin.isAppDocument(webView.getUrl(), BuildConfig.APP_ORIGIN)) {
+                webView.loadUrl(BuildConfig.APP_PAGE_URL);
             }
+        }
+    }
+
+    /** 正式包优先用对得上当前外壳的本机快照。调试包始终用刚打进 APK 的页面。 */
+    private File openPageSnapshot() {
+        if (BuildConfig.ALLOW_CLEARTEXT) {
+            return null;
+        }
+        return WebSnapshot.activate(new File(getFilesDir(), "web-release"), BuildConfig.VERSION_CODE);
+    }
+
+    /** 首屏出来后再拉取新页面，避免和启动数据抢网络。这次进程不重载。 */
+    private void scheduleHotUpdate() {
+        if (hotUpdateStarted || BuildConfig.ALLOW_CLEARTEXT) {
+            return;
+        }
+        hotUpdateStarted = true;
+        final File root = new File(getFilesDir(), "web-release");
+        final int versionCode = BuildConfig.VERSION_CODE;
+        final String origin = BuildConfig.APP_ORIGIN;
+        final String currentId = currentReleaseId();
+        Thread worker = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                WebHotUpdate.Result result = WebHotUpdate.fetch(origin, currentId, root, versionCode);
+                if (result == WebHotUpdate.Result.FAILED) {
+                    Log.w(TAG, "应用页面热更新失败，继续使用当前快照");
+                }
+            }
+        }, "web-hot-update");
+        worker.start();
+    }
+
+    private String currentReleaseId() {
+        String id = WebSnapshot.releaseId(pageFiles);
+        if (id != null) {
+            return id;
+        }
+        try {
+            InputStream input = getAssets().open("web/release.json");
+            try {
+                byte[] bytes = WebSnapshot.readAtMost(input, 1024 * 1024);
+                WebSnapshot.Manifest manifest = WebSnapshot.parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+                return manifest == null ? "" : manifest.id;
+            } finally {
+                input.close();
+            }
+        } catch (IOException missing) {
+            return "";
         }
     }
 
@@ -291,6 +348,29 @@ public class WebShellActivity extends Activity {
     }
 
     /**
+     * {@code /app/} 从本机快照或包内页面读取。设备媒体仍走 appassets。
+     * 其它地址（接口、站内图片）交给 WebView 自己请求。
+     */
+    private WebResourceResponse serve(Uri uri) {
+        if (uri == null) {
+            return null;
+        }
+        if ("appassets.androidplatform.net".equals(uri.getHost())) {
+            return serveAsset(uri);
+        }
+        if (!PageOrigin.staysInWebView(uri.toString(), BuildConfig.APP_ORIGIN)) {
+            return null;
+        }
+        String path = uri.getPath() != null ? uri.getPath() : "";
+        String relative = AssetGuard.resolveAppRelativePath(android.net.Uri.decode(path));
+        if (relative == null) {
+            return new WebResourceResponse("text/plain", "utf-8", 403, "Forbidden",
+                    securityHeaders(), null);
+        }
+        return serveAppFile(relative);
+    }
+
+    /**
      * 把 {@code /assets/web/...} 的请求映射到 APK 内的 asset 文件。
      * 只允许访问 {@code web/} 目录，避免通过 URL 读取其他打包资源。
      */
@@ -327,6 +407,42 @@ public class WebShellActivity extends Activity {
             return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found",
                     securityHeaders(), null);
         }
+    }
+
+    /**
+     * 应用页面从这次进程选定的目录读。快照缺文件时不回退到包内另一份，避免混用两个版本。
+     * <p>
+     * 响应用 {@code no-store}：WebView 的 HTTP 缓存键只有 URL，覆盖安装或热更新后
+     * 会把旧的 index.html 配到新脚本上。字节本来就在本机，直接读文件。
+     */
+    private WebResourceResponse serveAppFile(String relative) {
+        try {
+            InputStream input = openAppFile(relative);
+            if (input == null) {
+                return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found",
+                        securityHeaders(), null);
+            }
+            String extension = relative.contains(".")
+                    ? relative.substring(relative.lastIndexOf('.') + 1).toLowerCase()
+                    : "html";
+            String mime = MIME_TYPES.containsKey(extension) ? MIME_TYPES.get(extension) : "application/octet-stream";
+            return new WebResourceResponse(mime, "utf-8", 200, "OK", securityHeaders(), input);
+        } catch (IOException missing) {
+            Log.w(TAG, "应用页面不存在: " + relative);
+            return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found",
+                    securityHeaders(), null);
+        }
+    }
+
+    private InputStream openAppFile(String relative) throws IOException {
+        if (pageFiles != null) {
+            File file = new File(pageFiles, relative);
+            if (!file.isFile() || !WebSnapshot.isInside(pageFiles, file)) {
+                return null;
+            }
+            return new FileInputStream(file);
+        }
+        return getAssets().open("web/" + relative);
     }
 
     /**

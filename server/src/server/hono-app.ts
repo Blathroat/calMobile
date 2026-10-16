@@ -29,6 +29,7 @@ import { createSettingsRoutes } from '../routes/settings-hono.js';
 import { createMediaRoutes } from '../routes/media-hono.js';
 import { createContentMediaRoutes } from '../routes/content-media-hono.js';
 import type { TrustProxy } from '../config/runtime.js';
+import { lookupAppFile } from './app-shell.js';
 import { canonicalRedirect, isJoinPagePath, lookupJoinFile, requestHost } from './join-site.js';
 
 /** 与 `/api/v1/status` 的服务标识一致。 */
@@ -55,7 +56,9 @@ export interface AppOptions {
   readonly forceHttps?: boolean;
   /** 报名站构建目录。缺省或目录里没有入口文件时，未知路径仍是 JSON 404。 */
   readonly joinRoot?: string;
-  /** `PUBLIC_BASE_URL`。配了之后，报名站页面的 Host 必须和它对齐。 */
+  /** 应用页面构建目录（`web/dist`）。有入口才托管 `/app/`。 */
+  readonly appRoot?: string;
+  /** `PUBLIC_BASE_URL`。配了之后，报名站和应用页面的 Host 必须和它对齐。 */
   readonly publicBaseUrl?: string;
 }
 
@@ -140,6 +143,39 @@ export function createApp(options: AppOptions): Hono {
   app.route('/api/v1/review', createReviewRoutes());
   app.route('/api/v1/checkin', createCheckinRoutes());
   app.route('/media', createMediaRoutes());
+
+  if (options.appRoot) {
+    const appRoot = options.appRoot;
+    const serveAppShell = (c: Context): Response => {
+      const url = new URL(c.req.url);
+      const location = canonicalRedirect({
+        requestHost: requestHost({
+          host: c.req.header('host') || '',
+          forwardedHost: c.req.header('x-forwarded-host') || '',
+          trustProxy: options.trustProxy,
+        }),
+        publicBaseUrl: options.publicBaseUrl || '',
+        pathAndQuery: `${url.pathname}${url.search}`,
+      });
+      if (location) return c.redirect(location, 308);
+      const found = lookupAppFile(appRoot, url.pathname);
+      if (found.kind === 'missing') {
+        return new Response('资源不存在', {
+          status: 404,
+          headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+        });
+      }
+      return new Response(new Uint8Array(found.file.body), {
+        status: 200,
+        headers: {
+          'content-type': found.file.type,
+          'cache-control': found.file.cache,
+        },
+      });
+    };
+    app.get('/app', serveAppShell);
+    app.get('/app/*', serveAppShell);
+  }
 
   /**
    * 统一错误处理。

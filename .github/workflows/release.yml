@@ -1,6 +1,7 @@
-# master 上的 CI 成功后才运行。功能分支和拉取请求不发布。
+# master 上的 CI 成功后才运行。功能分支、拉取请求和普通提交不发布。
+# 只有合并提交才发布。发不发 APK、重启不重启服务，看 CI 记下的路径清单。
 # versionCode / versionName 用本工作流的运行编号。删掉或换掉这个文件会让编号从 1 重新计。
-# 没开 DEPLOY_ENABLED 时只发布 APK。开了才同步服务器。
+# 没开 DEPLOY_ENABLED 时只可能发布 APK。开了才同步服务器或页面。
 # 服务器地址放在 Secret DEPLOY_HOST。不要放进 Variables：变量值会写进 Actions 日志。
 
 name: Release
@@ -13,14 +14,61 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: release-master
   cancel-in-progress: false
 
 jobs:
-  release-apk:
+  scope:
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      apk: ${{ steps.decide.outputs.apk }}
+      server: ${{ steps.decide.outputs.server }}
+      app: ${{ steps.decide.outputs.app }}
+      join: ${{ steps.decide.outputs.join }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+
+      - name: 判断是不是合并提交
+        id: merge
+        run: |
+          set -euo pipefail
+          parents="$(git rev-list --parents -n 1 HEAD)"
+          set -- $parents
+          if [ "$#" -ge 3 ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "不是合并提交，跳过发布和部署。"
+          fi
+
+      - uses: actions/download-artifact@v4
+        if: steps.merge.outputs.ok == 'true'
+        with:
+          name: changed-files
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: 判断发布范围
+        id: decide
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.merge.outputs.ok }}" != "true" ]; then
+            printf '%s\n' "apk=false" "server=false" "app=false" "join=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node scripts/release-scope.mjs changed-files.txt >> "$GITHUB_OUTPUT"
+
+  release-apk:
+    needs: scope
+    if: needs.scope.outputs.apk == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -131,7 +179,8 @@ jobs:
           fi
 
   deploy-server:
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository && vars.DEPLOY_ENABLED == 'true' }}
+    needs: scope
+    if: ${{ (needs.scope.outputs.server == 'true' || needs.scope.outputs.app == 'true' || needs.scope.outputs.join == 'true') && vars.DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -152,8 +201,31 @@ jobs:
             server/pnpm-lock.yaml
 
       - run: pnpm --dir web install --frozen-lockfile
-      - run: pnpm --dir server install --frozen-lockfile
-      - run: pnpm --dir server build
+
+      - name: 安装并构建服务端
+        if: needs.scope.outputs.server == 'true'
+        run: |
+          pnpm --dir server install --frozen-lockfile
+          pnpm --dir server build
+
+      - name: 构建应用页面
+        if: needs.scope.outputs.app == 'true'
+        env:
+          APP_API_BASE: ${{ vars.APP_API_BASE }}
+        run: |
+          node --input-type=module <<'EOF'
+          import { resolveClientTarget } from './scripts/client-target.mjs';
+          const target = resolveClientTarget({ APP_API_BASE: process.env.APP_API_BASE });
+          if (target.allowCleartext || target.loopbackPort != null) {
+            process.stderr.write(`页面包的 APP_API_BASE 必须是公网 https，当前是 ${target.apiBase}\n`);
+            process.exit(1);
+          }
+          EOF
+          pnpm --dir web build
+
+      - name: 构建报名站
+        if: needs.scope.outputs.server != 'true' && needs.scope.outputs.join == 'true'
+        run: pnpm --dir web build:join
 
       - name: 同步服务器
         env:
@@ -190,6 +262,9 @@ jobs:
           UPLOAD_MAX_MB: ${{ vars.UPLOAD_MAX_MB }}
           JWT_EXPIRES_IN: ${{ vars.JWT_EXPIRES_IN }}
           REFRESH_TOKEN_TTL: ${{ vars.REFRESH_TOKEN_TTL }}
+          DEPLOY_SERVER: ${{ needs.scope.outputs.server }}
+          DEPLOY_APP: ${{ needs.scope.outputs.app }}
+          DEPLOY_JOIN: ${{ needs.scope.outputs.join }}
         run: |
           set -euo pipefail
           path="${DEPLOY_PATH:-/opt/calmobile}"
@@ -231,6 +306,8 @@ jobs:
           trap cleanup EXIT
 
           copied=1
+          rsh=$(printf 'ssh -i %q -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR' "$key")
+          if [ "$DEPLOY_SERVER" = true ]; then
           "${copy[@]}" scripts/remote-release.sh "$DEPLOY_USER@$DEPLOY_HOST:/tmp/calmobile-remote-release.sh"
           "${remote[@]}" bash /tmp/calmobile-remote-release.sh prepare "$path" "$DEPLOY_USER"
 
@@ -246,12 +323,20 @@ jobs:
           node scripts/sync-production-env.mjs --current "$current" --template deploy/production.env --out "$merged"
           "${remote[@]}" "umask 077; cat > /tmp/calmobile.env.new; chmod 600 /tmp/calmobile.env.new" < "$merged"
 
-          rsh=$(printf 'ssh -i %q -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR' "$key")
           rsync -az --delete -e "$rsh" server/dist/ "$DEPLOY_USER@$DEPLOY_HOST:$path/server/dist/"
           rsync -az -e "$rsh" server/package.json server/pnpm-lock.yaml "$DEPLOY_USER@$DEPLOY_HOST:$path/server/"
+          else
+          "${remote[@]}" mkdir -p "$path/web"
+          fi
+          if [ "$DEPLOY_SERVER" = true ] || [ "$DEPLOY_JOIN" = true ]; then
           rsync -az --delete -e "$rsh" web/dist-join/ "$DEPLOY_USER@$DEPLOY_HOST:$path/web/dist-join/"
-
+          fi
+          if [ "$DEPLOY_APP" = true ]; then
+          rsync -az --delete -e "$rsh" web/dist/ "$DEPLOY_USER@$DEPLOY_HOST:$path/web/dist/"
+          fi
+          if [ "$DEPLOY_SERVER" = true ]; then
           "${remote[@]}" bash /tmp/calmobile-remote-release.sh finish "$path" /tmp/calmobile.env.new
+          fi
 
       - name: 删除本机密钥副本
         if: always()

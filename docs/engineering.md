@@ -10,13 +10,15 @@
 
 | 层           | 责任                                              | 权威入口                                                  |
 |--------------|---------------------------------------------------|-----------------------------------------------------------|
-| WebView 页面 | 路由、渲染、表单和用户交互                        | `web/src/`（构建后同步到 generated assets）               |
+| WebView 页面 | 路由、渲染、表单和用户交互                        | `web/src/`（构建到 `web/dist`，包内一份，正式包再用本机快照） |
 | 前端数据     | 类型化 REST client、令牌续期、缓存                | `web/src/api/client.ts`；契约表为 `web/api-endpoints.mjs` |
 | 前端加载     | 缓存首屏、后台刷新、错误呈现                      | Vue composable 与 `web/src/services/query-cache.ts`       |
 | 原生桥接     | 日历、通知权限、摄像头、媒体、分享、CSV、设备镜像 | `WebAppActions.handle()` 的固定动作表                     |
 | 后端         | 认证、业务规则、持久化、邮件和接口                | `server/src/`                                             |
 
 页面不直接 `fetch`，也不通过原生桥接取业务数据。读取接口直接返回数据。写接口按响应约定返回信封。
+
+正式包的文档地址是 `APP_API_BASE` 所在源的 `/app/index.html`。WebView 拦截 `/app/`，从本机快照读文件；还没有快照，或快照不是当前 `versionCode` 时，用 APK 里的那份。页面切换不再请求网络。首屏出来之后才在后台拉取 `/app/release.json`，新文件留到下次冷启动再换上。调试包（接口是 http）不热更新。只有 `/app/index.html` 能调用 `CalMobileNative`，其它链接交给系统浏览器。设备上选中、尚未上传的媒体仍从 `https://appassets.androidplatform.net/media/` 读取。
 
 新接口同时改 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由和 `server/src/test/` 下的契约测试。表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`。后端再校验一次。
 
@@ -70,9 +72,9 @@
 - 顶栏使用 `--topbar-h`，再叠 `--safe-top`。有底部导航时内容区叠 `--safe-bottom`。Android WebView 里这两项 `env()` 经常是 0，因此 `WebShellActivity` 按系统栏 inset 缩小页面。展会图保持 9:16。并排字段等高。日期、时间和状态使用选择器、分段控件或面板。
 - 强调色使用 `--accent*`。二维码保持白底黑点。Markdown / HTML 先经 `web/src/services/markdown.ts` 清洗再渲染。
 - 动效只动画 `transform` 与 `opacity`，并遵守 `prefers-reduced-motion`。动效全失时先看设备动画 scale，步骤见 [`operations.md`](operations.md)。
-- 第三方库由 `web/package.json` 与锁文件管理。重型功能动态导入，构建产物随 APK 打包，运行时不引用 CDN。
+- 第三方库由 `web/package.json` 与锁文件管理。重型功能动态导入，构建进页面包，运行时不引用 CDN。页面包随 APK 带一份；正式包再从本站 `/app/` 热更新到本机快照，切换页面只读这份快照。
 - 二维码在 Worker 里串行解码。暂停与换页后丢弃过期帧，离开时释放 Worker 和摄像头。WASM 通过构建资源定位到本地文件。
 
 ## 文案
 
-界面文案在 `web/src/i18n/strings.ts`，按界面分区分层。前端用 `t('auth.login.title')` 这种点分路径读取。模板里的中文写成 `:placeholder="t('exhibition.form.venuePlaceholder')"` 这种绑定。周几、年月这类格式化常量留在 `web/src/services/format.ts`，不进这张表。邮件正文在后端，不进这张表。
+界面文案在 `web/src/i18n/strings.ts`，按界面分区分层。前端用 `t('auth.login.title')` 这种点分路径读取。模板里的中文写成 `:placeholder="t('exhibition.form.venuePlaceholder')"` 这种绑定。周几、年月这类格式化常量留在 `web/src/services/format.ts`，不进这张表。邮件正文在后端，不进这张表。构建时这份表打进应用页面包和报名站包，不单独部署源文件。

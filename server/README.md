@@ -42,7 +42,9 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 
 骨架的层次是安全响应头、CORS、请求日志、JSON 体积守卫、路由、统一错误处理。响应使用 Hono `secureHeaders` 的默认集，不发送 `X-Powered-By`。关掉的探针和未知路径一样是 JSON 404。
 
-报名站打开时，页面回退到 `web/dist-join` 的 `join.html`。`/api`、`/media` 和探针仍是 JSON。配了 `PUBLIC_BASE_URL` 时，只有报名站页面按 Host 做 308。
+报名站打开时，页面回退到 `web/dist-join` 的 `join.html`。`/api`、`/media` 和探针仍是 JSON。配了 `PUBLIC_BASE_URL` 时，报名站和应用页面的 Host 必须和它对齐，否则 308。
+
+已安装客户端的页面在 `/app/`，文件来自 `web/dist`（`index.html` 是入口，`release.json` 是热更新清单）。有这份产物就托管，不看 `ENABLE_WEB`。缺的 `/app/assets/` 不回退成页面。`index.html` 与 `release.json` 使用 `no-cache`，`/app/assets/` 下带哈希的文件长期缓存。部署只放构建产物，不放 `web/src`。界面文案已经打进这些脚本。
 
 `src/` 的模块图无环。`config/auth.ts` 只导出纯函数。进程级配置由 `config/env.ts` 的 `loadProcessConfig()` 解析，要用密钥的模块自己去取。
 
@@ -78,7 +80,7 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 
 ## 邮件
 
-验证码走 SMTP。生产机出站 25 端口开着时，用本机 Postfix 发信，并配好 SPF 和 DKIM。反解析（PTR）要和发信域名一致，不然对方会拒信或丢进垃圾箱；PTR 不在这台机器上改。出站 25 被封时不要在这台机器上自建，改用托管中继。本地开发仍用 `docker-compose.yml` 里的 Mailpit。
+验证码走 SMTP。生产发信交给托管中继，不从本机的 25 端口直接投递。SPF 只 include 中继方，不把源站地址写进 DNS；DKIM 和退信主机用中继方给出的记录。本地开发仍用 `docker-compose.yml` 里的 Mailpit。
 
 发码次数、冷却、先落库再后台发信、模板里不放链接，写在这三处：
 
