@@ -9,6 +9,7 @@
  * 取数走 `useAsync` + api 的查询缓存：从搜索列表点进来时数据已经预热过，不会先闪骨架屏。
  */
 import { computed, onMounted } from 'vue';
+import { usePullRefresh } from '@/services/pull-refresh';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { paths } from '@/app/surface';
@@ -44,6 +45,13 @@ const hosted = computed(() => asList(profile.value?.exhibitions));
 const isOwn = computed(() => {
   const nickname = String(route.params.nickname ?? '');
   return nickname !== '' && nickname === String(session.user.nickname ?? '');
+});
+/** 看自己的公开页时用会话里的头像。公开资料缓存还停在旧地址时，上传后也能立刻换上。 */
+const avatarSrc = computed(() => {
+  const selfId = String(session.user.id || '');
+  const pageId = String(profile.value?.id || route.query.userId || '');
+  if (selfId && pageId && selfId === pageId) return String(session.user.avatar || '');
+  return String(profile.value?.avatar || '');
 });
 /** 展商和管理员的角色改由名字后的标签表达，这里不再重复。 */
 const identityLine = computed(() => {
@@ -88,8 +96,8 @@ function asList(value: unknown): JsonObject[] {
 }
 
 /** 用户公开页读 nickname + userId：搜索页预热用的是同一份参数，缓存键才对得上。 */
-function load(): void {
-  void query.run(() =>
+function load(): Promise<unknown> {
+  return query.run(() =>
     api.users.publicProfile({
       nickname: String(route.params.nickname ?? ''),
       userId: String(route.query.userId ?? ''),
@@ -122,6 +130,11 @@ function openMeetingAdmin(): void {
 }
 
 onMounted(load);
+
+usePullRefresh(
+  () => load(),
+  computed(() => query.loading.value && settled.value),
+);
 </script>
 
 <template>
@@ -157,7 +170,7 @@ onMounted(load);
   <template v-else>
     <div class="card">
       <div class="row" data-gap="md">
-        <AvatarBox :src="String(profile.avatar || '')" :name="String(profile.nickname || '')" />
+        <AvatarBox :src="avatarSrc" :name="String(profile.nickname || '')" />
         <span class="row-copy">
           <span class="name-line">
             <strong class="row-title">{{ profile.nickname }}</strong>

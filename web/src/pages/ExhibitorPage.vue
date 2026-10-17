@@ -14,6 +14,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { usePullRefresh } from '@/services/pull-refresh';
 import { useHint } from '@/composables/useHint';
 import { coverOf } from '@/services/cover';
 import { useBootstrapStore } from '@/stores/bootstrap';
@@ -78,8 +79,8 @@ const registrationTotal = computed(() =>
   items.value.reduce((sum, item) => sum + (Number(item.registrationCount) || 0), 0),
 );
 
-function load(): void {
-  void query.run(() => api.exhibitions.list());
+function load(): Promise<unknown> {
+  return query.run(() => api.exhibitions.list());
 }
 
 /** 新建展会：受限时用同一句提示兜住残留入口。 */
@@ -139,7 +140,15 @@ function warm(id: unknown): void {
   void api.exhibitions.get(String(id)).catch(() => undefined);
 }
 
-onMounted(load);
+onMounted(() => {
+  void load();
+});
+
+usePullRefresh(
+  () => load(),
+  computed(() => query.loading.value && hasContent.value),
+  computed(() => tab.value !== 'meetings'),
+);
 </script>
 
 <template>

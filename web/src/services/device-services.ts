@@ -47,6 +47,10 @@ export const device = {
   importMedia(kind: 'image' | 'video') {
     return nativeBridge.call('media.import', { kind });
   },
+  /** 从系统文件选择器读一个文本文件，正文由原生读出来回传（不依赖 WebView 的文件访问）。 */
+  importText(mimeTypes = 'application/json', maxBytes = 512 * 1024) {
+    return nativeBridge.call('media.importText', { mimeTypes, maxBytes });
+  },
   /** 把 dataUrl 落盘成文件，返回可访问 url；`kind` 决定存储目录与后续展示方式。 */
   storeMedia(payload: Parameters<typeof nativeBridge.call<'media.store'>>[1]) {
     return nativeBridge.call('media.store', payload);
@@ -62,5 +66,13 @@ export const device = {
   /** 把调用方生成好的 CSV 内容写文件并交系统处理；`exported: false` 表示没写成（权限或存储），不是异常。 */
   exportCsv(filename: string, content: string) {
     return nativeBridge.call('export.csv', { filename, content });
+  },
+  /** 把任意文本写成文件并交系统「另存为」面板；用户取消时以 `cancelled` 失败。 */
+  exportText(fileName: string, content: string, mimeType = 'application/json') {
+    return nativeBridge.call('export.text', { fileName, content, mimeType });
+  },
+  /** 把 dataUrl 图片写进系统相册（报名二维码长按保存）；`saved: false` 表示没写成，不是异常。 */
+  saveImage(dataUrl: string, fileName = '') {
+    return nativeBridge.call('media.saveImage', { dataUrl, fileName });
   },
 };

@@ -22,8 +22,11 @@ import java.util.Map;
  * | `calendar.status` / `calendar.toggle` | 写系统日历（CalendarContract） |
  * | `notify.requestPermission` | 通知运行时权限 |
  * | `media.pickImage` / `media.import` / `media.store` / `media.discard` | 系统选择器、私有目录落盘与删掉临时文件 |
+ * | `media.importText` | 页面读不到 `content://` 内容（关着文件访问），文本正文由原生代读 |
  * | `share.text` | 系统分享面板 |
  * | `export.csv` | 系统「另存为」面板 |
+ * | `export.text` | 语言包底稿等文本同样走系统「另存为」面板，由用户选位置 |
+ * | `media.saveImage` | 图片写进系统相册（API 29+ 走 MediaStore，老系统回落「另存为」） |
  * | `session.save` / `session.load` / `session.clear` / `session.device` | 会话与可信设备凭据属于设备状态，存应用私有目录（{@link SessionStore}） |
  *
  * 数据行由前端传进来（它已经从后端拿到数据），原生只负责落盘与格式。
@@ -59,17 +62,26 @@ final class WebAppActions {
             case "media.import":
                 MediaActions.importMedia(bridge, payload, callback);
                 return;
+            case "media.importText":
+                MediaActions.importText(bridge, payload, callback);
+                return;
             case "media.store":
                 callback.success(MediaActions.storeDataUrl(activity, payload));
                 return;
             case "media.discard":
                 callback.success(MediaActions.discard(activity, payload));
                 return;
+            case "media.saveImage":
+                MediaActions.saveImage(bridge, payload, callback);
+                return;
             case "share.text":
                 MediaActions.shareText(activity, payload, callback);
                 return;
             case "export.csv":
                 MediaActions.exportCsv(bridge, payload, callback);
+                return;
+            case "export.text":
+                MediaActions.exportText(bridge, payload, callback);
                 return;
             case "session.save":
                 callback.success(SessionActions.save(activity, payload));
@@ -90,7 +102,7 @@ final class WebAppActions {
 
     // ── 供 WebAppBridge 与测试直接调用 ─────────────────────────────
 
-    /** 系统界面（文件选择、导出 CSV）返回结果。 */
+    /** 系统界面（文件选择、导出、保存图片）返回结果。 */
     static void onActivityResult(WebAppBridge bridge, WebAppBridge.PendingResult pending,
             int resultCode, Intent data) {
         MediaActions.onActivityResult(bridge, pending, resultCode, data);

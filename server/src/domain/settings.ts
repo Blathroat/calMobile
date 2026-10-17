@@ -51,6 +51,7 @@ export interface ServerPatch {
   appTitleEn?: unknown;
   categories?: unknown;
   canRevise?: unknown;
+  canReviseAttended?: unknown;
   imageCount?: unknown;
   imageSizeMb?: unknown;
   videoCount?: unknown;
@@ -79,6 +80,8 @@ export interface ServerPatch {
   defaultCover?: unknown;
   maxFutureExhibitions?: unknown;
   maxFutureMeetings?: unknown;
+  inviteUses?: unknown;
+  inviteValidHours?: unknown;
 }
 
 interface SettingRow {
@@ -161,6 +164,25 @@ export function normalizeTheme(
   return { index, colors };
 }
 
+/** 老库存的是天数。没有小时数时按 24 小时一天换算，0 仍然表示不过期。 */
+function normalizeInvite(raw: { uses?: number; validHours?: number; validDays?: number } | null | undefined): {
+  uses: number;
+  validHours: number;
+} {
+  const source = raw ?? {};
+  const uses = clampInt(source.uses, DEFAULT_SETTINGS.invite.uses, [1, 100]);
+  const hours =
+    source.validHours !== undefined && source.validHours !== null
+      ? source.validHours
+      : source.validDays !== undefined && source.validDays !== null
+        ? Number(source.validDays) * 24
+        : DEFAULT_SETTINGS.invite.validHours;
+  return {
+    uses,
+    validHours: clampInt(hours, DEFAULT_SETTINGS.invite.validHours, [0, 24 * 365]),
+  };
+}
+
 function clampInt(value: unknown, fallback: number, [min, max]: [number, number]): number {
   const number = Number.parseInt(String(value), 10);
   if (!Number.isFinite(number)) {
@@ -199,6 +221,10 @@ export async function readServerSettings(): Promise<ServerSettings> {
   settings.upload = { ...DEFAULT_SETTINGS.upload, ...settings.upload };
   // 老库存的 exhibitor 只有展会额度。新键按默认值补上，避免读出来是 undefined。
   settings.exhibitor = { ...DEFAULT_SETTINGS.exhibitor, ...settings.exhibitor };
+  // 老库的 review JSON 没有 canReviseAttended（加这个键之前写入的）：以默认值为底补上，
+  // 否则读出来是 undefined，路由里的 `=== true` 判断与前端开关都拿不到 false。
+  settings.review = { ...DEFAULT_SETTINGS.review, ...settings.review };
+  settings.invite = normalizeInvite(settings.invite);
   // 老库的 limits JSON 没有文本填写和选项上限。缺的键用默认值补上，避免读出来是 undefined。
   const storedLimits = settings.limits;
   settings.limits = {
@@ -268,6 +294,10 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   if (Object.prototype.hasOwnProperty.call(source, 'canRevise')) {
     next.review = { ...next.review, canRevise: Boolean(source.canRevise) };
   }
+  if (Object.prototype.hasOwnProperty.call(source, 'canReviseAttended')) {
+    // 与 canRevise 同一套写法：只处理提交过的键，布尔化后合并进 review 段。
+    next.review = { ...next.review, canReviseAttended: Boolean(source.canReviseAttended) };
+  }
   if (['imageCount', 'imageSizeMb', 'videoCount', 'videoSizeMb'].some((key) => key in source)) {
     // 兜底值再取一次默认设置：库里那一项可能是加新键**之前**写入的 JSON
     // （例如 media 里还没有 videoSizeMb），直接拿 `next.media.videoSizeMb` 会是 undefined。
@@ -333,6 +363,16 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     next.exhibitor = {
       ...next.exhibitor,
       maxFutureMeetings: clampInt(source.maxFutureMeetings, next.exhibitor.maxFutureMeetings, [0, 100]),
+    };
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(source, 'inviteUses') ||
+    Object.prototype.hasOwnProperty.call(source, 'inviteValidHours')
+  ) {
+    const fallback = normalizeInvite(next.invite);
+    next.invite = {
+      uses: clampInt(source.inviteUses, fallback.uses, [1, 100]),
+      validHours: clampInt(source.inviteValidHours, fallback.validHours, [0, 24 * 365]),
     };
   }
 

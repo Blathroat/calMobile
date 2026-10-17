@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { TrustProxy } from '../config/runtime.js';
-import { query } from '../config/pool.js';
+import { query, transaction } from '../config/pool.js';
 import { USER_COLUMNS, USER_FROM } from '../domain/queries.js';
 import { userPayload, guestPayload, type UserRow } from '../domain/payloads.js';
 import { capabilities } from '../domain/permissions.js';
@@ -30,10 +30,11 @@ import {
   useTrustedDevice,
   type SessionDevice,
 } from '../domain/session.js';
-import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp.js';
+import { issueCode, consumeCode, peekPendingPayload, isCodeRejected, maskEmail } from '../domain/otp.js';
+import { assertInviteUsable, consumeInvite } from '../domain/invites.js';
 import { secondFactorState, verifySecondFactor, type SecondFactorUser } from '../domain/two-factor.js';
 import { issueTicket, findTicket, consumeTicket, countTicketFailure } from '../domain/preauth.js';
-import { badRequest, unauthorized } from '../domain/errors.js';
+import { ApiError, badRequest, unauthorized } from '../domain/errors.js';
 import { failureResponse, jsonResponse, okResponse } from '../http/respond.js';
 import { clientIp } from '../http/client-ip.js';
 import { honoRateLimit } from '../middleware/rate-limit.js';
@@ -75,9 +76,15 @@ interface RegisterPayload {
   username?: string;
   passwordHash?: string;
   nickname?: string;
+  inviteCode?: string;
 }
 interface IdRow {
   id: string;
+}
+
+function ruleFailure(c: Context, error: unknown): Response | null {
+  if (error instanceof ApiError && error.envelope) return failureResponse(c, error.message);
+  return null;
 }
 
 function bodyError(c: Context): unknown {
@@ -294,13 +301,29 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     const textLimits = await limits();
     const parsed = safeParseSchema(registerSchema(textLimits), await bodyOf(c));
     if (!parsed.success) return failureResponse(c, parsed.error);
-    const { username, password, email } = parsed.data;
+    const { username, password, email, inviteCode: rawInvite } = parsed.data;
     const conflict = await registrationConflict(username, email);
     if (conflict) return failureResponse(c, conflict);
+    let inviteCode = '';
+    if (rawInvite && rawInvite.trim()) {
+      try {
+        inviteCode = await assertInviteUsable(rawInvite);
+      } catch (error: unknown) {
+        const failed = ruleFailure(c, error);
+        if (failed) return failed;
+        throw error;
+      }
+    }
+    const pending: RegisterPayload = {
+      username,
+      passwordHash: await bcrypt.hash(password, 10),
+      nickname: username,
+    };
+    if (inviteCode) pending.inviteCode = inviteCode;
     const ticket = await issueCode({
       purpose: 'register',
       email,
-      payload: { username, passwordHash: await bcrypt.hash(password, 10), nickname: username },
+      payload: pending,
       ip: requestIp(c, options.trustProxy),
     });
     return jsonResponse(c, { ok: true, error: '', ...ticket });
@@ -310,6 +333,16 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     const parsed = safeParseSchema(registerVerifySchema, await bodyOf(c));
     if (!parsed.success) return failureResponse(c, parsed.error);
     const { email, code, deviceToken, deviceName } = parsed.data;
+    const peeked = (await peekPendingPayload('register', email)) as RegisterPayload | null;
+    if (peeked?.inviteCode) {
+      try {
+        await assertInviteUsable(peeked.inviteCode);
+      } catch (error: unknown) {
+        const failed = ruleFailure(c, error);
+        if (failed) return failed;
+        throw error;
+      }
+    }
     let consumed;
     try {
       consumed = await consumeCode({
@@ -327,20 +360,26 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     const conflict = await registrationConflict(username, consumed.email);
     if (conflict) return failureResponse(c, conflict);
     const id = `usr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const role = pending.inviteCode ? 'exhibitor' : 'user';
     try {
-      await query(
-        `INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at)
-        VALUES ($1, $2, $3, $4, $5, 'user', true, now())`,
-        [id, username, pending.passwordHash, consumed.email, pending.nickname || username],
-      );
+      await transaction(async (client) => {
+        if (pending.inviteCode) await consumeInvite(client, pending.inviteCode);
+        await client.query(
+          `INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at)
+          VALUES ($1, $2, $3, $4, $5, $6, true, now())`,
+          [id, username, pending.passwordHash, consumed.email, pending.nickname || username, role],
+        );
+      });
     } catch (error: unknown) {
       if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505')
         return failureResponse(c, '该用户名或邮箱已被注册');
+      const failed = ruleFailure(c, error);
+      if (failed) return failed;
       throw error;
     }
     const device = sessionDevice(deviceToken, deviceName);
     await rememberTrustedDevice(id, device);
-    const session = await issueSession({ id, username, role: 'user' }, device);
+    const session = await issueSession({ id, username, role }, device);
     return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(id) });
   });
 

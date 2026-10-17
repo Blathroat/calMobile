@@ -9,12 +9,19 @@
  * - 缺键回中文由调用方做；这里只判断「当前用哪一个包」。
  * - 报名站只认 `joinDefault`。这个值只有在服务器默认名称写进下载列表时才会被记下。
  * - 应用先认用户的选择，没选过才认服务器默认名称。
+ * - 包文件（和 `zh.json`）里的 `strings` 是**嵌套 JSON**：`{ "auth": { "login": { "title": "登录" } } }`，
+ *   叶子必须是字符串，每段键是 `[A-Za-z0-9]+`（点分拼起来仍满足原来的
+ *   `[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*`）。校验通过后在这里压成扁平表存进 `pack.strings`，
+ *   于是 `overlayFor()` / `lookup()` / `packBytes()` 与页面层都不用改。
+ * - 只认嵌套格式：老版本装在 `localStorage` 里的扁平包升级后读不回来，会被丢掉（用户明确无需兼容）。
+ *   新写进去的包是嵌套形状（见 `storedPack()`），所以升级后新装的包下次启动仍在。
  */
 
 export const PACK_LIMIT = 8;
 export const PACK_BYTES = 400 * 1024;
 const PACK_ID = /^[a-z0-9-]{1,32}$/;
-const STRING_KEY = /^[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*$/;
+/** 嵌套表里每一段键的字符集。 */
+const SEGMENT_KEY = /^[A-Za-z0-9]+$/;
 
 export type PackErrorCode = 'badPack' | 'badUrl' | 'idMismatch' | 'tooMany' | 'downloadFailed';
 
@@ -31,6 +38,7 @@ export class PackError extends Error {
 export interface LangPack {
   id: string;
   name: string;
+  /** 点分路径的扁平表。包文件与落盘用嵌套形状，进出都由本模块转换。 */
   strings: Record<string, string>;
   url?: string;
 }
@@ -51,6 +59,30 @@ export function isPackId(value: string): boolean {
   return PACK_ID.test(value);
 }
 
+/**
+ * 把嵌套的 `strings` 校验并压成点分路径的扁平表。
+ * 只收「对象套对象、叶子是字符串」：数组、数字、`null` 与空对象都抛 `badPack`。
+ */
+function flattenPack(value: unknown, prefix: string): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new PackError('badPack');
+  const flat: Record<string, string> = Object.create(null);
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (!SEGMENT_KEY.test(key)) throw new PackError('badPack');
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof item === 'string') {
+      // 空串照收：某一层没翻译时页面拿到的就是空串，查找会停在它，不回退中文。
+      flat[path] = item;
+      continue;
+    }
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new PackError('badPack');
+    const nested = flattenPack(item, path);
+    if (Object.keys(nested).length === 0) throw new PackError('badPack');
+    Object.assign(flat, nested);
+  }
+  if (Object.keys(flat).length === 0) throw new PackError('badPack');
+  return flat;
+}
+
 /** 把任意 JSON 收成语言包。不符合就抛 `PackError`，不返回半份。 */
 export function parsePack(value: unknown, expectedId?: string): LangPack {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new PackError('badPack');
@@ -59,15 +91,8 @@ export function parsePack(value: unknown, expectedId?: string): LangPack {
   const name = typeof record.name === 'string' ? record.name.trim() : '';
   if (!isPackId(id) || !name || [...name].length > 40) throw new PackError('badPack');
   if (expectedId && id !== expectedId) throw new PackError('idMismatch');
-  if (!record.strings || typeof record.strings !== 'object' || Array.isArray(record.strings)) {
-    throw new PackError('badPack');
-  }
-  const strings: Record<string, string> = Object.create(null);
-  for (const [key, item] of Object.entries(record.strings as Record<string, unknown>)) {
-    if (!STRING_KEY.test(key) || typeof item !== 'string') throw new PackError('badPack');
-    strings[key] = item;
-  }
-  return { id, name, strings };
+  // 扁平键（带点的键）在这里被 SEGMENT_KEY 拒掉：老版本的扁平包不兼容。
+  return { id, name, strings: flattenPack(record.strings, '') };
 }
 
 export function packBytes(pack: LangPack): number {
@@ -150,10 +175,35 @@ export function writeLangState(storage: Pick<Storage, 'setItem'> | null, state: 
   storage.setItem(JOIN_KEY, state.joinDefault);
 }
 
-function storedPack(pack: LangPack): LangPack {
+/** 嵌套的 `strings`：与包文件 / `zh.json` 同形。 */
+type NestedStrings = { [key: string]: string | NestedStrings };
+
+/** 把扁平表还原成嵌套表（落盘用）。键都来自校验过的包，不会出现「既是叶子又是分支」的冲突。 */
+function nestStrings(flat: Record<string, string>): NestedStrings {
+  const tree: NestedStrings = {};
+  for (const [path, text] of Object.entries(flat)) {
+    const parts = path.split('.');
+    let node = tree;
+    for (const part of parts.slice(0, -1)) {
+      const child = node[part];
+      const next: NestedStrings = child && typeof child === 'object' ? child : {};
+      node[part] = next;
+      node = next;
+    }
+    node[parts[parts.length - 1]!] = text;
+  }
+  return tree;
+}
+
+/**
+ * 落盘形状与包文件一致（嵌套 `strings`），读回来由 `parsePack()` 再压平。
+ * 校验只认嵌套，所以老版本写下的扁平包读不回来，只能丢掉——这是明确的取舍。
+ */
+function storedPack(pack: LangPack): unknown {
+  const strings = nestStrings(pack.strings);
   return pack.url
-    ? { id: pack.id, name: pack.name, strings: pack.strings, url: pack.url }
-    : { id: pack.id, name: pack.name, strings: pack.strings };
+    ? { id: pack.id, name: pack.name, strings, url: pack.url }
+    : { id: pack.id, name: pack.name, strings };
 }
 
 function readPacks(raw: string | null): LangPack[] {

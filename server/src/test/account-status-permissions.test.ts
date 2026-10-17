@@ -25,7 +25,7 @@ test('用户列表与账号状态只有管理员能操作', async () => {
   const list = await get('/api/v1/users?query=demo', { token: tokens.admin.token });
   assert.ok(Array.isArray(list.body) && list.body.length > 0, '管理员应当能查到用户');
   const row = list.body[0];
-  for (const key of ['id', 'nickname', 'email', 'role', 'status', 'registrationTime', 'lastLoginTime']) {
+  for (const key of ['id', 'nickname', 'email', 'avatar', 'role', 'status', 'registrationTime', 'lastLoginTime']) {
     assert.ok(row[key] !== undefined, `用户缺少字段 ${key}`);
   }
   assert.strictEqual(row.password_hash, undefined, '不能把密码哈希发出去');
@@ -255,33 +255,38 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
       { token },
     );
     assert.strictEqual(submitted.body.ok, true, JSON.stringify(submitted.body));
-    return submitted.body.registration.id;
+    return submitted.body.registration;
   };
-  const registrationA = await submit(exhibitionA, tokens.user.token, '受限收紧用例');
-  const registrationB = await submit(exhibitionB, tokens.admin.token, '受限收紧管理员');
+  const submittedA = await submit(exhibitionA, tokens.user.token, '受限收紧用例');
+  const submittedB = await submit(exhibitionB, tokens.admin.token, '受限收紧管理员');
+  const registrationA = submittedA.id;
+  // 报名码带可轮换凭据，不能按 id 手拼：取报名接口下发的那两个。
+  const codeA = String(submittedA.checkInCode);
+  const codeB = String(submittedB.checkInCode);
 
   // 被收紧的五条路由：动作名 + 期望文案 + 怎么发这个请求（受限与恢复正常两轮共用）。
   const calls = [
     {
       name: '编辑展会',
       message: '账号已被限制，不能修改展会',
-      send: (token: string, id: string) =>
+      send: (token: string, id: string, _code: string) =>
         put(`/api/v1/exhibitions/${id}`, { title: '受限账号不该改成的标题' }, { token }),
     },
     {
       name: '删除展会',
       message: '账号已被限制，不能删除展会',
-      send: (token: string, id: string) => del(`/api/v1/exhibitions/${id}`, { token }),
+      send: (token: string, id: string, _code: string) => del(`/api/v1/exhibitions/${id}`, { token }),
     },
     {
       name: '暂停 / 恢复报名',
       message: '账号已被限制，不能修改报名设置',
-      send: (token: string, id: string) => put(`/api/v1/exhibitions/${id}/status`, { status: '无需审核' }, { token }),
+      send: (token: string, id: string, _code: string) =>
+        put(`/api/v1/exhibitions/${id}/status`, { status: '无需审核' }, { token }),
     },
     {
       name: '改报名收集项',
       message: '账号已被限制，不能修改报名设置',
-      send: (token: string, id: string) =>
+      send: (token: string, id: string, _code: string) =>
         put(
           `/api/v1/exhibitions/${id}/fields`,
           {
@@ -293,14 +298,8 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     {
       name: '现场核销',
       message: '账号已被限制，不能核销',
-      send: (token: string, id: string, registrationId: string) =>
-        post(
-          '/api/v1/checkin',
-          {
-            code: `CALMOBILE-CHECKIN|${id}|${registrationId}`,
-          },
-          { token },
-        ),
+      // 受限判定排在解析报名码之前，所以这里拿真实下发的码即可（内容不重要）。
+      send: (token: string, _id: string, code: string) => post('/api/v1/checkin', { code }, { token }),
     },
   ];
 
@@ -308,7 +307,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     // ① 受限的展商（自己举办的展会也一样不给动）：403 + 逐条比对文案
     await setStatus('usr-2', 'limited');
     for (const item of calls) {
-      const response = await item.send(tokens.exhibitor.token, exhibitionA, registrationA);
+      const response = await item.send(tokens.exhibitor.token, exhibitionA, codeA);
       assert.strictEqual(response.status, 403, `${item.name}对受限展商应当 403：${JSON.stringify(response.body)}`);
       assert.strictEqual(response.body.error, item.message, `${item.name}的受限文案不对`);
     }
@@ -325,7 +324,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     //    —— 这正是受限判定必须排在角色检查之前的机器化证据
     await setStatus('usr-3', 'limited');
     for (const item of calls) {
-      const response = await item.send(tokens.user.token, exhibitionA, registrationA);
+      const response = await item.send(tokens.user.token, exhibitionA, codeA);
       assert.strictEqual(response.status, 403, `${item.name}对受限普通用户应当 403：${JSON.stringify(response.body)}`);
       assert.ok(
         response.body.error.includes('已被限制'),
@@ -337,7 +336,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     // ③ 摘掉受限标签后，普通用户被拒的原因变回角色权限（不再因为「已被限制」）
     await setStatus('usr-3', 'active');
     for (const item of calls) {
-      const response = await item.send(tokens.user.token, exhibitionA, registrationA);
+      const response = await item.send(tokens.user.token, exhibitionA, codeA);
       assert.strictEqual(response.status, 403, `${item.name}普通用户仍应因角色被拒：${JSON.stringify(response.body)}`);
       assert.ok(
         !response.body.error.includes('已被限制'),
@@ -373,13 +372,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     assert.strictEqual(refields.body.ok, true, `恢复正常后改收集项应当成功：${JSON.stringify(refields.body)}`);
     assert.strictEqual(refields.body.fields[0].title, '恢复正常后的问题');
 
-    const checked = await post(
-      '/api/v1/checkin',
-      {
-        code: `CALMOBILE-CHECKIN|${exhibitionA}|${registrationA}`,
-      },
-      { token: tokens.exhibitor.token },
-    );
+    const checked = await post('/api/v1/checkin', { code: codeA }, { token: tokens.exhibitor.token });
     assert.strictEqual(checked.body.ok, true, `恢复正常后核销应当成功：${JSON.stringify(checked.body)}`);
     assert.strictEqual(checked.body.status, '已参加');
 
@@ -422,13 +415,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
       true,
       `管理员受限态下改收集项应当成功：${JSON.stringify(adminFields.body)}`,
     );
-    const adminCheckin = await post(
-      '/api/v1/checkin',
-      {
-        code: `CALMOBILE-CHECKIN|${exhibitionB}|${registrationB}`,
-      },
-      { token: tokens.admin.token },
-    );
+    const adminCheckin = await post('/api/v1/checkin', { code: codeB }, { token: tokens.admin.token });
     assert.strictEqual(adminCheckin.body.ok, true, `管理员受限态下核销应当成功：${JSON.stringify(adminCheckin.body)}`);
     assert.strictEqual(adminCheckin.body.status, '已参加');
     const adminDelete = await del(`/api/v1/exhibitions/${exhibitionB}`, { token: tokens.admin.token });

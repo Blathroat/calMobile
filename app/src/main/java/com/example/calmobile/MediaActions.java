@@ -2,12 +2,15 @@ package com.example.calmobile;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
 
@@ -43,6 +46,9 @@ final class MediaActions {
 
     /** 复制到一半发现超过上限：已经删掉半成品，调用方按「超限」提示。 */
     static final long CANCELLED_OVERSIZE = Long.MIN_VALUE;
+
+    /** 文本导入的默认上限：512 KB，够放一份语言包 JSON。 */
+    static final int TEXT_IMPORT_MAX_BYTES = 512 * 1024;
 
     static void pickFile(WebAppBridge bridge, String mimeType, String chooserTitle,
             WebAppBridge.ResultCallback callback) {
@@ -98,6 +104,145 @@ final class MediaActions {
         pending.context.put("avatar", Boolean.valueOf("avatar".equals(kind)));
         bridge.startForResult(Intent.createChooser(intent, video ? "选择视频" : "选择图片"),
                 bridge.nextRequestCode(), pending);
+    }
+
+    /**
+     * 从系统选择器读一个文本文件，正文由原生读出来回传。
+     * <p>
+     * 页面读不到设备文件：应用关着 setAllowFileAccess / setAllowContentAccess，
+     * 渲染进程不保证能打开选择器返回的 content:// URI，语言包「从文件安装」因此走这里。
+     */
+    static void importText(WebAppBridge bridge, Map<String, Object> payload,
+            WebAppBridge.ResultCallback callback) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        applyMimeTypes(intent, WebAppBridge.text(payload, "mimeTypes", "application/json"));
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        int maxBytes = WebAppBridge.number(payload, "maxBytes", TEXT_IMPORT_MAX_BYTES);
+        if (maxBytes <= 0) {
+            maxBytes = TEXT_IMPORT_MAX_BYTES;
+        }
+        WebAppBridge.PendingResult pending =
+                new WebAppBridge.PendingResult("media.importText", callback);
+        pending.context.put("maxBytes", Integer.valueOf(maxBytes));
+        bridge.startForResult(Intent.createChooser(intent, "选择文本文件"),
+                bridge.nextRequestCode(), pending);
+    }
+
+    /**
+     * {@code mimeTypes} 是前端给的字符串（{@link WebAppBridge#text} 会把数组按逗号拼起来）：
+     * 单个直接当 type，多个时用第一个当 type、其余放进 {@code EXTRA_MIME_TYPES}。
+     * 一个都没有时退回 {@code application/json}。
+     */
+    private static void applyMimeTypes(Intent intent, String mimeTypes) {
+        List<String> accepted = new ArrayList<>();
+        if (mimeTypes != null) {
+            for (String part : mimeTypes.split(",")) {
+                String type = part.trim();
+                if (!type.isEmpty()) {
+                    accepted.add(type);
+                }
+            }
+        }
+        if (accepted.isEmpty()) {
+            accepted.add("application/json");
+        }
+        intent.setType(accepted.get(0));
+        if (accepted.size() > 1) {
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, accepted.toArray(new String[0]));
+        }
+    }
+
+    /** {@code media.importText} 的选择结果：按 UTF-8 读正文回给页面。 */
+    static void readImportedText(Activity activity, WebAppBridge.PendingResult pending,
+            int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            pending.callback.failure(WebAppBridge.CODE_CANCELLED, "已取消选择");
+            return;
+        }
+        Uri uri = data.getData();
+        int maxBytes = Number.class
+                .cast(pending.context.getOrDefault("maxBytes", TEXT_IMPORT_MAX_BYTES)).intValue();
+        byte[] raw;
+        try {
+            raw = readAtMostBytes(activity, uri, maxBytes);
+        } catch (Exception error) {
+            Log.w(TAG, "读取文本文件失败: " + uri, error);
+            pending.callback.failure("读取文件失败：" + error.getMessage());
+            return;
+        }
+        String tooLarge = textTooLargeReason(raw.length, declaredSize(activity, uri), maxBytes);
+        if (tooLarge != null) {
+            pending.callback.failure(tooLarge);
+            return;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("text", decodeText(raw));
+        result.put("fileName", displayName(activity, uri));
+        result.put("bytes", raw.length);
+        pending.callback.success(result);
+    }
+
+    /**
+     * 读内容 URI，最多读 {@code limit + 1} 字节。
+     * <p>
+     * 多读的那一字节专门用来判断「文件还没读完」：读到 {@code limit + 1} 就是超限，
+     * 既不把超大文件整个读进内存，也能给出明确的上限提示。
+     */
+    static byte[] readAtMostBytes(Context context, Uri uri, int limit) throws Exception {
+        try (InputStream input = context.getContentResolver().openInputStream(uri)) {
+            if (input == null) {
+                throw new java.io.IOException("无法打开文件");
+            }
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while (output.size() <= limit && (read = input.read(buffer)) > 0) {
+                output.write(buffer, 0, Math.min(read, limit + 1 - output.size()));
+            }
+            return output.toByteArray();
+        }
+    }
+
+    /** 选择器返回的文件展示名；读不到时给空串。 */
+    static String displayName(Context context, Uri uri) {
+        try (android.database.Cursor cursor = context.getContentResolver().query(uri,
+                new String[] { android.provider.OpenableColumns.DISPLAY_NAME }, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst() && !cursor.isNull(0)) {
+                return cursor.getString(0);
+            }
+        } catch (Exception error) {
+            Log.w(TAG, "读取文件名失败: " + uri, error);
+        }
+        return "";
+    }
+
+    /**
+     * 文本导入超限的说明；没超限返回 null。
+     *
+     * @param bytesRead     实际读到的字节数（读取时最多读 {@code maxBytes + 1} 个）
+     * @param declaredBytes Provider 声明的大小，未知时给 -1
+     * @param maxBytes      上限
+     */
+    static String textTooLargeReason(long bytesRead, long declaredBytes, int maxBytes) {
+        if (bytesRead <= maxBytes) {
+            return null;
+        }
+        if (declaredBytes > maxBytes) {
+            return "文件 " + declaredBytes + " 字节，超过上限 " + maxBytes + " 字节（超出 "
+                    + (declaredBytes - maxBytes) + " 字节）";
+        }
+        return "文件超过上限 " + maxBytes + " 字节（已读到 " + maxBytes + " 字节仍未结束）";
+    }
+
+    /** 按 UTF-8 解码，并剥掉 BOM。 */
+    static String decodeText(byte[] bytes) {
+        return stripBom(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    /** 去掉 UTF-8 BOM：语言包 JSON 常带 BOM，JSON.parse 遇到它直接报错。 */
+    static String stripBom(String text) {
+        return text != null && text.startsWith("\uFEFF") ? text.substring(1) : text;
     }
 
     static Map<String, Object> storeDataUrl(Context context, Map<String, Object> payload) {
@@ -554,6 +699,18 @@ final class MediaActions {
             writeCsv(activity, pending, resultCode, data);
             return;
         }
+        if (pending.context.containsKey("text")) {
+            writeText(activity, pending, resultCode, data);
+            return;
+        }
+        if (pending.context.containsKey("imageBytes")) {
+            writeGalleryImage(activity, pending, resultCode, data);
+            return;
+        }
+        if ("media.importText".equals(pending.action)) {
+            readImportedText(activity, pending, resultCode, data);
+            return;
+        }
         if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
             pending.callback.failure(WebAppBridge.CODE_CANCELLED, "已取消选择");
             return;
@@ -605,6 +762,199 @@ final class MediaActions {
         result.put("rows", Number.class.cast(pending.context.getOrDefault("rowCount", 0)).intValue());
         pending.callback.success(result);
     }
+
+    /**
+     * 导出任意文本（语言包底稿）：正文由前端给，原生只弹系统「另存为」面板并写文件。
+     * <p>
+     * 与 CSV 不同，这里**不加** UTF-8 BOM：带 BOM 的 JSON 语言包会让部分解析器直接报错。
+     */
+    static void exportText(WebAppBridge bridge, Map<String, Object> payload,
+            WebAppBridge.ResultCallback callback) {
+        String content = WebAppBridge.text(payload, "content", "");
+        String mimeType = WebAppBridge.text(payload, "mimeType", "application/json");
+        String fileName = WebAppBridge.text(payload, "fileName", "");
+        if (fileName.isEmpty()) {
+            fileName = ExportManager.fileName("calmobile-text", ExportManager.textExtension(mimeType));
+        }
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(mimeType);
+        intent.putExtra(Intent.EXTRA_TITLE, fileName);
+        WebAppBridge.PendingResult pending = new WebAppBridge.PendingResult("export.text", callback);
+        pending.context.put("text", content);
+        pending.context.put("fileName", fileName);
+        bridge.startForResult(intent, bridge.nextRequestCode(), pending);
+    }
+
+    /** 「另存为」返回后按 UTF-8 写文本；用户取消走 cancelled，不是故障。 */
+    static void writeText(Activity activity, WebAppBridge.PendingResult pending,
+            int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            pending.callback.failure(WebAppBridge.CODE_CANCELLED, "已取消保存");
+            return;
+        }
+        String text = String.valueOf(pending.context.get("text"));
+        try (java.io.OutputStream output =
+                     activity.getContentResolver().openOutputStream(data.getData())) {
+            if (output == null) {
+                pending.callback.failure("无法写入所选文件");
+                return;
+            }
+            output.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            output.flush();
+        } catch (Exception error) {
+            pending.callback.failure("保存失败：" + error.getMessage());
+            return;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("exported", true);
+        result.put("fileName", String.valueOf(pending.context.get("fileName")));
+        pending.callback.success(result);
+    }
+
+    /**
+     * 保存图片到系统相册（报名二维码长按保存）。
+     * <p>
+     * API 29 起写 MediaStore，不需要任何存储权限；minSdk 24 的老系统没有分区存储，
+     * 为一次保存去申请 WRITE_EXTERNAL_STORAGE 不值当，改走系统「另存为」面板让用户自己选位置。
+     */
+    static void saveImage(WebAppBridge bridge, Map<String, Object> payload,
+            WebAppBridge.ResultCallback callback) {
+        String[] parts = imageDataUrlParts(WebAppBridge.text(payload, "dataUrl", ""));
+        if (parts == null) {
+            callback.failure("无法识别的图片数据");
+            return;
+        }
+        String mime = parts[0];
+        if (!isGalleryImageMime(mime)) {
+            callback.failure("只支持 PNG / JPEG 图片，当前是 " + mime);
+            return;
+        }
+        if ("image/jpg".equals(mime)) {
+            mime = "image/jpeg";
+        }
+        byte[] bytes;
+        try {
+            bytes = Base64.decode(parts[1], Base64.DEFAULT);
+        } catch (Exception error) {
+            callback.failure("图片数据解析失败");
+            return;
+        }
+        if (bytes.length == 0) {
+            callback.failure("图片数据为空");
+            return;
+        }
+        Activity activity = bridge.activity();
+        String fileName = galleryFileName(mime, WebAppBridge.text(payload, "fileName", ""));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Uri uri = insertIntoGallery(activity, fileName, mime, bytes);
+            if (uri == null) {
+                callback.failure("保存到相册失败");
+                return;
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("saved", true);
+            result.put("uri", uri.toString());
+            callback.success(result);
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(mime);
+        intent.putExtra(Intent.EXTRA_TITLE, fileName);
+        WebAppBridge.PendingResult pending =
+                new WebAppBridge.PendingResult("media.saveImage", callback);
+        pending.context.put("imageBytes", bytes);
+        pending.context.put("fileName", fileName);
+        bridge.startForResult(intent, bridge.nextRequestCode(), pending);
+    }
+
+    /** 写进系统相册。失败时删掉刚插入的空行，不留一张打不开的图。 */
+    private static Uri insertIntoGallery(Context context, String fileName, String mime, byte[] bytes) {
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
+        values.put(MediaStore.Images.Media.MIME_TYPE, mime);
+        // 归到自己的目录，用户在相册里能按 Pictures/calMobile 找到导出的二维码。
+        values.put(MediaStore.Images.Media.RELATIVE_PATH,
+                Environment.DIRECTORY_PICTURES + "/calMobile");
+        Uri target = context.getContentResolver()
+                .insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+        if (target == null) {
+            return null;
+        }
+        try (java.io.OutputStream output = context.getContentResolver().openOutputStream(target)) {
+            if (output == null) {
+                throw new java.io.IOException("无法打开相册写入流");
+            }
+            output.write(bytes);
+            output.flush();
+        } catch (Exception error) {
+            Log.w(TAG, "写入相册失败: " + fileName, error);
+            //noinspection ResultOfMethodCallIgnored
+            context.getContentResolver().delete(target, null, null);
+            return null;
+        }
+        return target;
+    }
+
+    /** 老系统的「另存为」返回后，把暂存的字节写进用户选的文件。 */
+    static void writeGalleryImage(Activity activity, WebAppBridge.PendingResult pending,
+            int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            pending.callback.failure(WebAppBridge.CODE_CANCELLED, "已取消保存");
+            return;
+        }
+        byte[] bytes = (byte[]) pending.context.get("imageBytes");
+        try (java.io.OutputStream output =
+                     activity.getContentResolver().openOutputStream(data.getData())) {
+            if (output == null) {
+                pending.callback.failure("无法写入所选文件");
+                return;
+            }
+            output.write(bytes);
+            output.flush();
+        } catch (Exception error) {
+            pending.callback.failure("保存失败：" + error.getMessage());
+            return;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("saved", true);
+        result.put("fileName", String.valueOf(pending.context.get("fileName")));
+        pending.callback.success(result);
+    }
+
+    /**
+     * 解析图片 data URL，返回 {@code {mime, base64}}；认不出时返回 null。
+     * <p>
+     * 与 {@link #storeDataUrl} 共用同一张 {@link #DATA_URL} 正则，避免两处解析规则漂移。
+     */
+    static String[] imageDataUrlParts(String dataUrl) {
+        if (dataUrl == null || dataUrl.isEmpty()) {
+            return null;
+        }
+        java.util.regex.Matcher matcher = DATA_URL.matcher(dataUrl);
+        if (!matcher.matches()) {
+            return null;
+        }
+        return new String[] { matcher.group(1).toLowerCase(java.util.Locale.US), matcher.group(2) };
+    }
+
+    /** 相册只收 PNG 与 JPEG：webp / gif 在部分相册应用里会显示成空白。 */
+    static boolean isGalleryImageMime(String mime) {
+        return "image/png".equals(mime) || "image/jpeg".equals(mime) || "image/jpg".equals(mime);
+    }
+
+    /** 相册里的展示名：调用方没给就用 calmobile-qr-时间戳.后缀。 */
+    static String galleryFileName(String mime, String provided) {
+        if (provided != null && !provided.trim().isEmpty()) {
+            return provided.trim();
+        }
+        String extension = "image/png".equals(mime) ? "png" : "jpg";
+        String stamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
+                .format(new java.util.Date());
+        return "calmobile-qr-" + stamp + "." + extension;
+    }
+
     /** 选择图片：把结果交回前端做裁剪等后续处理。 */
     static void pickImage(WebAppBridge bridge, WebAppBridge.ResultCallback callback) {
         pickFile(bridge, "image/*", "选择图片", callback);

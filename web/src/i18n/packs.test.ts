@@ -15,8 +15,26 @@ import {
 
 const empty = (): LangState => ({ packs: [], choice: '', serverDefault: '', joinDefault: '' });
 
+/** 包文件 / 网络 / 落盘里的 strings：嵌套 JSON。 */
+function nested(paths: Record<string, string>): Record<string, unknown> {
+  const tree: Record<string, unknown> = {};
+  for (const [path, text] of Object.entries(paths)) {
+    const parts = path.split('.');
+    let node = tree;
+    for (const part of parts.slice(0, -1)) node = (node[part] ??= {}) as Record<string, unknown>;
+    node[parts[parts.length - 1]!] = text;
+  }
+  return tree;
+}
+
+/** 内存里的语言包（LangPack）：strings 是点分路径的扁平表。 */
 function pack(id: string, strings: Record<string, string> = { 'auth.login.title': id }) {
   return { id, name: id.toUpperCase(), strings };
+}
+
+/** 落盘 / 网络上的语言包：strings 嵌套，和包文件同形。 */
+function packFile(id: string, strings: Record<string, string> = { 'auth.login.title': id }) {
+  return { id, name: id.toUpperCase(), strings: nested(strings) };
 }
 
 describe('语言包', () => {
@@ -29,10 +47,25 @@ describe('语言包', () => {
     expect(() => parsePack({ id: 'english', name: 'English', strings: {} }, 'en')).toThrow(PackError);
   });
 
+  it('嵌套 strings 逐层校验：数组、数字、空对象与旧的扁平包都拒绝', () => {
+    expect(parsePack(packFile('en')).strings).toEqual({ 'auth.login.title': 'en' });
+    expect(() => parsePack({ id: 'en', name: 'English', strings: { auth: { login: ['Log in'] } } })).toThrow(PackError);
+    expect(() => parsePack({ id: 'en', name: 'English', strings: { auth: { login: { title: 1 } } } })).toThrow(
+      PackError,
+    );
+    expect(() => parsePack({ id: 'en', name: 'English', strings: { auth: {} } })).toThrow(PackError);
+    expect(() => parsePack({ id: 'en', name: 'English', strings: {} })).toThrow(PackError);
+    expect(() => parsePack({ id: 'en', name: 'English', strings: null })).toThrow(PackError);
+    // 老版本装在 localStorage 里的扁平包（带点的键）不兼容，直接丢掉。
+    expect(() => parsePack({ id: 'en', name: 'English', strings: { 'auth.login.title': 'Log in' } })).toThrow(
+      PackError,
+    );
+  });
+
   it('空串保留，列表里的名称必须和文件里的 id 一致', () => {
-    expect(parsePack({ id: 'en', name: 'English', strings: { 'auth.login.title': '' } }, 'en').strings).toEqual({
-      'auth.login.title': '',
-    });
+    expect(parsePack({ id: 'en', name: 'English', strings: nested({ 'auth.login.title': '' }) }, 'en').strings).toEqual(
+      { 'auth.login.title': '' },
+    );
   });
 
   it('报名站只在默认名称已安装时使用它', () => {
@@ -71,28 +104,31 @@ describe('语言包', () => {
     expect(removePack(installed, 'en').choice).toBe('');
   });
 
-  it('读写本机存储时丢掉坏包', () => {
+  it('落盘写成嵌套形状，读回来压平并丢掉坏包', () => {
     const memory = new Map<string, string>();
     const storage = {
       getItem: (key: string) => memory.get(key) ?? null,
       setItem: (key: string, value: string) => void memory.set(key, value),
     };
     writeLangState(storage, installPack(empty(), pack('en'), false));
-    memory.set('calmobile.lang.packs', JSON.stringify([pack('en'), { id: 'no', name: '', strings: {} }, pack('ja')]));
+    const written = JSON.parse(memory.get('calmobile.lang.packs') ?? '[]') as { strings?: unknown }[];
+    expect(written[0]?.strings).toEqual(nested({ 'auth.login.title': 'en' }));
+
+    memory.set(
+      'calmobile.lang.packs',
+      JSON.stringify([packFile('en'), { id: 'no', name: '', strings: {} }, packFile('ja')]),
+    );
     const loaded = readLangState(storage);
     expect(loaded.packs.map((item) => item.id)).toEqual(['en', 'ja']);
+    expect(loaded.packs[0]?.strings['auth.login.title']).toBe('en');
   });
 
   it('下载失败、地址不对和 id 对不上都不写入', async () => {
     const fetchImpl = (async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/missing.json')) return new Response('no', { status: 404 });
-      if (url.endsWith('/wrong.json')) {
-        return new Response(JSON.stringify({ id: 'ja', name: 'Japanese', strings: {} }), { status: 200 });
-      }
-      return new Response(JSON.stringify({ id: 'en', name: 'English', strings: { 'auth.login.title': 'Log in' } }), {
-        status: 200,
-      });
+      if (url.endsWith('/wrong.json')) return new Response(JSON.stringify(packFile('ja')), { status: 200 });
+      return new Response(JSON.stringify(packFile('en', { 'auth.login.title': 'Log in' })), { status: 200 });
     }) as typeof fetch;
 
     await expect(fetchPack('ftp://example.com/en.json', 'en', fetchImpl, false)).rejects.toMatchObject({

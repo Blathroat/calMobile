@@ -13,6 +13,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { usePullRefresh } from '@/services/pull-refresh';
 import AvatarBox from '@/components/AvatarBox.vue';
 import MediaBox from '@/components/MediaBox.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -63,7 +64,7 @@ async function run(text: string): Promise<void> {
   searched.value = text;
   // 客户端把 /search 的返回类型标成了数组，实际是 `{ query, exhibitions, users, count }`，
   // 这里按真实结构转一次（改 client.ts 的类型不在本次改动范围内）。
-  await query.run(async () => (await api.search(text)) as unknown as JsonObject);
+  await query.run(() => api.search(text) as unknown as Promise<JsonObject>);
 }
 
 function onInput(): void {
@@ -118,6 +119,12 @@ function openUser(user: JsonObject): void {
 onMounted(() => {
   if (keyword.value.trim()) void run(keyword.value.trim());
 });
+
+usePullRefresh(
+  () => run(keyword.value.trim()),
+  computed(() => query.loading.value && hasContent.value),
+  computed(() => keyword.value.trim().length > 0),
+);
 
 onBeforeUnmount(() => {
   if (timer !== undefined) window.clearTimeout(timer);
@@ -216,7 +223,7 @@ onBeforeUnmount(() => {
             @pointerdown="warmUser(user)"
             @click="openUser(user)"
           >
-            <AvatarBox :name="String(user.nickname || '')" />
+            <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || '')" />
             <span class="row-copy">
               <span class="name-line">
                 <strong class="row-title truncate">{{

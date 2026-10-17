@@ -5,6 +5,7 @@
  */
 import { RouterLink } from 'vue-router';
 import AppIcon from './AppIcon.vue';
+import { preloadTab } from '@/app/preload';
 import { t } from '@/i18n';
 import type { TabItem } from '@/app/shell';
 
@@ -13,7 +14,7 @@ defineProps<{ items: TabItem[] }>();
 
 <template>
   <nav class="tabbar" :aria-label="t('nav.tabBar')">
-    <RouterLink v-for="item in items" :key="item.id" class="tab" :to="item.path">
+    <RouterLink v-for="item in items" :key="item.id" class="tab" :to="item.path" @pointerdown="preloadTab(item.id)">
       <AppIcon :name="item.icon" />
       <span>{{ item.label }}</span>
     </RouterLink>
@@ -24,7 +25,7 @@ defineProps<{ items: TabItem[] }>();
 .tab {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 58px;
+  min-height: 48px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -42,8 +43,8 @@ defineProps<{ items: TabItem[] }>();
 }
 
 .tab svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 .tab[aria-current='page'] {

@@ -17,6 +17,10 @@ vi.mock('@/app/runtime', () => ({
         exhibition: { id: 'exh-1', title: '秋季展会', date: '2026-09-20' },
       }),
     },
+    // 详情页会读「我的报名」判断底部按钮，mock 要完整：缺了它只剩失败兜底那条路被覆盖。
+    registrations: {
+      list: vi.fn().mockResolvedValue([]),
+    },
     profile: {
       get: vi.fn().mockResolvedValue({ id: 'u1', username: 'user' }),
       notifications: vi.fn().mockResolvedValue({ granted: false }),

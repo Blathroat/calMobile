@@ -18,6 +18,7 @@ function searchUserPayload(row: UserRow) {
     role: labels.ROLE_LABEL[row.role] || row.role,
     roleCode: row.role,
     email: row.email || '',
+    avatar: row.avatar || '',
     status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active,
     registrationTime: row.registration_time || '',
     lastLoginTime: row.last_login_time || '',

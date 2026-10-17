@@ -218,7 +218,7 @@ onBeforeUnmount(stopCountdown);
 </script>
 
 <template>
-  <!-- 入口页版式与旧版（master）一致：内容区的两道内距由外壳给（左右各 32px），
+  <!-- 入口页版式与旧版（master）一致：内容区的两道内距由外壳给（左右各 24px），
        品牌方块靠左、标题与说明居中，注册 / 忘记密码跟在表单后面随内容滚动。 -->
   <div class="stack">
     <div class="stack" data-align="text">
@@ -370,14 +370,14 @@ onBeforeUnmount(stopCountdown);
 /* 入口页的品牌标记：线框的 .brand-mark（圆角方底 + 品牌首字）。
    旧版的入口 hero 用的是 `.ph-img`（无描边、只填底色），这里保持一致。 */
 .brand-mark {
-  width: 84px;
-  height: 84px;
+  width: 72px;
+  height: 72px;
   display: grid;
   place-items: center;
   border-radius: var(--r-panel);
   background: var(--f2);
   color: var(--frame);
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 800;
 }
 </style>

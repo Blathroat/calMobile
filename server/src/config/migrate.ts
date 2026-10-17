@@ -19,6 +19,7 @@ import { pool } from './pool.js';
 import bcrypt from 'bcryptjs';
 import type { PoolClient } from 'pg';
 import * as dbConfig from './database.js';
+import * as labels from '../domain/labels.js';
 import { isEntry } from '../entry.js';
 
 export interface MigrationStep {
@@ -40,7 +41,11 @@ export interface ServerSettings {
   ui: { mode: string };
   capabilities: { calendar: boolean; notifications: boolean; richText: boolean; export: boolean };
   categories: string[];
-  review: { canRevise: boolean; statuses: string[] };
+  /**
+   * 审核策略。`canRevise`：展商能否改已通过 / 已拒绝的报名；
+   * `canReviseAttended`：展商能否把「已参加」退回重审（默认关闭，管理员始终可改）。
+   */
+  review: { canRevise: boolean; canReviseAttended: boolean; statuses: string[] };
   media: { imageCount: number; imageSizeMb: number; videoCount: number; videoSizeMb: number };
   upload: {
     avatarSizeMb: number;
@@ -78,6 +83,8 @@ export interface ServerSettings {
   cover: { defaultCover: string };
   /** 展商端策略：同时能筹备的展会数、私人会议数上限，0 表示不限。 */
   exhibitor: { maxFutureExhibitions: number; maxFutureMeetings: number };
+  /** 邀请码生成默认值。uses 至少 1；validHours 为 0 表示不过期。 */
+  invite: { uses: number; validHours: number };
 }
 
 /**
@@ -545,6 +552,36 @@ export const STEPS: MigrationStep[] = [
             CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled'));
         `,
   },
+  {
+    id: '0015-exhibitor-invites',
+    sql: `
+        CREATE TABLE IF NOT EXISTS exhibitor_invites (
+            id           TEXT PRIMARY KEY,
+            code         TEXT NOT NULL UNIQUE,
+            max_uses     INTEGER NOT NULL CHECK (max_uses >= 1),
+            used_count   INTEGER NOT NULL DEFAULT 0,
+            expires_at   TIMESTAMPTZ,
+            created_by   TEXT REFERENCES users(id) ON DELETE SET NULL,
+            revoked_at   TIMESTAMPTZ,
+            created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS exhibitor_invites_created_idx
+            ON exhibitor_invites (created_at DESC);
+        `,
+  },
+  {
+    // 报名码从「确定性拼接」升级成「带可轮换凭据」：凭据在报名被退回重审时换新，
+    // 现场那张旧二维码随之失效。存量已通过 / 已参加的报名在这里补一个随机凭据；
+    // 不补的话它们升级后拼不出码（`registrationPayload` 凭据为空就不下发报名码）。
+    // `ADD COLUMN IF NOT EXISTS` + `WHERE check_in_secret = ''` 让这一步可以反复执行。
+    id: '0016-check-in-secret',
+    sql: `
+        ALTER TABLE registrations ADD COLUMN IF NOT EXISTS check_in_secret TEXT NOT NULL DEFAULT '';
+        UPDATE registrations
+           SET check_in_secret = substr(md5(random()::text || id), 1, 12)
+         WHERE status IN ('approved', 'attended') AND check_in_secret = '';
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
@@ -552,7 +589,7 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   ui: { mode: 'auto' },
   capabilities: { calendar: false, notifications: false, richText: true, export: true },
   categories: ['智能家居', '物流技术', '医疗健康', '新材料'],
-  review: { canRevise: false, statuses: ['待审核', '已通过', '已拒绝'] },
+  review: { canRevise: false, canReviseAttended: false, statuses: ['待审核', '已通过', '已拒绝'] },
   media: { imageCount: 8, imageSizeMb: 10, videoCount: 2, videoSizeMb: 50 },
   upload: {
     avatarSizeMb: 2,
@@ -585,6 +622,7 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   cover: { defaultCover: '' },
   // 0 = 不限。演示环境默认放开，部署方按运营策略调小。
   exhibitor: { maxFutureExhibitions: 0, maxFutureMeetings: 0 },
+  invite: { uses: 1, validHours: 168 },
 };
 
 function errorMessage(error: unknown): string {
@@ -819,18 +857,25 @@ export async function seed(): Promise<void> {
       ['reg-3', 'exh-2', 'usr-3', '王磊', '专业观众', '姓名 / 公司名称：王磊', 'pending'],
     ];
     for (const [id, exhibitionId, visitorId, name, type, answers, status] of registrations) {
+      // 示例报名和真实报名一样带核销凭据（建记录时就生成）。
+      // 已有凭据的行保留原值：重复 seed 不会把演示用的二维码换掉。
+      const secret = labels.newCheckInSecret();
       await client.query(
         `
-                INSERT INTO registrations (id, exhibition_id, visitor_id, visitor_name, visitor_type, answers, status)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                INSERT INTO registrations (id, exhibition_id, visitor_id, visitor_name, visitor_type, answers, status, check_in_secret)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 ON CONFLICT (id) DO UPDATE SET
                     visitor_name = EXCLUDED.visitor_name,
                     visitor_type = EXCLUDED.visitor_type,
                     answers = EXCLUDED.answers,
                     status = EXCLUDED.status,
+                    check_in_secret = CASE
+                        WHEN registrations.check_in_secret = '' THEN EXCLUDED.check_in_secret
+                        ELSE registrations.check_in_secret
+                    END,
                     updated_at = now()
             `,
-        [id, exhibitionId, visitorId, name, type, answers, status],
+        [id, exhibitionId, visitorId, name, type, answers, status, secret],
       );
     }
     console.log(`示例报名就绪（${registrations.length} 条）`);

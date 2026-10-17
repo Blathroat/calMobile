@@ -25,7 +25,7 @@ import { jsonResponse, mutate } from '../http/respond.js';
 import { authenticateHono, optionalAuthHono, userOf, type HonoEnv } from './hono-utils.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { parseSchema } from '../domain/validation.js';
-import { adminTwoFactorSchema, userStatusSchema } from '../domain/schemas.js';
+import { adminTwoFactorSchema, userRoleSchema, userStatusSchema } from '../domain/schemas.js';
 
 const app = new Hono<HonoEnv>();
 const USER_ORDER = 'ORDER BY u.registration_time, u.id';
@@ -154,6 +154,35 @@ app.put('/:id/status', authenticateHono, async (c) => {
     return { user: statusPayload((await findUserById(id)) || row) };
   });
 });
+app.put('/:id/role', authenticateHono, async (c) => {
+  const actor = requireAdmin({ user: userOf(c) });
+  const rawBody = bodyRecord(await readJsonBody(c));
+  return mutate(c, async () => {
+    const id = c.req.param('id');
+    if (id === actor.userId) throw badRequest('不能修改自己的权限');
+    const body = parseSchema(userRoleSchema, rawBody);
+    const role = body.role;
+    const row = await findUserById(id);
+    if (!row) throw notFound('用户不存在或已删除');
+    if (row.role === 'admin' && role !== 'admin') {
+      // 调用者自己已是另一位管理员，正常请求里这里至少还能数到一位。
+      // 仍然先数一遍，避免以后放宽「不能改自己」时把最后一位管理员降掉。
+      const others = await query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM users WHERE role = 'admin' AND id <> $1`,
+        [id],
+      );
+      if (Number(others.rows[0]?.n ?? 0) < 1) throw badRequest('至少保留一位管理员');
+    }
+    await query(
+      `UPDATE users SET role = $2,
+              accept_meetings = CASE WHEN $2 = 'user' THEN false ELSE accept_meetings END,
+              updated_at = now()
+        WHERE id = $1`,
+      [id, role],
+    );
+    return { user: statusPayload((await findUserById(id)) || row) };
+  });
+});
 app.put('/:id/two-factor', authenticateHono, async (c) => {
   requireAdmin({ user: userOf(c) });
   const rawBody = bodyRecord(await readJsonBody(c));
@@ -174,5 +203,6 @@ export const USERS_ENDPOINTS: readonly [string, string][] = [
   ['GET', '/public'],
   ['GET', '/:id'],
   ['PUT', '/:id/status'],
+  ['PUT', '/:id/role'],
   ['PUT', '/:id/two-factor'],
 ];

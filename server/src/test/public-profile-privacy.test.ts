@@ -115,14 +115,14 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
     );
     assert.strictEqual(submitted.body.ok, true, JSON.stringify(submitted.body));
     const registrationId = submitted.body.registration.id;
-    const codePrefix = `CALMOBILE-CHECKIN|${exhibitionId}|${registrationId}`;
 
-    // 本人的取码路径（报名详情）照常带报名码
+    // 本人的取码路径（报名详情）照常带报名码；码里带可轮换凭据，不按 id 手拼。
     const own = await get(`/api/v1/registrations/${registrationId}`, { token: tokens.user.token });
     assert.strictEqual(own.body.found, true);
+    const ownCode = String(own.body.registration.checkInCode);
     assert.ok(
-      String(own.body.registration.checkInCode).startsWith(codePrefix),
-      `本人应当拿到报名码：${own.body.registration.checkInCode}`,
+      ownCode.startsWith(`CALMOBILE-CHECKIN|${exhibitionId}|${registrationId}|`),
+      `本人应当拿到报名码：${ownCode}`,
     );
 
     // 打开「展示我的报名」后，匿名访问公开页也必须看不到报名码
@@ -153,9 +153,10 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
     // 管理员另有带报名码的路径：报名详情对管理员开放任意一条
     const adminDetail = await get(`/api/v1/registrations/${registrationId}`, { token: tokens.admin.token });
     assert.strictEqual(adminDetail.body.found, true);
-    assert.ok(
-      String(adminDetail.body.registration.checkInCode).startsWith(codePrefix),
-      '管理员走报名详情应当仍能拿到报名码',
+    assert.strictEqual(
+      String(adminDetail.body.registration.checkInCode),
+      ownCode,
+      '管理员走报名详情应当拿到同一个凭据拼出的报名码',
     );
   } finally {
     await put('/api/v1/profile', { showRegistrations: originalShow }, { token: tokens.user.token });

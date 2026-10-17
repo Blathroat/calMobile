@@ -3,6 +3,7 @@ package com.example.calmobile;
 import android.annotation.SuppressLint;
 import android.Manifest;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Insets;
@@ -16,6 +17,7 @@ import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.webkit.ConsoleMessage;
 import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -30,7 +32,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -83,11 +87,24 @@ public class WebShellActivity extends Activity {
         return dir;
     }
 
+    /** 文件选择器 requestCode 的起点：1000 起自增，桥的区间从 6000 开始，两边不会撞。 */
+    private static final int FILE_CHOOSER_REQUEST_BASE = 1000;
+    /** 桥的 requestCode 起点（{@link WebAppBridge#nextRequestCode()}），文件选择器不能越过它。 */
+    private static final int BRIDGE_REQUEST_CODE_BASE = 6000;
+
     private WebView webView;
     private WebAppBridge bridge;
     /** 这次进程读的页面目录。null 表示用 APK 里的那份。进程内不替换。 */
     private File pageFiles;
     private boolean hotUpdateStarted;
+
+    /**
+     * WebView 里 `<input type="file">`（语言包「从文件安装」）的回调表。
+     * 系统选择器返回前按 requestCode 暂存，返回后立刻移除，避免泄漏和下一次选择拿不到结果。
+     */
+    private final Map<Integer, ValueCallback<Uri[]>> fileChooserCallbacks = new HashMap<>();
+
+    private int nextFileChooserRequestCode = FILE_CHOOSER_REQUEST_BASE;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -143,7 +160,7 @@ public class WebShellActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                return serve(request.getUrl());
+                return serve(request);
             }
 
             @Override
@@ -209,6 +226,34 @@ public class WebShellActivity extends Activity {
                         }
                     }
                 });
+            }
+
+            /**
+             * WebView 里的 {@code <input type="file">} 必须实现这个回调才会弹系统选择器；
+             * 不实现时默认返回 false，页面点「从文件安装」不会有任何反应。
+             * <p>
+             * 结果交给 {@link WebChromeClient.FileChooserParams#parseResult} 解析：多选结果在
+             * ClipData 里，用户按返回键取消时它返回 null，正好对应 {@code onReceiveValue(null)}。
+             */
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                    FileChooserParams params) {
+                Intent intent = params.createIntent();
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                applyAcceptTypes(intent, params.getAcceptTypes());
+                int requestCode = nextFileChooserRequestCode();
+                fileChooserCallbacks.put(requestCode, callback);
+                try {
+                    startActivityForResult(Intent.createChooser(intent, "选择文件"), requestCode);
+                } catch (ActivityNotFoundException error) {
+                    // 设备上没有能应答的选择器：必须回一次 null，
+                    // 否则页面的 input 一直等结果，下一次点击也挂住。
+                    fileChooserCallbacks.remove(requestCode);
+                    callback.onReceiveValue(null);
+                    return false;
+                }
+                return true;
             }
         });
 
@@ -294,8 +339,70 @@ public class WebShellActivity extends Activity {
         return super.onKeyDown(keyCode, event);
     }
 
+    /**
+     * 分配一个文件选择器专用的 requestCode。
+     *
+     * 从 1000 起自增，到桥的区间（6000 起）前绕回起点，并跳过还挂着回调的号：
+     * 这两张表绝不能收到同一个 requestCode，否则结果会落到别处的选择器上。
+     */
+    private int nextFileChooserRequestCode() {
+        while (true) {
+            int code = nextFileChooserRequestCode;
+            nextFileChooserRequestCode = code + 1;
+            if (nextFileChooserRequestCode >= BRIDGE_REQUEST_CODE_BASE) {
+                nextFileChooserRequestCode = FILE_CHOOSER_REQUEST_BASE;
+            }
+            if (!fileChooserCallbacks.containsKey(code)) {
+                return code;
+            }
+        }
+    }
+
+    /**
+     * 把 {@code accept} 属性转成系统选择器的类型：单个 MIME 直接当 type，多个时用第一个当 type、
+     * 其余放进 {@code EXTRA_MIME_TYPES}（ACTION_GET_CONTENT 只认一个 type）。
+     * <p>
+     * {@code accept} 里的扩展名（{@code ".json"}）不一定被 WebView 改写成 MIME，这里只放行含
+     * 斜杠的项，一个都没有就退回任意类型（&#42;/&#42;）：宁可让用户自己挑，
+     * 也不要传一个没有应用能应答的类型。
+     */
+    private static void applyAcceptTypes(Intent intent, String[] acceptTypes) {
+        List<String> accepted = new ArrayList<>();
+        if (acceptTypes != null) {
+            for (String type : acceptTypes) {
+                if (type != null && type.indexOf('/') > 0) {
+                    accepted.add(type.trim());
+                }
+            }
+        }
+        if (accepted.isEmpty()) {
+            intent.setType("*/*");
+            return;
+        }
+        intent.setType(accepted.get(0));
+        if (accepted.size() > 1) {
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, accepted.toArray(new String[0]));
+        }
+    }
+
+    /**
+     * 文件选择器的结果先在这里消化，剩下的再转发给桥。
+     * <p>
+     * 表项无论成功、取消还是失败都要移除：留着既泄漏 ValueCallback，
+     * 也会让这个 requestCode 对应的下一次选择找不到入口。
+     */
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        ValueCallback<Uri[]> fileChooser = fileChooserCallbacks.remove(requestCode);
+        if (fileChooser != null) {
+            super.onActivityResult(requestCode, resultCode, data);
+            // parseResult 在取消（RESULT_CANCELED / data == null）时返回 null，多选从 ClipData 取。
+            Uri[] result = resultCode == RESULT_OK && data != null
+                    ? WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+                    : null;
+            fileChooser.onReceiveValue(result);
+            return;
+        }
         super.onActivityResult(requestCode, resultCode, data);
         if (bridge != null) {
             bridge.onActivityResult(requestCode, resultCode, data);
@@ -351,12 +458,13 @@ public class WebShellActivity extends Activity {
      * {@code /app/} 从本机快照或包内页面读取。设备媒体仍走 appassets。
      * 其它地址（接口、站内图片）交给 WebView 自己请求。
      */
-    private WebResourceResponse serve(Uri uri) {
+    private WebResourceResponse serve(WebResourceRequest request) {
+        Uri uri = request == null ? null : request.getUrl();
         if (uri == null) {
             return null;
         }
         if ("appassets.androidplatform.net".equals(uri.getHost())) {
-            return serveAsset(uri);
+            return serveAsset(uri, request.getMethod());
         }
         if (!PageOrigin.staysInWebView(uri.toString(), BuildConfig.APP_ORIGIN)) {
             return null;
@@ -374,7 +482,7 @@ public class WebShellActivity extends Activity {
      * 把 {@code /assets/web/...} 的请求映射到 APK 内的 asset 文件。
      * 只允许访问 {@code web/} 目录，避免通过 URL 读取其他打包资源。
      */
-    private WebResourceResponse serveAsset(Uri uri) {
+    private WebResourceResponse serveAsset(Uri uri, String method) {
         if (!"appassets.androidplatform.net".equals(uri.getHost())) {
             return null;
         }
@@ -383,7 +491,14 @@ public class WebShellActivity extends Activity {
         String path = uri.getPath() != null ? uri.getPath() : "";
         String decoded = android.net.Uri.decode(path);
         if (decoded.startsWith("/media/")) {
-            return serveMedia(decoded.substring("/media/".length()));
+            String name = decoded.substring("/media/".length());
+            // fetch 跨源时可能先发预检。媒体文件本身是简单 GET，这里仍应答，避免预检被当成失败。
+            if ("OPTIONS".equalsIgnoreCase(method)) {
+                int status = AssetGuard.isMediaFileAllowed(name) ? 204 : 403;
+                String reason = status == 204 ? "No Content" : "Forbidden";
+                return new WebResourceResponse("text/plain", "utf-8", status, reason, mediaHeaders(), null);
+            }
+            return serveMedia(name);
         }
         String assetPath = AssetGuard.resolveAssetPath(decoded);
         if (assetPath == null) {
@@ -470,6 +585,11 @@ public class WebShellActivity extends Activity {
         return headers;
     }
 
+    /** 设备媒体给页面 fetch 用，要带上页面源，否则跨源读取失败。 */
+    private Map<String, String> mediaHeaders() {
+        return MediaCors.headers(BuildConfig.APP_ORIGIN);
+    }
+
     /**
      * 读取用户上传的媒体文件。
      * <p>
@@ -479,12 +599,12 @@ public class WebShellActivity extends Activity {
     private WebResourceResponse serveMedia(String name) {
         if (!AssetGuard.isMediaFileAllowed(name)) {
             return new WebResourceResponse("text/plain", "utf-8", 403, "Forbidden",
-                    securityHeaders(), null);
+                    mediaHeaders(), null);
         }
         File file = new File(mediaDir(this), name);
         if (!file.isFile()) {
             return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found",
-                    securityHeaders(), null);
+                    mediaHeaders(), null);
         }
         String extension = name.contains(".")
                 ? name.substring(name.lastIndexOf('.') + 1).toLowerCase()
@@ -493,12 +613,12 @@ public class WebShellActivity extends Activity {
                 ? MIME_TYPES.get(extension)
                 : guessMediaMime(extension);
         try {
-            return new WebResourceResponse(mime, "utf-8", 200, "OK", securityHeaders(),
+            return new WebResourceResponse(mime, "utf-8", 200, "OK", mediaHeaders(),
                     new FileInputStream(file));
         } catch (IOException error) {
             Log.w(TAG, "媒体文件读取失败: " + name, error);
             return new WebResourceResponse("text/plain", "utf-8", 500, "Error",
-                    securityHeaders(), null);
+                    mediaHeaders(), null);
         }
     }
 

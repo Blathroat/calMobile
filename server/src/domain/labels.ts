@@ -8,6 +8,8 @@
  * 不会因为文案调整而牵动数据。
  */
 
+import { randomUUID } from 'node:crypto';
+
 /** 展会报名方式 / 报名状态：code ↔ 中文标签。 */
 export const EXHIBITION_STATUS: Record<string, string> = {
   review: '需审核',
@@ -120,31 +122,47 @@ export function acceptsRegistration(statusCode: string): boolean {
   return statusCode === 'review' || statusCode === 'optional';
 }
 
-/** 报名码前缀：`CALMOBILE-CHECKIN|<展会 id>|<报名 id>`。 */
+/**
+ * 报名码前缀：`CALMOBILE-CHECKIN|<展会 id>|<报名 id>|<凭据>`。
+ *
+ * 前两段只用来定位报名，第三段是**可轮换的凭据**：报名被退回重审后换一个，
+ * 现场那张旧二维码随之失效（见 `routes/review-hono.ts` 的状态流转）。
+ */
 export const CODE_PREFIX = 'CALMOBILE-CHECKIN|';
 
-/** 生成报名码；只有启用二维码且已通过（或已参加）的报名才应该下发。 */
-export function checkInCode(exhibitionId: string, registrationId: string): string {
-  return `${CODE_PREFIX}${exhibitionId}|${registrationId}`;
+/**
+ * 生成一个新的报名码凭据。
+ *
+ * 12 位十六进制（48 bit）：现场扫码要的是「猜不到」，不是密码学强度。
+ * 每次轮换都重新生成，因此旧码不会因为报名 id 不变而继续可用。
+ */
+export function newCheckInSecret(): string {
+  return randomUUID().replace(/-/g, '').slice(0, 12);
 }
 
-/** 解析扫码结果，返回 { exhibitionId, registrationId }；无法识别时返回 null。 */
-export function parseCheckInCode(raw: unknown): { exhibitionId: string; registrationId: string } | null {
+/** 生成报名码；只有启用二维码、已通过（或已参加）且凭据非空的报名才应该下发。 */
+export function checkInCode(exhibitionId: string, registrationId: string, secret: string): string {
+  return `${CODE_PREFIX}${exhibitionId}|${registrationId}|${secret}`;
+}
+
+/**
+ * 解析扫码结果，返回 { exhibitionId, registrationId, secret }；无法识别时返回 null。
+ *
+ * 旧的两段码（没有凭据那一段）解析成空 secret，而不是直接判为无法识别：
+ * 它到核销那一步会得到「报名码已失效」的明确提示，用户才知道去重新打开二维码。
+ */
+export function parseCheckInCode(
+  raw: unknown,
+): { exhibitionId: string; registrationId: string; secret: string } | null {
   const text = String(raw || '').trim();
   if (!text.startsWith(CODE_PREFIX)) {
     return null;
   }
-  const rest = text.slice(CODE_PREFIX.length);
-  const separator = rest.indexOf('|');
-  if (separator <= 0) {
+  const [exhibitionId = '', registrationId = '', secret = ''] = text.slice(CODE_PREFIX.length).split('|');
+  if (!exhibitionId.trim() || !registrationId.trim()) {
     return null;
   }
-  const exhibitionId = rest.slice(0, separator).trim();
-  const registrationId = rest.slice(separator + 1).trim();
-  if (!exhibitionId || !registrationId) {
-    return null;
-  }
-  return { exhibitionId, registrationId };
+  return { exhibitionId: exhibitionId.trim(), registrationId: registrationId.trim(), secret: secret.trim() };
 }
 
 /** 日期（YYYY-MM-DD）→ 「6月8日」，与前端 dateLabel 一致。 */

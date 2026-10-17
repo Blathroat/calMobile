@@ -11,6 +11,7 @@ import { computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { usePullRefresh } from '@/services/pull-refresh';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
@@ -71,12 +72,19 @@ const COPY = {
   visitorFallback: t('admin.users.title'),
 };
 
-function load(): void {
+function load(): Promise<unknown> {
   const id = props.mode === 'admin' ? String(props.exhibitorId || '') : '';
-  void query.run(() => api.meetings.inbox(id ? { exhibitorId: id } : {}));
+  return query.run(() => api.meetings.inbox(id ? { exhibitorId: id } : {}));
 }
 
-onMounted(load);
+onMounted(() => {
+  void load();
+});
+
+usePullRefresh(
+  () => load(),
+  computed(() => query.loading.value && hasRecords.value),
+);
 watch(
   () => props.exhibitorId,
   () => {

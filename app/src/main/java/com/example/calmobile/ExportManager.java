@@ -7,7 +7,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 把前端传来的数据行拼成 CSV。
+ * 导出相关的纯逻辑：拼 CSV，以及给导出文件起名。
  *
  * 数据由**前端**负责取（它在 `admin.js` 里已经从后端拿到展会列表），原生只做设备侧的事：
  * 拼 CSV、加 UTF-8 BOM（Excel 打开中文不乱码）、交给系统「另存为」面板。
@@ -56,10 +56,20 @@ final class ExportManager {
         return builder.toString();
     }
 
-    /** 导出文件名：带时间戳，避免多次导出互相覆盖。 */
+    /** CSV 导出文件名：带时间戳，避免多次导出互相覆盖。 */
     static String fileName(String prefix) {
+        return fileName(prefix, "csv");
+    }
+
+    /** 通用导出文件名：前缀 + 时间戳 + 后缀。文本导出与 CSV 共用同一套命名。 */
+    static String fileName(String prefix, String extension) {
         String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
-        return prefix + "_" + stamp + ".csv";
+        return prefix + "_" + stamp + "." + extension;
+    }
+
+    /** 文本导出的缺省后缀：JSON 底稿用 json，其余按纯文本。 */
+    static String textExtension(String mimeType) {
+        return mimeType != null && mimeType.toLowerCase(Locale.US).contains("json") ? "json" : "txt";
     }
 
     private static String value(Map<String, Object> row, String key) {

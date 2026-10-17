@@ -54,6 +54,9 @@ describe('markdownToHtml', () => {
         '[展会](https://example.com/展会(秋)?a=1&b=2)\n\n[邮箱](mailto:info@example.com)',
     );
     expect(root.querySelector('pre code')?.textContent).toBe('<script>示例代码</script>\n');
+    // 表格标签整体留在清洗白名单里，详情页才能用 .rich-content 的表格样式展示。
+    expect(root.querySelector('table')).not.toBeNull();
+    expect([...root.querySelectorAll('thead th')].map((cell) => cell.textContent)).toEqual(['名称', '地点']);
     expect(root.querySelector('tbody td')?.textContent).toBe('秋展');
     expect(decodeURI(root.querySelector('a')?.getAttribute('href') ?? '')).toBe('https://example.com/展会(秋)?a=1&b=2');
     expect(root.querySelector('a[href^="mailto:"]')?.getAttribute('href')).toBe('mailto:info@example.com');

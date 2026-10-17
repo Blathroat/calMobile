@@ -780,12 +780,99 @@
   background: var(--f3);
 }
 
+/* 新卡片滑入。`.list.reveal` 关掉通用 item-in，避免进入动画播两遍。
+   第一次绘制由页面把 TransitionGroup 的 css 关掉，整表不重放。 */
+.app-body .list.reveal > * {
+  animation: none;
+}
+
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -16px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.app-body .list.reveal {
+  position: relative;
+}
+
+.app-body .list.reveal > .reveal-enter-active {
+  animation: reveal-in var(--motion-normal) var(--ease-out) both;
+}
+
+.app-body .list.reveal > .reveal-move {
+  transition: transform var(--motion-normal) var(--ease-out);
+}
+
+.app-body .list.reveal > .reveal-leave-active {
+  position: absolute;
+  left: 0;
+  right: 0;
+  animation: none;
+  opacity: 0;
+}
+
+/* 下拉刷新与「缓存已画出、网络还在更新」共用这一枚指示。只动画 transform / opacity。 */
+.app-body {
+  position: relative;
+}
+
+.pull-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: center;
+  height: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.pull-indicator[data-on='true'] {
+  opacity: 1;
+}
+
+.pull-spinner {
+  width: 22px;
+  height: 22px;
+  margin-top: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--stroke);
+  border-top-color: var(--accent);
+}
+
+.pull-spinner[data-spin='true'] {
+  animation: pull-spin 0.7s linear infinite;
+}
+
+@keyframes pull-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.app-body[data-pull-settle='true'] > .page-surface,
+.app-body[data-pull-settle='true'] > .pull-indicator {
+  transition: transform var(--motion-page) var(--ease-out);
+}
+
 /* ── 减弱动效偏好 ─────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   .app-body .list > *,
+  .app-body .list.reveal > .reveal-enter-active,
+  .app-body .list.reveal > .reveal-move,
   .app-body .card,
   .app-body .row-card,
+  .pull-spinner,
   .sheet,
   .sheet-panel,
   .sheet-panel > *,
@@ -807,7 +894,10 @@
     transition: none !important;
   }
 
-  .app-body [data-busy='true'] {
+  .app-body [data-busy='true'],
+  .app-body[data-pull-settle='true'] > .page-surface,
+  .app-body[data-pull-settle='true'] > .pull-indicator,
+  .pull-indicator {
     transition: none !important;
   }
 

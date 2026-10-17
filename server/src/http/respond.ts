@@ -23,8 +23,14 @@ export function failureEnvelope(message: string): Record<string, unknown> {
   return { ok: false, error: message };
 }
 
-/** JSON 响应统一带 charset：与 `res.json()` 的 `application/json; charset=utf-8` 对齐。 */
-export const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8' };
+/**
+ * JSON 响应统一带 charset，并禁止浏览器缓存。
+ * 资料、头像地址都是按当前身份返回的，启发式缓存会让别的页面继续显示旧头像。
+ */
+export const JSON_HEADERS = {
+  'Content-Type': 'application/json; charset=utf-8',
+  'Cache-Control': 'no-store',
+};
 
 /** Hono 的 c.json 只接受它自己那套字面量状态码类型，我们自己算出来的数字要先过一次断言。 */
 function statusCode(status: number): ContentfulStatusCode {

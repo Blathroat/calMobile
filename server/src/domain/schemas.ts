@@ -78,6 +78,7 @@ export function registerSchema(limits: Limits) {
       }
     }),
     email: emailInputSchema('请输入有效的邮箱地址'),
+    inviteCode: z.string().trim().max(32).optional(),
   });
 }
 export type RegisterInput = z.infer<ReturnType<typeof registerSchema>>;
@@ -182,6 +183,7 @@ export const serverSettingsPatchSchema = z
     appTitleEn: z.unknown(),
     categories: z.unknown(),
     canRevise: z.unknown(),
+    canReviseAttended: z.unknown(),
     imageCount: z.unknown(),
     imageSizeMb: z.unknown(),
     videoCount: z.unknown(),
@@ -211,12 +213,20 @@ export const serverSettingsPatchSchema = z
     defaultCover: z.unknown(),
     maxFutureExhibitions: z.unknown(),
     maxFutureMeetings: z.unknown(),
+    inviteUses: z.unknown(),
+    inviteValidHours: z.unknown(),
     notify: notifySchema,
   })
   .partial()
   .passthrough();
 export const userStatusSchema = z.object({
   status: z.preprocess(labels.toUserStatus, z.string({ error: labels.USER_STATUS_HINT })),
+});
+export const userRoleSchema = z.object({
+  role: z.enum(['user', 'exhibitor', 'admin'], { error: '请选择用户、展商或管理员' }),
+});
+export const inviteRedeemSchema = z.object({
+  code: inputString.transform((value) => value.trim()),
 });
 export const adminTwoFactorSchema = z.object({
   enabled: z.literal(false, { error: '两步验证只能由本人开启（需要验证码）' }),

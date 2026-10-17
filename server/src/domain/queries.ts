@@ -32,7 +32,7 @@ export const EXHIBITION_FROM = `
 /** 报名：字段 + 展会信息（报名表不冗余展会标题，改期后不会两边不一致）。 */
 export const REGISTRATION_COLUMNS = `
     r.id, r.exhibition_id, r.visitor_id, r.visitor_name, r.visitor_type, r.answers,
-    r.status, r.check_in_time, r.created_at,
+    r.status, r.check_in_time, r.check_in_secret, r.created_at,
     e.title                 AS exhibition_title,
     e.venue                 AS exhibition_venue,
     e.time                  AS exhibition_time,

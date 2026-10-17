@@ -245,6 +245,8 @@ describe('app shell', () => {
     }
 
     // 详情页在没有数据时不投递页脚，槽位保持空（CSS 用 :empty 收起整行）。
+    // 同一文件里更早的路由挂载可能已经从本机接口写入查询缓存；这里停住读取，避免缓存先把操作区画出来。
+    const detailSpy = vi.spyOn(api.exhibitions, 'get').mockReturnValue(new Promise(() => {}) as never);
     const detail = await mountRoute('/detail/exh-1');
     try {
       const foot = detail.container.querySelector('#app-foot');
@@ -252,6 +254,7 @@ describe('app shell', () => {
       expect(foot?.childElementCount).toBe(0);
     } finally {
       unmount(detail.container, detail.app);
+      detailSpy.mockRestore();
     }
   });
 

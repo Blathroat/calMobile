@@ -118,6 +118,12 @@ describe('设置页独立取数状态', () => {
   it('资料编辑在抽屉里完成并在保存成功后关闭', async () => {
     await mountSettings();
     await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
+    const actions = document.querySelector('.card .action-row');
+    expect([...(actions?.querySelectorAll('button') ?? [])].map((item) => item.textContent?.trim())).toEqual([
+      '编辑资料',
+      '更换头像',
+      '移除头像',
+    ]);
     button('编辑资料')!.click();
     await nextTick();
     expect(document.querySelector('.sheet-panel #settings-nickname')).not.toBeNull();

@@ -26,6 +26,9 @@ import MediaBox from '@/components/MediaBox.vue';
 import HintNote from '@/components/HintNote.vue';
 import { useHint } from '@/composables/useHint';
 import { useAsync } from '@/composables/useAsync';
+import { useRevealReady } from '@/composables/useReveal';
+import { usePullRefresh } from '@/services/pull-refresh';
+import type { CachedRead } from '@/services/query-cache';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
 import RoleTag from '@/components/RoleTag.vue';
@@ -70,6 +73,7 @@ const monthData = computed(() => monthQuery.data.value?.data);
 const error = computed(() => monthQuery.error.value?.message ?? '');
 const loading = monthQuery.loading;
 const hasContent = computed(() => monthData.value !== undefined);
+const revealReady = useRevealReady();
 
 const calendarHost = ref<HTMLElement>();
 const swipeHost = ref<HTMLElement>();
@@ -188,11 +192,16 @@ async function load(): Promise<boolean> {
         requested.month = month;
       }
     }
-    const data = (await api.exhibitions.month({
+    const monthPromise = api.exhibitions.month({
       year: requested.year,
       month: requested.month,
       day: requested.day || undefined,
-    })) as JsonObject;
+    }) as CachedRead<JsonObject>;
+    // 启动未完成就离开首页时，上面的 throwIfAborted 已经返回，不会发这次请求。
+    if (monthPromise.cached !== undefined) {
+      monthQuery.seed({ data: monthPromise.cached, year: requested.year, month: requested.month });
+    }
+    const data = await monthPromise;
     return { data, year: requested.year, month: requested.month };
   });
   if (!result) return false;
@@ -356,6 +365,11 @@ function announce(): void {
   toast(announcement.value);
 }
 
+usePullRefresh(
+  () => load().then(() => undefined),
+  computed(() => loading.value && hasContent.value),
+);
+
 onMounted(() => {
   enableSwipe();
   announce();
@@ -461,57 +475,63 @@ onBeforeUnmount(() => {
     <span>{{ error }}</span>
   </div>
 
-  <div class="list" data-gap="sm">
-    <SkeletonBlock v-if="loading && !hasContent" :rows="2" />
-    <StateBlock
-      v-else-if="!loading && !error && items.length === 0 && meetings.length === 0"
-      :title="t('home.emptyDay')"
-      :description="t('home.emptyDayHint')"
-      :action-label="t('admin.exhibitions.search')"
-      @action="router.push('/search')"
-    />
-    <template v-else>
-      <button
-        v-for="item in items"
-        :key="String(item.id)"
-        class="row-card"
-        type="button"
-        data-pressable="true"
-        :aria-label="`查看 ${item.title} 详情`"
-        @pointerdown="warm(item.id)"
-        @click="router.push(`/detail/${item.id}`)"
-      >
-        <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
-        <span class="row-copy">
-          <span class="row" data-gap="md">
-            <strong class="row-title truncate">{{ item.title }}</strong>
-            <StatusTag :text="String(item.modeLabel || item.status || '')" />
-          </span>
-          <span class="row-meta">{{ item.time }} · {{ item.venue }}</span>
-          <span class="row-meta truncate">{{ item.category || '' }}</span>
+  <SkeletonBlock v-if="loading && !hasContent" :rows="2" />
+  <StateBlock
+    v-else-if="!loading && !error && items.length === 0 && meetings.length === 0"
+    :title="t('home.emptyDay')"
+    :description="t('home.emptyDayHint')"
+    :action-label="t('admin.exhibitions.search')"
+    @action="router.push('/search')"
+  />
+  <TransitionGroup
+    v-else
+    name="reveal"
+    tag="div"
+    class="list reveal"
+    data-gap="sm"
+    :css="revealReady"
+    :data-busy="loading && hasContent ? 'true' : undefined"
+  >
+    <button
+      v-for="item in items"
+      :key="String(item.id)"
+      class="row-card"
+      type="button"
+      data-pressable="true"
+      :aria-label="`查看 ${item.title} 详情`"
+      @pointerdown="warm(item.id)"
+      @click="router.push(`/detail/${item.id}`)"
+    >
+      <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
+      <span class="row-copy">
+        <span class="row" data-gap="md">
+          <strong class="row-title truncate">{{ item.title }}</strong>
+          <StatusTag :text="String(item.modeLabel || item.status || '')" />
         </span>
-      </button>
-      <button
-        v-for="meeting in meetings"
-        :key="String(meeting.id)"
-        class="row-card"
-        type="button"
-        data-pressable="true"
-        :aria-label="`查看与 ${meeting.title} 的会议详情`"
-        @click="router.push(paths.meetingDetail(String(meeting.id)))"
-      >
-        <span class="avatar" aria-hidden="true">{{ String(meeting.title || '会').slice(0, 1) }}</span>
-        <span class="row-copy">
-          <span class="name-line">
-            <strong class="row-title truncate">{{ meeting.title }}</strong>
-            <RoleTag :role-code="String(meeting.titleRole || '')" />
-          </span>
-          <span class="row-meta">{{ meetingLine(meeting) }}</span>
+        <span class="row-meta">{{ item.time }} · {{ item.venue }}</span>
+        <span class="row-meta truncate">{{ item.category || '' }}</span>
+      </span>
+    </button>
+    <button
+      v-for="meeting in meetings"
+      :key="String(meeting.id)"
+      class="row-card"
+      type="button"
+      data-pressable="true"
+      :aria-label="`查看与 ${meeting.title} 的会议详情`"
+      @click="router.push(paths.meetingDetail(String(meeting.id)))"
+    >
+      <span class="avatar" aria-hidden="true">{{ String(meeting.title || '会').slice(0, 1) }}</span>
+      <span class="row-copy">
+        <span class="name-line">
+          <strong class="row-title truncate">{{ meeting.title }}</strong>
+          <RoleTag :role-code="String(meeting.titleRole || '')" />
         </span>
-        <StatusTag :text="String(meeting.status || '')" />
-      </button>
-    </template>
-  </div>
+        <span class="row-meta">{{ meetingLine(meeting) }}</span>
+      </span>
+      <StatusTag :text="String(meeting.status || '')" />
+    </button>
+  </TransitionGroup>
 </template>
 
 <style>
@@ -542,8 +562,8 @@ onBeforeUnmount(() => {
   position: relative;
   min-width: 0;
   /* 行高只有一档：日历按月份排 5 或 6 行（放得下就 5 行），行距与字号因此完全一致。
-       46px 也保证触控命中区不小于 44px。 */
-  min-height: 46px;
+       44px 保证触控命中区不小于这个下限。 */
+  min-height: 44px;
   /* 数字与“有展会”圆点共用同一条居中轴：flex 纵向排列 + align-items: center，
        圆点因此始终落在数字正下方，不再因为绝对定位与列宽换算而偏右。 */
   display: flex;

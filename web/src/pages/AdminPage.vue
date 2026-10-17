@@ -13,6 +13,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router';
 import { api, applyRuntimeBootstrap } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { usePullRefresh } from '@/services/pull-refresh';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
@@ -29,6 +30,11 @@ import type { Bootstrap, Exhibition, JsonObject, User } from '@/api/types';
 import { t } from '@/i18n';
 
 const USER_STATUSES = [t('admin.users.normal'), t('admin.users.restricted'), t('admin.users.banned')];
+const ROLE_OPTIONS = [
+  { code: 'user', label: t('admin.users.roleUser') },
+  { code: 'exhibitor', label: t('admin.users.roleExhibitor') },
+  { code: 'admin', label: t('admin.users.roleAdmin') },
+];
 
 /**
  * 分区用稳定的英文 id 做值（`value` 会写进 URL 的 `?tab=`），标签才是给用户看的文案：
@@ -192,6 +198,8 @@ const form = reactive({
   announcementEnabled: false,
   categories: '',
   canRevise: false,
+  /** 「已参加」能否由展商退回重审；默认关闭（管理员始终可改） */
+  canReviseAttended: false,
   imageCount: 8,
   imageSizeMb: 10,
   videoCount: 2,
@@ -211,6 +219,9 @@ const form = reactive({
   storageMb: 1024,
   /** 存满以后：拒绝新上传，或删掉最早的文件 */
   whenFull: 'reject' as 'reject' | 'evict-oldest',
+  /** 生成邀请码时的默认次数与有效小时。0 小时表示不过期。 */
+  inviteUses: 1,
+  inviteValidHours: 168,
 });
 
 /** 管理页自己的文案：提示与开关说明放在这里，提取脚本会换成文案 key。 */
@@ -225,6 +236,7 @@ const COPY = {
   manageExhibitions: t('admin.users.manageExhibitions'),
   manageMeetings: t('admin.users.manageMeetings'),
   adjustStatus: t('admin.users.adjustStatus'),
+  adjustRole: t('admin.users.adjustRole'),
   avatarSection: t('admin.media.avatar'),
   avatarFormats: t('admin.media.avatarFormats'),
   avatarFormatsInvalid: t('admin.media.avatarFormatRule'),
@@ -242,6 +254,7 @@ const COPY = {
  */
 const usersCopy = {
   adjustStatus: COPY.adjustStatus,
+  adjustRole: COPY.adjustRole,
   manageExhibitions: COPY.manageExhibitions,
   manageMeetings: COPY.manageMeetings,
 };
@@ -267,6 +280,10 @@ const storagePolicies = [
   { value: 'evict-oldest', label: COPY.storageEvict },
 ];
 const coverBusy = ref(false);
+const inviteBusy = ref(false);
+const invites = ref<
+  Array<{ id: string; code: string; maxUses: number; usedCount: number; expiresAt: string; status: string }>
+>([]);
 const settingsError = ref('');
 const settingsSaving = ref(false);
 const loaded = ref(false);
@@ -363,6 +380,20 @@ onMounted(() => {
   loadPanel();
   preloadPanels();
 });
+
+// 设置分区里有正在编辑的表单，下拉不重新取设置，避免盖掉未保存的输入。
+usePullRefresh(
+  async () => {
+    if (tab.value === 'users') await loadUsers();
+    else if (tab.value === 'exhibitions') await loadExhibitions();
+  },
+  computed(() => {
+    if (tab.value === 'users') return users.loading.value && users.data.value !== undefined;
+    if (tab.value === 'exhibitions') return exhibitions.loading.value && exhibitions.data.value !== undefined;
+    return false;
+  }),
+  computed(() => tab.value === 'users' || tab.value === 'exhibitions'),
+);
 onBeforeUnmount(() => {
   window.clearTimeout(searchTimer);
   window.clearTimeout(preloadTimer);
@@ -381,6 +412,37 @@ function openPublic(user: User): void {
     path: `/user-public/${encodeURIComponent(nickname)}`,
     query: { userId: String(user.id ?? '') },
   });
+}
+
+function manageRole(user: User): void {
+  const actions: SheetAction[] = ROLE_OPTIONS.map((option) => ({
+    label: option.label,
+    variant: user.roleCode === option.code ? 'primary' : 'ghost',
+    onClick: async (close) => {
+      close();
+      await updateUserRole(user, option.code, option.label);
+    },
+  }));
+  openSheet({
+    title: `调整 ${user.nickname} 的权限`,
+    message: `${user.role} · 注册于 ${user.registrationTime || t('admin.users.unknown')}`,
+    actions,
+    layout: 'stack',
+  });
+}
+
+async function updateUserRole(user: User, role: string, label: string): Promise<void> {
+  try {
+    const result = await api.users.setRole(String(user.id ?? ''), role);
+    const ok = result?.ok === true;
+    toast(
+      String(ok ? `已将 ${user.nickname} 设为${label}` : result?.error || t('admin.users.updateFailed')),
+      ok ? 'success' : 'error',
+    );
+    if (ok) await loadUsers();
+  } catch (reason) {
+    toast(reason instanceof Error ? reason.message : String(reason), 'error');
+  }
 }
 
 function manageUser(user: User): void {
@@ -525,6 +587,7 @@ function fillForm(data: JsonObject): void {
   form.announcementEnabled = announcement.enabled === true;
   form.categories = (Array.isArray(data.categories) ? data.categories : []).map((item) => String(item)).join('\n');
   form.canRevise = review.canRevise === true;
+  form.canReviseAttended = review.canReviseAttended === true;
   form.imageCount = Number(media.imageCount ?? bootstrap.media.imageCount ?? 8);
   form.imageSizeMb = Number(media.imageSizeMb ?? bootstrap.media.imageSizeMb ?? 10);
   form.videoCount = Number(media.videoCount ?? bootstrap.media.videoCount ?? 2);
@@ -549,6 +612,27 @@ function fillForm(data: JsonObject): void {
   form.defaultCover = String(cover.defaultCover ?? bootstrap.cover.defaultCover ?? '');
   form.maxFutureExhibitions = Number(exhibitor.maxFutureExhibitions ?? bootstrap.exhibitor.maxFutureExhibitions ?? 0);
   form.maxFutureMeetings = Number(exhibitor.maxFutureMeetings ?? bootstrap.exhibitor.maxFutureMeetings ?? 0);
+  const invite = (data.invite ?? {}) as JsonObject;
+  form.inviteUses = Number(invite.uses ?? form.inviteUses) || 1;
+  const legacyDays = invite.validDays;
+  const storedHours =
+    invite.validHours ??
+    (legacyDays === undefined || legacyDays === null ? form.inviteValidHours : Number(legacyDays) * 24);
+  form.inviteValidHours = Number(storedHours);
+  if (!Number.isFinite(form.inviteValidHours)) form.inviteValidHours = 168;
+  if (Array.isArray(data.invites)) {
+    invites.value = data.invites.map((item) => {
+      const row = (item ?? {}) as JsonObject;
+      return {
+        id: String(row.id ?? ''),
+        code: String(row.code ?? ''),
+        maxUses: Number(row.maxUses) || 0,
+        usedCount: Number(row.usedCount) || 0,
+        expiresAt: String(row.expiresAt ?? ''),
+        status: String(row.status ?? ''),
+      };
+    });
+  }
   form.storageMb = Number(upload.storageMb ?? 1024);
   form.whenFull = upload.whenFull === 'evict-oldest' ? 'evict-oldest' : 'reject';
   const storage = (data.storage ?? {}) as JsonObject;
@@ -679,6 +763,7 @@ async function saveSettings(): Promise<void> {
         .map((item) => item.trim())
         .filter(Boolean),
       canRevise: form.canRevise,
+      canReviseAttended: form.canReviseAttended,
       imageCount: Number(form.imageCount) || 0,
       imageSizeMb: Number(form.imageSizeMb) || 0,
       videoCount: Number(form.videoCount) || 0,
@@ -690,6 +775,8 @@ async function saveSettings(): Promise<void> {
       defaultCover: form.defaultCover.trim(),
       maxFutureExhibitions: Number(form.maxFutureExhibitions) || 0,
       maxFutureMeetings: Number(form.maxFutureMeetings) || 0,
+      inviteUses: Number(form.inviteUses) || 1,
+      inviteValidHours: Number(form.inviteValidHours) || 0,
       storageMb: Number(form.storageMb) || 0,
       whenFull: form.whenFull,
     };
@@ -730,6 +817,74 @@ async function saveSettings(): Promise<void> {
 }
 
 const canEditSettings = computed(() => session.user.can?.admin === true || session.role === 'admin');
+
+async function generateInvite(): Promise<void> {
+  if (inviteBusy.value) return;
+  inviteBusy.value = true;
+  settingsError.value = '';
+  try {
+    const result = await api.settings.createInvite({
+      uses: Number(form.inviteUses) || 1,
+      validHours: Number(form.inviteValidHours) || 0,
+    });
+    if (result?.ok !== true) {
+      settingsError.value = String(result?.error || t('admin.settings.saveFailed'));
+      toast(settingsError.value, 'error');
+      return;
+    }
+    const settings = (result.settings ?? {}) as JsonObject;
+    if (settings.invite || settings.invites) fillForm(settings);
+    toast(t('admin.invites.generated'), 'success');
+  } catch (reason) {
+    settingsError.value = reason instanceof Error ? reason.message : String(reason);
+    toast(settingsError.value, 'error');
+  } finally {
+    inviteBusy.value = false;
+  }
+}
+
+async function revokeInvite(id: string): Promise<void> {
+  if (inviteBusy.value) return;
+  inviteBusy.value = true;
+  try {
+    const result = await api.settings.revokeInvite(id);
+    if (result?.ok !== true) {
+      toast(String(result?.error || t('admin.settings.saveFailed')), 'error');
+      return;
+    }
+    if (Array.isArray(result.invites)) {
+      invites.value = result.invites.map((item) => {
+        const row = (item ?? {}) as JsonObject;
+        return {
+          id: String(row.id ?? ''),
+          code: String(row.code ?? ''),
+          maxUses: Number(row.maxUses) || 0,
+          usedCount: Number(row.usedCount) || 0,
+          expiresAt: String(row.expiresAt ?? ''),
+          status: String(row.status ?? ''),
+        };
+      });
+    }
+    toast(t('admin.invites.revoked'), 'success');
+  } catch (reason) {
+    toast(reason instanceof Error ? reason.message : String(reason), 'error');
+  } finally {
+    inviteBusy.value = false;
+  }
+}
+
+async function copyInvite(code: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(code);
+    toast(t('admin.invites.copied'), 'success');
+  } catch {
+    openSheet({
+      title: t('admin.invites.copy'),
+      message: code,
+      actions: [{ label: t('common.cancel'), onClick: (close) => close() }],
+    });
+  }
+}
 </script>
 
 <template>
@@ -751,6 +906,7 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
     @search="onSearch"
     @open-public="openPublic"
     @manage="manageUser"
+    @adjust-role="manageRole"
     @disable-two-factor="disableTwoFactor"
     @open-exhibitions="openUserExhibitions"
     @open-meetings="openUserMeetings"
@@ -785,8 +941,13 @@ const canEditSettings = computed(() => session.user.can?.admin === true || sessi
     :limit-groups="LIMIT_GROUPS"
     :pair-limits="pairLimits"
     :copy="settingsCopy"
+    :invites="invites"
+    :invite-busy="inviteBusy"
     @retry="loadSettings"
     @save="saveSettings"
     @pick-cover="pickDefaultCover"
+    @generate="generateInvite"
+    @revoke="revokeInvite"
+    @copy="copyInvite"
   />
 </template>

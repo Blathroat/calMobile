@@ -76,6 +76,8 @@ export function preloadTabs(): void {
   if (session.loggedIn) {
     enqueue('profile', () => api.profile.get());
     enqueue('notifications', () => api.profile.notifications());
+    // 我的活动同时要报名和会议。只预热报名时，切过去会议卡片仍要等网络。
+    enqueue('meetings-mine', () => api.meetings.mine());
   }
   if (session.user.can?.exhibitor) {
     enqueue('exhibitions', () => api.exhibitions.list({}));
@@ -84,6 +86,42 @@ export function preloadTabs(): void {
     enqueue('users', () => api.users.list({ query: '' }));
     enqueue('settings', () => api.settings.get());
   }
+}
+
+/**
+ * 手指按下底部导航时立刻预取这一页。
+ * 不进空闲队列：用户已经决定要切过去。缓存仍新鲜时 `get` 不会再发请求。
+ */
+export function preloadTab(id: string): void {
+  const task = tabTask(id);
+  if (!task) return;
+  void task().catch(() => undefined);
+}
+
+function tabTask(id: string): (() => Promise<unknown>) | null {
+  const session = useSessionStore();
+  if (id === 'home') {
+    if (isJoinSurface) return null;
+    const { year, month } = homeMonth();
+    return () => api.exhibitions.month({ year, month });
+  }
+  if (id === 'my-registrations') {
+    if (!session.loggedIn) return null;
+    return () => Promise.all([api.registrations.list(), api.meetings.mine()]);
+  }
+  if (id === 'profile') {
+    if (!session.loggedIn) return null;
+    return () => Promise.all([api.profile.get(), api.profile.notifications()]);
+  }
+  if (id === 'exhibitor') {
+    if (!session.user.can?.exhibitor) return null;
+    return () => Promise.all([api.exhibitions.list({}), api.meetings.inbox({})]);
+  }
+  if (id === 'admin') {
+    if (!session.user.can?.admin) return null;
+    return () => Promise.all([api.users.list({ query: '' }), api.settings.get()]);
+  }
+  return null;
 }
 
 /** 相邻月份：左右滑动切月时目标月份已经在缓存里。 */

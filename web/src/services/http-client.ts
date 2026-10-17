@@ -15,7 +15,7 @@ import { t } from '@/i18n';
  * 重放后仍是 401，就把 `ApiError(401)` 交给会话层 —— 刷新接口自己 401 时因此不会无限递归。
  * 并发的多个 401 共用 `refreshing` 同一个 Promise，所以一次会话只会发一次刷新请求。
  *
- * **超时与取消**：超时默认 3 秒，用 `AbortController` + `setTimeout` 实现；调用方传入的 `signal`
+ * **超时与取消**：超时默认 10 秒，用 `AbortController` + `setTimeout` 实现；调用方传入的 `signal`
  * 与超时共用同一个 controller。两者都以 AbortError 结束，靠 `reason` 分开：
  * `'timeout'` 是自己掐的，`'aborted'` 是调用方取消的（页面切走、重新取数），文案不同也便于排障。
  *
@@ -68,7 +68,7 @@ export interface HttpRequest {
 
 /**
  * `HttpClient` 的构造参数。
- * - `timeoutMs`：单次请求超时，缺省 3000 毫秒。
+ * - `timeoutMs`：单次请求超时，缺省 10000 毫秒。
  * - `fetcher`：注入用（测试替身）；缺省时保存全局 fetch，注意构造函数里的 this 绑定说明。
  * - `getAccessToken`：每次请求前现取令牌；返回空就不发 Authorization 头，登录类接口依赖这一点。
  * - `refresh`：刷新令牌；返回 false 表示刷新失败，此时原始的 401 会作为 `ApiError` 抛给上层。
@@ -108,8 +108,8 @@ export class HttpClient {
   constructor(private readonly options: HttpClientOptions) {
     // WebView 对原生 fetch 的 this 绑定严格，保存函数后必须绑定全局对象再调用。
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
-    // 3 秒是移动网络下的折中：再短会把正常慢请求判死，再长页面就一直转圈。
-    this.timeoutMs = options.timeoutMs ?? 3000;
+    // 10 秒覆盖登录和注册在移动网络上的往返。上传另行传入更长的超时。
+    this.timeoutMs = options.timeoutMs ?? 10000;
   }
 
   /**
@@ -147,6 +147,8 @@ export class HttpClient {
             : JSON.stringify(request.body);
       const response = await this.fetcher(url, {
         method: request.method ?? 'GET',
+        // 带身份的 JSON 不能进浏览器 HTTP 缓存。否则头像地址会停在上传前的那一份。
+        cache: 'no-store',
         headers: {
           Accept: 'application/json',
           // 只有带请求体时才发 Content-Type：GET 带它没有意义，还可能触发多余的预检。

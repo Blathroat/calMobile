@@ -127,13 +127,34 @@ describe('个人页资料展示与编辑', () => {
   it('受限账号的铅笔不可用，也不会打开抽屉', async () => {
     vi.mocked(api.profile.get).mockResolvedValue({ ...PROFILE, can: { profile: false } });
     await mountProfile();
-    await vi.waitFor(() => expect(document.querySelector('button[aria-label="编辑资料"]')).not.toBeNull());
     const bio = cards().find((card) => card.textContent?.includes('个人简介'));
+    await vi.waitFor(() => {
+      const edit = bio?.querySelector<HTMLButtonElement>('button[aria-label="编辑资料"]');
+      expect(edit?.disabled).toBe(true);
+    });
     const edit = bio?.querySelector<HTMLButtonElement>('button[aria-label="编辑资料"]');
-    expect(edit?.disabled).toBe(true);
     edit?.dispatchEvent(new Event('click'));
     await nextTick();
     expect(document.querySelector('.sheet-panel')).toBeNull();
     expect(toast).toHaveBeenCalledWith('账号已被限制，不能编辑个人信息', 'error');
+  });
+
+  it('晚到的旧资料不会盖掉刚换上的头像', async () => {
+    let release!: (value: typeof PROFILE) => void;
+    vi.mocked(api.profile.get).mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    await mountProfile();
+    const session = useSessionStore();
+    session.bumpProfile();
+    session.applyUser({ ...session.user, avatar: '/new.jpg' });
+    release(PROFILE);
+    await vi.waitFor(() => expect(session.user.avatar).toBe('/new.jpg'));
+    await Promise.resolve();
+    await nextTick();
+    expect(session.user.avatar).toBe('/new.jpg');
+    expect(document.querySelector('img')?.getAttribute('src')).toContain('/new.jpg');
   });
 });

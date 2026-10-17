@@ -101,4 +101,17 @@ public class ExportManagerTest {
         assertTrue(name.startsWith("calmobile-exhibitions_"));
         assertTrue(name.endsWith(".csv"));
     }
+
+    /** 文本导出沿用同一套命名：前缀 + 时间戳 + 按 MIME 取的后缀。 */
+    @Test
+    public void namesTextExportByMimeType() {
+        String name = ExportManager.fileName("calmobile-text", ExportManager.textExtension("application/json"));
+        assertTrue(name.startsWith("calmobile-text_"));
+        assertTrue(name.endsWith(".json"));
+        assertEquals("json", ExportManager.textExtension("application/json"));
+        assertEquals("json", ExportManager.textExtension("application/json; charset=utf-8"));
+        assertEquals("txt", ExportManager.textExtension("text/plain"));
+        assertEquals("txt", ExportManager.textExtension("application/octet-stream"));
+        assertEquals("txt", ExportManager.textExtension(null));
+    }
 }

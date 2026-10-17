@@ -15,7 +15,8 @@ const REGISTRATION_TRANSITIONS: Record<string, readonly string[]> = {
   pending: ['approved', 'rejected', 'cancelled'],
   approved: ['attended', 'rejected', 'cancelled'],
   rejected: ['approved', 'cancelled'],
-  attended: [],
+  // 已参加可以退回重审，但放不放行由 review.canReviseAttended 决定（见下面的权限判断）。
+  attended: ['approved', 'rejected'],
   cancelled: ['pending', 'approved'],
 };
 interface ReviewRecordRow {
@@ -25,6 +26,7 @@ interface ReviewRecordRow {
   visitor_name: string;
   answers: string | null;
   status: string;
+  check_in_secret?: string | null;
   registration_time: string | null;
   exhibition_exhibitor_id: string | null;
   visitor_role?: string | null;
@@ -37,16 +39,35 @@ interface ExhibitionScopeRow {
   id: string;
   exhibitor_id: string | null;
 }
-const REVIEW_COLUMNS = `r.id, r.exhibition_id, r.visitor_id, r.visitor_name, r.answers, r.status, to_char(r.created_at, 'MM-DD HH24:MI') AS registration_time, e.exhibitor_id AS exhibition_exhibitor_id, COALESCE(vu.role, '') AS visitor_role`;
+const REVIEW_COLUMNS = `r.id, r.exhibition_id, r.visitor_id, r.visitor_name, r.answers, r.status, r.check_in_secret, to_char(r.created_at, 'MM-DD HH24:MI') AS registration_time, e.exhibitor_id AS exhibition_exhibitor_id, COALESCE(vu.role, '') AS visitor_role`;
 const REVIEW_FROM = `FROM registrations r JOIN exhibitions e ON e.id = r.exhibition_id LEFT JOIN users vu ON vu.id = r.visitor_id`;
 async function canReviseByExhibitor() {
   const review = await readSection('review');
   return Boolean(review && review.canRevise === true);
 }
+/** 展商能否把「已参加」退回：独立开关，默认关闭（管理员始终可以改）。 */
+async function canReviseAttendedByExhibitor() {
+  const review = await readSection('review');
+  return Boolean(review && review.canReviseAttended === true);
+}
 function summaryOf(answers: unknown) {
   return String(answers || '')
     .replace(/\n/g, ' ')
     .slice(0, 46);
+}
+/**
+ * 状态流转后这条报名该用哪个核销凭据。
+ *
+ * - 新状态是「已参加」：核销成功用的就是当前这个码，保持不动；
+ * - 上一次是「已参加」而现在不是（退回重审 / 改判）：**换新凭据**，现场那张旧二维码立即失效；
+ * - 其余情况保持原值；只有已通过却没有凭据（老数据）时补一个，保证码拼得出来。
+ */
+function rotatedCheckInSecret(row: ReviewRecordRow, status: string): string {
+  const current = String(row.check_in_secret || '');
+  if (status === 'attended') return current;
+  if (row.status === 'attended') return labels.newCheckInSecret();
+  if (!current && status === 'approved') return labels.newCheckInSecret();
+  return current;
 }
 function reviewPayload(row: ReviewRecordRow) {
   return {
@@ -139,13 +160,28 @@ app.put('/:id/status', authenticateHono, async (c) => {
       throw badRequest(
         `不能把「${labels.REGISTRATION_STATUS[row.status] || row.status}」的报名改成「${labels.REGISTRATION_STATUS[status]}」`,
       );
-    if (user.role !== 'admin' && !(await canReviseByExhibitor())) {
-      if (row.status === 'approved' || row.status === 'rejected')
-        throw forbidden('管理员未开放修改已通过或已拒绝的报名');
-      if (row.status === 'cancelled') throw forbidden('管理员未开放重新审核已撤销的报名');
+    if (user.role !== 'admin') {
+      if (row.status === 'attended') {
+        // 已参加走独立开关：默认关闭，只有管理员显式打开后展商才能退回。
+        if (!(await canReviseAttendedByExhibitor())) throw forbidden('管理员未开放修改已参加的报名');
+      } else if (!(await canReviseByExhibitor())) {
+        if (row.status === 'approved' || row.status === 'rejected')
+          throw forbidden('管理员未开放修改已通过或已拒绝的报名');
+        if (row.status === 'cancelled') throw forbidden('管理员未开放重新审核已撤销的报名');
+      }
     }
     try {
-      await query('UPDATE registrations SET status = $2, updated_at = now() WHERE id = $1', [row.id, status]);
+      await query(
+        `UPDATE registrations
+            SET status = $2,
+                -- 核销时间记的是「曾经核销」这个事实：状态离开「已参加」后不该再挂着，
+                -- 否则列表与导出会把一条退回重审的报名显示成已核销过。
+                check_in_time = CASE WHEN $2 = 'attended' THEN check_in_time ELSE NULL END,
+                check_in_secret = $3,
+                updated_at = now()
+          WHERE id = $1`,
+        [row.id, status, rotatedCheckInSecret(row, status)],
+      );
     } catch (error: unknown) {
       if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505')
         throw badRequest('该用户在这场展会上已有未撤销的报名，不能把这条改成此状态');
