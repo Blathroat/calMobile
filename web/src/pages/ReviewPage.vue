@@ -4,6 +4,7 @@
  *
  * 状态为待审核 / 已通过 / 已拒绝 / 已参加；展商能否重新审核由管理员设置决定
  * （`bootstrap.review.canRevise`），管理员自己不受该开关限制。
+ * 「已参加」退回另有一条策略（`bootstrap.review.canReviseAttended`，默认关闭）。
  *
  * 筛选切换只改本地状态并复用已取到的数据：分段上的数量与顶部统计都从这一份记录算出来，
  * 切筛选不重新取数，也不清空上一份结果（只在原位标记忙碌）。
@@ -108,8 +109,10 @@ usePullRefresh(
 
 /**
  * 可选动作必须与后端状态机一致（`server/src/routes/review-hono.ts` 的
- * REGISTRATION_TRANSITIONS）：已参加是终态；展商在「允许修改已通过或已拒绝的报名」
- * 关闭时不能动已审核的记录，管理员不受该策略限制，但仍受状态机限制。
+ * REGISTRATION_TRANSITIONS）：已参加可以退回已通过 / 已拒绝，但默认关闭，
+ * 只有管理员或 `canReviseAttended` 打开时展商才看得到入口；展商在
+ * 「允许修改已通过或已拒绝的报名」关闭时不能动已审核的记录，管理员不受该策略限制，
+ * 但仍受状态机限制。
  */
 const TRANSITIONS: Record<string, string[]> = {
   [REGISTRATION_STATUS.PENDING]: [REGISTRATION_STATUS.APPROVED, REGISTRATION_STATUS.REJECTED],
@@ -120,6 +123,13 @@ const TRANSITIONS: Record<string, string[]> = {
 
 function targetsFor(record: Registration): string[] {
   const status = String(record.status ?? '');
+  // 已参加不是终态，但默认只有管理员能动：管理员没打开 canReviseAttended 时
+  // 展商看不到「调整状态」（详情里的 attendedLocked 提示仍会说明原因）。
+  if (status === REGISTRATION_STATUS.ATTENDED) {
+    return isAdmin.value || bootstrap.review.canReviseAttended === true
+      ? [REGISTRATION_STATUS.APPROVED, REGISTRATION_STATUS.REJECTED]
+      : [];
+  }
   const reviewed = status !== REGISTRATION_STATUS.PENDING;
   const mayRevise = isAdmin.value || !reviewed || bootstrap.review.canRevise === true;
   return mayRevise ? (TRANSITIONS[status] ?? []) : [];
@@ -185,7 +195,6 @@ function openDetail(record: Registration): void {
       status: String(record.status ?? ''),
       statusTone: statusTone(String(record.status ?? '')),
       registrationTime: String(record.registrationTime ?? ''),
-      summary: String(record.summary ?? ''),
       answers: answers.map((line) => ({
         label: line.label || t('exhibition.detail.additionalInfo'),
         value: line.value || '—',

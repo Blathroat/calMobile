@@ -1,5 +1,5 @@
 /**
- * 界面文案的取用入口。内置中文在 `zh.json`。
+ * 界面文案的取用入口。内置中文在 `zh.json`（嵌套 JSON，加载时压成扁平表）。
  *
  * 谁读：所有页面、路由 `meta.title`、`app/shell.ts` 的导航标签。
  * 谁写：内置中文只改 `zh.json`。用户的语言包在本机，不进这张表。邮件正文在后端。
@@ -7,13 +7,19 @@
  * 不变量：
  * - 路径用点连接，例如 `auth.login.title`。查找顺序是当前语言包 → 内置中文 → `fallback`。
  *   `fallback` 默认是路径本身。屏幕上直接出现这种路径，就是中文表里也没有这一条。
+ *   调用方看到的永远是扁平表：`zh.json` 与语言包文件写嵌套，只是为了人改的时候不用把
+ *   长前缀抄一遍（见下面的 `flattenStrings()`）。
  * - 语言包或中文表里该条是空串时返回空串，不会继续往下走。
  * - **不是响应式的**。切换语言后整页重新加载。模块顶层取到的值会固定，
  *   正确做法仍是存路径、渲染时再 `t(path)`。
  * - 不做插值 / 复数 / 占位符。
  * - 下载语言包不走 `api/client.ts`：链接是用户或服务器给的任意地址，不能带上接口令牌。
+ * - 这里只提供纯函数 `chineseTemplate()`：落到文件、系统「另存为」和提示都属于页面层，
+ *   而且不能在这里 import `services/device-services.ts`——`native-bridge` 反过来 import 本模块，会成环。
+ * - 安装 / 切换语言会整页重载，所以提示先用 `services/toast.ts` 的 `toastAfterReload()` 排队。
  */
 import { isJoinSurface } from '@/app/surface';
+import { toastAfterReload } from '@/services/toast';
 import builtinJson from './zh.json';
 import {
   PACK_BYTES,
@@ -32,7 +38,30 @@ import {
   type LangState,
 } from './packs';
 
-const builtin: Record<string, string> = Object.assign(Object.create(null), builtinJson);
+/**
+ * 嵌套表压成点分路径的扁平表。
+ *
+ * `zh.json` 与用户语言包都用嵌套 JSON 写，人改的时候不用重复抄长前缀；但运行时查找
+ * （下面的 `lookup()`、`overlayFor()`、`t()`）都在按点分路径索引的扁平表里做，
+ * 热路径上不必每层 `split`，所以模块加载时压一次。
+ * 中文表是打进页面包的构建产物，形状可信：只收字符串叶子，其余静默跳过。
+ */
+function flattenStrings(node: Record<string, unknown>, prefix = ''): Record<string, string> {
+  const flat: Record<string, string> = Object.create(null);
+  for (const [key, value] of Object.entries(node)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === 'string') {
+      flat[path] = value;
+      continue;
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      Object.assign(flat, flattenStrings(value as Record<string, unknown>, path));
+    }
+  }
+  return flat;
+}
+
+const builtin: Record<string, string> = flattenStrings(builtinJson as Record<string, unknown>);
 
 const surface = isJoinSurface ? 'join' : 'app';
 
@@ -110,18 +139,9 @@ export function deleteLanguage(id: string): void {
   reloadForLanguage();
 }
 
+/** 下载给用户改的中文底稿：与 `zh.json` 一样是嵌套结构，装上就能用。 */
 export function chineseTemplate(): string {
-  return `${JSON.stringify({ id: 'en', name: 'English', strings: { ...builtinJson } }, null, 2)}\n`;
-}
-
-export function downloadChineseTemplate(): void {
-  const blob = new Blob([chineseTemplate()], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'zh-template.json';
-  link.click();
-  URL.revokeObjectURL(url);
+  return `${JSON.stringify({ id: 'en', name: 'English', strings: builtinJson }, null, 2)}\n`;
 }
 
 export function langErrorText(error: unknown): string {
@@ -145,6 +165,8 @@ export async function installPackFromUrl(url: string): Promise<void> {
   const pack = await installFromUrl(url, undefined, true);
   state = chooseLanguage(state, pack.id);
   persist();
+  // 重载会把当场弹的气泡冲掉，排队到重载后再弹（外壳挂载时 flushDeferredToast()）。
+  toastAfterReload(t('settings.lang.installDone'), 'success');
   reloadForLanguage();
 }
 
@@ -161,6 +183,8 @@ export async function installPackFromText(text: string): Promise<void> {
   state = installPack(state, pack, true);
   state = chooseLanguage(state, pack.id);
   persist();
+  // 与链接安装同一条：重载后再弹。
+  toastAfterReload(t('settings.lang.installDone'), 'success');
   reloadForLanguage();
 }
 

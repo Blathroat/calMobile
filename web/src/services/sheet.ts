@@ -10,7 +10,7 @@
  * `layout: 'stack'` 把按钮竖着排（选项多、文字长短不一时比并排更好读）。
  * `layout: 'close-below'` 把最后一颗按钮独占下一行并拉满宽度，用来放「关闭」。
  */
-import { markRaw, reactive, readonly, type Component } from 'vue';
+import { markRaw, reactive, shallowReadonly, type Component } from 'vue';
 import { t } from '@/i18n';
 
 export interface SheetAction {
@@ -109,4 +109,14 @@ export function confirmSheet(options: {
   });
 }
 
-export const sheet = readonly(state);
+/**
+ * 对外只读的面板状态。
+ *
+ * **为什么是浅只读**：deep readonly 会让 AppSheet 用 v-bind 传下去的内容组件 props
+ * 也变成只读代理，面板里的 v-model（手动输入报名码、粘贴 Markdown）于是只在控制台留一句
+ * Set operation on key "code" failed: target is readonly，输入值悄悄丢掉，提交时报「请输入报名码」。
+ * 这里只需要挡住「页面直接给 sheet.current 赋值」这一种误用，因此用 shallowReadonly：
+ * 顶层仍只读，读到的 current / props / model 保持原样的响应式对象，面板能正常写回；
+ * closing 这类嵌套字段的变化照旧能触发 AppSheet 重渲染，退场动画不受影响。
+ */
+export const sheet = shallowReadonly(state);

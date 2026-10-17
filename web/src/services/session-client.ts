@@ -1,6 +1,7 @@
 /** 管理访问令牌生命周期，刷新令牌不扩散到页面层。 */
 import { nativeBridge } from './native-bridge';
 import { ApiError, type HttpClient } from './http-client';
+import { forgetSession, rememberSession } from './session-hint';
 
 export interface SessionTokens {
   token: string;
@@ -79,6 +80,9 @@ export class SessionClient {
     this.accessToken = tokens.token;
     this.refreshToken = tokens.refreshToken ?? '';
     this.username = username;
+    // 记下「本机有登录态」：整页重载后首帧会话还没恢复，路由守卫靠它先等 restore()，
+    // 免得把已登录的页面误判成未登录、闪一下登录页（见 services/session-hint.ts）。
+    rememberSession();
     // 没有原生桥时当场写入。晚到的异步保存不能盖过随后的退出。
     if (!nativeBridge.hasNative()) this.writeBrowserSession();
     void this.persist();
@@ -89,6 +93,8 @@ export class SessionClient {
     this.accessToken = '';
     this.refreshToken = '';
     this.username = '';
+    // 已经不在登录态了，重载后不该再让守卫等恢复。
+    forgetSession();
     if (!nativeBridge.hasNative()) this.writeBrowserSession(null);
     void this.forget();
   }
@@ -105,6 +111,9 @@ export class SessionClient {
     this.username = stored.username;
     const renewed = await this.refresh();
     if (!renewed && !signal.aborted) this.clear();
+    // 恢复成功同样算「本机有登录态」。refresh() 内部已记过一次，这里再记是幂等的：
+    // 让「restore() 成功」这条契约不依赖 refresh() 的实现细节。
+    if (renewed) rememberSession();
     return renewed;
   }
 

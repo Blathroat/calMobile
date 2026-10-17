@@ -1,4 +1,6 @@
 import { t } from '@/i18n';
+import { bootApp } from '@/app/runtime';
+import { hasRememberedSession } from '@/services/session-hint';
 /**
  * 路由表与访问守卫。
  *
@@ -11,9 +13,16 @@ import { t } from '@/i18n';
  * - `requiresAuth` / `roles` / `capability`：访问约束，只被下面的守卫读取，外壳不关心。
  *
  * 守卫按固定顺序判定，先命中先返回（顺序不能调换）：
- * 1. 登录：`requiresAuth` 且未登录 → 跳 `/login` 并带 `redirect=<原 fullPath>`；
- * 2. 角色：`roles` 不含当前角色 → 回 `/home`；
- * 3. 能力：`capability` 不被 `session.can()` 允许 → 也回 `/home`。
+ * 1. 等待会话恢复：整页重载（切换语言、安装语言包）后首帧令牌还没进内存
+ *    （`loggedIn === false`），本机又留着「上次离开时是登录态」提示时，对需要登录的页面与
+ *    `/login` 都先 `await bootApp()` 恢复会话再往下判；否则这一屏会在恢复完成前被判定成
+ *    匿名、甩到登录页，用户看到「短暂跳登录页」。`/` 的 redirect 是同步的，冷启动先落
+ *    `/login`，所以入口也走这条；恢复到已登录而这一屏是 `/login` 时，直接回 `redirect` 里
+ *    记的原地址（没有就回 `/home`）。提示不是身份依据（见 `services/session-hint.ts`）：
+ *    没有它时行为与从前完全一致，照旧跳登录页；
+ * 2. 登录：`requiresAuth` 且未登录 → 跳 `/login` 并带 `redirect=<原 fullPath>`；
+ * 3. 角色：`roles` 不含当前角色 → 回 `/home`；
+ * 4. 能力：`capability` 不被 `session.can()` 允许 → 也回 `/home`。
  * 先是登录再是角色 / 能力：未登录时权限表为空而 `can()` 默认放行，若先判能力就会把匿名用户
  * 直接放进需要权限的页面。
  *
@@ -23,8 +32,9 @@ import { t } from '@/i18n';
  * 坑：
  * - `roles` / `capability` 漏写不报错，但等于对所有登录用户开放，记得成对检查；
  * - 越权一律回 `/home`，没有 403 页；`/home` 自身不要求登录，所以不会出现互相弹跳的死循环；
- * - `/` 的 redirect 读 `session.loggedIn` 的**当前值**：冷启动时令牌只在内存里，首帧必然落登录页，
- *   由 `main.ts` 在 bootstrap 落定后用 `replace` 纠正；
+ * - `/` 是同步 redirect，读 `session.loggedIn` 的**当前值**：冷启动首帧还是空的，于是先落
+ *   `/login`；有登录态提示时守卫在 `/login` 上等恢复再送回原处，没有提示时 `main.ts` 仍会在
+ *   bootstrap 落定后用 `replace` 纠正；
  * - 每次导航先 `navigation.begin()` 取消上一次未完成的导航，`afterEach` 再记方向给动效；
  * - 新增页面要同步 `app/shell.test.ts` 的 `ROUTES` 与 `docs/engineering.md` 的屏幕表。
  */
@@ -99,7 +109,8 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
   const router = createRouter({
     history,
     routes: [
-      // 冷启动没有会话（令牌只存在内存里），入口与登录页一致；bootstrap 落定后由 main.ts 纠正。
+      // 入口是同步 redirect：按当前状态落首页或登录页。整页重载后的首帧（本机留着登录态
+      // 提示）会先落到 `/login`，守卫在那里等会话恢复，恢复到就直接送回原处，不闪登录页。
       { path: '/', redirect: () => (useSessionStore().loggedIn ? '/home' : '/login') },
       // 登录页是未登录时的落点，不显示返回键（没有可返回的上一页）
       { path: '/login', component: LoginPage, meta: { title: 'auth.login.title', bodyGap: 'tight' } },
@@ -300,10 +311,21 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
    * 全局前置守卫：登录 → 角色 → 能力，判定顺序与理由见文件头。
    * 返回 `true` 放行；返回路径或位置对象即改道（vue-router 4 的返回值写法，不用 next()）。
    */
-  router.beforeEach((to) => {
+  router.beforeEach(async (to) => {
     // 先取消上一次还没完成的导航，避免旧页面的懒加载 / 取数在切走后继续写状态
     navigation.begin();
     const session = useSessionStore();
+    // 整页重载后的首帧：令牌还在设备存储里、还没换进内存，本机又留着登录态提示时，
+    // 先恢复会话再判登录。提示只用于这一步等待，不是身份依据（见 services/session-hint.ts）。
+    // `/` 的 redirect 是同步的，冷启动会先落到 `/login`，所以 `/login` 也要一起等：
+    // 恢复成已登录就从这里直接回原地址，不把登录页落到屏幕上。
+    const recovering = hasRememberedSession() && !session.loggedIn;
+    if (recovering && (to.meta.requiresAuth || to.path === '/login')) {
+      await bootApp().catch(() => undefined);
+      if (session.loggedIn && to.path === '/login') {
+        return typeof to.query.redirect === 'string' ? to.query.redirect : '/home';
+      }
+    }
     if (to.meta.requiresAuth && !session.loggedIn) {
       // 带上原 fullPath（含 query），登录成功后按它送回原处
       return { path: '/login', query: { redirect: to.fullPath } };

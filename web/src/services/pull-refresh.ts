@@ -5,8 +5,12 @@
  * 多层页面（展商后台里的会议列表）按注册顺序叠放，最上层的生效。
  * 刷新期间查询缓存忽略新鲜期，但页面上已有的内容不会被清掉。
  *
- * 加载圈跟着下拉滑出来，松手后才开始转、才发请求。
+ * 指示圈只属于**手动下拉**：跟着手指滑出来，松手后才开始转、才发请求；
  * 就算接口马上回来，也要先滑到停留位置，再滑回去。
+ *
+ * **后台刷新不碰指示圈**：切底部导航的预取、返回旧页面时「缓存已画出、网络还在回来」，
+ * 只会让登记页面的 `busy` 为真（汇到 `pullBusy`）。这不再滑入、不再转圈、也不改内容位移——
+ * 否则每次切页面都会闪一下圈。页面自己的忙碌标记由页面自己表达。
  */
 import { onScopeDispose, ref, watch, type Ref } from 'vue';
 import { withForcedReads } from '@/services/query-cache';
@@ -22,7 +26,11 @@ interface Entry {
 
 const stack: Entry[] = [];
 
-/** 页面正在用缓存等网络，或下拉刷新还没结束。 */
+/**
+ * 登记页面的后台刷新状态：`busy` 为真（缓存已画出、网络还在回来），或手动下拉刷新还没结束。
+ * 只作状态信号，**不驱动指示圈**——那是外壳的 `pullDragging` / `pullOffset` / `pullSpinning` /
+ * `pullSettling` 的事（见文件头：后台刷新不显示指示圈）。
+ */
 export const pullBusy = ref(false);
 /** 手指正在下拉，内容跟手，不做过渡。 */
 export const pullDragging = ref(false);
@@ -49,6 +57,12 @@ const TRIGGER = 56;
 const MAX_PULL = 96;
 const REST = 44;
 const SLOP = 8;
+/**
+ * 触摸死区。点击按钮时手指总会跟着漂几像素；没过死区就当没有下拉——
+ * 不设 `pullDragging`、位移保持 0，外壳的指示圈与内容位移都不会被点出来。
+ * 轴判定仍走 SLOP=8：横滑要在死区内就能被区分开，才不会被误判成竖拉。
+ */
+const PULL_DEAD_ZONE = 16;
 /** 与 motion.css 的页面过渡同长，滑入滑出才看得出。 */
 const SLIDE_MS = 280;
 /** 停在展开位置的最短时间，接口再快也要转完这一下。 */
@@ -90,18 +104,6 @@ async function animateOffset(next: number, token: number): Promise<void> {
   await wait(SLIDE_MS);
 }
 
-function untilBusyClears(entry: Entry): Promise<void> {
-  const busy = entry.busy;
-  if (!busy?.value) return Promise.resolve();
-  return new Promise((resolve) => {
-    const stop = watch(busy, (value) => {
-      if (value) return;
-      stop();
-      resolve();
-    });
-  });
-}
-
 /**
  * 滑到停留位置并转圈，等 `work` 结束（至少 HOLD_MS），再滑回去。
  * 新的手势或页面离开会把代数加一，这一轮就不再改位移。
@@ -135,8 +137,8 @@ async function holdThenRelease(entry: Entry, work: () => Promise<unknown>): Prom
 }
 
 /**
- * 登记当前页的刷新。`busy` 为真时（缓存已画出、网络还没回来）外壳滑入同一枚指示。
- * `enabled` 为假时手势落到下一层；没有下一层就不响应下拉。
+ * 登记当前页的刷新。`busy` 是页面自己的后台忙碌标记：只汇到 `pullBusy`，
+ * 不滑入指示圈、不转圈（见文件头）。`enabled` 为假时手势落到下一层；没有下一层就不响应下拉。
  */
 export function usePullRefresh(refresh: Refresh, busy?: Ref<boolean>, enabled?: Ref<boolean>): void {
   const entry: Entry = { refresh, busy, enabled };
@@ -148,10 +150,8 @@ export function usePullRefresh(refresh: Refresh, busy?: Ref<boolean>, enabled?: 
         busy,
         (value) => {
           if (activeEntry() !== entry) return;
+          // 只同步状态：后台刷新不滑入、不转圈，指示圈留给手动下拉（见文件头）。
           pullBusy.value = value;
-          // 手指正在拉，或这一轮已经是松手后的刷新：不要再播一遍。
-          if (!value || holding || pullDragging.value) return;
-          void holdThenRelease(entry, () => untilBusyClears(entry));
         },
         { immediate: true },
       ),
@@ -194,6 +194,22 @@ export async function runRegisteredRefresh(): Promise<void> {
   } finally {
     pullBusy.value = activeEntry()?.busy?.value === true;
   }
+}
+
+/**
+ * 把指示圈相关的状态全部归零，换页时由外壳调用。
+ *
+ * 换页之后上一页的手势与在途动画一律作废：`generation` 加一让滑入 / 滑出与 hold 循环
+ * 手里的 token 失效，四个状态清掉，指示圈不会留在新页面上。参数不用，清的是模块级状态。
+ */
+export function resetPullVisual(): void {
+  generation += 1;
+  holding = false;
+  holdingEntry = undefined;
+  pullDragging.value = false;
+  pullOffset.value = 0;
+  pullSpinning.value = false;
+  pullSettling.value = false;
 }
 
 /**
@@ -244,6 +260,12 @@ export function bindPullGesture(element: HTMLElement): () => void {
       }
     }
     if (element.scrollTop > 0 || dy <= 0) {
+      pullOffset.value = 0;
+      pullDragging.value = false;
+      return;
+    }
+    // 死区内的向下漂移不算下拉：状态与位移都不动，只有超过死区才照旧跟手。
+    if (dy <= PULL_DEAD_ZONE) {
       pullOffset.value = 0;
       pullDragging.value = false;
       return;

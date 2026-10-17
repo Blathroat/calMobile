@@ -17,15 +17,7 @@ import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
-import {
-  PATTERNS,
-  allowedFormats,
-  check,
-  limit,
-  uploadCountLimit,
-  uploadSizeLimitMb,
-  validateAll,
-} from '@/services/validate';
+import { PATTERNS, allowedFormats, check, limit, validateAll } from '@/services/validate';
 import { EXHIBITION_STATUS, REGISTRATION_MODES } from '@/services/status';
 import { device } from '@/services/device-services';
 import { publishImportedMedia } from '@/services/publish-media';
@@ -114,16 +106,6 @@ const descriptionSummary = computed(() => {
 const qrHint = computed(() => (form.qrEnabled ? t('exhibition.form.checkInQrOn') : t('exhibition.form.checkInQrOff')));
 const allowCancelLabel = t('exhibition.form.allowCancel');
 const allowCancelHint = t('exhibition.form.approvedCancelLocked');
-
-/** 媒体限制说明：数量与大小上限都来自「管理-设置」。 */
-const mediaHint = computed(() => {
-  const imageCount = Number(bootstrap.media.imageCount) || 8;
-  const imageSize = Number(bootstrap.media.imageSizeMb) || 10;
-  return (
-    `图片 ${imageCount} 张 / 单张 ${imageSize} MB，` +
-    `视频 ${uploadCountLimit('video')} 个 / 单个不超过 ${uploadSizeLimitMb('video')} MB；${t('exhibition.editor.mediaUsesShortUrl')}`
-  );
-});
 
 // ── 校验 ─────────────────────────────────────────────────────────
 
@@ -678,7 +660,6 @@ function normalizeOptions(options: unknown): string[] {
     <CollectFieldsCard
       :fields="fields"
       :label="t('exhibition.form.collectFields')"
-      :hint="mediaHint"
       :title-max="limit('fieldTitle', 30)"
       :radio-max="limit('radioOption', 60)"
       :check-max="limit('checkOption', 60)"

@@ -198,6 +198,8 @@ const form = reactive({
   announcementEnabled: false,
   categories: '',
   canRevise: false,
+  /** 「已参加」能否由展商退回重审；默认关闭（管理员始终可改） */
+  canReviseAttended: false,
   imageCount: 8,
   imageSizeMb: 10,
   videoCount: 2,
@@ -585,6 +587,7 @@ function fillForm(data: JsonObject): void {
   form.announcementEnabled = announcement.enabled === true;
   form.categories = (Array.isArray(data.categories) ? data.categories : []).map((item) => String(item)).join('\n');
   form.canRevise = review.canRevise === true;
+  form.canReviseAttended = review.canReviseAttended === true;
   form.imageCount = Number(media.imageCount ?? bootstrap.media.imageCount ?? 8);
   form.imageSizeMb = Number(media.imageSizeMb ?? bootstrap.media.imageSizeMb ?? 10);
   form.videoCount = Number(media.videoCount ?? bootstrap.media.videoCount ?? 2);
@@ -760,6 +763,7 @@ async function saveSettings(): Promise<void> {
         .map((item) => item.trim())
         .filter(Boolean),
       canRevise: form.canRevise,
+      canReviseAttended: form.canReviseAttended,
       imageCount: Number(form.imageCount) || 0,
       imageSizeMb: Number(form.imageSizeMb) || 0,
       videoCount: Number(form.videoCount) || 0,

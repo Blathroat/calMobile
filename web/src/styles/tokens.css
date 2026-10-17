@@ -1633,6 +1633,9 @@ button.avatar {
 
 .rich-content {
   display: grid;
+  /* 单列兜住内容宽度：否则宽表格会把这一列撑到自己的固有宽度，卡片被撑破，
+     表格自己的 max-width 也就失去了参照。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--s3);
   color: var(--ink);
   font-size: var(--fs-body);
@@ -1668,6 +1671,41 @@ button.avatar {
   border-inline-start: 3px solid var(--accent-edge);
   background: var(--f3);
   color: var(--ink-2);
+}
+
+/* 表格：整张表连同每个单元格都是同口径的 1px 框线。
+   行高与列宽都跟着内容走（不给 nowrap、也不给固定行高），列宽按内容分配；
+   窄屏放不下时只有表格自己横向滚动，不撑破卡片。 */
+.rich-content table {
+  display: block; /* 表格要成为滚动容器，不能用默认的 table 布局 */
+  width: max-content; /* 内容窄时外框贴着内容，不拉满整行 */
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  table-layout: auto;
+  /* display:block 时折叠边框模型会把最外圈算两遍，实测外框会变粗成 2px 双线。
+     这里保留 1px 的边框宽度但不上色，外框交给最外圈的 th/td，四边一律 1px。 */
+  border: var(--hairline) solid transparent;
+}
+
+.rich-content th,
+.rich-content td {
+  padding: var(--s2) var(--s3);
+  border: var(--hairline) solid var(--stroke);
+  /* 每列至少放得下几个字：没有这个下限时，5 列以上的表会被压到每格一两个字，
+     行高被拉成几百像素（实测 644px）。给下限后列宽仍随内容增长，放不下就横向滚动。 */
+  min-width: 4.5em;
+  text-align: start;
+  vertical-align: top;
+  /* 盖掉 .rich-content 的 anywhere：单元格的固有宽度按词计算，
+     表格才有触发横向滚动的下限；过长的串仍在单元格内断开，不会溢出。 */
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.rich-content th {
+  background: var(--f3);
+  font-weight: 700;
 }
 
 /* ============================================================================

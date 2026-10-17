@@ -98,6 +98,8 @@ describe('简介加载、编辑与保存', () => {
     expect(preview?.classList.contains('ghost')).toBe(true);
     expect(document.querySelector('.toolbar')?.textContent).not.toContain('粘贴');
     expect(document.querySelectorAll('.action-row > button')).toHaveLength(2);
+    // 这一行不在 .card 里，靠 data-fill 改回「等宽铺满」。
+    expect(document.querySelector('.action-row')?.getAttribute('data-fill')).toBe('true');
     preview?.click();
     await nextTick();
     expect(preview?.textContent).toContain('继续编辑');

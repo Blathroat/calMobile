@@ -429,7 +429,7 @@ async function rebindTotp(): Promise<void> {
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
       <p v-if="notice" class="notice" data-tone="accent" role="status">{{ notice }}</p>
 
-      <div class="row" data-between="true">
+      <div class="row email-row" data-between="true">
         <span class="row-copy">
           <span class="row-title">{{ t('auth.register.email') }}</span>
           <span class="row-meta truncate">{{ emailLabel }}</span>
@@ -495,3 +495,14 @@ async function rebindTotp(): Promise<void> {
     </div>
   </template>
 </template>
+
+<style>
+/* 「更换邮箱」按内容取宽：`.cta` 默认 width:100%，在 `.row[data-between]` 里会被拉成整行。
+   高度仍由 `.cta[data-size='small']` 的 min-height: var(--touch) 保证 44px。
+   选择器只命中本页这一行。 */
+.email-row > .cta[data-size='small'] {
+  flex: none;
+  width: auto;
+  white-space: nowrap;
+}
+</style>

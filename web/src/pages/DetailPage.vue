@@ -27,7 +27,8 @@ import RoleTag from '@/components/RoleTag.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import ImageViewer from '@/components/ImageViewer.vue';
 import { formatDateWithWeekday } from '@/services/format';
-import type { ExhibitionDetail, JsonObject } from '@/api/types';
+import { REGISTRATION_STATUS } from '@/services/status';
+import type { ExhibitionDetail, JsonObject, Registration } from '@/api/types';
 import { t } from '@/i18n';
 
 const route = useRoute();
@@ -47,6 +48,8 @@ const fields = computed<JsonObject[]>(() => query.data.value?.fields ?? []);
 const found = computed(() => query.data.value?.found !== false);
 const exhibitionId = computed(() => String(route.params.id ?? ''));
 
+/** 我的报名列表（缓存键 `registrations`）。只有已登录时才请求；取不到就是空表。 */
+const registrations = ref<Registration[]>([]);
 const calendarState = ref<{ inCalendar: boolean; granted: boolean }>({ inCalendar: false, granted: false });
 const calendarBusy = ref(false);
 /** 大图查看：封面放大到全屏，支持双指缩放。 */
@@ -80,22 +83,69 @@ const canRegister = computed(() => session.user.can?.register === true);
 const registerLimited = computed(() => session.loggedIn === true && session.user.can?.register === false);
 
 const registerBlocked = computed(() => exhibition.value?.openForRegistration === false || registerLimited.value);
+
+/**
+ * 本场展会的有效报名：列表里第一条 `exhibitionId` 命中本页、且状态不是「已撤销」的记录。
+ *
+ * 列表接口把已撤销的记录也返回（服务端按创建时间倒序整表下发），所以「撤销过」必须
+ * 在这里排掉，否则用户撤销后按钮会一直停在「查看我的报名」。
+ * 没取到（未登录 / 请求失败 / 真没报名）时是 null，底部保持原来的「立即报名」。
+ */
+const myRegistration = computed<Registration | null>(() => {
+  const id = exhibitionId.value;
+  if (!id) return null;
+  return (
+    registrations.value.find(
+      (record) => String(record.exhibitionId ?? '') === id && record.status !== REGISTRATION_STATUS.CANCELLED,
+    ) ?? null
+  );
+});
+
 const registerLabel = computed(() => {
+  // 已报名时主按钮是「去哪看报名」，与报名是否关闭、账号是否受限无关。
+  if (myRegistration.value) return t('exhibition.detail.viewMyRegistration');
   if (exhibition.value?.openForRegistration === false) return t('exhibition.detail.registrationClosed');
   return registerLimited.value || canRegister.value
     ? t('exhibition.detail.registerNow')
     : t('exhibition.detail.registerAfterLogin');
 });
 
+/** 已报名时按钮必须是可点的「查看我的报名」，不受报名已关闭 / 受限账号影响。 */
+const registerDisabled = computed(() => myRegistration.value === null && registerBlocked.value);
+/** 只有「不能报名」这一种禁用才带说明；查看自己的报名不需要解释。 */
+const registerTitle = computed(() =>
+  registerDisabled.value && registerLimited.value ? t('exhibition.detail.registerRestricted') : undefined,
+);
+
 function footerHint(): string {
   const item = exhibition.value;
   if (!item) return '';
+  // 已报名的说明优先：报名关闭 / 受限都不影响「我已经报上了」这件事。
+  if (myRegistration.value) return t('exhibition.detail.registeredHint');
   if (item.openForRegistration === false) {
     return `${item.modeLabel || item.status}：该展会当前不接受报名。`;
   }
   if (registerLimited.value) return t('exhibition.detail.registerRestricted');
   // 访客进不来这一页（守守卫按「访客只可访问首页」处理），所以这里不再区分「先登录」的引导。
   return t('exhibition.detail.trackInActivities');
+}
+
+/**
+ * 读「我的报名」，判断本场是否已经报过名。
+ *
+ * 取舍：这条查询只是增强底部按钮，属于附带信息。失败时保持「立即报名」、不弹错误、
+ * 也不把整页变成失败态 —— 真要重复报名，服务端仍会用「已提交过该展会的报名」拦住，
+ * 那是更准确的提示；让整页因为这条增强查询报错反而更糟。
+ * 未登录不发请求：报名列表是登录态数据，访客不需要也不该看到这个判断。
+ */
+async function loadMyRegistration(): Promise<void> {
+  if (session.loggedIn !== true) return;
+  try {
+    const records = await api.registrations.list();
+    if (Array.isArray(records)) registrations.value = records;
+  } catch {
+    registrations.value = [];
+  }
 }
 
 async function load(): Promise<void> {
@@ -157,6 +207,11 @@ async function toggleCalendar(): Promise<void> {
 function startRegistration(): void {
   const item = exhibition.value;
   if (!item) return;
+  // 已报名：主按钮变成「查看我的报名」，跳自己的报名详情，不受报名关闭 / 受限影响。
+  if (myRegistration.value) {
+    void router.push(`/registration-detail/${myRegistration.value.id}`);
+    return;
+  }
   if (registerLimited.value) {
     toast(t('exhibition.detail.registerRestricted'), 'error');
     return;
@@ -201,14 +256,20 @@ function share(): void {
   });
 }
 
+/** 下拉刷新：展会详情与「我的报名」一起重取（未登录时后者自己跳过，不发请求）。 */
+async function refreshAll(): Promise<void> {
+  await Promise.all([load(), loadMyRegistration()]);
+}
+
 // 会话只用于判断「能不能报名」，取到即可。
 usePullRefresh(
-  () => load(),
+  () => refreshAll(),
   computed(() => query.loading.value && query.data.value !== undefined),
 );
 
 onMounted(() => {
   void load();
+  void loadMyRegistration();
 });
 </script>
 
@@ -344,8 +405,8 @@ onMounted(() => {
           <button
             class="cta"
             type="button"
-            :disabled="registerBlocked"
-            :title="registerLimited ? t('exhibition.detail.registerRestricted') : undefined"
+            :disabled="registerDisabled"
+            :title="registerTitle"
             @click="startRegistration"
           >
             {{ registerLabel }}

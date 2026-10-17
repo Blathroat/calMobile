@@ -42,8 +42,12 @@ export interface BootstrapState {
   media: JsonObject;
   /** 服务端约定：`avatarSizeMb` / `avatarFormats`，以及封面用的 `imageFormats` / `videoFormats` */
   server: JsonObject;
-  /** 审核策略，目前只有 `canRevise`：报名被审核后是否还允许修改 */
-  review: JsonObject;
+  /**
+   * 审核策略：`canRevise` 是报名被审核后是否还允许修改；
+   * `canReviseAttended` 是「已参加」能否退回重审（后端默认关闭）。
+   * 老库可能还没下发新键，读取时按可能缺字段处理。
+   */
+  review: JsonObject & { canRevise?: boolean; canReviseAttended?: boolean };
   /** 管理员配色：强调色由 `colors[index]` 决定，运行时写进 `--accent*`；下标越界由 `app/theme.ts` 夹回范围 */
   theme: JsonObject;
   /** 缺省展会封面：`defaultCover` 是媒体短 URL，展会自己没有封面时用它（空串表示继续用占位图） */

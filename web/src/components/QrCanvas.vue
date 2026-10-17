@@ -31,6 +31,22 @@ async function render(): Promise<void> {
 
 onMounted(render);
 watch(() => props.text, render);
+
+/**
+ * 导出当前画布为 PNG dataURL，供报名详情的「长按保存」使用。
+ * 画布还没画出来、或内核不给导出时返回空串，调用方据此如实提示失败。
+ */
+function toPngDataUrl(): string {
+  const node = canvas.value;
+  if (!node) return '';
+  try {
+    return node.toDataURL('image/png');
+  } catch {
+    return '';
+  }
+}
+
+defineExpose({ toPngDataUrl });
 </script>
 
 <template>

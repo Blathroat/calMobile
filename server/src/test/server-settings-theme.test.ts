@@ -77,6 +77,45 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
   );
 });
 
+test('新增 review.canReviseAttended：老库缺键兜底 false，保存后可读回', async () => {
+  const before = await get('/api/v1/settings');
+  const canReviseBefore = before.body.review.canRevise === true;
+
+  // 老库：加这个键之前写入的 review JSON 里没有 canReviseAttended
+  await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [
+    JSON.stringify({ canRevise: true, statuses: DEFAULT_SETTINGS.review.statuses }),
+    'review',
+  ]);
+  try {
+    const legacySettings = await get('/api/v1/settings');
+    assert.strictEqual(
+      legacySettings.body.review.canReviseAttended,
+      false,
+      '老库缺键时应当兜底 false，而不是 undefined',
+    );
+    assert.strictEqual(legacySettings.body.review.canRevise, true, '同一段里已有的键照旧生效');
+    const legacyBootstrap = await get('/api/v1/bootstrap');
+    assert.strictEqual(legacyBootstrap.body.review.canReviseAttended, false, 'bootstrap 下发的 review 也要补上这个键');
+
+    const saved = await put('/api/v1/settings', { canReviseAttended: true }, { token: tokens.admin.token });
+    assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+    assert.strictEqual(saved.body.settings.review.canReviseAttended, true, '保存结果里应当带上新开关');
+    assert.strictEqual(saved.body.settings.review.canRevise, true, '同一段里的其它键不能被重置');
+    assert.strictEqual((await get('/api/v1/settings')).body.review.canReviseAttended, true);
+    assert.strictEqual((await get('/api/v1/bootstrap')).body.review.canReviseAttended, true);
+
+    // 关回去要真的写 false，而不是被当成「没提交」而跳过
+    const off = await put('/api/v1/settings', { canReviseAttended: false }, { token: tokens.admin.token });
+    assert.strictEqual(off.body.settings.review.canReviseAttended, false);
+  } finally {
+    await put(
+      '/api/v1/settings',
+      { canRevise: canReviseBefore, canReviseAttended: false },
+      { token: tokens.admin.token },
+    );
+  }
+});
+
 test('老库的 4 色色板：迁移补到 8 色，且已有的 index 不变', async () => {
   // 模拟老库：迁移 0006 之前写入的 theme 只有 4 个颜色
   const legacyColors = DEFAULT_SETTINGS.theme.colors.slice(0, 4);

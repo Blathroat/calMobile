@@ -6,6 +6,7 @@
  * 表单是 AdminPage 里的 reactive 对象，作为普通 prop 下传；子组件只改它的嵌套字段，
  * 不整体替换，因此父组件不需要处理 update:modelValue（也避免 v-model 对 const 绑定的改写）。
  */
+import AppIcon from '@/components/AppIcon.vue';
 import SegControl from '@/components/SegControl.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
@@ -27,6 +28,7 @@ interface AdminSettingsForm {
   announcementEnabled: boolean;
   categories: string;
   canRevise: boolean;
+  canReviseAttended: boolean;
   imageCount: number;
   imageSizeMb: number;
   videoCount: number;
@@ -279,6 +281,16 @@ function inviteStatusLabel(status: string): string {
           <span />
         </label>
       </div>
+      <div class="switch-row">
+        <span class="switch-copy">
+          <strong>{{ t('admin.settings.reviewAttended') }}</strong>
+          <span class="field-hint">{{ t('admin.settings.reviewAttendedHint') }}</span>
+        </span>
+        <label class="switch" for="settings-revise-attended">
+          <input id="settings-revise-attended" v-model="form.canReviseAttended" type="checkbox" />
+          <span />
+        </label>
+      </div>
     </div>
 
     <div class="card">
@@ -491,15 +503,24 @@ function inviteStatusLabel(status: string): string {
     </div>
 
     <p v-if="settingsError" class="field-error" role="alert">{{ settingsError }}</p>
-    <button
-      class="cta"
-      type="button"
-      :disabled="settingsSaving || !canEditSettings"
-      :data-loading="settingsSaving ? 'true' : 'false'"
-      @click="emit('save')"
-    >
-      {{ t('admin.settings.save') }}
-    </button>
+
+    <!-- 悬浮保存：只在本分区（管理-设置）渲染，贴页面右下角；保存中或没有权限时禁用。
+         用 .round-action（51px 圆形、带阴影）加 save 图标，标题与读屏名复用同一句文案。
+         投递到 body：`position: fixed` 若留在页面里，页面切换的 `.route-enter` 动画期间
+         transform 祖先会成为包含块，按钮会先按内容区定位再跳回屏幕右下角（长页面尤其明显）。
+         放到 body 下就没有这个包含块，定位从第一帧起就是屏幕坐标。 -->
+    <Teleport to="body">
+      <button
+        class="round-action settings-save-fab"
+        type="button"
+        :disabled="settingsSaving || !canEditSettings"
+        :aria-label="t('admin.settings.save')"
+        :title="t('admin.settings.save')"
+        @click="emit('save')"
+      >
+        <AppIcon name="save" />
+      </button>
+    </Teleport>
   </template>
 </template>
 
@@ -532,7 +553,27 @@ function inviteStatusLabel(status: string): string {
   background: var(--accent);
 }
 
-.storage-meter[data-full='true'] > span {
-  background: var(--danger-ink);
+/* 悬浮保存按钮：fixed 贴屏幕右下角，但横向要落在 `.app` 这条 720px 居中列内，
+   不能飘到窗口边；底部要避开底部导航与安全区。取值理由：
+   - 右：窗口比 --app-max 宽时，(100vw - --app-max) / 2 正是 `.app` 右缘到窗口右缘的距离，
+     再加一层内容内距 --s4，按钮就贴在这条列内；窄屏下括号内为负，max() 取 --s4 兜底，
+     因此窄屏不会溢出。
+   - 下：底部导航最小高度 48px（AppTabBar 里 .tab 的 min-height，等于 --ctrl 44 + --s1 4）
+     + 顶部内距 --s2 + 一条 --hairline 上边框，再留 --s4 的呼吸位，最后叠上安全区
+     --safe-bottom（.app 的 padding-bottom 也是这个值），所以安全区与导航都不会压住它。
+   选择器带上 .round-action 是为了稳定压过 motion.css 里的 position: relative。 */
+.round-action.settings-save-fab {
+  position: fixed;
+  right: max(var(--s4), calc((100vw - var(--app-max)) / 2 + var(--s4)));
+  bottom: calc(var(--ctrl) + var(--s1) + var(--s2) + var(--hairline) + var(--s4) + var(--safe-bottom));
+  z-index: 30;
+}
+
+/* 禁用时与 .cta[disabled] 同一套观感：灰底灰字、去掉阴影，指针提示不可点。 */
+.settings-save-fab[disabled] {
+  background: var(--f1);
+  color: var(--ink-3);
+  box-shadow: none;
+  cursor: not-allowed;
 }
 </style>

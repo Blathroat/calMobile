@@ -86,9 +86,11 @@ app.post('/', authenticateHono, async (c) => {
     const status = autoApproved ? 'approved' : 'pending';
     const id = `reg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     try {
+      // 建记录时就生成核销凭据：报名码由「展会 + 报名 + 凭据」拼成，
+      // 凭据以后可以在退回重审时轮换（见 routes/review-hono.ts）。
       await query(
-        `INSERT INTO registrations (id, exhibition_id, visitor_id, visitor_name, visitor_type, answers, status) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [id, exhibitionId, user.userId, visitorName, visitorType, document.text, status],
+        `INSERT INTO registrations (id, exhibition_id, visitor_id, visitor_name, visitor_type, answers, status, check_in_secret) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, exhibitionId, user.userId, visitorName, visitorType, document.text, status, labels.newCheckInSecret()],
       );
     } catch (error: unknown) {
       if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505')

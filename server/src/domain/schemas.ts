@@ -183,6 +183,7 @@ export const serverSettingsPatchSchema = z
     appTitleEn: z.unknown(),
     categories: z.unknown(),
     canRevise: z.unknown(),
+    canReviseAttended: z.unknown(),
     imageCount: z.unknown(),
     imageSizeMb: z.unknown(),
     videoCount: z.unknown(),

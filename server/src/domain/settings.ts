@@ -51,6 +51,7 @@ export interface ServerPatch {
   appTitleEn?: unknown;
   categories?: unknown;
   canRevise?: unknown;
+  canReviseAttended?: unknown;
   imageCount?: unknown;
   imageSizeMb?: unknown;
   videoCount?: unknown;
@@ -220,6 +221,9 @@ export async function readServerSettings(): Promise<ServerSettings> {
   settings.upload = { ...DEFAULT_SETTINGS.upload, ...settings.upload };
   // 老库存的 exhibitor 只有展会额度。新键按默认值补上，避免读出来是 undefined。
   settings.exhibitor = { ...DEFAULT_SETTINGS.exhibitor, ...settings.exhibitor };
+  // 老库的 review JSON 没有 canReviseAttended（加这个键之前写入的）：以默认值为底补上，
+  // 否则读出来是 undefined，路由里的 `=== true` 判断与前端开关都拿不到 false。
+  settings.review = { ...DEFAULT_SETTINGS.review, ...settings.review };
   settings.invite = normalizeInvite(settings.invite);
   // 老库的 limits JSON 没有文本填写和选项上限。缺的键用默认值补上，避免读出来是 undefined。
   const storedLimits = settings.limits;
@@ -289,6 +293,10 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   }
   if (Object.prototype.hasOwnProperty.call(source, 'canRevise')) {
     next.review = { ...next.review, canRevise: Boolean(source.canRevise) };
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'canReviseAttended')) {
+    // 与 canRevise 同一套写法：只处理提交过的键，布尔化后合并进 review 段。
+    next.review = { ...next.review, canReviseAttended: Boolean(source.canReviseAttended) };
   }
   if (['imageCount', 'imageSizeMb', 'videoCount', 'videoSizeMb'].some((key) => key in source)) {
     // 兜底值再取一次默认设置：库里那一项可能是加新键**之前**写入的 JSON

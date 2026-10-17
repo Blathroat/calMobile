@@ -512,7 +512,7 @@ function escapeRegExp(value: string): string {
     </div>
 
     <!-- 这一行只放预览和粘贴。插入图片、插入视频留在上面的工具条。 -->
-    <div class="action-row">
+    <div class="action-row" data-fill="true">
       <button
         class="cta"
         :class="{ ghost: !showPreview }"
@@ -658,5 +658,19 @@ function escapeRegExp(value: string): string {
   color: var(--on-dark);
   font-size: 16px;
   line-height: 1;
+}
+
+/* 预览 / 粘贴 Markdown 这一行不在 `.card` 里，tokens.css 靠后的 `.action-row > .cta`
+   按内容取宽。这里显式改回等分：一行两列、横向铺满、文案不折行。 */
+.action-row[data-fill='true'] {
+  align-items: stretch;
+  overflow: visible;
+}
+
+.action-row[data-fill='true'] > .cta {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  white-space: nowrap;
 }
 </style>

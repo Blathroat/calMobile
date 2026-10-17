@@ -20,7 +20,6 @@ const COPY = {
   status: t('registration.detail.status'),
   time: t('registration.detail.registeredAt'),
   answers: t('registration.detail.submittedInfo'),
-  summary: t('registration.detail.summary'),
 };
 
 withDefaults(
@@ -29,7 +28,6 @@ withDefaults(
     /** 与列表里同一个状态色调，抽屉和列表不会对同一条报名给出两种颜色。 */
     statusTone?: StatusTone;
     registrationTime?: string;
-    summary?: string;
     answers: { label: string; value: string }[];
     /** 终态说明：没有可调整的动作时由调用方传进来。 */
     hint?: string;
@@ -37,7 +35,6 @@ withDefaults(
   {
     statusTone: 'muted',
     registrationTime: '',
-    summary: '',
     hint: '',
   },
 );
@@ -65,11 +62,6 @@ withDefaults(
         </div>
       </div>
       <p v-else class="row-meta">{{ t('registration.detail.noCollectedInfo') }}</p>
-    </div>
-
-    <div v-if="summary" class="stack" data-gap="sm">
-      <span class="section-label">{{ COPY.summary }}</span>
-      <p class="detail-value">{{ summary }}</p>
     </div>
 
     <p v-if="hint" class="field-hint">{{ hint }}</p>

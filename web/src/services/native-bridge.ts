@@ -36,10 +36,13 @@ export type NativeAction =
   | 'notify.requestPermission'
   | 'media.pickImage'
   | 'media.import'
+  | 'media.importText'
   | 'media.store'
   | 'media.discard'
   | 'share.text'
   | 'export.csv'
+  | 'export.text'
+  | 'media.saveImage'
   | 'session.save'
   | 'session.load'
   | 'session.clear'
@@ -70,6 +73,9 @@ export interface NativeActionPayloads {
   'media.pickImage': Record<string, never>;
   // 走系统文件选择器，kind 决定取图片还是视频。
   'media.import': { kind: 'image' | 'video' };
+  // 走系统文件选择器读一个文本文件（语言包）：正文由原生读出来回给页面，
+  // 页面不直接读设备文件（WebView 关掉了文件 / content 访问）。
+  'media.importText': { mimeTypes?: string; maxBytes?: number };
   // dataUrl 落盘成文件；kind 决定存储目录。
   'media.store': { dataUrl: string; kind: 'avatar' | 'image' | 'video' };
   /** 删掉选择器刚落盘的临时文件。只接受媒体目录下的单层文件名。 */
@@ -78,6 +84,10 @@ export interface NativeActionPayloads {
   'share.text': { title: string; text: string };
   // CSV 正文由调用方生成，原生只负责写文件。
   'export.csv': { filename: string; content: string };
+  // 任意文本文件（语言包底稿）交系统「另存为」面板；正文与文件名由调用方给。
+  'export.text': { fileName: string; content: string; mimeType?: string };
+  // 把 dataUrl 图片写进系统相册；fileName 只是展示名，落盘名由原生补全。
+  'media.saveImage': { dataUrl: string; fileName?: string };
   // 刷新令牌存在设备私有存储里（`SessionStore.java`）；空 token 等价于清除。
   'session.save': { refreshToken: string; username?: string };
   'session.load': Record<string, never>;
@@ -103,12 +113,18 @@ export interface NativeActionResults {
     mimeType?: string;
     compressed?: boolean;
   };
+  // 文本文件的正文与展示名；用户取消时以 cancelled 失败。
+  'media.importText': { text: string; fileName?: string; bytes?: number };
   'media.store': { url: string };
   'media.discard': { ok: boolean };
   // shared 为 false 等价于用户放弃分享，不是错误。
   'share.text': { shared: boolean };
   // exported 为 false 表示没写成（权限或存储），不是异常。
   'export.csv': { exported: boolean };
+  // 同上：系统面板里点了取消会以 cancelled 失败，不是故障。
+  'export.text': { exported: boolean; fileName?: string };
+  // 写进相册后返回；低版本系统改用系统「另存为」面板，取消同样以 cancelled 失败。
+  'media.saveImage': { saved: boolean; uri?: string };
   'session.save': { ok: boolean; refreshToken: string; username: string };
   // 读回的值可能与写入不同：原生侧才是权威存储，空 refreshToken 表示没有会话。
   'session.load': { refreshToken: string; username: string };
@@ -153,7 +169,10 @@ declare global {
 const INTERACTIVE_ACTIONS = new Set<NativeAction>([
   'media.pickImage',
   'media.import',
+  'media.importText',
   'export.csv',
+  'export.text',
+  'media.saveImage',
   'camera.ensurePermission',
   'notify.requestPermission',
 ]);

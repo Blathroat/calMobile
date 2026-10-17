@@ -259,6 +259,20 @@ export function otherCode(code: string): string {
 }
 
 /**
+ * 取一条报名的报名码（走报名详情接口，不手拼）。
+ *
+ * 报名码里带**可轮换的凭据**（退回重审后换新），因此用例不能按 id 拼码，
+ * 只能拿接口下发的那一个。取码的身份要能看这条报名：本人或管理员。
+ */
+export async function registrationCode(registrationId: string, token: string): Promise<string> {
+  const detail = await get(`/api/v1/registrations/${registrationId}`, { token });
+  assert.strictEqual(detail.body.found, true, `取报名码失败：${JSON.stringify(detail.body)}`);
+  const code = String(detail.body.registration?.checkInCode || '');
+  assert.ok(code, `该报名没有下发报名码：${JSON.stringify(detail.body.registration)}`);
+  return code;
+}
+
+/**
  * 契约环境里由 `test/setup-contract.ts` 的 `vi.stubEnv` 注入的 CORS_ORIGIN。
  * 与业务无关，只看骨架的 CORS 行为；写死字面量，不读 process.env。
  */

@@ -10,12 +10,13 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-function mount(fields: CollectField[], extra: { radioMax?: number; checkMax?: number } = {}): void {
+function mount(fields: CollectField[], extra: { hint?: string; radioMax?: number; checkMax?: number } = {}): void {
   document.body.innerHTML = '<div id="collect-test"></div>';
   app = createApp(CollectFieldsCard, {
     fields,
     label: '报名收集项',
-    hint: '报名的人会按这些问题填写',
+    // 不传 hint 时不带这个 prop，验证「可选」这一档。
+    hint: 'hint' in extra ? extra.hint : '卡片说明小字',
     titleMax: 40,
     radioMax: extra.radioMax,
     checkMax: extra.checkMax,
@@ -55,6 +56,25 @@ describe('报名收集项编辑卡', () => {
     await nextTick();
     expect(fields[0]?.type).toBe('多选');
     expect(fields[0]?.options).toEqual(['朋友']);
+  });
+
+  it('说明文案为空或没传时不渲染那段小字，传了仍照旧显示', async () => {
+    mount([], { hint: '' });
+    expect(document.body.textContent).not.toContain('卡片说明小字');
+    // 只剩下「还没有收集项」这一条提示。
+    expect(document.querySelectorAll('.card > .field-hint')).toHaveLength(1);
+
+    app?.unmount();
+    mount([]);
+    await nextTick();
+    expect(document.querySelectorAll('.card > .field-hint')).toHaveLength(2);
+    expect(document.body.textContent).toContain('卡片说明小字');
+
+    app?.unmount();
+    mount([], { hint: undefined });
+    await nextTick();
+    expect(document.body.textContent).not.toContain('卡片说明小字');
+    expect(document.querySelectorAll('.card > .field-hint')).toHaveLength(1);
   });
 
   it('单选和多选的选项输入使用各自的字数上限', async () => {

@@ -61,6 +61,8 @@ export interface RegistrationRow {
   exhibition_qr_enabled?: boolean | null;
   exhibition_allow_cancel?: boolean | null;
   check_in_time?: string | Date | null;
+  /** 可轮换的报名码凭据：退回重审后换一个，旧码随之失效。 */
+  check_in_secret?: string | null;
 }
 
 export interface UserRow {
@@ -149,10 +151,15 @@ export function fieldPayload(row: FieldRow) {
  * `checkInCode` 只在「展会启用二维码」且「报名已通过 / 已参加」时下发，
  * 其余状态给空串，页面据此不渲染二维码。这是现场核销的唯一凭据，
  * 因此只在本人 / 管理员可见的路径上下发（公开页用 publicRegistrationPayload）。
+ *
+ * 码里带上轮换凭据 `check_in_secret`；凭据为空（老数据迁移前可能如此）时**不拼码**，
+ * 否则会下发一个核销时必然被拒的码。
  */
 export function registrationPayload(row: RegistrationRow) {
   const statusCode = row.status;
-  const codeAllowed = row.exhibition_qr_enabled === true && (statusCode === 'approved' || statusCode === 'attended');
+  const secret = String(row.check_in_secret || '');
+  const codeAllowed =
+    row.exhibition_qr_enabled === true && (statusCode === 'approved' || statusCode === 'attended') && secret !== '';
   return {
     id: row.id,
     exhibitionId: row.exhibition_id,
@@ -170,7 +177,7 @@ export function registrationPayload(row: RegistrationRow) {
     statusLabel: labels.REGISTRATION_STATUS[statusCode] || '',
     qrEnabled: row.exhibition_qr_enabled === true,
     allowCancel: row.exhibition_allow_cancel !== false,
-    checkInCode: codeAllowed ? labels.checkInCode(row.exhibition_id, row.id) : '',
+    checkInCode: codeAllowed ? labels.checkInCode(row.exhibition_id, row.id, secret) : '',
     checkInTime: row.check_in_time ? new Date(row.check_in_time).toISOString() : '',
   };
 }

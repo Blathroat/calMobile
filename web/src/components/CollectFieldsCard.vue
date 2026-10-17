@@ -22,7 +22,8 @@ const props = defineProps<{
   fields: CollectField[];
   /** 卡片标题，两边文案不同，结构相同。 */
   label: string;
-  hint: string;
+  /** 卡片说明；为空时不渲染那段小字。 */
+  hint?: string;
   titleMax: number;
   /** 单选选项字数上限。缺省与后端默认一致。 */
   radioMax?: number;
@@ -99,7 +100,7 @@ function itemLabel(index: number): string {
       <span class="section-label">{{ label }}</span>
       <span class="pill">{{ `${fields.length} 项` }}</span>
     </div>
-    <p class="field-hint">{{ hint }}</p>
+    <p v-if="hint" class="field-hint">{{ hint }}</p>
     <p v-if="fields.length === 0" class="field-hint">{{ COPY.empty }}</p>
     <div v-if="fields.length" class="collect-list">
       <div v-for="(item, index) in fields" :key="index" class="collect-item">
