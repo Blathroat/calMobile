@@ -575,7 +575,7 @@ function escapeRegExp(value: string): string {
 
 <style>
 .editor-surface {
-  min-height: 220px;
+  min-height: 192px;
   padding: var(--s3);
   border: var(--hairline) solid var(--stroke);
   border-radius: var(--r-input);

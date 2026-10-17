@@ -20,7 +20,7 @@ withDefaults(defineProps<{ rows?: number }>(), { rows: 3 });
 }
 
 .skeleton-row {
-  height: 72px;
+  height: 64px;
   border-radius: var(--r-card);
   background: linear-gradient(90deg, var(--f1) 25%, var(--f3) 37%, var(--f1) 63%);
   background-size: 400% 100%;

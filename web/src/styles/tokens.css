@@ -1,8 +1,9 @@
 /* ============================================================================
  * calMobile · 设计令牌
  *
- * 生产版以 390dp 逻辑宽度为基准。字号按 9/10/12/14/17 × 1.8 取整，
- * 间距统一到 4px 栅格，触控区域不小于 44px。
+ * 生产界面以 1080×2400、xxhdpi 的逻辑画布 360×800 为密度基准。
+ * 字号、间距、圆角按上一档的 7/8 取整，间距与圆角再对齐 4px 栅格。
+ * 触控命中不小于 44px。1px 描边不参与缩放。
  * ==========================================================================*/
 
 :root {
@@ -34,15 +35,15 @@
   --info-ink: #2f6f8f; /* 仅展示等中性状态 */
   --info-tint: #e6eef3;
 
-  /* ── 字号（9/10/12/14/17px × 1.8） ───────────────────────────────── */
-  --fs-eyebrow: 13px;
-  --fs-meta: 14px;
-  --fs-body: 16px;
-  --fs-label: 14px;
-  --fs-h3: 18px;
-  --fs-h2: 22px;
-  --fs-h1: 26px;
-  --fs-tag: 12px;
+  /* ── 字号 ────────────────────────────────────────────────────────── */
+  --fs-eyebrow: 11px;
+  --fs-meta: 12px;
+  --fs-body: 14px;
+  --fs-label: 12px;
+  --fs-h3: 16px;
+  --fs-h2: 19px;
+  --fs-h1: 23px;
+  --fs-tag: 10px;
   --lh-tight: 1.25;
   --lh-base: 1.45;
 
@@ -50,16 +51,16 @@
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
-  --s4: 16px;
-  --s5: 20px;
-  --s6: 24px;
-  --s7: 32px;
+  --s4: 12px;
+  --s5: 16px;
+  --s6: 20px;
+  --s7: 28px;
 
   /* ── 圆角 ────────────────────────────────────────────────────────── */
   --r-chip: 8px;
   --r-input: 12px;
-  --r-card: 16px;
-  --r-panel: 20px;
+  --r-card: 12px;
+  --r-panel: 16px;
   --r-pill: 999px;
 
   /* ── 阴影与描边 ──────────────────────────────────────────────────── */
@@ -72,9 +73,9 @@
 
   /* ── 行为尺寸 ────────────────────────────────────────────────────── */
   --touch: 44px;
-  /* 顶部栏内容高度：12px 上下内边距 + 44px 触控高度，所有页面统一 */
-  --topbar-h: 68px;
-  --ctrl: 48px;
+  /* 顶部栏内容高度：8px 上下内边距 + 44px 触控高度，所有页面统一 */
+  --topbar-h: 60px;
+  --ctrl: 44px;
   --app-max: 720px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -365,7 +366,7 @@ label {
 /* 路由容器：内容区的纵向排布由它承担（页面只负责往里放区块），
    单独一层是为了让 `route-enter` 动画在每次切换时重放。
    它还负责内容的**第二道内距**：旧版（master）每个页面都被 `scaffold` 多包了一层
-   `.app-body`，两道 `var(--s4)` 叠起来才是实机版式（内容左右各留 32px）。 */
+   `.app-body`，两道 `var(--s4)` 叠起来才是实机版式（内容左右各留 24px）。 */
 .app-body > .page-surface {
   min-height: 0;
   display: flex;
@@ -672,7 +673,7 @@ label {
 .section-label::before {
   content: '';
   width: 3px;
-  height: 14px;
+  height: 12px;
   border-radius: var(--r-pill);
   background: var(--accent);
 }
@@ -687,7 +688,7 @@ label {
   align-items: center;
   gap: var(--s2);
   min-height: calc(var(--safe-top) + var(--topbar-h));
-  padding: calc(var(--s3) + var(--safe-top)) var(--s4) var(--s3);
+  padding: calc(var(--s2) + var(--safe-top)) var(--s4) var(--s2);
   background: var(--screen);
   border-bottom: var(--hairline) solid var(--stroke);
   position: sticky;
@@ -716,8 +717,8 @@ label {
 }
 
 .icon-button svg {
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
 }
 
 .icon-button:disabled {
@@ -727,12 +728,12 @@ label {
 
 /* 跟在区块标题后面的小图标：命中区仍是 44px，字形贴着标题。 */
 .icon-button[data-inline='true'] {
-  margin-inline-start: calc((var(--touch) - 16px) / -2);
+  margin-inline-start: calc((var(--touch) - 14px) / -2);
 }
 
 .icon-button[data-inline='true'] svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .icon-button[data-variant='outlined'] {
@@ -741,8 +742,8 @@ label {
 }
 
 .icon {
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.5;
@@ -751,8 +752,8 @@ label {
 }
 
 .icon-sm {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 /* ============================================================================
@@ -861,8 +862,8 @@ label {
 /* 展会图片统一按设计稿的 1080×1920（9:16）竖版比例展示，避免图片被拉成方块 */
 .thumb {
   flex: none;
-  width: 45px;
-  height: 80px;
+  width: 36px;
+  height: 64px;
   border: var(--hairline) solid var(--stroke);
   border-radius: var(--r-input);
   background: var(--f3);
@@ -878,8 +879,8 @@ button.avatar {
 
 .avatar {
   flex: none;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   border: var(--hairline) solid var(--stroke);
@@ -902,8 +903,8 @@ button.avatar {
 }
 
 .thumb-sm {
-  width: 38px;
-  height: 68px;
+  width: 32px;
+  height: 56px;
 }
 
 /* 9:16 的短视频/封面槽位（展会卡片、报名记录等） */
@@ -940,7 +941,7 @@ button.avatar {
 
 /* 展会封面：1080×1920 的竖版海报，宽度收窄后居中展示 */
 .hero {
-  width: min(100%, 260px);
+  width: min(100%, 228px);
   aspect-ratio: 1080 / 1920;
   margin-inline: auto;
   border: var(--hairline) solid var(--stroke);
@@ -950,7 +951,7 @@ button.avatar {
 }
 
 .hero-compact {
-  width: min(100%, 168px);
+  width: min(100%, 148px);
 }
 
 .hero > img {
@@ -980,7 +981,7 @@ button.avatar {
   flex: none;
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 4px 9px;
   border: var(--hairline) solid var(--stroke);
   border-radius: var(--r-pill);
   background: var(--screen);
@@ -1043,8 +1044,8 @@ button.avatar {
 .cta[data-loading='true']::after {
   content: '';
   position: absolute;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
@@ -1064,9 +1065,9 @@ button.avatar {
 
 /* 右下角圆形按钮 */
 .round-action {
-  width: 58px;
-  height: 58px;
-  min-width: 58px;
+  width: 51px;
+  height: 51px;
+  min-width: 51px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1079,8 +1080,8 @@ button.avatar {
 }
 
 .round-action svg {
-  width: 24px;
-  height: 24px;
+  width: 21px;
+  height: 21px;
 }
 
 .round-action[data-variant='ghost'] {
@@ -1150,7 +1151,7 @@ button.avatar {
 }
 
 .textarea {
-  min-height: 120px;
+  min-height: 105px;
   padding: var(--s3);
   display: block;
   resize: vertical;
@@ -1237,8 +1238,8 @@ button.avatar {
 }
 
 .check-label input {
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
   accent-color: var(--accent);
 }
 
@@ -1270,8 +1271,8 @@ button.avatar {
 .switch {
   position: relative;
   flex: none;
-  width: 52px;
-  height: 30px;
+  width: 45px;
+  height: 27px;
 }
 
 .switch input {
@@ -1297,8 +1298,8 @@ button.avatar {
   position: absolute;
   top: 3px;
   inset-inline-start: 3px;
-  width: 24px;
-  height: 24px;
+  width: 21px;
+  height: 21px;
   border-radius: var(--r-pill);
   background: var(--screen);
   box-shadow: var(--shadow-card);
@@ -1310,7 +1311,7 @@ button.avatar {
 }
 
 .switch input:checked + span::after {
-  transform: translateX(22px);
+  transform: translateX(18px);
 }
 
 .switch input:focus-visible + span {
@@ -1342,7 +1343,7 @@ button.avatar {
   position: relative;
   z-index: 1;
   flex: 1 1 auto;
-  min-width: 76px;
+  min-width: 66px;
   min-height: 44px;
   padding: 0 var(--s3);
   border: var(--hairline) solid transparent;
@@ -1385,9 +1386,9 @@ button.avatar {
   position: absolute;
   bottom: 4px;
   left: 0;
-  width: 22px;
+  width: 20px;
   height: 3px;
-  margin-left: -11px;
+  margin-left: -10px;
   border-radius: var(--r-pill);
   background: var(--accent);
   opacity: 0;
@@ -1544,7 +1545,7 @@ button.avatar {
 /* 面板里的按钮不占满整行：并排放在右下角，宽度一致。 */
 .sheet-actions .cta {
   width: auto;
-  min-width: 112px;
+  min-width: 98px;
 }
 
 /* 选项多、文案长短不一的面板（例如用户状态、报名方式列表）竖着排更好读 */

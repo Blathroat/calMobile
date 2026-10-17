@@ -542,8 +542,8 @@ onBeforeUnmount(() => {
   position: relative;
   min-width: 0;
   /* 行高只有一档：日历按月份排 5 或 6 行（放得下就 5 行），行距与字号因此完全一致。
-       46px 也保证触控命中区不小于 44px。 */
-  min-height: 46px;
+       44px 保证触控命中区不小于这个下限。 */
+  min-height: 44px;
   /* 数字与“有展会”圆点共用同一条居中轴：flex 纵向排列 + align-items: center，
        圆点因此始终落在数字正下方，不再因为绝对定位与列宽换算而偏右。 */
   display: flex;

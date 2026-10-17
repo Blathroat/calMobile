@@ -24,7 +24,7 @@ defineProps<{ items: TabItem[] }>();
 .tab {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 58px;
+  min-height: 48px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -42,8 +42,8 @@ defineProps<{ items: TabItem[] }>();
 }
 
 .tab svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 .tab[aria-current='page'] {

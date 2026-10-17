@@ -47,7 +47,7 @@ watch(() => props.text, render);
 <style>
 /* 二维码始终是白底黑点：反色会导致部分扫码器识别失败 */
 .qr-canvas {
-  width: min(220px, 68vw);
+  width: min(192px, 68vw);
   height: auto;
   aspect-ratio: 1;
   padding: var(--s2);

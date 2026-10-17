@@ -16,7 +16,7 @@ export interface TabItem {
   icon: string;
 }
 
-/** 内容区的间距：默认 16px，`tight` 为 12px（首页、展商后台这类信息密集页）。 */
+/** 内容区的间距：默认 `--s4`（12px）。`tight` 用 `--s3`，目前也是 12px。 */
 export type BodyGap = 'default' | 'tight';
 
 export interface ShellMeta {
