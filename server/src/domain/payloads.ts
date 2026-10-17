@@ -90,6 +90,7 @@ export interface AdminUserRow {
   nickname: string;
   email?: string | null;
   role: string;
+  avatar?: string | null;
   status?: string | null;
   email_verified?: boolean | null;
   two_factor_enabled?: boolean | null;
@@ -197,6 +198,7 @@ export function userPayload(row: UserRow, can: Capabilities) {
   return {
     loggedIn: true,
     guest: false,
+    id: row.id,
     role: row.role,
     roleLabel: labels.ROLE_LABEL[row.role] || labels.ROLE_LABEL.user,
     username: row.username,
@@ -250,6 +252,7 @@ export function adminUserPayload(row: AdminUserRow, index: number) {
     username: row.username,
     nickname: row.nickname,
     email: row.email || '',
+    avatar: row.avatar || '',
     role: labels.ROLE_LABEL[row.role] || row.role,
     roleCode: row.role,
     status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active || '',

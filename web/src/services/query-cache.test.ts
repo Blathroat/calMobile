@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { QueryCache } from './query-cache';
+import { describe, expect, it, vi } from 'vitest';
+import { QueryCache, withForcedReads } from './query-cache';
 
 describe('QueryCache', () => {
   it('deduplicates fresh reads and invalidates by prefix', async () => {
@@ -59,5 +59,63 @@ describe('QueryCache', () => {
     expect(fresh).toBe('新数据');
     expect(calls).toBe(1);
     expect(cache.peek('users.list:{}')).toBe('新数据');
+  });
+
+  it('过期后仍保留旧值，强制刷新不走新鲜短路', async () => {
+    vi.useFakeTimers();
+    try {
+      const cache = new QueryCache(1_000);
+      await cache.get('profile', async () => '旧');
+      vi.advanceTimersByTime(1_001);
+      let release!: (value: string) => void;
+      const pending = cache.get(
+        'profile',
+        () =>
+          new Promise<string>((resolve) => {
+            release = resolve;
+          }),
+      );
+      expect(pending.revalidating).toBe(true);
+      expect(pending.cached).toBe('旧');
+      expect(cache.peek('profile')).toBe('旧');
+      release('新');
+      await expect(pending).resolves.toBe('新');
+      expect(cache.peek('profile')).toBe('新');
+
+      const fresh = cache.get('profile', async () => '不该再取');
+      expect(fresh.revalidating).toBe(false);
+      expect(fresh.cached).toBe('新');
+      await fresh;
+
+      let forcedCalls = 0;
+      const forced = cache.get(
+        'profile',
+        async () => {
+          forcedCalls += 1;
+          return '强制';
+        },
+        true,
+      );
+      expect(forced.revalidating).toBe(true);
+      expect(forced.cached).toBe('新');
+      expect(cache.peek('profile')).toBe('新');
+      await forced;
+      expect(forcedCalls).toBe(1);
+      expect(cache.peek('profile')).toBe('强制');
+
+      let pulled = 0;
+      await withForcedReads(async () => {
+        const again = cache.get('profile', async () => {
+          pulled += 1;
+          return '下拉';
+        });
+        expect(again.revalidating).toBe(true);
+        await again;
+      });
+      expect(pulled).toBe(1);
+      expect(cache.peek('profile')).toBe('下拉');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -78,6 +78,8 @@ export interface ServerSettings {
   cover: { defaultCover: string };
   /** 展商端策略：同时能筹备的展会数、私人会议数上限，0 表示不限。 */
   exhibitor: { maxFutureExhibitions: number; maxFutureMeetings: number };
+  /** 邀请码生成默认值。uses 至少 1；validHours 为 0 表示不过期。 */
+  invite: { uses: number; validHours: number };
 }
 
 /**
@@ -545,6 +547,23 @@ export const STEPS: MigrationStep[] = [
             CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled'));
         `,
   },
+  {
+    id: '0015-exhibitor-invites',
+    sql: `
+        CREATE TABLE IF NOT EXISTS exhibitor_invites (
+            id           TEXT PRIMARY KEY,
+            code         TEXT NOT NULL UNIQUE,
+            max_uses     INTEGER NOT NULL CHECK (max_uses >= 1),
+            used_count   INTEGER NOT NULL DEFAULT 0,
+            expires_at   TIMESTAMPTZ,
+            created_by   TEXT REFERENCES users(id) ON DELETE SET NULL,
+            revoked_at   TIMESTAMPTZ,
+            created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS exhibitor_invites_created_idx
+            ON exhibitor_invites (created_at DESC);
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
@@ -585,6 +604,7 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   cover: { defaultCover: '' },
   // 0 = 不限。演示环境默认放开，部署方按运营策略调小。
   exhibitor: { maxFutureExhibitions: 0, maxFutureMeetings: 0 },
+  invite: { uses: 1, validHours: 168 },
 };
 
 function errorMessage(error: unknown): string {

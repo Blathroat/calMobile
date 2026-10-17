@@ -12,6 +12,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { usePullRefresh } from '@/services/pull-refresh';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
@@ -54,6 +55,11 @@ const qrError = ref('');
 onMounted(() => {
   void load();
 });
+
+usePullRefresh(
+  () => load(),
+  computed(() => query.loading.value && query.data.value !== undefined),
+);
 
 async function load(): Promise<void> {
   qrError.value = '';

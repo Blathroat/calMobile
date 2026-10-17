@@ -8,6 +8,7 @@ import { computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { usePullRefresh } from '@/services/pull-refresh';
 import AdminExhibitionCard from '@/components/AdminExhibitionCard.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -19,12 +20,21 @@ const exhibitorId = computed(() => String(route.params.exhibitorId ?? ''));
 const query = useAsync<Exhibition[]>();
 const items = computed(() => query.data.value ?? []);
 
-function load(): void {
-  void query.run(() => api.exhibitions.list({ exhibitorId: exhibitorId.value }));
+function load(): Promise<unknown> {
+  return query.run(() => api.exhibitions.list({ exhibitorId: exhibitorId.value }));
 }
 
-onMounted(load);
-watch(exhibitorId, load);
+onMounted(() => {
+  void load();
+});
+watch(exhibitorId, () => {
+  void load();
+});
+
+usePullRefresh(
+  () => load(),
+  computed(() => query.loading.value && query.data.value !== undefined),
+);
 </script>
 
 <template>

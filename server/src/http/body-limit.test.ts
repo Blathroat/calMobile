@@ -192,6 +192,9 @@ test('tooLargeResponse：413 + 固定文案', async () => {
   assert.deepEqual(await response.json(), { error: '请求体超过大小上限' });
 });
 
-test('JSON_HEADERS：带 charset，与 res.json() 一致', () => {
-  assert.deepEqual(JSON_HEADERS, { 'Content-Type': 'application/json; charset=utf-8' });
+test('JSON_HEADERS：带 charset，并不让浏览器缓存带身份的 JSON', () => {
+  assert.deepEqual(JSON_HEADERS, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
 });

@@ -25,7 +25,7 @@ test('用户列表与账号状态只有管理员能操作', async () => {
   const list = await get('/api/v1/users?query=demo', { token: tokens.admin.token });
   assert.ok(Array.isArray(list.body) && list.body.length > 0, '管理员应当能查到用户');
   const row = list.body[0];
-  for (const key of ['id', 'nickname', 'email', 'role', 'status', 'registrationTime', 'lastLoginTime']) {
+  for (const key of ['id', 'nickname', 'email', 'avatar', 'role', 'status', 'registrationTime', 'lastLoginTime']) {
     assert.ok(row[key] !== undefined, `用户缺少字段 ${key}`);
   }
   assert.strictEqual(row.password_hash, undefined, '不能把密码哈希发出去');

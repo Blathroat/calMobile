@@ -12,6 +12,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { usePullRefresh } from '@/services/pull-refresh';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
@@ -83,19 +84,25 @@ function countOf(status: string): number {
 
 // ── 取数 ─────────────────────────────────────────────────────────
 
-function loadExhibitions(): void {
-  void list.run(() => api.exhibitions.list());
+function loadExhibitions(): Promise<unknown> {
+  return list.run(() => api.exhibitions.list());
 }
 
-function load(): void {
-  if (!exhibitionId.value) {
-    loadExhibitions();
-    return;
-  }
-  void review.run(() => api.review.list({ exhibitionId: exhibitionId.value }));
+function load(): Promise<unknown> {
+  if (!exhibitionId.value) return loadExhibitions();
+  return review.run(() => api.review.list({ exhibitionId: exhibitionId.value }));
 }
 
-onMounted(load);
+onMounted(() => {
+  void load();
+});
+
+usePullRefresh(
+  () => load(),
+  computed(() =>
+    exhibitionId.value ? review.loading.value && hasRecords.value : list.loading.value && list.data.value !== undefined,
+  ),
+);
 
 // ── 审核动作 ─────────────────────────────────────────────────────
 
@@ -116,6 +123,10 @@ function targetsFor(record: Registration): string[] {
   const reviewed = status !== REGISTRATION_STATUS.PENDING;
   const mayRevise = isAdmin.value || !reviewed || bootstrap.review.canRevise === true;
   return mayRevise ? (TRANSITIONS[status] ?? []) : [];
+}
+
+function canMarkAttended(record: Registration): boolean {
+  return targetsFor(record).includes(REGISTRATION_STATUS.ATTENDED);
 }
 
 function targetLabel(target: string): string {
@@ -411,6 +422,15 @@ async function exportCsv(): Promise<void> {
           </button>
         </div>
         <div v-else class="action-row">
+          <button
+            v-if="canMarkAttended(record)"
+            class="cta ghost"
+            data-size="small"
+            type="button"
+            @click="changeStatus(record, REGISTRATION_STATUS.ATTENDED)"
+          >
+            {{ t('registration.review.markAttended') }}
+          </button>
           <button class="cta ghost" data-size="small" type="button" @click="openDetail(record)">
             {{ COPY.detail }}
           </button>

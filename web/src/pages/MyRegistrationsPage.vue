@@ -9,8 +9,11 @@ import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { useRevealReady } from '@/composables/useReveal';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
+import { tagRead, type CachedRead } from '@/services/query-cache';
+import { usePullRefresh } from '@/services/pull-refresh';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MediaBox from '@/components/MediaBox.vue';
@@ -44,21 +47,44 @@ const countLabel = computed(() => {
   if (!session.loggedIn) return t('registration.list.signedOut');
   return hasContent.value ? `${records.value.length + meetings.value.length} 条记录` : '—';
 });
+/** 第一次画出整表时不播进入动画；之后新卡片才滑入。 */
+const revealReady = useRevealReady();
 
 onMounted(() => {
   // 路由已要求登录；未登录时不发请求，直接画出「先去登录」的引导。
   if (session.loggedIn) void load();
 });
 
-async function load(): Promise<void> {
-  await query.run(async () => {
-    const [registrations, meetings] = await Promise.all([api.registrations.list(), api.meetings.mine()]);
-    return {
-      registrations,
-      meetings: Array.isArray(meetings) ? meetings : [],
-    };
-  });
+/** 报名和会议各自带上缓存快照，有一边过期也能先画出另一边。 */
+function readActivities(): CachedRead<Activities> {
+  const registrations = api.registrations.list() as CachedRead<Registration[]>;
+  const meetings = api.meetings.mine() as CachedRead<JsonObject[]>;
+  const cached =
+    registrations.cached !== undefined || meetings.cached !== undefined
+      ? {
+          registrations: registrations.cached ?? [],
+          meetings: Array.isArray(meetings.cached) ? meetings.cached : [],
+        }
+      : undefined;
+  return tagRead(
+    Promise.all([registrations, meetings]).then(([nextRegistrations, nextMeetings]) => ({
+      registrations: nextRegistrations,
+      meetings: Array.isArray(nextMeetings) ? nextMeetings : [],
+    })),
+    cached,
+    registrations.revalidating || meetings.revalidating,
+  );
 }
+
+async function load(): Promise<void> {
+  await query.run(() => readActivities());
+}
+
+usePullRefresh(
+  () => load(),
+  computed(() => query.loading.value && hasContent.value),
+  computed(() => session.loggedIn),
+);
 
 /** 手指按下就预取详情，点进去时不再等首屏。 */
 function warm(id: unknown): void {
@@ -103,7 +129,7 @@ function openLogin(): void {
   />
 
   <template v-else>
-    <div class="list" data-gap="sm">
+    <div class="list" data-gap="sm" :data-busy="query.loading.value && hasContent ? 'true' : undefined">
       <SkeletonBlock v-if="query.loading.value && !hasContent" :rows="3" />
 
       <StateBlock
@@ -127,51 +153,55 @@ function openLogin(): void {
       <template v-else>
         <template v-if="records.length > 0">
           <span v-if="meetings.length > 0" class="section-label">{{ registrationSection }}</span>
-          <button
-            v-for="record in records"
-            :key="String(record.id)"
-            class="row-card"
-            type="button"
-            data-pressable="true"
-            :aria-label="`查看 ${record.exhibitionTitle} 的报名详情`"
-            @pointerdown="warm(record.id)"
-            @click="router.push(paths.registrationDetail(String(record.id)))"
-          >
-            <!-- 报名接口不下发展会封面，这里保留线框的斜线占位 -->
-            <MediaBox class-name="thumb" />
-            <span class="row-copy">
-              <strong class="row-title truncate">{{ record.exhibitionTitle }}</strong>
-              <span class="row-meta">{{ formatRecordDate(record) }} {{ record.exhibitionTime }}</span>
-              <span class="row-meta truncate">{{ record.exhibitionVenue }}</span>
-              <span class="row-meta truncate">报名信息：{{ summary(record) }}</span>
-            </span>
-            <StatusTag :text="String(record.statusLabel || record.status || '')" />
-          </button>
+          <TransitionGroup name="reveal" tag="div" class="list reveal" data-gap="sm" :css="revealReady">
+            <button
+              v-for="record in records"
+              :key="String(record.id)"
+              class="row-card"
+              type="button"
+              data-pressable="true"
+              :aria-label="`查看 ${record.exhibitionTitle} 的报名详情`"
+              @pointerdown="warm(record.id)"
+              @click="router.push(paths.registrationDetail(String(record.id)))"
+            >
+              <!-- 报名接口不下发展会封面，这里保留线框的斜线占位 -->
+              <MediaBox class-name="thumb" />
+              <span class="row-copy">
+                <strong class="row-title truncate">{{ record.exhibitionTitle }}</strong>
+                <span class="row-meta">{{ formatRecordDate(record) }} {{ record.exhibitionTime }}</span>
+                <span class="row-meta truncate">{{ record.exhibitionVenue }}</span>
+                <span class="row-meta truncate">报名信息：{{ summary(record) }}</span>
+              </span>
+              <StatusTag :text="String(record.statusLabel || record.status || '')" />
+            </button>
+          </TransitionGroup>
         </template>
 
         <template v-if="meetings.length > 0">
           <span v-if="records.length > 0" class="section-label">{{ meetingSection }}</span>
-          <button
-            v-for="meeting in meetings"
-            :key="String(meeting.id)"
-            class="row-card"
-            type="button"
-            data-pressable="true"
-            :aria-label="`查看与 ${meeting.exhibitorName} 的会议详情`"
-            @pointerdown="warmMeeting(meeting.id)"
-            @click="router.push(paths.meetingDetail(String(meeting.id)))"
-          >
-            <span class="avatar" aria-hidden="true">{{ String(meeting.exhibitorName || '展').slice(0, 1) }}</span>
-            <span class="row-copy">
-              <span class="name-line">
-                <strong class="row-title truncate">{{ meeting.exhibitorName }}</strong>
-                <RoleTag :role-code="String(meeting.exhibitorRole || '')" />
+          <TransitionGroup name="reveal" tag="div" class="list reveal" data-gap="sm" :css="revealReady">
+            <button
+              v-for="meeting in meetings"
+              :key="String(meeting.id)"
+              class="row-card"
+              type="button"
+              data-pressable="true"
+              :aria-label="`查看与 ${meeting.exhibitorName} 的会议详情`"
+              @pointerdown="warmMeeting(meeting.id)"
+              @click="router.push(paths.meetingDetail(String(meeting.id)))"
+            >
+              <span class="avatar" aria-hidden="true">{{ String(meeting.exhibitorName || '展').slice(0, 1) }}</span>
+              <span class="row-copy">
+                <span class="name-line">
+                  <strong class="row-title truncate">{{ meeting.exhibitorName }}</strong>
+                  <RoleTag :role-code="String(meeting.exhibitorRole || '')" />
+                </span>
+                <span class="row-meta">{{ formatMeetingWhen(meeting.meetingDate, meeting.meetingTime) }}</span>
+                <span class="row-meta truncate">{{ meetingSummary(meeting) }}</span>
               </span>
-              <span class="row-meta">{{ formatMeetingWhen(meeting.meetingDate, meeting.meetingTime) }}</span>
-              <span class="row-meta truncate">{{ meetingSummary(meeting) }}</span>
-            </span>
-            <StatusTag :text="String(meeting.status || '')" />
-          </button>
+              <StatusTag :text="String(meeting.status || '')" />
+            </button>
+          </TransitionGroup>
         </template>
       </template>
     </div>

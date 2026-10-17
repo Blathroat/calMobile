@@ -9,7 +9,7 @@
 import SegControl from '@/components/SegControl.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
-import type { Ref } from 'vue';
+import { computed, type Ref } from 'vue';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -41,9 +41,20 @@ interface AdminSettingsForm {
   maxFutureMeetings: number;
   storageMb: number;
   whenFull: 'reject' | 'evict-oldest';
+  inviteUses: number;
+  inviteValidHours: number;
 }
 
-defineProps<{
+interface InviteItem {
+  id: string;
+  code: string;
+  maxUses: number;
+  usedCount: number;
+  expiresAt: string;
+  status: string;
+}
+
+const props = defineProps<{
   form: AdminSettingsForm;
   settingsQuery: { data: Ref<JsonObject | undefined>; error: Ref<Error | undefined>; loading: Ref<boolean> };
   loaded: boolean;
@@ -72,8 +83,29 @@ defineProps<{
     storageLimit: string;
     storageWhenFull: string;
   };
+  invites: InviteItem[];
+  inviteBusy: boolean;
 }>();
-const emit = defineEmits<{ retry: []; save: []; 'pick-cover': [] }>();
+const emit = defineEmits<{
+  retry: [];
+  save: [];
+  'pick-cover': [];
+  generate: [];
+  revoke: [id: string];
+  copy: [code: string];
+}>();
+
+/** 过期和已删除的码由服务端清掉；这里再滤一次，避免缓存里的旧行继续占位。 */
+const visibleInvites = computed(() =>
+  props.invites.filter((item) => item.status !== 'expired' && item.status !== 'revoked'),
+);
+
+function inviteStatusLabel(status: string): string {
+  if (status === 'exhausted') return t('admin.invites.exhausted');
+  if (status === 'expired') return t('admin.invites.expired');
+  if (status === 'revoked') return t('admin.invites.revoked');
+  return t('admin.invites.available');
+}
 </script>
 
 <template>
@@ -246,6 +278,70 @@ const emit = defineEmits<{ retry: []; save: []; 'pick-cover': [] }>();
           <input id="settings-revise" v-model="form.canRevise" type="checkbox" />
           <span />
         </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="section-label">{{ t('admin.invites.title') }}</span>
+      <p class="field-hint">{{ t('admin.invites.hint') }}</p>
+      <div class="field">
+        <label for="settings-invite-uses">{{ t('admin.invites.uses') }}</label>
+        <input
+          id="settings-invite-uses"
+          v-model.number="form.inviteUses"
+          class="input"
+          type="number"
+          min="1"
+          max="100"
+          inputmode="numeric"
+          :disabled="!canEditSettings || inviteBusy"
+        />
+      </div>
+      <div class="field">
+        <label for="settings-invite-days">{{ t('admin.invites.days') }}</label>
+        <input
+          id="settings-invite-days"
+          v-model.number="form.inviteValidHours"
+          class="input"
+          type="number"
+          min="0"
+          max="8760"
+          inputmode="numeric"
+          :disabled="!canEditSettings || inviteBusy"
+        />
+        <p class="field-hint">{{ t('admin.invites.daysHint') }}</p>
+      </div>
+      <button
+        class="cta"
+        type="button"
+        :disabled="!canEditSettings || inviteBusy"
+        :data-loading="inviteBusy ? 'true' : undefined"
+        @click="emit('generate')"
+      >
+        {{ t('admin.invites.generate') }}
+      </button>
+      <StateBlock v-if="visibleInvites.length === 0" :title="t('admin.invites.empty')" />
+      <div v-else class="list" data-gap="sm">
+        <div v-for="item in visibleInvites" :key="item.id" class="row" data-between="true">
+          <span class="row-copy">
+            <strong class="row-title">{{ item.code }}</strong>
+            <span class="row-meta">{{ `${item.usedCount}/${item.maxUses} · ${inviteStatusLabel(item.status)}` }}</span>
+          </span>
+          <span class="row" data-gap="sm">
+            <button class="cta ghost" data-size="small" type="button" @click="emit('copy', item.code)">
+              {{ t('admin.invites.copy') }}
+            </button>
+            <button
+              class="cta ghost"
+              data-size="small"
+              type="button"
+              :disabled="inviteBusy"
+              @click="emit('revoke', item.id)"
+            >
+              {{ t('admin.invites.revoke') }}
+            </button>
+          </span>
+        </div>
       </div>
     </div>
 

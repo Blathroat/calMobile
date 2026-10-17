@@ -90,6 +90,7 @@ export const LIMITED_ACTIONS: Record<string, string> = {
   checkin: '账号已被限制，不能核销',
   profile: '账号已被限制，不能编辑个人信息',
   meetingSettings: '账号已被限制，不能修改私人会议设置',
+  invite: '账号已被限制，不能使用邀请码',
 };
 
 /** 受限账号执行被禁操作时抛出 403；返回当前用户便于串起来用。 */

@@ -15,8 +15,9 @@
  * 「本地立即生效 → 落库 → 失败回滚」，失败时界面不会停在没保存成功的颜色/模式上。
  */
 import { computed, onMounted, reactive, ref } from 'vue';
+import { usePullRefresh } from '@/services/pull-refresh';
 import { useRouter } from 'vue-router';
-import { api, bootApp } from '@/app/runtime';
+import { api, bootApp, refreshRuntimeBootstrap } from '@/app/runtime';
 import { saveAccentIndex, saveUiMode } from '@/app/preferences';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useCapabilitiesStore } from '@/stores/capabilities';
@@ -91,7 +92,9 @@ function errorText(reason: unknown): string {
 /** 两组数据分别保留错误和重试入口；完整资料到齐前不能提交覆盖写入。 */
 async function load(): Promise<void> {
   await bootApp().catch(() => undefined);
-  loading.value = true;
+  // 已经画出资料卡时不要整页换成骨架，下拉刷新只标记忙碌。
+  const first = !profileLoaded.value && !notifyLoaded.value;
+  if (first) loading.value = true;
   await Promise.all([loadProfile(), loadNotifications()]);
   loading.value = false;
 }
@@ -99,8 +102,11 @@ async function load(): Promise<void> {
 async function loadProfile(): Promise<void> {
   profileLoading.value = true;
   profileError.value = '';
+  const epoch = session.profileEpoch;
   try {
     const result = await api.profile.get();
+    // 上传头像或退出发生在这次请求之后：响应当时的头像已经过期，不能写回会话。
+    if (epoch !== session.profileEpoch) return;
     Object.assign(profile, result);
     session.applyUser({ ...user.value, ...result });
     profileLoaded.value = true;
@@ -126,6 +132,12 @@ async function loadNotifications(): Promise<void> {
 }
 
 onMounted(load);
+
+usePullRefresh(
+  () => load(),
+  computed(() => !loading.value && (profileLoading.value || notifyLoading.value)),
+  loggedIn,
+);
 
 // ── 头像：选图 → 共享组件裁剪 → 上传到服务器 ────────────────────
 
@@ -205,6 +217,7 @@ async function storeAvatar(dataUrl: string): Promise<void> {
   try {
     const saved = await api.profile.uploadAvatar(image.bytes, image.contentType);
     const fresh = (saved.user as JsonObject | undefined) ?? {};
+    session.bumpProfile();
     session.applyUser({ ...user.value, ...fresh });
     Object.assign(profile, fresh);
     avatarMessage.value = t('settings.avatarUpdated');
@@ -226,6 +239,7 @@ async function removeAvatar(): Promise<void> {
   try {
     const saved = await api.profile.removeAvatar();
     const fresh = (saved.user as JsonObject | undefined) ?? {};
+    session.bumpProfile();
     session.applyUser({ ...user.value, ...fresh });
     Object.assign(profile, fresh);
     avatarMessage.value = t('settings.avatarRemoved');
@@ -268,6 +282,7 @@ async function savePrivacy(value: boolean): Promise<void> {
       showRegistrations: value,
     });
     const fresh = (saved.user as JsonObject | undefined) ?? {};
+    session.bumpProfile();
     session.applyUser({ ...user.value, ...fresh });
     Object.assign(profile, fresh);
     toast(value ? t('settings.registrationsShown') : t('settings.registrationsHidden'), 'success');
@@ -356,6 +371,29 @@ const modeItems = computed(() => [
 
 const mode = computed(() => settings.mode);
 
+const inviteCode = ref('');
+const inviteBusy = ref(false);
+
+async function redeemInvite(): Promise<void> {
+  const code = inviteCode.value.trim();
+  if (!code || inviteBusy.value || limited.value) return;
+  inviteBusy.value = true;
+  try {
+    const result = await api.profile.redeemInvite(code);
+    if (result?.ok !== true) {
+      toast(String(result?.error || t('admin.users.updateFailed')), 'error');
+      return;
+    }
+    inviteCode.value = '';
+    toast(t('settings.invite.done'), 'success');
+    await refreshRuntimeBootstrap();
+  } catch (reason) {
+    toast(errorText(reason), 'error');
+  } finally {
+    inviteBusy.value = false;
+  }
+}
+
 /** 切换明暗模式：本地令牌先变，落库失败由 `saveUiMode` 回滚，这里只提示。 */
 async function changeMode(value: string): Promise<void> {
   if (value === mode.value) return;
@@ -382,17 +420,17 @@ async function changeMode(value: string): Promise<void> {
     <SkeletonBlock v-if="loading" :rows="4" />
 
     <template v-else>
-      <SkeletonBlock v-if="profileLoading" :rows="2" />
+      <SkeletonBlock v-if="profileLoading && !profileLoaded" :rows="2" />
       <StateBlock
-        v-else-if="profileError"
+        v-else-if="profileError && !profileLoaded"
         tone="error"
         :title="t('security.profileLoadFailed')"
         :description="profileError"
         :action-label="t('common.retry')"
         @action="loadProfile"
       />
-      <!-- 头像卡：当前头像 + 编辑资料入口 + 上传 / 移除 -->
-      <div class="card">
+      <!-- 头像卡：当前头像 + 编辑资料、更换头像、移除头像同一行。资料失败时卡片仍在，按钮置灰。 -->
+      <div class="card" :data-busy="profileLoading ? 'true' : undefined">
         <div class="row" data-gap="md">
           <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || user.username || '')" large />
           <span class="row-copy">
@@ -403,17 +441,17 @@ async function changeMode(value: string): Promise<void> {
             <span class="row-meta truncate">{{ user.email || t('settings.emailEmpty') }}</span>
           </span>
         </div>
-        <button
-          class="cta ghost"
-          data-size="small"
-          type="button"
-          :disabled="limited || !profileReady"
-          :title="limited ? limitHint : undefined"
-          @click="openEditor"
-        >
-          {{ t('settings.profile.editProfile') }}
-        </button>
-        <div class="row" data-gap="md">
+        <div class="action-row">
+          <button
+            class="cta ghost"
+            data-size="small"
+            type="button"
+            :disabled="limited || !profileReady"
+            :title="limited ? limitHint : undefined"
+            @click="openEditor"
+          >
+            {{ t('settings.profile.editProfile') }}
+          </button>
           <button
             class="cta ghost"
             data-size="small"
@@ -443,6 +481,37 @@ async function changeMode(value: string): Promise<void> {
       <div v-if="limited" class="notice" data-tone="accent">
         <strong>{{ limitHint }}</strong>
         <span>{{ t('settings.limitUnaffected') }}</span>
+      </div>
+
+      <div class="card">
+        <span class="section-label">{{ t('settings.invite.title') }}</span>
+        <p v-if="user.role === 'exhibitor'" class="field-hint">{{ t('settings.invite.alreadyExhibitor') }}</p>
+        <p v-else-if="user.role === 'admin'" class="field-hint">{{ t('settings.invite.alreadyAdmin') }}</p>
+        <template v-else>
+          <p class="field-hint">{{ t('settings.invite.hint') }}</p>
+          <div class="field">
+            <label for="settings-invite">{{ t('settings.invite.title') }}</label>
+            <input
+              id="settings-invite"
+              v-model="inviteCode"
+              class="input"
+              type="text"
+              autocomplete="off"
+              maxlength="32"
+              :placeholder="t('settings.invite.placeholder')"
+              :disabled="limited || inviteBusy"
+            />
+          </div>
+          <button
+            class="cta"
+            type="button"
+            :disabled="limited || inviteBusy || !inviteCode.trim()"
+            :data-loading="inviteBusy ? 'true' : undefined"
+            @click="redeemInvite"
+          >
+            {{ t('settings.invite.submit') }}
+          </button>
+        </template>
       </div>
 
       <!-- 通知设置：两个偏好 + 系统通知权限入口 -->

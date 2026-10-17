@@ -15,9 +15,44 @@
  * **并发**：同一个键上的并发读共享同一个 Promise，因此只发一次请求；代价是它们拿到**同一个
  * 对象引用**，调用方不要原地修改返回值，那会改到缓存里的对象。
  *
- * 缓存值没有过期通知，只在读的时候按 TTL 判一次，`peek` 连 TTL 都不看。进程内存储，
- * 页面刷新即消失，不做持久化（离线数据不走这里）。
+ * 缓存值没有过期通知。TTL 内 `get` 直接返回；过期后旧值仍留在表里，调用方可以先画，
+ * 同时重新请求。`peek` 连 TTL 都不看。进程内存储，页面刷新即消失，不做持久化（离线数据不走这里）。
+ *
+ * 下拉刷新用 `withForcedReads`：新鲜期内也重新请求，但请求完成前不删旧值。
  */
+
+/** 带上本次读取的缓存快照。`await` 仍得到网络或新鲜缓存的值，附加字段只供先画。 */
+export interface CachedRead<T> extends Promise<T> {
+  /** 发起时缓存里已有的值，含已过期的。没有条目则不加这个字段。 */
+  cached?: T;
+  /** 这次会等网络。新鲜且非强制刷新时为 false。缺省按「要等网络」处理。 */
+  revalidating: boolean;
+}
+
+let forceDepth = 0;
+
+/** 当前是否处于下拉刷新：这个范围内的 `get` 不走新鲜短路。 */
+export function readsForced(): boolean {
+  return forceDepth > 0;
+}
+
+/** 执行 `task` 期间，查询缓存忽略 TTL，但仍把旧值留在 `cached` 上。 */
+export async function withForcedReads<T>(task: () => Promise<T>): Promise<T> {
+  forceDepth += 1;
+  try {
+    return await task();
+  } finally {
+    forceDepth -= 1;
+  }
+}
+
+/** 把缓存快照挂到已有 Promise 上，不改变它 resolve 的值。 */
+export function tagRead<T>(promise: Promise<T>, cached: T | undefined, revalidating: boolean): CachedRead<T> {
+  const tagged = promise as CachedRead<T>;
+  if (cached !== undefined) tagged.cached = cached;
+  tagged.revalidating = revalidating;
+  return tagged;
+}
 
 /** 缓存条目：值与写入时间（用来算 TTL 是否新鲜）。 */
 interface CacheEntry<T> {
@@ -57,17 +92,26 @@ export class QueryCache {
    * 取一个键：有新鲜缓存就直接返回，有同键在途请求就搭车，否则调用 `read` 取一次。
    *
    * @param key 缓存键，必须带上所有影响结果的参数（参数不同就是两个不同的键）。
-   * @param read 真正取数的函数，只在缓存未命中且无在途请求时被调用。
-   * @returns 解析后的值；同一键的并发调用者拿到同一个引用。
+   * @param read 真正取数的函数，只在需要网络且无在途请求时被调用。
+   * @param force 为真时即使未过期也重新取。下拉刷新走 `withForcedReads`，不必逐个传这个参数。
+   * @returns 解析后的值；同一键的并发调用者拿到同一个引用。Promise 上附有 `cached` / `revalidating`。
    * @throws 透传 `read` 的异常：失败结果不写缓存，并且所有搭车的调用者收到同一个错误。
    */
-  async get<T>(key: string, read: () => Promise<T>): Promise<T> {
-    // 命中且未过期才直接用；过期的当没有，重新取。
-    const cached = this.values.get(key);
-    if (cached && Date.now() - cached.at < this.ttlMs) return cached.value as T;
+  get<T>(key: string, read: () => Promise<T>, force = false): CachedRead<T> {
+    const forced = force || readsForced();
+    const entry = this.values.get(key);
+    // 未过期且不是强制刷新才短路。过期条目留在表里，刷新完成前 `peek` 仍能拿到旧值。
+    const fresh = !!entry && Date.now() - entry.at < this.ttlMs;
+    const cached = entry?.value as T | undefined;
+    if (fresh && !forced) return tagRead(Promise.resolve(cached as T), cached, false);
     const existing = this.inflight.get(key);
     // 已有同键请求就搭车，否则两个组件同时要同一份数据会各发一次请求。
-    if (existing) return existing as Promise<T>;
+    const task = (existing as Promise<T> | undefined) ?? this.begin(key, read);
+    return tagRead(task, cached, true);
+  }
+
+  /** 发起一次读并登记在途表。完成前不删除已有的旧值。 */
+  private begin<T>(key: string, read: () => Promise<T>): Promise<T> {
     // 记下发起时的代数与这一键的作废次数：期间 clear 过或 invalidate 过，结果都不能写回。
     const generation = this.generation;
     const epoch = this.epochOf(key);

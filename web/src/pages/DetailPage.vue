@@ -9,6 +9,8 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { usePullRefresh } from '@/services/pull-refresh';
+import { tagRead, type CachedRead } from '@/services/query-cache';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { registrationLink } from '@/services/registration-link';
@@ -98,10 +100,16 @@ function footerHint(): string {
 
 async function load(): Promise<void> {
   calendarRequested = false;
-  const data = await query.run(async () => {
-    const detail = await api.exhibitions.get(exhibitionId.value);
-    if (detail.exhibition?.description) await loadMarkdownParser();
-    return detail;
+  const data = await query.run(() => {
+    const pending = api.exhibitions.get(exhibitionId.value) as CachedRead<ExhibitionDetail>;
+    return tagRead(
+      pending.then(async (detail) => {
+        if (detail.exhibition?.description) await loadMarkdownParser();
+        return detail;
+      }),
+      pending.cached,
+      pending.revalidating,
+    );
   });
   if (data?.found === false) {
     calendarState.value = { inCalendar: false, granted: false };
@@ -194,6 +202,11 @@ function share(): void {
 }
 
 // 会话只用于判断「能不能报名」，取到即可。
+usePullRefresh(
+  () => load(),
+  computed(() => query.loading.value && query.data.value !== undefined),
+);
+
 onMounted(() => {
   void load();
 });

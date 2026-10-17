@@ -22,7 +22,7 @@ afterAll(stopContract);
 /**
  * 前端每个数据动作都必须能在后端找到对应路由。
  *
- * 这条断言是「72 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
+ * 这条断言是「76 个动作全部实现」的机器化证据：漏实现一个动作、或者改了路径忘了
  * 同步 `ENDPOINTS`，都会在这里失败，而不是等到某个页面在真机上静默报错。
  */
 test('前端每个数据动作都对应后端已注册的路由', () => {
@@ -30,8 +30,8 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
   const actions = Object.keys(endpoints);
   assert.strictEqual(
     actions.length,
-    72,
-    `前端数据动作数量变了（期望 72）：${actions.length} 个 —— ${actions.join(', ')}`,
+    76,
+    `前端数据动作数量变了（期望 76）：${actions.length} 个 —— ${actions.join(', ')}`,
   );
 
   const declared = backendRoutes();

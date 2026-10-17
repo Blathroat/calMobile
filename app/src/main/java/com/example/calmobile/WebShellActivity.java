@@ -143,7 +143,7 @@ public class WebShellActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                return serve(request.getUrl());
+                return serve(request);
             }
 
             @Override
@@ -351,12 +351,13 @@ public class WebShellActivity extends Activity {
      * {@code /app/} 从本机快照或包内页面读取。设备媒体仍走 appassets。
      * 其它地址（接口、站内图片）交给 WebView 自己请求。
      */
-    private WebResourceResponse serve(Uri uri) {
+    private WebResourceResponse serve(WebResourceRequest request) {
+        Uri uri = request == null ? null : request.getUrl();
         if (uri == null) {
             return null;
         }
         if ("appassets.androidplatform.net".equals(uri.getHost())) {
-            return serveAsset(uri);
+            return serveAsset(uri, request.getMethod());
         }
         if (!PageOrigin.staysInWebView(uri.toString(), BuildConfig.APP_ORIGIN)) {
             return null;
@@ -374,7 +375,7 @@ public class WebShellActivity extends Activity {
      * 把 {@code /assets/web/...} 的请求映射到 APK 内的 asset 文件。
      * 只允许访问 {@code web/} 目录，避免通过 URL 读取其他打包资源。
      */
-    private WebResourceResponse serveAsset(Uri uri) {
+    private WebResourceResponse serveAsset(Uri uri, String method) {
         if (!"appassets.androidplatform.net".equals(uri.getHost())) {
             return null;
         }
@@ -383,7 +384,14 @@ public class WebShellActivity extends Activity {
         String path = uri.getPath() != null ? uri.getPath() : "";
         String decoded = android.net.Uri.decode(path);
         if (decoded.startsWith("/media/")) {
-            return serveMedia(decoded.substring("/media/".length()));
+            String name = decoded.substring("/media/".length());
+            // fetch 跨源时可能先发预检。媒体文件本身是简单 GET，这里仍应答，避免预检被当成失败。
+            if ("OPTIONS".equalsIgnoreCase(method)) {
+                int status = AssetGuard.isMediaFileAllowed(name) ? 204 : 403;
+                String reason = status == 204 ? "No Content" : "Forbidden";
+                return new WebResourceResponse("text/plain", "utf-8", status, reason, mediaHeaders(), null);
+            }
+            return serveMedia(name);
         }
         String assetPath = AssetGuard.resolveAssetPath(decoded);
         if (assetPath == null) {
@@ -470,6 +478,11 @@ public class WebShellActivity extends Activity {
         return headers;
     }
 
+    /** 设备媒体给页面 fetch 用，要带上页面源，否则跨源读取失败。 */
+    private Map<String, String> mediaHeaders() {
+        return MediaCors.headers(BuildConfig.APP_ORIGIN);
+    }
+
     /**
      * 读取用户上传的媒体文件。
      * <p>
@@ -479,12 +492,12 @@ public class WebShellActivity extends Activity {
     private WebResourceResponse serveMedia(String name) {
         if (!AssetGuard.isMediaFileAllowed(name)) {
             return new WebResourceResponse("text/plain", "utf-8", 403, "Forbidden",
-                    securityHeaders(), null);
+                    mediaHeaders(), null);
         }
         File file = new File(mediaDir(this), name);
         if (!file.isFile()) {
             return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found",
-                    securityHeaders(), null);
+                    mediaHeaders(), null);
         }
         String extension = name.contains(".")
                 ? name.substring(name.lastIndexOf('.') + 1).toLowerCase()
@@ -493,12 +506,12 @@ public class WebShellActivity extends Activity {
                 ? MIME_TYPES.get(extension)
                 : guessMediaMime(extension);
         try {
-            return new WebResourceResponse(mime, "utf-8", 200, "OK", securityHeaders(),
+            return new WebResourceResponse(mime, "utf-8", 200, "OK", mediaHeaders(),
                     new FileInputStream(file));
         } catch (IOException error) {
             Log.w(TAG, "媒体文件读取失败: " + name, error);
             return new WebResourceResponse("text/plain", "utf-8", 500, "Error",
-                    securityHeaders(), null);
+                    mediaHeaders(), null);
         }
     }
 

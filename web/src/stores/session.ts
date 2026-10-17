@@ -32,6 +32,11 @@ export interface SessionState {
   guest: boolean;
   /** 最近一次后端下发的用户对象（字段全是可选的），读时自己兜底 */
   user: User;
+  /**
+   * 资料写入的代数。上传头像、保存资料、退出登录都会加一。
+   * 更早发出的 `GET /profile` 回来后不得再 `applyUser`，否则会把新头像盖回旧地址。
+   */
+  profileEpoch: number;
 }
 
 /**
@@ -42,7 +47,7 @@ const emptyUser = (): User => ({ role: 'guest', roleLabel: t('auth.login.guest')
 
 /** 当前会话；写入口是 `applyUser()` / `clear()` / `expire()`，别直接改 state。 */
 export const useSessionStore = defineStore('session', {
-  state: (): SessionState => ({ loggedIn: false, expired: false, guest: true, user: emptyUser() }),
+  state: (): SessionState => ({ loggedIn: false, expired: false, guest: true, user: emptyUser(), profileEpoch: 0 }),
   getters: {
     /** 当前角色代码（后端下发英文代码，展示用 `user.roleLabel`）；缺失时按 guest 处理。 */
     role: (state) => String(state.user.role ?? 'guest'),
@@ -67,11 +72,17 @@ export const useSessionStore = defineStore('session', {
       this.expired = false;
     },
     /** 登出 / 令牌失效时复位到访客态；不负责清后端缓存（那是 `api/client.ts` 的事）。 */
+    /** 记一次更新的资料写入，让尚在途中的旧资料响应作废。 */
+    bumpProfile() {
+      this.profileEpoch += 1;
+    },
     clear() {
       this.loggedIn = false;
       this.expired = false;
       this.guest = true;
       this.user = emptyUser();
+      // 加一而不是归零：退出前发出的资料请求仍持有旧代数，回来时不能把用户写回来。
+      this.profileEpoch += 1;
     },
     /** 令牌被认证端拒绝：与用户主动退出区分，供外壳带回原地址重新登录。 */
     expire() {

@@ -79,6 +79,8 @@ export interface ServerPatch {
   defaultCover?: unknown;
   maxFutureExhibitions?: unknown;
   maxFutureMeetings?: unknown;
+  inviteUses?: unknown;
+  inviteValidHours?: unknown;
 }
 
 interface SettingRow {
@@ -161,6 +163,25 @@ export function normalizeTheme(
   return { index, colors };
 }
 
+/** 老库存的是天数。没有小时数时按 24 小时一天换算，0 仍然表示不过期。 */
+function normalizeInvite(raw: { uses?: number; validHours?: number; validDays?: number } | null | undefined): {
+  uses: number;
+  validHours: number;
+} {
+  const source = raw ?? {};
+  const uses = clampInt(source.uses, DEFAULT_SETTINGS.invite.uses, [1, 100]);
+  const hours =
+    source.validHours !== undefined && source.validHours !== null
+      ? source.validHours
+      : source.validDays !== undefined && source.validDays !== null
+        ? Number(source.validDays) * 24
+        : DEFAULT_SETTINGS.invite.validHours;
+  return {
+    uses,
+    validHours: clampInt(hours, DEFAULT_SETTINGS.invite.validHours, [0, 24 * 365]),
+  };
+}
+
 function clampInt(value: unknown, fallback: number, [min, max]: [number, number]): number {
   const number = Number.parseInt(String(value), 10);
   if (!Number.isFinite(number)) {
@@ -199,6 +220,7 @@ export async function readServerSettings(): Promise<ServerSettings> {
   settings.upload = { ...DEFAULT_SETTINGS.upload, ...settings.upload };
   // 老库存的 exhibitor 只有展会额度。新键按默认值补上，避免读出来是 undefined。
   settings.exhibitor = { ...DEFAULT_SETTINGS.exhibitor, ...settings.exhibitor };
+  settings.invite = normalizeInvite(settings.invite);
   // 老库的 limits JSON 没有文本填写和选项上限。缺的键用默认值补上，避免读出来是 undefined。
   const storedLimits = settings.limits;
   settings.limits = {
@@ -333,6 +355,16 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     next.exhibitor = {
       ...next.exhibitor,
       maxFutureMeetings: clampInt(source.maxFutureMeetings, next.exhibitor.maxFutureMeetings, [0, 100]),
+    };
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(source, 'inviteUses') ||
+    Object.prototype.hasOwnProperty.call(source, 'inviteValidHours')
+  ) {
+    const fallback = normalizeInvite(next.invite);
+    next.invite = {
+      uses: clampInt(source.inviteUses, fallback.uses, [1, 100]),
+      validHours: clampInt(source.inviteValidHours, fallback.validHours, [0, 24 * 365]),
     };
   }
 

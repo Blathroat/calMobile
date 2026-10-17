@@ -11,7 +11,7 @@
  * 4. **发码限流按库里计数**（同一用途 + 同一邮箱 60 秒 1 条 / 1 小时 5 条 / 24 小时 15 条，同一 IP 1 小时 20 条）——
  *    不用 `middleware/rate-limit.ts` 的内存窗口：那个重启就归零，而验证码是**发出去就要花钱、
  *    还可能被用来骚扰他人**的资源；
- * 5. **先落库、再返回，发信在后台**（`send()` 不 await）：前端 `api.js` 的请求超时是 3 秒，
+ * 5. **先落库、再返回，发信在后台**（`send()` 不 await）：前端请求超时是 10 秒，
  *    同步等一次 SMTP 往返会把注册页卡成超时错误；
  * 6. **发信结果写 `mail_log`**：状态页的「邮件通道」自检项读的就是它，「发信成功但用户收不到」
  *    这类故障没有留痕根本查不出来。
@@ -403,4 +403,26 @@ export async function consumeCode(options: ConsumeCodeOptions = {}): Promise<{
     throw new CodeRejected('验证码已被使用，请重新获取');
   }
   return { email, userId: row.user_id || null, payload: row.payload || null };
+}
+
+/**
+ * 读出最新一封未消费验证码上的暂存内容，不消费。
+ *
+ * 注册要在扣掉邮箱验证码之前确认邀请码还能用。
+ */
+export async function peekPendingPayload(purpose: string, email: string): Promise<unknown> {
+  assertPurpose(purpose);
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+  const result = await query<{ payload: unknown }>(
+    `
+        SELECT payload
+          FROM email_codes
+         WHERE purpose = $1 AND lower(email) = $2 AND consumed_at IS NULL
+         ORDER BY created_at DESC
+         LIMIT 1
+    `,
+    [purpose, normalized],
+  );
+  return result.rows[0]?.payload ?? null;
 }

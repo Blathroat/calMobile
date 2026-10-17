@@ -11,6 +11,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { paths } from '@/app/surface';
 import { useAsync } from '@/composables/useAsync';
+import { usePullRefresh } from '@/services/pull-refresh';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
 import { REGISTRATION_STATUS, statusTone } from '@/services/status';
@@ -69,11 +70,18 @@ function statusHint(): string {
   return COPY.approvedHint;
 }
 
-function load(): void {
-  void query.run(() => api.meetings.get(String(route.params.id ?? '')));
+function load(): Promise<unknown> {
+  return query.run(() => api.meetings.get(String(route.params.id ?? '')));
 }
 
-onMounted(load);
+onMounted(() => {
+  void load();
+});
+
+usePullRefresh(
+  () => load(),
+  computed(() => query.loading.value && query.data.value !== undefined),
+);
 
 function askCancel(): void {
   const item = meeting.value;

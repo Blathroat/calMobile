@@ -20,13 +20,14 @@ defineProps<{
   users: { data: Ref<User[] | undefined>; error: Ref<Error | undefined>; loading: Ref<boolean> };
   userItems: User[];
   query: string;
-  copy: { adjustStatus: string; manageExhibitions: string; manageMeetings: string };
+  copy: { adjustStatus: string; adjustRole: string; manageExhibitions: string; manageMeetings: string };
 }>();
 const emit = defineEmits<{
   retry: [];
   search: [value: string];
   'open-public': [user: User];
   manage: [user: User];
+  'adjust-role': [user: User];
   'disable-two-factor': [user: User];
   'open-exhibitions': [user: User];
   'open-meetings': [user: User];
@@ -77,7 +78,7 @@ const emit = defineEmits<{
           :aria-label="`查看 ${user.nickname} 的公开页`"
           @click="emit('open-public', user)"
         >
-          <AvatarBox :name="String(user.nickname || '')" />
+          <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || '')" />
           <span class="row-copy">
             <span class="name-line">
               <strong class="row-title truncate">{{ user.nickname }}</strong>
@@ -92,9 +93,6 @@ const emit = defineEmits<{
           <StatusTag :text="String(user.status || '')" :tone="statusTone(String(user.status || ''))" />
         </button>
         <div class="action-row">
-          <button class="cta ghost" data-size="small" type="button" @click="emit('manage', user)">
-            {{ copy.adjustStatus }}
-          </button>
           <template v-if="user.roleCode === 'exhibitor' || user.roleCode === 'admin'">
             <button class="cta ghost" data-size="small" type="button" @click="emit('open-exhibitions', user)">
               {{ copy.manageExhibitions }}
@@ -102,7 +100,16 @@ const emit = defineEmits<{
             <button class="cta ghost" data-size="small" type="button" @click="emit('open-meetings', user)">
               {{ copy.manageMeetings }}
             </button>
+            <button class="cta ghost" data-size="small" type="button" @click="emit('manage', user)">
+              {{ copy.adjustStatus }}
+            </button>
           </template>
+          <button v-else class="cta ghost" data-size="small" type="button" @click="emit('manage', user)">
+            {{ copy.adjustStatus }}
+          </button>
+          <button class="cta ghost" data-size="small" type="button" @click="emit('adjust-role', user)">
+            {{ copy.adjustRole }}
+          </button>
         </div>
         <!-- 兜底出口：用户邮箱用不了（离职、邮箱被回收）时，只有管理员能帮他关掉两步验证 -->
         <button

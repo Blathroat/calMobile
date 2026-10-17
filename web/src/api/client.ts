@@ -117,6 +117,8 @@ export interface ApiClient {
      * 与账号绑定（`users.seen_hints`），换设备仍是已读；幂等，重复提交同一条不报错。
      */
     markHint(hint: string): Promise<JsonObject>;
+    /** 用邀请码把当前账号设为展商。已经是展商或管理员时不消耗邀请码。 */
+    redeemInvite(code: string): Promise<ApiResult>;
   };
   /** 展会封面和简介媒体。字节上传后返回可写入正文的地址。 */
   media: {
@@ -213,6 +215,8 @@ export interface ApiClient {
     get(id: Id): Promise<User>;
     /** 启用/封禁；失效整个 `users` 前缀（列表与详情同族）。 */
     setStatus(id: Id, status: string): Promise<ApiResult>;
+    /** 调整角色：用户、展商或管理员。失效整个 `users` 前缀。 */
+    setRole(id: Id, role: string): Promise<ApiResult>;
     /** 管理员强制关闭某个用户的两步验证（账号找回用）。 */
     disableTwoFactor(id: Id): Promise<ApiResult>;
     /** 公开主页数据：按用户名/ID 查对外可见的信息。 */
@@ -230,6 +234,10 @@ export interface ApiClient {
     saveUiMode(mode: string): Promise<ApiResult>;
     /** 保存本人的强调色：写调用者自己的 `users.ui_theme`，不动全局默认色板。 */
     saveUiTheme(themeIndex: number): Promise<ApiResult>;
+    /** 按当前次数和有效小时生成一枚邀请码，并记住这两个默认值。0 小时表示不过期。 */
+    createInvite(payload: JsonObject): Promise<ApiResult>;
+    /** 删除一枚邀请码。删除后列表里不再出现。 */
+    revokeInvite(id: Id): Promise<ApiResult>;
   };
   /** 私人会议：展商设置、申请、审核和管理员限制。 */
   meetings: {
@@ -399,15 +407,17 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
             contentType,
             timeoutMs: 20_000,
           },
-          ['profile', 'users.public'],
+          ['profile', 'users', 'search'],
         ),
-      removeAvatar: () => write<ApiResult>('/profile/avatar', { method: 'DELETE' }, ['profile', 'users.public']),
+      removeAvatar: () => write<ApiResult>('/profile/avatar', { method: 'DELETE' }, ['profile', 'users', 'search']),
       changePassword: (payload) => http.request<ApiResult>('/profile/password', { method: 'POST', body: payload }),
       notifications: () => read<JsonObject>('notifications', '/profile/notifications'),
       saveNotifications: (payload) =>
         write<ApiResult>('/profile/notifications', { method: 'PUT', body: payload }, ['notifications']),
       // 提示状态只进用户态（bootstrap 的 user 段），没有对应的读缓存需要失效。
       markHint: (hint) => http.request<JsonObject>('/profile/hints', { method: 'PUT', body: { hint } }),
+      redeemInvite: (code) =>
+        write<ApiResult>('/profile/invite', { method: 'POST', body: { code } }, ['profile', 'users']),
     },
     media: {
       upload: (bytes, contentType, kind) =>
@@ -524,6 +534,8 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
       get: (id) => read<User>('users.record', `/users/${encodeURIComponent(id)}`),
       setStatus: (id, status) =>
         write<ApiResult>(`/users/${encodeURIComponent(id)}/status`, { method: 'PUT', body: { id, status } }, ['users']),
+      setRole: (id, role) =>
+        write<ApiResult>(`/users/${encodeURIComponent(id)}/role`, { method: 'PUT', body: { role } }, ['users']),
       disableTwoFactor: (id) =>
         write<ApiResult>(
           `/users/${encodeURIComponent(id)}/two-factor`,
@@ -542,6 +554,9 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
       // 强调色是个人偏好：写调用者自己的 `users.ui_theme`，不动全局默认色板。
       saveUiTheme: (themeIndex) =>
         write<ApiResult>('/settings/ui-theme', { method: 'PUT', body: { themeIndex } }, ['settings']),
+      createInvite: (payload) => write<ApiResult>('/settings/invites', { method: 'POST', body: payload }, ['settings']),
+      revokeInvite: (id) =>
+        write<ApiResult>(`/settings/invites/${encodeURIComponent(id)}`, { method: 'DELETE' }, ['settings']),
     },
     meetings: {
       settings: () => read<JsonObject>('meetings.settings', '/meetings/settings'),

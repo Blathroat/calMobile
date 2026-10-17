@@ -52,6 +52,7 @@ const code = ref('');
 /** 验证码到底发去了哪个邮箱：后端回什么就显示什么，避免用户填了别名邮箱后对不上。 */
 const sentTo = ref('');
 const pending = ref<JsonObject | null>(null);
+const inviteCode = ref('');
 /** 注册凭据只提交一次；后续启动失败可在同一会话里重试。 */
 let verifiedSession: AbortSignal | undefined;
 
@@ -167,6 +168,8 @@ async function submitAccount(): Promise<void> {
       password: password.value,
       confirmPassword: confirm.value,
     };
+    const enteredInvite = inviteCode.value.trim();
+    if (enteredInvite) payload.inviteCode = enteredInvite;
     const sent = await api.auth.register(payload);
     if (!sent?.ok) {
       error.value = String(sent?.error || t('auth.register.failed'));
@@ -331,6 +334,20 @@ function messageOf(reason: unknown): string {
       <span class="field-counter" :data-over="confirm.length > (secret.max ?? 0) ? 'true' : 'false'"
         >{{ confirm.length }}/{{ secret.max }}</span
       >
+    </div>
+
+    <div class="field">
+      <label for="register-invite">{{ t('auth.register.inviteCode') }}</label>
+      <input
+        id="register-invite"
+        v-model="inviteCode"
+        class="input"
+        type="text"
+        autocomplete="off"
+        maxlength="32"
+        :placeholder="t('auth.register.invitePlaceholder')"
+      />
+      <p class="field-hint">{{ t('auth.register.inviteHint') }}</p>
     </div>
 
     <div class="row" data-between="true">

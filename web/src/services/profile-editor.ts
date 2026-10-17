@@ -80,6 +80,7 @@ export function openProfileEditor(profile: JsonObject, options?: { blocked?: () 
         showRegistrations: profile.showRegistrations === true,
       });
       const fresh = (saved.user as JsonObject | undefined) ?? {};
+      session.bumpProfile();
       session.applyUser({ ...session.user, ...fresh });
       Object.assign(profile, fresh);
       closeSheet();

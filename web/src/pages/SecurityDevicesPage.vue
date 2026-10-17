@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /** 已登录设备列表；每一行按设备聚合会话，可以远程撤销单台或全部设备。 */
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+import { usePullRefresh } from '@/services/pull-refresh';
 import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
@@ -69,14 +70,21 @@ async function load(): Promise<void> {
   try {
     const result = await api.security.sessions();
     devices.value = Array.isArray(result.sessions) ? (result.sessions as DeviceSession[]) : [];
+    loadError.value = '';
   } catch (reason) {
-    loadError.value = errorText(reason);
+    if (devices.value.length === 0) loadError.value = errorText(reason);
+    else notice.value = errorText(reason);
   } finally {
     loading.value = false;
   }
 }
 
 onMounted(load);
+
+usePullRefresh(
+  () => load(),
+  computed(() => loading.value && devices.value.length > 0),
+);
 
 function signOutLocally(): void {
   api.session.clear();
@@ -132,7 +140,7 @@ function revokeAll(): void {
 </script>
 
 <template>
-  <SkeletonBlock v-if="loading" :rows="3" />
+  <SkeletonBlock v-if="loading && devices.length === 0" :rows="3" />
   <StateBlock
     v-else-if="loadError"
     tone="error"

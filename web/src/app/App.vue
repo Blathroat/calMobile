@@ -7,7 +7,7 @@
  * - 页面需要固定操作区时用 `Teleport to="#app-foot"`，它落在网格的第三行；
  * - 轻提示与底部面板是全局的，每个页面都不用自己挂载容器。
  */
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterView, useRoute, useRouter } from 'vue-router';
 import AppTopBar from '@/components/AppTopBar.vue';
 import AppIcon from '@/components/AppIcon.vue';
@@ -18,6 +18,7 @@ import { bodyAttrs, tabItems } from '@/app/shell';
 import { paths } from '@/app/surface';
 import { navigation } from '@/app/navigation';
 import { preloadTabs, resetPreload } from '@/app/preload';
+import { bindPullGesture, pullDragging, pullOffset, pullSettling, pullSpinning } from '@/services/pull-refresh';
 import { api } from '@/app/runtime';
 import { closeSheet, confirmSheet, sheet } from '@/services/sheet';
 import { toast } from '@/services/toast';
@@ -37,6 +38,19 @@ const title = computed(() => (typeof route.meta.title === 'string' ? t(route.met
 const topAction = computed(() => route.meta.topAction);
 const attrs = computed(() => bodyAttrs(route.meta));
 const logoutBusy = ref(false);
+const bodyEl = ref<HTMLElement>();
+const showPull = computed(() => pullDragging.value || pullOffset.value > 0 || pullSpinning.value || pullSettling.value);
+/** 内容下移。滑出到 0 时仍留着 transform，过渡才播得完。 */
+const pullShift = computed(() => {
+  if (!pullSettling.value && pullOffset.value <= 0) return undefined;
+  return { transform: `translate3d(0, ${pullOffset.value}px, 0)` };
+});
+/** 圈放在内容让开的空隙里，不跟内容一起被推出屏幕。 */
+const indicatorShift = computed(() => {
+  if (!pullSettling.value && pullOffset.value <= 0 && !pullDragging.value) return undefined;
+  return { transform: `translate3d(0, ${pullOffset.value - 30}px, 0)` };
+});
+let unbindPull: (() => void) | undefined;
 
 function onTopAction(): void {
   const action = topAction.value;
@@ -105,7 +119,11 @@ watch(
   },
 );
 
-onMounted(watchSystemMode);
+onMounted(() => {
+  watchSystemMode();
+  if (bodyEl.value) unbindPull = bindPullGesture(bodyEl.value);
+});
+onBeforeUnmount(() => unbindPull?.());
 </script>
 
 <template>
@@ -135,14 +153,29 @@ onMounted(watchSystemMode);
         </button>
       </template>
     </AppTopBar>
-    <main class="app-body" v-bind="attrs">
+    <main
+      ref="bodyEl"
+      class="app-body"
+      v-bind="attrs"
+      :data-pulling="pullDragging ? 'true' : undefined"
+      :data-pull-settle="pullSettling ? 'true' : undefined"
+    >
+      <div class="pull-indicator" :data-on="showPull ? 'true' : undefined" :style="indicatorShift">
+        <span class="pull-spinner" :data-spin="pullSpinning ? 'true' : undefined" />
+        <span class="sr-only">{{ showPull ? t('common.refreshing') : t('common.pullRefresh') }}</span>
+      </div>
       <RouterView v-slot="{ Component }">
         <!-- 单独一层承载页面切换动画：`.app-body` 在切换之间是同一个元素，
              动画需要挂在每次都重建的节点上。
              键用 `fullPath`，所以换 query（例如管理页的 `?tab=`）也会重建页面；
              页面自己 watch query 完成切换的（`meta.queryInPlace`）则只认 path，
-             免得为了换一个分区把整页重新挂载、数据重新取一遍。 -->
-        <div :key="route.meta.queryInPlace === true ? route.path : route.fullPath" class="route-enter page-surface">
+             免得为了换一个分区把整页重新挂载、数据重新取一遍。
+             下拉时的位移只在 offset > 0 时写 inline transform，避免盖住页面切换动画。 -->
+        <div
+          :key="route.meta.queryInPlace === true ? route.path : route.fullPath"
+          class="route-enter page-surface"
+          :style="pullShift"
+        >
           <component :is="Component" />
         </div>
       </RouterView>

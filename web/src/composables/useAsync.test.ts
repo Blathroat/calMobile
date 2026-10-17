@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { effectScope } from 'vue';
 import { navigation } from '@/app/navigation';
 import { useAsync } from './useAsync';
+import type { CachedRead } from '@/services/query-cache';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -72,6 +73,37 @@ describe('页面取数生命周期', () => {
     await currentPending;
     expect(query.data.value).toBe('已有内容');
     expect(query.error.value?.message).toBe('当前失败');
+    scope.stop();
+  });
+
+  it('新鲜缓存先画出且不进入忙碌', async () => {
+    const scope = effectScope();
+    const query = scope.run(() => useAsync<string>())!;
+    const pending = Promise.resolve('缓存') as CachedRead<string>;
+    pending.cached = '缓存';
+    pending.revalidating = false;
+    const done = query.run(() => pending);
+    expect(query.data.value).toBe('缓存');
+    expect(query.loading.value).toBe(false);
+    expect(await done).toBe('缓存');
+    expect(query.loading.value).toBe(false);
+    scope.stop();
+  });
+
+  it('过期缓存先画出，并保持忙碌直到新数据到达', async () => {
+    const scope = effectScope();
+    const query = scope.run(() => useAsync<string>())!;
+    const old = deferred<string>();
+    const pending = old.promise as CachedRead<string>;
+    pending.cached = '旧';
+    pending.revalidating = true;
+    const done = query.run(() => pending);
+    expect(query.data.value).toBe('旧');
+    expect(query.loading.value).toBe(true);
+    old.resolve('新');
+    expect(await done).toBe('新');
+    expect(query.data.value).toBe('新');
+    expect(query.loading.value).toBe(false);
     scope.stop();
   });
 });

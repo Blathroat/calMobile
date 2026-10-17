@@ -17,6 +17,7 @@ import { forgetTexts, storageReport } from '../services/media-gc.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { parseSchema } from '../domain/validation.js';
 import { notifySchema, serverSettingsPatchSchema, uiModeSchema, uiThemeSchema } from '../domain/schemas.js';
+import { createInvite, deleteInvite, listInvites } from '../domain/invites.js';
 
 const app = new Hono<HonoEnv>();
 function bodyRecord(value: unknown): Record<string, unknown> {
@@ -28,6 +29,7 @@ function has(body: object | null | undefined, key: string) {
 async function settingsPayload(userId: string | null | undefined, role?: string | null) {
   const settings = await readServerSettings();
   const storage = role === 'admin' ? await storageReport() : undefined;
+  const invites = role === 'admin' ? await listInvites() : undefined;
   // `theme.index` 下发的是**调用者实际生效**的下标（个人选择优先于全局默认）：
   // 页面据此画选中环，不必自己判断「我有没有单独选过配色」。
   const themeIndex = await readUiTheme(userId, settings.theme.index, settings.theme.colors);
@@ -43,8 +45,10 @@ async function settingsPayload(userId: string | null | undefined, role?: string 
     limits: settings.limits,
     cover: settings.cover,
     exhibitor: settings.exhibitor,
+    invite: settings.invite,
     notify: await readNotificationPreferences(userId),
     ...(storage ? { storage } : {}),
+    ...(invites ? { invites } : {}),
   };
 }
 app.get('/', optionalAuthHono, async (c) => {
@@ -67,6 +71,24 @@ app.put('/', authenticateHono, async (c) => {
     if (has(body, 'notify')) await saveNotificationPreferences(user.userId, parseSchema(notifySchema, body.notify));
     return { settings: await settingsPayload(user.userId, user.role) };
   });
+});
+app.post('/invites', authenticateHono, async (c) => {
+  const user = requireAdmin({ user: userOf(c) });
+  const rawBody = bodyRecord(await readJsonBody(c));
+  return mutate(c, async () => {
+    const current = await readServerSettings();
+    const next = applyServerPatch(current, {
+      inviteUses: rawBody.uses,
+      inviteValidHours: rawBody.validHours,
+    });
+    await saveServerSettings(current, next);
+    await createInvite(user.userId, next.invite.uses, next.invite.validHours);
+    return { invites: await listInvites(), settings: await settingsPayload(user.userId, user.role) };
+  });
+});
+app.delete('/invites/:id', authenticateHono, async (c) => {
+  requireAdmin({ user: userOf(c) });
+  return mutate(c, async () => ({ invites: await deleteInvite(c.req.param('id')) }));
 });
 app.put('/ui-mode', authenticateHono, async (c) => {
   const user = requireUser({ user: userOf(c) });
@@ -91,6 +113,8 @@ export function createSettingsRoutes() {
 export const SETTINGS_ENDPOINTS: readonly [string, string][] = [
   ['GET', '/'],
   ['PUT', '/'],
+  ['POST', '/invites'],
+  ['DELETE', '/invites/:id'],
   ['PUT', '/ui-mode'],
   ['PUT', '/ui-theme'],
 ];

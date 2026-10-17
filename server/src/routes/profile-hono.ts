@@ -8,7 +8,7 @@
 import bcrypt from 'bcryptjs';
 import { Hono } from 'hono';
 import type { TrustProxy } from '../config/runtime.js';
-import { query } from '../config/pool.js';
+import { query, transaction } from '../config/pool.js';
 import { USER_COLUMNS, USER_FROM } from '../domain/queries.js';
 import { userPayload, type UserRow } from '../domain/payloads.js';
 import { capabilities, assertNotLimited, requireUser } from '../domain/permissions.js';
@@ -22,7 +22,9 @@ import {
   securityIdentitySchema,
   emailVerifyLooseSchema,
   notifySchema,
+  inviteRedeemSchema,
 } from '../domain/schemas.js';
+import { consumeInvite } from '../domain/invites.js';
 import { badRequest, notFound } from '../domain/errors.js';
 import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp.js';
 import {
@@ -558,6 +560,23 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     return mutate(c, async () => ({ seenHints: await saveSeenHint(user.userId, body.hint) }));
   });
 
+  app.post('/invite', authenticateHono, async (c) => {
+    const actor = requireUser({ user: userOf(c) });
+    assertNotLimited(actor, 'invite');
+    const rawBody = bodyRecord(await readJsonBody(c));
+    return mutate(c, async () => {
+      const body = parseSchema(inviteRedeemSchema, rawBody);
+      if (actor.role === 'exhibitor') throw badRequest('你已经是展商');
+      if (actor.role === 'admin') throw badRequest('你已经是管理员');
+      if (actor.role !== 'user') throw badRequest('当前身份不能使用邀请码');
+      await transaction(async (client) => {
+        await consumeInvite(client, body.code);
+        await client.query(`UPDATE users SET role = 'exhibitor', updated_at = now() WHERE id = $1`, [actor.userId]);
+      });
+      return { user: await loadUser(actor.userId) };
+    });
+  });
+
   return app;
 }
 
@@ -583,6 +602,7 @@ export const PROFILE_ENDPOINTS: readonly [string, string][] = [
   ['POST', '/email'],
   ['POST', '/email/verify'],
   ['PUT', '/hints'],
+  ['POST', '/invite'],
   ['GET', '/notifications'],
   ['PUT', '/notifications'],
 ];
