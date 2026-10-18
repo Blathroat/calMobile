@@ -6,7 +6,15 @@
  */
 
 import * as labels from './labels.js';
+import { isPastExpiry } from './membership.js';
 import type { Capabilities } from './permissions.js';
+
+/** 时间戳（Date 或 ISO 字符串）→ ISO 字符串；空值返回空串。 */
+function isoTime(value: Date | string | null | undefined): string {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+}
 
 export interface ExhibitionRow {
   id: string;
@@ -82,6 +90,8 @@ export interface UserRow {
   status?: string | null;
   email_verified?: boolean | null;
   two_factor_enabled?: boolean | null;
+  /** 限时展商的到期时间；NULL 表示永久。到期后角色会被降回普通用户。 */
+  exhibitor_expires_at?: string | Date | null;
   last_login_time?: string | null;
   registration_time?: string | null;
 }
@@ -96,6 +106,7 @@ export interface AdminUserRow {
   status?: string | null;
   email_verified?: boolean | null;
   two_factor_enabled?: boolean | null;
+  exhibitor_expires_at?: string | Date | null;
   registration_time?: string | null;
   last_login_time?: string | null;
 }
@@ -223,6 +234,9 @@ export function userPayload(row: UserRow, can: Capabilities) {
     // 邮箱验证状态与两步验证开关：个人页「安全」区与用户管理都看这两个字段
     emailVerified: row.email_verified === true,
     twoFactorEnabled: row.two_factor_enabled === true,
+    // 展商时长：空串表示永久；到期后角色已降为普通用户，但保留时间用于说明「已到期」
+    exhibitorExpiresAt: isoTime(row.exhibitor_expires_at),
+    exhibitorExpired: isPastExpiry(row.exhibitor_expires_at),
     lastLoginTime: row.last_login_time || '',
     registrationTime: row.registration_time || '',
     can,
@@ -248,6 +262,8 @@ export function guestPayload() {
     statusCode: 'guest',
     lastLoginTime: '',
     registrationTime: '',
+    exhibitorExpiresAt: '',
+    exhibitorExpired: false,
     can: { register: false, profile: false, exhibitor: false, admin: false, limited: false },
   };
 }
@@ -266,6 +282,8 @@ export function adminUserPayload(row: AdminUserRow, index: number) {
     // 管理员据此决定要不要显示「关闭两步验证」这个兜底入口
     emailVerified: row.email_verified === true,
     twoFactorEnabled: row.two_factor_enabled === true,
+    exhibitorExpiresAt: isoTime(row.exhibitor_expires_at),
+    exhibitorExpired: isPastExpiry(row.exhibitor_expires_at),
     registrationTime: row.registration_time || '',
     lastLoginTime: row.last_login_time || '',
     order: index,

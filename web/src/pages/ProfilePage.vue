@@ -1,12 +1,16 @@
 <script setup lang="ts">
 /**
- * 屏幕 09 · 个人主页（身份卡 + 资料展示 + 设置入口）
+ * 屏幕 09 · 个人主页（身份卡 + 活动概览 + 简介 + 公开资料 + 入口）
  * 旧实现：app/src/main/assets/web/js/pages/profile.js（`git show 5e3d9ab^`）
  *
- * 这一屏回答「我是谁、我公开了什么」。头像卡片下方展示地区；简介标题右侧的铅笔
- * 打开与用户设置相同的编辑资料抽屉（`services/profile-editor.ts`）。
- * 头像裁剪、通知、配色、明暗、隐私开关与安全入口仍在 `UserSettingsPage.vue`，
- * 入口有两个：顶栏右侧的设置图标（路由 meta 的 `topAction`）与这一屏的设置卡片。
+ * 这一屏回答三件事：我是谁（身份卡）、我给别人的印象（简介与公开资料）、
+ * 我参加过什么（身份卡底部的活动概览）。最后才是用户设置、安全设置与退出登录。
+ *
+ * 身份卡右侧的铅笔打开与用户设置相同的编辑资料抽屉（`services/profile-editor.ts`）。
+ * 没有简介时显示可点的空态，不把操作指引当正文。
+ *
+ * 活动概览复用 `registrations` 列表的查询缓存：它是增强信息，取不到就不显示，
+ * 不让资料主状态跟着失败（与展会详情页判断「我的报名」同一类处理）。
  *
  * 退出登录仍走 `POST /auth/logout`，一次调用清掉服务端与本地会话。
  */
@@ -18,6 +22,9 @@ import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
 import { openProfileEditor } from '@/services/profile-editor';
+import { paths } from '@/app/surface';
+import { REGISTRATION_STATUS } from '@/services/status';
+import { daysUntil, formatLocalChineseDate } from '@/services/format';
 import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -29,8 +36,6 @@ import { t } from '@/i18n';
 const COPY = {
   /** 设置入口的说明：把设置页里能改的东西列出来，省得点进去才发现。 */
   settingsMeta: t('profile.settingsSummary'),
-  /** 简介下方社交账号行的前缀，与后面的内容同一字重。 */
-  socialPrefix: t('profile.socialPrefix'),
 };
 
 const router = useRouter();
@@ -42,24 +47,19 @@ const loggedIn = computed(() => session.loggedIn);
 const limited = computed(() => user.value.can?.profile === false);
 const limitHint = computed(() => t('profile.restricted'));
 
-// ── 取数：本页只用到个人资料 ──────────────────────────────────────
+// ── 取数：资料是主状态，活动概览是增强信息 ──────────────────────
 
 const profile = reactive<JsonObject>({});
 const loading = ref(true);
 const loadFailed = ref(false);
 const loadError = ref('');
+const activity = ref<{ attended: number; total: number } | null>(null);
 
 /** 取数失败优先用后端/传输层自带的原因，没有就回落到通用文案。 */
 function errorText(reason: unknown): string {
   return reason instanceof Error && reason.message ? reason.message : t('exhibition.form.saveFailed');
 }
 
-/**
- * 只拉个人资料：通知偏好属于设置页，放在这里拉会让本页的失败态跟着一起抖。
- *
- * 失败在原位给出错误块与重试，而不是画出空资料 —— 后端没起时页面照常渲染、
- * 每行都显示「未填写」，是最容易让人误判「加载成功」的一种假象。
- */
 /** 会话里已经有的资料先铺上，公开页和设置页改过头像后这里不用等 GET。 */
 function paintFromSession(): void {
   const current = session.user;
@@ -73,6 +73,10 @@ function paintFromSession(): void {
   });
 }
 
+/**
+ * 资料是主状态：失败在原位给出错误块与重试，而不是画出空资料。
+ * 会话里已经有 id 时，错误只作为附加提示，已经画出的身份卡不清空。
+ */
 async function load(): Promise<void> {
   await bootApp().catch(() => undefined);
   paintFromSession();
@@ -96,29 +100,105 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(load);
+/**
+ * 活动概览：报名列表条数与已参加场数。
+ *
+ * 只用于身份卡底部的一行摘要，属于增强信息：取不到就不显示，不弹错误、
+ * 也不影响资料主状态。列表本身走查询缓存，和其它页面共用同一条 `registrations` 键。
+ */
+async function loadActivity(): Promise<void> {
+  if (session.loggedIn !== true) return;
+  try {
+    const records = await api.registrations.list();
+    if (!Array.isArray(records)) return;
+    activity.value = {
+      attended: records.filter((record) => record.status === REGISTRATION_STATUS.ATTENDED).length,
+      total: records.length,
+    };
+  } catch {
+    // 增强信息失败保持隐藏；下拉刷新时会再试一次。
+  }
+}
+
+async function refreshAll(): Promise<void> {
+  await Promise.all([load(), loadActivity()]);
+}
+
+onMounted(() => {
+  void load();
+  void loadActivity();
+});
 
 usePullRefresh(
-  () => load(),
+  () => refreshAll(),
   computed(() => loading.value && Boolean(user.value.id)),
   loggedIn,
 );
 
 // ── 展示用取值 ────────────────────────────────────────────────────
 
-function identityMeta(): string {
+/** 身份说明行：正常状态不占一行，只在受限/封禁时说明账号状态。 */
+const identityLine = computed(() => {
   const code = String(user.value.role || '');
   const role = String(user.value.roleLabel || '');
-  const status = String(user.value.status || t('admin.users.normal'));
-  if (code === 'exhibitor' || code === 'admin') return status;
-  return role ? `${role} · ${status}` : status;
+  const status = String(user.value.status || '');
+  const statusCode = String(user.value.statusCode || '');
+  const normal = statusCode === 'active' || status === t('admin.users.normal');
+  const tagged = code === 'exhibitor' || code === 'admin';
+  if (normal) return tagged ? '' : role;
+  if (tagged) return status;
+  return role && status ? role + ' · ' + status : role || status;
+});
+
+// ── 展商时长：限时展商看到到期日，到期后说明原因与续期入口 ──
+
+/** 限时展商身份卡里的一行：有效期至某日。 */
+const membershipLine = computed(() => {
+  if (String(user.value.role || '') !== 'exhibitor') return '';
+  const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
+  return date ? `${t('profile.membership.until')}${date}` : '';
+});
+
+/** 7 天内到期的提醒：说明还能用多久、可以续期。 */
+const membershipSoon = computed(() => {
+  if (String(user.value.role || '') !== 'exhibitor') return '';
+  const days = daysUntil(user.value.exhibitorExpiresAt);
+  if (days === null || days > 7) return '';
+  return `${t('profile.membership.soon')}${days}${t('profile.membership.soonTail')}`;
+});
+
+/** 已经自动到期的账号：说明原因与续期方式（管理员手动降级会清掉到期时间，不会走到这里）。 */
+const membershipExpired = computed(() => {
+  if (user.value.exhibitorExpired !== true) return '';
+  const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
+  return date ? `${t('profile.membership.expired')}${date}${t('profile.membership.expiredHint')}` : '';
+});
+
+function hasProfileValue(key: string): boolean {
+  const value = profile[key];
+  return typeof value === 'string' && value !== '';
 }
 
 /** 资料字段的展示值：缺失时沿用旧页面给出的空态文案。 */
 function profileValue(key: string, emptyKey: string): string {
-  const value = profile[key];
-  return typeof value === 'string' && value !== '' ? value : t(emptyKey);
+  return hasProfileValue(key) ? String(profile[key]) : t(emptyKey);
 }
+
+const hasBio = computed(() => hasProfileValue('bio'));
+
+/** 自己的公开主页：优先按昵称定位；带上 userId，昵称重名时也能落到本账号。 */
+const publicPath = computed(() => {
+  const nickname = String(user.value.nickname || user.value.username || '');
+  if (!nickname) return '';
+  const id = String(user.value.id || '');
+  const query = id ? '?userId=' + encodeURIComponent(id) : '';
+  return '/user-public/' + encodeURIComponent(nickname) + query;
+});
+
+/** 公开主页入口右侧说明的是「别人能看到什么」，不是本页的开关状态。 */
+const publicMeta = computed(() =>
+  profile.showRegistrations === true ? t('profile.publicRegistrationsShown') : t('profile.publicRegistrationsHidden'),
+);
 
 /** 编辑资料：与设置页「编辑资料」打开同一抽屉。受限账号先说明原因。 */
 function openEditor(): void {
@@ -138,7 +218,7 @@ const logoutBusy = ref(false);
 function logout(): void {
   confirmSheet({
     title: t('profile.logout'),
-    message: t('profile.guestHint'),
+    message: t('app.logoutMessage'),
     confirmLabel: t('profile.logout'),
     tone: 'danger',
     onConfirm: async () => {
@@ -159,7 +239,7 @@ function logout(): void {
 </script>
 
 <template>
-  <!-- 访客：与旧页面一致，原位说明并给出登录入口，而不是让下面的开关显示默认值 -->
+  <!-- 访客：与旧页面一致，原位说明并给出登录入口 -->
   <StateBlock
     v-if="!loggedIn"
     icon="user"
@@ -186,28 +266,20 @@ function logout(): void {
         <span>{{ loadError }}</span>
       </div>
       <div class="profile-stack" :data-busy="loading ? 'true' : undefined">
-        <!-- 身份卡：头像、昵称、角色/状态，以及地区（地区的空态与简介区原来的空态一致） -->
-        <div class="card">
+        <!-- 身份卡：头像、昵称、角色与账号状态；底部是活动概览。 -->
+        <div class="card" data-tone="fill">
           <div class="row" data-gap="md">
             <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || user.username || '')" large />
             <span class="row-copy">
               <span class="name-line">
-                <strong class="row-title">{{ user.nickname || user.username }}</strong>
+                <strong class="identity-name">{{ user.nickname || user.username }}</strong>
                 <RoleTag :role-code="String(user.role || '')" />
               </span>
-              <span class="row-meta">{{ identityMeta() }}</span>
-              <span class="row-meta truncate">{{ profileValue('region', 'profile.notFilled') }}</span>
+              <span v-if="identityLine" class="row-meta">{{ identityLine }}</span>
+              <span v-if="membershipLine" class="row-meta">{{ membershipLine }}</span>
             </span>
-          </div>
-        </div>
-
-        <!-- 简介与社交账号。地区已上收到身份卡；铅笔打开与设置页相同的编辑资料抽屉。 -->
-        <div class="card">
-          <div class="row">
-            <span class="section-label">{{ t('profile.bio') }}</span>
             <button
               class="icon-button"
-              data-inline="true"
               type="button"
               :aria-label="t('settings.profile.editProfile')"
               :disabled="limited"
@@ -217,20 +289,100 @@ function logout(): void {
               <AppIcon name="edit" />
             </button>
           </div>
-          <p class="row-meta">
-            {{ profileValue('bio', 'profile.bioEmpty') }}<br /><br />{{ COPY.socialPrefix
-            }}{{ profileValue('socialMedia', 'profile.notFilled') }}
-          </p>
+          <!-- 活动概览：整行可点，进入我的活动；取不到数据时整块不渲染 -->
+          <template v-if="activity">
+            <hr class="divider" />
+            <button class="profile-stats" type="button" @click="router.push(paths.registrations)">
+              <span class="profile-stat">
+                <strong>{{ activity.attended }}</strong>
+                <span class="row-meta">{{ t('profile.stats.attended') }}</span>
+              </span>
+              <span class="profile-stat">
+                <strong>{{ activity.total }}</strong>
+                <span class="row-meta">{{ t('profile.stats.registrations') }}</span>
+              </span>
+              <AppIcon name="chevronRight" />
+            </button>
+          </template>
         </div>
 
-        <!-- 设置入口：与顶栏右侧的设置图标进同一页（头像、通知、隐私、安全都在那里） -->
+        <!-- 受限：说明为什么编辑入口不可用 -->
+        <div v-if="limited" class="notice" data-tone="accent">
+          <strong>{{ limitHint }}</strong>
+        </div>
+
+        <!-- 限时展商：快到期与已到期都说明原因和续期方式，避免身份标签悄悄消失 -->
+        <div v-if="membershipSoon" class="notice" data-tone="accent">
+          <span>{{ membershipSoon }}</span>
+        </div>
+        <div v-if="membershipExpired" class="notice" data-tone="accent">
+          <span>{{ membershipExpired }}</span>
+        </div>
+
+        <!-- 个人简介：有内容时按正文排版，空态给出可点的「填写简介」 -->
         <div class="card">
-          <span class="section-label">{{ t('settings.title') }}</span>
+          <span class="section-label">{{ t('profile.bio') }}</span>
+          <p v-if="hasBio" class="bio-text">{{ String(profile.bio) }}</p>
+          <div v-else class="bio-empty">
+            <p class="field-hint">{{ t('profile.bioEmpty') }}</p>
+            <button
+              class="text-action"
+              type="button"
+              :disabled="limited"
+              :title="limited ? limitHint : undefined"
+              @click="openEditor"
+            >
+              {{ t('profile.bioEmptyAction') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 公开资料：地区与社交账号都是「标签 + 值」，空值弱化显示 -->
+        <div class="card">
+          <span class="section-label">{{ t('profile.public.details') }}</span>
+          <div class="row" data-between="true">
+            <span class="row-meta">{{ t('settings.profile.region') }}</span>
+            <strong class="truncate" :class="hasProfileValue('region') ? 'strong' : 'dim'">{{
+              profileValue('region', 'profile.notFilled')
+            }}</strong>
+          </div>
+          <div class="row" data-between="true">
+            <span class="row-meta">{{ t('settings.profile.social') }}</span>
+            <strong class="truncate" :class="hasProfileValue('socialMedia') ? 'strong' : 'dim'">{{
+              profileValue('socialMedia', 'profile.notFilled')
+            }}</strong>
+          </div>
+        </div>
+
+        <!-- 入口：公开主页、用户设置、安全设置各自一行，不套卡片 -->
+        <div class="list" data-gap="sm">
+          <button
+            v-if="publicPath"
+            class="row-card"
+            type="button"
+            data-pressable="true"
+            @click="router.push(publicPath)"
+          >
+            <span class="dim" aria-hidden="true"><AppIcon name="user" size="icon icon-sm" /></span>
+            <span class="row-copy">
+              <strong class="row-title">{{ t('profile.previewPublic') }}</strong>
+              <span class="row-meta">{{ publicMeta }}</span>
+            </span>
+            <AppIcon name="chevronRight" />
+          </button>
           <button class="row-card" type="button" data-pressable="true" @click="router.push('/settings')">
             <span class="dim" aria-hidden="true"><AppIcon name="settings" size="icon icon-sm" /></span>
             <span class="row-copy">
               <strong class="row-title">{{ t('settings.title') }}</strong>
               <span class="row-meta">{{ COPY.settingsMeta }}</span>
+            </span>
+            <AppIcon name="chevronRight" />
+          </button>
+          <button class="row-card" type="button" data-pressable="true" @click="router.push('/security')">
+            <span class="dim" aria-hidden="true"><AppIcon name="shield" size="icon icon-sm" /></span>
+            <span class="row-copy">
+              <strong class="row-title">{{ t('security.title') }}</strong>
+              <span class="row-meta">{{ t('settings.securityMeta') }}</span>
             </span>
             <AppIcon name="chevronRight" />
           </button>
@@ -246,14 +398,35 @@ function logout(): void {
 </template>
 
 <style>
-/* 外壳只给 `.page-surface` 的直接子元素留间距。忙碌标记需要包一层，间距在这一层补回。 */
+/* 外壳只给 .page-surface 的直接子元素留间距。忙碌标记需要包一层，间距在这一层补回。 */
 .profile-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--s4);
+  gap: var(--s5);
 }
 
 .profile-stack > * {
   flex: none;
+}
+
+/* 简介正文：正文色与正文行高，保留用户输入的换行。 */
+.bio-text {
+  color: var(--ink);
+  font-size: var(--fs-body);
+  line-height: var(--lh-base);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* 简介空态：一句说明 + 一个可点的入口，不占用正文的位置。 */
+.bio-empty {
+  display: grid;
+  gap: var(--s1);
+  justify-items: start;
+}
+
+.bio-empty .text-action[disabled] {
+  color: var(--ink-3);
+  cursor: not-allowed;
 }
 </style>

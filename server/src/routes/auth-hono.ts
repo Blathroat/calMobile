@@ -32,6 +32,7 @@ import {
 } from '../domain/session.js';
 import { issueCode, consumeCode, peekPendingPayload, isCodeRejected, maskEmail } from '../domain/otp.js';
 import { assertInviteUsable, consumeInvite } from '../domain/invites.js';
+import { settleExpiredExhibitor } from '../domain/membership.js';
 import { secondFactorState, verifySecondFactor, type SecondFactorUser } from '../domain/two-factor.js';
 import { issueTicket, findTicket, consumeTicket, countTicketFailure } from '../domain/preauth.js';
 import { ApiError, badRequest, unauthorized } from '../domain/errors.js';
@@ -150,6 +151,8 @@ function authLimiter(trustProxy: TrustProxy) {
 }
 
 async function loadUser(id: string) {
+  // 限时展商可能已经到期：先把角色结算成普通用户，登录 / 刷新后的响应才不会给出过期的身份。
+  await settleExpiredExhibitor(id);
   const result = await query<UserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id]);
   const row = result.rows[0];
   return row ? userPayload(row, capabilities(row.role, row.status ?? undefined)) : null;
@@ -363,11 +366,13 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     const role = pending.inviteCode ? 'exhibitor' : 'user';
     try {
       await transaction(async (client) => {
-        if (pending.inviteCode) await consumeInvite(client, pending.inviteCode);
+        // 邀请码的展商时长在同一个事务里读出来，和消耗次数一起落库。
+        const durationDays = pending.inviteCode ? (await consumeInvite(client, pending.inviteCode)).durationDays : 0;
         await client.query(
-          `INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at)
-          VALUES ($1, $2, $3, $4, $5, $6, true, now())`,
-          [id, username, pending.passwordHash, consumed.email, pending.nickname || username, role],
+          `INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at, exhibitor_expires_at)
+          VALUES ($1, $2, $3, $4, $5, $6, true, now(),
+                  CASE WHEN $7::int = 0 THEN NULL ELSE now() + make_interval(days => $7::int) END)`,
+          [id, username, pending.passwordHash, consumed.email, pending.nickname || username, role, durationDays],
         );
       });
     } catch (error: unknown) {

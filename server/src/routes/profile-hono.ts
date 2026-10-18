@@ -25,6 +25,7 @@ import {
   inviteRedeemSchema,
 } from '../domain/schemas.js';
 import { consumeInvite } from '../domain/invites.js';
+import { settleExpiredExhibitor } from '../domain/membership.js';
 import { badRequest, notFound } from '../domain/errors.js';
 import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp.js';
 import {
@@ -114,6 +115,8 @@ async function currentAvatar(userId: string): Promise<string> {
 }
 
 async function loadUser(id: string) {
+  // 到期结算先于拼 payload：资料页、兑换结果与导航能力位都按结算后的角色下发。
+  await settleExpiredExhibitor(id);
   const result = await query<UserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id]);
   const row = result.rows[0];
   if (!row) throw notFound('用户不存在或已删除');
@@ -566,12 +569,30 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const rawBody = bodyRecord(await readJsonBody(c));
     return mutate(c, async () => {
       const body = parseSchema(inviteRedeemSchema, rawBody);
-      if (actor.role === 'exhibitor') throw badRequest('你已经是展商');
-      if (actor.role === 'admin') throw badRequest('你已经是管理员');
-      if (actor.role !== 'user') throw badRequest('当前身份不能使用邀请码');
+      // 以库里的角色为准：认证中间件可能刚把到期的展商结算成普通用户。
+      const current = await query<{ role: string; exhibitor_expires_at: string | Date | null }>(
+        'SELECT role, exhibitor_expires_at FROM users WHERE id = $1',
+        [actor.userId],
+      );
+      const row = current.rows[0];
+      if (!row) throw notFound('用户不存在或已删除');
+      if (row.role === 'admin') throw badRequest('你已经是管理员');
+      // 永久展商没有可续的时长；限时展商可以续期，普通用户（含已到期的）直接开通。
+      if (row.role === 'exhibitor' && !row.exhibitor_expires_at) throw badRequest('你已经是展商');
+      if (row.role !== 'user' && row.role !== 'exhibitor') throw badRequest('当前身份不能使用邀请码');
       await transaction(async (client) => {
-        await consumeInvite(client, body.code);
-        await client.query(`UPDATE users SET role = 'exhibitor', updated_at = now() WHERE id = $1`, [actor.userId]);
+        const { durationDays } = await consumeInvite(client, body.code);
+        await client.query(
+          `UPDATE users
+              SET role = 'exhibitor',
+                  exhibitor_expires_at = CASE
+                    WHEN $2::int = 0 THEN NULL
+                    ELSE GREATEST(now(), COALESCE(exhibitor_expires_at, now())) + make_interval(days => $2::int)
+                  END,
+                  updated_at = now()
+            WHERE id = $1`,
+          [actor.userId, durationDays],
+        );
       });
       return { user: await loadUser(actor.userId) };
     });

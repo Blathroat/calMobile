@@ -87,6 +87,8 @@
   --toast-ok: rgba(36, 93, 60, 0.96);
   --toast-error: rgba(163, 58, 42, 0.96);
   --on-dark: #ffffff; /* 深色底上的文字 */
+  /* 配色色板上的选中对勾：色板里的强调色都是深底，固定用白色，不随明暗模式反转 */
+  --swatch-mark: #ffffff;
   --shadow-card: 0 1px 2px rgba(31, 35, 40, 0.04);
   --shadow-float: 0 12px 28px rgba(31, 35, 40, 0.14);
   --shadow-panel: 0 4px 12px rgba(31, 35, 40, 0.16);
@@ -528,6 +530,24 @@ label {
   min-width: 0;
 }
 
+/* 三列并排字段（邀请码生成）：窄屏下三列等分，输入框与标签各自对齐。 */
+.grid-cols-3 {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s2);
+}
+
+.grid-cols-3 > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.grid-cols-3 > .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
 /* 卡片底部的两三个操作并排。子项自己拉伸，不要再套一层 grid-cols-2。 */
 .action-row {
   display: flex;
@@ -656,6 +676,7 @@ label {
 
 .divider {
   height: var(--hairline);
+  margin: 0;
   background: var(--stroke);
   border: 0;
 }
@@ -807,6 +828,11 @@ label {
   gap: var(--s2);
 }
 
+/* 行自带分隔线时，列表不再额外留间距（设置页与语言卡内部的开关行） */
+.list[data-gap='none'] {
+  gap: 0;
+}
+
 .row-card {
   display: flex;
   align-items: center;
@@ -839,6 +865,17 @@ label {
   font-weight: 700;
 }
 
+/* 身份卡上的名字：比列表标题大一档，长名字先省略 */
+.identity-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 名字和后面的身份小标签排在同一行，长名字先省略，标签不被挤掉。 */
 .name-line {
   display: flex;
@@ -857,6 +894,36 @@ label {
   color: var(--ink-2);
   font-size: var(--fs-meta);
   line-height: 1.35;
+}
+
+/* 活动概览：个人页与用户公开页的身份卡共用。
+   个人页是整行按钮（右侧箭头进我的活动），公开页是只读展示。 */
+.profile-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--s6);
+  width: 100%;
+  min-height: var(--touch);
+  padding: var(--s1) 0 0;
+  color: var(--ink);
+  text-align: start;
+}
+
+.profile-stat {
+  display: grid;
+  gap: 0;
+}
+
+.profile-stat > strong {
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-stats > svg {
+  margin-inline-start: auto;
+  color: var(--ink-3);
 }
 
 /* 展会图片统一按设计稿的 1080×1920（9:16）竖版比例展示，避免图片被拉成方块 */
@@ -1260,6 +1327,20 @@ button.avatar {
   flex: 1 1 auto;
   width: auto;
   min-width: 0;
+}
+
+/* 卡片里的一行开关：去掉自身边框，相邻行用分隔线区分。
+   只认显式的 data-flush，其它页面已有的 .switch-row 外观不变。 */
+.switch-row[data-flush='true'] {
+  min-height: var(--ctrl);
+  padding: var(--s2) 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.switch-row[data-flush='true'] + .switch-row[data-flush='true'] {
+  border-top: var(--hairline) solid var(--stroke);
 }
 
 .switch-row .switch-copy {

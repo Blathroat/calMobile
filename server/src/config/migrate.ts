@@ -83,19 +83,23 @@ export interface ServerSettings {
   cover: { defaultCover: string };
   /** 展商端策略：同时能筹备的展会数、私人会议数上限，0 表示不限。 */
   exhibitor: { maxFutureExhibitions: number; maxFutureMeetings: number };
-  /** 邀请码生成默认值。uses 至少 1；validHours 为 0 表示不过期。 */
-  invite: { uses: number; validHours: number };
+  /**
+   * 邀请码生成默认值。uses 至少 1；validHours 为 0 表示不过期。
+   * durationDays 是兑换后展商身份保留的天数，0 表示永久。
+   */
+  invite: { uses: number; validHours: number; durationDays: number };
 }
 
 /**
- * 应用配色的默认色板（8 种）。
+ * 应用配色的默认色板（12 种）。
  *
  * 契约：**index 与语义稳定，位置一旦发布不得改动**。
  * `theme.index` 是存下来的用户选择，前端 `applyTheme()` 与原生 `ui.sync` 都按下标取色，
- * 换位置等于换掉所有老用户当前的强调色，因此新色只能往后追加。
+ * 换位置等于换掉所有老用户当前的强调色，因此新色只能往后追加。0..7 是首版发布的 8 色，
+ * 8..11 是后来追加的 4 色；老库存的短色板由 `normalizeThemeColors()` 在读取时补齐。
  *
  * 每个色都能同时充当「实心按钮底色 + 白字」：与白色的对比度均 ≥ 4.5:1
- * （最浅的 #2F6F8F 约 5.5:1），与深色模式页面底色（#171A1F）的对比度均 ≥ 2.6:1，
+ * （最浅的 #C05621 约 4.6:1），与深色模式页面底色（#171A1F）的对比度均 ≥ 2.1:1，
  * 因此深色模式下也认得出是「有彩色」而不是糊成一块深灰。
  *
  * 定义放在 `STEPS` 之前：迁移 `0006` 的 `params` 读它，位置在后会踩到 TDZ。
@@ -110,6 +114,10 @@ export const THEME_COLORS: readonly string[] = [
   '#0E6E62', // 5 墨绿（偏青）：介于绿与蓝之间，区分度落在 2 与 3 之间
   '#6B3FA0', // 6 紫：活动、创意与展演类主题
   '#A32C5E', // 7 玫红：促销、节庆等强情绪主题
+  '#5F6B2A', // 8 橄榄绿：偏黄绿，和 2 的森林绿、5 的墨绿拉开一档
+  '#A33B3B', // 9 深红：比 7 的玫红更沉，适合展陈、纪实类主题
+  '#8E4A76', // 10 梅紫：介于 6 的紫与 7 的玫红之间，更柔和
+  '#41707E', // 11 钢青：比 3 更偏灰青，适合冷静、工具感的界面
 ];
 
 /** 迁移步骤：id 一旦发布就不要改内容，只能追加新步骤。 */
@@ -582,6 +590,19 @@ export const STEPS: MigrationStep[] = [
          WHERE status IN ('approved', 'attended') AND check_in_secret = '';
         `,
   },
+  {
+    // 展商身份可以按天发放：邀请码记录兑换后保留多少天，用户记录到期时间。
+    // NULL 表示永久；0 天邀请码也写 NULL，因此老库和老邀请码的行为保持不变。
+    id: '0017-exhibitor-membership',
+    sql: `
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS exhibitor_expires_at TIMESTAMPTZ;
+        ALTER TABLE exhibitor_invites ADD COLUMN IF NOT EXISTS duration_days INTEGER NOT NULL DEFAULT 0;
+
+        CREATE INDEX IF NOT EXISTS users_exhibitor_expiry_idx
+            ON users (exhibitor_expires_at)
+            WHERE role = 'exhibitor' AND exhibitor_expires_at IS NOT NULL;
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
@@ -622,7 +643,7 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   cover: { defaultCover: '' },
   // 0 = 不限。演示环境默认放开，部署方按运营策略调小。
   exhibitor: { maxFutureExhibitions: 0, maxFutureMeetings: 0 },
-  invite: { uses: 1, validHours: 168 },
+  invite: { uses: 1, validHours: 168, durationDays: 0 },
 };
 
 function errorMessage(error: unknown): string {

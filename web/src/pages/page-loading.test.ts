@@ -157,6 +157,42 @@ describe('管理页搜索', () => {
     expect(api.users.list).not.toHaveBeenCalledWith({ query: '旧用户' });
   });
 
+  it('管理设置里能填邀请码时长，并显示在邀请码列表', async () => {
+    vi.mocked(api.settings.get).mockResolvedValue({
+      invite: { uses: 2, validHours: 24, durationDays: 30 },
+      invites: [
+        {
+          id: 'inv-1',
+          code: 'ABCDEFGH',
+          maxUses: 2,
+          usedCount: 0,
+          durationDays: 30,
+          expiresAt: '',
+          status: 'available',
+        },
+        {
+          id: 'inv-2',
+          code: 'PERMANENT',
+          maxUses: 1,
+          usedCount: 0,
+          durationDays: 0,
+          expiresAt: '',
+          status: 'available',
+        },
+      ],
+    });
+    const { container } = await mount(AdminPage, '/admin?tab=settings');
+    await vi.advanceTimersByTimeAsync(0);
+    await flush();
+    // 次数、有效小时、展商时长三个字段并排在一行
+    expect(container.querySelectorAll('.grid-cols-3 > .field')).toHaveLength(3);
+    expect(container.querySelector<HTMLInputElement>('#settings-invite-uses')).not.toBeNull();
+    expect(container.querySelector<HTMLInputElement>('#settings-invite-days')).not.toBeNull();
+    expect(container.querySelector<HTMLInputElement>('#settings-invite-duration')?.value).toBe('30');
+    expect(container.textContent).toContain('30 天');
+    expect(container.textContent).toContain('永久');
+  });
+
   it('预热晚到不会覆盖设置分区里已经编辑的表单', async () => {
     const preload = deferred<JsonObject>();
     vi.mocked(api.settings.get)

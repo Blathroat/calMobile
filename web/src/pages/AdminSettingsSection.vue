@@ -45,6 +45,8 @@ interface AdminSettingsForm {
   whenFull: 'reject' | 'evict-oldest';
   inviteUses: number;
   inviteValidHours: number;
+  /** 兑换后展商身份保留的天数；0 表示永久 */
+  inviteDurationDays: number;
 }
 
 interface InviteItem {
@@ -52,6 +54,8 @@ interface InviteItem {
   code: string;
   maxUses: number;
   usedCount: number;
+  /** 兑换后展商身份保留的天数；0 表示永久 */
+  durationDays: number;
   expiresAt: string;
   status: string;
 }
@@ -107,6 +111,11 @@ function inviteStatusLabel(status: string): string {
   if (status === 'expired') return t('admin.invites.expired');
   if (status === 'revoked') return t('admin.invites.revoked');
   return t('admin.invites.available');
+}
+
+/** 展商时长：0 天是永久，其余按天显示。 */
+function inviteDurationLabel(item: InviteItem): string {
+  return item.durationDays > 0 ? `${item.durationDays} ${t('admin.invites.dayUnit')}` : t('admin.invites.permanent');
 }
 </script>
 
@@ -296,33 +305,49 @@ function inviteStatusLabel(status: string): string {
     <div class="card">
       <span class="section-label">{{ t('admin.invites.title') }}</span>
       <p class="field-hint">{{ t('admin.invites.hint') }}</p>
-      <div class="field">
-        <label for="settings-invite-uses">{{ t('admin.invites.uses') }}</label>
-        <input
-          id="settings-invite-uses"
-          v-model.number="form.inviteUses"
-          class="input"
-          type="number"
-          min="1"
-          max="100"
-          inputmode="numeric"
-          :disabled="!canEditSettings || inviteBusy"
-        />
+      <!-- 三个数字字段并排：次数、码有效期、兑换后的展商时长 -->
+      <div class="grid-cols-3">
+        <div class="field">
+          <label for="settings-invite-uses">{{ t('admin.invites.uses') }}</label>
+          <input
+            id="settings-invite-uses"
+            v-model.number="form.inviteUses"
+            class="input"
+            type="number"
+            min="1"
+            max="100"
+            inputmode="numeric"
+            :disabled="!canEditSettings || inviteBusy"
+          />
+        </div>
+        <div class="field">
+          <label for="settings-invite-days">{{ t('admin.invites.days') }}</label>
+          <input
+            id="settings-invite-days"
+            v-model.number="form.inviteValidHours"
+            class="input"
+            type="number"
+            min="0"
+            max="8760"
+            inputmode="numeric"
+            :disabled="!canEditSettings || inviteBusy"
+          />
+        </div>
+        <div class="field">
+          <label for="settings-invite-duration">{{ t('admin.invites.duration') }}</label>
+          <input
+            id="settings-invite-duration"
+            v-model.number="form.inviteDurationDays"
+            class="input"
+            type="number"
+            min="0"
+            max="3650"
+            inputmode="numeric"
+            :disabled="!canEditSettings || inviteBusy"
+          />
+        </div>
       </div>
-      <div class="field">
-        <label for="settings-invite-days">{{ t('admin.invites.days') }}</label>
-        <input
-          id="settings-invite-days"
-          v-model.number="form.inviteValidHours"
-          class="input"
-          type="number"
-          min="0"
-          max="8760"
-          inputmode="numeric"
-          :disabled="!canEditSettings || inviteBusy"
-        />
-        <p class="field-hint">{{ t('admin.invites.daysHint') }}</p>
-      </div>
+      <p class="field-hint">{{ t('admin.invites.fieldsHint') }}</p>
       <button
         class="cta"
         type="button"
@@ -337,7 +362,9 @@ function inviteStatusLabel(status: string): string {
         <div v-for="item in visibleInvites" :key="item.id" class="row" data-between="true">
           <span class="row-copy">
             <strong class="row-title">{{ item.code }}</strong>
-            <span class="row-meta">{{ `${item.usedCount}/${item.maxUses} · ${inviteStatusLabel(item.status)}` }}</span>
+            <span class="row-meta">{{
+              `${item.usedCount}/${item.maxUses} · ${inviteDurationLabel(item)} · ${inviteStatusLabel(item.status)}`
+            }}</span>
           </span>
           <span class="row" data-gap="sm">
             <button class="cta ghost" data-size="small" type="button" @click="emit('copy', item.code)">

@@ -5,6 +5,7 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import UserSettingsPage from './UserSettingsPage.vue';
 import AppSheet from '@/components/AppSheet.vue';
 import { api } from '@/app/runtime';
+import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { closeSheet, sheet } from '@/services/sheet';
 
@@ -54,11 +55,12 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-async function mountSettings(): Promise<void> {
+async function mountSettings(options: { theme?: { colors: string[]; index: number } } = {}): Promise<void> {
   const pinia = createPinia();
   setActivePinia(pinia);
   // 启动身份摘要中有头像，但完整资料必须成功加载后才可覆盖写入。
   useSessionStore().applyUser({ id: PROFILE.id, username: PROFILE.username, avatar: PROFILE.avatar });
+  if (options.theme) useBootstrapStore().apply({ theme: options.theme });
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/settings', component: UserSettingsPage }],
@@ -139,5 +141,70 @@ describe('设置页独立取数状态', () => {
       expect(api.profile.save).toHaveBeenCalledWith(expect.objectContaining({ nickname: '新昵称' })),
     );
     expect(sheet.current?.closing).toBe(true);
+  });
+
+  it('按账号、通知与隐私、外观、语言、邀请码分组', async () => {
+    await mountSettings();
+    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    const labels = [...document.querySelectorAll('.settings-section .section-label')].map((node) =>
+      node.textContent?.trim(),
+    );
+    expect(labels).toEqual(['账号', '通知与隐私', '外观', '语言', '邀请码']);
+  });
+
+  it('配色色板按服务端色板渲染，选中项用对勾标出', async () => {
+    const colors = Array.from(
+      { length: 12 },
+      (_, index) =>
+        '#' +
+        String(index + 1)
+          .padStart(2, '0')
+          .repeat(3),
+    );
+    await mountSettings({ theme: { colors, index: 3 } });
+    await vi.waitFor(() => expect(document.querySelectorAll('.swatch')).toHaveLength(12));
+    // 选中只画一个对勾，其余色块保持干净
+    expect(document.querySelectorAll('.swatch svg')).toHaveLength(1);
+    const pressed = [...document.querySelectorAll<HTMLButtonElement>('.swatch')].filter(
+      (item) => item.getAttribute('aria-pressed') === 'true',
+    );
+    expect(pressed).toHaveLength(1);
+    expect(pressed[0]?.querySelector('svg')).not.toBeNull();
+  });
+
+  it('不再提供安全设置入口', async () => {
+    await mountSettings();
+    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    expect(document.querySelectorAll('button.row-card')).toHaveLength(0);
+    expect(document.body.textContent).not.toContain('安全设置');
+  });
+
+  it('邀请码卡片在页面最底部：普通用户与限时展商可兑换，永久展商和管理员只看说明', async () => {
+    await mountSettings();
+    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    const lastSection = (): HTMLElement | null =>
+      (document.querySelector('.settings-groups')?.lastElementChild as HTMLElement | undefined) ?? null;
+    expect(lastSection()?.querySelector('.section-label')?.textContent?.trim()).toBe('邀请码');
+    expect(lastSection()?.querySelector('#settings-invite')).not.toBeNull();
+
+    // 限时展商可以续期：输入框还在，并写明当前到期日与顺延规则
+    const expiresAt = new Date(Date.now() + 3 * 86_400_000).toISOString();
+    useSessionStore().applyUser({ ...useSessionStore().user, role: 'exhibitor', exhibitorExpiresAt: expiresAt });
+    await nextTick();
+    expect(lastSection()?.querySelector('#settings-invite')).not.toBeNull();
+    expect(lastSection()?.textContent).toContain('当前展商有效期至');
+    expect(lastSection()?.textContent).toContain('填写邀请码可顺延续期');
+
+    // 永久展商与管理员没有可兑换的东西，卡片保留在最底部，只换一句身份说明
+    const permanent = [
+      [{ role: 'exhibitor', exhibitorExpiresAt: '' }, '当前是永久展商，不需要邀请码'],
+      [{ role: 'admin', exhibitorExpiresAt: '' }, '当前是管理员，不需要邀请码'],
+    ] as const;
+    for (const [patch, hint] of permanent) {
+      useSessionStore().applyUser({ ...useSessionStore().user, ...patch });
+      await nextTick();
+      expect(lastSection()?.querySelector('#settings-invite')).toBeNull();
+      expect(lastSection()?.textContent).toContain(hint);
+    }
   });
 });

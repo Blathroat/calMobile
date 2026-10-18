@@ -18,11 +18,14 @@
  */
 
 import { forbidden, unauthorized } from './errors.js';
+import { isPastExpiry } from './membership.js';
 
 export interface Actor {
   userId: string;
   role: string;
   status?: string;
+  /** 展商时长已走完：写操作给「已到期」文案，而不是「无权操作」。 */
+  exhibitorExpired?: boolean;
 }
 
 export interface AuthedRequest {
@@ -62,9 +65,14 @@ export function capabilities(role: string, status?: string): Capabilities {
   };
 }
 
-/** 管理员包含展商的全部能力，因此也能开办私人会议、被预约。 */
-export function canHostMeetings(role: string | null | undefined): boolean {
-  return role === 'exhibitor' || role === 'admin';
+/**
+ * 管理员包含展商的全部能力，因此也能开办私人会议、被预约。
+ * 传入到期时间时顺带判断会员时长：已到期的展商不再接受新的会议预约。
+ */
+export function canHostMeetings(role: string | null | undefined, expiresAt?: string | Date | null): boolean {
+  if (role === 'admin') return true;
+  if (role !== 'exhibitor') return false;
+  return !isPastExpiry(expiresAt);
 }
 
 /** 是不是「受限」账号。管理员不算（否则没人能解除限制）；缺 status 时按未受限处理。 */
@@ -122,9 +130,14 @@ export function requireRole(req: AuthedRequest, roles: string[], message = '无�
   return user;
 }
 
-/** 展商后台 / 报名管理 / 核销：展商与管理员可用。 */
+/** 展商后台 / 报名管理 / 核销：展商与管理员可用。已到期的展商单独说明原因。 */
 export function requireExhibitor(req: AuthedRequest, message = '只有展商或管理员可以执行此操作'): Actor {
-  return requireRole(req, ['exhibitor', 'admin'], message);
+  const user = requireUser(req);
+  if (user.role === 'exhibitor' || user.role === 'admin') return user;
+  if (user.exhibitorExpired) {
+    throw forbidden('展商身份已到期，填写邀请码续期后才能使用展商功能');
+  }
+  throw forbidden(message);
 }
 
 /** 服务器级设置：只有管理员可改。 */

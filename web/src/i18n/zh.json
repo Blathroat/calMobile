@@ -29,14 +29,17 @@
       "available": "可用",
       "copied": "已复制邀请码",
       "copy": "复制",
+      "dayUnit": "天",
       "days": "有效小时",
-      "daysHint": "0 表示不过期",
+      "duration": "展商时长（天）",
       "empty": "还没有邀请码",
+      "fieldsHint": "有效小时 0 表示不过期；展商时长 0 表示永久，大于 0 时从兑换起算，限时展商再兑换会从原到期日顺延。",
+      "permanent": "永久",
       "exhausted": "已用完",
       "expired": "已过期",
       "generate": "生成邀请码",
       "generated": "已生成邀请码",
-      "hint": "填写次数和小时数后生成邀请码。用户用有效邀请码注册或在设置里兑换，身份会变为展商。",
+      "hint": "填写次数、有效小时和展商时长后生成邀请码。用户用有效邀请码注册或在设置里兑换，身份会变为展商；展商时长为 0 表示永久，大于 0 时到期自动恢复为普通用户。",
       "revoke": "删除",
       "revoked": "已删除",
       "title": "邀请码",
@@ -145,6 +148,8 @@
       "banned": "封禁",
       "disableTwoFactor": "关闭两步验证",
       "empty": "暂无用户数据",
+      "exhibitorExpired": "展商已到期",
+      "exhibitorUntil": "展商到期",
       "manage": "用户管理",
       "manageExhibitions": "管理展会",
       "manageMeetings": "管理会议",
@@ -564,12 +569,21 @@
   "profile": {
     "avatarInitial": "用",
     "bio": "个人简介",
-    "bioEmpty": "还没有填写简介，点击“编辑”补充你的关注方向。",
+    "bioEmpty": "还没有简介。简介会显示在你的公开主页上。",
+    "bioEmptyAction": "填写简介",
     "guestHint": "登录后可以维护资料、查看报名记录并接收审核通知。",
     "guestTitle": "当前以访客身份浏览",
     "loggedOut": "已退出登录",
     "logout": "退出登录",
+    "membership": {
+      "expired": "展商身份已于",
+      "expiredHint": "到期，可在设置里填写邀请码续期。",
+      "soon": "展商身份还有",
+      "soonTail": "天到期，可在设置里填写邀请码续期。",
+      "until": "展商有效期至"
+    },
     "notFilled": "未填写",
+    "previewPublic": "查看公开主页",
     "public": {
       "adminNotice": "管理员查看公开页不受用户隐私设置限制，下方已参加展会为该用户的完整记录。",
       "adminView": "管理视角",
@@ -589,9 +603,14 @@
       "title": "用户公开页",
       "unavailable": "该用户未公开资料，或账号已停用。"
     },
+    "publicRegistrationsHidden": "公开页仅展示资料",
+    "publicRegistrationsShown": "公开页展示报名记录",
     "restricted": "账号已被限制，不能编辑个人信息",
-    "settingsSummary": "编辑资料、修改密码、通知、配色、隐私与安全",
-    "socialPrefix": "社交账号：",
+    "settingsSummary": "通知、外观、语言与隐私",
+    "stats": {
+      "attended": "已参加展会",
+      "registrations": "报名记录"
+    },
     "title": "个人主页"
   },
   "registration": {
@@ -795,9 +814,11 @@
     "changeAvatar": "更换头像",
     "emailEmpty": "未填写邮箱",
     "invite": {
-      "alreadyAdmin": "当前身份已经是管理员",
-      "alreadyExhibitor": "当前身份已经是展商",
+      "alreadyAdmin": "当前是管理员，不需要邀请码",
+      "alreadyExhibitor": "当前是永久展商，不需要邀请码",
       "done": "已将身份设为展商",
+      "renewHint": "当前展商有效期至",
+      "renewHintTail": "，填写邀请码可顺延续期。",
       "hint": "填写有效邀请码后，身份会变为展商",
       "placeholder": "输入邀请码",
       "submit": "使用邀请码",
@@ -832,10 +853,8 @@
       "permissionGranted": "已开启通知权限",
       "registrationUpdates": "报名状态变化提醒",
       "requestPermission": "开启系统通知权限",
-      "title": "通知设置",
       "updated": "通知设置已更新"
     },
-    "privacy": "隐私设置",
     "profile": {
       "editProfile": "编辑资料",
       "nickname": "昵称",
@@ -847,6 +866,11 @@
     "registrationsHidden": "已关闭公开展示",
     "registrationsShown": "已开启公开展示",
     "removeAvatar": "移除头像",
+    "section": {
+      "account": "账号",
+      "appearance": "外观",
+      "notifyPrivacy": "通知与隐私"
+    },
     "securityMeta": "邮箱与两步验证",
     "showRegistrations": "在公开页展示我的报名记录",
     "showRegistrationsHint": "关闭后其他人看不到你参加过的展会",

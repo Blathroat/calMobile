@@ -52,7 +52,7 @@ public final class AppSettings {
 
     // 预设色号与后端 `server/src/config/migrate.ts` 的 `THEME_COLORS` **逐位对应**：
     // 前端 settings 里的 `theme.index` 就是这个数组的下标，两边一旦错位，
-    // 页面强调色与状态栏颜色就对不上。后端 8 色，这里必须也是 8 色、顺序一致。
+    // 页面强调色与状态栏颜色就对不上。后端 12 色，这里必须也是 12 色、顺序一致。
     // 直接写 0xAARRGGBB 字面量而不是 Color.rgb(...)：静态初始化不碰 Android API，
     // 这两个归一化函数才能在普通 JVM 单测里跑。
     private static final int[] ACCENTS = {
@@ -63,7 +63,11 @@ public final class AppSettings {
             0xFF334E7D,   // 4 #334E7D 靛蓝
             0xFF0E6E62,   // 5 #0E6E62 墨绿
             0xFF6B3FA0,   // 6 #6B3FA0 紫
-            0xFFA32C5E    // 7 #A32C5E 玫红
+            0xFFA32C5E,   // 7 #A32C5E 玫红
+            0xFF5F6B2A,   // 8 #5F6B2A 橄榄绿
+            0xFFA33B3B,   // 9 #A33B3B 深红
+            0xFF8E4A76,   // 10 #8E4A76 梅紫
+            0xFF41707E    // 11 #41707E 钢青
     };
 
     private AppSettings() { }

@@ -35,6 +35,25 @@ export function formatChineseDate(iso: unknown): string {
   return `${date.year}年${date.month}月${date.day}日`;
 }
 
+/**
+ * 服务器下发的 ISO 时间（展商到期时间）→ 本地中文日期：2026年11月1日。
+ *
+ * 与展会日期的 `YYYY-MM-DD` 分开：这里带时区，按本地时间取年月日，
+ * 用户在哪个时区看到的就是哪一天，不额外做时区换算。
+ */
+export function formatLocalChineseDate(value: unknown): string {
+  const date = new Date(String(value ?? ''));
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+/** 距离某个 ISO 时间还有几个整天（向上取整）；空值或非法时间返回 null。 */
+export function daysUntil(value: unknown, now = Date.now()): number | null {
+  const date = new Date(String(value ?? ''));
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.max(0, Math.ceil((date.getTime() - now) / 86_400_000));
+}
+
 /** 14:30 → 14时30分。空串或非法时间返回空串。 */
 export function formatChineseTime(value: unknown): string {
   const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(value ?? '').trim());

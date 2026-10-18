@@ -8,6 +8,7 @@ import {
   pullSettling,
   pullSpinning,
   resetPullVisual,
+  suppressPull,
   usePullRefresh,
 } from './pull-refresh';
 
@@ -36,9 +37,13 @@ function mount(refresh: () => Promise<unknown>, busy = ref(false)): HTMLElement 
 }
 
 function pointer(type: string, y: number): PointerEvent {
+  return pointerAt(type, 0, y);
+}
+
+function pointerAt(type: string, x: number, y: number): PointerEvent {
   return new PointerEvent(type, {
     pointerId: 1,
-    clientX: 0,
+    clientX: x,
     clientY: y,
     pointerType: 'touch',
     bubbles: true,
@@ -150,5 +155,98 @@ describe('下拉刷新', () => {
     expect(pullOffset.value).toBe(0);
     expect(pullSpinning.value).toBe(false);
     expect(pullSettling.value).toBe(false);
+  });
+
+  it('斜划日历：横向一追平就放弃这次下拉，不留指示圈也不刷新', () => {
+    const refresh = vi.fn(async () => undefined);
+    const el = mount(refresh);
+
+    el.dispatchEvent(pointerAt('pointerdown', 0, 0));
+    el.dispatchEvent(pointerAt('pointermove', 10, 40));
+    // 先竖后横：横向追平后立刻放弃，位移归零，横滑交回页面。
+    el.dispatchEvent(pointerAt('pointermove', 200, 45));
+    expect(pullDragging.value).toBe(false);
+    expect(pullOffset.value).toBe(0);
+
+    // 这次手势已经作废，之后的抬手不会再发请求。
+    el.dispatchEvent(pointerAt('pointerup', 200, 45));
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('斜划刚过死区不跟手，纵向下拉明显占优后才跟手', () => {
+    const refresh = vi.fn(async () => undefined);
+    const el = mount(refresh);
+
+    el.dispatchEvent(pointerAt('pointerdown', 0, 0));
+    // 30 : 40 还不到纵向的 1.5 倍，不点亮指示圈。
+    el.dispatchEvent(pointerAt('pointermove', 30, 40));
+    expect(pullDragging.value).toBe(false);
+    expect(pullOffset.value).toBe(0);
+
+    // 纵向明显占优后才照旧跟手。
+    el.dispatchEvent(pointerAt('pointermove', 30, 60));
+    expect(pullDragging.value).toBe(true);
+    expect(pullOffset.value).toBeGreaterThan(0);
+
+    el.dispatchEvent(pointerAt('pointerup', 30, 60));
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('pointercancel 不是松手：不刷新，并把状态复位', () => {
+    const refresh = vi.fn(async () => undefined);
+    const el = mount(refresh);
+
+    el.dispatchEvent(pointer('pointerdown', 0));
+    el.dispatchEvent(pointer('pointermove', 200));
+    expect(pullOffset.value).toBeGreaterThan(56);
+
+    // 浏览器接管手势（原生滚动）：复位收起，不进入刷新。
+    el.dispatchEvent(pointer('pointercancel', 200));
+    expect(refresh).not.toHaveBeenCalled();
+    expect(pullDragging.value).toBe(false);
+    expect(pullOffset.value).toBe(0);
+    expect(pullSpinning.value).toBe(false);
+  });
+
+  it('宿主接管横滑后不再跟手，已经露出的位移立刻收回', () => {
+    const refresh = vi.fn(async () => undefined);
+    const el = mount(refresh);
+
+    el.dispatchEvent(pointer('pointerdown', 0));
+    el.dispatchEvent(pointer('pointermove', 40));
+    expect(pullDragging.value).toBe(true);
+    expect(pullOffset.value).toBeGreaterThan(0);
+
+    // 页面自己的横滑处理器宣布接管：这次手势作废，圈与位移都收回。
+    suppressPull();
+    expect(pullDragging.value).toBe(false);
+    expect(pullOffset.value).toBe(0);
+
+    el.dispatchEvent(pointer('pointermove', 80));
+    expect(pullDragging.value).toBe(false);
+    expect(pullOffset.value).toBe(0);
+
+    el.dispatchEvent(pointer('pointerup', 80));
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('新手势重新可用：压制只作用于被接管的那一次手势', () => {
+    const refresh = vi.fn(async () => undefined);
+    const el = mount(refresh);
+
+    el.dispatchEvent(pointer('pointerdown', 0));
+    el.dispatchEvent(pointer('pointermove', 40));
+    suppressPull();
+    el.dispatchEvent(pointer('pointerup', 40));
+
+    // 新手势从 pointerdown 重新开始：上一次的压制已经清掉，竖直下拉照旧跟手。
+    el.dispatchEvent(pointer('pointerdown', 0));
+    el.dispatchEvent(pointer('pointermove', 80));
+    expect(pullDragging.value).toBe(true);
+    expect(pullOffset.value).toBeGreaterThan(0);
+
+    // 80 * 0.45 = 36，还没到 56 的阈值，松手不请求。
+    el.dispatchEvent(pointer('pointerup', 80));
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

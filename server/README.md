@@ -124,7 +124,7 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - 同一用户同一展会只允许一条未撤销的报名，由部分唯一索引和应用层一起拦。唯一冲突不会变成 500。
 - 审核状态机在 `routes/review-hono.ts` 的 `REGISTRATION_TRANSITIONS`：待审核可到已通过、已拒绝、已撤销；已通过可到已参加、已拒绝、已撤销；已拒绝可到已通过、已撤销；已撤销可到待审核、已通过；已参加可到已通过、已拒绝，但展商只有在 `app_settings.review.canReviseAttended` 打开时才放行，管理员始终可以改。离开已参加会清空 `check_in_time`。越权是 403。白名单之外是 200 + `ok:false`。展商只能改自己举办的展会的报名。审核页只把其中一部分做成按钮。报名者自己撤销走撤销接口。
 - 核销走 `/checkin`，不受审核状态机限制。重复核销返回 `duplicated:true`。报名码是 `CALMOBILE-CHECKIN|<展会>|<报名>|<凭据>`：凭据存在 `registrations.check_in_secret`，报名被退回重审时轮换，旧二维码随即失效（返回「报名码已失效，请在报名详情里重新打开二维码」）。
-- 公开页的报名不含 `checkInCode`。本人和管理员走 `/registrations`、`/review` 时下发。
+- 公开页的报名不含 `checkInCode`。本人和管理员走 `/registrations`、`/review` 时下发。公开页始终带上 `attendedCount`（已参加场数），不受「展示我的报名」开关影响；开关只决定报名记录列表。
 - 已撤销的报名再撤销一次，是业务失败，不是 500。
 - 字符上限取管理员配置的 `limits`。老库缺新键时按默认值补上。
 - 密码用 bcrypt。登录时账号不存在也比对一次固定哑哈希。重置密码先校验新密码，通过后才消费验证码。
@@ -134,7 +134,9 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - 受限账号的判定在 `domain/permissions.ts` 的 `isLimited()` / `assertNotLimited()`，文案表是 `LIMITED_ACTIONS`。拦截挂在 `mutate()` 之外，并排在角色检查之前，因此受限的普通用户看到的是「账号已被限制」。管理员不受限。封禁在认证层拒绝。`capabilities` 同步把对应入口置灰。
 - `PUT /profile` 只写出现过的字段，不接受 `email`。
 - 管理员不能改自己的状态。管理员关闭他人两步验证是对方邮箱不可用时的出口。`enabled:true` 会被拒。
-- 管理员不能改自己的权限，也不能去掉最后一位管理员。把展商或管理员改成普通用户时，`accept_meetings` 置为 false。邀请码只会把身份设为展商，不能设成管理员。有效期按小时计，0 表示不过期。删除是直接删行。列表时清掉已过期和已作废的行，这两类不再展示。注册时邀请码可选，先记在验证码票上，建号时与插入同一事务里消耗。已登录用户用 `POST /profile/invite` 兑换。已经是展商或管理员时不消耗。受限账号不能兑换。
+- 管理员不能改自己的权限，也不能去掉最后一位管理员。把展商或管理员改成普通用户时，`accept_meetings` 置为 false。管理员手动把角色设成展商时视为永久（`exhibitor_expires_at = NULL`）；改成普通用户或管理员时一并清空到期时间。邀请码只会把身份设为展商，不能设成管理员。
+- 邀请码有两套时间：`expires_at` 是码本身的有效期（按小时，0 表示不过期）；`duration_days` 是兑换后展商身份保留的天数（0 表示永久，上限 3650）。用户行上的 `exhibitor_expires_at` 是到期时间，NULL 表示永久。删除是直接删行，列表时清掉已过期和已作废的码，这两类不再展示。注册时邀请码可选，先记在验证码票上，建号时与插入同一事务里消耗并写入到期时间。已登录用户用 `POST /profile/invite` 兑换：普通用户开通；限时展商从 `max(now(), 原到期时间)` 顺延，0 天码转为永久；永久展商与管理员拒绝且不消耗。受限账号不能兑换。
+- 展商到期按访问惰性结算，没有定时任务：认证解析（`middleware/auth.ts`）读到已到期的展商时把 `role` 改回 `user`、`accept_meetings` 关掉，并保留到期时间作为「已到期」历史。公开页、搜索和会议宿主这些读别人角色的地方用 `domain/membership.ts` 的 `effectiveRole()` / `canHostMeetings()` 判断，不依赖对方先登录。管理员用户列表在读取前批量结算一次。已到期的展商调用展商接口返回 403，文案说明「展商身份已到期」。
 - `PUT /exhibitions/:id/status` 同时接受中文标签和英文代码。
 - 私人会议未开放时，申请表单不返回收集项。被限制的会议，主办人改状态得到 403。
 
@@ -144,9 +146,9 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 
 `videoSizeMb` 的下限是 1。原生侧 0 会变成不限。头像单文件上限是 `min(upload.avatarSizeMb, UPLOAD_MAX_MB)`，`UPLOAD_MAX_MB` 缺省并封顶 20。封面和简介媒体不走这道 20MB 硬顶，也不走 2MB 的 JSON 体积守卫。
 
-色板定义在 `src/config/migrate.ts` 的 `THEME_COLORS`。`app_settings.theme` 是全局默认。`users.ui_theme` 是个人选择。下标 0 固定为默认色，新色只往后追加。原生 `AppSettings.ACCENTS` 与这里逐位对应。
+色板定义在 `src/config/migrate.ts` 的 `THEME_COLORS`，当前 12 色（首版发布 8 色，后来追加 4 色）。`app_settings.theme` 是全局默认。`users.ui_theme` 是个人选择。下标 0 固定为默认色，新色只往后追加，0..7 的语义不变。原生 `AppSettings.ACCENTS` 与这里逐位对应。
 
-下发的 `theme.index` 是该调用者实际生效的下标：`users.ui_theme ?? app_settings.theme.index`。`PUT /settings/ui-theme` 越界是 200 + `ok:false`，不夹取。`PUT /settings` 的全局 `themeIndex` 仍按补齐后的色板长度夹取。老库的补色和加列在迁移里。`readServerSettings()` 再用 `normalizeThemeColors()` 兜底。
+下发的 `theme.index` 是该调用者实际生效的下标：`users.ui_theme ?? app_settings.theme.index`。`PUT /settings/ui-theme` 越界是 200 + `ok:false`，不夹取。`PUT /settings` 的全局 `themeIndex` 仍按补齐后的色板长度夹取。色板扩容后，老库不用迁移：`readServerSettings()` 的 `normalizeThemeColors()` 会在读取时把存着的短色板补齐到当前 12 色。
 
 ## 数据模型
 
@@ -156,6 +158,7 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - 迁移按编号记在 `schema_migrations`，只跑没跑过的步骤。新字段追加新步骤。
 - 邮箱大小写无关唯一，空串例外。验证码只存哈希。注册时的待建账号暂存在 `email_codes.payload`。两步验证的预认证票在 `preauth_tickets`。发信留痕在 `mail_log`。
 - `refresh_tokens.session_id` 对应 JWT 的 `sid`。远程撤销后，访问令牌也立即失效。服务端只保存设备凭据的哈希。
+- 展商时长是 `users.exhibitor_expires_at`（NULL 永久）。邀请码的 `duration_days` 默认 0，老码和老账号因此保持永久。默认值存在 `app_settings.invite.durationDays`。
 
 表结构以迁移脚本为准。
 

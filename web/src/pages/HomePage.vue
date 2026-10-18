@@ -27,7 +27,7 @@ import HintNote from '@/components/HintNote.vue';
 import { useHint } from '@/composables/useHint';
 import { useAsync } from '@/composables/useAsync';
 import { useRevealReady } from '@/composables/useReveal';
-import { usePullRefresh } from '@/services/pull-refresh';
+import { suppressPull, usePullRefresh } from '@/services/pull-refresh';
 import type { CachedRead } from '@/services/query-cache';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
@@ -304,6 +304,9 @@ function enableSwipe(): void {
       // 纵向手势交给页面滚动，横向才由日历接管。
       axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
       if (axis === 'x') {
+        // 日历接管横滑：把外壳的下拉手势本次作废，斜划时不会再闪出下拉指示圈。
+        // 纵向手势不会走到这里，仍照旧能下拉刷新。
+        suppressPull();
         card.dataset.drag = 'true';
         card.style.transition = 'none';
       }

@@ -7,6 +7,8 @@
  *
  * 指示圈只属于**手动下拉**：跟着手指滑出来，松手后才开始转、才发请求；
  * 就算接口马上回来，也要先滑到停留位置，再滑回去。
+ * 只有真正的松手（`pointerup`）会发请求：手势被浏览器接管时收到的是 `pointercancel`，
+ * 那只是取消，复位视觉即可，绝不刷新。
  *
  * **后台刷新不碰指示圈**：切底部导航的预取、返回旧页面时「缓存已画出、网络还在回来」，
  * 只会让登记页面的 `busy` 为真（汇到 `pullBusy`）。这不再滑入、不再转圈、也不改内容位移——
@@ -63,6 +65,12 @@ const SLOP = 8;
  * 轴判定仍走 SLOP=8：横滑要在死区内就能被区分开，才不会被误判成竖拉。
  */
 const PULL_DEAD_ZONE = 16;
+/**
+ * 进入跟手的方向比例：纵向下拉要明显强于横向偏移才算竖拉。
+ * 斜划日历（先竖后横）刚过死区时，纵向可能只比横向大一点点；
+ * 要求 1.5 倍能把这一段挡在跟手之外，不至于先闪出一枚指示圈。
+ */
+const PULL_AXIS_RATIO = 1.5;
 /** 与 motion.css 的页面过渡同长，滑入滑出才看得出。 */
 const SLIDE_MS = 280;
 /** 停在展开位置的最短时间，接口再快也要转完这一下。 */
@@ -71,6 +79,8 @@ const HOLD_MS = 280;
 let generation = 0;
 let holding = false;
 let holdingEntry: Entry | undefined;
+/** 本次手势已被页面自己的横滑处理器（首页日历的月切换）接管：外壳不再跟手。 */
+let suppressed = false;
 
 function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
@@ -213,9 +223,31 @@ export function resetPullVisual(): void {
 }
 
 /**
+ * 手势被浏览器接管（`pointercancel`）时的收尾：复位视觉、作废在途动画，
+ * 但**绝不发请求**——`pointercancel` 不是松手，刷新只能由 `pointerup` 触发。
+ * 清的就是换页时 `resetPullVisual()` 清的那一组状态，直接复用；
+ * 里面的 `generation += 1` 顺带让还在跑的 hold 循环 token 失效，动画不会再把状态改回去。
+ */
+function abortPull(): void {
+  resetPullVisual();
+}
+
+/**
+ * 页面自己的横滑处理器接管手势时调用（首页日历判定要横滑的那一刻）。
+ *
+ * 为什么用「宿主主动接管」而不是继续调 PULL_AXIS_RATIO：比例调高会一起误伤正常的
+ * 竖直下拉（手指总会带一点横向偏移）；而宿主已经确定要横滑，这是确定性信号，
+ * 外壳这次手势直接作废即可。同时复位视觉，让已经露出来的指示圈立刻消失。
+ */
+export function suppressPull(): void {
+  suppressed = true;
+  resetPullVisual();
+}
+
+/**
  * 把下拉手势绑到滚动容器上。
  * 先分清横滑和竖拉，横滑不 `preventDefault`，首页日历的左右滑动仍由页面自己处理。
- * 请求在松手并越过阈值之后才发出。
+ * 竖拉期间持续复核方向（见 `onMove`），请求在松手并越过阈值之后才发出。
  */
 export function bindPullGesture(element: HTMLElement): () => void {
   let pointerId: number | null = null;
@@ -245,10 +277,14 @@ export function bindPullGesture(element: HTMLElement): () => void {
     startX = event.clientX;
     startY = event.clientY;
     axis = 'undecided';
+    // 新手势从头开始：上一次被宿主接管的压制不再生效。
+    suppressed = false;
   }
 
   function onMove(event: PointerEvent): void {
     if (event.pointerId !== pointerId) return;
+    // 宿主已经接管这次手势（横滑）：不跟手、不改位移，也不 preventDefault。
+    if (suppressed) return;
     const dx = event.clientX - startX;
     const dy = event.clientY - startY;
     if (axis === 'undecided') {
@@ -258,6 +294,13 @@ export function bindPullGesture(element: HTMLElement): () => void {
         resetTracking();
         return;
       }
+    } else if (Math.abs(dx) >= Math.abs(dy)) {
+      // 方向要持续复核：斜划（先竖后横）时前面判成竖拉，这里横向一追平就放弃这次下拉。
+      // 复位但不 preventDefault，横滑交回页面自己的处理器（首页日历的月切换）。
+      pullOffset.value = 0;
+      pullDragging.value = false;
+      resetTracking();
+      return;
     }
     if (element.scrollTop > 0 || dy <= 0) {
       pullOffset.value = 0;
@@ -266,6 +309,12 @@ export function bindPullGesture(element: HTMLElement): () => void {
     }
     // 死区内的向下漂移不算下拉：状态与位移都不动，只有超过死区才照旧跟手。
     if (dy <= PULL_DEAD_ZONE) {
+      pullOffset.value = 0;
+      pullDragging.value = false;
+      return;
+    }
+    // 纵向不够占优（刚过死区的斜划）也不跟手：门槛收紧，避免闪圈。
+    if (dy <= Math.abs(dx) * PULL_AXIS_RATIO) {
       pullOffset.value = 0;
       pullDragging.value = false;
       return;
@@ -291,15 +340,25 @@ export function bindPullGesture(element: HTMLElement): () => void {
     void holdThenRelease(entry, () => runRegisteredRefresh());
   }
 
+  /**
+   * 浏览器中途接管手势（原生滚动）发的是 pointercancel，不是松手：
+   * 只复位、绝不刷新；刷新只能由真正的 pointerup 触发。
+   */
+  function onCancel(event: PointerEvent): void {
+    if (event.pointerId !== pointerId) return;
+    resetTracking();
+    abortPull();
+  }
+
   element.addEventListener('pointerdown', onDown);
   element.addEventListener('pointermove', onMove, { passive: false });
   element.addEventListener('pointerup', onUp);
-  element.addEventListener('pointercancel', onUp);
+  element.addEventListener('pointercancel', onCancel);
   return () => {
     element.removeEventListener('pointerdown', onDown);
     element.removeEventListener('pointermove', onMove);
     element.removeEventListener('pointerup', onUp);
-    element.removeEventListener('pointercancel', onUp);
+    element.removeEventListener('pointercancel', onCancel);
     generation += 1;
     holding = false;
     holdingEntry = undefined;

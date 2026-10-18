@@ -3,12 +3,16 @@
  *
  * 码只把身份设为展商，不能设成管理员。生成时避开 0/O、1/I。
  * 兑换时只做去空白和大写，因此用户手打的 0 和 O 仍按原字符比对。
+ *
+ * 每枚码带一个展商时长（`duration_days`）：0 表示永久，大于 0 时兑换者从兑换时刻起
+ * 拥有这么多天展商身份。续期与到期结算见 `domain/membership.ts`。
  */
 
 import crypto from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { query } from '../config/pool.js';
 import { badRequest, notFound } from './errors.js';
+import { clampDurationDays } from './membership.js';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 8;
@@ -20,6 +24,8 @@ interface InviteRow {
   code: string;
   max_uses: number;
   used_count: number;
+  /** 兑换后展商身份保留的天数；0 表示永久。 */
+  duration_days: number;
   expires_at: Date | string | null;
   created_at: Date | string;
   revoked_at: Date | string | null;
@@ -67,13 +73,14 @@ export function invitePayload(row: InviteRow) {
     code: row.code,
     maxUses: Number(row.max_uses),
     usedCount: Number(row.used_count),
+    durationDays: clampDurationDays(row.duration_days),
     expiresAt: iso(row.expires_at),
     createdAt: iso(row.created_at),
     status: inviteStatus(row),
   };
 }
 
-const INVITE_COLUMNS = 'id, code, max_uses, used_count, expires_at, created_at, revoked_at';
+const INVITE_COLUMNS = 'id, code, max_uses, used_count, duration_days, expires_at, created_at, revoked_at';
 
 async function findByCode(code: string, client?: PoolClient): Promise<InviteRow | null> {
   const sql = `SELECT ${INVITE_COLUMNS} FROM exhibitor_invites WHERE code = $1`;
@@ -121,21 +128,24 @@ export async function assertInviteUsable(raw: unknown): Promise<string> {
   return code;
 }
 
-/** 在调用方的事务里把使用次数加一。加不上时按当前行说明原因。 */
-export async function consumeInvite(client: PoolClient, raw: unknown): Promise<void> {
+/**
+ * 在调用方的事务里把使用次数加一，并返回这枚码的展商时长。
+ * 加不上时按当前行说明原因。
+ */
+export async function consumeInvite(client: PoolClient, raw: unknown): Promise<{ durationDays: number }> {
   const code = normalizeInviteCode(raw);
   if (!code) throw badRequest('邀请码无效');
-  const updated = await client.query(
+  const updated = await client.query<{ duration_days: number }>(
     `UPDATE exhibitor_invites
         SET used_count = used_count + 1
       WHERE code = $1
         AND revoked_at IS NULL
         AND used_count < max_uses
         AND (expires_at IS NULL OR expires_at > now())
-      RETURNING id`,
+      RETURNING duration_days`,
     [code],
   );
-  if (updated.rowCount) return;
+  if (updated.rowCount) return { durationDays: clampDurationDays(updated.rows[0]?.duration_days) };
   const row = await findByCode(code, client);
   const message = unusableMessage(row);
   await discardIfStale(row, client);
@@ -151,18 +161,22 @@ function generateCode(): string {
   return code;
 }
 
-/** 次数夹到 1–100，小时数夹到 0–8760（一年）。0 小时表示不过期。码冲突时最多重试 5 次。 */
-export async function createInvite(createdBy: string, uses: number, validHours: number) {
+/**
+ * 次数夹到 1–100，小时数夹到 0–8760（一年），展商时长夹到 0–3650 天。
+ * 小时数与天数都是 0 表示永久。码冲突时最多重试 5 次。
+ */
+export async function createInvite(createdBy: string, uses: number, validHours: number, durationDays: number) {
   const maxUses = Math.max(1, Math.min(100, Math.trunc(Number(uses)) || 1));
   const hours = Math.max(0, Math.min(24 * 365, Math.trunc(Number(validHours)) || 0));
+  const days = clampDurationDays(durationDays);
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const id = `inv-${crypto.randomUUID()}`;
     const code = generateCode();
     try {
       await query(
-        `INSERT INTO exhibitor_invites (id, code, max_uses, expires_at, created_by)
-         VALUES ($1, $2, $3, CASE WHEN $4::int = 0 THEN NULL ELSE now() + make_interval(hours => $4::int) END, $5)`,
-        [id, code, maxUses, hours, createdBy],
+        `INSERT INTO exhibitor_invites (id, code, max_uses, duration_days, expires_at, created_by)
+         VALUES ($1, $2, $3, $4, CASE WHEN $5::int = 0 THEN NULL ELSE now() + make_interval(hours => $5::int) END, $6)`,
+        [id, code, maxUses, days, hours, createdBy],
       );
       const row = await findByCode(code);
       if (!row) throw new Error('邀请码写入后读不到');

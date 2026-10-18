@@ -17,7 +17,10 @@ export const EXHIBITION_COLUMNS = `
     to_char(e.registration_start, 'YYYY-MM-DD')             AS registration_start,
     to_char(e.registration_end, 'YYYY-MM-DD')             AS registration_end,
     COALESCE(u.nickname, '')                                AS exhibitor,
-    COALESCE(u.role, '')                                    AS exhibitor_role,
+    -- 展商时长已走完时按普通用户展示（只影响展示，角色结算见 domain/membership.ts）
+    CASE WHEN u.role = 'exhibitor' AND u.exhibitor_expires_at IS NOT NULL
+              AND u.exhibitor_expires_at <= now()
+         THEN 'user' ELSE COALESCE(u.role, '') END          AS exhibitor_role,
     (SELECT count(*)::int FROM registrations r
       WHERE r.exhibition_id = e.id AND r.status <> 'cancelled')  AS registration_count,
     (SELECT count(*)::int FROM exhibition_fields f
@@ -54,7 +57,7 @@ export const REGISTRATION_FROM = `
 export const USER_COLUMNS = `
     u.id, u.username, u.email, u.nickname, u.role, u.status, u.bio, u.region,
     u.avatar, u.social_media, u.show_registrations, u.seen_hints, u.accept_meetings,
-    u.email_verified, u.two_factor_enabled,
+    u.email_verified, u.two_factor_enabled, u.exhibitor_expires_at,
     to_char(u.registration_time, 'YYYY-MM-DD')  AS registration_time,
     to_char(u.last_login_time, 'YYYY-MM-DD')    AS last_login_time
 `;

@@ -16,6 +16,7 @@ test('作废、过期、用完按这个顺序判定', () => {
     code: 'ABCDEFGH',
     max_uses: 2,
     used_count: 2,
+    duration_days: 0,
     expires_at: '2000-01-01T00:00:00.000Z',
     created_at: '2000-01-01T00:00:00.000Z',
     revoked_at: '2000-01-02T00:00:00.000Z',

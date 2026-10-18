@@ -228,10 +228,174 @@ test('管理员调整别人的权限，不能改自己，也不能去掉最后�
   );
 });
 
+test('邀请码可以按天发展商时长，兑换后写入到期时间', async () => {
+  const created = await post(
+    '/api/v1/settings/invites',
+    { uses: 1, validHours: 7, durationDays: 30 },
+    { token: tokens.admin.token },
+  );
+  assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
+  assert.strictEqual(created.body.settings.invite.durationDays, 30);
+  const invite = created.body.invites[0];
+  assert.strictEqual(invite.durationDays, 30);
+
+  await createVerifiedAccount('usr-timed', 'timeduser', 'timeduser@example.com');
+  const session = await login('timeduser');
+  const redeemed = await post('/api/v1/profile/invite', { code: invite.code }, { token: session.token });
+  assert.strictEqual(redeemed.body.ok, true, JSON.stringify(redeemed.body));
+  assert.strictEqual(redeemed.body.user.role, 'exhibitor');
+  const days = (new Date(redeemed.body.user.exhibitorExpiresAt).getTime() - Date.now()) / 86_400_000;
+  assert.ok(days > 29 && days < 31, `到期时间应约在 30 天后，实际 ${days} 天`);
+
+  const stored = await pool.query('SELECT exhibitor_expires_at FROM users WHERE id = $1', ['usr-timed']);
+  assert.ok(stored.rows[0]?.exhibitor_expires_at, '到期时间要落库');
+});
+
+test('限时展商续兑从原到期时间顺延，0 天码转为永久', async () => {
+  const first = await post(
+    '/api/v1/settings/invites',
+    { uses: 1, validHours: 7, durationDays: 30 },
+    { token: tokens.admin.token },
+  );
+  await createVerifiedAccount('usr-renew', 'renewer', 'renewer@example.com');
+  const session = await login('renewer');
+  const opened = await post('/api/v1/profile/invite', { code: first.body.invites[0].code }, { token: session.token });
+  assert.strictEqual(opened.body.ok, true, JSON.stringify(opened.body));
+  const firstExpiry = new Date(opened.body.user.exhibitorExpiresAt).getTime();
+
+  const second = await post(
+    '/api/v1/settings/invites',
+    { uses: 1, validHours: 7, durationDays: 10 },
+    { token: tokens.admin.token },
+  );
+  const extended = await post(
+    '/api/v1/profile/invite',
+    { code: second.body.invites[0].code },
+    { token: session.token },
+  );
+  assert.strictEqual(extended.body.ok, true, JSON.stringify(extended.body));
+  const extendedExpiry = new Date(extended.body.user.exhibitorExpiresAt).getTime();
+  const added = (extendedExpiry - firstExpiry) / 86_400_000;
+  assert.ok(added > 9.9 && added < 10.1, `续期应顺延约 10 天，实际 ${added} 天`);
+
+  const permanent = await post(
+    '/api/v1/settings/invites',
+    { uses: 1, validHours: 7, durationDays: 0 },
+    { token: tokens.admin.token },
+  );
+  const upgraded = await post(
+    '/api/v1/profile/invite',
+    { code: permanent.body.invites[0].code },
+    { token: session.token },
+  );
+  assert.strictEqual(upgraded.body.ok, true, JSON.stringify(upgraded.body));
+  assert.strictEqual(upgraded.body.user.exhibitorExpiresAt, '', '0 天码把限时展商转成永久');
+
+  // 永久展商没有可续的时长：再次兑换是业务失败，且不消耗次数。
+  const before = await pool.query('SELECT used_count FROM exhibitor_invites WHERE code = $1', [
+    permanent.body.invites[0].code,
+  ]);
+  const again = await post(
+    '/api/v1/profile/invite',
+    { code: permanent.body.invites[0].code },
+    { token: session.token },
+  );
+  assert.strictEqual(again.body.ok, false);
+  assert.match(String(again.body.error), /已经是展商/);
+  const after = await pool.query('SELECT used_count FROM exhibitor_invites WHERE code = $1', [
+    permanent.body.invites[0].code,
+  ]);
+  assert.strictEqual(Number(after.rows[0]?.used_count), Number(before.rows[0]?.used_count));
+});
+
+test('展商到期后自动降为普通用户，展商功能被收回', async () => {
+  await createVerifiedAccount('usr-expired', 'expireduser', 'expireduser@example.com');
+  await pool.query(
+    `UPDATE users SET role = 'exhibitor', accept_meetings = true, exhibitor_expires_at = now() - interval '1 day'
+      WHERE id = 'usr-expired'`,
+  );
+  const session = await login('expireduser');
+
+  // 任意一次鉴权请求先把角色结算成普通用户
+  const boot = await get('/api/v1/bootstrap', { token: session.token });
+  assert.strictEqual(boot.body.user.role, 'user', JSON.stringify(boot.body.user));
+  assert.strictEqual(boot.body.user.can.exhibitor, false);
+  assert.strictEqual(boot.body.user.exhibitorExpired, true);
+  assert.ok(boot.body.user.exhibitorExpiresAt);
+  const stored = await pool.query('SELECT role, accept_meetings FROM users WHERE id = $1', ['usr-expired']);
+  assert.strictEqual(stored.rows[0]?.role, 'user');
+  assert.strictEqual(stored.rows[0]?.accept_meetings, false);
+
+  const exhibition = await post('/api/v1/exhibitions', {}, { token: session.token });
+  assert.strictEqual(exhibition.status, 403);
+  assert.match(String(exhibition.body.error), /展商身份已到期/);
+  const meetingSettings = await get('/api/v1/meetings/settings', { token: session.token });
+  assert.strictEqual(meetingSettings.status, 403);
+
+  // 公开页也不再显示展商，且会议入口关闭
+  const publicPage = await get('/api/v1/users/public?userId=usr-expired');
+  assert.strictEqual(publicPage.body.roleCode, 'user');
+  assert.strictEqual(publicPage.body.meetingsOpen, false);
+});
+
+test('到期展商即使没登录过，也不能再接受新的会议预约', async () => {
+  await createVerifiedAccount('usr-expired-host', 'expiredhost', 'expiredhost@example.com');
+  await pool.query(
+    `UPDATE users SET role = 'exhibitor', accept_meetings = true, exhibitor_expires_at = now() - interval '1 hour'
+      WHERE id = 'usr-expired-host'`,
+  );
+  const apply = await get('/api/v1/meetings/apply/usr-expired-host', { token: tokens.user.token });
+  assert.strictEqual(apply.body.open, false, JSON.stringify(apply.body));
+  const created = await post(
+    '/api/v1/meetings',
+    { exhibitorId: 'usr-expired-host', meetingDate: '2099-01-01', meetingTime: '10:00' },
+    { token: tokens.user.token },
+  );
+  assert.strictEqual(created.body.ok, false, JSON.stringify(created.body));
+  assert.match(String(created.body.error), /暂不接受/);
+});
+
+test('管理员改角色时设置或清空展商到期时间', async () => {
+  await createVerifiedAccount('usr-role-move', 'rolemove', 'rolemove@example.com');
+  await pool.query(
+    `UPDATE users SET role = 'exhibitor', exhibitor_expires_at = now() + interval '3 days'
+      WHERE id = 'usr-role-move'`,
+  );
+  // 手动设成展商视为永久
+  const promoted = await put('/api/v1/users/usr-role-move/role', { role: 'exhibitor' }, { token: tokens.admin.token });
+  assert.strictEqual(promoted.body.ok, true, JSON.stringify(promoted.body));
+  const permanent = await pool.query('SELECT role, exhibitor_expires_at FROM users WHERE id = $1', ['usr-role-move']);
+  assert.strictEqual(permanent.rows[0]?.role, 'exhibitor');
+  assert.strictEqual(permanent.rows[0]?.exhibitor_expires_at, null, '手动设展商是永久');
+
+  // 降级时清掉到期时间，避免显示成“展商已到期”
+  await pool.query(`UPDATE users SET exhibitor_expires_at = now() + interval '3 days' WHERE id = 'usr-role-move'`);
+  const demoted = await put('/api/v1/users/usr-role-move/role', { role: 'user' }, { token: tokens.admin.token });
+  assert.strictEqual(demoted.body.ok, true, JSON.stringify(demoted.body));
+  const cleared = await pool.query('SELECT role, exhibitor_expires_at FROM users WHERE id = $1', ['usr-role-move']);
+  assert.strictEqual(cleared.rows[0]?.role, 'user');
+  assert.strictEqual(cleared.rows[0]?.exhibitor_expires_at, null);
+});
+
+test('管理员用户列表带展商到期字段', async () => {
+  await createVerifiedAccount('usr-list-timed', 'listtimed', 'listtimed@example.com');
+  await pool.query(
+    `UPDATE users SET role = 'exhibitor', exhibitor_expires_at = now() + interval '7 days'
+      WHERE id = 'usr-list-timed'`,
+  );
+  const listed = await get('/api/v1/users', { token: tokens.admin.token });
+  const row = listed.body.find((item: { id: string }) => item.id === 'usr-list-timed');
+  assert.ok(row, '用户列表里应有这个账号');
+  assert.strictEqual(row.roleCode, 'exhibitor');
+  assert.ok(row.exhibitorExpiresAt, '限时展商要下发到期时间');
+  assert.strictEqual(row.exhibitorExpired, false);
+});
+
 test('管理设置才列出邀请码，普通用户看不到这份名单', async () => {
   const admin = await get('/api/v1/settings', { token: tokens.admin.token });
   assert.strictEqual(typeof admin.body.invite.uses, 'number');
   assert.strictEqual(typeof admin.body.invite.validHours, 'number');
+  assert.strictEqual(typeof admin.body.invite.durationDays, 'number');
   assert.ok(Array.isArray(admin.body.invites));
   const user = await get('/api/v1/settings', { token: tokens.user.token });
   assert.strictEqual(user.body.invites, undefined);

@@ -82,6 +82,7 @@ export interface ServerPatch {
   maxFutureMeetings?: unknown;
   inviteUses?: unknown;
   inviteValidHours?: unknown;
+  inviteDurationDays?: unknown;
 }
 
 interface SettingRow {
@@ -164,10 +165,16 @@ export function normalizeTheme(
   return { index, colors };
 }
 
-/** 老库存的是天数。没有小时数时按 24 小时一天换算，0 仍然表示不过期。 */
-function normalizeInvite(raw: { uses?: number; validHours?: number; validDays?: number } | null | undefined): {
+/**
+ * 邀请码默认值。老库存的是「有效天数」，没有小时数时按 24 小时一天换算；
+ * 没有展商时长时补 0（永久），与老邀请码的行为一致。
+ */
+function normalizeInvite(
+  raw: { uses?: number; validHours?: number; validDays?: number; durationDays?: number } | null | undefined,
+): {
   uses: number;
   validHours: number;
+  durationDays: number;
 } {
   const source = raw ?? {};
   const uses = clampInt(source.uses, DEFAULT_SETTINGS.invite.uses, [1, 100]);
@@ -180,6 +187,7 @@ function normalizeInvite(raw: { uses?: number; validHours?: number; validDays?: 
   return {
     uses,
     validHours: clampInt(hours, DEFAULT_SETTINGS.invite.validHours, [0, 24 * 365]),
+    durationDays: clampInt(source.durationDays, DEFAULT_SETTINGS.invite.durationDays, [0, 3650]),
   };
 }
 
@@ -367,12 +375,14 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   }
   if (
     Object.prototype.hasOwnProperty.call(source, 'inviteUses') ||
-    Object.prototype.hasOwnProperty.call(source, 'inviteValidHours')
+    Object.prototype.hasOwnProperty.call(source, 'inviteValidHours') ||
+    Object.prototype.hasOwnProperty.call(source, 'inviteDurationDays')
   ) {
     const fallback = normalizeInvite(next.invite);
     next.invite = {
       uses: clampInt(source.inviteUses, fallback.uses, [1, 100]),
       validHours: clampInt(source.inviteValidHours, fallback.validHours, [0, 24 * 365]),
+      durationDays: clampInt(source.inviteDurationDays, fallback.durationDays, [0, 3650]),
     };
   }
 

@@ -2,7 +2,8 @@
 /**
  * 个人设置里的语言。
  *
- * 选择记在本机。链接和文件安装的包也在本机，不进页面包。
+ * 选择记在本机。链接和文件安装的包也在本机，不进页面包。卡片标题由设置页的「语言」组标题承担，
+ * 组件里不再重复一个卡内小标题；已安装的包用带分隔线的开关行。
  * 切换、安装和删除当前语言后会重新加载，因为 `t()` 不是响应式的；
  * 安装成功的提示会排队到重载之后（`toastAfterReload()`，由外壳挂载时弹出）。
  * 「下载中文底稿」的落盘逻辑放在这里而不是 `i18n`：那一层不能引设备桥（`native-bridge` 会成环）。
@@ -135,7 +136,7 @@ async function fromFile(event: Event): Promise<void> {
 
 <template>
   <div class="card">
-    <span class="section-label">{{ t('settings.lang.title') }}</span>
+    <!-- 标题由设置页的「语言」组标题承担，卡片里直接从分段控件开始 -->
     <SegControl
       :model-value="choice"
       :items="items"
@@ -174,14 +175,17 @@ async function fromFile(event: Event): Promise<void> {
     <p v-if="fileError" class="field-error" role="alert">{{ fileError }}</p>
 
     <p v-if="packs.length === 0" class="field-hint">{{ t('settings.lang.empty') }}</p>
-    <div v-for="pack in packs" :key="pack.id" class="switch-row">
-      <span class="switch-copy">
-        <strong>{{ pack.name }}</strong>
-        <span class="row-meta">{{ pack.id }}</span>
-      </span>
-      <button class="text-action" type="button" @click="deleteLanguage(pack.id)">
-        {{ t('settings.lang.remove') }}
-      </button>
+    <!-- 已安装的语言包：卡片内的开关行用分隔线版式，不再各套一层边框 -->
+    <div v-else class="list" data-gap="none">
+      <div v-for="pack in packs" :key="pack.id" class="switch-row" data-flush="true">
+        <span class="switch-copy">
+          <strong>{{ pack.name }}</strong>
+          <span class="row-meta">{{ pack.id }}</span>
+        </span>
+        <button class="text-action" type="button" @click="deleteLanguage(pack.id)">
+          {{ t('settings.lang.remove') }}
+        </button>
+      </div>
     </div>
 
     <button class="text-action" type="button" @click="saveTemplate">

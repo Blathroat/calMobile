@@ -9,7 +9,15 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { calendarRowCount, daysInMonth, firstWeekdayOffset, formatDateWithWeekday, parseDate } from './format';
+import {
+  calendarRowCount,
+  daysInMonth,
+  daysUntil,
+  firstWeekdayOffset,
+  formatDateWithWeekday,
+  formatLocalChineseDate,
+  parseDate,
+} from './format';
 
 /** 表头顺序（`HomePage.vue` 的 `WEEK_LABELS`）：周一在前，与偏移的起点一致。 */
 const WEEK_START = '一';
@@ -71,5 +79,25 @@ describe('日期格式化', () => {
     expect(parseDate('2026-9-1')).toBeNull();
     expect(formatDateWithWeekday('')).toBe('');
     expect(formatDateWithWeekday('not-a-date')).toBe('');
+  });
+});
+
+describe('展商到期时间', () => {
+  it('按本地日期展示，不和展会日期混用', () => {
+    // 本地时间 2026-11-01 12:00 的 ISO 时间，展示为本地这一天
+    const localNoon = new Date(2026, 10, 1, 12, 0, 0).toISOString();
+    expect(formatLocalChineseDate(localNoon)).toBe('2026年11月1日');
+    expect(formatLocalChineseDate('')).toBe('');
+    expect(formatLocalChineseDate('not-a-date')).toBe('');
+  });
+
+  it('剩余天数向上取整，过期按 0 天算', () => {
+    const now = new Date(2026, 9, 18, 12, 0, 0).getTime();
+    const plus = (ms: number) => new Date(now + ms).toISOString();
+    expect(daysUntil(plus(3 * 86_400_000), now)).toBe(3);
+    expect(daysUntil(plus(3 * 86_400_000 - 60_000), now)).toBe(3);
+    expect(daysUntil(plus(60_000), now)).toBe(1);
+    expect(daysUntil(plus(-1), now)).toBe(0);
+    expect(daysUntil('', now)).toBeNull();
   });
 });

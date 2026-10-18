@@ -92,8 +92,8 @@ test('老库里缺少 videoSizeMb 时以默认值兜底，不给出 undefined', 
   assert.equal(next.media.imageCount, 4);
 });
 
-test('默认色板是 8 种，index 0 仍是老用户的焦糖橙', () => {
-  assert.equal(DEFAULT_SETTINGS.theme.colors.length, 8, '配色扩到 8 种');
+test('默认色板是 12 种，index 0 仍是老用户的焦糖橙', () => {
+  assert.equal(DEFAULT_SETTINGS.theme.colors.length, 12, '配色扩到 12 种');
   assert.deepEqual(DEFAULT_SETTINGS.theme.colors, [...THEME_COLORS]);
   assert.equal(DEFAULT_SETTINGS.theme.colors[0], '#C05621', 'index 0 的语义不能变');
   assert.equal(DEFAULT_SETTINGS.theme.index, 0);
@@ -101,10 +101,10 @@ test('默认色板是 8 种，index 0 仍是老用户的焦糖橙', () => {
   for (const color of DEFAULT_SETTINGS.theme.colors) {
     assert.match(color, /^#[0-9A-F]{6}$/, `${color} 不是 #RRGGBB`);
   }
-  assert.equal(new Set(DEFAULT_SETTINGS.theme.colors).size, 8, '色板里不能有重复色');
+  assert.equal(new Set(DEFAULT_SETTINGS.theme.colors).size, 12, '色板里不能有重复色');
 });
 
-test('老库的 4 色色板在读取路径上被补齐到 8 色，index 不越界', () => {
+test('老库的 4 色色板在读取路径上被补齐到 12 色，index 不越界', () => {
   // 老库：只有旧色板的 4 项，index 3 是当时合法的选择
   const legacy = { index: 3, colors: DEFAULT_SETTINGS.theme.colors.slice(0, 4) };
   const next = normalizeTheme(legacy);
@@ -113,23 +113,23 @@ test('老库的 4 色色板在读取路径上被补齐到 8 色，index 不越�
   assert.equal(next.index, 3, 'index 不变，老用户选中的强调色不动');
 
   // 越界（老库被手工改大）时夹到补齐后的最后一位，而不是 undefined
-  assert.equal(normalizeTheme({ index: 42, colors: legacy.colors }).index, 7);
+  assert.equal(normalizeTheme({ index: 42, colors: legacy.colors }).index, 11);
   assert.equal(normalizeTheme({ index: -1, colors: legacy.colors }).index, 0);
 });
 
 test('非法 / 重复 / 缺失 / 超长的颜色都不会让色板长度跑偏', () => {
   const next = normalizeTheme({ index: 5, colors: ['#C05621', '#C05621', 'red', '', null, '#c05621'] });
-  assert.equal(next.colors.length, 8, '非法与重复项被丢掉后要补齐');
+  assert.equal(next.colors.length, 12, '非法与重复项被丢掉后要补齐');
   assert.equal(next.colors[0], '#C05621');
   assert.equal(next.colors[5], DEFAULT_SETTINGS.theme.colors[5]);
-  assert.equal(normalizeTheme({ colors: [] }).colors.length, 8, '空色板退回默认色板');
-  assert.equal(normalizeTheme({ colors: 'nope' }).colors.length, 8, '非数组也退回默认色板');
+  assert.equal(normalizeTheme({ colors: [] }).colors.length, 12, '空色板退回默认色板');
+  assert.equal(normalizeTheme({ colors: 'nope' }).colors.length, 12, '非数组也退回默认色板');
   // 缺 colors 的 theme（老到没有这一项）同样可用
   assert.deepEqual(normalizeTheme({ index: 2 }).colors, DEFAULT_SETTINGS.theme.colors);
-  // 多于默认色板（手工塞过）时只取前 8 个，index 的范围与长度始终一致
-  const extra = normalizeTheme({ index: 9, colors: [...DEFAULT_SETTINGS.theme.colors, '#111111', '#222222'] });
-  assert.equal(extra.colors.length, 8, '超长色板要被截到默认长度');
-  assert.equal(extra.index, 7, 'index 要按截断后的长度夹取');
+  // 多于默认色板（手工塞过）时只取前 12 个，index 的范围与长度始终一致
+  const extra = normalizeTheme({ index: 13, colors: [...DEFAULT_SETTINGS.theme.colors, '#111111', '#222222'] });
+  assert.equal(extra.colors.length, 12, '超长色板要被截到默认长度');
+  assert.equal(extra.index, 11, 'index 要按截断后的长度夹取');
 });
 
 test('收集项的新长度上限缺省时补默认值，提交时按范围收敛', () => {
@@ -148,11 +148,27 @@ test('收集项的新长度上限缺省时补默认值，提交时按范围收�
   assert.equal(next.limits.checkOption, 1);
 });
 
+test('邀请码时长默认 0（永久），提交时夹到 0..3650 天', () => {
+  assert.equal(DEFAULT_SETTINGS.invite.durationDays, 0, '老邀请码与默认生成都是永久');
+  const next = applyServerPatch(defaults(), { inviteDurationDays: 30 });
+  assert.equal(next.invite.durationDays, 30);
+  assert.equal(applyServerPatch(defaults(), { inviteDurationDays: '15' }).invite.durationDays, 15);
+  assert.equal(applyServerPatch(defaults(), { inviteDurationDays: 99999 }).invite.durationDays, 3650);
+  assert.equal(applyServerPatch(defaults(), { inviteDurationDays: -1 }).invite.durationDays, 0);
+  assert.equal(applyServerPatch(defaults(), { inviteDurationDays: 'abc' }).invite.durationDays, 0);
+  // 只改次数 / 有效小时时，时长保持原值
+  const current = defaults();
+  current.invite.durationDays = 45;
+  assert.equal(applyServerPatch(current, { inviteUses: 3 }).invite.durationDays, 45);
+  assert.equal(applyServerPatch(current, { inviteUses: 3 }).invite.uses, 3);
+});
+
 test('themeIndex 采用补齐后的色板长度夹取', () => {
   const legacy = { ...defaults(), theme: { index: 0, colors: DEFAULT_SETTINGS.theme.colors.slice(0, 4) } };
-  // 老库的色板只有 4 项，但提交 7 应当落在新色板的范围内（补齐后 8 色），而不是被夹到 3
+  // 老库的色板只有 4 项，但提交 7 / 11 应当落在新色板的范围内（补齐后 12 色），而不是被夹到 3
   assert.equal(applyServerPatch(legacy, { themeIndex: 7 }).theme.index, 7);
-  assert.equal(applyServerPatch(legacy, { themeIndex: 99 }).theme.index, 7);
+  assert.equal(applyServerPatch(legacy, { themeIndex: 11 }).theme.index, 11);
+  assert.equal(applyServerPatch(legacy, { themeIndex: 99 }).theme.index, 11);
   assert.equal(applyServerPatch(legacy, { themeIndex: 'abc' }).theme.index, 0, '解析不出来时保留原值');
   assert.equal(applyServerPatch(legacy, {}).theme.index, 0, '没提交就不动');
   assert.deepEqual(applyServerPatch(legacy, {}).theme.colors, DEFAULT_SETTINGS.theme.colors);
@@ -167,7 +183,7 @@ test('themeIndex 采用补齐后的色板长度夹取', () => {
 test('个人配色的非法下标按规则失败，不静默夹取', async () => {
   await assert.rejects(() => saveUiTheme(null, 3), /请先登录/, '未登录不能写个人配色');
   await assert.rejects(() => saveUiTheme(undefined, 3), /请先登录/, '未登录不能写个人配色');
-  for (const bad of [99, -1, 8, 1.5, 'abc', '', '2abc', null, undefined, {}]) {
+  for (const bad of [99, -1, 12, 1.5, 'abc', '', '2abc', null, undefined, {}]) {
     await assert.rejects(
       () => saveUiTheme('usr-3', bad),
       /配色下标/,

@@ -38,6 +38,77 @@ test('隐私开关决定公开页是否展示报名记录，管理员始终可�
   await put('/api/v1/profile', { showRegistrations: false }, { token: tokens.user.token });
 });
 
+test('公开页的已参加展会数不受隐私开关限制', async () => {
+  const users = await get('/api/v1/users?query=user', { token: tokens.admin.token });
+  const self = users.body.find((row: any) => row.username === 'user');
+  assert.ok(self, '种子里的 user 账号应当存在');
+
+  const before = await get('/api/v1/profile', { token: tokens.user.token });
+  const originalShow = before.body.showRegistrations === true;
+
+  // 自己造一场展会 + 一条报名，再把它改成「已参加」；最后删掉展会还原。
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '公开页已参加数用例展',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: isoDateAfter(31),
+      category: '智能家居',
+      status: '无需审核',
+      qrEnabled: false,
+    },
+    { token: tokens.exhibitor.token },
+  );
+  assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
+  const exhibitionId = created.body.exhibition.id;
+  try {
+    const hiddenBefore = await get(`/api/v1/users/public?userId=${self.id}`, { token: tokens.exhibitor.token });
+    assert.strictEqual(hiddenBefore.body.found, true);
+    assert.strictEqual(typeof hiddenBefore.body.attendedCount, 'number', '公开页始终下发已参加数');
+    assert.deepStrictEqual(hiddenBefore.body.registrations, [], '关闭隐私开关时仍不返回报名记录');
+    const countBefore = hiddenBefore.body.attendedCount;
+
+    const submitted = await post(
+      '/api/v1/registrations',
+      {
+        exhibitionId,
+        visitorName: '公开页计数用例',
+        visitorType: '专业观众',
+        answers: '姓名 / 公司名称：公开页计数用例\n参观身份：专业观众',
+      },
+      { token: tokens.user.token },
+    );
+    assert.strictEqual(submitted.body.ok, true, JSON.stringify(submitted.body));
+    const registrationId = submitted.body.registration.id;
+
+    // 已通过 → 已参加 受「允许修改已通过或已拒绝的报名」限制；管理员始终可以改，这里用管理员账号。
+    const attended = await put(
+      `/api/v1/review/${registrationId}/status`,
+      { status: '已参加' },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(attended.body.ok, true, JSON.stringify(attended.body));
+
+    // 开关仍关闭：报名记录不可见，但已参加数照常 +1（不受隐私开关限制）
+    const hiddenAfter = await get(`/api/v1/users/public?userId=${self.id}`, { token: tokens.exhibitor.token });
+    assert.strictEqual(hiddenAfter.body.attendedCount, countBefore + 1, '关闭隐私开关时也要统计已参加数');
+    assert.deepStrictEqual(hiddenAfter.body.registrations, [], '关闭时仍然不返回报名记录');
+
+    // 打开开关：记录可见，计数不变
+    await put('/api/v1/profile', { showRegistrations: true }, { token: tokens.user.token });
+    const visible = await get(`/api/v1/users/public?userId=${self.id}`, { token: tokens.exhibitor.token });
+    assert.strictEqual(visible.body.attendedCount, countBefore + 1, '打开开关后已参加数不变');
+    assert.ok(
+      visible.body.registrations.some((row: any) => row.id === registrationId),
+      '打开开关后能看到这条已参加的报名',
+    );
+  } finally {
+    await put('/api/v1/profile', { showRegistrations: originalShow }, { token: tokens.user.token });
+    await del(`/api/v1/exhibitions/${exhibitionId}`, { token: tokens.exhibitor.token });
+  }
+});
+
 test('公开页支持按昵称查询', async () => {
   const byNickname = await get('/api/v1/users/public?nickname=user');
   assert.strictEqual(byNickname.body.found, true, '公开页应当支持昵称查询');
