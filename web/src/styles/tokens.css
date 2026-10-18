@@ -530,6 +530,24 @@ label {
   min-width: 0;
 }
 
+/* 三列并排字段（邀请码生成）：窄屏下三列等分，输入框与标签各自对齐。 */
+.grid-cols-3 {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s2);
+}
+
+.grid-cols-3 > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.grid-cols-3 > .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
 /* 卡片底部的两三个操作并排。子项自己拉伸，不要再套一层 grid-cols-2。 */
 .action-row {
   display: flex;

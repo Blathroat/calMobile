@@ -305,47 +305,49 @@ function inviteDurationLabel(item: InviteItem): string {
     <div class="card">
       <span class="section-label">{{ t('admin.invites.title') }}</span>
       <p class="field-hint">{{ t('admin.invites.hint') }}</p>
-      <div class="field">
-        <label for="settings-invite-uses">{{ t('admin.invites.uses') }}</label>
-        <input
-          id="settings-invite-uses"
-          v-model.number="form.inviteUses"
-          class="input"
-          type="number"
-          min="1"
-          max="100"
-          inputmode="numeric"
-          :disabled="!canEditSettings || inviteBusy"
-        />
+      <!-- 三个数字字段并排：次数、码有效期、兑换后的展商时长 -->
+      <div class="grid-cols-3">
+        <div class="field">
+          <label for="settings-invite-uses">{{ t('admin.invites.uses') }}</label>
+          <input
+            id="settings-invite-uses"
+            v-model.number="form.inviteUses"
+            class="input"
+            type="number"
+            min="1"
+            max="100"
+            inputmode="numeric"
+            :disabled="!canEditSettings || inviteBusy"
+          />
+        </div>
+        <div class="field">
+          <label for="settings-invite-days">{{ t('admin.invites.days') }}</label>
+          <input
+            id="settings-invite-days"
+            v-model.number="form.inviteValidHours"
+            class="input"
+            type="number"
+            min="0"
+            max="8760"
+            inputmode="numeric"
+            :disabled="!canEditSettings || inviteBusy"
+          />
+        </div>
+        <div class="field">
+          <label for="settings-invite-duration">{{ t('admin.invites.duration') }}</label>
+          <input
+            id="settings-invite-duration"
+            v-model.number="form.inviteDurationDays"
+            class="input"
+            type="number"
+            min="0"
+            max="3650"
+            inputmode="numeric"
+            :disabled="!canEditSettings || inviteBusy"
+          />
+        </div>
       </div>
-      <div class="field">
-        <label for="settings-invite-days">{{ t('admin.invites.days') }}</label>
-        <input
-          id="settings-invite-days"
-          v-model.number="form.inviteValidHours"
-          class="input"
-          type="number"
-          min="0"
-          max="8760"
-          inputmode="numeric"
-          :disabled="!canEditSettings || inviteBusy"
-        />
-        <p class="field-hint">{{ t('admin.invites.daysHint') }}</p>
-      </div>
-      <div class="field">
-        <label for="settings-invite-duration">{{ t('admin.invites.duration') }}</label>
-        <input
-          id="settings-invite-duration"
-          v-model.number="form.inviteDurationDays"
-          class="input"
-          type="number"
-          min="0"
-          max="3650"
-          inputmode="numeric"
-          :disabled="!canEditSettings || inviteBusy"
-        />
-        <p class="field-hint">{{ t('admin.invites.durationHint') }}</p>
-      </div>
+      <p class="field-hint">{{ t('admin.invites.fieldsHint') }}</p>
       <button
         class="cta"
         type="button"

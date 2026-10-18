@@ -184,6 +184,10 @@ describe('管理页搜索', () => {
     const { container } = await mount(AdminPage, '/admin?tab=settings');
     await vi.advanceTimersByTimeAsync(0);
     await flush();
+    // 次数、有效小时、展商时长三个字段并排在一行
+    expect(container.querySelectorAll('.grid-cols-3 > .field')).toHaveLength(3);
+    expect(container.querySelector<HTMLInputElement>('#settings-invite-uses')).not.toBeNull();
+    expect(container.querySelector<HTMLInputElement>('#settings-invite-days')).not.toBeNull();
     expect(container.querySelector<HTMLInputElement>('#settings-invite-duration')?.value).toBe('30');
     expect(container.textContent).toContain('30 天');
     expect(container.textContent).toContain('永久');
