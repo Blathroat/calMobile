@@ -22,6 +22,8 @@
 
 新接口同时改 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由和 `server/src/test/` 下的契约测试。表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`。后端再校验一次。
 
+角色由服务端判定。展商身份可以按天发放（`users.exhibitor_expires_at`，NULL 表示永久）：到期在服务端认证解析时惰性结算成普通用户，页面只读后端下发的有效角色、`exhibitorExpiresAt` 与 `exhibitorExpired` 做展示，不自己算过期，也不在页面里另写一套续期规则。
+
 ## 应用外壳
 
 外壳在 `web/src/app/App.vue`：`.app` 网格是顶栏、可滚动的内容区和底部导航（或页面页脚）。页面只往内容区放内容。
