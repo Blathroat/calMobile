@@ -143,13 +143,13 @@ describe('设置页独立取数状态', () => {
     expect(sheet.current?.closing).toBe(true);
   });
 
-  it('按账号、通知与隐私、外观、语言分组', async () => {
+  it('按账号、通知与隐私、外观、语言、邀请码分组', async () => {
     await mountSettings();
     await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
     const labels = [...document.querySelectorAll('.settings-section .section-label')].map((node) =>
       node.textContent?.trim(),
     );
-    expect(labels).toEqual(['账号', '通知与隐私', '外观', '语言']);
+    expect(labels).toEqual(['账号', '通知与隐私', '外观', '语言', '邀请码']);
   });
 
   it('配色色板按服务端色板渲染，选中项用对勾标出', async () => {
@@ -179,14 +179,25 @@ describe('设置页独立取数状态', () => {
     expect(document.body.textContent).not.toContain('安全设置');
   });
 
-  it('邀请码只对普通用户显示，并放在页面最底部', async () => {
+  it('邀请码卡片固定在页面最底部，展商与管理员只显示身份说明', async () => {
     await mountSettings();
     await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
-    const groups = document.querySelector('.settings-groups');
-    expect(groups?.lastElementChild?.querySelector('#settings-invite')).not.toBeNull();
+    const lastSection = (): HTMLElement | null =>
+      (document.querySelector('.settings-groups')?.lastElementChild as HTMLElement | undefined) ?? null;
+    expect(lastSection()?.querySelector('.section-label')?.textContent?.trim()).toBe('邀请码');
+    expect(lastSection()?.querySelector('#settings-invite')).not.toBeNull();
 
-    useSessionStore().applyUser({ ...useSessionStore().user, role: 'exhibitor' });
-    await nextTick();
-    expect(document.querySelector('#settings-invite')).toBeNull();
+    // 展商与管理员不能兑换，卡片保留在最底部，只把输入框换成身份说明
+    const roles = [
+      ['exhibitor', '当前已是展商，不需要邀请码'],
+      ['admin', '当前是管理员，不需要邀请码'],
+    ] as const;
+    for (const [role, hint] of roles) {
+      useSessionStore().applyUser({ ...useSessionStore().user, role });
+      await nextTick();
+      expect(lastSection()?.querySelector('.section-label')?.textContent?.trim()).toBe('邀请码');
+      expect(lastSection()?.querySelector('#settings-invite')).toBeNull();
+      expect(lastSection()?.textContent).toContain(hint);
+    }
   });
 });

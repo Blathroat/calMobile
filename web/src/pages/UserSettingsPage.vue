@@ -2,9 +2,9 @@
 /**
  * 用户设置：头像、通知与隐私、外观（配色与明暗）、语言。
  *
- * 版式按「账号 / 通知与隐私 / 外观 / 语言」分组：组标题在卡片外，卡片里的开关行
- * 用 `.switch-row[data-flush='true']` 的分隔线版式，不再套第二层边框；邀请码只对
- * 普通用户显示，放在页面最底部。
+ * 版式按「账号 / 通知与隐私 / 外观 / 语言 / 邀请码」分组：组标题在卡片外，卡片里的
+ * 开关行用 `.switch-row[data-flush='true']` 的分隔线版式，不再套第二层边框。邀请码
+ * 固定在页面最底部：普通用户显示输入框，展商与管理员只说明身份已升级。
  *
  * 编辑资料与个人页身份卡右侧的铅笔共用 `services/profile-editor.ts` 的同一抽屉。
  * 头像、通知、配色、明暗、语言、隐私留在这里，因为它们各自写不同的接口。
@@ -54,11 +54,16 @@ const loggedIn = computed(() => session.loggedIn);
 const limited = computed(() => user.value.can?.profile === false);
 /** 受限时统一用同一句说明原因，避免每个入口各写一套说法。 */
 const limitHint = computed(() => t('profile.restricted'));
-/** 邀请码只对普通用户有意义：展商与管理员已经不需要，整张卡不渲染。 */
+/** 只有普通用户能兑换邀请码：展商与管理员身份已升级，卡片里只显示说明。 */
 const isPlainUser = computed(() => {
   const role = String(user.value.role || '');
   return role !== 'exhibitor' && role !== 'admin';
 });
+
+/** 展商与管理员不再需要邀请码，卡片底部按当前身份给一句说明。 */
+const inviteRoleHint = computed(() =>
+  user.value.role === 'admin' ? t('settings.invite.alreadyAdmin') : t('settings.invite.alreadyExhibitor'),
+);
 
 /**
  * 本页专用说法。`t()` 不依赖响应式数据，在 setup 里取一次即可。
@@ -602,32 +607,38 @@ async function changeMode(value: string): Promise<void> {
         <LanguagePackCard />
       </section>
 
-      <!-- 邀请码：普通用户专属，放在页面最底部 -->
-      <div v-if="isPlainUser" class="card">
-        <div class="field">
-          <label for="settings-invite">{{ t('settings.invite.title') }}</label>
-          <input
-            id="settings-invite"
-            v-model="inviteCode"
-            class="input"
-            type="text"
-            autocomplete="off"
-            maxlength="32"
-            :placeholder="t('settings.invite.placeholder')"
-            :disabled="limited || inviteBusy"
-          />
-          <p class="field-hint">{{ t('settings.invite.hint') }}</p>
+      <!-- 邀请码：固定在页面最底部；普通用户可兑换，展商与管理员只说明身份已升级 -->
+      <section class="settings-section">
+        <span class="section-label">{{ t('settings.invite.title') }}</span>
+        <div class="card">
+          <template v-if="isPlainUser">
+            <div class="field">
+              <label class="sr-only" for="settings-invite">{{ t('settings.invite.title') }}</label>
+              <input
+                id="settings-invite"
+                v-model="inviteCode"
+                class="input"
+                type="text"
+                autocomplete="off"
+                maxlength="32"
+                :placeholder="t('settings.invite.placeholder')"
+                :disabled="limited || inviteBusy"
+              />
+              <p class="field-hint">{{ t('settings.invite.hint') }}</p>
+            </div>
+            <button
+              class="cta"
+              type="button"
+              :disabled="limited || inviteBusy || !inviteCode.trim()"
+              :data-loading="inviteBusy ? 'true' : undefined"
+              @click="redeemInvite"
+            >
+              {{ t('settings.invite.submit') }}
+            </button>
+          </template>
+          <p v-else class="field-hint">{{ inviteRoleHint }}</p>
         </div>
-        <button
-          class="cta"
-          type="button"
-          :disabled="limited || inviteBusy || !inviteCode.trim()"
-          :data-loading="inviteBusy ? 'true' : undefined"
-          @click="redeemInvite"
-        >
-          {{ t('settings.invite.submit') }}
-        </button>
-      </div>
+      </section>
     </div>
   </template>
 

@@ -802,6 +802,8 @@
     "changeAvatar": "更换头像",
     "emailEmpty": "未填写邮箱",
     "invite": {
+      "alreadyAdmin": "当前是管理员，不需要邀请码",
+      "alreadyExhibitor": "当前已是展商，不需要邀请码",
       "done": "已将身份设为展商",
       "hint": "填写有效邀请码后，身份会变为展商",
       "placeholder": "输入邀请码",
