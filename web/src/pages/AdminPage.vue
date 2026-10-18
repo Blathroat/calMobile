@@ -222,6 +222,8 @@ const form = reactive({
   /** 生成邀请码时的默认次数与有效小时。0 小时表示不过期。 */
   inviteUses: 1,
   inviteValidHours: 168,
+  /** 兑换后展商身份保留的天数；0 表示永久 */
+  inviteDurationDays: 0,
 });
 
 /** 管理页自己的文案：提示与开关说明放在这里，提取脚本会换成文案 key。 */
@@ -282,7 +284,15 @@ const storagePolicies = [
 const coverBusy = ref(false);
 const inviteBusy = ref(false);
 const invites = ref<
-  Array<{ id: string; code: string; maxUses: number; usedCount: number; expiresAt: string; status: string }>
+  Array<{
+    id: string;
+    code: string;
+    maxUses: number;
+    usedCount: number;
+    durationDays: number;
+    expiresAt: string;
+    status: string;
+  }>
 >([]);
 const settingsError = ref('');
 const settingsSaving = ref(false);
@@ -620,6 +630,7 @@ function fillForm(data: JsonObject): void {
     (legacyDays === undefined || legacyDays === null ? form.inviteValidHours : Number(legacyDays) * 24);
   form.inviteValidHours = Number(storedHours);
   if (!Number.isFinite(form.inviteValidHours)) form.inviteValidHours = 168;
+  form.inviteDurationDays = Number(invite.durationDays ?? form.inviteDurationDays) || 0;
   if (Array.isArray(data.invites)) {
     invites.value = data.invites.map((item) => {
       const row = (item ?? {}) as JsonObject;
@@ -628,6 +639,7 @@ function fillForm(data: JsonObject): void {
         code: String(row.code ?? ''),
         maxUses: Number(row.maxUses) || 0,
         usedCount: Number(row.usedCount) || 0,
+        durationDays: Number(row.durationDays) || 0,
         expiresAt: String(row.expiresAt ?? ''),
         status: String(row.status ?? ''),
       };
@@ -777,6 +789,7 @@ async function saveSettings(): Promise<void> {
       maxFutureMeetings: Number(form.maxFutureMeetings) || 0,
       inviteUses: Number(form.inviteUses) || 1,
       inviteValidHours: Number(form.inviteValidHours) || 0,
+      inviteDurationDays: Number(form.inviteDurationDays) || 0,
       storageMb: Number(form.storageMb) || 0,
       whenFull: form.whenFull,
     };
@@ -826,6 +839,7 @@ async function generateInvite(): Promise<void> {
     const result = await api.settings.createInvite({
       uses: Number(form.inviteUses) || 1,
       validHours: Number(form.inviteValidHours) || 0,
+      durationDays: Number(form.inviteDurationDays) || 0,
     });
     if (result?.ok !== true) {
       settingsError.value = String(result?.error || t('admin.settings.saveFailed'));
@@ -860,6 +874,7 @@ async function revokeInvite(id: string): Promise<void> {
           code: String(row.code ?? ''),
           maxUses: Number(row.maxUses) || 0,
           usedCount: Number(row.usedCount) || 0,
+          durationDays: Number(row.durationDays) || 0,
           expiresAt: String(row.expiresAt ?? ''),
           status: String(row.status ?? ''),
         };

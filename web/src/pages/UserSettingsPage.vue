@@ -30,6 +30,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { device } from '@/services/device-services';
 import { toast } from '@/services/toast';
 import { avatarExportMime } from '@/services/validate';
+import { formatLocalChineseDate } from '@/services/format';
 import { openProfileEditor } from '@/services/profile-editor';
 import LanguagePackCard from '@/components/LanguagePackCard.vue';
 import AppIcon from '@/components/AppIcon.vue';
@@ -54,16 +55,28 @@ const loggedIn = computed(() => session.loggedIn);
 const limited = computed(() => user.value.can?.profile === false);
 /** 受限时统一用同一句说明原因，避免每个入口各写一套说法。 */
 const limitHint = computed(() => t('profile.restricted'));
-/** 只有普通用户能兑换邀请码：展商与管理员身份已升级，卡片里只显示说明。 */
-const isPlainUser = computed(() => {
+/**
+ * 谁能兑换邀请码：普通用户直接开通；限时展商可以续期（从原到期日顺延）；
+ * 永久展商与管理员没有可兑换的东西，卡片里只显示身份说明。
+ */
+const canRedeemInvite = computed(() => {
   const role = String(user.value.role || '');
-  return role !== 'exhibitor' && role !== 'admin';
+  if (role === 'admin') return false;
+  if (role === 'exhibitor') return Boolean(user.value.exhibitorExpiresAt);
+  return true;
 });
 
-/** 展商与管理员不再需要邀请码，卡片底部按当前身份给一句说明。 */
+/** 永久展商与管理员不再需要邀请码，卡片底部按当前身份给一句说明。 */
 const inviteRoleHint = computed(() =>
   user.value.role === 'admin' ? t('settings.invite.alreadyAdmin') : t('settings.invite.alreadyExhibitor'),
 );
+
+/** 限时展商在卡片里看到自己的到期日与续期规则。 */
+const inviteRenewHint = computed(() => {
+  if (user.value.role !== 'exhibitor') return '';
+  const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
+  return date ? `${t('settings.invite.renewHint')}${date}${t('settings.invite.renewHintTail')}` : '';
+});
 
 /**
  * 本页专用说法。`t()` 不依赖响应式数据，在 setup 里取一次即可。
@@ -607,11 +620,11 @@ async function changeMode(value: string): Promise<void> {
         <LanguagePackCard />
       </section>
 
-      <!-- 邀请码：固定在页面最底部；普通用户可兑换，展商与管理员只说明身份已升级 -->
+      <!-- 邀请码：固定在页面最底部；普通用户与限时展商可兑换（续期），永久展商和管理员只看说明 -->
       <section class="settings-section">
         <span class="section-label">{{ t('settings.invite.title') }}</span>
         <div class="card">
-          <template v-if="isPlainUser">
+          <template v-if="canRedeemInvite">
             <div class="field">
               <label class="sr-only" for="settings-invite">{{ t('settings.invite.title') }}</label>
               <input
@@ -624,7 +637,8 @@ async function changeMode(value: string): Promise<void> {
                 :placeholder="t('settings.invite.placeholder')"
                 :disabled="limited || inviteBusy"
               />
-              <p class="field-hint">{{ t('settings.invite.hint') }}</p>
+              <p v-if="inviteRenewHint" class="field-hint">{{ inviteRenewHint }}</p>
+              <p v-else class="field-hint">{{ t('settings.invite.hint') }}</p>
             </div>
             <button
               class="cta"

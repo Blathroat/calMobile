@@ -52,7 +52,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-async function mountProfile(): Promise<Router> {
+async function mountProfile(extra: Record<string, unknown> = {}): Promise<Router> {
   const pinia = createPinia();
   setActivePinia(pinia);
   useSessionStore().applyUser({
@@ -61,6 +61,7 @@ async function mountProfile(): Promise<Router> {
     nickname: PROFILE.nickname,
     email: PROFILE.email,
     avatar: PROFILE.avatar,
+    ...extra,
   });
   const router = createRouter({
     history: createMemoryHistory(),
@@ -231,6 +232,30 @@ describe('个人页资料展示与编辑', () => {
     await router.push('/profile');
     rows[2]?.click();
     await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/security'));
+  });
+
+  it('限时展商显示有效期，快到期时提示可以续期', async () => {
+    const expiresAt = new Date(Date.now() + 3 * 86_400_000 - 60_000).toISOString();
+    await mountProfile({ role: 'exhibitor', roleLabel: '展商', exhibitorExpiresAt: expiresAt });
+    await vi.waitFor(() => expect(cards()[0]?.textContent).toContain('展商有效期至'));
+    expect(cards()[0]?.textContent).toContain('展商');
+    expect(document.body.textContent).toContain('展商身份还有3天到期');
+    expect(document.body.textContent).toContain('填写邀请码续期');
+    expect(document.body.textContent).not.toContain('展商身份已于');
+  });
+
+  it('自动到期的展商显示到期说明和续期方式', async () => {
+    const expiredAt = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    await mountProfile({
+      role: 'user',
+      roleLabel: '普通用户',
+      exhibitorExpired: true,
+      exhibitorExpiresAt: expiredAt,
+    });
+    await vi.waitFor(() => expect(document.body.textContent).toContain('展商身份已于'));
+    expect(document.body.textContent).toContain('到期，可在设置里填写邀请码续期。');
+    expect(cards()[0]?.textContent).not.toContain('展商有效期至');
+    expect(document.querySelector('.notice[data-tone="accent"]')).not.toBeNull();
   });
 
   it('晚到的旧资料不会盖掉刚换上的头像', async () => {

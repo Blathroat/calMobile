@@ -10,7 +10,7 @@ import RoleTag from '@/components/RoleTag.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
-import { truncate } from '@/services/format';
+import { formatLocalChineseDate, truncate } from '@/services/format';
 import { statusTone } from '@/services/status';
 import type { Ref } from 'vue';
 import type { User } from '@/api/types';
@@ -32,6 +32,15 @@ const emit = defineEmits<{
   'open-exhibitions': [user: User];
   'open-meetings': [user: User];
 }>();
+
+/** 限时展商的到期说明；永久展商与普通用户不显示这一行。 */
+function exhibitorMeta(user: User): string {
+  const date = formatLocalChineseDate(user.exhibitorExpiresAt);
+  if (!date) return '';
+  return user.exhibitorExpired === true
+    ? `${t('admin.users.exhibitorExpired')} ${date}`
+    : `${t('admin.users.exhibitorUntil')} ${date}`;
+}
 </script>
 
 <template>
@@ -87,13 +96,15 @@ const emit = defineEmits<{
             <span class="row-meta">{{
               `${user.status} · 最近登录 ${user.lastLoginTime || t('admin.users.unknown')}`
             }}</span>
+            <span v-if="exhibitorMeta(user)" class="row-meta">{{ exhibitorMeta(user) }}</span>
             <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
             <span v-if="user.twoFactorEnabled === true" class="row-meta">{{ t('admin.users.twoFactorEnabled') }}</span>
           </span>
           <StatusTag :text="String(user.status || '')" :tone="statusTone(String(user.status || ''))" />
         </button>
         <div class="action-row">
-          <template v-if="user.roleCode === 'exhibitor' || user.roleCode === 'admin'">
+          <!-- 到期的展商已降为普通用户，但他们的展会/会议还在，管理员仍要能从卡片接管 -->
+          <template v-if="user.roleCode === 'exhibitor' || user.roleCode === 'admin' || user.exhibitorExpired === true">
             <button class="cta ghost" data-size="small" type="button" @click="emit('open-exhibitions', user)">
               {{ copy.manageExhibitions }}
             </button>

@@ -24,6 +24,7 @@ import { confirmSheet } from '@/services/sheet';
 import { openProfileEditor } from '@/services/profile-editor';
 import { paths } from '@/app/surface';
 import { REGISTRATION_STATUS } from '@/services/status';
+import { daysUntil, formatLocalChineseDate } from '@/services/format';
 import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -149,6 +150,30 @@ const identityLine = computed(() => {
   return role && status ? role + ' · ' + status : role || status;
 });
 
+// ── 展商时长：限时展商看到到期日，到期后说明原因与续期入口 ──
+
+/** 限时展商身份卡里的一行：有效期至某日。 */
+const membershipLine = computed(() => {
+  if (String(user.value.role || '') !== 'exhibitor') return '';
+  const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
+  return date ? `${t('profile.membership.until')}${date}` : '';
+});
+
+/** 7 天内到期的提醒：说明还能用多久、可以续期。 */
+const membershipSoon = computed(() => {
+  if (String(user.value.role || '') !== 'exhibitor') return '';
+  const days = daysUntil(user.value.exhibitorExpiresAt);
+  if (days === null || days > 7) return '';
+  return `${t('profile.membership.soon')}${days}${t('profile.membership.soonTail')}`;
+});
+
+/** 已经自动到期的账号：说明原因与续期方式（管理员手动降级会清掉到期时间，不会走到这里）。 */
+const membershipExpired = computed(() => {
+  if (user.value.exhibitorExpired !== true) return '';
+  const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
+  return date ? `${t('profile.membership.expired')}${date}${t('profile.membership.expiredHint')}` : '';
+});
+
 function hasProfileValue(key: string): boolean {
   const value = profile[key];
   return typeof value === 'string' && value !== '';
@@ -251,6 +276,7 @@ function logout(): void {
                 <RoleTag :role-code="String(user.role || '')" />
               </span>
               <span v-if="identityLine" class="row-meta">{{ identityLine }}</span>
+              <span v-if="membershipLine" class="row-meta">{{ membershipLine }}</span>
             </span>
             <button
               class="icon-button"
@@ -283,6 +309,14 @@ function logout(): void {
         <!-- 受限：说明为什么编辑入口不可用 -->
         <div v-if="limited" class="notice" data-tone="accent">
           <strong>{{ limitHint }}</strong>
+        </div>
+
+        <!-- 限时展商：快到期与已到期都说明原因和续期方式，避免身份标签悄悄消失 -->
+        <div v-if="membershipSoon" class="notice" data-tone="accent">
+          <span>{{ membershipSoon }}</span>
+        </div>
+        <div v-if="membershipExpired" class="notice" data-tone="accent">
+          <span>{{ membershipExpired }}</span>
         </div>
 
         <!-- 个人简介：有内容时按正文排版，空态给出可点的「填写简介」 -->

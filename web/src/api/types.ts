@@ -42,6 +42,10 @@ export interface User extends JsonObject {
   nickname?: string;
   role?: string;
   roleLabel?: string;
+  /** 限时展商的到期时间（ISO 字符串）；空串表示永久，到期后角色会变回普通用户。 */
+  exhibitorExpiresAt?: string;
+  /** 展商时长已经走完（角色已降为普通用户），用于页面说明原因。 */
+  exhibitorExpired?: boolean;
   status?: string;
   loggedIn?: boolean;
   guest?: boolean;
