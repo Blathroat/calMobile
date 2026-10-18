@@ -144,9 +144,9 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 
 `videoSizeMb` 的下限是 1。原生侧 0 会变成不限。头像单文件上限是 `min(upload.avatarSizeMb, UPLOAD_MAX_MB)`，`UPLOAD_MAX_MB` 缺省并封顶 20。封面和简介媒体不走这道 20MB 硬顶，也不走 2MB 的 JSON 体积守卫。
 
-色板定义在 `src/config/migrate.ts` 的 `THEME_COLORS`。`app_settings.theme` 是全局默认。`users.ui_theme` 是个人选择。下标 0 固定为默认色，新色只往后追加。原生 `AppSettings.ACCENTS` 与这里逐位对应。
+色板定义在 `src/config/migrate.ts` 的 `THEME_COLORS`，当前 12 色（首版发布 8 色，后来追加 4 色）。`app_settings.theme` 是全局默认。`users.ui_theme` 是个人选择。下标 0 固定为默认色，新色只往后追加，0..7 的语义不变。原生 `AppSettings.ACCENTS` 与这里逐位对应。
 
-下发的 `theme.index` 是该调用者实际生效的下标：`users.ui_theme ?? app_settings.theme.index`。`PUT /settings/ui-theme` 越界是 200 + `ok:false`，不夹取。`PUT /settings` 的全局 `themeIndex` 仍按补齐后的色板长度夹取。老库的补色和加列在迁移里。`readServerSettings()` 再用 `normalizeThemeColors()` 兜底。
+下发的 `theme.index` 是该调用者实际生效的下标：`users.ui_theme ?? app_settings.theme.index`。`PUT /settings/ui-theme` 越界是 200 + `ok:false`，不夹取。`PUT /settings` 的全局 `themeIndex` 仍按补齐后的色板长度夹取。色板扩容后，老库不用迁移：`readServerSettings()` 的 `normalizeThemeColors()` 会在读取时把存着的短色板补齐到当前 12 色。
 
 ## 数据模型
 
