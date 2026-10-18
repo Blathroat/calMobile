@@ -80,9 +80,10 @@ app.post('/invites', authenticateHono, async (c) => {
     const next = applyServerPatch(current, {
       inviteUses: rawBody.uses,
       inviteValidHours: rawBody.validHours,
+      inviteDurationDays: rawBody.durationDays,
     });
     await saveServerSettings(current, next);
-    await createInvite(user.userId, next.invite.uses, next.invite.validHours);
+    await createInvite(user.userId, next.invite.uses, next.invite.validHours, next.invite.durationDays);
     return { invites: await listInvites(), settings: await settingsPayload(user.userId, user.role) };
   });
 });

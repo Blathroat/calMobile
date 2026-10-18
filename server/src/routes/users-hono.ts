@@ -19,6 +19,7 @@ import {
 } from '../domain/payloads.js';
 import * as labels from '../domain/labels.js';
 import { canHostMeetings, requireAdmin, type Actor } from '../domain/permissions.js';
+import { effectiveRole, isPastExpiry, settleExpiredExhibitor, settleExpiredExhibitors } from '../domain/membership.js';
 import { badRequest, notFound } from '../domain/errors.js';
 import { revokeAllDevicesForUser } from '../domain/session.js';
 import { jsonResponse, mutate } from '../http/respond.js';
@@ -35,6 +36,12 @@ function likePattern(keyword: string) {
 async function findUserById(id: string) {
   return (await query<UserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id])).rows[0] || null;
 }
+/** 时间戳（Date 或 ISO 字符串）→ ISO 字符串；空值返回空串。 */
+function iso(value: string | Date | null | undefined): string {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+}
 function statusPayload(row: UserRow) {
   return {
     id: row.id,
@@ -42,6 +49,8 @@ function statusPayload(row: UserRow) {
     role: labels.ROLE_LABEL[row.role] || row.role,
     roleCode: row.role,
     status: labels.USER_STATUS[row.status as string] || labels.USER_STATUS.active,
+    exhibitorExpiresAt: iso(row.exhibitor_expires_at),
+    exhibitorExpired: isPastExpiry(row.exhibitor_expires_at),
   };
 }
 function bodyRecord(value: unknown): Record<string, unknown> {
@@ -60,6 +69,9 @@ async function publicTarget(id: string, nickname: string) {
 }
 async function publicProfile(viewer: Actor | null, target: UserRow | null) {
   if (!target) return { found: false, error: '用户不存在或未公开' };
+  // 限时展商到期后先结算：公开页的角色和会议入口不能还停在过期身份上。
+  await settleExpiredExhibitor(target.id);
+  const roleCode = effectiveRole(target.role, target.exhibitor_expires_at);
   const viewedAsAdmin = viewer?.role === 'admin';
   const isSelf = viewer?.userId === target.id;
   const showRegistrations = target.show_registrations === true;
@@ -79,9 +91,9 @@ async function publicProfile(viewer: Actor | null, target: UserRow | null) {
   const profile = {
     id: target.id,
     nickname: target.nickname,
-    role: labels.ROLE_LABEL[target.role] || target.role,
-    roleCode: target.role,
-    meetingsOpen: canHostMeetings(target.role) && target.status === 'active' && target.accept_meetings === true,
+    role: labels.ROLE_LABEL[roleCode] || roleCode,
+    roleCode,
+    meetingsOpen: canHostMeetings(roleCode) && target.status === 'active' && target.accept_meetings === true,
     bio: target.bio || '',
     region: target.region || '',
     avatar: target.avatar || '',
@@ -107,6 +119,8 @@ async function publicProfile(viewer: Actor | null, target: UserRow | null) {
 }
 app.get('/', authenticateHono, async (c) => {
   requireAdmin({ user: userOf(c) });
+  // 管理员看用户列表前批量结算：列表里不再出现已经到期的展商。
+  await settleExpiredExhibitors();
   const keyword = String(c.req.query('query') || '').trim();
   const result = keyword
     ? await query<AdminUserRow>(
@@ -179,8 +193,11 @@ app.put('/:id/role', authenticateHono, async (c) => {
       );
       if (Number(others.rows[0]?.n ?? 0) < 1) throw badRequest('至少保留一位管理员');
     }
+    // 管理员改角色：设成展商视为永久（清掉到期时间）；降成普通用户/管理员也清掉，
+    // 避免把管理员降级误显示成「展商已到期」。
     await query(
       `UPDATE users SET role = $2,
+              exhibitor_expires_at = NULL,
               accept_meetings = CASE WHEN $2 = 'user' THEN false ELSE accept_meetings END,
               updated_at = now()
         WHERE id = $1`,

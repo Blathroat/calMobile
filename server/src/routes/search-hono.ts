@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { query } from '../config/pool.js';
 import { EXHIBITION_COLUMNS, EXHIBITION_FROM, USER_COLUMNS, USER_FROM } from '../domain/queries.js';
 import { exhibitionPayload, type ExhibitionRow, type UserRow } from '../domain/payloads.js';
+import { effectiveRole } from '../domain/membership.js';
 import * as labels from '../domain/labels.js';
 import { jsonResponse } from '../http/respond.js';
 import { optionalAuthHono, userOf, type HonoEnv } from './hono-utils.js';
@@ -12,11 +13,13 @@ function likePattern(keyword: string) {
   return `%${keyword.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 }
 function searchUserPayload(row: UserRow) {
+  // 已到期的展商按普通用户展示，不必等对方下次登录触发结算。
+  const roleCode = effectiveRole(row.role, row.exhibitor_expires_at);
   return {
     id: row.id,
     nickname: row.nickname,
-    role: labels.ROLE_LABEL[row.role] || row.role,
-    roleCode: row.role,
+    role: labels.ROLE_LABEL[roleCode] || roleCode,
+    roleCode,
     email: row.email || '',
     avatar: row.avatar || '',
     status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active,

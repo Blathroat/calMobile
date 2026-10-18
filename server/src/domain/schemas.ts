@@ -215,6 +215,7 @@ export const serverSettingsPatchSchema = z
     maxFutureMeetings: z.unknown(),
     inviteUses: z.unknown(),
     inviteValidHours: z.unknown(),
+    inviteDurationDays: z.unknown(),
     notify: notifySchema,
   })
   .partial()

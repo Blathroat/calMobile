@@ -4,11 +4,12 @@ import { query } from '../config/pool.js';
 import { loadProcessConfig } from '../config/env.js';
 import { ApiError } from '../domain/errors.js';
 import { capabilities, type Capabilities } from '../domain/permissions.js';
+import { isPastExpiry, settleExpiredExhibitor } from '../domain/membership.js';
 import { jwtVerify } from 'jose';
 
 const { accessSecret } = loadProcessConfig().auth;
 
-const USER_FIELDS = 'id, username, email, nickname, role, status';
+const USER_FIELDS = 'id, username, email, nickname, role, status, exhibitor_expires_at';
 
 export interface AuthedUser {
   userId: string;
@@ -19,6 +20,8 @@ export interface AuthedUser {
   status: string;
   /** JWT 会话 id；老版本令牌没有 sid，等自然过期后会统一升级。 */
   sessionId?: string;
+  /** 展商时长已经走完：本次请求按普通用户处理，写操作可据此给出「已到期」说明。 */
+  exhibitorExpired?: boolean;
   can: Capabilities;
 }
 
@@ -33,6 +36,7 @@ interface UserRow {
   nickname: string;
   role: string;
   status: string;
+  exhibitor_expires_at: string | Date | null;
 }
 
 /** 从请求头取令牌；没有令牌返回空串。 */
@@ -84,14 +88,24 @@ export async function resolveUser(token: string): Promise<AuthedUser | null> {
   if (row.status === 'banned') {
     throw new ApiError(403, '账号已被封禁');
   }
+  // 限时展商到期：在这里惰性结算。命中时把库里的角色改成普通用户，本次请求
+  // 也按普通用户继续（不必等定时任务）；普通用户保留过去的到期时间，用于展示「已到期」。
+  const expired = isPastExpiry(row.exhibitor_expires_at);
+  let role = row.role;
+  if (row.role === 'exhibitor' && expired) {
+    await settleExpiredExhibitor(row.id);
+    role = 'user';
+  }
+  const exhibitorExpired = expired && (row.role === 'exhibitor' || role === 'user');
   return {
     userId: row.id,
     username: row.username,
     email: row.email,
     nickname: row.nickname,
-    role: row.role,
+    role,
     status: row.status,
     ...(sessionId ? { sessionId } : {}),
-    can: capabilities(row.role, row.status),
+    ...(exhibitorExpired ? { exhibitorExpired } : {}),
+    can: capabilities(role, row.status),
   };
 }

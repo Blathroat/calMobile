@@ -83,8 +83,11 @@ export interface ServerSettings {
   cover: { defaultCover: string };
   /** 展商端策略：同时能筹备的展会数、私人会议数上限，0 表示不限。 */
   exhibitor: { maxFutureExhibitions: number; maxFutureMeetings: number };
-  /** 邀请码生成默认值。uses 至少 1；validHours 为 0 表示不过期。 */
-  invite: { uses: number; validHours: number };
+  /**
+   * 邀请码生成默认值。uses 至少 1；validHours 为 0 表示不过期。
+   * durationDays 是兑换后展商身份保留的天数，0 表示永久。
+   */
+  invite: { uses: number; validHours: number; durationDays: number };
 }
 
 /**
@@ -587,6 +590,19 @@ export const STEPS: MigrationStep[] = [
          WHERE status IN ('approved', 'attended') AND check_in_secret = '';
         `,
   },
+  {
+    // 展商身份可以按天发放：邀请码记录兑换后保留多少天，用户记录到期时间。
+    // NULL 表示永久；0 天邀请码也写 NULL，因此老库和老邀请码的行为保持不变。
+    id: '0017-exhibitor-membership',
+    sql: `
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS exhibitor_expires_at TIMESTAMPTZ;
+        ALTER TABLE exhibitor_invites ADD COLUMN IF NOT EXISTS duration_days INTEGER NOT NULL DEFAULT 0;
+
+        CREATE INDEX IF NOT EXISTS users_exhibitor_expiry_idx
+            ON users (exhibitor_expires_at)
+            WHERE role = 'exhibitor' AND exhibitor_expires_at IS NOT NULL;
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
@@ -627,7 +643,7 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   cover: { defaultCover: '' },
   // 0 = 不限。演示环境默认放开，部署方按运营策略调小。
   exhibitor: { maxFutureExhibitions: 0, maxFutureMeetings: 0 },
-  invite: { uses: 1, validHours: 168 },
+  invite: { uses: 1, validHours: 168, durationDays: 0 },
 };
 
 function errorMessage(error: unknown): string {

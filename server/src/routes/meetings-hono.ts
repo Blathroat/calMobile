@@ -25,6 +25,8 @@ interface ExhibitorGate {
   role: string;
   status: string;
   accept_meetings: boolean;
+  /** 限时展商的到期时间；NULL 表示永久。到期后不再接受新的会议预约。 */
+  exhibitor_expires_at?: string | Date | null;
   meeting_allow_cancel?: boolean | null;
   meeting_notice?: string | null;
   nickname: string;
@@ -120,9 +122,9 @@ function assertTime(value: string) {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw badRequest('会议时间需要是 HH:MM');
 }
 
-/** 正常的展商或管理员，且自己打开了开关，才接受新申请。受限和封禁一律视为关闭。 */
+/** 正常的展商或管理员，且自己打开了开关，才接受新申请。受限、封禁与到期一律视为关闭。 */
 function meetingsOpen(row: ExhibitorGate): boolean {
-  return canHostMeetings(row.role) && row.status === 'active' && row.accept_meetings === true;
+  return canHostMeetings(row.role, row.exhibitor_expires_at) && row.status === 'active' && row.accept_meetings === true;
 }
 
 async function loadMeeting(id: string) {
@@ -134,7 +136,7 @@ app.get('/settings', authenticateHono, async (c) => {
   const user = requireUser({ user: userOf(c) });
   if (user.role !== 'exhibitor' && user.role !== 'admin') throw forbidden('只有展商或管理员可以执行此操作');
   const row = await query<ExhibitorGate>(
-    'SELECT id, role, status, accept_meetings, meeting_allow_cancel, meeting_notice, nickname FROM users WHERE id = $1',
+    'SELECT id, role, status, accept_meetings, meeting_allow_cancel, meeting_notice, nickname, exhibitor_expires_at FROM users WHERE id = $1',
     [user.userId],
   );
   const exhibitor = row.rows[0];
@@ -198,13 +200,13 @@ app.get('/inbox', authenticateHono, async (c) => {
   // 没指定主办人时看自己的收件箱。管理员可以点名另一位展商或管理员。
   const exhibitorId = requested || user.userId;
   if (user.role === 'exhibitor' && exhibitorId !== user.userId) throw forbidden('只能查看自己的私人会议');
-  const exhibitor = await query<{ id: string; nickname: string; role: string }>(
-    'SELECT id, nickname, role FROM users WHERE id = $1',
+  const exhibitor = await query<ExhibitorGate>(
+    'SELECT id, nickname, role, status, accept_meetings, exhibitor_expires_at FROM users WHERE id = $1',
     [exhibitorId],
   );
   const row = exhibitor.rows[0];
   if (!row) throw notFound('用户不存在或已删除');
-  if (!canHostMeetings(row.role)) throw badRequest('该用户不是展商');
+  if (!canHostMeetings(row.role, row.exhibitor_expires_at)) throw badRequest('该用户不是展商');
   const result = await query<MeetingRow>(
     `SELECT ${MEETING_SELECT}
        ${MEETING_FROM}
@@ -223,7 +225,7 @@ app.get('/apply/:exhibitorId', authenticateHono, async (c) => {
   requireUser({ user: userOf(c) });
   const exhibitorId = c.req.param('exhibitorId');
   const result = await query<ExhibitorGate>(
-    'SELECT id, role, status, accept_meetings, meeting_allow_cancel, meeting_notice, nickname FROM users WHERE id = $1',
+    'SELECT id, role, status, accept_meetings, meeting_allow_cancel, meeting_notice, nickname, exhibitor_expires_at FROM users WHERE id = $1',
     [exhibitorId],
   );
   const exhibitor = result.rows[0];
@@ -264,7 +266,7 @@ app.post('/', authenticateHono, async (c) => {
     try {
       await transaction(async (client) => {
         const locked = await client.query<ExhibitorGate>(
-          'SELECT id, role, status, accept_meetings, nickname FROM users WHERE id = $1 FOR UPDATE',
+          'SELECT id, role, status, accept_meetings, nickname, exhibitor_expires_at FROM users WHERE id = $1 FOR UPDATE',
           [input.exhibitorId],
         );
         const exhibitor = locked.rows[0];
