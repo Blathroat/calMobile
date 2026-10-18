@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
  * 屏幕 14 · 用户公开页
- * 业务：展示昵称、简介、所在地区、社交账号与已参加展会。
+ * 业务：展示身份卡（含已参加展会数）、昵称、简介、所在地区、社交账号与已参加展会。
  *
- * 普通访问者按用户的「展示我的报名」策略过滤；管理员从管理后台进入时不受该策略影响，
- * 始终能查看用户已参加的展会，页面会说明当前是管理视角，避免把「管理可见」当成公开范围。
+ * 身份卡上的已参加展会数是公开事实，不受「展示我的报名」策略影响；该策略只决定下方
+ * 报名记录列表是否可见。管理员从管理后台进入时不受该策略影响，始终能查看用户已参加的展会，
+ * 页面会说明当前是管理视角，避免把「管理可见」当成公开范围。
  *
  * 取数走 `useAsync` + api 的查询缓存：从搜索列表点进来时数据已经预热过，不会先闪骨架屏。
  */
@@ -40,6 +41,8 @@ const adminView = computed(() => profile.value?.viewedAsAdmin === true);
 /** 用户自己的「展示我的报名」策略：关掉时下方只说明「不展示」。 */
 const showRegistrations = computed(() => profile.value?.showRegistrations === true);
 const registrations = computed(() => asList(profile.value?.registrations));
+/** 已参加展会数：服务端始终下发，不受「展示我的报名」影响。 */
+const attendedCount = computed(() => Number(profile.value?.attendedCount) || 0);
 /** 这个用户自己开办的展会：只有展商 / 管理员有，普通用户是空数组。 */
 const hosted = computed(() => asList(profile.value?.exhibitions));
 const isOwn = computed(() => {
@@ -181,6 +184,14 @@ usePullRefresh(
           <span class="row-meta">{{ profile.bio || t('profile.public.bioEmpty') }}</span>
         </span>
         <StatusTag :text="visibilityLabel" :tone="adminView || showRegistrations ? 'ok' : 'muted'" />
+      </div>
+      <!-- 已参加展会数不受隐私开关影响：开关只决定下方的报名记录列表 -->
+      <hr class="divider" />
+      <div class="profile-stats">
+        <span class="profile-stat">
+          <strong>{{ attendedCount }}</strong>
+          <span class="row-meta">{{ t('profile.stats.attended') }}</span>
+        </span>
       </div>
     </div>
 

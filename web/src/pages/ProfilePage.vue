@@ -395,33 +395,4 @@ function logout(): void {
   color: var(--ink-3);
   cursor: not-allowed;
 }
-
-/* 活动概览：两个数字块 + 右侧箭头，整行是按钮。 */
-.profile-stats {
-  display: flex;
-  align-items: center;
-  gap: var(--s6);
-  width: 100%;
-  min-height: var(--touch);
-  padding: var(--s1) 0 0;
-  color: var(--ink);
-  text-align: start;
-}
-
-.profile-stat {
-  display: grid;
-  gap: 0;
-}
-
-.profile-stat > strong {
-  font-size: var(--fs-h3);
-  font-weight: 700;
-  line-height: var(--lh-tight);
-  font-variant-numeric: tabular-nums;
-}
-
-.profile-stats > svg {
-  margin-inline-start: auto;
-  color: var(--ink-3);
-}
 </style>

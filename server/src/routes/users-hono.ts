@@ -71,6 +71,11 @@ async function publicProfile(viewer: Actor | null, target: UserRow | null) {
     );
     registrations = result.rows.map(publicRegistrationPayload);
   }
+  // 已参加场数不受「展示我的报名」影响：它是公开事实，开关只决定下方报名记录列表。
+  const attended = await query<{ count: number }>(
+    `SELECT COUNT(*)::int AS count FROM registrations WHERE visitor_id = $1 AND status = 'attended'`,
+    [target.id],
+  );
   const profile = {
     id: target.id,
     nickname: target.nickname,
@@ -95,6 +100,7 @@ async function publicProfile(viewer: Actor | null, target: UserRow | null) {
     profile,
     viewedAsAdmin,
     showRegistrations,
+    attendedCount: Number(attended.rows[0]?.count) || 0,
     registrations,
     exhibitions: hosted.rows.map(exhibitionPayload),
   };

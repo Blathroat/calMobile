@@ -876,6 +876,36 @@ label {
   line-height: 1.35;
 }
 
+/* 活动概览：个人页与用户公开页的身份卡共用。
+   个人页是整行按钮（右侧箭头进我的活动），公开页是只读展示。 */
+.profile-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--s6);
+  width: 100%;
+  min-height: var(--touch);
+  padding: var(--s1) 0 0;
+  color: var(--ink);
+  text-align: start;
+}
+
+.profile-stat {
+  display: grid;
+  gap: 0;
+}
+
+.profile-stat > strong {
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-stats > svg {
+  margin-inline-start: auto;
+  color: var(--ink-3);
+}
+
 /* 展会图片统一按设计稿的 1080×1920（9:16）竖版比例展示，避免图片被拉成方块 */
 .thumb {
   flex: none;
