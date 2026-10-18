@@ -11,7 +11,11 @@ import { toast } from '@/services/toast';
 
 vi.mock('@/app/runtime', () => ({
   bootApp: async () => undefined,
-  api: { profile: { get: vi.fn(), save: vi.fn() }, auth: { logout: vi.fn() } },
+  api: {
+    profile: { get: vi.fn(), save: vi.fn() },
+    auth: { logout: vi.fn() },
+    registrations: { list: vi.fn() },
+  },
 }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 
@@ -39,6 +43,7 @@ beforeEach(async () => {
   document.body.innerHTML = '<div id="profile-test"></div>';
   vi.mocked(api.profile.get).mockResolvedValue(PROFILE);
   vi.mocked(api.profile.save).mockResolvedValue({ ok: true, user: { ...PROFILE, region: '杭州' } });
+  vi.mocked(api.registrations.list).mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -63,6 +68,8 @@ async function mountProfile(): Promise<Router> {
       { path: '/profile', component: ProfilePage },
       { path: '/settings', component: { template: '<div />' } },
       { path: '/security', component: { template: '<div />' } },
+      { path: '/my-registrations', component: { template: '<div />' } },
+      { path: '/user-public/:nickname', component: { template: '<div />' } },
     ],
   });
   await router.push('/profile');
@@ -84,20 +91,24 @@ function editButton(): HTMLButtonElement | undefined {
 }
 
 describe('个人页资料展示与编辑', () => {
-  it('身份卡显示地区与编辑入口，简介卡展示简介和社交账号，铅笔打开与设置页相同的编辑抽屉', async () => {
+  it('身份卡只留身份与活动，简介在简介卡，地区与社交账号在公开资料卡', async () => {
     await mountProfile();
-    await vi.waitFor(() => expect(cards()[0]?.textContent).toContain('上海'));
+    await vi.waitFor(() => expect(cards()[0]?.textContent).toContain('普通用户'));
+    // 正常状态不展示
+    expect(cards()[0]?.textContent).not.toContain('正常');
+    expect(cards()[0]?.textContent).not.toContain('上海');
     expect(cards()[0]?.textContent).not.toContain('user@example.com');
-    expect(cards()[0]?.textContent).not.toContain('未填写邮箱');
     expect(cards()[0]?.querySelector('.identity-name')?.textContent).toBe('旧昵称');
+    expect(cards()[1]?.textContent).toContain('已有简介');
+    expect(cards()[1]?.textContent).not.toContain('社交账号');
+
+    await vi.waitFor(() => expect(cards()[2]?.textContent).toContain('上海'));
+    expect(cards()[2]?.textContent).toContain('地区');
+    expect(cards()[2]?.textContent).toContain('社交账号');
+    expect(cards()[2]?.textContent).toContain('@user');
+
     const edit = editButton();
     expect(edit?.querySelector('svg')).not.toBeNull();
-    expect(cards()[1]?.textContent).toContain('已有简介');
-    expect(cards()[1]?.textContent).toContain('社交账号');
-    expect(cards()[1]?.textContent).toContain('@user');
-    expect(cards()[1]?.textContent).not.toContain('地区');
-    expect(cards()[1]?.textContent).not.toContain('上海');
-
     edit?.click();
     await nextTick();
     expect(document.querySelector<HTMLInputElement>('.sheet-panel #settings-nickname')?.value).toBe('旧昵称');
@@ -121,39 +132,104 @@ describe('个人页资料展示与编辑', () => {
       ),
     );
     expect(sheet.current?.closing).toBe(true);
-    await vi.waitFor(() => expect(cards()[0]?.textContent).toContain('杭州'));
+    await vi.waitFor(() => expect(cards()[2]?.textContent).toContain('杭州'));
     expect(cards()[1]?.textContent).not.toContain('杭州');
+    expect(cards()[0]?.textContent).not.toContain('杭州');
   });
 
-  it('地区为空时身份卡显示未填写', async () => {
+  it('地区为空时公开资料卡显示未填写', async () => {
     vi.mocked(api.profile.get).mockResolvedValue({ ...PROFILE, region: '' });
     await mountProfile();
-    await vi.waitFor(() => expect(cards()[0]?.textContent).toContain('未填写'));
-    expect(cards()[1]?.textContent).not.toContain('地区');
+    await vi.waitFor(() => expect(cards()[2]?.textContent).toContain('未填写'));
+    expect(cards()[0]?.textContent).not.toContain('未填写');
   });
 
-  it('受限账号的铅笔不可用，也不会打开抽屉', async () => {
-    vi.mocked(api.profile.get).mockResolvedValue({ ...PROFILE, can: { profile: false } });
+  it('没有简介时给出可点的缺省提示，不把提示画成正文', async () => {
+    vi.mocked(api.profile.get).mockResolvedValue({ ...PROFILE, bio: '' });
+    await mountProfile();
+    await vi.waitFor(() => expect(document.body.textContent).toContain('还没有简介'));
+    expect(document.querySelector('.bio-text')).toBeNull();
+    const fill = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (item) => item.textContent?.trim() === '填写简介',
+    );
+    expect(fill?.disabled).toBe(false);
+    fill?.click();
+    await nextTick();
+    expect(document.querySelector('.sheet-panel #settings-bio')).not.toBeNull();
+  });
+
+  it('受限账号的铅笔与「填写简介」不可用，也不会打开抽屉', async () => {
+    vi.mocked(api.profile.get).mockResolvedValue({ ...PROFILE, bio: '', can: { profile: false } });
     await mountProfile();
     const edit = editButton();
+    const fill = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (item) => item.textContent?.trim() === '填写简介',
+    );
     await vi.waitFor(() => expect(edit?.disabled).toBe(true));
+    expect(fill?.disabled).toBe(true);
+    expect(document.body.textContent).toContain('账号已被限制，不能编辑个人信息');
     edit?.dispatchEvent(new Event('click'));
     await nextTick();
     expect(document.querySelector('.sheet-panel')).toBeNull();
     expect(toast).toHaveBeenCalledWith('账号已被限制，不能编辑个人信息', 'error');
   });
 
-  it('设置卡片分别进入用户设置与安全设置', async () => {
+  it('活动概览显示已参加与报名记录数，点击进入我的活动', async () => {
+    vi.mocked(api.registrations.list).mockResolvedValue([
+      { id: 'r1', status: '已参加' },
+      { id: 'r2', status: '已通过' },
+      { id: 'r3', status: '已撤销' },
+    ]);
     const router = await mountProfile();
-    await vi.waitFor(() => expect(document.querySelectorAll('button.row-card').length).toBe(2));
-    const [settingsEntry, securityEntry] = [...document.querySelectorAll<HTMLButtonElement>('button.row-card')];
-    expect(settingsEntry?.textContent).toContain('通知、外观、语言与隐私');
-    expect(securityEntry?.textContent).toContain('邮箱与两步验证');
+    await vi.waitFor(() => expect(document.querySelectorAll('.profile-stat strong')).toHaveLength(2));
+    const numbers = [...document.querySelectorAll('.profile-stat strong')].map((item) => item.textContent?.trim());
+    expect(numbers).toEqual(['1', '3']);
+    const stats = document.querySelector<HTMLButtonElement>('.profile-stats');
+    expect(stats?.textContent).toContain('已参加展会');
+    expect(stats?.textContent).toContain('报名记录');
+    stats?.click();
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/my-registrations'));
+  });
 
-    settingsEntry?.click();
+  it('活动概览取不到时整块不显示，资料仍然正常', async () => {
+    vi.mocked(api.registrations.list).mockRejectedValue(new Error('offline'));
+    await mountProfile();
+    await vi.waitFor(() => expect(cards()[0]?.textContent).toContain('普通用户'));
+    expect(document.querySelector('.profile-stats')).toBeNull();
+    expect(cards()[2]?.textContent).toContain('上海');
+  });
+
+  it('公开主页入口按展示策略给出说明，并进入自己的公开页', async () => {
+    const router = await mountProfile();
+    await vi.waitFor(() => expect(document.body.textContent).toContain('公开页展示报名记录'));
+    const row = [...document.querySelectorAll<HTMLButtonElement>('button.row-card')].find((item) =>
+      item.textContent?.includes('查看公开主页'),
+    );
+    expect(row).not.toBeUndefined();
+    row?.click();
+    await vi.waitFor(() => expect(router.currentRoute.value.params.nickname).toBe('旧昵称'));
+    expect(router.currentRoute.value.query.userId).toBe('u1');
+  });
+
+  it('关闭公开展示时公开主页入口改为仅展示资料', async () => {
+    vi.mocked(api.profile.get).mockResolvedValue({ ...PROFILE, showRegistrations: false });
+    await mountProfile();
+    await vi.waitFor(() => expect(document.body.textContent).toContain('公开页仅展示资料'));
+  });
+
+  it('设置卡片分别进入设置与安全设置', async () => {
+    const router = await mountProfile();
+    await vi.waitFor(() => expect(document.querySelectorAll('button.row-card').length).toBe(3));
+    const rows = [...document.querySelectorAll<HTMLButtonElement>('button.row-card')];
+    const labels = rows.map((item) => item.textContent ?? '');
+    expect(labels[0]).toContain('查看公开主页');
+    expect(labels[1]).toContain('设置');
+    expect(labels[2]).toContain('安全设置');
+
+    rows[1]?.click();
     await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/settings'));
     await router.push('/profile');
-    securityEntry?.click();
+    rows[2]?.click();
     await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/security'));
   });
 

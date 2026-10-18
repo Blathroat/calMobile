@@ -1,14 +1,14 @@
 <script setup lang="ts">
 /**
- * 用户设置：头像、通知与隐私、外观（配色与明暗）、语言、安全入口。
+ * 用户设置：头像、通知与隐私、外观（配色与明暗）、语言。
  *
  * 版式按「账号 / 通知与隐私 / 外观 / 语言」分组：组标题在卡片外，卡片里的开关行
  * 用 `.switch-row[data-flush='true']` 的分隔线版式，不再套第二层边框；邀请码只对
  * 普通用户显示，放在页面最底部。
  *
  * 编辑资料与个人页身份卡右侧的铅笔共用 `services/profile-editor.ts` 的同一抽屉。
- * 头像、通知、配色、明暗、语言、隐私和安全入口留在这里，因为它们各自写不同的接口。
- * 语言包在本机，不写后端。
+ * 头像、通知、配色、明暗、语言、隐私留在这里，因为它们各自写不同的接口。
+ * 安全设置只从个人页进入，本页不再提供入口。语言包在本机，不写后端。
  *
  * 头像链路：`media.pickImage` 选图 → 共享组件 `AvatarCropper`（单指拖动 + 双指捏合裁剪）
  * → `POST /profile/avatar` 把方图传到服务器。手势、取景与导出都在组件里，本页只负责
@@ -32,7 +32,6 @@ import { toast } from '@/services/toast';
 import { avatarExportMime } from '@/services/validate';
 import { openProfileEditor } from '@/services/profile-editor';
 import LanguagePackCard from '@/components/LanguagePackCard.vue';
-import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import RoleTag from '@/components/RoleTag.vue';
 import AvatarCropper from '@/components/AvatarCropper.vue';
@@ -66,8 +65,6 @@ const isPlainUser = computed(() => {
 const COPY = {
   /** 已经有头像时按钮要换个说法（资源里只有「上传头像」）。 */
   changeAvatar: t('settings.changeAvatar'),
-  /** 安全入口的说明：这一页同时管邮箱与两步验证。 */
-  securityMeta: t('settings.securityMeta'),
   /** 配色没有保存按钮，用它解释「点了就生效」。 */
   accentHint: t('settings.theme.accentHint'),
 };
@@ -493,16 +490,6 @@ async function changeMode(value: string): Promise<void> {
           <strong>{{ limitHint }}</strong>
           <span>{{ t('settings.limitUnaffected') }}</span>
         </div>
-
-        <!-- 安全：邮箱与两步验证共用同一套凭据，入口与个人页一致，直接用行卡片 -->
-        <button class="row-card" type="button" data-pressable="true" @click="router.push('/security')">
-          <span class="dim" aria-hidden="true"><AppIcon name="shield" size="icon icon-sm" /></span>
-          <span class="row-copy">
-            <strong class="row-title">{{ t('security.title') }}</strong>
-            <span class="row-meta">{{ COPY.securityMeta }}</span>
-          </span>
-          <AppIcon name="chevronRight" />
-        </button>
       </section>
 
       <!-- 通知与隐私：通知偏好、系统通知权限与报名公开展示 -->

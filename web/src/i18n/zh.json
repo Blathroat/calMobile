@@ -564,12 +564,14 @@
   "profile": {
     "avatarInitial": "用",
     "bio": "个人简介",
-    "bioEmpty": "还没有填写简介，点击“编辑”补充你的关注方向。",
+    "bioEmpty": "还没有简介。简介会显示在你的公开主页上。",
+    "bioEmptyAction": "填写简介",
     "guestHint": "登录后可以维护资料、查看报名记录并接收审核通知。",
     "guestTitle": "当前以访客身份浏览",
     "loggedOut": "已退出登录",
     "logout": "退出登录",
     "notFilled": "未填写",
+    "previewPublic": "查看公开主页",
     "public": {
       "adminNotice": "管理员查看公开页不受用户隐私设置限制，下方已参加展会为该用户的完整记录。",
       "adminView": "管理视角",
@@ -589,8 +591,14 @@
       "title": "用户公开页",
       "unavailable": "该用户未公开资料，或账号已停用。"
     },
+    "publicRegistrationsHidden": "公开页仅展示资料",
+    "publicRegistrationsShown": "公开页展示报名记录",
     "restricted": "账号已被限制，不能编辑个人信息",
     "settingsSummary": "通知、外观、语言与隐私",
+    "stats": {
+      "attended": "已参加展会",
+      "registrations": "报名记录"
+    },
     "title": "个人主页"
   },
   "registration": {

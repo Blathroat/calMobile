@@ -150,6 +150,13 @@ describe('设置页独立取数状态', () => {
     expect(labels).toEqual(['账号', '通知与隐私', '外观', '语言']);
   });
 
+  it('不再提供安全设置入口', async () => {
+    await mountSettings();
+    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    expect(document.querySelectorAll('button.row-card')).toHaveLength(0);
+    expect(document.body.textContent).not.toContain('安全设置');
+  });
+
   it('邀请码只对普通用户显示，并放在页面最底部', async () => {
     await mountSettings();
     await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
