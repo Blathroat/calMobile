@@ -656,6 +656,7 @@ label {
 
 .divider {
   height: var(--hairline);
+  margin: 0;
   background: var(--stroke);
   border: 0;
 }
@@ -807,6 +808,11 @@ label {
   gap: var(--s2);
 }
 
+/* 行自带分隔线时，列表不再额外留间距（设置页与语言卡内部的开关行） */
+.list[data-gap='none'] {
+  gap: 0;
+}
+
 .row-card {
   display: flex;
   align-items: center;
@@ -837,6 +843,17 @@ label {
 .row-title {
   font-size: var(--fs-body);
   font-weight: 700;
+}
+
+/* 身份卡上的名字：比列表标题大一档，长名字先省略 */
+.identity-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 名字和后面的身份小标签排在同一行，长名字先省略，标签不被挤掉。 */
@@ -1260,6 +1277,20 @@ button.avatar {
   flex: 1 1 auto;
   width: auto;
   min-width: 0;
+}
+
+/* 卡片里的一行开关：去掉自身边框，相邻行用分隔线区分。
+   只认显式的 data-flush，其它页面已有的 .switch-row 外观不变。 */
+.switch-row[data-flush='true'] {
+  min-height: var(--ctrl);
+  padding: var(--s2) 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.switch-row[data-flush='true'] + .switch-row[data-flush='true'] {
+  border-top: var(--hairline) solid var(--stroke);
 }
 
 .switch-row .switch-copy {

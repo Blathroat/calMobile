@@ -140,4 +140,24 @@ describe('设置页独立取数状态', () => {
     );
     expect(sheet.current?.closing).toBe(true);
   });
+
+  it('按账号、通知与隐私、外观、语言分组', async () => {
+    await mountSettings();
+    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    const labels = [...document.querySelectorAll('.settings-section .section-label')].map((node) =>
+      node.textContent?.trim(),
+    );
+    expect(labels).toEqual(['账号', '通知与隐私', '外观', '语言']);
+  });
+
+  it('邀请码只对普通用户显示，并放在页面最底部', async () => {
+    await mountSettings();
+    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    const groups = document.querySelector('.settings-groups');
+    expect(groups?.lastElementChild?.querySelector('#settings-invite')).not.toBeNull();
+
+    useSessionStore().applyUser({ ...useSessionStore().user, role: 'exhibitor' });
+    await nextTick();
+    expect(document.querySelector('#settings-invite')).toBeNull();
+  });
 });

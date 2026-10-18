@@ -1,12 +1,14 @@
 <script setup lang="ts">
 /**
- * 屏幕 09 · 个人主页（身份卡 + 资料展示 + 设置入口）
+ * 屏幕 09 · 个人主页（身份卡 + 简介卡 + 设置与安全入口）
  * 旧实现：app/src/main/assets/web/js/pages/profile.js（`git show 5e3d9ab^`）
  *
- * 这一屏回答「我是谁、我公开了什么」。头像卡片下方展示地区；简介标题右侧的铅笔
- * 打开与用户设置相同的编辑资料抽屉（`services/profile-editor.ts`）。
+ * 这一屏回答「我是谁、我公开了什么」。身份卡右上角的铅笔打开与用户设置相同的
+ * 编辑资料抽屉（`services/profile-editor.ts`）；简介正文与社交账号各占一卡。
+ * 设置与安全两个入口直接是行卡片，不再套一层卡片，避免双重边框。
+ *
  * 头像裁剪、通知、配色、明暗、隐私开关与安全入口仍在 `UserSettingsPage.vue`，
- * 入口有两个：顶栏右侧的设置图标（路由 meta 的 `topAction`）与这一屏的设置卡片。
+ * 入口有两个：顶栏右侧的设置图标（路由 meta 的 `topAction`）与这一屏的设置行。
  *
  * 退出登录仍走 `POST /auth/logout`，一次调用清掉服务端与本地会话。
  */
@@ -29,8 +31,6 @@ import { t } from '@/i18n';
 const COPY = {
   /** 设置入口的说明：把设置页里能改的东西列出来，省得点进去才发现。 */
   settingsMeta: t('profile.settingsSummary'),
-  /** 简介下方社交账号行的前缀，与后面的内容同一字重。 */
-  socialPrefix: t('profile.socialPrefix'),
 };
 
 const router = useRouter();
@@ -138,7 +138,7 @@ const logoutBusy = ref(false);
 function logout(): void {
   confirmSheet({
     title: t('profile.logout'),
-    message: t('profile.guestHint'),
+    message: t('app.logoutMessage'),
     confirmLabel: t('profile.logout'),
     tone: 'danger',
     onConfirm: async () => {
@@ -186,28 +186,20 @@ function logout(): void {
         <span>{{ loadError }}</span>
       </div>
       <div class="profile-stack" :data-busy="loading ? 'true' : undefined">
-        <!-- 身份卡：头像、昵称、角色/状态，以及地区（地区的空态与简介区原来的空态一致） -->
-        <div class="card">
+        <!-- 身份卡：头像、昵称、角色/状态与地区。编辑资料跟在姓名行右侧，打开同一个抽屉。 -->
+        <div class="card" data-tone="fill">
           <div class="row" data-gap="md">
             <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || user.username || '')" large />
             <span class="row-copy">
               <span class="name-line">
-                <strong class="row-title">{{ user.nickname || user.username }}</strong>
+                <strong class="identity-name">{{ user.nickname || user.username }}</strong>
                 <RoleTag :role-code="String(user.role || '')" />
               </span>
               <span class="row-meta">{{ identityMeta() }}</span>
               <span class="row-meta truncate">{{ profileValue('region', 'profile.notFilled') }}</span>
             </span>
-          </div>
-        </div>
-
-        <!-- 简介与社交账号。地区已上收到身份卡；铅笔打开与设置页相同的编辑资料抽屉。 -->
-        <div class="card">
-          <div class="row">
-            <span class="section-label">{{ t('profile.bio') }}</span>
             <button
               class="icon-button"
-              data-inline="true"
               type="button"
               :aria-label="t('settings.profile.editProfile')"
               :disabled="limited"
@@ -217,20 +209,34 @@ function logout(): void {
               <AppIcon name="edit" />
             </button>
           </div>
-          <p class="row-meta">
-            {{ profileValue('bio', 'profile.bioEmpty') }}<br /><br />{{ COPY.socialPrefix
-            }}{{ profileValue('socialMedia', 'profile.notFilled') }}
-          </p>
         </div>
 
-        <!-- 设置入口：与顶栏右侧的设置图标进同一页（头像、通知、隐私、安全都在那里） -->
+        <!-- 简介与社交账号：正文保留用户输入的换行，社交账号单独一行，不再用空行拼在一起。 -->
         <div class="card">
-          <span class="section-label">{{ t('settings.title') }}</span>
+          <span class="section-label">{{ t('profile.bio') }}</span>
+          <p class="bio-text">{{ profileValue('bio', 'profile.bioEmpty') }}</p>
+          <hr class="divider" />
+          <div class="row" data-between="true">
+            <span class="row-meta">{{ t('settings.profile.social') }}</span>
+            <strong class="strong truncate">{{ profileValue('socialMedia', 'profile.notFilled') }}</strong>
+          </div>
+        </div>
+
+        <!-- 设置与安全：独立行卡片，不再套在卡片里 -->
+        <div class="list" data-gap="sm">
           <button class="row-card" type="button" data-pressable="true" @click="router.push('/settings')">
             <span class="dim" aria-hidden="true"><AppIcon name="settings" size="icon icon-sm" /></span>
             <span class="row-copy">
               <strong class="row-title">{{ t('settings.title') }}</strong>
               <span class="row-meta">{{ COPY.settingsMeta }}</span>
+            </span>
+            <AppIcon name="chevronRight" />
+          </button>
+          <button class="row-card" type="button" data-pressable="true" @click="router.push('/security')">
+            <span class="dim" aria-hidden="true"><AppIcon name="shield" size="icon icon-sm" /></span>
+            <span class="row-copy">
+              <strong class="row-title">{{ t('security.title') }}</strong>
+              <span class="row-meta">{{ t('settings.securityMeta') }}</span>
             </span>
             <AppIcon name="chevronRight" />
           </button>
@@ -246,14 +252,23 @@ function logout(): void {
 </template>
 
 <style>
-/* 外壳只给 `.page-surface` 的直接子元素留间距。忙碌标记需要包一层，间距在这一层补回。 */
+/* 外壳只给 .page-surface 的直接子元素留间距。忙碌标记需要包一层，间距在这一层补回。 */
 .profile-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--s4);
+  gap: var(--s5);
 }
 
 .profile-stack > * {
   flex: none;
+}
+
+/* 简介正文：正文色与正文行高，保留用户输入的换行；空态文案也走这段样式。 */
+.bio-text {
+  color: var(--ink);
+  font-size: var(--fs-body);
+  line-height: var(--lh-base);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 </style>

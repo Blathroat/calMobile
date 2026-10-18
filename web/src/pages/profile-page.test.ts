@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, type App } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { createMemoryHistory, createRouter } from 'vue-router';
+import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import ProfilePage from './ProfilePage.vue';
 import AppSheet from '@/components/AppSheet.vue';
 import { api } from '@/app/runtime';
@@ -47,7 +47,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-async function mountProfile(): Promise<void> {
+async function mountProfile(): Promise<Router> {
   const pinia = createPinia();
   setActivePinia(pinia);
   useSessionStore().applyUser({
@@ -59,7 +59,11 @@ async function mountProfile(): Promise<void> {
   });
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/profile', component: ProfilePage }],
+    routes: [
+      { path: '/profile', component: ProfilePage },
+      { path: '/settings', component: { template: '<div />' } },
+      { path: '/security', component: { template: '<div />' } },
+    ],
   });
   await router.push('/profile');
   app = createApp({ render: () => [h(ProfilePage), h(AppSheet)] })
@@ -67,29 +71,33 @@ async function mountProfile(): Promise<void> {
     .use(router);
   app.mount('#profile-test');
   await nextTick();
+  return router;
 }
 
 function cards(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>('.card')];
 }
 
+/** 编辑入口在身份卡右侧，全页只有一个。 */
+function editButton(): HTMLButtonElement | undefined {
+  return document.querySelector<HTMLButtonElement>('button[aria-label="编辑资料"]') ?? undefined;
+}
+
 describe('个人页资料展示与编辑', () => {
-  it('身份卡显示地区，简介区不再列出地区，铅笔打开与设置页相同的编辑抽屉', async () => {
+  it('身份卡显示地区与编辑入口，简介卡展示简介和社交账号，铅笔打开与设置页相同的编辑抽屉', async () => {
     await mountProfile();
     await vi.waitFor(() => expect(cards()[0]?.textContent).toContain('上海'));
     expect(cards()[0]?.textContent).not.toContain('user@example.com');
     expect(cards()[0]?.textContent).not.toContain('未填写邮箱');
+    expect(cards()[0]?.querySelector('.identity-name')?.textContent).toBe('旧昵称');
+    const edit = editButton();
+    expect(edit?.querySelector('svg')).not.toBeNull();
     expect(cards()[1]?.textContent).toContain('已有简介');
-    expect(cards()[1]?.textContent).toContain('社交账号：@user');
-    expect(cards()[1]?.textContent).not.toContain('社交账号@');
+    expect(cards()[1]?.textContent).toContain('社交账号');
+    expect(cards()[1]?.textContent).toContain('@user');
     expect(cards()[1]?.textContent).not.toContain('地区');
     expect(cards()[1]?.textContent).not.toContain('上海');
-    const bioCopy = cards()[1]?.querySelector('p.row-meta');
-    expect(bioCopy?.innerHTML).toContain('<br><br>');
-    expect(bioCopy?.querySelector('.strong')).toBeNull();
 
-    const edit = cards()[1]?.querySelector<HTMLButtonElement>('button[aria-label="编辑资料"]');
-    expect(edit?.querySelector('svg')).not.toBeNull();
     edit?.click();
     await nextTick();
     expect(document.querySelector<HTMLInputElement>('.sheet-panel #settings-nickname')?.value).toBe('旧昵称');
@@ -127,16 +135,26 @@ describe('个人页资料展示与编辑', () => {
   it('受限账号的铅笔不可用，也不会打开抽屉', async () => {
     vi.mocked(api.profile.get).mockResolvedValue({ ...PROFILE, can: { profile: false } });
     await mountProfile();
-    const bio = cards().find((card) => card.textContent?.includes('个人简介'));
-    await vi.waitFor(() => {
-      const edit = bio?.querySelector<HTMLButtonElement>('button[aria-label="编辑资料"]');
-      expect(edit?.disabled).toBe(true);
-    });
-    const edit = bio?.querySelector<HTMLButtonElement>('button[aria-label="编辑资料"]');
+    const edit = editButton();
+    await vi.waitFor(() => expect(edit?.disabled).toBe(true));
     edit?.dispatchEvent(new Event('click'));
     await nextTick();
     expect(document.querySelector('.sheet-panel')).toBeNull();
     expect(toast).toHaveBeenCalledWith('账号已被限制，不能编辑个人信息', 'error');
+  });
+
+  it('设置卡片分别进入用户设置与安全设置', async () => {
+    const router = await mountProfile();
+    await vi.waitFor(() => expect(document.querySelectorAll('button.row-card').length).toBe(2));
+    const [settingsEntry, securityEntry] = [...document.querySelectorAll<HTMLButtonElement>('button.row-card')];
+    expect(settingsEntry?.textContent).toContain('通知、外观、语言与隐私');
+    expect(securityEntry?.textContent).toContain('邮箱与两步验证');
+
+    settingsEntry?.click();
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/settings'));
+    await router.push('/profile');
+    securityEntry?.click();
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/security'));
   });
 
   it('晚到的旧资料不会盖掉刚换上的头像', async () => {

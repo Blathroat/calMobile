@@ -590,8 +590,7 @@
       "unavailable": "该用户未公开资料，或账号已停用。"
     },
     "restricted": "账号已被限制，不能编辑个人信息",
-    "settingsSummary": "编辑资料、修改密码、通知、配色、隐私与安全",
-    "socialPrefix": "社交账号：",
+    "settingsSummary": "通知、外观、语言与隐私",
     "title": "个人主页"
   },
   "registration": {
@@ -795,8 +794,6 @@
     "changeAvatar": "更换头像",
     "emailEmpty": "未填写邮箱",
     "invite": {
-      "alreadyAdmin": "当前身份已经是管理员",
-      "alreadyExhibitor": "当前身份已经是展商",
       "done": "已将身份设为展商",
       "hint": "填写有效邀请码后，身份会变为展商",
       "placeholder": "输入邀请码",
@@ -832,10 +829,8 @@
       "permissionGranted": "已开启通知权限",
       "registrationUpdates": "报名状态变化提醒",
       "requestPermission": "开启系统通知权限",
-      "title": "通知设置",
       "updated": "通知设置已更新"
     },
-    "privacy": "隐私设置",
     "profile": {
       "editProfile": "编辑资料",
       "nickname": "昵称",
@@ -847,6 +842,11 @@
     "registrationsHidden": "已关闭公开展示",
     "registrationsShown": "已开启公开展示",
     "removeAvatar": "移除头像",
+    "section": {
+      "account": "账号",
+      "appearance": "外观",
+      "notifyPrivacy": "通知与隐私"
+    },
     "securityMeta": "邮箱与两步验证",
     "showRegistrations": "在公开页展示我的报名记录",
     "showRegistrationsHint": "关闭后其他人看不到你参加过的展会",
