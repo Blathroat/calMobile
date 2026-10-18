@@ -17,10 +17,10 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
   const asUser = await put('/api/v1/settings', { appTitleZh: 'x' }, { token: tokens.user.token });
   assert.strictEqual(asUser.status, 403);
 
-  // 色板是 8 种，且 index 0 仍是默认的焦糖橙（老用户的强调色不能变）
+  // 色板是 12 种，且 index 0 仍是默认的焦糖橙（老用户的强调色不能变）
   const paletteBefore = await get('/api/v1/settings');
   assert.strictEqual(paletteBefore.body.theme.colors.length, DEFAULT_SETTINGS.theme.colors.length);
-  assert.strictEqual(paletteBefore.body.theme.colors.length, 8, '配色面板要有 8 个色块');
+  assert.strictEqual(paletteBefore.body.theme.colors.length, 12, '配色面板要有 12 个色块');
   assert.strictEqual(paletteBefore.body.theme.colors[0], '#C05621', 'index 0 必须还是默认的焦糖橙');
   assert.deepStrictEqual(
     paletteBefore.body.theme.colors,
@@ -57,7 +57,7 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
 
   // 配色下标同理：超出色板长度时夹到最后一个，而不是原样写入
   const overflow = await put('/api/v1/settings', { themeIndex: 99 }, { token: tokens.admin.token });
-  assert.strictEqual(overflow.body.settings.theme.index, 7, '99 应当被夹到 8 色色板的最后一位');
+  assert.strictEqual(overflow.body.settings.theme.index, 11, '99 应当被夹到 12 色色板的最后一位');
   const negative = await put('/api/v1/settings', { themeIndex: -3 }, { token: tokens.admin.token });
   assert.strictEqual(negative.body.settings.theme.index, 0, '负数应当夹到 0');
 
@@ -116,20 +116,20 @@ test('新增 review.canReviseAttended：老库缺键兜底 false，保存后可�
   }
 });
 
-test('老库的 4 色色板：迁移补到 8 色，且已有的 index 不变', async () => {
+test('老库的 4 色色板：读取时补到 12 色，且已有的 index 不变', async () => {
   // 模拟老库：迁移 0006 之前写入的 theme 只有 4 个颜色
   const legacyColors = DEFAULT_SETTINGS.theme.colors.slice(0, 4);
   const legacy = { index: 3, colors: legacyColors };
   await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [JSON.stringify(legacy), 'theme']);
   try {
-    // 迁移是幂等的：再跑一次也应当把色板补到 8 色
+    // 读取路径上的补齐是幂等的：再跑一次迁移与读取，色板仍是 12 色
     await migrate();
 
     const bootstrap = await get('/api/v1/bootstrap');
     assert.deepStrictEqual(
       bootstrap.body.theme.colors,
       DEFAULT_SETTINGS.theme.colors,
-      `迁移后必须是新的 8 色色板：${JSON.stringify(bootstrap.body.theme.colors)}`,
+      `补齐后必须是新的 12 色色板：${JSON.stringify(bootstrap.body.theme.colors)}`,
     );
     assert.strictEqual(bootstrap.body.theme.index, 3, '已有用户选中的 index 不能被迁移改掉');
     assert.strictEqual(bootstrap.body.theme.colors[3], legacyColors[3], 'index 3 的色值语义保持不变');
@@ -145,14 +145,14 @@ test('老库的 4 色色板：迁移补到 8 色，且已有的 index 不变', a
   }
 });
 
-test('老库色板被手工改坏（非法值 / 重复值）时，读取与夹取仍按 8 色色板', async () => {
+test('老库色板被手工改坏（非法值 / 重复值）时，读取与夹取仍按 12 色色板', async () => {
   await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [
     JSON.stringify({ index: 6, colors: ['#C05621', 'not-a-color', '#C05621', null] }),
     'theme',
   ]);
   try {
     const bootstrap = await get('/api/v1/bootstrap');
-    assert.strictEqual(bootstrap.body.theme.colors.length, 8, '非法与重复的颜色应当被丢掉后补齐');
+    assert.strictEqual(bootstrap.body.theme.colors.length, 12, '非法与重复的颜色应当被丢掉后补齐');
     assert.strictEqual(bootstrap.body.theme.colors[0], '#C05621', '库里的合法项要保留');
     assert.strictEqual(bootstrap.body.theme.index, 6, 'index 落在补齐后的范围里，应当保留');
     assert.strictEqual(bootstrap.body.theme.colors[6], DEFAULT_SETTINGS.theme.colors[6]);
@@ -163,7 +163,7 @@ test('老库色板被手工改坏（非法值 / 重复值）时，读取与夹�
       'theme',
     ]);
     const clamped = await get('/api/v1/settings');
-    assert.strictEqual(clamped.body.theme.index, 7, '老库的越界 index 要夹到 8 色色板的最后一位');
+    assert.strictEqual(clamped.body.theme.index, 11, '老库的越界 index 要夹到 12 色色板的最后一位');
   } finally {
     await pool.query('UPDATE app_settings SET value = $1::jsonb WHERE key = $2', [
       JSON.stringify(DEFAULT_SETTINGS.theme),
@@ -182,7 +182,7 @@ test('个人配色按账号保存：没有个人选择时跟随全局默认', as
   const global = (await get('/api/v1/settings')).body.theme.index;
   const bootstrap = await get('/api/v1/bootstrap', { token: tokens.user.token });
   assert.strictEqual(bootstrap.body.theme.index, global, '没选过配色时应当跟随全局默认');
-  assert.deepStrictEqual(bootstrap.body.theme.colors, DEFAULT_SETTINGS.theme.colors, '色板仍是补齐后的 8 色');
+  assert.deepStrictEqual(bootstrap.body.theme.colors, DEFAULT_SETTINGS.theme.colors, '色板仍是补齐后的 12 色');
 });
 
 test('普通用户设置的配色在自己的 bootstrap 生效，且不串到别人身上', async () => {

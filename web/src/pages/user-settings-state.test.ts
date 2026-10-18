@@ -5,6 +5,7 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import UserSettingsPage from './UserSettingsPage.vue';
 import AppSheet from '@/components/AppSheet.vue';
 import { api } from '@/app/runtime';
+import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { closeSheet, sheet } from '@/services/sheet';
 
@@ -54,11 +55,12 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-async function mountSettings(): Promise<void> {
+async function mountSettings(options: { theme?: { colors: string[]; index: number } } = {}): Promise<void> {
   const pinia = createPinia();
   setActivePinia(pinia);
   // 启动身份摘要中有头像，但完整资料必须成功加载后才可覆盖写入。
   useSessionStore().applyUser({ id: PROFILE.id, username: PROFILE.username, avatar: PROFILE.avatar });
+  if (options.theme) useBootstrapStore().apply({ theme: options.theme });
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/settings', component: UserSettingsPage }],
@@ -148,6 +150,26 @@ describe('设置页独立取数状态', () => {
       node.textContent?.trim(),
     );
     expect(labels).toEqual(['账号', '通知与隐私', '外观', '语言']);
+  });
+
+  it('配色色板按服务端色板渲染，选中项用对勾标出', async () => {
+    const colors = Array.from(
+      { length: 12 },
+      (_, index) =>
+        '#' +
+        String(index + 1)
+          .padStart(2, '0')
+          .repeat(3),
+    );
+    await mountSettings({ theme: { colors, index: 3 } });
+    await vi.waitFor(() => expect(document.querySelectorAll('.swatch')).toHaveLength(12));
+    // 选中只画一个对勾，其余色块保持干净
+    expect(document.querySelectorAll('.swatch svg')).toHaveLength(1);
+    const pressed = [...document.querySelectorAll<HTMLButtonElement>('.swatch')].filter(
+      (item) => item.getAttribute('aria-pressed') === 'true',
+    );
+    expect(pressed).toHaveLength(1);
+    expect(pressed[0]?.querySelector('svg')).not.toBeNull();
   });
 
   it('不再提供安全设置入口', async () => {

@@ -32,6 +32,7 @@ import { toast } from '@/services/toast';
 import { avatarExportMime } from '@/services/validate';
 import { openProfileEditor } from '@/services/profile-editor';
 import LanguagePackCard from '@/components/LanguagePackCard.vue';
+import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import RoleTag from '@/components/RoleTag.vue';
 import AvatarCropper from '@/components/AvatarCropper.vue';
@@ -573,12 +574,15 @@ async function changeMode(value: string): Promise<void> {
               :key="`${index}-${color}`"
               class="swatch"
               type="button"
-              :style="{ background: color }"
               :aria-label="`${t('settings.theme.accent')} ${index + 1}`"
               :aria-pressed="index === accentIndex ? 'true' : 'false'"
               :disabled="accentBusy"
               @click="changeAccent(index)"
-            />
+            >
+              <span class="swatch-dot" :style="{ background: color }">
+                <AppIcon v-if="index === accentIndex" name="check" size="icon icon-sm" />
+              </span>
+            </button>
           </div>
           <p class="field-hint">{{ COPY.accentHint }}</p>
           <hr class="divider" />
@@ -655,27 +659,44 @@ async function changeMode(value: string): Promise<void> {
   justify-self: start;
 }
 
-/* 配色色板：四列等宽，圆形随格子自适应并封顶；8 色正好两行。 */
+/* 配色色板：12 色排成两行小圆点。每个按钮保留 44px 命中区，圆点只是视觉尺寸；
+   选中用描边 + 对勾双重线索，不再用一颗大圆占满格子。 */
 .swatch-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--s2);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--s1);
 }
 
 .swatch {
   width: 100%;
-  max-width: 64px;
-  height: auto;
-  aspect-ratio: 1;
-  justify-self: center;
+  min-height: var(--touch);
   display: grid;
   place-items: center;
-  border: var(--hairline) solid var(--stroke);
-  border-radius: var(--r-pill);
+  background: transparent;
 }
 
-.swatch[aria-pressed='true'] {
-  border: 3px solid var(--ink);
-  box-shadow: 0 0 0 3px var(--accent-edge);
+.swatch-dot {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  color: var(--swatch-mark);
+  transition: transform var(--motion-fast) var(--ease);
+}
+
+.swatch[aria-pressed='true'] .swatch-dot {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.swatch[disabled] {
+  opacity: 0.6;
+}
+
+@media (hover: hover) {
+  .swatch:hover .swatch-dot {
+    transform: scale(1.08);
+  }
 }
 </style>
