@@ -192,7 +192,7 @@ test('报名窗口由服务端按数据库当前日期判断', async () => {
       registrationStart: isoDateAfter(30),
       registrationEnd: isoDateAfter(50),
       category: '智能家居',
-      status: '无需审核',
+      status: 'optional',
     },
     { token: tokens.exhibitor.token },
   );
@@ -223,7 +223,7 @@ test('报名窗口由服务端按数据库当前日期判断', async () => {
       registrationStart: isoDateAfter(-30),
       registrationEnd: isoDateAfter(-1),
       category: '智能家居',
-      status: '无需审核',
+      status: 'optional',
     },
     { token: tokens.exhibitor.token },
   );
@@ -255,7 +255,7 @@ test('报名收集项的必填与选项由服务端校验', async () => {
       time: '09:00-17:00',
       date: isoDateAfter(30),
       category: '智能家居',
-      status: '无需审核',
+      status: 'optional',
     },
     { token: tokens.exhibitor.token },
   );
@@ -290,9 +290,9 @@ test('报名收集项的必填与选项由服务端校验', async () => {
       `/api/v1/exhibitions/${exhibitionId}/fields`,
       {
         fields: [
-          { title: '姓名 / 公司名称', type: '文本', required: true, options: [] },
-          { title: '参观身份', type: '单选', required: true, options: ['专业观众', '媒体'] },
-          { title: '报名需求', type: '多选', required: false, options: ['停车位', '翻译服务'] },
+          { title: '姓名 / 公司名称', type: 'text', required: true, options: [] },
+          { title: '参观身份', type: 'radio', required: true, options: ['专业观众', '媒体'] },
+          { title: '报名需求', type: 'checkbox', required: false, options: ['停车位', '翻译服务'] },
         ],
       },
       { token: tokens.exhibitor.token },

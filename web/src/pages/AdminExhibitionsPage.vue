@@ -50,7 +50,7 @@ usePullRefresh(
   <template v-else>
     <div class="row" data-between="true">
       <span class="section-label">{{ t('admin.exhibitions.all') }}</span>
-      <span class="pill">{{ `${items.length} 个展会` }}</span>
+      <span class="pill">{{ t('exhibition.list.exhibitionCount', { count: items.length }) }}</span>
     </div>
     <StateBlock
       v-if="items.length === 0"

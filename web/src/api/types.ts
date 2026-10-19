@@ -32,7 +32,9 @@ export interface AuthResult extends JsonObject {
 }
 
 /**
- * 当前登录用户。`role` 是英文代码，展示用 `roleLabel`（中文映射只在服务端做）。
+ * 当前登录用户。`role` 与 `statusCode` 是英文代码，展示时用
+ * `services/status.ts` 的 `roleLabel()` / `userStatusLabel()` 取文案；
+ * `roleLabel` / `status` 是服务端下发的**兼容字段**（旧快照还在用），新代码不要读。
  * `can` 是权限位，页面按 `can.exhibitor` / `can.admin` 决定入口显隐；它只是界面依据，
  * 真正的授权由后端判定，不能拿它当安全边界。
  */
@@ -41,12 +43,16 @@ export interface User extends JsonObject {
   username?: string;
   nickname?: string;
   role?: string;
+  /** 服务端下发的旧展示字段，新代码用 `roleLabel(role)`。 */
   roleLabel?: string;
   /** 限时展商的到期时间（ISO 字符串）；空串表示永久，到期后角色会变回普通用户。 */
   exhibitorExpiresAt?: string;
   /** 展商时长已经走完（角色已降为普通用户），用于页面说明原因。 */
   exhibitorExpired?: boolean;
+  /** 服务端下发的旧展示字段，新代码用 `userStatusLabel(statusCode)`。 */
   status?: string;
+  /** 账号状态 code：active / limited / banned。 */
+  statusCode?: string;
   loggedIn?: boolean;
   guest?: boolean;
   can?: Record<string, boolean>;

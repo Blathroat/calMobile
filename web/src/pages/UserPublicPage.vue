@@ -26,6 +26,7 @@ import RoleTag from '@/components/RoleTag.vue';
 import { formatRecordDate } from '@/services/format';
 import { coverOf } from '@/services/cover';
 import type { JsonObject } from '@/api/types';
+import { exhibitionStatusLabel, registrationStatusLabel, statusTone } from '@/services/status';
 import { t } from '@/i18n';
 
 const route = useRoute();
@@ -91,7 +92,7 @@ const COPY = {
 
 /** 报名人数的量词放在这里，模板里不出现中文。 */
 function registrationCountLabel(item: JsonObject): string {
-  return `${Number(item.registrationCount ?? 0)} 人报名`;
+  return t('profile.public.registrationCount', { count: Number(item.registrationCount ?? 0) });
 }
 
 function asList(value: unknown): JsonObject[] {
@@ -231,7 +232,7 @@ usePullRefresh(
     <div v-if="hosted.length > 0" class="card">
       <div class="row" data-between="true">
         <span class="section-label">{{ COPY.hostedTitle }}</span>
-        <span class="pill">{{ hosted.length }} 个</span>
+        <span class="pill">{{ t('profile.public.hostedCount', { count: hosted.length }) }}</span>
       </div>
       <div class="list" data-gap="sm">
         <button
@@ -248,7 +249,10 @@ usePullRefresh(
             <span class="row-meta">{{ `${item.dateLabel || item.date} · ${item.venue}` }}</span>
             <span class="row-meta">{{ registrationCountLabel(item) }}</span>
           </span>
-          <StatusTag :text="String(item.status || '')" />
+          <StatusTag
+            :text="exhibitionStatusLabel(String(item.statusCode || ''))"
+            :tone="statusTone(String(item.statusCode || ''))"
+          />
         </button>
       </div>
     </div>
@@ -256,16 +260,21 @@ usePullRefresh(
     <div class="card">
       <div class="row" data-between="true">
         <span class="section-label">{{ t('profile.public.attendedExhibitions') }}</span>
-        <span class="pill">{{ registrations.length }} 条</span>
+        <span class="pill">{{ t('profile.public.recordCount', { count: registrations.length }) }}</span>
       </div>
       <div v-if="registrations.length > 0" class="list" data-gap="sm">
         <div v-for="record in registrations" :key="String(record.id || record.exhibitionTitle)" class="row-card">
           <MediaBox class-name="thumb thumb-cover thumb-sm" />
           <span class="row-copy">
             <strong class="row-title truncate">{{ record.exhibitionTitle }}</strong>
-            <span class="row-meta">{{ formatRecordDate(record) }} · {{ record.statusLabel }}</span>
+            <span class="row-meta"
+              >{{ formatRecordDate(record) }} · {{ registrationStatusLabel(String(record.statusCode || '')) }}</span
+            >
           </span>
-          <StatusTag :text="String(record.statusLabel || '')" />
+          <StatusTag
+            :text="registrationStatusLabel(String(record.statusCode || ''))"
+            :tone="statusTone(String(record.statusCode || ''))"
+          />
         </div>
       </div>
       <p v-else class="row-meta">

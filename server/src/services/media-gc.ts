@@ -169,7 +169,7 @@ export async function ensureRoom(incomingBytes: number): Promise<void> {
   const settings = await readServerSettings();
   const limit = settings.upload.storageMb * 1024 * 1024;
   // 新文件比整个上限还大时，删旧文件也放不下，所以一份都不删。
-  if (incomingBytes > limit) throw badRequest('存储空间已满，已停止新上传');
+  if (incomingBytes > limit) throw badRequest('存储空间已满，已停止新上传', { code: 'media.storageFull' });
   const config = resolveUploadConfig();
   const files = await listUploadFiles(config);
   const referenced = await referencedKeys();
@@ -193,7 +193,7 @@ export async function ensureRoom(incomingBytes: number): Promise<void> {
     }
     await stripMissing(plan.evict);
   }
-  if (!plan.ok) throw badRequest('存储空间已满，已停止新上传');
+  if (!plan.ok) throw badRequest('存储空间已满，已停止新上传', { code: 'media.storageFull' });
 }
 
 /** 管理员看到的占用。先清一轮，条上的数字不把过期垃圾算进去。 */

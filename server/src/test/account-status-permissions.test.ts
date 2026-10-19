@@ -85,7 +85,7 @@ test('受限账号不能报名 / 发布展会 / 编辑个人信息，其余照�
         venue: '测试展馆',
         time: '09:00-17:00',
         date: '2026-09-20',
-        status: '需审核',
+        status: 'review',
       },
       { token: tokens.user.token },
     );
@@ -136,7 +136,7 @@ test('受限账号不能报名 / 发布展会 / 编辑个人信息，其余照�
         date: '2026-09-21',
         registrationStart: '2026-01-01',
         registrationEnd: '2026-12-31',
-        status: '无需审核',
+        status: 'optional',
       },
       { token: tokens.admin.token },
     );
@@ -231,7 +231,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
         time: '09:00-17:00',
         date: isoDateAfter(30),
         category: '智能家居',
-        status: '无需审核',
+        status: 'optional',
         qrEnabled: true,
       },
       { token: tokens.exhibitor.token },
@@ -281,7 +281,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
       name: '暂停 / 恢复报名',
       message: '账号已被限制，不能修改报名设置',
       send: (token: string, id: string, _code: string) =>
-        put(`/api/v1/exhibitions/${id}/status`, { status: '无需审核' }, { token }),
+        put(`/api/v1/exhibitions/${id}/status`, { status: 'optional' }, { token }),
     },
     {
       name: '改报名收集项',
@@ -290,7 +290,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
         put(
           `/api/v1/exhibitions/${id}/fields`,
           {
-            fields: [{ title: '受限账号不该改成的问题', type: '文本', required: false }],
+            fields: [{ title: '受限账号不该改成的问题', type: 'text', required: false }],
           },
           { token },
         ),
@@ -356,7 +356,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
 
     const paused = await put(
       `/api/v1/exhibitions/${exhibitionA}/status`,
-      { status: '需审核' },
+      { status: 'review' },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(paused.body.ok, true, `恢复正常后改报名设置应当成功：${JSON.stringify(paused.body)}`);
@@ -365,7 +365,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     const refields = await put(
       `/api/v1/exhibitions/${exhibitionA}/fields`,
       {
-        fields: [{ title: '恢复正常后的问题', type: '文本', required: false }],
+        fields: [{ title: '恢复正常后的问题', type: 'text', required: false }],
       },
       { token: tokens.exhibitor.token },
     );
@@ -395,7 +395,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     assert.strictEqual(adminEdit.body.ok, true, `管理员受限态下编辑展会应当成功：${JSON.stringify(adminEdit.body)}`);
     const adminStatus = await put(
       `/api/v1/exhibitions/${exhibitionB}/status`,
-      { status: '需审核' },
+      { status: 'review' },
       { token: tokens.admin.token },
     );
     assert.strictEqual(
@@ -406,7 +406,7 @@ test('受限账号不能编辑 / 删除展会、改报名设置与核销，恢�
     const adminFields = await put(
       `/api/v1/exhibitions/${exhibitionB}/fields`,
       {
-        fields: [{ title: '管理员受限态下改的收集项', type: '文本', required: false }],
+        fields: [{ title: '管理员受限态下改的收集项', type: 'text', required: false }],
       },
       { token: tokens.admin.token },
     );

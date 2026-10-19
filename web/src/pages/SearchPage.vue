@@ -23,6 +23,7 @@ import RoleTag from '@/components/RoleTag.vue';
 import { truncate } from '@/services/format';
 import { coverOf } from '@/services/cover';
 import type { JsonObject } from '@/api/types';
+import { modeLabel, roleLabel, statusTone, userStatusLabel } from '@/services/status';
 import { t } from '@/i18n';
 
 /** 输入防抖：停手 220ms 才真正发请求，避免逐字打字打出一串请求。 */
@@ -43,7 +44,9 @@ const users = computed(() => asList(results.value?.users));
 const hasContent = computed(() => results.value !== undefined);
 const isEmptyResult = computed(() => hasContent.value && exhibitions.value.length === 0 && users.value.length === 0);
 const countLabel = computed(() =>
-  !keyword.value.trim() || !hasContent.value ? t('search.zeroCount') : `${Number(results.value?.count) || 0} 条结果`,
+  !keyword.value.trim() || !hasContent.value
+    ? t('search.zeroCount')
+    : t('search.resultCount', { count: Number(results.value?.count) || 0 }),
 );
 
 let timer: number | undefined;
@@ -176,14 +179,14 @@ onBeforeUnmount(() => {
     <StateBlock
       v-else-if="isEmptyResult"
       icon="search"
-      :title="`没有找到与“${searched}”相关的结果`"
+      :title="t('search.noMatch', { query: searched })"
       :description="t('search.emptyHint')"
       :action-label="t('exhibition.detail.backHome')"
       @action="router.push('/home')"
     />
     <div v-else class="stack">
       <template v-if="exhibitions.length > 0">
-        <span class="section-label">展会 · {{ exhibitions.length }}</span>
+        <span class="section-label">{{ t('search.exhibitionSection', { count: exhibitions.length }) }}</span>
         <div class="list" data-gap="sm">
           <button
             v-for="item in exhibitions"
@@ -202,7 +205,10 @@ onBeforeUnmount(() => {
             <span class="row-copy">
               <span class="row" data-gap="md">
                 <strong class="row-title truncate">{{ item.title }}</strong>
-                <StatusTag :text="String(item.modeLabel || item.status || '')" />
+                <StatusTag
+                  :text="modeLabel(String(item.statusCode || ''))"
+                  :tone="statusTone(String(item.statusCode || ''))"
+                />
               </span>
               <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
               <span class="row-meta truncate">{{ item.venue }}</span>
@@ -212,7 +218,7 @@ onBeforeUnmount(() => {
       </template>
 
       <template v-if="users.length > 0">
-        <span class="section-label">用户 · {{ users.length }}</span>
+        <span class="section-label">{{ t('search.userSection', { count: users.length }) }}</span>
         <div class="list" data-gap="sm">
           <button
             v-for="user in users"
@@ -229,13 +235,16 @@ onBeforeUnmount(() => {
                 <strong class="row-title truncate">{{
                   user.roleCode === 'exhibitor' || user.roleCode === 'admin'
                     ? user.nickname
-                    : `${user.nickname} · ${user.role}`
+                    : `${user.nickname} · ${roleLabel(String(user.roleCode || ''))}`
                 }}</strong>
                 <RoleTag :role-code="String(user.roleCode || '')" />
               </span>
               <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
             </span>
-            <StatusTag :text="String(user.status || '')" />
+            <StatusTag
+              :text="userStatusLabel(String(user.statusCode || ''))"
+              :tone="statusTone(String(user.statusCode || ''))"
+            />
           </button>
         </div>
       </template>

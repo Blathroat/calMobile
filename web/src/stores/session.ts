@@ -19,7 +19,7 @@
  *   （默认拒绝）语义相反；空权限表下它会把一切都放行，因此守卫必须先用 `requiresAuth` 挡住匿名访问。
  * - state 不持久化：冷启动时是空会话，真实登录态等 `bootApp()` 落定（见 `main.ts`）。
  */
-import { t } from '@/i18n';
+import { roleLabel } from '@/services/status';
 import { defineStore } from 'pinia';
 import type { User } from '@/api/types';
 
@@ -43,13 +43,13 @@ export interface SessionState {
  * 空用户兜底：角色 guest、标签取注入文案、权限表为空。
  * @returns 一份全新的用户对象，避免多个 store 实例共享同一引用
  */
-const emptyUser = (): User => ({ role: 'guest', roleLabel: t('auth.login.guest'), can: {} });
+const emptyUser = (): User => ({ role: 'guest', roleLabel: roleLabel('guest'), can: {} });
 
 /** 当前会话；写入口是 `applyUser()` / `clear()` / `expire()`，别直接改 state。 */
 export const useSessionStore = defineStore('session', {
   state: (): SessionState => ({ loggedIn: false, expired: false, guest: true, user: emptyUser(), profileEpoch: 0 }),
   getters: {
-    /** 当前角色代码（后端下发英文代码，展示用 `user.roleLabel`）；缺失时按 guest 处理。 */
+    /** 当前角色代码（后端下发 code，展示用 `services/status.ts` 的 `roleLabel()`）；缺失时按 guest 处理。 */
     role: (state) => String(state.user.role ?? 'guest'),
     /** 受限账号：能看不能改（不能发布 / 修改 / 删除展会、不能核销），页面据此禁用按钮。 */
     limited: (state) => state.user.can?.limited === true,

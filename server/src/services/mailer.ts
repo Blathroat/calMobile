@@ -51,6 +51,9 @@ export interface SendResult {
   transport: string;
   messageId?: string;
   error?: string;
+  /** 稳定错误码与占位值（供前端本地化）；没有码时只发中文。 */
+  errorCode?: string;
+  errorParams?: Record<string, string | number>;
   ms: number;
 }
 
@@ -193,6 +196,8 @@ export async function send(message: MailMessage, options: { config?: MailConfig 
       ok: false,
       transport: config.transport,
       error: `邮件通道未配置：${config.problems.join('；')}`,
+      errorCode: 'mail.notConfigured',
+      errorParams: { problems: config.problems.join('；') },
       ms: ms(),
     };
   }

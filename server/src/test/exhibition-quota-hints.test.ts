@@ -31,7 +31,7 @@ test('展商可同时筹备的展会数上限：超出后不能再新建，管�
     time: '09:00-17:00',
     date: isoDateAfter(35),
     category: '智能家居',
-    status: '无需审核',
+    status: 'optional',
     qrEnabled: false,
   };
   try {
@@ -89,7 +89,7 @@ async function withOneExhibitionSlot(
         time: '09:00-17:00',
         date,
         category: '智能家居',
-        status: '无需审核',
+        status: 'optional',
         qrEnabled: false,
       },
       { token: tokens.exhibitor.token },

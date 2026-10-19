@@ -127,7 +127,7 @@ describe('简介加载、编辑与保存', () => {
       venue: '',
       date: '',
       time: '09:00-17:00',
-      status: '需审核',
+      status: 'review',
       category: '',
       description: '草稿',
       imageUri: '',

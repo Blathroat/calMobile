@@ -9,6 +9,7 @@
  */
 import AppIcon from '@/components/AppIcon.vue';
 import SegControl from '@/components/SegControl.vue';
+import { FIELD_TYPE, fieldTypeLabel } from '@/services/status';
 import { t } from '@/i18n';
 
 export interface CollectField {
@@ -32,16 +33,13 @@ const props = defineProps<{
   disabled?: boolean;
 }>();
 
-const FIELD_TYPES = ['文本', '单选', '多选'] as const;
-const TYPE_ITEMS = FIELD_TYPES.map((type) => ({ value: type, label: type }));
+const FIELD_TYPES = [FIELD_TYPE.TEXT, FIELD_TYPE.RADIO, FIELD_TYPE.CHECKBOX] as const;
+const TYPE_ITEMS = FIELD_TYPES.map((type) => ({ value: type, label: fieldTypeLabel(type) }));
 
 const COPY = {
   title: t('exhibition.editor.heading'),
   type: t('registration.fields.fieldType'),
   remove: t('common.delete'),
-  option: t('registration.fields.option'),
-  ordinal: t('registration.fields.ordinalPrefix'),
-  unit: t('registration.fields.itemUnit'),
   placeholder: t('registration.fields.questionPlaceholder'),
   empty: t('registration.fields.emptyHint'),
   textHint: t('registration.fields.textInputHint'),
@@ -50,7 +48,7 @@ const COPY = {
 };
 
 function addField(): void {
-  props.fields.push({ title: '', type: '文本', required: false, options: [] });
+  props.fields.push({ title: '', type: FIELD_TYPE.TEXT, required: false, options: [] });
 }
 
 function removeField(index: number): void {
@@ -60,7 +58,7 @@ function removeField(index: number): void {
 function changeFieldType(item: CollectField, type: string): void {
   item.type = type;
   // 切到单选 / 多选时留出一格。一个选项就够用，多的由编辑的人自己加。
-  if (type !== '文本' && item.options.length === 0) item.options = [''];
+  if (type !== FIELD_TYPE.TEXT && item.options.length === 0) item.options = [''];
 }
 
 function addOption(item: CollectField): void {
@@ -72,25 +70,25 @@ function removeOption(item: CollectField, index: number): void {
 }
 
 function isChoice(item: CollectField): boolean {
-  return item.type === '单选' || item.type === '多选';
+  return item.type === FIELD_TYPE.RADIO || item.type === FIELD_TYPE.CHECKBOX;
 }
 
 function typeHint(item: CollectField): string {
-  if (item.type === '单选') return COPY.radioHint;
-  if (item.type === '多选') return COPY.checkHint;
+  if (item.type === FIELD_TYPE.RADIO) return COPY.radioHint;
+  if (item.type === FIELD_TYPE.CHECKBOX) return COPY.checkHint;
   return COPY.textHint;
 }
 
 function optionLabel(index: number): string {
-  return `${COPY.option} ${index + 1}`;
+  return t('registration.fields.optionLabel', { index: index + 1 });
 }
 
 function optionMax(item: CollectField): number {
-  return item.type === '多选' ? (props.checkMax ?? 60) : (props.radioMax ?? 60);
+  return item.type === FIELD_TYPE.CHECKBOX ? (props.checkMax ?? 60) : (props.radioMax ?? 60);
 }
 
 function itemLabel(index: number): string {
-  return `${COPY.ordinal} ${index + 1} ${COPY.unit}`;
+  return t('registration.fields.itemLabel', { index: index + 1 });
 }
 </script>
 
@@ -98,7 +96,7 @@ function itemLabel(index: number): string {
   <div class="card">
     <div class="row" data-between="true">
       <span class="section-label">{{ label }}</span>
-      <span class="pill">{{ `${fields.length} 项` }}</span>
+      <span class="pill">{{ t('registration.fields.countItems', { count: fields.length }) }}</span>
     </div>
     <p v-if="hint" class="field-hint">{{ hint }}</p>
     <p v-if="fields.length === 0" class="field-hint">{{ COPY.empty }}</p>
@@ -130,7 +128,7 @@ function itemLabel(index: number): string {
           v-if="isChoice(item)"
           class="collect-options"
           role="group"
-          :aria-label="item.type === '单选' ? t('admin.limits.radioOption') : t('admin.limits.checkOption')"
+          :aria-label="item.type === FIELD_TYPE.RADIO ? t('admin.limits.radioOption') : t('admin.limits.checkOption')"
         >
           <div v-for="(option, optionIndex) in item.options" :key="optionIndex" class="option-row">
             <span class="option-index">{{ optionIndex + 1 }}</span>
@@ -145,7 +143,7 @@ function itemLabel(index: number): string {
             <button
               class="icon-button option-remove"
               type="button"
-              :aria-label="`删除选项 ${optionIndex + 1}`"
+              :aria-label="t('registration.fields.removeOptionAria', { index: optionIndex + 1 })"
               :disabled="disabled"
               @click="removeOption(item, optionIndex)"
             >
@@ -159,7 +157,7 @@ function itemLabel(index: number): string {
         <div class="collect-foot">
           <label class="tick" :data-on="item.required ? 'true' : 'false'">
             <input v-model="item.required" type="checkbox" :disabled="disabled" />
-            <span>{{ item.required ? '必填' : '选填' }}</span>
+            <span>{{ item.required ? t('registration.fields.required') : t('registration.fields.optional') }}</span>
           </label>
           <span class="collect-ordinal">{{ itemLabel(index) }}</span>
           <button

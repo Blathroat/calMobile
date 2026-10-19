@@ -71,7 +71,7 @@ describe('用户公开页身份卡', () => {
       ...PROFILE,
       showRegistrations: true,
       attendedCount: 4,
-      registrations: [{ id: 'r1', exhibitionTitle: '展会甲', statusLabel: '已参加' }],
+      registrations: [{ id: 'r1', exhibitionTitle: '展会甲', statusCode: 'attended' }],
     });
     await mountPublic();
     await vi.waitFor(() => expect(document.body.textContent).toContain('展会甲'));

@@ -68,7 +68,7 @@ const stats = computed(() => {
   const text = content.value;
   const lines = text === '' ? 0 : text.split(/\r?\n/).length;
   const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
-  return `${lines} 行 · ${words} 词`;
+  return t('exhibition.editor.stats', { lines, words });
 });
 
 /**
@@ -90,10 +90,13 @@ const media = computed<MediaTile[]>(() => {
 const mediaHint = computed(() => {
   const imageCount = Number(bootstrap.media.imageCount) || 8;
   const imageSize = Number(bootstrap.media.imageSizeMb) || 10;
-  return (
-    `媒体数量与大小受服务器设置限制：图片 ${imageCount} 张 / 单张 ${imageSize} MB，` +
-    `视频 ${uploadCountLimit('video')} 个 / 单个不超过 ${uploadSizeLimitMb('video')} MB；${t('exhibition.editor.mediaUsesShortUrl')}`
-  );
+  return t('exhibition.editor.mediaHint', {
+    imageCount,
+    imageSize,
+    videoCount: uploadCountLimit('video'),
+    videoSize: uploadSizeLimitMb('video'),
+    shortUrl: t('exhibition.editor.mediaUsesShortUrl'),
+  });
 });
 
 // ── 取数 ─────────────────────────────────────────────────────────
@@ -216,7 +219,7 @@ async function insertImage(): Promise<void> {
   const max = Number(bootstrap.media.imageCount) || 8;
   const current = media.value.filter((item) => item.kind === 'image').length;
   if (current >= max) {
-    toast(`图片数量已达上限（${max} 张）`, 'error');
+    toast(t('exhibition.editor.imageLimitReached', { max }), 'error');
     return;
   }
   try {
@@ -226,12 +229,22 @@ async function insertImage(): Promise<void> {
       return;
     }
     const url = await publishImportedMedia('image', result);
-    appendText(`\n\n![展会图片](${url})\n\n`);
+    appendText(`\n\n![${t('exhibition.editor.imageAlt')}](${url})\n\n`);
     const size = formatBytes(result.bytes);
-    toast(result.compressed ? `图片已压缩为 ${size} 并插入` : `图片已插入（${size}）`, 'success');
+    toast(
+      result.compressed
+        ? t('exhibition.editor.imageInsertedCompressed', { size })
+        : t('exhibition.editor.imageInserted', { size }),
+      'success',
+    );
   } catch (reason) {
     if (isCancelled(reason)) return;
-    toast(reason instanceof Error ? reason.message : `请选择 ${formatsHint('image')} 格式的图片`, 'error');
+    toast(
+      reason instanceof Error
+        ? reason.message
+        : t('exhibition.editor.imageFormatHint', { formats: formatsHint('image') }),
+      'error',
+    );
   }
 }
 
@@ -240,7 +253,7 @@ async function insertVideo(): Promise<void> {
   const max = uploadCountLimit('video');
   const current = media.value.filter((item) => item.kind === 'video').length;
   if (current >= max) {
-    toast(`视频数量已达上限（${max} 个）`, 'error');
+    toast(t('exhibition.editor.videoLimitReached', { max }), 'error');
     return;
   }
   try {
@@ -258,10 +271,15 @@ async function insertVideo(): Promise<void> {
     }
     const url = await publishImportedMedia('video', result);
     appendText(`\n\n<video controls src="${url}"></video>\n\n`);
-    toast(`视频已插入（${formatBytes(result.bytes)}）`, 'success');
+    toast(t('exhibition.editor.videoInserted', { size: formatBytes(result.bytes) }), 'success');
   } catch (reason) {
     if (isCancelled(reason)) return;
-    toast(reason instanceof Error ? reason.message : `请选择 ${formatsHint('video')} 格式的视频`, 'error');
+    toast(
+      reason instanceof Error
+        ? reason.message
+        : t('exhibition.editor.videoFormatHint', { formats: formatsHint('video') }),
+      'error',
+    );
   }
 }
 
@@ -352,7 +370,10 @@ async function save(): Promise<void> {
     try {
       patchExhibitionDraft(markdown);
       const summary = plainText(markdownToHtml(markdown), 20);
-      toast(markdown ? `简介已保存（${summary}）` : t('exhibition.editor.descriptionCleared'), 'success');
+      toast(
+        markdown ? t('exhibition.editor.descriptionSaved', { summary }) : t('exhibition.editor.descriptionCleared'),
+        'success',
+      );
       await router.back();
     } finally {
       saving.value = false;
@@ -367,7 +388,7 @@ async function save(): Promise<void> {
       title: exhibition.value.title,
       venue: exhibition.value.venue,
       time: exhibition.value.time,
-      status: exhibition.value.status,
+      status: exhibition.value.statusCode,
       category: exhibition.value.category,
       date: exhibition.value.date,
       description: markdown,
@@ -383,7 +404,10 @@ async function save(): Promise<void> {
       return;
     }
     const summary = plainText(markdownToHtml(markdown), 20);
-    toast(markdown ? `简介已保存（${summary}）` : t('exhibition.editor.descriptionCleared'), 'success');
+    toast(
+      markdown ? t('exhibition.editor.descriptionSaved', { summary }) : t('exhibition.editor.descriptionCleared'),
+      'success',
+    );
     await router.replace(`/exhibition-form/${encodeURIComponent(String(exhibition.value.id ?? exhibitionId.value))}`);
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -436,7 +460,7 @@ function escapeRegExp(value: string): string {
         type="button"
         :aria-pressed="false"
         :title="t('exhibition.editor.bold')"
-        @click="surround('**', '**', '文本')"
+        @click="surround('**', '**', t('exhibition.editor.textPlaceholder'))"
       >
         <strong>B</strong>
       </button>
@@ -444,7 +468,7 @@ function escapeRegExp(value: string): string {
         type="button"
         :aria-pressed="false"
         :title="t('exhibition.editor.italic')"
-        @click="surround('*', '*', '文本')"
+        @click="surround('*', '*', t('exhibition.editor.textPlaceholder'))"
       >
         <em>I</em>
       </button>
@@ -466,7 +490,7 @@ function escapeRegExp(value: string): string {
         type="button"
         :aria-pressed="false"
         :title="t('exhibition.editor.link')"
-        @click="surround('[', '](https://)', '链接文字')"
+        @click="surround('[', '](https://)', t('exhibition.editor.linkPlaceholder'))"
       >
         <AppIcon name="share" size="icon icon-sm" />
       </button>
@@ -535,7 +559,9 @@ function escapeRegExp(value: string): string {
     <div class="stack" data-gap="sm">
       <div class="row" data-between="true">
         <span class="section-label">{{ t('exhibition.editor.insertImage') }}</span>
-        <span v-if="media.length > 0" class="pill">{{ `${media.length} 项` }}</span>
+        <span v-if="media.length > 0" class="pill">{{
+          t('exhibition.editor.mediaCount', { count: media.length })
+        }}</span>
       </div>
       <p v-if="media.length === 0" class="field-hint">{{ t('exhibition.form.emptyDescription') }}</p>
       <div v-else class="media-grid">

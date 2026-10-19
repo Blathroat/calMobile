@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { z } from 'zod';
 import { DEFAULT_SETTINGS } from '../config/migrate.js';
 import { ApiError } from './errors.js';
 import {
@@ -10,6 +11,7 @@ import {
   stringListSchema,
   textSchema,
   timeRangeSchema,
+  validationCode,
 } from './validation.js';
 import {
   exhibitionStatusSchema,
@@ -30,11 +32,15 @@ import {
 const limits = DEFAULT_SETTINGS.limits;
 
 function messageOf(run: () => unknown): string {
+  return errorOf(run).message;
+}
+
+function errorOf(run: () => unknown): ApiError {
   try {
     run();
   } catch (error) {
     assert.ok(error instanceof ApiError);
-    return error.message;
+    return error;
   }
   assert.fail('应当校验失败');
 }
@@ -144,20 +150,22 @@ test('展会 schema 拒绝非法日期并保留报名日期顺序规则', () => 
 test('收集项的选项按单选和多选各自的上限拦住', () => {
   assert.equal(
     messageOf(() =>
-      parseSchema(fieldsSchema({ ...limits, radioOption: 2 }), [{ title: '来源', type: '单选', options: ['朋友们'] }]),
+      parseSchema(fieldsSchema({ ...limits, radioOption: 2 }), [{ title: '来源', type: 'radio', options: ['朋友们'] }]),
     ),
     '单选选项最多 2 个字符',
   );
   assert.equal(
     messageOf(() =>
-      parseSchema(fieldsSchema({ ...limits, checkOption: 2 }), [{ title: '需求', type: '多选', options: ['停车位'] }]),
+      parseSchema(fieldsSchema({ ...limits, checkOption: 2 }), [
+        { title: '需求', type: 'checkbox', options: ['停车位'] },
+      ]),
     ),
     '多选选项最多 2 个字符',
   );
   assert.deepEqual(
     parseSchema(fieldsSchema({ ...limits, radioOption: 2, checkOption: 2 }), [
-      { title: '来源', type: '单选', options: ['友'] },
-      { title: '需求', type: '多选', options: ['车'] },
+      { title: '来源', type: 'radio', options: ['友'] },
+      { title: '需求', type: 'checkbox', options: ['车'] },
     ]).map((item) => item.options),
     [['友'], ['车']],
   );
@@ -165,7 +173,7 @@ test('收集项的选项按单选和多选各自的上限拦住', () => {
 
 test('收集项 schema 限制数组长度、项类型和动态标题上限', () => {
   assert.deepEqual(
-    parseSchema(fieldsSchema(limits), [{ title: '说明', type: '文本', options: ['x'.repeat(61)] }])[0]?.options,
+    parseSchema(fieldsSchema(limits), [{ title: '说明', type: 'text', options: ['x'.repeat(61)] }])[0]?.options,
     [],
   );
   assert.equal(
@@ -178,7 +186,7 @@ test('收集项 schema 限制数组长度、项类型和动态标题上限', () 
   );
   assert.equal(
     messageOf(() => parseSchema(fieldsSchema(limits), [{ title: '有效标题', type: '未知' }])),
-    '收集项类型只能是 文本 / 单选 / 多选',
+    '收集项类型只能是 text / radio / checkbox',
   );
   assert.equal(
     messageOf(() => parseSchema(fieldsSchema({ ...limits, fieldTitle: 2 }), [{ title: '过长标题' }])),
@@ -238,28 +246,84 @@ test('登录、重置密码和修改密码的中文错误保持一致', () => {
 });
 
 test('状态白名单和月份范围由 schema 校验', () => {
+  // 协议值是 code；旧中文仍要能写进来（老客户端 / 老表单），两套都验一遍。
+  assert.equal(parseSchema(exhibitionStatusSchema, { status: 'review' }).status, 'review');
   assert.equal(parseSchema(exhibitionStatusSchema, { status: '需审核' }).status, 'review');
   assert.equal(
     messageOf(() => parseSchema(exhibitionStatusSchema, { status: '未知' })),
-    '报名方式只能是 需审核 / 无需审核 / 仅展示 / 截止报名 / 已结束',
+    '报名方式只能是 review / optional / display / closed / ended',
   );
+  assert.equal(parseSchema(reviewStatusSchema, { status: 'approved' }).status, 'approved');
   assert.equal(parseSchema(reviewStatusSchema, { status: '已通过' }).status, 'approved');
   assert.equal(
     messageOf(() => parseSchema(reviewStatusSchema, { status: '未知' })),
-    '报名状态只能是 待审核 / 已通过 / 已拒绝 / 已撤销 / 已参加',
+    '报名状态只能是 pending / approved / rejected / cancelled / attended',
   );
   assert.deepEqual(parseSchema(reviewQuerySchema, { status: ' 已通过 ' }), {
     statusLabel: '已通过',
     statusCode: 'approved',
   });
   assert.deepEqual(parseSchema(reviewQuerySchema, { status: '全部' }), { statusLabel: '全部', statusCode: '' });
+  // 'all' 是新前端的筛选哨兵，同样表示「不筛选」。
+  assert.deepEqual(parseSchema(reviewQuerySchema, { status: 'all' }), { statusLabel: 'all', statusCode: '' });
+  assert.deepEqual(parseSchema(reviewQuerySchema, { status: 'pending' }), {
+    statusLabel: 'pending',
+    statusCode: 'pending',
+  });
   assert.equal(parseSchema(userStatusSchema, { status: '封禁' }).status, 'banned');
   assert.equal(
     messageOf(() => parseSchema(userStatusSchema, { status: '未知' })),
-    '账号状态只能是 正常 / 受限 / 封禁',
+    '账号状态只能是 active / limited / banned',
   );
   assert.equal(
     messageOf(() => parseSchema(monthQuerySchema, { year: 2026, month: 13 })),
     '月份不能大于 12',
   );
+});
+
+test('校验失败带稳定错误码与占位值，中文一个字不变', () => {
+  const required = errorOf(() => parseSchema(textSchema({ label: '展会名称', max: 3 }), ''));
+  assert.equal(required.message, '请输入展会名称');
+  assert.equal(required.errorCode, 'validation.required');
+  assert.deepEqual(required.errorParams, { label: '展会名称' });
+
+  const tooLong = errorOf(() => parseSchema(textSchema({ label: '展会名称', max: 3 }), '1234'));
+  assert.equal(tooLong.message, '展会名称最多 3 个字符');
+  assert.equal(tooLong.errorCode, 'validation.tooLong');
+  assert.deepEqual(tooLong.errorParams, { label: '展会名称', max: 3 });
+
+  const integer = errorOf(() => parseSchema(intSchema({ label: '年份', min: 1970, max: 9999 }), 'abc'));
+  assert.equal(integer.message, '年份必须是整数');
+  assert.equal(integer.errorCode, 'validation.integer');
+  assert.deepEqual(integer.errorParams, { label: '年份' });
+
+  const tooSmall = errorOf(() => parseSchema(monthQuerySchema, { year: 1900, month: 6, day: 1 }));
+  assert.equal(tooSmall.message, '年份不能小于 1970');
+  assert.equal(tooSmall.errorCode, 'validation.min');
+  assert.deepEqual(tooSmall.errorParams, { label: '年份', min: 1970 });
+
+  const badDate = errorOf(() => parseSchema(isoDateSchema({ label: '展会日期', required: true }), '2026/01/01'));
+  assert.equal(badDate.message, '展会日期格式应为 YYYY-MM-DD');
+  assert.equal(badDate.errorCode, 'validation.dateFormat');
+  assert.deepEqual(badDate.errorParams, { label: '展会日期' });
+});
+
+test('validationCode：取第一条带码的 issue，没有码时返回 null', () => {
+  const coded = z
+    .object({ a: textSchema({ label: '甲' }), b: intSchema({ label: '乙' }) })
+    .safeParse({ a: '', b: 'x' });
+  assert.ok(!coded.success);
+  assert.deepEqual(validationCode(coded.error), { code: 'validation.required', params: { label: '甲' } });
+
+  // 没有 i18nCode 的 issue（第三方 / 未改造的 schema）：不发码，响应只带中文。
+  const uncoded = z.object({ n: z.number() }).safeParse({ n: 'x' });
+  assert.ok(!uncoded.success);
+  assert.equal(validationCode(uncoded.error), null);
+
+  const parsed = z.object({ n: z.number() }).safeParse({ n: 'x' });
+  assert.ok(!parsed.success);
+  const error = errorOf(() => parseSchema(z.object({ n: z.number() }), { n: 'x' }));
+  assert.equal(error.errorCode, undefined);
+  assert.equal(error.errorParams, undefined);
+  assert.ok(error.message, '没有码时仍然给中文文案');
 });

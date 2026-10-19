@@ -26,7 +26,7 @@ import {
 } from '../domain/schemas.js';
 import { consumeInvite } from '../domain/invites.js';
 import { settleExpiredExhibitor } from '../domain/membership.js';
-import { badRequest, notFound } from '../domain/errors.js';
+import { badRequest, errorDetailFields, notFound } from '../domain/errors.js';
 import { issueCode, consumeCode, isCodeRejected, maskEmail } from '../domain/otp.js';
 import {
   secondFactorState,
@@ -119,7 +119,7 @@ async function loadUser(id: string) {
   await settleExpiredExhibitor(id);
   const result = await query<UserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.id = $1`, [id]);
   const row = result.rows[0];
-  if (!row) throw notFound('用户不存在或已删除');
+  if (!row) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
   return userPayload(row, capabilities(row.role, row.status as string | undefined));
 }
 
@@ -162,7 +162,8 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       if (has(parsed, 'nickname')) {
         set('nickname', parsed.nickname);
       }
-      if (has(parsed, 'email')) throw badRequest('邮箱需要通过「验证新邮箱」修改');
+      if (has(parsed, 'email'))
+        throw badRequest('邮箱需要通过「验证新邮箱」修改', { code: 'validation.emailChangeViaFlow' });
       if (has(parsed, 'bio')) {
         set('bio', parsed.bio);
       }
@@ -176,7 +177,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
         const previous = await currentAvatar(user.userId);
         if (nextAvatar !== previous) {
           // 新头像只能走上传接口，避免再把设备私有路径写进库。清空仍然允许。
-          if (nextAvatar !== '') throw badRequest('头像请通过上传更新');
+          if (nextAvatar !== '') throw badRequest('头像请通过上传更新', { code: 'profile.avatarUploadOnly' });
           set('avatar', '');
           removedAvatar = previous;
         }
@@ -205,14 +206,25 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       const maxBytes = limitMb * 1024 * 1024;
       const declared = Number(c.req.header('content-length'));
       const read = await readCappedBytes(c.req.raw.body, maxBytes, Number.isFinite(declared) ? declared : undefined);
-      if (!read.ok) throw badRequest(`头像超过 ${limitMb} MB 限制`);
+      if (!read.ok)
+        throw badRequest(`头像超过 ${limitMb} MB 限制`, {
+          code: 'profile.avatarTooLarge',
+          params: { max: limitMb },
+        });
       const inspected = inspectAvatar(read.bytes);
       if (!inspected.ok) {
-        throw badRequest(inspected.reason === 'too-large' ? '图片尺寸过大' : '无法识别的图片');
+        const tooLarge = inspected.reason === 'too-large';
+        throw badRequest(tooLarge ? '图片尺寸过大' : '无法识别的图片', {
+          code: tooLarge ? 'media.imageDimensionsTooLarge' : 'media.imageUnreadable',
+        });
       }
       if (!formatAllowed(inspected.image.extension, settings.upload.avatarFormats)) {
         throw badRequest(
           `服务器设置不允许上传 .${inspected.image.extension} 格式，允许：${settings.upload.avatarFormats.join('、')}`,
+          {
+            code: 'profile.avatarFormatRejected',
+            params: { ext: inspected.image.extension, formats: settings.upload.avatarFormats.join('、') },
+          },
         );
       }
       await ensureRoom(read.bytes.byteLength);
@@ -260,7 +272,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
   app.get('/security', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
     const factors = await secondFactorState(user.userId);
-    if (!factors) throw notFound('用户不存在或已删除');
+    if (!factors) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
     return jsonResponse(c, {
       email: factors.email,
       emailVerified: factors.emailVerified,
@@ -276,8 +288,9 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
   app.post('/security/email-code', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
     const factors = await secondFactorState(user.userId);
-    if (!factors) throw notFound('用户不存在或已删除');
-    if (!factors.emailVerified || !factors.email) throw badRequest('请先验证当前邮箱');
+    if (!factors) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
+    if (!factors.emailVerified || !factors.email)
+      throw badRequest('请先验证当前邮箱', { code: 'security.verifyCurrentEmailFirst' });
     const sent = await issueCode({
       purpose: 'security',
       email: factors.email,
@@ -292,32 +305,39 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const body = bodyRecord(await readJsonBody(c));
     const { method, scope, code } = parseSchema(securityIdentitySchema, body);
     const factors = await secondFactorState(user.userId);
-    if (!factors) throw notFound('用户不存在或已删除');
+    if (!factors) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
 
     if (method === 'totp') {
-      if (!factors.totpBound) return jsonResponse(c, { ok: false, error: '此账号尚未配置验证器' });
+      if (!factors.totpBound)
+        return jsonResponse(c, { ok: false, error: '此账号尚未配置验证器', errorCode: 'security.totpNotConfigured' });
       const currentSessionId = stepUpSessionId(c, user);
       await reserveSecurityStepUpAttempt(user.userId, currentSessionId);
       try {
         if (!(await verifyBoundTotp(user.userId, code))) {
-          return jsonResponse(c, { ok: false, error: '验证器验证码不正确' });
+          return jsonResponse(c, { ok: false, error: '验证器验证码不正确', errorCode: 'security.totpCodeInvalid' });
         }
         await clearSecurityStepUpFailures(user.userId, currentSessionId);
       } catch (error: unknown) {
-        if (isCodeRejected(error)) return jsonResponse(c, { ok: false, error: error.message });
+        if (isCodeRejected(error))
+          return jsonResponse(c, { ok: false, error: error.message, ...errorDetailFields(error.errorDetail) });
         throw error;
       }
     } else {
       if (!factors.emailVerified || !factors.email) {
-        return jsonResponse(c, { ok: false, error: '当前邮箱尚未验证，无法使用邮箱验证码复核身份' });
+        return jsonResponse(c, {
+          ok: false,
+          error: '当前邮箱尚未验证，无法使用邮箱验证码复核身份',
+          errorCode: 'security.emailNotVerified',
+        });
       }
       try {
         const consumed = await consumeCode({ purpose: 'security', email: factors.email, code });
         if (consumed.userId !== user.userId) {
-          return jsonResponse(c, { ok: false, error: '验证码不正确或已失效' });
+          return jsonResponse(c, { ok: false, error: '验证码不正确或已失效', errorCode: 'security.codeInvalid' });
         }
       } catch (error: unknown) {
-        if (isCodeRejected(error)) return jsonResponse(c, { ok: false, error: error.message });
+        if (isCodeRejected(error))
+          return jsonResponse(c, { ok: false, error: error.message, ...errorDetailFields(error.errorDetail) });
         throw error;
       }
     }
@@ -335,8 +355,9 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       [user.userId],
     );
     const row = found.rows[0];
-    if (!row) throw notFound('用户不存在或已删除');
-    if (row.email_verified !== true || !row.email) throw badRequest('请先验证邮箱，再开启两步验证');
+    if (!row) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
+    if (row.email_verified !== true || !row.email)
+      throw badRequest('请先验证邮箱，再开启两步验证', { code: 'security.verifyEmailBeforeTwoFactor' });
     const sent = await issueCode({
       purpose: 'enable2fa',
       email: row.email,
@@ -354,7 +375,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       user.userId,
     ]);
     const emailRow = found.rows[0];
-    if (!emailRow) throw notFound('用户不存在或已删除');
+    if (!emailRow) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
     let consumed;
     try {
       consumed = await consumeCode({
@@ -363,10 +384,12 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
         code,
       });
     } catch (error: unknown) {
-      if (isCodeRejected(error)) return jsonResponse(c, { ok: false, error: error.message });
+      if (isCodeRejected(error))
+        return jsonResponse(c, { ok: false, error: error.message, ...errorDetailFields(error.errorDetail) });
       throw error;
     }
-    if (consumed.userId !== user.userId) return jsonResponse(c, { ok: false, error: '验证码不正确或已失效' });
+    if (consumed.userId !== user.userId)
+      return jsonResponse(c, { ok: false, error: '验证码不正确或已失效', errorCode: 'security.codeInvalid' });
     await query(
       "UPDATE users SET two_factor_enabled = true, two_factor_method = 'email', updated_at = now() WHERE id = $1",
       [user.userId],
@@ -386,7 +409,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     await consumeSecurityStepUp(body.stepUpToken, user.userId, stepUpSessionId(c, user), 'totp');
     const found = await query<TotpAccountRow>('SELECT id, username, email FROM users WHERE id = $1', [user.userId]);
     const account = found.rows[0];
-    if (!account) throw notFound('用户不存在或已删除');
+    if (!account) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
     const settings = await readServerSettings();
     const issuer = String((settings.brand && (settings.brand.zh || settings.brand.en)) || 'calMobile');
     const setup = await beginTotpSetup(account, issuer);
@@ -396,7 +419,8 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
 
   app.post('/2fa/totp/activate', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
-    if (!(await activateBoundTotp(user.userId))) throw badRequest('请先配置验证器并验证邮箱');
+    if (!(await activateBoundTotp(user.userId)))
+      throw badRequest('请先配置验证器并验证邮箱', { code: 'security.configureTotpFirst' });
     return jsonResponse(c, { ok: true, error: '', twoFactorEnabled: true, twoFactorMethod: 'totp' });
   });
 
@@ -412,7 +436,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       return jsonResponse(c, { ok: true, error: '', twoFactorEnabled: true, ...result });
     } catch (error: unknown) {
       if (isCodeRejected(error)) {
-        return jsonResponse(c, { ok: false, error: error.message });
+        return jsonResponse(c, { ok: false, error: error.message, ...errorDetailFields(error.errorDetail) });
       }
       throw error;
     }
@@ -428,8 +452,10 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
         [user.userId],
       );
       const row = found.rows[0];
-      if (!row || !(await bcrypt.compare(password, row.password_hash))) throw badRequest('当前密码不正确');
-      if (row.two_factor_enabled !== true) throw badRequest('请先开启两步验证，再生成备用码');
+      if (!row || !(await bcrypt.compare(password, row.password_hash)))
+        throw badRequest('当前密码不正确', { code: 'security.currentPasswordWrong' });
+      if (row.two_factor_enabled !== true)
+        throw badRequest('请先开启两步验证，再生成备用码', { code: 'security.twoFactorRequiredForBackup' });
       return { backupCodes: await regenerateBackupCodes(user.userId) };
     });
   });
@@ -483,7 +509,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
   app.delete('/sessions/:id', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
     const id = c.req.param('id').trim();
-    if (!id || id.length > 128) throw badRequest('设备标识无效');
+    if (!id || id.length > 128) throw badRequest('设备标识无效', { code: 'security.deviceIdInvalid' });
     await revokeDeviceForUser(user.userId, id);
     return jsonResponse(c, { ok: true, error: '' });
   });
@@ -500,10 +526,11 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     const { email } = parseSchema(emailSchema, body);
     const current = await query<EmailOnlyRow>('SELECT email FROM users WHERE id = $1', [user.userId]);
     if (String(current.rows[0]?.email || '').toLowerCase() === email.toLowerCase())
-      throw badRequest('新邮箱与当前邮箱相同');
+      throw badRequest('新邮箱与当前邮箱相同', { code: 'profile.emailUnchanged' });
     await consumeSecurityStepUp(body.stepUpToken, user.userId, stepUpSessionId(c, user), 'email');
     const taken = await query('SELECT id FROM users WHERE lower(email) = lower($1)', [email]);
-    if (taken.rows.length > 0) return jsonResponse(c, { ok: false, error: '该邮箱已被其他账号使用' });
+    if (taken.rows.length > 0)
+      return jsonResponse(c, { ok: false, error: '该邮箱已被其他账号使用', errorCode: 'profile.emailTaken' });
     const sent = await issueCode({
       purpose: 'email',
       email,
@@ -521,10 +548,12 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     try {
       consumed = await consumeCode({ purpose: 'email', email, code });
     } catch (error: unknown) {
-      if (isCodeRejected(error)) return jsonResponse(c, { ok: false, error: error.message });
+      if (isCodeRejected(error))
+        return jsonResponse(c, { ok: false, error: error.message, ...errorDetailFields(error.errorDetail) });
       throw error;
     }
-    if (consumed.userId !== user.userId) return jsonResponse(c, { ok: false, error: '验证码不正确或已失效' });
+    if (consumed.userId !== user.userId)
+      return jsonResponse(c, { ok: false, error: '验证码不正确或已失效', errorCode: 'security.codeInvalid' });
     try {
       await query(
         `UPDATE users SET email = $2, email_verified = true, email_verified_at = now(), updated_at = now() WHERE id = $1`,
@@ -532,7 +561,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       );
     } catch (error: unknown) {
       if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505')
-        return jsonResponse(c, { ok: false, error: '该邮箱已被其他账号使用' });
+        return jsonResponse(c, { ok: false, error: '该邮箱已被其他账号使用', errorCode: 'profile.emailTaken' });
       throw error;
     }
     return jsonResponse(c, { ok: true, error: '', user: await loadUser(user.userId) });
@@ -575,11 +604,13 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
         [actor.userId],
       );
       const row = current.rows[0];
-      if (!row) throw notFound('用户不存在或已删除');
-      if (row.role === 'admin') throw badRequest('你已经是管理员');
+      if (!row) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
+      if (row.role === 'admin') throw badRequest('你已经是管理员', { code: 'profile.alreadyAdmin' });
       // 永久展商没有可续的时长；限时展商可以续期，普通用户（含已到期的）直接开通。
-      if (row.role === 'exhibitor' && !row.exhibitor_expires_at) throw badRequest('你已经是展商');
-      if (row.role !== 'user' && row.role !== 'exhibitor') throw badRequest('当前身份不能使用邀请码');
+      if (row.role === 'exhibitor' && !row.exhibitor_expires_at)
+        throw badRequest('你已经是展商', { code: 'profile.alreadyExhibitor' });
+      if (row.role !== 'user' && row.role !== 'exhibitor')
+        throw badRequest('当前身份不能使用邀请码', { code: 'profile.inviteRoleInvalid' });
       await transaction(async (client) => {
         const { durationDays } = await consumeInvite(client, body.code);
         await client.query(

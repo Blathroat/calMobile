@@ -46,35 +46,63 @@ app.post('/', authenticateHono, async (c) => {
   const body = bodyRecord(await readJsonBody(c));
   const { code } = parseSchema(checkinSchema, body);
   const parsed = labels.parseCheckInCode(code);
-  if (!parsed) return jsonResponse(c, { ok: false, error: '无法识别的报名码，请扫描报名详情里的二维码' });
+  if (!parsed)
+    return jsonResponse(c, {
+      ok: false,
+      error: '无法识别的报名码，请扫描报名详情里的二维码',
+      errorCode: 'checkin.codeUnrecognized',
+    });
   const result = await query<CheckInRow>(`SELECT ${CHECKIN_COLUMNS} ${REGISTRATION_FROM} WHERE r.id = $1`, [
     parsed.registrationId,
   ]);
   const row = result.rows[0];
-  if (!row) return jsonResponse(c, { ok: false, error: '报名记录不存在，可能已被撤销' });
-  if (row.exhibition_id !== parsed.exhibitionId) return jsonResponse(c, { ok: false, error: '报名码与展会不匹配' });
+  if (!row)
+    return jsonResponse(c, {
+      ok: false,
+      error: '报名记录不存在，可能已被撤销',
+      errorCode: 'checkin.recordMissing',
+    });
+  if (row.exhibition_id !== parsed.exhibitionId)
+    return jsonResponse(c, { ok: false, error: '报名码与展会不匹配', errorCode: 'checkin.exhibitionMismatch' });
   const record = checkInRecord(row);
   if (!canManageExhibition(exhibitor, { exhibitor_id: row.exhibition_exhibitor_id }))
-    return jsonResponse(c, { ok: false, error: '该报名不属于你举办的展会', record });
+    return jsonResponse(c, {
+      ok: false,
+      error: '该报名不属于你举办的展会',
+      errorCode: 'checkin.notYourExhibition',
+      record,
+    });
   // 报名码里的凭据必须与行上的一致：报名被退回重审后凭据已轮换，旧二维码到这里失效。
   // 空的凭据（迁移前的老码、老数据）同样判失效，不给它蒙混过状态判断的机会。
   const secret = String(row.check_in_secret || '');
   if (!secret || secret !== parsed.secret)
-    return jsonResponse(c, { ok: false, error: '报名码已失效，请在报名详情里重新打开二维码', record });
+    return jsonResponse(c, {
+      ok: false,
+      error: '报名码已失效，请在报名详情里重新打开二维码',
+      errorCode: 'checkin.codeExpired',
+      record,
+    });
   const statusLabel = labels.REGISTRATION_STATUS[row.status] || '';
+  // status 是兼容字段（中文），新代码读 statusCode。
   if (row.status === 'attended')
     return jsonResponse(c, {
       ok: false,
       duplicated: true,
       status: statusLabel,
+      statusCode: row.status,
       error: `${row.visitor_name} 的报名码已经核销过了`,
+      errorCode: 'checkin.alreadyCheckedIn',
+      errorParams: { name: row.visitor_name },
       record,
     });
   if (row.status !== 'approved')
     return jsonResponse(c, {
       ok: false,
       status: statusLabel,
+      statusCode: row.status,
       error: `当前状态为「${statusLabel}」，只有已通过的报名可以核销`,
+      errorCode: 'checkin.notApproved',
+      errorParams: { status: statusLabel },
       record,
     });
   // RETURNING 把本次写入的核销时间带回来：核销时间由数据库 now() 决定，不能拿旧行。
@@ -92,7 +120,10 @@ app.post('/', authenticateHono, async (c) => {
       ok: false,
       duplicated: true,
       status: labels.REGISTRATION_STATUS.attended,
+      statusCode: 'attended',
       error: `${row.visitor_name} 的报名码已经核销过了`,
+      errorCode: 'checkin.alreadyCheckedIn',
+      errorParams: { name: row.visitor_name },
       record: { ...record, checkInTime: raced.rows[0]?.check_in_time_text || '' },
     });
   }
@@ -100,6 +131,7 @@ app.post('/', authenticateHono, async (c) => {
     ok: true,
     duplicated: false,
     status: labels.REGISTRATION_STATUS.attended,
+    statusCode: 'attended',
     message: `已核销 ${row.visitor_name} 的报名`,
     error: '',
     record: { ...record, checkInTime: updated.rows[0]?.check_in_time_text || '' },

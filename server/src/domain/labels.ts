@@ -1,11 +1,16 @@
 /**
- * 状态词汇表：数据库里存英文代码，对外只讲中文标签。
+ * 状态词汇表：数据库、接口与前端比较用的都是**英文 code**，中文只在显示层映射一次。
  *
- * 中文标签是与前端领域类型约定的同一批字符串，
- * 前端按值比较，因此这里的映射是**接口契约**，改动必须两处同时改。
+ * 契约（与前端 `web/src/services/status.ts` 是同一套定义，改一边必须同步另一边）：
+ * - 协议值一律是 code：报名状态 pending / approved / rejected / cancelled / attended；
+ *   报名方式 review / optional / display / closed / ended；账号状态 active / limited / banned；
+ *   角色 admin / exhibitor / user / guest；收集项类型 text / radio / checkbox。
+ * - 下面几张「code → 中文」映射只给**兼容字段**用：接口仍下发 status / statusLabel /
+ *   modeLabel / roleLabel 这些中文标签，给还没更新快照的旧页面；新代码读 statusCode / role。
+ * - `toXxx()` 写入前把用户给的值统一成 code，同时接受 code 与旧中文。
  *
  * 这样做的好处：数据库里筛选、统计、加约束都用稳定的英文代码，
- * 不会因为文案调整而牵动数据。
+ * 不会因为文案调整而牵动数据，也不会因为装了语言包而比不中。
  */
 
 import { randomUUID } from 'node:crypto';
@@ -19,9 +24,18 @@ export const EXHIBITION_STATUS: Record<string, string> = {
   ended: '已结束',
 };
 
-/** 展会收集项类型：数据库约束与前端表单都使用这三种中文值。 */
-export const EXHIBITION_FIELD_TYPES = ['文本', '单选', '多选'] as const;
-export const EXHIBITION_STATUS_HINT = `报名方式只能是 ${Object.values(EXHIBITION_STATUS).join(' / ')}`;
+/** 展会收集项类型：数据库约束、接口与前端表单都用这三个 code。 */
+export const EXHIBITION_FIELD_TYPES = ['text', 'radio', 'checkbox'] as const;
+export type FieldTypeCode = (typeof EXHIBITION_FIELD_TYPES)[number];
+
+/** 收集项类型 code → 中文：只给兼容字段与提示文案用（协议值本身是 code）。 */
+export const FIELD_TYPE: Record<FieldTypeCode, string> = {
+  text: '文本',
+  radio: '单选',
+  checkbox: '多选',
+};
+export const EXHIBITION_STATUS_HINT = `报名方式只能是 ${Object.keys(EXHIBITION_STATUS).join(' / ')}`;
+export const FIELD_TYPE_HINT = `收集项类型只能是 ${EXHIBITION_FIELD_TYPES.join(' / ')}`;
 
 /** 报名审核状态：code ↔ 中文标签。 */
 export const REGISTRATION_STATUS: Record<string, string> = {
@@ -31,7 +45,7 @@ export const REGISTRATION_STATUS: Record<string, string> = {
   cancelled: '已撤销',
   attended: '已参加',
 };
-export const REGISTRATION_STATUS_HINT = `报名状态只能是 ${Object.values(REGISTRATION_STATUS).join(' / ')}`;
+export const REGISTRATION_STATUS_HINT = `报名状态只能是 ${Object.keys(REGISTRATION_STATUS).join(' / ')}`;
 
 /** 账号状态：code ↔ 中文标签。 */
 export const USER_STATUS: Record<string, string> = {
@@ -39,7 +53,7 @@ export const USER_STATUS: Record<string, string> = {
   limited: '受限',
   banned: '封禁',
 };
-export const USER_STATUS_HINT = `账号状态只能是 ${Object.values(USER_STATUS).join(' / ')}`;
+export const USER_STATUS_HINT = `账号状态只能是 ${Object.keys(USER_STATUS).join(' / ')}`;
 
 /** 角色：code ↔ 中文标签。 */
 export const ROLE_LABEL: Record<string, string> = {
@@ -82,6 +96,16 @@ export function toExhibitionStatus(value: unknown): string | null {
   }
   if (Object.prototype.hasOwnProperty.call(exhibitionStatusByLabel, text)) {
     return exhibitionStatusByLabel[text] ?? null;
+  }
+  return null;
+}
+
+/** 收集项类型：code 或旧中文 → code；不认识时返回 null。 */
+export function toFieldType(value: unknown): FieldTypeCode | null {
+  const text = String(value || '').trim();
+  if ((EXHIBITION_FIELD_TYPES as readonly string[]).includes(text)) return text as FieldTypeCode;
+  for (const [code, label] of Object.entries(FIELD_TYPE)) {
+    if (label === text) return code as FieldTypeCode;
   }
   return null;
 }

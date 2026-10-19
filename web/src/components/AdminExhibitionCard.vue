@@ -8,7 +8,7 @@ import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
-import { EXHIBITION_STATUS, statusTone } from '@/services/status';
+import { EXHIBITION_STATUS, modeLabel, statusTone } from '@/services/status';
 import { coverOf } from '@/services/cover';
 import { formatDateWithWeekday } from '@/services/format';
 import MediaBox from '@/components/MediaBox.vue';
@@ -27,8 +27,9 @@ function toggleLock(): void {
   const title = closing ? t('admin.exhibitions.pauseRegistration') : t('admin.exhibitions.resumeRegistration');
   const nextStatus = closing ? EXHIBITION_STATUS.CLOSED : EXHIBITION_STATUS.REVIEW_REQUIRED;
   const message = closing
-    ? `暂停后「${item.title}」不可报名，展商不能自行恢复。`
-    : `恢复后「${item.title}」将重新按需审核的方式收集报名。`;
+    ? t('exhibition.card.pauseMessage', { title: item.title })
+    : t('exhibition.card.resumeMessage', { title: item.title });
+  const doneText = closing ? t('exhibition.card.pauseDone') : t('exhibition.card.resumeDone');
   confirmSheet({
     title,
     message,
@@ -37,7 +38,7 @@ function toggleLock(): void {
       try {
         const result = await api.exhibitions.setStatus(String(item.id), nextStatus);
         const ok = result?.ok === true;
-        toast(String(ok ? `已${title}` : result?.error || t('common.failed')), ok ? 'success' : 'error');
+        toast(String(ok ? doneText : result?.error || t('common.failed')), ok ? 'success' : 'error');
         if (ok) emit('changed');
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -54,17 +55,22 @@ function toggleLock(): void {
       type="button"
       data-pressable="true"
       style="border: 0; padding: 0; background: transparent"
-      :aria-label="`查看 ${item.title} 详情`"
+      :aria-label="t('exhibition.list.viewAria', { title: item.title })"
       @click="router.push(`/detail/${item.id}`)"
     >
       <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
       <span class="row-copy">
         <strong class="row-title truncate">{{ item.title }}</strong>
-        <span class="row-meta">{{ `${formatDateWithWeekday(item.date)} ${item.time}` }}</span>
+        <span class="row-meta">{{ `${formatDateWithWeekday(item.date)} ${String(item.time ?? '')}`.trim() }}</span>
         <span class="row-meta truncate">{{ item.venue }}</span>
-        <span class="row-meta">{{ `${item.status} · ${item.registrationCount ?? 0} 条报名` }}</span>
+        <span class="row-meta">{{
+          t('exhibition.list.statusWithRegistrations', {
+            status: modeLabel(String(item.statusCode ?? '')),
+            count: String(item.registrationCount ?? 0),
+          })
+        }}</span>
       </span>
-      <StatusTag :text="String(item.modeLabel || item.status || '')" :tone="statusTone(String(item.status || ''))" />
+      <StatusTag :text="modeLabel(String(item.statusCode || ''))" :tone="statusTone(String(item.statusCode || ''))" />
     </button>
     <div class="grid-cols-2">
       <button

@@ -14,13 +14,19 @@
 
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import type { ErrorDetail } from '../domain/errors.js';
 import { runEnveloped, successEnvelope } from './envelope.js';
 
 export { successEnvelope };
 
 /** 失败信封：`{ ok:false, error }`（HTTP 200）。 */
-export function failureEnvelope(message: string): Record<string, unknown> {
-  return { ok: false, error: message };
+export function failureEnvelope(message: string, detail?: ErrorDetail): Record<string, unknown> {
+  return { ok: false, error: message, ...(detail ? detailFields(detail) : {}) };
+}
+
+/** `ErrorDetail` → 响应体里的可选字段（没有码时是空对象）。 */
+function detailFields(detail: ErrorDetail): { errorCode: string; errorParams?: Record<string, string | number> } {
+  return detail.params ? { errorCode: detail.code, errorParams: detail.params } : { errorCode: detail.code };
 }
 
 /**
@@ -48,8 +54,8 @@ export function okResponse(c: Context, payload: unknown = {}): Response {
 }
 
 /** 200 + 失败信封。 */
-export function failureResponse(c: Context, message: string): Response {
-  return jsonResponse(c, failureEnvelope(message));
+export function failureResponse(c: Context, message: string, detail?: ErrorDetail): Response {
+  return jsonResponse(c, failureEnvelope(message, detail));
 }
 
 /**

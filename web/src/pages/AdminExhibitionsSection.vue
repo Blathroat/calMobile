@@ -43,7 +43,7 @@ const emit = defineEmits<{ retry: []; search: [value: string]; export: []; chang
     </div>
     <div class="row" data-between="true">
       <span class="section-label">{{ t('admin.exhibitions.all') }}</span>
-      <span class="pill">{{ `${exhibitionItems.length} 个展会` }}</span>
+      <span class="pill">{{ t('exhibition.list.exhibitionCount', { count: exhibitionItems.length }) }}</span>
     </div>
     <div v-if="exhibitions.error.value" class="notice" data-tone="accent">
       <span>{{ exhibitions.error.value.message }}</span>
@@ -52,7 +52,7 @@ const emit = defineEmits<{ retry: []; search: [value: string]; export: []; chang
     <StateBlock
       v-if="exhibitionItems.length === 0"
       icon="search"
-      :title="query ? `没有找到与“${query}”相关的展会` : t('admin.exhibitions.empty')"
+      :title="query ? t('exhibition.list.noMatch', { query }) : t('admin.exhibitions.empty')"
       :description="query ? t('admin.exhibitions.tryAnotherKeyword') : t('admin.exhibitions.shownWhenCreated')"
     />
     <div v-else class="list" data-gap="sm" :data-busy="exhibitions.loading.value ? 'true' : undefined">

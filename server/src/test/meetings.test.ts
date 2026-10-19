@@ -45,7 +45,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
       '/api/v1/meetings/settings',
       {
         acceptMeetings: true,
-        fields: [{ title: '来意', type: '文本', required: true, options: [] }],
+        fields: [{ title: '来意', type: 'text', required: true, options: [] }],
       },
       { token: tokens.exhibitor.token },
     );
@@ -66,7 +66,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     const adminHost = 'usr-1';
     const adminSaved = await put(
       '/api/v1/meetings/settings',
-      { acceptMeetings: true, fields: [{ title: '议题', type: '文本', required: true, options: [] }] },
+      { acceptMeetings: true, fields: [{ title: '议题', type: 'text', required: true, options: [] }] },
       { token: tokens.admin.token },
     );
     assert.strictEqual(adminSaved.body.ok, true, JSON.stringify(adminSaved.body));
@@ -127,6 +127,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     );
     assert.strictEqual(self.body.ok, false);
     assert.match(String(self.body.error), /不能向自己/);
+    assert.strictEqual(self.body.errorCode, 'meeting.selfApply', '抛出形态的失败也要带稳定错误码');
 
     const pendingMonth = await get('/api/v1/exhibitions/month?year=2099&month=6', { token: tokens.user.token });
     assert.deepStrictEqual(pendingMonth.body.eventDays, []);
@@ -136,7 +137,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
 
     const approved = await put(
       `/api/v1/meetings/${meetingId}/status`,
-      { status: '已通过' },
+      { status: 'approved' },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(approved.body.ok, true, JSON.stringify(approved.body));
@@ -179,19 +180,21 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     );
     assert.strictEqual(blocked.body.ok, false);
     assert.match(String(blocked.body.error), /最多 1 个/);
+    assert.strictEqual(blocked.body.errorCode, 'meeting.quotaExceeded');
+    assert.deepEqual(blocked.body.errorParams, { max: 1 }, '带变量的码要给出占位值');
 
     const locked = await put(`/api/v1/meetings/${meetingId}/lock`, { locked: true }, { token: tokens.admin.token });
     assert.strictEqual(locked.body.ok, true);
     assert.strictEqual(locked.body.meeting.locked, true);
     const exhibitorBlocked = await put(
       `/api/v1/meetings/${meetingId}/status`,
-      { status: '已拒绝' },
+      { status: 'rejected' },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(exhibitorBlocked.status, 403);
     const adminStatus = await put(
       `/api/v1/meetings/${meetingId}/status`,
-      { status: '已拒绝' },
+      { status: 'rejected' },
       { token: tokens.admin.token },
     );
     assert.strictEqual(adminStatus.body.meeting.status, '已拒绝');
@@ -206,7 +209,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     assert.strictEqual(unlocked.body.meeting.locked, false);
     const exhibitorAgain = await put(
       `/api/v1/meetings/${meetingId}/status`,
-      { status: '已通过' },
+      { status: 'approved' },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(exhibitorAgain.body.ok, true);
@@ -242,7 +245,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
         acceptMeetings: true,
         allowCancel: true,
         notice: '请提前一天确认时间',
-        fields: [{ title: '来意', type: '文本', required: true, options: [] }],
+        fields: [{ title: '来意', type: 'text', required: true, options: [] }],
       },
       { token: tokens.exhibitor.token },
     );

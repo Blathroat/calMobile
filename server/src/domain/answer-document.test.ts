@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { answerDocument, type AnswerField } from './answer-document.js';
 
 const fields: AnswerField[] = [
-  { title: '姓名', type: '文本', required: true },
-  { title: '参观身份', type: '单选', required: true, options: ['专业观众', '媒体'] },
-  { title: '报名需求', type: '多选', required: false, options: ['停车位', '翻译服务'] },
+  { title: '姓名', type: 'text', required: true },
+  { title: '参观身份', type: 'radio', required: true, options: ['专业观众', '媒体'] },
+  { title: '报名需求', type: 'checkbox', required: false, options: ['停车位', '翻译服务'] },
 ];
 
 const limits = { textFill: 20, answer: 200 };
@@ -77,7 +77,7 @@ test('回填认全角半角冒号、顿号和逗号，整项未填写当空', ()
 
 test('同一标题取第一行', () => {
   const result = answerDocument({
-    fields: [{ title: '姓名', type: '文本' }],
+    fields: [{ title: '姓名', type: 'text' }],
     source: { text: '姓名：第一\n姓名：第二' },
   });
   assert.equal(result.values['姓名'], '第一');
@@ -103,8 +103,8 @@ test('必填、超长和非法选项一起返回，接口句子用第一个字�
 test('文本超长，单选的长选项不按文本框填写计算', () => {
   const result = answerDocument({
     fields: [
-      { title: '来意', type: '文本', required: true },
-      { title: '身份', type: '单选', required: true, options: ['专业观众'] },
+      { title: '来意', type: 'text', required: true },
+      { title: '身份', type: 'radio', required: true, options: ['专业观众'] },
     ],
     source: { values: { 来意: '超过啦', 身份: '专业观众' } },
     limits: { textFill: 2, answer: 200 },
@@ -114,7 +114,7 @@ test('文本超长，单选的长选项不按文本框填写计算', () => {
 
 test('字段都通过时，整段超长单独成为接口句子', () => {
   const result = answerDocument({
-    fields: [{ title: '来意', type: '文本', required: false }],
+    fields: [{ title: '来意', type: 'text', required: false }],
     source: { values: { 来意: '好' } },
     limits: { textFill: 20, answer: 1 },
   });
@@ -135,13 +135,13 @@ test('选填多选的未填写不是非法选项，纯空白写成未填写', ()
 
 test('没有选项列表时不检查成员；逗号分隔的选项字符串可用', () => {
   const open = answerDocument({
-    fields: [{ title: '身份', type: '单选', options: [] }],
+    fields: [{ title: '身份', type: 'radio', options: [] }],
     source: { values: { 身份: '占位' } },
     limits,
   });
   assert.equal(open.message, '');
   const listed = answerDocument({
-    fields: [{ title: '身份', type: '单选', required: true, options: '专业观众,媒体' }],
+    fields: [{ title: '身份', type: 'radio', required: true, options: '专业观众,媒体' }],
     source: { values: { 身份: '媒体' } },
     limits,
   });

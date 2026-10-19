@@ -27,7 +27,10 @@ export async function withExhibitionQuota<T>(
         const count = counted.rows[0]!;
         // 以拿锁后的数据库日期判断是否新增占用；调低上限也不冻结现有未来展会的编辑。
         if (count.occupies_slot && !count.already_counted && count.total >= maxFutureExhibitions) {
-          throw badRequest(`同时筹备的展会最多 ${maxFutureExhibitions} 个，请调整展会日期或删除已有展会`);
+          throw badRequest(`同时筹备的展会最多 ${maxFutureExhibitions} 个，请调整展会日期或删除已有展会`, {
+            code: 'quota.exhibitionsExceeded',
+            params: { max: maxFutureExhibitions },
+          });
         }
       }
     }

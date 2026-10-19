@@ -115,7 +115,9 @@ function inviteStatusLabel(status: string): string {
 
 /** 展商时长：0 天是永久，其余按天显示。 */
 function inviteDurationLabel(item: InviteItem): string {
-  return item.durationDays > 0 ? `${item.durationDays} ${t('admin.invites.dayUnit')}` : t('admin.invites.permanent');
+  return item.durationDays > 0
+    ? t('admin.invites.durationDays', { days: item.durationDays })
+    : t('admin.invites.permanent');
 }
 </script>
 
@@ -363,7 +365,12 @@ function inviteDurationLabel(item: InviteItem): string {
           <span class="row-copy">
             <strong class="row-title">{{ item.code }}</strong>
             <span class="row-meta">{{
-              `${item.usedCount}/${item.maxUses} · ${inviteDurationLabel(item)} · ${inviteStatusLabel(item.status)}`
+              t('admin.invites.meta', {
+                used: item.usedCount,
+                max: item.maxUses,
+                duration: inviteDurationLabel(item),
+                status: inviteStatusLabel(item.status),
+              })
             }}</span>
           </span>
           <span class="row" data-gap="sm">

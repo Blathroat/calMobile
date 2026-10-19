@@ -18,7 +18,7 @@ import { toast } from '@/services/toast';
 import { confirmSheet, openSheet } from '@/services/sheet';
 import type { SheetAction } from '@/services/sheet';
 import { meetingLink } from '@/services/registration-link';
-import { statusTone } from '@/services/status';
+import { REGISTRATION_STATUS, registrationStatusLabel, statusTone } from '@/services/status';
 import { answerDocument } from '@domain/answer-document';
 import { formatMeetingWhen, truncate } from '@/services/format';
 import StateBlock from '@/components/StateBlock.vue';
@@ -45,7 +45,9 @@ const records = computed<JsonObject[]>(() =>
   Array.isArray(data.value?.records) ? (data.value.records as JsonObject[]) : [],
 );
 const hasRecords = computed(() => data.value !== undefined);
-const pendingCount = computed(() => records.value.filter((record) => String(record.status || '') === '待审核').length);
+const pendingCount = computed(
+  () => records.value.filter((record) => String(record.statusCode || '') === REGISTRATION_STATUS.PENDING).length,
+);
 const exhibitorId = computed(() =>
   String(data.value?.exhibitorId || props.exhibitorId || (props.mode === 'exhibitor' ? session.user.id : '') || ''),
 );
@@ -97,8 +99,12 @@ function summary(record: JsonObject): string {
 }
 
 function reviewed(record: JsonObject): boolean {
-  const status = String(record.status || '');
-  return status === '已通过' || status === '已拒绝' || status === '已撤销';
+  const status = String(record.statusCode || '');
+  return (
+    status === REGISTRATION_STATUS.APPROVED ||
+    status === REGISTRATION_STATUS.REJECTED ||
+    status === REGISTRATION_STATUS.CANCELLED
+  );
 }
 
 function canChange(record: JsonObject): boolean {
@@ -130,21 +136,21 @@ function askStatus(record: JsonObject): void {
   const name = String(record.visitorName || COPY.visitorFallback);
   openSheet({
     title: COPY.statusTitle,
-    message: `为「${name}」的私人会议选择通过或拒绝。`,
+    message: t('meeting.inbox.chooseStatus', { name }),
     layout: 'stack',
     actions: [
       {
         label: COPY.approve,
         onClick: (close) => {
           close();
-          void changeStatus(record, '已通过');
+          void changeStatus(record, REGISTRATION_STATUS.APPROVED);
         },
       },
       {
         label: COPY.reject,
         onClick: (close) => {
           close();
-          void changeStatus(record, '已拒绝');
+          void changeStatus(record, REGISTRATION_STATUS.REJECTED);
         },
       },
     ],
@@ -188,8 +194,8 @@ function openDetail(record: JsonObject): void {
     size: 'full',
     component: RegistrationDetailSheet,
     props: {
-      status: String(record.status || ''),
-      statusTone: statusTone(String(record.status || '')),
+      status: registrationStatusLabel(String(record.statusCode || '')),
+      statusTone: statusTone(String(record.statusCode || '')),
       registrationTime: when,
       answers: answers.map((line) => ({
         label: line.label || t('exhibition.detail.additionalInfo'),
@@ -217,7 +223,7 @@ function askDelete(record: JsonObject): void {
   const name = String(record.visitorName || COPY.visitorFallback);
   confirmSheet({
     title: COPY.deleteTitle,
-    message: `删除「${name}」的私人会议后无法恢复。`,
+    message: t('meeting.inbox.deleteConfirm', { name }),
     confirmLabel: COPY.remove,
     tone: 'danger',
     onConfirm: async () => {
@@ -253,7 +259,9 @@ async function copyLink(): Promise<void> {
 <template>
   <div v-if="mode === 'exhibitor'" class="row" data-between="true">
     <span class="section-label">{{ COPY.section }}</span>
-    <span v-if="hasRecords" class="pill">{{ `待审核 ${pendingCount} · 共 ${records.length} 条` }}</span>
+    <span v-if="hasRecords" class="pill">{{
+      t('meeting.inbox.pendingSummary', { pending: pendingCount, total: records.length })
+    }}</span>
   </div>
   <button v-if="mode === 'exhibitor'" class="cta ghost" type="button" @click="router.push('/meeting-settings')">
     {{ COPY.settings }}
@@ -280,18 +288,20 @@ async function copyLink(): Promise<void> {
             v-if="record.visitorId"
             class="avatar"
             type="button"
-            :aria-label="`查看 ${record.visitorName} 的公开页`"
+            :aria-label="t('review.page.viewProfile', { name: String(record.visitorName || COPY.visitorFallback) })"
             @click="openProfile(record)"
           >
-            {{ String(record.visitorName || '用').slice(0, 1) }}
+            {{ String(record.visitorName || t('profile.avatarInitial')).slice(0, 1) }}
           </button>
-          <span v-else class="avatar" aria-hidden="true">{{ String(record.visitorName || '用').slice(0, 1) }}</span>
+          <span v-else class="avatar" aria-hidden="true">{{
+            String(record.visitorName || t('profile.avatarInitial')).slice(0, 1)
+          }}</span>
           <button
             class="row-card"
             type="button"
             data-pressable="true"
             style="flex: 1 1 auto; min-width: 0; border: 0; padding: 0; background: transparent"
-            :aria-label="`查看 ${record.visitorName} 的会议详情`"
+            :aria-label="t('meeting.inbox.viewDetail', { name: String(record.visitorName || COPY.visitorFallback) })"
             @click="openDetail(record)"
           >
             <span class="row-copy">
@@ -302,7 +312,10 @@ async function copyLink(): Promise<void> {
               <span class="row-meta">{{ formatMeetingWhen(record.meetingDate, record.meetingTime) }}</span>
               <span class="row-meta truncate">{{ summary(record) }}</span>
             </span>
-            <StatusTag :text="String(record.status || '')" :tone="statusTone(String(record.status || ''))" />
+            <StatusTag
+              :text="registrationStatusLabel(String(record.statusCode || ''))"
+              :tone="statusTone(String(record.statusCode || ''))"
+            />
           </button>
         </div>
 
@@ -318,7 +331,7 @@ async function copyLink(): Promise<void> {
               data-size="small"
               type="button"
               :disabled="!canChange(record)"
-              @click="changeStatus(record, '已通过')"
+              @click="changeStatus(record, REGISTRATION_STATUS.APPROVED)"
             >
               {{ COPY.approve }}
             </button>
@@ -327,7 +340,7 @@ async function copyLink(): Promise<void> {
               data-size="small"
               type="button"
               :disabled="!canChange(record)"
-              @click="changeStatus(record, '已拒绝')"
+              @click="changeStatus(record, REGISTRATION_STATUS.REJECTED)"
             >
               {{ COPY.reject }}
             </button>

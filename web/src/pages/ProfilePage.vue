@@ -23,7 +23,7 @@ import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
 import { openProfileEditor } from '@/services/profile-editor';
 import { paths } from '@/app/surface';
-import { REGISTRATION_STATUS } from '@/services/status';
+import { REGISTRATION_STATUS, USER_STATUS, roleLabel, userStatusLabel } from '@/services/status';
 import { daysUntil, formatLocalChineseDate } from '@/services/format';
 import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
@@ -112,7 +112,7 @@ async function loadActivity(): Promise<void> {
     const records = await api.registrations.list();
     if (!Array.isArray(records)) return;
     activity.value = {
-      attended: records.filter((record) => record.status === REGISTRATION_STATUS.ATTENDED).length,
+      attended: records.filter((record) => String(record.statusCode ?? '') === REGISTRATION_STATUS.ATTENDED).length,
       total: records.length,
     };
   } catch {
@@ -139,15 +139,16 @@ usePullRefresh(
 
 /** 身份说明行：正常状态不占一行，只在受限/封禁时说明账号状态。 */
 const identityLine = computed(() => {
+  // 角色与状态都按 code 取文案：接口下发的 roleLabel / status 是中文标签，装语言包后不能直接用。
   const code = String(user.value.role || '');
-  const role = String(user.value.roleLabel || '');
-  const status = String(user.value.status || '');
+  const role = roleLabel(code);
   const statusCode = String(user.value.statusCode || '');
-  const normal = statusCode === 'active' || status === t('admin.users.normal');
+  const status =
+    statusCode === USER_STATUS.RESTRICTED || statusCode === USER_STATUS.BANNED ? userStatusLabel(statusCode) : '';
   const tagged = code === 'exhibitor' || code === 'admin';
-  if (normal) return tagged ? '' : role;
   if (tagged) return status;
-  return role && status ? role + ' · ' + status : role || status;
+  if (!status) return role;
+  return role ? role + ' · ' + status : status;
 });
 
 // ── 展商时长：限时展商看到到期日，到期后说明原因与续期入口 ──
@@ -156,7 +157,7 @@ const identityLine = computed(() => {
 const membershipLine = computed(() => {
   if (String(user.value.role || '') !== 'exhibitor') return '';
   const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
-  return date ? `${t('profile.membership.until')}${date}` : '';
+  return date ? t('profile.membership.until', { date }) : '';
 });
 
 /** 7 天内到期的提醒：说明还能用多久、可以续期。 */
@@ -164,14 +165,14 @@ const membershipSoon = computed(() => {
   if (String(user.value.role || '') !== 'exhibitor') return '';
   const days = daysUntil(user.value.exhibitorExpiresAt);
   if (days === null || days > 7) return '';
-  return `${t('profile.membership.soon')}${days}${t('profile.membership.soonTail')}`;
+  return t('profile.membership.soon', { days });
 });
 
 /** 已经自动到期的账号：说明原因与续期方式（管理员手动降级会清掉到期时间，不会走到这里）。 */
 const membershipExpired = computed(() => {
   if (user.value.exhibitorExpired !== true) return '';
   const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
-  return date ? `${t('profile.membership.expired')}${date}${t('profile.membership.expiredHint')}` : '';
+  return date ? t('profile.membership.expired', { date }) : '';
 });
 
 function hasProfileValue(key: string): boolean {

@@ -75,7 +75,7 @@ const inviteRoleHint = computed(() =>
 const inviteRenewHint = computed(() => {
   if (user.value.role !== 'exhibitor') return '';
   const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
-  return date ? `${t('settings.invite.renewHint')}${date}${t('settings.invite.renewHintTail')}` : '';
+  return date ? t('settings.invite.renewHint', { date }) : '';
 });
 
 /**
@@ -592,7 +592,7 @@ async function changeMode(value: string): Promise<void> {
               :key="`${index}-${color}`"
               class="swatch"
               type="button"
-              :aria-label="`${t('settings.theme.accent')} ${index + 1}`"
+              :aria-label="t('settings.theme.accentOption', { name: t('settings.theme.accent'), index: index + 1 })"
               :aria-pressed="index === accentIndex ? 'true' : 'false'"
               :disabled="accentBusy"
               @click="changeAccent(index)"

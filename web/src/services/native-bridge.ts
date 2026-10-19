@@ -260,7 +260,7 @@ export class NativeBridge {
       const limit = INTERACTIVE_ACTIONS.has(action) ? this.interactiveTimeoutMs : this.timeoutMs;
       entry.timer = setTimeout(() => {
         this.pending.delete(callbackId);
-        reject(new NativeBridgeError(`原生动作 ${action} 超时未响应`, 'timeout'));
+        reject(new NativeBridgeError(t('app.nativeTimeout', { action }), 'timeout'));
       }, limit);
       // 顺序要紧：先登记 pending 再 invoke，原生回调可能同步到达，晚了就认不出 callbackId。
       this.pending.set(callbackId, entry);

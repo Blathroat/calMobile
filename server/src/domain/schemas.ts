@@ -8,6 +8,7 @@ import {
   inputString,
   intSchema,
   isoDateSchema,
+  issueParams,
   stringListSchema,
   textSchema,
   timeRangeSchema,
@@ -26,7 +27,12 @@ export const loginSchema = z
     deviceName: z.string().trim().max(80).optional(),
   })
   .superRefine(({ username, password }, ctx) => {
-    if (!username || !password) ctx.addIssue({ code: 'custom', message: '请输入账号与密码' });
+    if (!username || !password)
+      ctx.addIssue({
+        code: 'custom',
+        message: '请输入账号与密码',
+        params: issueParams('validation.loginCredentialsRequired'),
+      });
   });
 export type LoginInput = z.infer<typeof loginSchema>;
 
@@ -39,7 +45,8 @@ export const loginVerifySchema = z
     trustDevice: z.boolean().optional(),
   })
   .superRefine(({ ticket, code }, ctx) => {
-    if (!ticket || !code) ctx.addIssue({ code: 'custom', message: '请填写验证码' });
+    if (!ticket || !code)
+      ctx.addIssue({ code: 'custom', message: '请填写验证码', params: issueParams('validation.codeRequired') });
   });
 export type LoginVerifyInput = z.infer<typeof loginVerifySchema>;
 
@@ -63,10 +70,18 @@ export function registerSchema(limits: Limits) {
           ctx.addIssue({
             code: 'custom',
             message: `用户名长度需在 ${limits.usernameMin}-${limits.usernameMax} 个字符之间`,
+            params: issueParams('validation.usernameLength', {
+              min: limits.usernameMin,
+              max: limits.usernameMax,
+            }),
           });
         }
         if (!usernamePattern.test(value)) {
-          ctx.addIssue({ code: 'custom', message: '用户名只能包含字母、数字、下划线、点或横线' });
+          ctx.addIssue({
+            code: 'custom',
+            message: '用户名只能包含字母、数字、下划线、点或横线',
+            params: issueParams('validation.usernameCharset'),
+          });
         }
       }),
     password: inputString.superRefine((value, ctx) => {
@@ -74,10 +89,11 @@ export function registerSchema(limits: Limits) {
         ctx.addIssue({
           code: 'custom',
           message: `密码长度需在 ${limits.passwordMin}-${limits.passwordMax} 个字符之间`,
+          params: issueParams('validation.passwordLength', { min: limits.passwordMin, max: limits.passwordMax }),
         });
       }
     }),
-    email: emailInputSchema('请输入有效的邮箱地址'),
+    email: emailInputSchema('请输入有效的邮箱地址', 'validation.emailInvalid'),
     inviteCode: z.string().trim().max(32).optional(),
   });
 }
@@ -93,11 +109,16 @@ export function resetPasswordSchema(limits: Limits) {
     })
     .superRefine(({ newPassword, confirmPassword }, ctx) => {
       if (newPassword !== confirmPassword) {
-        ctx.addIssue({ code: 'custom', message: '两次输入的新密码不一致' });
+        ctx.addIssue({
+          code: 'custom',
+          message: '两次输入的新密码不一致',
+          params: issueParams('validation.passwordMismatch'),
+        });
       } else if (newPassword.length < limits.passwordMin || newPassword.length > limits.passwordMax) {
         ctx.addIssue({
           code: 'custom',
           message: `密码长度需在 ${limits.passwordMin}-${limits.passwordMax} 个字符之间`,
+          params: issueParams('validation.passwordLength', { min: limits.passwordMin, max: limits.passwordMax }),
         });
       }
     });
@@ -110,9 +131,18 @@ export function profilePatchSchema(limits: Limits) {
       nickname: inputString
         .transform((value) => value.trim())
         .superRefine((value, ctx) => {
-          if (!value) ctx.addIssue({ code: 'custom', message: '昵称不能为空' });
+          if (!value)
+            ctx.addIssue({
+              code: 'custom',
+              message: '昵称不能为空',
+              params: issueParams('validation.nicknameRequired'),
+            });
           if (value.length > limits.nickname)
-            ctx.addIssue({ code: 'custom', message: `昵称最多 ${limits.nickname} 个字符` });
+            ctx.addIssue({
+              code: 'custom',
+              message: `昵称最多 ${limits.nickname} 个字符`,
+              params: issueParams('validation.tooLong', { label: '昵称', max: limits.nickname }),
+            });
         }),
       email: inputString,
       bio: textSchema({ label: '个人简介', max: limits.bio, required: false }),
@@ -124,7 +154,12 @@ export function profilePatchSchema(limits: Limits) {
     .partial()
     .superRefine((value, ctx) => {
       if ('email' in value)
-        ctx.addIssue({ code: 'custom', path: ['email'], message: '邮箱需要通过「验证新邮箱」修改' });
+        ctx.addIssue({
+          code: 'custom',
+          path: ['email'],
+          message: '邮箱需要通过「验证新邮箱」修改',
+          params: issueParams('validation.emailChangeViaFlow'),
+        });
     });
 }
 export type ProfilePatchInput = z.infer<ReturnType<typeof profilePatchSchema>>;
@@ -134,13 +169,25 @@ export function passwordChangeSchema(limits: Limits) {
     .object({ newPassword: inputString, confirmPassword: inputString })
     .superRefine(({ newPassword, confirmPassword }, ctx) => {
       if (!newPassword || !confirmPassword) {
-        ctx.addIssue({ code: 'custom', message: '请填写完整密码' });
+        ctx.addIssue({ code: 'custom', message: '请填写完整密码', params: issueParams('validation.passwordRequired') });
       } else if (newPassword !== confirmPassword) {
-        ctx.addIssue({ code: 'custom', message: '两次输入的新密码不一致' });
+        ctx.addIssue({
+          code: 'custom',
+          message: '两次输入的新密码不一致',
+          params: issueParams('validation.passwordMismatch'),
+        });
       } else if (newPassword.length < limits.passwordMin) {
-        ctx.addIssue({ code: 'custom', message: `密码至少需要 ${limits.passwordMin} 个字符` });
+        ctx.addIssue({
+          code: 'custom',
+          message: `密码至少需要 ${limits.passwordMin} 个字符`,
+          params: issueParams('validation.passwordMin', { min: limits.passwordMin }),
+        });
       } else if (newPassword.length > limits.passwordMax) {
-        ctx.addIssue({ code: 'custom', message: `密码最多 ${limits.passwordMax} 个字符` });
+        ctx.addIssue({
+          code: 'custom',
+          message: `密码最多 ${limits.passwordMax} 个字符`,
+          params: issueParams('validation.passwordMax', { max: limits.passwordMax }),
+        });
       }
     });
 }
@@ -153,12 +200,21 @@ export const securityIdentitySchema = z.object({
     z
       .string()
       .trim()
-      .regex(/^\d{6}$/, '请输入 6 位数字验证码'),
+      .refine((value) => /^\d{6}$/.test(value), {
+        message: '请输入 6 位数字验证码',
+        params: issueParams('validation.sixDigitCode'),
+      }),
   ),
 });
 
 export const passwordOnlySchema = z.object({ password: inputString }).superRefine(({ password }, ctx) => {
-  if (!password) ctx.addIssue({ code: 'custom', path: ['password'], message: '请输入当前密码' });
+  if (!password)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['password'],
+      message: '请输入当前密码',
+      params: issueParams('validation.currentPasswordRequired'),
+    });
 });
 export const emailSchema = z.object({ email: emailInputSchema('邮箱格式不正确') });
 export const emailVerifyLooseSchema = z.object({
@@ -220,33 +276,80 @@ export const serverSettingsPatchSchema = z
   })
   .partial()
   .passthrough();
+/**
+ * 词表值（状态 / 报名方式）：先按 code 归一，不认的值给一句中文提示 + 稳定错误码。
+ * 提示串来自 labels.ts 的常量，没有变量，因此不带 i18nParams。
+ */
+function vocabularySchema(normalize: (value: unknown) => string | null, hint: string, code: string) {
+  return z.preprocess(
+    normalize,
+    z
+      .unknown()
+      .superRefine((value, ctx) => {
+        if (typeof value !== 'string' || value === '') {
+          ctx.addIssue({ code: 'custom', message: hint, params: issueParams(code) });
+        }
+      })
+      .pipe(z.string()),
+  );
+}
+
 export const userStatusSchema = z.object({
-  status: z.preprocess(labels.toUserStatus, z.string({ error: labels.USER_STATUS_HINT })),
+  status: vocabularySchema(labels.toUserStatus, labels.USER_STATUS_HINT, 'validation.userStatusInvalid'),
 });
 export const userRoleSchema = z.object({
-  role: z.enum(['user', 'exhibitor', 'admin'], { error: '请选择用户、展商或管理员' }),
+  role: z
+    .unknown()
+    .superRefine((value, ctx) => {
+      if (value !== 'user' && value !== 'exhibitor' && value !== 'admin') {
+        ctx.addIssue({
+          code: 'custom',
+          message: '请选择用户、展商或管理员',
+          params: issueParams('users.roleInvalid'),
+        });
+      }
+    })
+    .pipe(z.enum(['user', 'exhibitor', 'admin'])),
 });
 export const inviteRedeemSchema = z.object({
   code: inputString.transform((value) => value.trim()),
 });
 export const adminTwoFactorSchema = z.object({
-  enabled: z.literal(false, { error: '两步验证只能由本人开启（需要验证码）' }),
+  enabled: z
+    .unknown()
+    .superRefine((value, ctx) => {
+      if (value !== false) {
+        ctx.addIssue({
+          code: 'custom',
+          message: '两步验证只能由本人开启（需要验证码）',
+          params: issueParams('security.twoFactorSelfOnly'),
+        });
+      }
+    })
+    .pipe(z.literal(false)),
 });
 export const exhibitionStatusSchema = z.object({
-  status: z.preprocess(labels.toExhibitionStatus, z.string({ error: labels.EXHIBITION_STATUS_HINT })),
+  status: vocabularySchema(
+    labels.toExhibitionStatus,
+    labels.EXHIBITION_STATUS_HINT,
+    'validation.exhibitionStatusInvalid',
+  ),
 });
+/** 筛选条上的「不筛选」：'all' 是新前端的哨兵（只在本机用），'全部' 是旧前端传过的值。 */
+const ALL_FILTERS = ['all', '全部'];
 export const reviewQuerySchema = z
   .object({
     status: inputString
       .transform((value) => value.trim())
-      .refine(
-        (value) => !value || value === '全部' || Boolean(labels.toRegistrationStatus(value)),
-        labels.REGISTRATION_STATUS_HINT,
-      ),
+      .refine((value) => !value || ALL_FILTERS.includes(value) || Boolean(labels.toRegistrationStatus(value)), {
+        message: labels.REGISTRATION_STATUS_HINT,
+        params: issueParams('validation.registrationStatusInvalid'),
+      }),
   })
   .transform(({ status }) => ({
+    // statusLabel 是兼容字段：原样回显客户端传的值；协议值看 statusCode。
     statusLabel: status || '全部',
-    statusCode: !status || status === '全部' ? '' : labels.toRegistrationStatus(status) || '',
+    statusCode: !status || ALL_FILTERS.includes(status) ? '' : labels.toRegistrationStatus(status) || '',
   }));
 
 export const monthQuerySchema = z.object({
@@ -258,24 +361,40 @@ export const monthQuerySchema = z.object({
 export function fieldSchema(limits: Limits) {
   const objectSchema = z
     .object({
-      type: z
-        .preprocess((value) => String(value === undefined || value === null ? '文本' : value).trim(), z.string())
-        .refine(
-          (value): value is (typeof labels.EXHIBITION_FIELD_TYPES)[number] =>
-            (labels.EXHIBITION_FIELD_TYPES as readonly string[]).includes(value),
-          '收集项类型只能是 文本 / 单选 / 多选',
-        ),
+      // 收集项类型：协议值是 code；老客户端 / 旧数据可能还传中文，这里统一成 code。
+      type: z.preprocess(
+        (value) => labels.toFieldType(value === undefined || value === null ? labels.EXHIBITION_FIELD_TYPES[0] : value),
+        z
+          .unknown()
+          .superRefine((value, ctx) => {
+            if (typeof value !== 'string' || labels.toFieldType(value) === null) {
+              ctx.addIssue({
+                code: 'custom',
+                message: labels.FIELD_TYPE_HINT,
+                params: issueParams('validation.fieldTypeInvalid'),
+              });
+            }
+          })
+          .pipe(z.enum(labels.EXHIBITION_FIELD_TYPES)),
+      ),
       title: textSchema({ label: '文本框标题', max: limits.fieldTitle }),
       required: boolSchema(false),
       options: z.unknown().optional(),
     })
     .transform((field, ctx) => {
-      if (field.type === '文本') return { ...field, options: [] };
-      const optionMax = field.type === '多选' ? limits.checkOption : limits.radioOption;
-      const optionLabel = field.type === '多选' ? '多选选项' : '单选选项';
+      // 文本项不接受选项；单选 / 多选各自有选项长度上限（提示文案是给人看的，保持中文）。
+      if (field.type === 'text') return { ...field, options: [] };
+      const optionMax = field.type === 'checkbox' ? limits.checkOption : limits.radioOption;
+      const optionLabel = field.type === 'checkbox' ? '多选选项' : '单选选项';
       const options = stringListSchema({ label: optionLabel, itemMax: optionMax }).safeParse(field.options);
       if (!options.success) {
-        ctx.addIssue({ code: 'custom', message: options.error.issues[0]?.message || '请求参数不正确' });
+        // 把内层校验（选项长度上限）的中文与错误码原样带出来；没有码时退回通用码。
+        const first = options.error.issues[0] as { message?: string; params?: Record<string, unknown> } | undefined;
+        ctx.addIssue({
+          code: 'custom',
+          message: first?.message || '请求参数不正确',
+          params: first?.params ?? issueParams('validation.paramsInvalid'),
+        });
         return z.NEVER;
       }
       return { ...field, options: options.data };
@@ -287,7 +406,24 @@ export function fieldSchema(limits: Limits) {
 }
 
 export function fieldsSchema(limits: Limits) {
-  return z.array(fieldSchema(limits), { error: '收集项需为数组' }).max(50, '收集项最多 50 项');
+  const items = z.array(fieldSchema(limits));
+  return z
+    .unknown()
+    .superRefine((value, ctx) => {
+      if (!Array.isArray(value)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: '收集项需为数组',
+          params: issueParams('validation.fieldsNotArray'),
+        });
+      }
+    })
+    .pipe(
+      items.refine((list) => list.length <= 50, {
+        message: '收集项最多 50 项',
+        params: issueParams('validation.fieldsTooMany'),
+      }),
+    );
 }
 
 /** 私人会议设置：是否接受预约、通过后能否撤销、申请页说明，以及展商自己的收集项。 */
@@ -360,15 +496,38 @@ export function exhibitionInputSchema(
   return schema
     .superRefine((source, ctx) => {
       const title = source.title || '';
-      if (!title) ctx.addIssue({ code: 'custom', path: ['title'], message: '展会名称不能为空' });
+      if (!title)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['title'],
+          message: '展会名称不能为空',
+          params: issueParams('validation.exhibitionTitleRequired'),
+        });
       const date = source.date ?? existing?.exhibition_date ?? '';
       const time = source.time ?? existing?.time ?? '';
-      if (creating && !date) ctx.addIssue({ code: 'custom', path: ['date'], message: '请选择展会日期' });
-      if (creating && !time) ctx.addIssue({ code: 'custom', path: ['time'], message: '请输入展会时间' });
+      if (creating && !date)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['date'],
+          message: '请选择展会日期',
+          params: issueParams('validation.dateRequired', { label: '展会日期' }),
+        });
+      if (creating && !time)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['time'],
+          message: '请输入展会时间',
+          params: issueParams('validation.required', { label: '展会时间' }),
+        });
       const registrationStart = source.registrationStart ?? existing?.registration_start ?? '';
       const registrationEnd = source.registrationEnd ?? existing?.registration_end ?? '';
       if (registrationStart && registrationEnd && registrationEnd < registrationStart) {
-        ctx.addIssue({ code: 'custom', path: ['registrationEnd'], message: '报名截止日期不能早于开始日期' });
+        ctx.addIssue({
+          code: 'custom',
+          path: ['registrationEnd'],
+          message: '报名截止日期不能早于开始日期',
+          params: issueParams('validation.registrationEndBeforeStart'),
+        });
       }
       const mappedStatus =
         source.status && source.status.trim() ? labels.toExhibitionStatus(source.status) : existing?.status || 'review';
@@ -377,6 +536,7 @@ export function exhibitionInputSchema(
           code: 'custom',
           path: ['status'],
           message: labels.EXHIBITION_STATUS_HINT,
+          params: issueParams('validation.exhibitionStatusInvalid'),
         });
     })
     .transform((source) => {
@@ -425,6 +585,10 @@ export function registrationSchema() {
 export type RegistrationInput = z.infer<ReturnType<typeof registrationSchema>>;
 export const registrationTargetSchema = z.object({ exhibitionId: textSchema({ required: false }) });
 export const reviewStatusSchema = z.object({
-  status: z.preprocess(labels.toRegistrationStatus, z.string({ error: labels.REGISTRATION_STATUS_HINT })),
+  status: vocabularySchema(
+    labels.toRegistrationStatus,
+    labels.REGISTRATION_STATUS_HINT,
+    'validation.registrationStatusInvalid',
+  ),
 });
 export const checkinSchema = z.object({ code: textSchema({ required: false }) });

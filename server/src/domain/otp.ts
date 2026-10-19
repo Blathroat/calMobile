@@ -22,7 +22,7 @@
 
 import crypto from 'node:crypto';
 import { query } from '../config/pool.js';
-import { ApiError, badRequest } from './errors.js';
+import { ApiError, badRequest, type ErrorDetail } from './errors.js';
 import { readSection } from './settings.js';
 import { send } from '../services/mailer.js';
 import { verificationMail, PURPOSE_KEYS } from '../services/mail-templates.js';
@@ -38,9 +38,18 @@ export const CODE_TTL_MIN = 10;
  * 限流（429）仍然是 `ApiError`：那是另一类语义。
  */
 export class CodeRejected extends Error {
-  constructor(message: string) {
+  /**
+   * 稳定错误码与占位值（与 ApiError 同一套形状）。
+   *
+   * 路由把它透传给 200 信封：`failureResponse(c, error.message, error.errorDetail)` /
+   * `...detailFields(error.errorDetail)`，否则这些文案在前端只剩中文可显示。
+   */
+  readonly errorDetail?: ErrorDetail;
+
+  constructor(message: string, errorDetail?: ErrorDetail) {
     super(message);
     this.name = 'CodeRejected';
+    this.errorDetail = errorDetail;
   }
 }
 
@@ -156,7 +165,7 @@ export function maskEmail(email: unknown): string {
 /** 用途校验：写错用途会让 CHECK 约束报 500，不如在这里给 400（这是代码缺陷，不是用户操作失败）。 */
 function assertPurpose(purpose: unknown): asserts purpose is string {
   if (!(PURPOSE_KEYS as string[]).includes(purpose as string)) {
-    throw badRequest('验证码用途不合法');
+    throw badRequest('验证码用途不合法', { code: 'otp.purposeInvalid' });
   }
 }
 
@@ -185,13 +194,18 @@ async function assertSendAllowed({
   );
   const row = counted.rows[0];
   if (Number(row?.last_minute) > 0) {
-    throw new ApiError(429, `验证码已发送，请 ${RESEND_COOLDOWN_SEC} 秒后再试`);
+    throw new ApiError(429, `验证码已发送，请 ${RESEND_COOLDOWN_SEC} 秒后再试`, true, {
+      code: 'otp.resendTooSoon',
+      params: { seconds: RESEND_COOLDOWN_SEC },
+    });
   }
   if (Number(row?.last_hour) >= SEND_PER_HOUR) {
-    throw new ApiError(429, '获取验证码过于频繁，请稍后再试');
+    throw new ApiError(429, '获取验证码过于频繁，请稍后再试', true, { code: 'otp.tooFrequent' });
   }
   if (Number(row?.last_day) >= SEND_PER_DAY) {
-    throw new ApiError(429, '今天获取验证码的次数已达上限，请明天再试');
+    throw new ApiError(429, '今天获取验证码的次数已达上限，请明天再试', true, {
+      code: 'otp.dailyLimit',
+    });
   }
   if (ip) {
     const byIp = await query<IpCountRow>(
@@ -202,7 +216,9 @@ async function assertSendAllowed({
       [ip],
     );
     if (Number(byIp.rows[0]?.total) >= IP_SEND_PER_HOUR) {
-      throw new ApiError(429, '当前网络获取验证码过于频繁，请稍后再试');
+      throw new ApiError(429, '当前网络获取验证码过于频繁，请稍后再试', true, {
+        code: 'otp.networkTooFrequent',
+      });
     }
   }
 }
@@ -295,7 +311,7 @@ export async function issueCode(options: IssueCodeOptions = {}): Promise<{
   assertPurpose(purpose);
   const email = normalizeEmail(options.email);
   if (!email) {
-    throw new CodeRejected('缺少邮箱地址');
+    throw new CodeRejected('缺少邮箱地址', { code: 'otp.emailRequired' });
   }
   await assertSendAllowed({ purpose, email, ip });
 
@@ -354,7 +370,7 @@ export async function consumeCode(options: ConsumeCodeOptions = {}): Promise<{
   const email = normalizeEmail(options.email);
   const code = String(options.code === undefined || options.code === null ? '' : options.code).trim();
   if (!email || !code) {
-    throw new CodeRejected('请填写邮箱与验证码');
+    throw new CodeRejected('请填写邮箱与验证码', { code: 'otp.emailAndCodeRequired' });
   }
 
   const result = await query<EmailCodeRow>(
@@ -369,13 +385,13 @@ export async function consumeCode(options: ConsumeCodeOptions = {}): Promise<{
   );
   const row = result.rows[0];
   if (!row) {
-    throw new CodeRejected('验证码不存在或已被使用，请重新获取');
+    throw new CodeRejected('验证码不存在或已被使用，请重新获取', { code: 'otp.notFound' });
   }
   if (new Date(row.expires_at).getTime() <= Date.now()) {
-    throw new CodeRejected('验证码已过期，请重新获取');
+    throw new CodeRejected('验证码已过期，请重新获取', { code: 'otp.expired' });
   }
   if (Number(row.attempts) >= MAX_ATTEMPTS) {
-    throw new CodeRejected('验证码尝试次数过多，请重新获取');
+    throw new CodeRejected('验证码尝试次数过多，请重新获取', { code: 'otp.tooManyAttempts' });
   }
 
   if (!sameHash(hashCode(code, row.id), row.code_hash)) {
@@ -392,7 +408,7 @@ export async function consumeCode(options: ConsumeCodeOptions = {}): Promise<{
         `,
       [row.id, attempts, MAX_ATTEMPTS],
     );
-    throw new CodeRejected('验证码不正确');
+    throw new CodeRejected('验证码不正确', { code: 'otp.incorrect' });
   }
 
   const used = await query('UPDATE email_codes SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL', [
@@ -400,7 +416,7 @@ export async function consumeCode(options: ConsumeCodeOptions = {}): Promise<{
   ]);
   if (used.rowCount !== 1) {
     // 并发：同一枚码被两个请求同时提交，只有一个能消费到。
-    throw new CodeRejected('验证码已被使用，请重新获取');
+    throw new CodeRejected('验证码已被使用，请重新获取', { code: 'otp.used' });
   }
   return { email, userId: row.user_id || null, payload: row.payload || null };
 }

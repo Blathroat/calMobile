@@ -25,10 +25,10 @@ export const PATTERNS = {
 };
 
 const MESSAGES = {
-  required: (label: string) => `请填写${label}`,
-  min: (label: string, min: number) => `${label}至少需要 ${min} 个字符`,
-  max: (label: string, max: number) => `${label}最多 ${max} 个字符`,
-  format: (label: string) => `${label}格式不正确`,
+  required: (label: string) => t('form.required', { label }),
+  min: (label: string, min: number) => t('form.tooShort', { label, min }),
+  max: (label: string, max: number) => t('form.tooLong', { label, max }),
+  format: (label: string) => t('form.badFormat', { label }),
 };
 
 /** 读取服务器下发的字符数上限，缺省时回退到内置默认值。 */
@@ -104,7 +104,7 @@ export function uploadSizeError(kind: 'image' | 'video', bytes: unknown): string
   const size = Number(bytes) || 0;
   if (size <= max * 1024 * 1024) return '';
   const label = kind === 'video' ? t('form.video') : t('form.image');
-  return `${label}超过服务器设置的 ${max} MB 上限`;
+  return t('form.tooLarge', { label, max });
 }
 
 // ── 基础判断 ──────────────────────────────────────────────────────

@@ -26,7 +26,7 @@ test('核销响应带原始多行 answers 与秒级 checkInTime，重复核销�
       time: '09:00-17:00',
       date: isoDateAfter(21),
       category: '智能家居',
-      status: '无需审核',
+      status: 'optional',
       qrEnabled: true,
     },
     { token: tokens.exhibitor.token },
@@ -57,6 +57,9 @@ test('核销响应带原始多行 answers 与秒级 checkInTime，重复核销�
     assert.strictEqual(again.body.ok, false);
     assert.strictEqual(again.body.duplicated, true);
     assert.ok(again.body.error.includes('已经核销'), again.body.error);
+    // 失败文案旁边的稳定错误码：带变量的码同时给出占位值。
+    assert.strictEqual(again.body.errorCode, 'checkin.alreadyCheckedIn');
+    assert.deepEqual(again.body.errorParams, { name: '载荷用例' });
     // 重复核销给的是原来那一次的时间，不是这次请求的时间。
     assert.strictEqual(again.body.record.checkInTime, first.body.record.checkInTime);
     assert.strictEqual(again.body.record.answers, ANSWERS);

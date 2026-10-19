@@ -59,6 +59,7 @@ beforeEach(() => {
   vi.mocked(createQrDecoder).mockReturnValue(decoder);
   vi.mocked(api.checkIn).mockResolvedValue({
     ok: true,
+    statusCode: 'attended',
     status: '已参加',
     message: '已核销 张三 的报名',
     record: RECORD,
@@ -123,6 +124,9 @@ describe('核销结果常驻列表', () => {
     await vi.waitFor(() => expect(cards().length).toBe(1));
     expect(cardText()).toContain('张三');
     expect(cardText()).toContain('秋季展会');
+    // 状态按 code 查文案：接口只下发 statusCode，屏幕上必须是中文标签而不是 code。
+    expect(cardText()).toContain('已参加');
+    expect(cardText()).not.toContain('attended');
 
     const stored = JSON.parse(localStorage.getItem(KEY)!);
     expect(Array.isArray(stored)).toBe(true);

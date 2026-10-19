@@ -76,3 +76,33 @@ test('errorResponse：状态码与正文一次给全', () => {
     body: { error: '数据库暂时不可用，请稍后重试' },
   });
 });
+
+test('errorResponse：带稳定错误码时一起下发，没有码时形状与改造前逐字一致', () => {
+  // 带变量：errorParams 一并给出，键与中文里的 {名字} 对应。
+  assert.deepEqual(
+    errorResponse(
+      new ApiError(400, '当前状态为「已通过」，只有已通过的报名可以核销', true, {
+        code: 'checkin.notApproved',
+        params: { status: '已通过' },
+      }),
+    ),
+    {
+      status: 400,
+      body: {
+        error: '当前状态为「已通过」，只有已通过的报名可以核销',
+        errorCode: 'checkin.notApproved',
+        errorParams: { status: '已通过' },
+      },
+    },
+  );
+  // 没有变量：只有 errorCode，不带 errorParams。
+  assert.deepEqual(errorResponse(new ApiError(404, '报名记录不存在', true, { code: 'review.recordMissing' })), {
+    status: 404,
+    body: { error: '报名记录不存在', errorCode: 'review.recordMissing' },
+  });
+  // 没有码：一个多余字段都不能出现。
+  assert.deepEqual(errorResponse(new ApiError(403, '无权执行此操作')), {
+    status: 403,
+    body: { error: '无权执行此操作' },
+  });
+});

@@ -120,6 +120,9 @@ test('头像上传落到服务器，并遵守大小与格式设置', async () =>
     assert.strictEqual(rejected.status, 200);
     assert.strictEqual(rejected.body.ok, false);
     assert.match(String(rejected.body.error), /不允许上传 \.jpg/);
+    // 带变量的抛出文案：码 + 占位值一起下发
+    assert.strictEqual(rejected.body.errorCode, 'profile.avatarFormatRejected');
+    assert.deepEqual(rejected.body.errorParams, { ext: 'jpg', formats: 'png' });
 
     const bogus = await put('/api/v1/settings', { avatarFormats: 'gif' }, { token: tokens.admin.token });
     assert.strictEqual(bogus.body.ok, false);
@@ -203,7 +206,7 @@ test('展会媒体上传到服务器，打不开或不再引用的文件会被�
         venue: '测试展馆',
         time: '09:00-17:00',
         date: '2026-09-20',
-        status: '需审核',
+        status: 'review',
         category: '智能家居',
         description: `![图](${linkedUrl})`,
       },

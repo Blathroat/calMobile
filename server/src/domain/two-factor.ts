@@ -93,7 +93,9 @@ function openSecret(stored: string): string {
   try {
     return totp.decryptSecret(stored, totpKey());
   } catch {
-    throw new CodeRejected('验证器密钥无法解读，请在「安全」里重新绑定验证器');
+    throw new CodeRejected('验证器密钥无法解读，请在「安全」里重新绑定验证器', {
+      code: 'security.totpSecretUnreadable',
+    });
   }
 }
 
@@ -164,26 +166,28 @@ export async function verifySecondFactor(
 ): Promise<{ method: 'totp' | 'email' | 'backup' }> {
   const value = String(code === undefined || code === null ? '' : code).trim();
   if (!value) {
-    throw new CodeRejected('请输入验证码');
+    throw new CodeRejected('请输入验证码', { code: 'otp.codeRequired' });
   }
 
   // 备用码的形状与 6 位码一眼可分：分开走分支，免得拿备用码去消耗邮箱验证码的尝试次数
   if (totp.isBackupCodeShape(value)) {
     if (!(await consumeBackupCode(user.id, value))) {
-      throw new CodeRejected('备用码不正确或已被使用');
+      throw new CodeRejected('备用码不正确或已被使用', { code: 'security.backupCodeInvalid' });
     }
     return { method: 'backup' };
   }
 
   if (!/^\d{6}$/.test(value)) {
-    throw new CodeRejected('请输入 6 位数字验证码，或用「XXXXX-XXXXX」形式的备用码');
+    throw new CodeRejected('请输入 6 位数字验证码，或用「XXXXX-XXXXX」形式的备用码', {
+      code: 'security.codeFormat',
+    });
   }
 
   const stored = String(user.totp_secret || '');
   const selectedMethod = user.two_factor_method === 'totp' ? 'totp' : 'email';
   if (selectedMethod === 'totp') {
     if (stored && totp.verifyCode(openSecret(stored), value)) return { method: 'totp' };
-    throw new CodeRejected('验证器验证码不正确');
+    throw new CodeRejected('验证器验证码不正确', { code: 'security.totpCodeInvalid' });
   }
 
   try {
@@ -193,12 +197,15 @@ export async function verifySecondFactor(
       code: value,
     });
     if (consumed.userId && consumed.userId !== user.id) {
-      throw new CodeRejected('验证码不正确');
+      throw new CodeRejected('验证码不正确', { code: 'otp.incorrect' });
     }
     return { method: 'email' };
   } catch (error: unknown) {
     if (isCodeRejected(error)) {
-      throw new CodeRejected(stored ? '验证码不正确（验证器与邮箱验证码都对不上）' : '验证码不正确');
+      throw new CodeRejected(
+        stored ? '验证码不正确（验证器与邮箱验证码都对不上）' : '验证码不正确',
+        stored ? { code: 'security.totpAndEmailMismatch' } : { code: 'otp.incorrect' },
+      );
     }
     throw error;
   }
@@ -254,11 +261,13 @@ export async function confirmTotpSetup(
   const found = await query<PendingSecretRow>('SELECT totp_pending_secret FROM users WHERE id = $1', [userId]);
   const pending = String((found.rows[0] || {}).totp_pending_secret || '');
   if (!pending) {
-    throw new CodeRejected('请先生成验证器密钥');
+    throw new CodeRejected('请先生成验证器密钥', { code: 'security.totpSecretMissing' });
   }
   const value = String(code === undefined || code === null ? '' : code).trim();
   if (!totp.verifyCode(openSecret(pending), value)) {
-    throw new CodeRejected('验证码不正确，请确认手机时间准确、且扫的是刚生成的密钥');
+    throw new CodeRejected('验证码不正确，请确认手机时间准确、且扫的是刚生成的密钥', {
+      code: 'security.totpCodeMismatch',
+    });
   }
   await consumeSecurityStepUp(stepUpToken, userId, sessionId, 'totp-confirm');
   const updated = await query(
@@ -274,6 +283,9 @@ export async function confirmTotpSetup(
     `,
     [userId, pending],
   );
-  if (updated.rowCount !== 1) throw new CodeRejected('验证器配置已变化，请重新验证身份并绑定');
+  if (updated.rowCount !== 1)
+    throw new CodeRejected('验证器配置已变化，请重新验证身份并绑定', {
+      code: 'security.totpSetupChanged',
+    });
   return { backupCodes: await regenerateBackupCodes(userId) };
 }

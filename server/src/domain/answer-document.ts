@@ -1,10 +1,14 @@
 /**
  * 收集项回答的文稿。
  *
+ * 收集项类型是协议值 code（text / radio / checkbox，见 labels.ts 的 FIELD_TYPE），不认中文。
+ *
  * 两张申请页和两条报名路由共用这一处：编码、按标题解码、必填、文本长度、选项和整段上限。
  * 空项在文稿里写成「未填写」，调用方拿到的值是空字符串。不传收集项时只按行切开，供详情展示历史原文。
  * 带上限校验时必须同时传入收集项。一份都没有时保留原文，只检查整段长度。
  */
+
+import type { ErrorDetail } from './errors.js';
 
 const EMPTY = '未填写';
 
@@ -25,6 +29,8 @@ export interface AnswerProblem {
   /** 缺省表示整段报名内容，不是某一项。 */
   title?: string;
   message: string;
+  /** 稳定错误码与 `{名字}` 占位值（供前端本地化）；没有码时只发中文。 */
+  detail?: ErrorDetail;
 }
 
 export interface AnswerLine {
@@ -42,6 +48,8 @@ export interface AnswerDocumentResult {
   problems: AnswerProblem[];
   /** 接口用的那一条：第一个字段错误，否则整段超长。没有问题时是空字符串。 */
   message: string;
+  /** 与 `message` 对应的错误码；没有问题时是 undefined。 */
+  errorDetail?: ErrorDetail;
 }
 
 export type AnswerSource = { values: Readonly<Record<string, unknown>> } | { text: unknown };
@@ -69,9 +77,24 @@ export function answerDocument(input: {
     const text = sourceText(input.source);
     const problems =
       input.limits && input.limits.answer > 0 && text.length > input.limits.answer
-        ? [{ message: `整段报名内容最多 ${input.limits.answer} 个字符` }]
+        ? [
+            {
+              message: `整段报名内容最多 ${input.limits.answer} 个字符`,
+              detail: {
+                code: 'validation.answerTooLong',
+                params: { max: input.limits.answer },
+              },
+            },
+          ]
         : [];
-    return { values: {}, lines: displayLines(text), text, problems, message: problems[0]?.message ?? '' };
+    return {
+      values: {},
+      lines: displayLines(text),
+      text,
+      problems,
+      message: problems[0]?.message ?? '',
+      errorDetail: problems[0]?.detail,
+    };
   }
 
   const values =
@@ -84,8 +107,8 @@ export function answerDocument(input: {
   }));
   const text = lines.map((line) => `${line.label}：${line.value || EMPTY}`).join('\n');
   const problems = input.limits ? problemsFor(fields, values, text, input.limits) : [];
-  const message = problems.find((problem) => problem.title)?.message ?? problems[0]?.message ?? '';
-  return { values, lines, text, problems, message };
+  const chosen = problems.find((problem) => problem.title) ?? problems[0];
+  return { values, lines, text, problems, message: chosen?.message ?? '', errorDetail: chosen?.detail };
 }
 
 function sourceText(source: AnswerSource): string {
@@ -152,7 +175,7 @@ function storedValue(text: string, title: string): string {
 }
 
 function readValue(field: NormalizedField, raw: unknown): string | string[] {
-  if (field.type === '多选') return choices(raw);
+  if (field.type === 'checkbox') return choices(raw);
   return scalar(raw);
 }
 
@@ -175,7 +198,7 @@ function choices(raw: unknown): string[] {
 }
 
 function shownValue(field: NormalizedField, value: string | string[] | undefined): string {
-  if (field.type === '多选') return Array.isArray(value) ? value.join('、') : '';
+  if (field.type === 'checkbox') return Array.isArray(value) ? value.join('、') : '';
   return typeof value === 'string' ? value : '';
 }
 
@@ -200,30 +223,58 @@ function problemsFor(
 ): AnswerProblem[] {
   const problems: AnswerProblem[] = [];
   for (const field of fields) {
-    const message = fieldProblem(field, values[field.title], limits.textFill);
-    if (message) problems.push({ title: field.title, message });
+    const problem = fieldProblem(field, values[field.title], limits.textFill);
+    if (problem) problems.push({ title: field.title, ...problem });
   }
   if (limits.answer > 0 && text.length > limits.answer) {
-    problems.push({ message: `整段报名内容最多 ${limits.answer} 个字符` });
+    problems.push({
+      message: `整段报名内容最多 ${limits.answer} 个字符`,
+      detail: { code: 'validation.answerTooLong', params: { max: limits.answer } },
+    });
   }
   return problems;
 }
 
-function fieldProblem(field: NormalizedField, value: string | string[] | undefined, textFill: number): string {
-  if (isEmpty(field, value)) return field.required ? `请填写「${field.title}」` : '';
-  if (field.type !== '单选' && field.type !== '多选') {
+/** 单个字段的校验结论；通过时返回 null。中文与错误码一起给出。 */
+function fieldProblem(
+  field: NormalizedField,
+  value: string | string[] | undefined,
+  textFill: number,
+): Pick<AnswerProblem, 'message' | 'detail'> | null {
+  if (isEmpty(field, value)) {
+    return field.required
+      ? {
+          message: `请填写「${field.title}」`,
+          detail: { code: 'validation.fieldRequired', params: { title: field.title } },
+        }
+      : null;
+  }
+  if (field.type !== 'radio' && field.type !== 'checkbox') {
     const text = typeof value === 'string' ? value : '';
-    if (textFill > 0 && text.length > textFill) return `「${field.title}」最多 ${textFill} 个字符`;
-    return '';
+    if (textFill > 0 && text.length > textFill) {
+      return {
+        message: `「${field.title}」最多 ${textFill} 个字符`,
+        detail: { code: 'validation.fieldTooLong', params: { title: field.title, max: textFill } },
+      };
+    }
+    return null;
   }
   const options = optionList(field.options);
-  if (options.length === 0) return '';
-  const chosen = field.type === '多选' && Array.isArray(value) ? value : [String(value ?? '')];
-  if (chosen.some((item) => !options.includes(item))) return `「${field.title}」只能选择：${options.join(' / ')}`;
-  return '';
+  if (options.length === 0) return null;
+  const chosen = field.type === 'checkbox' && Array.isArray(value) ? value : [String(value ?? '')];
+  if (chosen.some((item) => !options.includes(item))) {
+    return {
+      message: `「${field.title}」只能选择：${options.join(' / ')}`,
+      detail: {
+        code: 'validation.fieldOptionInvalid',
+        params: { title: field.title, options: options.join(' / ') },
+      },
+    };
+  }
+  return null;
 }
 
 function isEmpty(field: NormalizedField, value: string | string[] | undefined): boolean {
-  if (field.type === '多选') return !Array.isArray(value) || value.length === 0;
+  if (field.type === 'checkbox') return !Array.isArray(value) || value.length === 0;
   return String(value ?? '').trim() === '';
 }

@@ -41,6 +41,7 @@ import {
   monthLabel,
 } from '@/services/format';
 import type { JsonObject } from '@/api/types';
+import { modeLabel, registrationStatusLabel, statusTone } from '@/services/status';
 import { t } from '@/i18n';
 
 const WEEK_LABELS = [
@@ -151,7 +152,7 @@ function dayRows(key: 'exhibitions' | 'meetings'): JsonObject[] {
 
 function meetingLine(meeting: JsonObject): string {
   const time = formatChineseTime(meeting.meetingTime);
-  return time ? `${time} · ${t('registration.list.privateMeeting')}` : t('registration.list.privateMeeting');
+  return time ? t('registration.list.privateMeetingAt', { time }) : t('registration.list.privateMeeting');
 }
 
 const eventDays = (): number[] =>
@@ -159,10 +160,12 @@ const eventDays = (): number[] =>
 const markedDays = (): number[] =>
   Array.isArray(monthData.value?.markedDays) ? (monthData.value?.markedDays as number[]) : [];
 const myActivityMark = t('home.hasMyActivity');
+/** 会议行的头像取名称首字，没有名称时用这里的兜底字。 */
+const meetingInitial = t('home.meetingInitial');
 
 const selectedMeta = computed(() => {
   const count = items.value.length + meetings.value.length;
-  return count > 0 ? `${count} 场` : t('home.noSchedule');
+  return count > 0 ? t('home.selectedCount', { count }) : t('home.noSchedule');
 });
 
 /** 启动公告：只在开关打开且本机未读过时显示一次。 */
@@ -172,7 +175,7 @@ function dayLabel(cell: Cell): string {
   const suffix = `${cell.bold ? t('home.hasExhibition') : ''}${cell.hasEvent ? myActivityMark : ''}`;
   const selected = cell.day === view.value.day && !cell.muted ? t('home.daySelected') : '';
   // 用格子自己的月份：补位格子是上/下月的日期，报成当月会让读屏听到错的日期。
-  return `${cell.month}月${cell.day}日${suffix}${selected}`;
+  return t('home.dayAria', { month: cell.month, day: cell.day, marks: suffix, selected });
 }
 
 /** 加载当前 `view` 对应的月份；已有内容时保留旧内容，只标记忙碌。 */
@@ -470,7 +473,9 @@ onBeforeUnmount(() => {
   <HintNote v-if="hintVisible" :text="t('home.swipeMonthHint')" @dismiss="dismissHint" />
 
   <div class="row" data-between="true">
-    <strong>{{ view.day > 0 ? `${view.month} 月 ${view.day} 日的活动` : t('home.dayEvents') }}</strong>
+    <strong>{{
+      view.day > 0 ? t('home.dayEventsOn', { month: view.month, day: view.day }) : t('home.dayEvents')
+    }}</strong>
     <span class="dim">{{ selectedMeta }}</span>
   </div>
 
@@ -501,7 +506,7 @@ onBeforeUnmount(() => {
       class="row-card"
       type="button"
       data-pressable="true"
-      :aria-label="`查看 ${item.title} 详情`"
+      :aria-label="t('exhibition.list.viewAria', { title: String(item.title ?? '') })"
       @pointerdown="warm(item.id)"
       @click="router.push(`/detail/${item.id}`)"
     >
@@ -509,7 +514,10 @@ onBeforeUnmount(() => {
       <span class="row-copy">
         <span class="row" data-gap="md">
           <strong class="row-title truncate">{{ item.title }}</strong>
-          <StatusTag :text="String(item.modeLabel || item.status || '')" />
+          <StatusTag
+            :text="modeLabel(String(item.statusCode || ''))"
+            :tone="statusTone(String(item.statusCode || ''))"
+          />
         </span>
         <span class="row-meta">{{ item.time }} · {{ item.venue }}</span>
         <span class="row-meta truncate">{{ item.category || '' }}</span>
@@ -521,10 +529,10 @@ onBeforeUnmount(() => {
       class="row-card"
       type="button"
       data-pressable="true"
-      :aria-label="`查看与 ${meeting.title} 的会议详情`"
+      :aria-label="t('home.meetingAria', { title: String(meeting.title ?? '') })"
       @click="router.push(paths.meetingDetail(String(meeting.id)))"
     >
-      <span class="avatar" aria-hidden="true">{{ String(meeting.title || '会').slice(0, 1) }}</span>
+      <span class="avatar" aria-hidden="true">{{ String(meeting.title || meetingInitial).slice(0, 1) }}</span>
       <span class="row-copy">
         <span class="name-line">
           <strong class="row-title truncate">{{ meeting.title }}</strong>
@@ -532,7 +540,10 @@ onBeforeUnmount(() => {
         </span>
         <span class="row-meta">{{ meetingLine(meeting) }}</span>
       </span>
-      <StatusTag :text="String(meeting.status || '')" />
+      <StatusTag
+        :text="registrationStatusLabel(String(meeting.statusCode || ''))"
+        :tone="statusTone(String(meeting.statusCode || ''))"
+      />
     </button>
   </TransitionGroup>
 </template>

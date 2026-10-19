@@ -86,7 +86,7 @@ export async function resolveUser(token: string): Promise<AuthedUser | null> {
     return null;
   }
   if (row.status === 'banned') {
-    throw new ApiError(403, '账号已被封禁');
+    throw new ApiError(403, '账号已被封禁', true, { code: 'auth.accountBanned' });
   }
   // 限时展商到期：在这里惰性结算。命中时把库里的角色改成普通用户，本次请求
   // 也按普通用户继续（不必等定时任务）；普通用户保留过去的到期时间，用于展示「已到期」。

@@ -58,12 +58,13 @@ export function inviteStatus(row: InviteRow, now = new Date()): InviteStatus {
   return 'available';
 }
 
-function unusableMessage(row: InviteRow | null, now = new Date()): string | null {
-  if (!row) return '邀请码无效';
+/** 不可用的原因：中文文案 + 稳定错误码（一条文案一个码）。 */
+function unusableReason(row: InviteRow | null, now = new Date()): { message: string; code: string } | null {
+  if (!row) return { message: '邀请码无效', code: 'invite.invalid' };
   const status = inviteStatus(row, now);
-  if (status === 'revoked') return '邀请码已作废';
-  if (status === 'expired') return '邀请码已过期';
-  if (status === 'exhausted') return '邀请码已用完';
+  if (status === 'revoked') return { message: '邀请码已作废', code: 'invite.revoked' };
+  if (status === 'expired') return { message: '邀请码已过期', code: 'invite.expired' };
+  if (status === 'exhausted') return { message: '邀请码已用完', code: 'invite.exhausted' };
   return null;
 }
 
@@ -118,12 +119,12 @@ export async function listInvites(limit = 50) {
 /** 注册发码前先看一眼：无效码不发邮件，也不消耗邮箱验证码。返回规范化后的码。 */
 export async function assertInviteUsable(raw: unknown): Promise<string> {
   const code = normalizeInviteCode(raw);
-  if (!code) throw badRequest('邀请码无效');
+  if (!code) throw badRequest('邀请码无效', { code: 'invite.invalid' });
   const row = await findByCode(code);
-  const message = unusableMessage(row);
-  if (message) {
+  const reason = unusableReason(row);
+  if (reason) {
     await discardIfStale(row);
-    throw badRequest(message);
+    throw badRequest(reason.message, { code: reason.code });
   }
   return code;
 }
@@ -134,7 +135,7 @@ export async function assertInviteUsable(raw: unknown): Promise<string> {
  */
 export async function consumeInvite(client: PoolClient, raw: unknown): Promise<{ durationDays: number }> {
   const code = normalizeInviteCode(raw);
-  if (!code) throw badRequest('邀请码无效');
+  if (!code) throw badRequest('邀请码无效', { code: 'invite.invalid' });
   const updated = await client.query<{ duration_days: number }>(
     `UPDATE exhibitor_invites
         SET used_count = used_count + 1
@@ -147,9 +148,9 @@ export async function consumeInvite(client: PoolClient, raw: unknown): Promise<{
   );
   if (updated.rowCount) return { durationDays: clampDurationDays(updated.rows[0]?.duration_days) };
   const row = await findByCode(code, client);
-  const message = unusableMessage(row);
+  const reason = unusableReason(row);
   await discardIfStale(row, client);
-  throw badRequest(message || '邀请码无效');
+  throw badRequest(reason?.message || '邀请码无效', { code: reason?.code || 'invite.invalid' });
 }
 
 function generateCode(): string {
@@ -186,12 +187,12 @@ export async function createInvite(createdBy: string, uses: number, validHours: 
       throw error;
     }
   }
-  throw badRequest('邀请码生成失败，请再试一次');
+  throw badRequest('邀请码生成失败，请再试一次', { code: 'invite.generateFailed' });
 }
 
 /** 删除后列表里不再出现。找不到才是 404。 */
 export async function deleteInvite(id: string) {
   const result = await query(`DELETE FROM exhibitor_invites WHERE id = $1 RETURNING id`, [id]);
-  if (!result.rowCount) throw notFound('邀请码不存在');
+  if (!result.rowCount) throw notFound('邀请码不存在', { code: 'invite.notFound' });
   return listInvites();
 }

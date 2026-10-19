@@ -17,7 +17,7 @@
  * - 管理员永远不受限 —— 否则没有任何人能解除限制。
  */
 
-import { forbidden, unauthorized } from './errors.js';
+import { forbidden, unauthorized, type ErrorDetail } from './errors.js';
 import { isPastExpiry } from './membership.js';
 
 export interface Actor {
@@ -88,17 +88,18 @@ export function isLimited(user: { role?: string; status?: string } | null | unde
  *
  * 路由里只调用这里，不各写一遍 `status === 'limited'`，避免改规则时漏掉某一处。
  */
-export const LIMITED_ACTIONS: Record<string, string> = {
-  register: '账号已被限制，不能报名',
-  exhibition: '账号已被限制，不能发布展会',
-  exhibitionUpdate: '账号已被限制，不能修改展会',
-  exhibitionDelete: '账号已被限制，不能删除展会',
-  exhibitionStatus: '账号已被限制，不能修改报名设置',
-  exhibitionFields: '账号已被限制，不能修改报名设置',
-  checkin: '账号已被限制，不能核销',
-  profile: '账号已被限制，不能编辑个人信息',
-  meetingSettings: '账号已被限制，不能修改私人会议设置',
-  invite: '账号已被限制，不能使用邀请码',
+export const LIMITED_ACTIONS: Record<string, { message: string; code: string }> = {
+  register: { message: '账号已被限制，不能报名', code: 'permission.limitedRegister' },
+  exhibition: { message: '账号已被限制，不能发布展会', code: 'permission.limitedExhibition' },
+  exhibitionUpdate: { message: '账号已被限制，不能修改展会', code: 'permission.limitedExhibitionUpdate' },
+  exhibitionDelete: { message: '账号已被限制，不能删除展会', code: 'permission.limitedExhibitionDelete' },
+  // 报名设置的两个动作共用一句文案与一个码。
+  exhibitionStatus: { message: '账号已被限制，不能修改报名设置', code: 'permission.limitedExhibitionSettings' },
+  exhibitionFields: { message: '账号已被限制，不能修改报名设置', code: 'permission.limitedExhibitionSettings' },
+  checkin: { message: '账号已被限制，不能核销', code: 'permission.limitedCheckin' },
+  profile: { message: '账号已被限制，不能编辑个人信息', code: 'permission.limitedProfile' },
+  meetingSettings: { message: '账号已被限制，不能修改私人会议设置', code: 'permission.limitedMeetingSettings' },
+  invite: { message: '账号已被限制，不能使用邀请码', code: 'permission.limitedInvite' },
 };
 
 /** 受限账号执行被禁操作时抛出 403；返回当前用户便于串起来用。 */
@@ -106,43 +107,60 @@ export function assertNotLimited(user: Actor | null | undefined, action: string)
   if (!isLimited(user)) {
     return user;
   }
-  const message = LIMITED_ACTIONS[action];
-  if (!message) {
+  const entry = LIMITED_ACTIONS[action];
+  if (!entry) {
     throw new Error(`未知的受限操作：${action}`);
   }
-  throw forbidden(message);
+  throw forbidden(entry.message, { code: entry.code });
 }
 
-/** 要求已登录；返回当前用户行。 */
-export function requireUser(req: AuthedRequest, message = '请先登录'): Actor {
+/** 要求已登录；返回当前用户行。默认文案自带错误码，调用方换文案时请一并换码。 */
+export function requireUser(
+  req: AuthedRequest,
+  message = '请先登录',
+  detail: ErrorDetail = { code: 'permission.loginRequired' },
+): Actor {
   if (!req.user) {
-    throw unauthorized(message);
+    throw unauthorized(message, detail);
   }
   return req.user;
 }
 
 /** 要求是指定角色之一。 */
-export function requireRole(req: AuthedRequest, roles: string[], message = '无权执行此操作'): Actor {
+export function requireRole(
+  req: AuthedRequest,
+  roles: string[],
+  message = '无权执行此操作',
+  detail: ErrorDetail = { code: 'permission.forbidden' },
+): Actor {
   const user = requireUser(req);
   if (!roles.includes(user.role)) {
-    throw forbidden(message);
+    throw forbidden(message, detail);
   }
   return user;
 }
 
 /** 展商后台 / 报名管理 / 核销：展商与管理员可用。已到期的展商单独说明原因。 */
-export function requireExhibitor(req: AuthedRequest, message = '只有展商或管理员可以执行此操作'): Actor {
+export function requireExhibitor(
+  req: AuthedRequest,
+  message = '只有展商或管理员可以执行此操作',
+  detail: ErrorDetail = { code: 'permission.exhibitorOnly' },
+): Actor {
   const user = requireUser(req);
   if (user.role === 'exhibitor' || user.role === 'admin') return user;
   if (user.exhibitorExpired) {
-    throw forbidden('展商身份已到期，填写邀请码续期后才能使用展商功能');
+    throw forbidden('展商身份已到期，填写邀请码续期后才能使用展商功能', { code: 'permission.exhibitorExpired' });
   }
-  throw forbidden(message);
+  throw forbidden(message, detail);
 }
 
 /** 服务器级设置：只有管理员可改。 */
-export function requireAdmin(req: AuthedRequest, message = '只有管理员可以修改服务器设置'): Actor {
-  return requireRole(req, ['admin'], message);
+export function requireAdmin(
+  req: AuthedRequest,
+  message = '只有管理员可以修改服务器设置',
+  detail: ErrorDetail = { code: 'permission.adminOnly' },
+): Actor {
+  return requireRole(req, ['admin'], message, detail);
 }
 
 /**
@@ -176,7 +194,7 @@ export function assertCanManageExhibition(
     return false;
   }
   if (!canManageExhibition(user, exhibition)) {
-    throw forbidden('只能管理自己举办的展会');
+    throw forbidden('只能管理自己举办的展会', { code: 'permission.exhibitionNotYours' });
   }
   return true;
 }

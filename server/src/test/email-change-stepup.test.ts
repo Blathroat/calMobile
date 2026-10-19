@@ -42,6 +42,17 @@ test('改邮箱要把验证码发到新地址，通过才落库；别人的码�
     assert.strictEqual(noProofTaken.status, 400, '没有身份复核时不能通过返回值探测邮箱是否已被占用');
     assert.match(noProofTaken.body.error, /请先验证身份/);
 
+    // 新邮箱与当前邮箱相同：直接拒绝，中文旁带稳定错误码
+    const proof0 = await identityTicket(session.token, 'before@example.com', 'email');
+    const same = await post(
+      '/api/v1/profile/email',
+      { email: 'before@example.com', stepUpToken: proof0 },
+      { token: session.token },
+    );
+    assert.strictEqual(same.status, 400);
+    assert.strictEqual(same.body.error, '新邮箱与当前邮箱相同');
+    assert.strictEqual(same.body.errorCode, 'profile.emailUnchanged');
+
     // 第一轮：换到 after1，验证码被别人拿去用（换了登录身份）应当失败
     const proof1 = await identityTicket(session.token, 'before@example.com', 'email');
     const asked = await post(

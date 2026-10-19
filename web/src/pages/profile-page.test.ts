@@ -28,8 +28,9 @@ const PROFILE = {
   bio: '已有简介',
   region: '上海',
   socialMedia: '@user',
+  role: 'user',
   roleLabel: '普通用户',
-  status: '正常',
+  statusCode: 'active',
   showRegistrations: true,
 };
 let app: App | undefined;
@@ -177,9 +178,9 @@ describe('个人页资料展示与编辑', () => {
 
   it('活动概览显示已参加与报名记录数，点击进入我的活动', async () => {
     vi.mocked(api.registrations.list).mockResolvedValue([
-      { id: 'r1', status: '已参加' },
-      { id: 'r2', status: '已通过' },
-      { id: 'r3', status: '已撤销' },
+      { id: 'r1', statusCode: 'attended' },
+      { id: 'r2', statusCode: 'approved' },
+      { id: 'r3', statusCode: 'cancelled' },
     ]);
     const router = await mountProfile();
     await vi.waitFor(() => expect(document.querySelectorAll('.profile-stat strong')).toHaveLength(2));

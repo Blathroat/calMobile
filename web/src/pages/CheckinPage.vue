@@ -21,7 +21,7 @@ import { createQrDecoder, type QrDecoder } from '@/services/qr-decoder';
 import { nativeBridge } from '@/services/native-bridge';
 import { openSheet } from '@/services/sheet';
 import { toast } from '@/services/toast';
-import { REGISTRATION_STATUS } from '@/services/status';
+import { REGISTRATION_STATUS, registrationStatusLabel } from '@/services/status';
 import { useHint } from '@/composables/useHint';
 import { answerDocument } from '@domain/answer-document';
 import AppIcon from '@/components/AppIcon.vue';
@@ -331,7 +331,7 @@ async function startScan(): Promise<void> {
     setStage(
       'error',
       t('checkin.scan.openFailed'),
-      `${message || t('checkin.scan.previewFailed')}。可以改用“手动输入报名码”。`,
+      t('checkin.scan.openFailedHint', { reason: message || t('checkin.scan.previewFailed') }),
     );
     clearStatus();
     return;
@@ -634,12 +634,14 @@ function renderResult(response: ApiResult): void {
   const ok = response?.ok === true;
   clearStatus();
   const record = (response?.record ?? {}) as JsonObject;
+  // 接口下发的是状态 code；没有 code（老服务端或异常响应）时才退回通用文案。
+  const statusCode = String(response?.statusCode ?? '');
   // 最新的排最前；本页只当现场记录用，超过上限就丢掉最旧的。
   outcomes.value = [
     {
       id: `${String(record.recordId ?? 'unknown')}-${Date.now()}-${outcomes.value.length}`,
       ok,
-      statusText: String(response?.status || t('checkin.notPassed')),
+      statusText: statusCode ? registrationStatusLabel(statusCode) : t('checkin.notPassed'),
       message: String(response?.message || response?.error || ''),
       record,
     },
@@ -742,7 +744,7 @@ async function submitManual(close: () => void): Promise<void> {
 
     <div class="row" data-between="true">
       <span class="section-label">{{ t('checkin.scan.checkIn') }}</span>
-      <span class="pill">{{ REGISTRATION_STATUS.ATTENDED }}</span>
+      <span class="pill">{{ registrationStatusLabel(REGISTRATION_STATUS.ATTENDED) }}</span>
     </div>
 
     <!-- 取景区：就近显示状态，而不是整页跳转 -->
@@ -821,7 +823,7 @@ async function submitManual(close: () => void): Promise<void> {
         <div class="row" data-between="true">
           <span class="section-label">{{ row.item.ok ? t('checkin.succeeded') : t('checkin.unsuccessful') }}</span>
           <StatusTag
-            :text="row.item.ok ? REGISTRATION_STATUS.ATTENDED : row.item.statusText"
+            :text="row.item.ok ? registrationStatusLabel(REGISTRATION_STATUS.ATTENDED) : row.item.statusText"
             :tone="row.item.ok ? 'ok' : 'danger'"
           />
         </div>

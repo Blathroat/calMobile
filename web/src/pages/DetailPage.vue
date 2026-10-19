@@ -27,7 +27,7 @@ import RoleTag from '@/components/RoleTag.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import ImageViewer from '@/components/ImageViewer.vue';
 import { formatDateWithWeekday } from '@/services/format';
-import { REGISTRATION_STATUS } from '@/services/status';
+import { REGISTRATION_STATUS, modeLabel, statusTone } from '@/services/status';
 import type { ExhibitionDetail, JsonObject, Registration } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -96,7 +96,8 @@ const myRegistration = computed<Registration | null>(() => {
   if (!id) return null;
   return (
     registrations.value.find(
-      (record) => String(record.exhibitionId ?? '') === id && record.status !== REGISTRATION_STATUS.CANCELLED,
+      (record) =>
+        String(record.exhibitionId ?? '') === id && String(record.statusCode ?? '') !== REGISTRATION_STATUS.CANCELLED,
     ) ?? null
   );
 });
@@ -123,7 +124,7 @@ function footerHint(): string {
   // 已报名的说明优先：报名关闭 / 受限都不影响「我已经报上了」这件事。
   if (myRegistration.value) return t('exhibition.detail.registeredHint');
   if (item.openForRegistration === false) {
-    return `${item.modeLabel || item.status}：该展会当前不接受报名。`;
+    return t('exhibition.detail.closedWithMode', { mode: modeLabel(String(item.statusCode || '')) });
   }
   if (registerLimited.value) return t('exhibition.detail.registerRestricted');
   // 访客进不来这一页（守守卫按「访客只可访问首页」处理），所以这里不再区分「先登录」的引导。
@@ -229,9 +230,9 @@ function share(): void {
   const link = registrationLink(bootstrap.publicBaseUrl, item.id);
   const text = [
     String(item.title ?? ''),
-    `${formatDateWithWeekday(item.date)} ${item.time}`,
+    `${formatDateWithWeekday(item.date)} ${String(item.time ?? '')}`.trim(),
     String(item.venue ?? ''),
-    link ? `${t('exhibition.detail.registrationLinkPrefix')}${link}` : '',
+    link ? t('exhibition.detail.registrationLinkPrefix', { link }) : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -317,7 +318,7 @@ onMounted(() => {
       :aria-label="COPY.openViewer"
       @click="viewerOpen = true"
     >
-      <img :src="cover" :alt="`${exhibition.title} 展会图片`" />
+      <img :src="cover" :alt="t('exhibition.detail.coverAlt', { title: String(exhibition.title ?? '') })" />
     </button>
     <div v-else class="hero ph-img" aria-hidden="true" />
 
@@ -338,7 +339,10 @@ onMounted(() => {
         <span class="row-meta">{{ exhibition.venue }}</span>
       </div>
       <div class="row" data-gap="md">
-        <StatusTag :text="String(exhibition.modeLabel || exhibition.status || '')" />
+        <StatusTag
+          :text="modeLabel(String(exhibition.statusCode || ''))"
+          :tone="statusTone(String(exhibition.statusCode || ''))"
+        />
         <span class="row-meta">{{
           exhibition.openForRegistration
             ? t('exhibition.detail.registrationNeeded')
@@ -351,7 +355,7 @@ onMounted(() => {
       class="row-card"
       type="button"
       data-pressable="true"
-      :aria-label="`查看 ${exhibition.exhibitor} 的公开主页`"
+      :aria-label="t('exhibition.detail.exhibitorHomeAria', { exhibitor: String(exhibition.exhibitor ?? '') })"
       @click="router.push(`/user-public/${encodeURIComponent(String(exhibition.exhibitor))}`)"
     >
       <AvatarBox :name="String(exhibition.exhibitor || '')" />
@@ -377,7 +381,10 @@ onMounted(() => {
       <p class="row-meta">
         {{
           fields.length > 0
-            ? `展商配置了 ${fields.length} 项信息：${fields.map((field) => String(field.title)).join('、')}`
+            ? t('exhibition.detail.fieldsSummary', {
+                count: fields.length,
+                titles: fields.map((field) => String(field.title ?? '')).join('、'),
+              })
             : t('exhibition.detail.noExtraRegistrationInfo')
         }}
       </p>
@@ -421,7 +428,7 @@ onMounted(() => {
   <ImageViewer
     v-if="viewerOpen && exhibition && cover"
     :src="cover"
-    :alt="`${exhibition.title} 展会图片`"
+    :alt="t('exhibition.detail.coverAlt', { title: String(exhibition.title ?? '') })"
     @close="viewerOpen = false"
   />
 </template>

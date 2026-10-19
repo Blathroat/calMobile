@@ -19,7 +19,7 @@ export async function runEnveloped(run: () => unknown | Promise<unknown>): Promi
     return successEnvelope(await run());
   } catch (error: unknown) {
     if (error instanceof ApiError && error.envelope && ENVELOPE_STATUS.has(error.status)) {
-      return { ok: false, error: error.message };
+      return { ok: false, error: error.message, ...error.detailFields() };
     }
     throw error;
   }

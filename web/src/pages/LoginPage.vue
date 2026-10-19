@@ -64,7 +64,7 @@ const methodHint = computed(() => {
 });
 
 const resendLabel = computed(() => {
-  if (remaining.value > 0) return `${remaining.value} ${t('auth.login.secondsUntilResend')}`;
+  if (remaining.value > 0) return t('auth.login.secondsUntilResend', { seconds: remaining.value });
   return emailSent.value ? t('auth.login.resendCode') : t('auth.login.sendEmailCode');
 });
 
@@ -78,7 +78,7 @@ function redirectTarget(): string {
 async function enterAs(): Promise<void> {
   await refreshRuntimeBootstrap();
   stopCountdown();
-  toast(`欢迎回来，${session.user.nickname || session.user.username}`, 'success');
+  toast(t('auth.login.welcomeBack', { name: String(session.user.nickname || session.user.username || '') }), 'success');
   await router.replace(redirectTarget());
 }
 

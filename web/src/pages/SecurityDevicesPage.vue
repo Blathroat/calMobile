@@ -33,16 +33,11 @@ const copy = {
   emptyDescription: t('security.devices.noSessions'),
   currentDevice: t('security.devices.currentDevice'),
   otherDevice: t('security.devices.otherDevice'),
-  lastActive: t('security.devices.recentActivity'),
-  firstSeen: t('security.devices.firstLogin'),
-  activeSessions: t('security.devices.activeSessions'),
   revokeThisDevice: t('security.devices.signOutThis'),
   unnamedDevice: t('security.devices.unnamedDevice'),
   unknownDate: t('admin.users.unknown'),
   processing: t('security.devices.processing'),
   revokeDeviceTitle: t('security.devices.signOut'),
-  confirmRevoke: t('security.devices.confirmSignOut'),
-  confirmSuffix: t('security.devices.confirmSuffix'),
   revokedNotice: t('security.devices.signedOut'),
   revokeAllTitle: t('security.devices.signOutAll'),
   revokeAllMessage: t('security.devices.endAllSessions'),
@@ -95,7 +90,7 @@ function signOutLocally(): void {
 function revokeDevice(device: DeviceSession): void {
   confirmSheet({
     title: copy.revokeDeviceTitle,
-    message: `${copy.confirmRevoke}「${device.deviceName || copy.unnamedDevice}」${copy.confirmSuffix}`,
+    message: t('security.devices.confirmSignOutLine', { name: device.deviceName || copy.unnamedDevice }),
     confirmLabel: copy.revokeDeviceTitle,
     tone: 'danger',
     onConfirm: async () => {
@@ -162,11 +157,15 @@ function revokeAll(): void {
           </div>
         </div>
         <div class="stack" data-gap="xs">
-          <span class="row-meta">{{ copy.lastActive }}：{{ dateLabel(device.lastActive) }}</span>
-          <span class="row-meta">{{ copy.firstSeen }}：{{ dateLabel(device.firstSeen) }}</span>
-          <span v-if="device.activeSessions > 1" class="row-meta"
-            >{{ device.activeSessions }} {{ copy.activeSessions }}</span
-          >
+          <span class="row-meta">{{
+            t('security.devices.recentActivityLine', { time: dateLabel(device.lastActive) })
+          }}</span>
+          <span class="row-meta">{{
+            t('security.devices.firstLoginLine', { time: dateLabel(device.firstSeen) })
+          }}</span>
+          <span v-if="device.activeSessions > 1" class="row-meta">{{
+            t('security.devices.activeSessionsLine', { count: device.activeSessions })
+          }}</span>
         </div>
         <button
           class="cta ghost"

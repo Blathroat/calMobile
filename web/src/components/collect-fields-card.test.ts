@@ -34,7 +34,7 @@ function typeButton(label: string): HTMLButtonElement {
 
 describe('报名收集项编辑卡', () => {
   it('类型是滑动分段，切到单选只留一个空选项', async () => {
-    const fields: CollectField[] = [{ title: '称呼', type: '文本', required: false, options: [] }];
+    const fields: CollectField[] = [{ title: '称呼', type: 'text', required: false, options: [] }];
     mount(fields);
     expect([...document.querySelectorAll('.seg button')].map((button) => button.textContent?.trim())).toEqual([
       '文本',
@@ -43,18 +43,18 @@ describe('报名收集项编辑卡', () => {
     ]);
     typeButton('单选').click();
     await nextTick();
-    expect(fields[0]?.type).toBe('单选');
+    expect(fields[0]?.type).toBe('radio');
     expect(fields[0]?.options).toEqual(['']);
     expect(document.body.textContent).not.toContain('至少写下两个选项');
   });
 
   it('已经有一个选项时，改成多选不会再补一格', async () => {
-    const fields: CollectField[] = [{ title: '来源', type: '单选', required: true, options: ['朋友'] }];
+    const fields: CollectField[] = [{ title: '来源', type: 'radio', required: true, options: ['朋友'] }];
     mount(fields);
     expect(document.querySelectorAll('.option-input')).toHaveLength(1);
     typeButton('多选').click();
     await nextTick();
-    expect(fields[0]?.type).toBe('多选');
+    expect(fields[0]?.type).toBe('checkbox');
     expect(fields[0]?.options).toEqual(['朋友']);
   });
 
@@ -78,10 +78,10 @@ describe('报名收集项编辑卡', () => {
   });
 
   it('单选和多选的选项输入使用各自的字数上限', async () => {
-    const radio: CollectField[] = [{ title: '来源', type: '单选', required: false, options: ['友'] }];
+    const radio: CollectField[] = [{ title: '来源', type: 'radio', required: false, options: ['友'] }];
     mount(radio, { radioMax: 4, checkMax: 8 });
     expect(document.querySelector<HTMLInputElement>('.option-input')?.maxLength).toBe(4);
-    const check: CollectField[] = [{ title: '需求', type: '多选', required: false, options: ['车'] }];
+    const check: CollectField[] = [{ title: '需求', type: 'checkbox', required: false, options: ['车'] }];
     app?.unmount();
     mount(check, { radioMax: 4, checkMax: 8 });
     await nextTick();

@@ -1,7 +1,15 @@
 import { createApi } from '@/api/client';
 import type { Bootstrap } from '@/api/types';
 import { applyAccentIndex, applyMode } from '@/app/theme';
-import { applyOfferedLang, currentLanguageId, downloadMissingPacks, reloadForLanguage, type LangOffer } from '@/i18n';
+import { isJoinSurface } from '@/app/surface';
+import {
+  applyOfferedLang,
+  currentLanguageId,
+  downloadMissingPacks,
+  reloadForLanguage,
+  t,
+  type LangOffer,
+} from '@/i18n';
 import { toast } from '@/services/toast';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useCapabilitiesStore } from '@/stores/capabilities';
@@ -14,6 +22,7 @@ let bootPromise: Promise<void> | undefined;
 
 export function bootApp(): Promise<void> {
   if (bootPromise) return bootPromise;
+  applyDocumentTitle();
   bootPromise = api.session
     // 先从设备存储恢复会话（有刷新令牌就换一张访问令牌），再取启动数据：
     // 顺序反了的话 bootstrap 会以匿名身份回答，页面首帧会停在登录页。
@@ -29,6 +38,15 @@ export function bootApp(): Promise<void> {
 
 export function resetBootForTests(): void {
   bootPromise = undefined;
+}
+
+/**
+ * 页面标题（浏览器页签、分享预览）。HTML 里只留品牌，语言相关的名字在这里落一次：
+ * 应用与报名站各有各的名字，靠 `isJoinSurface` 区分。切语言会整页重载，所以不用监听。
+ */
+function applyDocumentTitle(): void {
+  if (typeof document === 'undefined') return;
+  document.title = t(isJoinSurface ? 'join.documentTitle' : 'app.documentTitle');
 }
 
 /** 每次身份切换后重读整份启动数据，偏好与权限落定后才允许进入下一屏。 */

@@ -158,7 +158,11 @@ async function deliverIdentityCode(): Promise<void> {
   try {
     identityEmail.value = (await props.sendIdentityCode()) || identityEmail.value;
     identityCodeSent.value = true;
-    notice.value = `${copy.identityCodeSent} ${identityEmail.value} · ${copy.emailCodeExpiry}`;
+    notice.value = t('security.setup.codeSentLine', {
+      sent: copy.identityCodeSent,
+      email: identityEmail.value,
+      expiry: copy.emailCodeExpiry,
+    });
   } catch (reason) {
     error.value = errorText(reason);
     props.onIdentityFailure?.();
@@ -333,7 +337,9 @@ function requestEmailResend(): void {
         {{ copy.emailMethod }}
       </button>
     </div>
-    <p v-if="identityMethod === 'email'" class="field-hint">{{ copy.emailSent }} {{ identityEmail }}。</p>
+    <p v-if="identityMethod === 'email'" class="field-hint">
+      {{ t('security.setup.codeSentToEmail', { email: identityEmail }) }}
+    </p>
     <button
       v-if="identityMethod === 'email' && !identityCodeSent"
       class="cta ghost"
@@ -394,7 +400,15 @@ function requestEmailResend(): void {
         :placeholder="t('auth.register.emailPlaceholder')"
       />
     </div>
-    <p v-if="pendingEmail" class="field-hint">{{ copy.emailSent }} {{ pendingEmail }} · {{ copy.emailCodeExpiry }}</p>
+    <p v-if="pendingEmail" class="field-hint">
+      {{
+        t('security.setup.codeSentLine', {
+          sent: copy.emailSent,
+          email: pendingEmail,
+          expiry: copy.emailCodeExpiry,
+        })
+      }}
+    </p>
     <div v-if="pendingEmail" class="field">
       <label for="security-sheet-email-code">{{ t('auth.register.sixDigits') }}</label>
       <input
@@ -428,9 +442,7 @@ function requestEmailResend(): void {
   </div>
 
   <div v-else-if="view === 'email-factor'" class="form" data-gap="sm">
-    <p class="field-hint">
-      {{ t('security.setup.enableTwoFactor') }}：{{ copy.emailSent }} {{ maskedEmail }} · {{ copy.emailCodeExpiry }}
-    </p>
+    <p class="field-hint">{{ t('security.setup.enableTwoFactorSent', { email: maskedEmail }) }}</p>
     <div class="field">
       <label for="security-sheet-factor-code">{{ t('auth.register.sixDigits') }}</label>
       <input
@@ -454,7 +466,13 @@ function requestEmailResend(): void {
   </div>
 
   <div v-else-if="view === 'totp'" class="form" data-gap="sm">
-    <p class="field-hint">{{ qrError ? `${qrError}，${copy.manualSecret}` : t('security.setup.scanOrEnter') }}</p>
+    <p class="field-hint">
+      {{
+        qrError
+          ? t('security.setup.scanFailed', { reason: qrError, manual: copy.manualSecret })
+          : t('security.setup.scanOrEnter')
+      }}
+    </p>
     <div class="qr-wrap"><QrCanvas :text="otpauthUri || ''" :size="200" @error="qrError = $event" /></div>
     <code class="qr-code-text">{{ secretGroups }}</code>
     <div class="field">
@@ -514,7 +532,14 @@ function requestEmailResend(): void {
 
   <div v-else-if="view === 'change-password'" class="form" data-gap="sm">
     <p class="field-hint">
-      {{ copy.passwordLength }} {{ passwordMin }}–{{ passwordMax }} {{ copy.passwordCharacters }}
+      {{
+        t('security.setup.passwordRange', {
+          label: copy.passwordLength,
+          min: passwordMin,
+          max: passwordMax,
+          unit: copy.passwordCharacters,
+        })
+      }}
     </p>
     <div class="field">
       <label for="security-sheet-new-password">{{ copy.newPassword }}</label>

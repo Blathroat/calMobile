@@ -196,7 +196,12 @@ export function createApp(options: AppOptions): Hono {
    */
   app.notFound((c) => {
     const url = new URL(c.req.url);
-    const missing = jsonResponse(c, { error: `路径 ${url.pathname}${url.search} 不存在` }, 404);
+    const path = `${url.pathname}${url.search}`;
+    const missing = jsonResponse(
+      c,
+      { error: `路径 ${path} 不存在`, errorCode: 'app.routeNotFound', errorParams: { path } },
+      404,
+    );
     if (!options.joinRoot || !isJoinPagePath(url.pathname)) return missing;
     const location = canonicalRedirect({
       requestHost: requestHost({

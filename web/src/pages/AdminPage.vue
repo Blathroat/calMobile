@@ -26,10 +26,15 @@ import SegControl from '@/components/SegControl.vue';
 import AdminUsersSection from './AdminUsersSection.vue';
 import AdminExhibitionsSection from './AdminExhibitionsSection.vue';
 import AdminSettingsSection from './AdminSettingsSection.vue';
+import { USER_STATUSES, modeLabel, roleLabel, userStatusLabel } from '@/services/status';
 import type { Bootstrap, Exhibition, JsonObject, User } from '@/api/types';
 import { t } from '@/i18n';
 
-const USER_STATUSES = [t('admin.users.normal'), t('admin.users.restricted'), t('admin.users.banned')];
+/**
+ * 账号状态面板：`value` 是回传接口、并与 `user.statusCode` 比较的 code（不随语言变），
+ * `label` 才是屏幕上的文案。
+ */
+const USER_STATUS_OPTIONS = USER_STATUSES.map((value) => ({ value, label: userStatusLabel(value) }));
 const ROLE_OPTIONS = [
   { code: 'user', label: t('admin.users.roleUser') },
   { code: 'exhibitor', label: t('admin.users.roleExhibitor') },
@@ -434,8 +439,11 @@ function manageRole(user: User): void {
     },
   }));
   openSheet({
-    title: `调整 ${user.nickname} 的权限`,
-    message: `${user.role} · 注册于 ${user.registrationTime || t('admin.users.unknown')}`,
+    title: t('admin.users.adjustRoleFor', { name: String(user.nickname ?? '') }),
+    message: t('admin.users.registeredAt', {
+      role: roleLabel(String(user.role || user.roleCode || '')),
+      time: String(user.registrationTime || t('admin.users.unknown')),
+    }),
     actions,
     layout: 'stack',
   });
@@ -446,7 +454,11 @@ async function updateUserRole(user: User, role: string, label: string): Promise<
     const result = await api.users.setRole(String(user.id ?? ''), role);
     const ok = result?.ok === true;
     toast(
-      String(ok ? `已将 ${user.nickname} 设为${label}` : result?.error || t('admin.users.updateFailed')),
+      String(
+        ok
+          ? t('admin.users.setTo', { name: String(user.nickname ?? ''), value: label })
+          : result?.error || t('admin.users.updateFailed'),
+      ),
       ok ? 'success' : 'error',
     );
     if (ok) await loadUsers();
@@ -456,18 +468,21 @@ async function updateUserRole(user: User, role: string, label: string): Promise<
 }
 
 function manageUser(user: User): void {
-  const actions: SheetAction[] = USER_STATUSES.map((status) => ({
-    label: status,
-    variant: user.status === status ? 'primary' : 'ghost',
+  const actions: SheetAction[] = USER_STATUS_OPTIONS.map((option) => ({
+    label: option.label,
+    variant: user.statusCode === option.value ? 'primary' : 'ghost',
     onClick: async (close) => {
       close();
-      await updateUserStatus(user, status);
+      await updateUserStatus(user, option.value, option.label);
     },
   }));
   // 不放「取消」：点遮罩、按返回或 Esc 都能关，面板里多一个取消只会让状态选项更不显眼。
   openSheet({
-    title: `调整 ${user.nickname} 的状态`,
-    message: `${user.role} · 注册于 ${user.registrationTime || t('admin.users.unknown')}`,
+    title: t('admin.users.adjustStatusFor', { name: String(user.nickname ?? '') }),
+    message: t('admin.users.registeredAt', {
+      role: roleLabel(String(user.role || user.roleCode || '')),
+      time: String(user.registrationTime || t('admin.users.unknown')),
+    }),
     actions,
     layout: 'stack',
   });
@@ -483,13 +498,17 @@ function openUserMeetings(user: User): void {
   void router.push(`/admin/meetings/${encodeURIComponent(String(user.id ?? ''))}`);
 }
 
-async function updateUserStatus(user: User, status: string): Promise<void> {
+async function updateUserStatus(user: User, status: string, label: string): Promise<void> {
   try {
     // 写接口统一返回 { ok, error }：只判断整个响应是否为真会把失败也当成成功。
     const result = await api.users.setStatus(String(user.id ?? ''), status);
     const ok = result?.ok === true;
     toast(
-      String(ok ? `已将 ${user.nickname} 设为${status}` : result?.error || t('admin.users.updateFailed')),
+      String(
+        ok
+          ? t('admin.users.setTo', { name: String(user.nickname ?? ''), value: label })
+          : result?.error || t('admin.users.updateFailed'),
+      ),
       ok ? 'success' : 'error',
     );
     if (ok) await loadUsers();
@@ -505,7 +524,7 @@ async function updateUserStatus(user: User, status: string): Promise<void> {
 function disableTwoFactor(user: User): void {
   confirmSheet({
     title: t('admin.users.disableTwoFactor'),
-    message: `关闭后 ${user.nickname} 登录时只校验密码。请确认这是账号本人提出的请求。`,
+    message: t('admin.users.disableTwoFactorConfirm', { name: String(user.nickname ?? '') }),
     confirmLabel: t('common.close'),
     tone: 'danger',
     onConfirm: async () => {
@@ -513,7 +532,11 @@ function disableTwoFactor(user: User): void {
         const result = await api.users.disableTwoFactor(String(user.id ?? ''));
         const ok = result?.ok === true;
         toast(
-          String(ok ? `已关闭 ${user.nickname} 的两步验证` : result?.error || t('admin.users.updateFailed')),
+          String(
+            ok
+              ? t('admin.users.twoFactorDisabled', { name: String(user.nickname ?? '') })
+              : result?.error || t('admin.users.updateFailed'),
+          ),
           ok ? 'success' : 'error',
         );
         if (ok) await loadUsers();
@@ -548,7 +571,7 @@ async function exportCsv(): Promise<void> {
       String(item.venue ?? ''),
       String(item.date ?? item.dateLabel ?? ''),
       String(item.time ?? ''),
-      String(item.modeLabel ?? item.status ?? ''),
+      modeLabel(String(item.statusCode ?? '')),
       String(item.category ?? ''),
       String(item.description ?? '').replace(/\n/g, ' '),
     ]),
@@ -558,7 +581,7 @@ async function exportCsv(): Promise<void> {
   const filename = 'exhibitions.csv';
   try {
     await device.exportCsv(filename, content);
-    toast(`已导出 ${exhibitionItems.value.length} 行到 ${filename}`, 'success');
+    toast(t('admin.exhibitions.exportedRows', { count: exhibitionItems.value.length, file: filename }), 'success');
   } catch (reason) {
     // 用户在系统保存框点了取消：按码判断，不给红色错误，只说明没有导出。
     if (reason && typeof reason === 'object' && (reason as { code?: unknown }).code === 'cancelled') {
@@ -670,9 +693,11 @@ const storagePercent = computed(() => {
   if (limit <= 0) return 0;
   return Math.min(100, Math.round((storageUsage.value.usedBytes / limit) * 100));
 });
-const storageCaption = computed(
-  () =>
-    `${t('admin.media.used')} ${formatStorage(storageUsage.value.usedBytes)} / ${formatStorage(storageUsage.value.limitBytes)}`,
+const storageCaption = computed(() =>
+  t('admin.media.usage', {
+    used: formatStorage(storageUsage.value.usedBytes),
+    limit: formatStorage(storageUsage.value.limitBytes),
+  }),
 );
 
 /**
