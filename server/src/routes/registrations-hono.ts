@@ -15,11 +15,12 @@ import { registrationSchema, registrationTargetSchema } from '../domain/schemas.
 
 const app = new Hono<HonoEnv>();
 const DUPLICATE_MESSAGE = '已提交过该展会的报名';
-function closedMessage(statusCode: string) {
-  if (statusCode === 'display') return '该展会仅展示，不开放报名';
-  if (statusCode === 'closed') return '该展会已截止报名';
-  if (statusCode === 'ended') return '该展会已结束';
-  return '该展会当前不可报名';
+/** 不可报名的原因：中文文案 + 稳定错误码。 */
+function closedMessage(statusCode: string): { message: string; code: string } {
+  if (statusCode === 'display') return { message: '该展会仅展示，不开放报名', code: 'registration.displayOnly' };
+  if (statusCode === 'closed') return { message: '该展会已截止报名', code: 'registration.closed' };
+  if (statusCode === 'ended') return { message: '该展会已结束', code: 'registration.ended' };
+  return { message: '该展会当前不可报名', code: 'registration.unavailable' };
 }
 interface ExhibitionWindowRow extends ExhibitionRow {
   before_start: boolean;
@@ -54,7 +55,7 @@ app.get('/:id', authenticateHono, async (c) => {
   const user = requireUser({ user: userOf(c) });
   const row = await loadRegistration(c.req.param('id'));
   if (!row || (row.visitor_id !== user.userId && user.role !== 'admin'))
-    return jsonResponse(c, { found: false, error: '报名记录不存在或已撤销' });
+    return jsonResponse(c, { found: false, error: '报名记录不存在或已撤销', errorCode: 'registration.notFound' });
   return jsonResponse(c, { found: true, registration: registrationPayload(row) });
 });
 app.post('/', authenticateHono, async (c) => {
@@ -63,17 +64,20 @@ app.post('/', authenticateHono, async (c) => {
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
     const { exhibitionId } = parseSchema(registrationTargetSchema, body);
-    if (!exhibitionId) throw badRequest('请选择要报名的展会');
+    if (!exhibitionId) throw badRequest('请选择要报名的展会', { code: 'registration.exhibitionRequired' });
     const exhibition = await loadExhibition(exhibitionId);
-    if (!exhibition) throw badRequest('展会不存在或已删除');
-    if (!labels.acceptsRegistration(exhibition.status)) throw badRequest(closedMessage(exhibition.status));
+    if (!exhibition) throw badRequest('展会不存在或已删除', { code: 'exhibition.notFound' });
+    if (!labels.acceptsRegistration(exhibition.status)) {
+      const closed = closedMessage(exhibition.status);
+      throw badRequest(closed.message, { code: closed.code });
+    }
     const existing = await query(
       `SELECT id FROM registrations WHERE exhibition_id = $1 AND visitor_id = $2 AND status <> 'cancelled' LIMIT 1`,
       [exhibitionId, user.userId],
     );
-    if (existing.rows.length > 0) throw badRequest(DUPLICATE_MESSAGE);
-    if (exhibition.before_start) throw badRequest('报名尚未开始');
-    if (exhibition.after_end) throw badRequest('报名已截止');
+    if (existing.rows.length > 0) throw badRequest(DUPLICATE_MESSAGE, { code: 'registration.duplicate' });
+    if (exhibition.before_start) throw badRequest('报名尚未开始', { code: 'registration.notStarted' });
+    if (exhibition.after_end) throw badRequest('报名已截止', { code: 'registration.afterEnd' });
     const bounds = await readLimits();
     const { visitorName, visitorType, answers } = parseSchema(registrationSchema(), body);
     const document = answerDocument({
@@ -81,7 +85,7 @@ app.post('/', authenticateHono, async (c) => {
       source: { text: answers },
       limits: { textFill: Number(bounds.textFill) || 200, answer: Number(bounds.answer) || 200 },
     });
-    if (document.message) throw badRequest(document.message);
+    if (document.message) throw badRequest(document.message, document.errorDetail);
     const autoApproved = exhibition.status === 'optional';
     const status = autoApproved ? 'approved' : 'pending';
     const id = `reg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -94,7 +98,7 @@ app.post('/', authenticateHono, async (c) => {
       );
     } catch (error: unknown) {
       if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505')
-        throw badRequest(DUPLICATE_MESSAGE);
+        throw badRequest(DUPLICATE_MESSAGE, { code: 'registration.duplicate' });
       throw error;
     }
     const created = await loadRegistration(id);
@@ -107,7 +111,7 @@ app.post('/', authenticateHono, async (c) => {
 });
 app.delete('/:id', authenticateHono, async (c) =>
   mutate(c, async () => {
-    const user = requireUser({ user: userOf(c) }, '请先登录后再操作');
+    const user = requireUser({ user: userOf(c) }, '请先登录后再操作', { code: 'registration.loginRequired' });
     const result = await query<{ id: string; visitor_id: string | null; status: string; allow_cancel: boolean }>(
       `SELECT r.id, r.visitor_id, r.status, e.allow_cancel
          FROM registrations r
@@ -116,11 +120,14 @@ app.delete('/:id', authenticateHono, async (c) =>
       [c.req.param('id')],
     );
     const row = result.rows[0];
-    if (!row) throw badRequest('报名记录不存在或已撤销');
-    if (row.visitor_id !== user.userId) throw forbidden('只能撤销自己的报名');
-    if (row.status === 'cancelled') throw badRequest('该报名已撤销，无需重复操作');
-    if (row.status === 'attended') throw badRequest('已参加的报名不能再撤销');
-    if (row.status === 'approved' && row.allow_cancel !== true) throw badRequest('展商未允许撤销已通过的报名');
+    if (!row) throw badRequest('报名记录不存在或已撤销', { code: 'registration.notFound' });
+    if (row.visitor_id !== user.userId) throw forbidden('只能撤销自己的报名', { code: 'registration.cancelNotYours' });
+    if (row.status === 'cancelled')
+      throw badRequest('该报名已撤销，无需重复操作', { code: 'registration.alreadyCancelled' });
+    if (row.status === 'attended')
+      throw badRequest('已参加的报名不能再撤销', { code: 'registration.attendedCannotCancel' });
+    if (row.status === 'approved' && row.allow_cancel !== true)
+      throw badRequest('展商未允许撤销已通过的报名', { code: 'registration.cancelNotAllowed' });
     await query(`UPDATE registrations SET status = 'cancelled', updated_at = now() WHERE id = $1`, [row.id]);
     return {};
   }),

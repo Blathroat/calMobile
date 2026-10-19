@@ -234,3 +234,10 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
     await del(`/api/v1/exhibitions/${exhibitionId}`, { token: tokens.exhibitor.token });
   }
 });
+
+test('公开页查不到用户：found:false 的中文旁边带稳定错误码', async () => {
+  const missing = await get('/api/v1/users/public?nickname=no-such-nickname-for-contract');
+  assert.strictEqual(missing.body.found, false);
+  assert.strictEqual(missing.body.error, '用户不存在或未公开');
+  assert.strictEqual(missing.body.errorCode, 'users.publicProfileUnavailable');
+});

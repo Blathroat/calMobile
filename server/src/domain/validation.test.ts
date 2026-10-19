@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { z } from 'zod';
 import { DEFAULT_SETTINGS } from '../config/migrate.js';
 import { ApiError } from './errors.js';
 import {
@@ -10,6 +11,7 @@ import {
   stringListSchema,
   textSchema,
   timeRangeSchema,
+  validationCode,
 } from './validation.js';
 import {
   exhibitionStatusSchema,
@@ -30,11 +32,15 @@ import {
 const limits = DEFAULT_SETTINGS.limits;
 
 function messageOf(run: () => unknown): string {
+  return errorOf(run).message;
+}
+
+function errorOf(run: () => unknown): ApiError {
   try {
     run();
   } catch (error) {
     assert.ok(error instanceof ApiError);
-    return error.message;
+    return error;
   }
   assert.fail('应当校验失败');
 }
@@ -273,4 +279,51 @@ test('状态白名单和月份范围由 schema 校验', () => {
     messageOf(() => parseSchema(monthQuerySchema, { year: 2026, month: 13 })),
     '月份不能大于 12',
   );
+});
+
+test('校验失败带稳定错误码与占位值，中文一个字不变', () => {
+  const required = errorOf(() => parseSchema(textSchema({ label: '展会名称', max: 3 }), ''));
+  assert.equal(required.message, '请输入展会名称');
+  assert.equal(required.errorCode, 'validation.required');
+  assert.deepEqual(required.errorParams, { label: '展会名称' });
+
+  const tooLong = errorOf(() => parseSchema(textSchema({ label: '展会名称', max: 3 }), '1234'));
+  assert.equal(tooLong.message, '展会名称最多 3 个字符');
+  assert.equal(tooLong.errorCode, 'validation.tooLong');
+  assert.deepEqual(tooLong.errorParams, { label: '展会名称', max: 3 });
+
+  const integer = errorOf(() => parseSchema(intSchema({ label: '年份', min: 1970, max: 9999 }), 'abc'));
+  assert.equal(integer.message, '年份必须是整数');
+  assert.equal(integer.errorCode, 'validation.integer');
+  assert.deepEqual(integer.errorParams, { label: '年份' });
+
+  const tooSmall = errorOf(() => parseSchema(monthQuerySchema, { year: 1900, month: 6, day: 1 }));
+  assert.equal(tooSmall.message, '年份不能小于 1970');
+  assert.equal(tooSmall.errorCode, 'validation.min');
+  assert.deepEqual(tooSmall.errorParams, { label: '年份', min: 1970 });
+
+  const badDate = errorOf(() => parseSchema(isoDateSchema({ label: '展会日期', required: true }), '2026/01/01'));
+  assert.equal(badDate.message, '展会日期格式应为 YYYY-MM-DD');
+  assert.equal(badDate.errorCode, 'validation.dateFormat');
+  assert.deepEqual(badDate.errorParams, { label: '展会日期' });
+});
+
+test('validationCode：取第一条带码的 issue，没有码时返回 null', () => {
+  const coded = z
+    .object({ a: textSchema({ label: '甲' }), b: intSchema({ label: '乙' }) })
+    .safeParse({ a: '', b: 'x' });
+  assert.ok(!coded.success);
+  assert.deepEqual(validationCode(coded.error), { code: 'validation.required', params: { label: '甲' } });
+
+  // 没有 i18nCode 的 issue（第三方 / 未改造的 schema）：不发码，响应只带中文。
+  const uncoded = z.object({ n: z.number() }).safeParse({ n: 'x' });
+  assert.ok(!uncoded.success);
+  assert.equal(validationCode(uncoded.error), null);
+
+  const parsed = z.object({ n: z.number() }).safeParse({ n: 'x' });
+  assert.ok(!parsed.success);
+  const error = errorOf(() => parseSchema(z.object({ n: z.number() }), { n: 'x' }));
+  assert.equal(error.errorCode, undefined);
+  assert.equal(error.errorParams, undefined);
+  assert.ok(error.message, '没有码时仍然给中文文案');
 });

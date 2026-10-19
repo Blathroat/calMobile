@@ -89,8 +89,9 @@ async function assertExhibitionScope(exhibitionId: string, user: { userId: strin
     exhibitionId,
   ]);
   const exhibition = result.rows[0];
-  if (!exhibition) throw notFound('展会不存在或已删除');
-  if (!canManageExhibition(user, exhibition)) throw forbidden('只能查看自己举办的展会的报名');
+  if (!exhibition) throw notFound('展会不存在或已删除', { code: 'exhibition.notFound' });
+  if (!canManageExhibition(user, exhibition))
+    throw forbidden('只能查看自己举办的展会的报名', { code: 'review.scopeForbidden' });
   return exhibition;
 }
 function bodyRecord(value: unknown): Record<string, unknown> {
@@ -142,7 +143,7 @@ app.get('/:id', authenticateHono, async (c) => {
   ]);
   const row = result.rows[0];
   if (!row || !canManageExhibition(user, { exhibitor_id: row.exhibition_exhibitor_id }))
-    return jsonResponse(c, { found: false, error: '报名记录不存在' });
+    return jsonResponse(c, { found: false, error: '报名记录不存在', errorCode: 'review.recordMissing' });
   return jsonResponse(c, { found: true, record: reviewPayload(row) });
 });
 app.put('/:id/status', authenticateHono, async (c) => {
@@ -152,24 +153,33 @@ app.put('/:id/status', authenticateHono, async (c) => {
   ]);
   const row = result.rows[0];
   if (row && !canManageExhibition(user, { exhibitor_id: row.exhibition_exhibitor_id }))
-    throw forbidden('只能管理自己举办的展会的报名');
+    throw forbidden('只能管理自己举办的展会的报名', { code: 'review.manageForbidden' });
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
     const { status } = parseSchema(reviewStatusSchema, body);
-    if (!row) throw badRequest('报名记录不存在');
+    if (!row) throw badRequest('报名记录不存在', { code: 'review.recordMissing' });
     const allowed = REGISTRATION_TRANSITIONS[row.status] || [];
     if (!allowed.includes(status))
       throw badRequest(
         `不能把「${labels.REGISTRATION_STATUS[row.status] || row.status}」的报名改成「${labels.REGISTRATION_STATUS[status]}」`,
+        {
+          code: 'review.transitionInvalid',
+          params: {
+            from: labels.REGISTRATION_STATUS[row.status] || row.status,
+            to: labels.REGISTRATION_STATUS[status] || status,
+          },
+        },
       );
     if (user.role !== 'admin') {
       if (row.status === 'attended') {
         // 已参加走独立开关：默认关闭，只有管理员显式打开后展商才能退回。
-        if (!(await canReviseAttendedByExhibitor())) throw forbidden('管理员未开放修改已参加的报名');
+        if (!(await canReviseAttendedByExhibitor()))
+          throw forbidden('管理员未开放修改已参加的报名', { code: 'review.reviseAttendedLocked' });
       } else if (!(await canReviseByExhibitor())) {
         if (row.status === 'approved' || row.status === 'rejected')
-          throw forbidden('管理员未开放修改已通过或已拒绝的报名');
-        if (row.status === 'cancelled') throw forbidden('管理员未开放重新审核已撤销的报名');
+          throw forbidden('管理员未开放修改已通过或已拒绝的报名', { code: 'review.reviseLocked' });
+        if (row.status === 'cancelled')
+          throw forbidden('管理员未开放重新审核已撤销的报名', { code: 'review.reviseCancelledLocked' });
       }
     }
     try {
@@ -186,7 +196,9 @@ app.put('/:id/status', authenticateHono, async (c) => {
       );
     } catch (error: unknown) {
       if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505')
-        throw badRequest('该用户在这场展会上已有未撤销的报名，不能把这条改成此状态');
+        throw badRequest('该用户在这场展会上已有未撤销的报名，不能把这条改成此状态', {
+          code: 'review.duplicateStatusChange',
+        });
       throw error;
     }
     return { record: { ...reviewPayload(row), status: labels.REGISTRATION_STATUS[status], statusCode: status } };

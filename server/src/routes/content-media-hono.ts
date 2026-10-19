@@ -20,7 +20,7 @@ const app = new Hono<HonoEnv>();
 
 function kindOf(value: string | undefined): ContentKind {
   if (value === 'image' || value === 'video') return value;
-  throw badRequest('请说明要上传的是图片还是视频');
+  throw badRequest('请说明要上传的是图片还是视频', { code: 'media.kindRequired' });
 }
 
 app.post('/', authenticateHono, async (c) => {
@@ -34,16 +34,25 @@ app.post('/', authenticateHono, async (c) => {
     const declared = Number(c.req.header('content-length'));
     const read = await readCappedBytes(c.req.raw.body, maxBytes, Number.isFinite(declared) ? declared : undefined);
     if (!read.ok || read.bytes.byteLength === 0) {
-      throw badRequest(`${kind === 'video' ? '视频' : '图片'}超过 ${limitMb} MB 限制`);
+      const label = kind === 'video' ? '视频' : '图片';
+      throw badRequest(`${label}超过 ${limitMb} MB 限制`, {
+        code: kind === 'video' ? 'media.videoTooLarge' : 'media.imageTooLarge',
+        params: { max: limitMb },
+      });
     }
     const formats = kind === 'video' ? settings.upload.videoFormats : settings.upload.imageFormats;
     const inspected = inspectContent(read.bytes, kind, formats);
     if (!inspected.ok) {
-      if (inspected.reason === 'too-large') throw badRequest('图片尺寸过大');
+      if (inspected.reason === 'too-large') throw badRequest('图片尺寸过大', { code: 'media.imageDimensionsTooLarge' });
       if (inspected.reason === 'format') {
-        throw badRequest(`服务器设置不允许上传这种格式，允许：${formats.join('、')}`);
+        throw badRequest(`服务器设置不允许上传这种格式，允许：${formats.join('、')}`, {
+          code: 'media.formatRejected',
+          params: { formats: formats.join('、') },
+        });
       }
-      throw badRequest(kind === 'video' ? '无法识别的视频' : '无法识别的图片');
+      throw badRequest(kind === 'video' ? '无法识别的视频' : '无法识别的图片', {
+        code: kind === 'video' ? 'media.videoUnreadable' : 'media.imageUnreadable',
+      });
     }
     await ensureRoom(read.bytes.byteLength);
     const config = resolveUploadConfig();

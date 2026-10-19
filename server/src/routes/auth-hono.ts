@@ -84,7 +84,7 @@ interface IdRow {
 }
 
 function ruleFailure(c: Context, error: unknown): Response | null {
-  if (error instanceof ApiError && error.envelope) return failureResponse(c, error.message);
+  if (error instanceof ApiError && error.envelope) return failureResponse(c, error.message, error.errorDetail);
   return null;
 }
 
@@ -175,7 +175,7 @@ async function requireUser(c: Context) {
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
   const { resolveUser } = await import('../middleware/auth.js');
   const user = await resolveUser(token);
-  if (!user) throw unauthorized('登录状态已失效，请重新登录');
+  if (!user) throw unauthorized('登录状态已失效，请重新登录', { code: 'session.expired' });
   c.set('authUser', user);
   return user;
 }
@@ -186,7 +186,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
 
   app.post('/login', limited, async (c) => {
     const parsed = safeParseSchema(loginSchema, await bodyOf(c));
-    if (!parsed.success) return failureResponse(c, parsed.error);
+    if (!parsed.success) return failureResponse(c, parsed.error, parsed.errorDetail);
     const { username, password, deviceToken, deviceName } = parsed.data;
     const device = sessionDevice(deviceToken, deviceName);
     const result = await query<LoginAccountRow>(
@@ -248,7 +248,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
 
   app.post('/login/verify', limited, async (c) => {
     const parsed = safeParseSchema(loginVerifySchema, await bodyOf(c));
-    if (!parsed.success) return failureResponse(c, parsed.error);
+    if (!parsed.success) return failureResponse(c, parsed.error, parsed.errorDetail);
     const { ticket, code, deviceToken, deviceName, trustDevice } = parsed.data;
     const device = sessionDevice(deviceToken, deviceName);
     const found = await findTicket(ticket);
@@ -264,7 +264,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     } catch (error: unknown) {
       if (isCodeRejected(error)) {
         await countTicketFailure(found.id);
-        return failureResponse(c, error.message);
+        return failureResponse(c, error.message, error.errorDetail);
       }
       throw error;
     }
@@ -277,7 +277,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
 
   app.post('/login/code', limited, async (c) => {
     const parsed = safeParseSchema(ticketSchema, await bodyOf(c));
-    if (!parsed.success) return failureResponse(c, parsed.error);
+    if (!parsed.success) return failureResponse(c, parsed.error, parsed.errorDetail);
     const { ticket } = parsed.data;
     const found = await findTicket(ticket);
     if (!found) return failureResponse(c, '验证已过期，请重新登录');
@@ -303,7 +303,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   app.post('/register', limited, async (c) => {
     const textLimits = await limits();
     const parsed = safeParseSchema(registerSchema(textLimits), await bodyOf(c));
-    if (!parsed.success) return failureResponse(c, parsed.error);
+    if (!parsed.success) return failureResponse(c, parsed.error, parsed.errorDetail);
     const { username, password, email, inviteCode: rawInvite } = parsed.data;
     const conflict = await registrationConflict(username, email);
     if (conflict) return failureResponse(c, conflict);
@@ -334,7 +334,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
 
   app.post('/register/verify', limited, async (c) => {
     const parsed = safeParseSchema(registerVerifySchema, await bodyOf(c));
-    if (!parsed.success) return failureResponse(c, parsed.error);
+    if (!parsed.success) return failureResponse(c, parsed.error, parsed.errorDetail);
     const { email, code, deviceToken, deviceName } = parsed.data;
     const peeked = (await peekPendingPayload('register', email)) as RegisterPayload | null;
     if (peeked?.inviteCode) {
@@ -354,7 +354,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
         code,
       });
     } catch (error: unknown) {
-      if (isCodeRejected(error)) return failureResponse(c, error.message);
+      if (isCodeRejected(error)) return failureResponse(c, error.message, error.errorDetail);
       throw error;
     }
     const pending = (consumed.payload || {}) as RegisterPayload;
@@ -390,7 +390,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
 
   app.post('/password/forgot', limited, async (c) => {
     const parsed = safeParseSchema(emailSchema, await bodyOf(c));
-    if (!parsed.success) return failureResponse(c, '请输入有效的邮箱地址');
+    if (!parsed.success) return failureResponse(c, '请输入有效的邮箱地址', { code: 'validation.emailInvalid' });
     const { email } = parsed.data;
     const found = await query<IdRow>(
       `SELECT id FROM users WHERE lower(email) = lower($1) AND email_verified = true AND status <> 'banned'`,
@@ -410,13 +410,13 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
   app.post('/password/reset', limited, async (c) => {
     const bounds = await limits();
     const parsed = safeParseSchema(resetPasswordSchema(bounds), await bodyOf(c));
-    if (!parsed.success) return failureResponse(c, parsed.error);
+    if (!parsed.success) return failureResponse(c, parsed.error, parsed.errorDetail);
     const { email, code, newPassword } = parsed.data;
     let consumed;
     try {
       consumed = await consumeCode({ purpose: 'reset', email, code });
     } catch (error: unknown) {
-      if (isCodeRejected(error)) return failureResponse(c, error.message);
+      if (isCodeRejected(error)) return failureResponse(c, error.message, error.errorDetail);
       throw error;
     }
     const found = await query<IdRow>('SELECT id FROM users WHERE lower(email) = lower($1) AND status <> $2', [
@@ -437,7 +437,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
 
   app.post('/logout', async (c) => {
     const parsed = safeParseSchema(logoutSchema, await bodyOf(c));
-    if (!parsed.success) return failureResponse(c, parsed.error);
+    if (!parsed.success) return failureResponse(c, parsed.error, parsed.errorDetail);
     const { refreshToken } = parsed.data;
     await revokeRefreshToken(refreshToken);
     return okResponse(c);
@@ -445,7 +445,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
 
   app.post('/refresh', async (c) => {
     const { refreshToken: token } = parseSchema(refreshSchema, await bodyOf(c));
-    if (!token) throw badRequest('缺少刷新令牌');
+    if (!token) throw badRequest('缺少刷新令牌', { code: 'auth.refreshTokenRequired' });
     const rotated = await rotateRefreshToken(token);
     return jsonResponse(c, {
       ok: true,

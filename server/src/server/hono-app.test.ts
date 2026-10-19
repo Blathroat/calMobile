@@ -105,7 +105,11 @@ test('未知路径返回统一 JSON 404', async () => {
   const server = await serve();
   const response = await hit(server.port, 'GET', '/nope?a=1');
   assert.equal(response.status, 404);
-  assert.deepEqual(JSON.parse(response.body), { error: '路径 /nope?a=1 不存在' });
+  assert.deepEqual(JSON.parse(response.body), {
+    error: '路径 /nope?a=1 不存在',
+    errorCode: 'app.routeNotFound',
+    errorParams: { path: '/nope?a=1' },
+  });
 });
 
 test('报名站页面按 Host 跳转，接口与缺失脚本仍不是页面', async () => {

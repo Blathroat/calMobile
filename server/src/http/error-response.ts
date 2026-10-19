@@ -65,8 +65,17 @@ export function clientMessage(err: unknown, status: number): string {
   return status < 500 ? '请求不合法' : '服务器内部错误';
 }
 
+/** 失败响应体：中文文案 + 可选的稳定错误码（前端拿到码就查文案表，查不到用 error）。 */
+export interface ErrorBody {
+  error: string;
+  errorCode?: string;
+  errorParams?: Record<string, string | number>;
+}
+
 /** 一次错误的完整出口：状态码 + 响应体。 */
-export function errorResponse(err: unknown): { status: number; body: { error: string } } {
+export function errorResponse(err: unknown): { status: number; body: ErrorBody } {
   const status = statusFor(err);
-  return { status, body: { error: clientMessage(err, status) } };
+  const body: ErrorBody = { error: clientMessage(err, status) };
+  if (err instanceof ApiError) Object.assign(body, err.detailFields());
+  return { status, body };
 }

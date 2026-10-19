@@ -7,6 +7,26 @@
  * 没有第二条路径可以退回。
  */
 
+/**
+ * 失败响应的稳定错误码与占位值。
+ *
+ * `code` 是给前端查文案表用的点分码（`server.<code>`），`params` 是文案里 `{名字}` 的值。
+ * 中文 `message` 照旧下发：它是兜底，前端遇到不认识的码就原样显示。
+ */
+export interface ErrorDetail {
+  code: string;
+  params?: Record<string, string | number>;
+}
+
+/** `ErrorDetail` → 响应体里的可选字段（没有码时是空对象，形状与改造前逐字一致）。 */
+export function errorDetailFields(detail?: ErrorDetail): {
+  errorCode?: string;
+  errorParams?: Record<string, string | number>;
+} {
+  if (!detail) return {};
+  return detail.params ? { errorCode: detail.code, errorParams: detail.params } : { errorCode: detail.code };
+}
+
 export class ApiError extends Error {
   status: number;
 
@@ -18,20 +38,46 @@ export class ApiError extends Error {
    */
   readonly envelope: boolean;
 
-  constructor(status: number, message: string, envelope = true) {
+  /** 稳定错误码；没有时响应里不带这个字段。 */
+  readonly errorCode?: string;
+
+  /** 文案里的 `{名字}` 占位值。 */
+  readonly errorParams?: Record<string, string | number>;
+
+  constructor(status: number, message: string, envelope = true, detail?: ErrorDetail) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.envelope = envelope;
+    this.errorCode = detail?.code;
+    this.errorParams = detail?.params;
+  }
+
+  /**
+   * 失败详情的原样形状。
+   *
+   * 与 `CodeRejected.errorDetail` 同名：路由透传时不用先分辨错误类型，
+   * `failureResponse(c, error.message, error.errorDetail)` 对两者都成立。
+   */
+  get errorDetail(): ErrorDetail | undefined {
+    return this.errorCode ? { code: this.errorCode, params: this.errorParams } : undefined;
+  }
+
+  /** 响应体里的可选错误码字段；没有码时是空对象。 */
+  detailFields(): { errorCode?: string; errorParams?: Record<string, string | number> } {
+    return errorDetailFields(this.errorCode ? { code: this.errorCode, params: this.errorParams } : undefined);
   }
 }
 
-export const badRequest = (message: string) => new ApiError(400, message);
-export const unauthorized = (message = '请先登录') => new ApiError(401, message);
-export const forbidden = (message = '无权执行此操作') => new ApiError(403, message);
-export const notFound = (message = '内容不存在或已删除') => new ApiError(404, message);
-export const conflict = (message = '操作与当前状态冲突') => new ApiError(409, message);
-export const serviceUnavailable = (message = '数据库暂时不可用，请稍后重试') => new ApiError(503, message);
+export const badRequest = (message: string, detail?: ErrorDetail) => new ApiError(400, message, true, detail);
+export const unauthorized = (message = '请先登录', detail?: ErrorDetail) => new ApiError(401, message, true, detail);
+export const forbidden = (message = '无权执行此操作', detail?: ErrorDetail) => new ApiError(403, message, true, detail);
+export const notFound = (message = '内容不存在或已删除', detail?: ErrorDetail) =>
+  new ApiError(404, message, true, detail);
+export const conflict = (message = '操作与当前状态冲突', detail?: ErrorDetail) =>
+  new ApiError(409, message, true, detail);
+export const serviceUnavailable = (message = '数据库暂时不可用，请稍后重试', detail?: ErrorDetail) =>
+  new ApiError(503, message, true, detail);
 
 /**
  * 「数据库现在用不了」的错误码。

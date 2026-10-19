@@ -16,7 +16,8 @@ export async function reserveSecurityStepUpAttempt(userId: string, sessionId: st
         WHERE user_id = $1 AND session_id = $2 AND attempted_at > now() - interval '15 minutes'`,
       [userId, sessionId],
     );
-    if (Number(result.rows[0]?.attempts) >= 5) throw new ApiError(429, '验证尝试过多，请 15 分钟后再试');
+    if (Number(result.rows[0]?.attempts) >= 5)
+      throw new ApiError(429, '验证尝试过多，请 15 分钟后再试', true, { code: 'security.stepUpTooManyAttempts' });
     await client.query('INSERT INTO security_stepup_attempts (id, user_id, session_id) VALUES ($1, $2, $3)', [
       crypto.randomUUID(),
       userId,
@@ -57,7 +58,7 @@ export async function consumeSecurityStepUp(
   scope: SecurityStepUpScope,
 ): Promise<void> {
   const value = String(token ?? '').trim();
-  if (!value || value.length > 128) throw badRequest('请先验证身份');
+  if (!value || value.length > 128) throw badRequest('请先验证身份', { code: 'security.stepUpRequired' });
   const consumed = await query(
     `UPDATE security_stepup_tickets SET consumed_at = now()
       WHERE token_hash = $1 AND user_id = $2 AND session_id = $3 AND scope = $4
@@ -65,5 +66,6 @@ export async function consumeSecurityStepUp(
       RETURNING id`,
     [tokenHash(value), userId, sessionId, scope],
   );
-  if (consumed.rowCount !== 1) throw badRequest('身份验证已过期或已使用，请重新验证');
+  if (consumed.rowCount !== 1)
+    throw badRequest('身份验证已过期或已使用，请重新验证', { code: 'security.stepUpExpired' });
 }

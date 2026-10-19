@@ -64,6 +64,16 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
   // 没提交的段不应被重置
   assert.strictEqual(clamped.body.settings.brand.zh, '展会助手');
 
+  // 标题为空被拒绝：中文旁带稳定错误码
+  const emptyBrand = await put(
+    '/api/v1/settings',
+    { appTitleZh: '', appTitleEn: 'ExpoHub' },
+    { token: tokens.admin.token },
+  );
+  assert.strictEqual(emptyBrand.body.ok, false);
+  assert.strictEqual(emptyBrand.body.error, '软件标题不能为空');
+  assert.strictEqual(emptyBrand.body.errorCode, 'settings.brandRequired');
+
   // 还原
   await put(
     '/api/v1/settings',
@@ -177,6 +187,12 @@ test('个人配色按账号保存：没有个人选择时跟随全局默认', as
 
   const anonymous = await put('/api/v1/settings/ui-theme', { themeIndex: 3 });
   assert.strictEqual(anonymous.status, 401, '未登录不能保存个人配色');
+
+  // 越界的个人配色不夹取，直接拒绝：文案带 {max}，码与占位值一起下发
+  const outOfRange = await put('/api/v1/settings/ui-theme', { themeIndex: 99 }, { token: tokens.user.token });
+  assert.strictEqual(outOfRange.body.ok, false, JSON.stringify(outOfRange.body));
+  assert.strictEqual(outOfRange.body.errorCode, 'settings.themeIndexInvalid');
+  assert.deepEqual(outOfRange.body.errorParams, { max: DEFAULT_SETTINGS.theme.colors.length - 1 });
 
   // 全局默认随服务器设置走，个人没选过就用它
   const global = (await get('/api/v1/settings')).body.theme.index;

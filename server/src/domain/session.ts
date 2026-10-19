@@ -145,29 +145,29 @@ export async function rotateRefreshToken(token: string): Promise<{
     [hash],
   );
   if (result.rows.length === 0) {
-    throw unauthorized('登录状态已失效，请重新登录');
+    throw unauthorized('登录状态已失效，请重新登录', { code: 'session.expired' });
   }
   const row = result.rows[0];
   if (!row) {
-    throw unauthorized('登录状态已失效，请重新登录');
+    throw unauthorized('登录状态已失效，请重新登录', { code: 'session.expired' });
   }
   if (row.revoked_at) {
-    throw unauthorized('登录状态已失效，请重新登录');
+    throw unauthorized('登录状态已失效，请重新登录', { code: 'session.expired' });
   }
   if (new Date(row.expires_at).getTime() <= Date.now()) {
-    throw unauthorized('登录已过期，请重新登录');
+    throw unauthorized('登录已过期，请重新登录', { code: 'session.loginExpired' });
   }
   const user = await query<SessionUser>('SELECT id, username, role, status FROM users WHERE id = $1', [row.user_id]);
   const account = user.rows[0];
   if (user.rows.length === 0 || !account || account.status === 'banned') {
-    throw unauthorized('账号不可用，请重新登录');
+    throw unauthorized('账号不可用，请重新登录', { code: 'session.accountUnavailable' });
   }
   const revoked = await query('UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL', [
     row.id,
   ]);
   if (revoked.rowCount !== 1) {
     // 并发重放：这一行已经被另一个请求撤销掉了，这个令牌不能再换令牌。
-    throw unauthorized('登录状态已失效，请重新登录');
+    throw unauthorized('登录状态已失效，请重新登录', { code: 'session.expired' });
   }
   return {
     user: account,

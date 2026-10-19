@@ -83,7 +83,7 @@
 
 ## 文案
 
-状态、报名方式、收集项类型、角色这些**协议值一律用英文 code**（`pending` / `review` / `text` / `exhibitor` …）：服务端 `server/src/domain/labels.ts` 与前端 `web/src/services/status.ts` 是同一套 code 的定义处，改一边必须同步另一边，接口只下发 code（`statusCode` / `role`），界面按 code 查 `status.*` / `role.*` / `fieldType.*` 取文案。中文标签字段（`status` / `statusLabel` / `modeLabel` / `roleLabel`）是给还没更新快照的旧页面留的兼容层，新代码不要读，更不要拿它当比较或回传的值——装了语言包会比不中、还会把译文写进库里。收集项类型在 `0018-field-type-codes` 里从中文迁到 code（`exhibition_fields` 与 `meeting_fields` 两张表）。
+状态、报名方式、收集项类型、角色这些**协议值一律用英文 code**（`pending` / `review` / `text` / `exhibitor` …）：服务端 `server/src/domain/labels.ts` 与前端 `web/src/services/status.ts` 是同一套 code 的定义处，改一边必须同步另一边，接口只下发 code（`statusCode` / `role`），界面按 code 查 `status.*` / `role.*` / `fieldType.*` 取文案。中文标签字段（`status` / `statusLabel` / `modeLabel` / `roleLabel`）是给还没更新快照的旧页面留的兼容层，新代码不要读（`web/src/api/compat-fields.test.ts` 盯着 `statusLabel` / `modeLabel` / `roleLabel` 三个读取；`status` 太容易和 HTTP 状态、表单模型撞名，靠扫描与评审），更不要拿它当比较或回传的值——装了语言包会比不中、还会把译文写进库里。下线条件：客户端快照不再存在旧版本后，服务端删掉这几个字段，同时删掉那条守卫测试。收集项类型在 `0018-field-type-codes` 里从中文迁到 code（`exhibition_fields` 与 `meeting_fields` 两张表）。
 
 界面文案在 `web/src/i18n/zh.json`，**嵌套 JSON**（`{"auth": {"login": {"title": "登录"}}}`）；前端仍用点分路径 `t('auth.login.title')` 读取，加载时压成扁平表，热路径不逐层查找。带变量的整句写成一条，变量在文案里写 `{名字}`，取值时用第二个参数给：`t('auth.login.secondsUntilResend', { seconds: 30 })`，值可以是字符串或数字；参数里缺哪个名字，屏幕上就原样留着 `{名字}`（跟整条缺失时显示路径同理），所以调用处不要把取到的文案再拼给别人看。模板里的中文写成 `:placeholder="t('exhibition.form.venuePlaceholder')"` 这种绑定，带参数是 `:aria-label="t('profile.avatarLabel', { name: props.name })"`。别的语言缺哪条，就用中文那条。周几、年月留在 `web/src/services/format.ts`，不进这张表。邮件正文在后端，不进这张表。构建时中文表打进应用页面包和报名站包，不单独部署源文件。
 

@@ -127,6 +127,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     );
     assert.strictEqual(self.body.ok, false);
     assert.match(String(self.body.error), /不能向自己/);
+    assert.strictEqual(self.body.errorCode, 'meeting.selfApply', '抛出形态的失败也要带稳定错误码');
 
     const pendingMonth = await get('/api/v1/exhibitions/month?year=2099&month=6', { token: tokens.user.token });
     assert.deepStrictEqual(pendingMonth.body.eventDays, []);
@@ -179,6 +180,8 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     );
     assert.strictEqual(blocked.body.ok, false);
     assert.match(String(blocked.body.error), /最多 1 个/);
+    assert.strictEqual(blocked.body.errorCode, 'meeting.quotaExceeded');
+    assert.deepEqual(blocked.body.errorParams, { max: 1 }, '带变量的码要给出占位值');
 
     const locked = await put(`/api/v1/meetings/${meetingId}/lock`, { locked: true }, { token: tokens.admin.token });
     assert.strictEqual(locked.body.ok, true);

@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { badRequest } from './errors.js';
+import { badRequest, type ErrorDetail } from './errors.js';
 import { readSection } from './settings.js';
 
 export interface TextOptions {
@@ -43,14 +43,48 @@ export const inputString = z.preprocess(
   z.string(),
 );
 
+/**
+ * 校验 issue 的 `params`：前端据此查文案表（`validationCode()` 取的就是这里的 `i18nCode`）。
+ * 文案里的 `{名字}` 与 `i18nParams` 的键一一对应。
+ */
+export function issueParams(
+  code: string,
+  params?: Record<string, string | number>,
+): { i18nCode: string; i18nParams?: Record<string, string | number> } {
+  return params ? { i18nCode: code, i18nParams: params } : { i18nCode: code };
+}
+
+/**
+ * zod 校验失败 → 稳定错误码：取**第一条**带 `params.i18nCode` 的 issue。
+ * 没有（老 schema、第三方 schema）就返回 null，响应只发中文，与改造前一样。
+ */
+export function validationCode(error: z.ZodError): ErrorDetail | null {
+  for (const issue of error.issues) {
+    const raw = (issue as { params?: { i18nCode?: unknown; i18nParams?: unknown } }).params;
+    const code = typeof raw?.i18nCode === 'string' ? raw.i18nCode : '';
+    if (!code) continue;
+    const detail: ErrorDetail = { code };
+    const values = raw?.i18nParams;
+    if (values && typeof values === 'object') {
+      const params: Record<string, string | number> = {};
+      for (const [key, value] of Object.entries(values as Record<string, unknown>)) {
+        if (typeof value === 'string' || typeof value === 'number') params[key] = value;
+      }
+      if (Object.keys(params).length > 0) detail.params = params;
+    }
+    return detail;
+  }
+  return null;
+}
+
 /** 邮箱格式保持与邮件发送层一致。返回值只去空白，不擅自改变大小写。 */
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-export function emailInputSchema(message = '邮箱格式不正确') {
+export function emailInputSchema(message = '邮箱格式不正确', code = 'validation.emailMalformed') {
   return z
     .preprocess((value) => String(value === undefined || value === null ? '' : value).trim(), z.string())
     .superRefine((value, ctx) => {
       if (!value || !EMAIL_PATTERN.test(value) || value.length > 120) {
-        ctx.addIssue({ code: 'custom', message });
+        ctx.addIssue({ code: 'custom', message, params: issueParams(code) });
       }
     });
 }
@@ -61,11 +95,11 @@ export function validationMessage(error: z.ZodError): string {
   return error.issues[0]?.message || '请求参数不正确';
 }
 
-/** 解析 schema；错误统一转为现有 ApiError，写路由会将其收成信封。 */
+/** 解析 schema；错误统一转为现有 ApiError，写路由会将其收成信封。带码时一起交给响应。 */
 export function parseSchema<T extends z.ZodType>(schema: T, value: unknown): z.infer<T> {
   const result = schema.safeParse(value);
   if (!result.success) {
-    throw badRequest(validationMessage(result.error));
+    throw badRequest(validationMessage(result.error), validationCode(result.error) ?? undefined);
   }
   return result.data;
 }
@@ -74,9 +108,13 @@ export function parseSchema<T extends z.ZodType>(schema: T, value: unknown): z.i
 export function safeParseSchema<T extends z.ZodType>(
   schema: T,
   value: unknown,
-): { success: true; data: z.infer<T> } | { success: false; error: string } {
+): { success: true; data: z.infer<T> } | { success: false; error: string; errorDetail?: ErrorDetail } {
   const result = schema.safeParse(value);
-  return result.success ? result : { success: false, error: validationMessage(result.error) };
+  if (result.success) return result;
+  const detail = validationCode(result.error);
+  return detail
+    ? { success: false, error: validationMessage(result.error), errorDetail: detail }
+    : { success: false, error: validationMessage(result.error) };
 }
 
 /** 当前生效的字符数上限。 */
@@ -88,26 +126,67 @@ export async function limits() {
 export function textSchema({ label, max, required = true }: TextOptions = {}) {
   const name = label || '内容';
   const trimmed = inputString.transform((value) => value.trim());
-  const checked = required ? trimmed.pipe(z.string().min(1, `请输入${name}`)) : trimmed;
-  return max ? checked.pipe(z.string().max(max, `${name}最多 ${max} 个字符`)) : checked;
+  const checked = required
+    ? trimmed.refine((value) => value.length > 0, {
+        message: `请输入${name}`,
+        params: issueParams('validation.required', { label: name }),
+      })
+    : trimmed;
+  return max
+    ? checked.refine((value) => value.length <= max, {
+        message: `${name}最多 ${max} 个字符`,
+        params: issueParams('validation.tooLong', { label: name, max }),
+      })
+    : checked;
 }
 
 /** 整数：沿用旧实现的 parseInt 语义，可给范围与默认值。 */
 export function intSchema({ label, min, max, fallback }: IntOptions = {}) {
   const name = label || '数值';
-  const schema = z.preprocess(
-    (value) => {
+  return z
+    .preprocess((value) => {
       if (value === undefined || value === null || value === '') return fallback;
       const parsed = Number.parseInt(String(value), 10);
       return Number.isFinite(parsed) ? parsed : value;
-    },
-    z
-      .number({ error: (issue) => (issue.input === undefined ? `请输入${name}` : `${name}必须是整数`) })
-      .refine(Number.isInteger, `${name}必须是整数`),
-  );
-  return schema
-    .refine((value) => min === undefined || value >= min, `${name}不能小于 ${min}`)
-    .refine((value) => max === undefined || value <= max, `${name}不能大于 ${max}`);
+    }, z.unknown())
+    .superRefine((value, ctx) => {
+      // 与旧实现逐条对应：不是数字（含 NaN）→ 请输入 / 必须是整数；再依次是整数、下限、上限。
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: value === undefined ? `请输入${name}` : `${name}必须是整数`,
+          params:
+            value === undefined
+              ? issueParams('validation.required', { label: name })
+              : issueParams('validation.integer', { label: name }),
+        });
+        return;
+      }
+      if (!Number.isInteger(value)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `${name}必须是整数`,
+          params: issueParams('validation.integer', { label: name }),
+        });
+        return;
+      }
+      if (min !== undefined && value < min) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `${name}不能小于 ${min}`,
+          params: issueParams('validation.min', { label: name, min }),
+        });
+        return;
+      }
+      if (max !== undefined && value > max) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `${name}不能大于 ${max}`,
+          params: issueParams('validation.max', { label: name, max }),
+        });
+      }
+    })
+    .transform((value) => value as number);
 }
 
 /** 布尔：接受 true/false、"true"/"false"、1/0。 */
@@ -126,21 +205,38 @@ export function isoDateSchema({ label, required = false }: IsoDateOptions = {}) 
     .preprocess((value) => String(value === undefined || value === null ? '' : value).trim(), z.string())
     .superRefine((value, ctx) => {
       if (!value) {
-        if (required) ctx.addIssue({ code: 'custom', message: `请选择${name}` });
+        if (required)
+          ctx.addIssue({
+            code: 'custom',
+            message: `请选择${name}`,
+            params: issueParams('validation.dateRequired', { label: name }),
+          });
         return;
       }
       const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
       if (!match) {
-        ctx.addIssue({ code: 'custom', message: `${name}格式应为 YYYY-MM-DD` });
+        ctx.addIssue({
+          code: 'custom',
+          message: `${name}格式应为 YYYY-MM-DD`,
+          params: issueParams('validation.dateFormat', { label: name }),
+        });
         return;
       }
       const date = new Date(`${value}T00:00:00Z`);
       if (Number.isNaN(date.getTime())) {
-        ctx.addIssue({ code: 'custom', message: `${name}不是一个有效日期` });
+        ctx.addIssue({
+          code: 'custom',
+          message: `${name}不是一个有效日期`,
+          params: issueParams('validation.dateInvalid', { label: name }),
+        });
         return;
       }
       if (date.toISOString().slice(0, 10) !== value) {
-        ctx.addIssue({ code: 'custom', message: `${name}不是一个有效日期` });
+        ctx.addIssue({
+          code: 'custom',
+          message: `${name}不是一个有效日期`,
+          params: issueParams('validation.dateInvalid', { label: name }),
+        });
       }
     });
 }
@@ -151,11 +247,20 @@ export function timeRangeSchema({ label = '时间', required = true }: TimeRange
     .preprocess((value) => String(value === undefined || value === null ? '' : value).trim(), z.string())
     .superRefine((value, ctx) => {
       if (!value) {
-        if (required) ctx.addIssue({ code: 'custom', message: `请输入${label}` });
+        if (required)
+          ctx.addIssue({
+            code: 'custom',
+            message: `请输入${label}`,
+            params: issueParams('validation.required', { label }),
+          });
         return;
       }
       if (!/^\d{2}:\d{2}(-\d{2}:\d{2})?$/.test(value)) {
-        ctx.addIssue({ code: 'custom', message: `${label}格式应为 09:00-17:30` });
+        ctx.addIssue({
+          code: 'custom',
+          message: `${label}格式应为 09:00-17:30`,
+          params: issueParams('validation.timeFormat', { label }),
+        });
       }
     });
 }
@@ -173,7 +278,14 @@ export function stringListSchema({ label, max = 40, itemMax = 60 }: StringListOp
         : [],
     z.array(item).superRefine((items, ctx) => {
       const invalid = items.find((value) => value.length > itemMax);
-      if (invalid) ctx.addIssue({ code: 'custom', message: `${label || '列表项'}最多 ${itemMax} 个字符` });
+      if (invalid) {
+        const name = label || '列表项';
+        ctx.addIssue({
+          code: 'custom',
+          message: `${name}最多 ${itemMax} 个字符`,
+          params: issueParams('validation.tooLong', { label: name, max: itemMax }),
+        });
+      }
     }),
   );
 }

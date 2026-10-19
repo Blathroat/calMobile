@@ -27,6 +27,9 @@ test('登录返回访问令牌与刷新令牌，密码错误给业务失败', as
   assert.strictEqual(bad.status, 200, '业务失败应当是 200 + ok:false');
   assert.strictEqual(bad.body.ok, false);
   assert.ok(bad.body.error, '必须给出可展示的错误');
+  // 没有码的路径保持原样：只发中文，不多一个字段。
+  assert.strictEqual(bad.body.errorCode, undefined);
+  assert.strictEqual(bad.body.errorParams, undefined);
 });
 
 test('登录限流：同一账号连续失败到上限后给 429', async () => {
@@ -80,6 +83,7 @@ test('退出登录会撤销刷新令牌', async () => {
   assert.strictEqual(out.body.ok, true);
   const reused = await post('/api/v1/auth/refresh', { refreshToken: session.refreshToken });
   assert.strictEqual(reused.status, 401);
+  assert.strictEqual(reused.body.errorCode, 'session.expired', '已撤销的刷新令牌也要带码');
 });
 
 test('未登录访问需要身份的接口返回 401', async () => {
@@ -87,6 +91,7 @@ test('未登录访问需要身份的接口返回 401', async () => {
     const response = await get(path);
     assert.strictEqual(response.status, 401, `${path} 应当要求登录`);
     assert.ok(response.body.error, `${path} 缺少错误说明`);
+    assert.strictEqual(response.body.errorCode, 'session.expired', `${path} 应当带登录失效的码`);
   }
 });
 test('登录支持用户名或已验证邮箱', async () => {

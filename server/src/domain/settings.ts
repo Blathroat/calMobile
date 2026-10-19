@@ -280,13 +280,13 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     const zh = String(source.appTitleZh === undefined ? next.brand.zh : source.appTitleZh).trim();
     const en = String(source.appTitleEn === undefined ? next.brand.en : source.appTitleEn).trim();
     if (!zh || !en) {
-      throw badRequest('软件标题不能为空');
+      throw badRequest('软件标题不能为空', { code: 'settings.brandRequired' });
     }
     if (zh.length > 20) {
-      throw badRequest('中文标题最多 20 个字符');
+      throw badRequest('中文标题最多 20 个字符', { code: 'settings.brandZhTooLong' });
     }
     if (en.length > 24) {
-      throw badRequest('英文标题最多 24 个字符');
+      throw badRequest('英文标题最多 24 个字符', { code: 'settings.brandEnTooLong' });
     }
     next.brand = { zh, en };
   }
@@ -356,7 +356,7 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
       .trim()
       .slice(0, 500);
     if (cover && !/^(https?:)?\/\//.test(cover) && !cover.startsWith('data:image/')) {
-      throw badRequest('缺省封面需要是一个可访问的图片地址');
+      throw badRequest('缺省封面需要是一个可访问的图片地址', { code: 'settings.coverInvalid' });
     }
     next.cover = { defaultCover: cover };
   }
@@ -403,7 +403,7 @@ export function avatarFormatList(value: unknown, fallback: string[]): string[] {
   const parsed = formatList(value, []);
   if (parsed.length === 0) return base;
   if (parsed.some((item) => !AVATAR_EXTENSIONS.has(item))) {
-    throw badRequest('头像格式只支持 jpg、jpeg、png、webp');
+    throw badRequest('头像格式只支持 jpg、jpeg、png、webp', { code: 'settings.avatarFormatsOnly' });
   }
   return parsed;
 }
@@ -456,7 +456,7 @@ export async function saveUiMode(userId: string | null | undefined, mode: unknow
   if (!userId) {
     // 没有 userId 就写不了「个人」偏好；以前这里会退回写全局 app_settings.ui，
     // 于是匿名请求能改掉所有用户的默认外观，现在直接拒绝。
-    throw badRequest('请先登录后再保存外观模式');
+    throw badRequest('请先登录后再保存外观模式', { code: 'settings.uiModeLoginRequired' });
   }
   const next = typeof mode === 'string' && MODES.includes(mode) ? mode : 'auto';
   await query('UPDATE users SET ui_mode = $2, updated_at = now() WHERE id = $1', [userId, next]);
@@ -506,14 +506,17 @@ export async function saveUiTheme(
 ): Promise<number> {
   if (!userId) {
     // 与外观模式同一条边界：没有 userId 就写不了个人偏好，更不能退回改全局默认。
-    throw badRequest('请先登录后再保存配色');
+    throw badRequest('请先登录后再保存配色', { code: 'settings.themeLoginRequired' });
   }
   const max = Math.max(0, colors.length - 1);
   const index = themeIndexToIndex(themeIndex);
   // 越界与非整数都拒绝：**不夹取**。配色是色板上的枚举选择，把 99 夹成 7 会把
   // 「点错了 / 前端传错字段」伪装成「保存成功」。
   if (index === null || index < 0 || index > max) {
-    throw badRequest(`配色下标必须是 0 到 ${max} 之间的整数`);
+    throw badRequest(`配色下标必须是 0 到 ${max} 之间的整数`, {
+      code: 'settings.themeIndexInvalid',
+      params: { max },
+    });
   }
   await query('UPDATE users SET ui_theme = $2, updated_at = now() WHERE id = $1', [userId, index]);
   return index;
@@ -568,7 +571,7 @@ export async function saveNotificationPreferences(
   patch: { exhibitionReminder?: unknown; registrationUpdates?: unknown } | null | undefined,
 ): Promise<{ exhibitionReminder: boolean; registrationUpdates: boolean }> {
   if (!userId) {
-    throw badRequest('请先登录后再保存通知偏好');
+    throw badRequest('请先登录后再保存通知偏好', { code: 'settings.notifyLoginRequired' });
   }
   const current = await readNotificationPreferences(userId);
   const next = {
@@ -595,7 +598,7 @@ export async function saveNotificationPreferences(
 export function normalizeUserStatus(value: unknown): string {
   const status = toUserStatus(value);
   if (!status) {
-    throw badRequest('账号状态只能是 正常 / 受限 / 封禁');
+    throw badRequest('账号状态只能是 正常 / 受限 / 封禁', { code: 'settings.userStatusInvalid' });
   }
   return status;
 }
@@ -617,9 +620,9 @@ const HINT_LIMIT = 50;
  * 幂等（重复提交同一条不报错，列表也不重复）；只写调用者自己那一行。
  */
 export async function saveSeenHint(userId: string | null | undefined, hint: unknown): Promise<string[]> {
-  if (!userId) throw badRequest('请先登录后再记录提示状态');
+  if (!userId) throw badRequest('请先登录后再记录提示状态', { code: 'settings.hintLoginRequired' });
   const key = String(hint ?? '').trim();
-  if (!HINT_KEY.test(key)) throw badRequest('提示标识不合法');
+  if (!HINT_KEY.test(key)) throw badRequest('提示标识不合法', { code: 'settings.hintKeyInvalid' });
   // 在 UPDATE 持有行锁时合并，等待中的请求会基于最新值追加，不覆盖另一设备刚确认的提示。
   const result = await query<{ seen_hints: string[] }>(
     `UPDATE users SET

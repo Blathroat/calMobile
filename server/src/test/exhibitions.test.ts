@@ -245,6 +245,9 @@ test('收集项的文本填写和选项长度按管理设置拦住', async () =>
     );
     assert.strictEqual(longRadio.body.ok, false, '超长单选选项必须被拒');
     assert.ok(String(longRadio.body.error).includes('单选选项'), longRadio.body.error);
+    // 校验失败带 validation.* 码，占位值与文案里的变量一一对应。
+    assert.strictEqual(longRadio.body.errorCode, 'validation.tooLong');
+    assert.deepEqual(longRadio.body.errorParams, { label: '单选选项', max: 2 });
 
     const longCheck = await put(
       '/api/v1/exhibitions/exh-1/fields',

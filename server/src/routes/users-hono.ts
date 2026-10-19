@@ -70,7 +70,7 @@ async function publicTarget(id: string, nickname: string) {
   );
 }
 async function publicProfile(viewer: Actor | null, target: UserRow | null) {
-  if (!target) return { found: false, error: '用户不存在或未公开' };
+  if (!target) return { found: false, error: '用户不存在或未公开', errorCode: 'users.publicProfileUnavailable' };
   // 限时展商到期后先结算：公开页的角色和会议入口不能还停在过期身份上。
   await settleExpiredExhibitor(target.id);
   const roleCode = effectiveRole(target.role, target.exhibitor_expires_at);
@@ -159,11 +159,11 @@ app.put('/:id/status', authenticateHono, async (c) => {
   const rawBody = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
     const id = c.req.param('id');
-    if (id === actor.userId) throw badRequest('不能修改自己的账号状态');
+    if (id === actor.userId) throw badRequest('不能修改自己的账号状态', { code: 'users.cannotChangeOwnStatus' });
     const body = parseSchema(userStatusSchema, rawBody);
     const status = body.status;
     const row = await findUserById(id);
-    if (!row) throw notFound('用户不存在或已删除');
+    if (!row) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
     // 受限或封禁不能再接受新的私人会议，开关一并关掉，避免状态恢复前仍有人能提交。
     await query(
       `UPDATE users SET status = $2,
@@ -181,11 +181,11 @@ app.put('/:id/role', authenticateHono, async (c) => {
   const rawBody = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
     const id = c.req.param('id');
-    if (id === actor.userId) throw badRequest('不能修改自己的权限');
+    if (id === actor.userId) throw badRequest('不能修改自己的权限', { code: 'users.cannotChangeOwnRole' });
     const body = parseSchema(userRoleSchema, rawBody);
     const role = body.role;
     const row = await findUserById(id);
-    if (!row) throw notFound('用户不存在或已删除');
+    if (!row) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
     if (row.role === 'admin' && role !== 'admin') {
       // 调用者自己已是另一位管理员，正常请求里这里至少还能数到一位。
       // 仍然先数一遍，避免以后放宽「不能改自己」时把最后一位管理员降掉。
@@ -193,7 +193,8 @@ app.put('/:id/role', authenticateHono, async (c) => {
         `SELECT count(*)::int AS n FROM users WHERE role = 'admin' AND id <> $1`,
         [id],
       );
-      if (Number(others.rows[0]?.n ?? 0) < 1) throw badRequest('至少保留一位管理员');
+      if (Number(others.rows[0]?.n ?? 0) < 1)
+        throw badRequest('至少保留一位管理员', { code: 'users.lastAdminRequired' });
     }
     // 管理员改角色：设成展商视为永久（清掉到期时间）；降成普通用户/管理员也清掉，
     // 避免把管理员降级误显示成「展商已到期」。
@@ -215,7 +216,7 @@ app.put('/:id/two-factor', authenticateHono, async (c) => {
     parseSchema(adminTwoFactorSchema, rawBody);
     const id = c.req.param('id');
     const row = await findUserById(id);
-    if (!row) throw notFound('用户不存在或已删除');
+    if (!row) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
     await query('UPDATE users SET two_factor_enabled = false, updated_at = now() WHERE id = $1', [id]);
     return { user: statusPayload(row), twoFactorEnabled: false };
   });
