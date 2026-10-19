@@ -365,7 +365,12 @@ function inviteDurationLabel(item: InviteItem): string {
           <span class="row-copy">
             <strong class="row-title">{{ item.code }}</strong>
             <span class="row-meta">{{
-              `${item.usedCount}/${item.maxUses} · ${inviteDurationLabel(item)} · ${inviteStatusLabel(item.status)}`
+              t('admin.invites.meta', {
+                used: item.usedCount,
+                max: item.maxUses,
+                duration: inviteDurationLabel(item),
+                status: inviteStatusLabel(item.status),
+              })
             }}</span>
           </span>
           <span class="row" data-gap="sm">

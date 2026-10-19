@@ -94,7 +94,7 @@ function askCancel(): void {
   if (!item) return;
   confirmSheet({
     title: t('registration.detail.cancelRegistration'),
-    message: `确定撤销「${item.exhibitionTitle}」的报名吗？撤销后展商将不再审核该记录。`,
+    message: t('registration.detail.cancelConfirmMessage', { title: String(item.exhibitionTitle ?? '') }),
     confirmLabel: t('exhibition.detail.confirmCancel'),
     tone: 'danger',
     onConfirm: async () => {
@@ -297,7 +297,9 @@ onBeforeUnmount(cancelQrHold);
       <p class="field-hint text-center">{{ t('registration.detail.checkInQrLongPress') }}</p>
       <code class="qr-code-text">{{ record.checkInCode }}</code>
       <!-- 只在二维码画不出来时说明退路（让展商手动输入上方报名码），正常情况不再堆一句提示 -->
-      <p v-if="qrError" class="field-hint text-center">{{ `${qrError}，可让展商手动输入上方报名码。` }}</p>
+      <p v-if="qrError" class="field-hint text-center">
+        {{ t('registration.detail.qrErrorHint', { error: qrError }) }}
+      </p>
     </div>
   </template>
 

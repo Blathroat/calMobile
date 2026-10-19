@@ -38,14 +38,15 @@ const records = computed(() => query.data.value?.registrations ?? []);
 const meetings = computed(() => query.data.value?.meetings ?? []);
 const hasContent = computed(() => query.data.value !== undefined);
 const isEmpty = computed(() => records.value.length === 0 && meetings.value.length === 0);
-/** 条数是派生数据（与首页的「N 场」同类），不占用文案 key；数据到位前保持「—」。 */
 const emptyDescription = t('registration.list.joinEmptyHint');
 const registrationSection = t('registration.list.exhibitionSection');
 const meetingSection = t('registration.list.privateMeeting');
 
+/** 条数是已加载记录数之和；数据到位前保持「—」。 */
 const countLabel = computed(() => {
   if (!session.loggedIn) return t('registration.list.signedOut');
-  return hasContent.value ? `${records.value.length + meetings.value.length} 条记录` : '—';
+  if (!hasContent.value) return '—';
+  return t('registration.list.recordCount', { count: records.value.length + meetings.value.length });
 });
 /** 第一次画出整表时不播进入动画；之后新卡片才滑入。 */
 const revealReady = useRevealReady();
@@ -160,7 +161,7 @@ function openLogin(): void {
               class="row-card"
               type="button"
               data-pressable="true"
-              :aria-label="`查看 ${record.exhibitionTitle} 的报名详情`"
+              :aria-label="t('registration.list.viewRegistrationAria', { title: String(record.exhibitionTitle ?? '') })"
               @pointerdown="warm(record.id)"
               @click="router.push(paths.registrationDetail(String(record.id)))"
             >
@@ -170,7 +171,9 @@ function openLogin(): void {
                 <strong class="row-title truncate">{{ record.exhibitionTitle }}</strong>
                 <span class="row-meta">{{ formatRecordDate(record) }} {{ record.exhibitionTime }}</span>
                 <span class="row-meta truncate">{{ record.exhibitionVenue }}</span>
-                <span class="row-meta truncate">报名信息：{{ summary(record) }}</span>
+                <span class="row-meta truncate">{{
+                  t('registration.list.answersLine', { summary: summary(record) })
+                }}</span>
               </span>
               <StatusTag :text="String(record.statusLabel || record.status || '')" />
             </button>
@@ -186,11 +189,13 @@ function openLogin(): void {
               class="row-card"
               type="button"
               data-pressable="true"
-              :aria-label="`查看与 ${meeting.exhibitorName} 的会议详情`"
+              :aria-label="t('registration.list.viewMeetingAria', { name: String(meeting.exhibitorName ?? '') })"
               @pointerdown="warmMeeting(meeting.id)"
               @click="router.push(paths.meetingDetail(String(meeting.id)))"
             >
-              <span class="avatar" aria-hidden="true">{{ String(meeting.exhibitorName || '展').slice(0, 1) }}</span>
+              <span class="avatar" aria-hidden="true">{{
+                String(meeting.exhibitorName || t('exhibition.detail.brandMark')).slice(0, 1)
+              }}</span>
               <span class="row-copy">
                 <span class="name-line">
                   <strong class="row-title truncate">{{ meeting.exhibitorName }}</strong>

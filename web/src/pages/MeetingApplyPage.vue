@@ -180,7 +180,7 @@ async function submit(): Promise<void> {
     tone="error"
     icon="user"
     :title="t('meeting.apply.noPublicProfile')"
-    :description="String(form?.error || '用户不存在或已删除')"
+    :description="String(form?.error || t('meeting.apply.userMissing'))"
     :action-label="t('exhibition.detail.backHome')"
     @action="router.push(paths.home)"
   />

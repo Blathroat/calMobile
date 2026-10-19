@@ -39,9 +39,6 @@ const COPY = {
   title: t('exhibition.editor.heading'),
   type: t('registration.fields.fieldType'),
   remove: t('common.delete'),
-  option: t('registration.fields.option'),
-  ordinal: t('registration.fields.ordinalPrefix'),
-  unit: t('registration.fields.itemUnit'),
   placeholder: t('registration.fields.questionPlaceholder'),
   empty: t('registration.fields.emptyHint'),
   textHint: t('registration.fields.textInputHint'),
@@ -82,7 +79,7 @@ function typeHint(item: CollectField): string {
 }
 
 function optionLabel(index: number): string {
-  return `${COPY.option} ${index + 1}`;
+  return t('registration.fields.optionLabel', { index: index + 1 });
 }
 
 function optionMax(item: CollectField): number {
@@ -90,7 +87,7 @@ function optionMax(item: CollectField): number {
 }
 
 function itemLabel(index: number): string {
-  return `${COPY.ordinal} ${index + 1} ${COPY.unit}`;
+  return t('registration.fields.itemLabel', { index: index + 1 });
 }
 </script>
 
@@ -98,7 +95,7 @@ function itemLabel(index: number): string {
   <div class="card">
     <div class="row" data-between="true">
       <span class="section-label">{{ label }}</span>
-      <span class="pill">{{ `${fields.length} 项` }}</span>
+      <span class="pill">{{ t('registration.fields.countItems', { count: fields.length }) }}</span>
     </div>
     <p v-if="hint" class="field-hint">{{ hint }}</p>
     <p v-if="fields.length === 0" class="field-hint">{{ COPY.empty }}</p>
@@ -145,7 +142,7 @@ function itemLabel(index: number): string {
             <button
               class="icon-button option-remove"
               type="button"
-              :aria-label="`删除选项 ${optionIndex + 1}`"
+              :aria-label="t('registration.fields.removeOptionAria', { index: optionIndex + 1 })"
               :disabled="disabled"
               @click="removeOption(item, optionIndex)"
             >
@@ -159,7 +156,7 @@ function itemLabel(index: number): string {
         <div class="collect-foot">
           <label class="tick" :data-on="item.required ? 'true' : 'false'">
             <input v-model="item.required" type="checkbox" :disabled="disabled" />
-            <span>{{ item.required ? '必填' : '选填' }}</span>
+            <span>{{ item.required ? t('registration.fields.required') : t('registration.fields.optional') }}</span>
           </label>
           <span class="collect-ordinal">{{ itemLabel(index) }}</span>
           <button

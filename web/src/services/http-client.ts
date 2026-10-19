@@ -190,11 +190,13 @@ export class HttpClient {
       } catch (error) {
         controller.signal.throwIfAborted();
         // 5xx 常返回网关的 HTML 错误页，解析失败同样属于传输失败。
-        throw new TransportError(`响应不是合法 JSON：${error instanceof Error ? error.message : String(error)}`);
+        throw new TransportError(
+          t('app.netBadJson', { detail: error instanceof Error ? error.message : String(error) }),
+        );
       }
       controller.signal.throwIfAborted();
       // 5xx 归传输失败：后端或代理异常，不是业务规则的判定结果。
-      if (response.status >= 500) throw new TransportError(`后端返回 ${response.status}`);
+      if (response.status >= 500) throw new TransportError(t('app.netServerError', { status: response.status }));
       if (!response.ok) {
         // 刷新后重放仍被拒绝，说明本次登录态已经失效。登录、刷新、登出等认证接口
         // 自己返回 401 时不能按这个规则处理。
@@ -205,7 +207,7 @@ export class HttpClient {
         const message =
           typeof data === 'object' && data !== null && 'error' in data
             ? String(data.error)
-            : `请求失败（${response.status}）`;
+            : t('app.netRequestFailed', { status: response.status });
         throw new ApiError(message, response.status);
       }
       // 200 + ok:false 是后端的规则失败约定，同样按业务失败抛出，不让页面去判 ok。
@@ -222,10 +224,12 @@ export class HttpClient {
         // 调用方的 signal 上带 aborted 标记，据此分开报：文案是排障用的，不是给用户看的业务提示。
         if (request.signal?.aborted || sessionSignal?.aborted)
           throw new TransportError(t('app.requestCancelled'), 'aborted');
-        throw new TransportError(`后端响应超时（超过 ${timeoutMs / 1000} 秒）`, 'timeout');
+        throw new TransportError(t('app.netTimeout', { seconds: timeoutMs / 1000 }), 'timeout');
       }
       // 其余都是网络层的原生错误（DNS、证书、连接被拒等），后端状态未知。
-      throw new TransportError(`连不上后端服务：${error instanceof Error ? error.message : String(error)}`);
+      throw new TransportError(
+        t('app.netUnreachable', { detail: error instanceof Error ? error.message : String(error) }),
+      );
     } finally {
       // 无论成败都要清定时器，否则每成功一次就多留一个待触发的 abort。
       clearTimeout(timer);

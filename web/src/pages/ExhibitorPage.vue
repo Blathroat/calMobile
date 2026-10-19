@@ -181,7 +181,9 @@ usePullRefresh(
   <template v-else>
     <div class="row" data-between="true">
       <span class="section-label">{{ t('exhibitor.hostedExhibitions') }}</span>
-      <span class="pill">{{ `${items.length} 个 · ${registrationTotal} 条报名` }}</span>
+      <span class="pill">{{
+        t('exhibition.list.countLabel', { count: items.length, registrations: registrationTotal })
+      }}</span>
     </div>
 
     <div v-if="limited" class="notice" data-tone="accent">
@@ -212,7 +214,7 @@ usePullRefresh(
           type="button"
           data-pressable="true"
           style="border: 0; padding: 0; background: transparent"
-          :aria-label="`查看 ${item.title} 详情`"
+          :aria-label="t('exhibition.list.viewAria', { title: item.title })"
           @pointerdown="warm(item.id)"
           @click="router.push(`/detail/${item.id}`)"
         >
@@ -221,7 +223,12 @@ usePullRefresh(
             <strong class="row-title truncate">{{ item.title }}</strong>
             <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
             <span class="row-meta truncate">{{ item.venue }}</span>
-            <span class="row-meta">{{ `${item.status} · ${item.registrationCount ?? 0} 条报名` }}</span>
+            <span class="row-meta">{{
+              t('exhibition.list.statusWithRegistrations', {
+                status: String(item.status),
+                count: String(item.registrationCount ?? 0),
+              })
+            }}</span>
             <span v-if="item.qrEnabled === true" class="row-meta">{{ t('exhibitor.qrEnabled') }}</span>
           </span>
           <StatusTag :text="String(item.modeLabel || '')" :tone="statusTone(String(item.status || ''))" />

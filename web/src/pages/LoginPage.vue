@@ -78,7 +78,7 @@ function redirectTarget(): string {
 async function enterAs(): Promise<void> {
   await refreshRuntimeBootstrap();
   stopCountdown();
-  toast(`欢迎回来，${session.user.nickname || session.user.username}`, 'success');
+  toast(t('auth.login.welcomeBack', { name: String(session.user.nickname || session.user.username || '') }), 'success');
   await router.replace(redirectTarget());
 }
 

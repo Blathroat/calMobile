@@ -148,7 +148,7 @@ function targetLabel(target: string): string {
 function statusMessage(status: string): string {
   if (status === REGISTRATION_STATUS.APPROVED) return t('registration.review.approvedToast');
   if (status === REGISTRATION_STATUS.REJECTED) return t('registration.review.rejectedToast');
-  return `已将报名标记为${status}`;
+  return t('review.page.markedStatus', { status });
 }
 
 /**
@@ -214,7 +214,7 @@ function openActions(record: Registration): void {
   }
   openSheet({
     title: t('registration.review.status'),
-    message: `当前：${record.status}`,
+    message: t('review.page.currentStatus', { status: String(record.status) }),
     // 与用户状态面板同一套排布：选项竖排，选中/主推动作一眼可辨。
     layout: 'stack',
     actions: targets
@@ -249,7 +249,7 @@ async function changeStatus(record: Registration, status: string): Promise<void>
 function askReject(record: Registration): void {
   openSheet({
     title: t('registration.review.reject'),
-    message: `将「${record.visitorName}」的报名标记为已拒绝？审核结果会同步到用户的“我的活动”。`,
+    message: t('review.page.rejectConfirm', { name: String(record.visitorName) }),
     actions: [
       { label: t('common.cancel'), onClick: (close) => close() },
       {
@@ -296,7 +296,7 @@ async function exportCsv(): Promise<void> {
   const filename = `registrations-${exhibitionId.value || 'all'}.csv`;
   try {
     await device.exportCsv(filename, content);
-    toast(`已导出 ${filtered.value.length} 条报名到 ${filename}`, 'success');
+    toast(t('review.page.exportDone', { count: filtered.value.length, file: filename }), 'success');
   } catch (reason) {
     // 用户在系统保存框点了取消：按码判断，不给红色错误，只说明没有导出。
     if (reason && typeof reason === 'object' && (reason as { code?: unknown }).code === 'cancelled') {
@@ -316,7 +316,7 @@ async function exportCsv(): Promise<void> {
         <span class="eyebrow">{{ bootstrap.brand.en }}</span>
         <h2>{{ t('registration.review.title') }}</h2>
       </div>
-      <span class="pill">{{ `${exhibitions.length} 个展会` }}</span>
+      <span class="pill">{{ t('review.page.exhibitionCount', { count: exhibitions.length }) }}</span>
     </header>
 
     <SkeletonBlock v-if="list.loading.value && list.data.value === undefined" :rows="2" />
@@ -341,7 +341,12 @@ async function exportCsv(): Promise<void> {
         >
           <span class="row-copy">
             <strong class="row-title truncate">{{ item.title }}</strong>
-            <span class="row-meta">{{ `${item.dateLabel} · ${item.registrationCount ?? 0} 条报名` }}</span>
+            <span class="row-meta">{{
+              t('review.page.exhibitionMeta', {
+                date: String(item.dateLabel),
+                count: String(item.registrationCount ?? 0),
+              })
+            }}</span>
           </span>
           <StatusTag :text="String(item.status || '')" :tone="statusTone(String(item.status || ''))" />
         </button>
@@ -355,7 +360,7 @@ async function exportCsv(): Promise<void> {
         <span class="eyebrow">{{ bootstrap.brand.en }}</span>
         <h2>{{ t('registration.review.title') }}</h2>
       </div>
-      <span class="pill">{{ `待审核 ${pendingCount}` }}</span>
+      <span class="pill">{{ t('review.page.pendingCount', { count: pendingCount }) }}</span>
     </div>
 
     <SegControl v-model="filter" :items="filterItems" :label="t('registration.review.status')" />
@@ -379,7 +384,7 @@ async function exportCsv(): Promise<void> {
     <StateBlock
       v-else-if="filtered.length === 0"
       icon="ticket"
-      :title="`没有${filter === '全部' ? '' : filter}的报名`"
+      :title="t('review.page.emptyTitle', { scope: filter === '全部' ? '' : filter })"
       :description="t('registration.review.emptyHint')"
     />
 
@@ -390,7 +395,7 @@ async function exportCsv(): Promise<void> {
             v-if="record.visitorId"
             class="avatar"
             type="button"
-            :aria-label="`查看 ${record.visitorName} 的公开页`"
+            :aria-label="t('review.page.viewProfile', { name: String(record.visitorName) })"
             @click="openVisitor(record)"
           >
             {{ String(record.visitorName ?? t('registration.review.initialFallback')).slice(0, 1) }}
@@ -403,7 +408,7 @@ async function exportCsv(): Promise<void> {
             type="button"
             data-pressable="true"
             style="flex: 1 1 auto; min-width: 0; border: 0; padding: 0; background: transparent"
-            :aria-label="`查看 ${record.visitorName} 的报名详情`"
+            :aria-label="t('review.page.viewDetail', { name: String(record.visitorName) })"
             @click="openDetail(record)"
           >
             <span class="row-copy">
@@ -411,7 +416,9 @@ async function exportCsv(): Promise<void> {
                 <strong class="row-title">{{ record.visitorName }}</strong>
                 <RoleTag :role-code="String(record.visitorRole || '')" />
               </span>
-              <span class="row-meta">{{ `报名于 ${record.registrationTime}` }}</span>
+              <span class="row-meta">{{
+                t('review.page.registeredAt', { time: String(record.registrationTime) })
+              }}</span>
               <span class="row-meta truncate">{{ truncate(record.summary, 34) }}</span>
             </span>
             <StatusTag :text="String(record.status || '')" :tone="statusTone(String(record.status || ''))" />

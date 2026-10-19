@@ -16,13 +16,14 @@ export interface CollectLimitBounds {
 
 export function collectFieldError(item: CollectLimitField, bounds: CollectLimitBounds): string {
   if (item.title.trim().length > bounds.title) {
-    return `文本框标题最多 ${bounds.title} 个字符`;
+    // 与 validate.ts 同一条长度提示，不另建同义键。
+    return t('form.tooLong', { label: t('admin.limits.fieldHeading'), max: bounds.title });
   }
   if (item.type === '文本') return '';
   const max = item.type === '多选' ? bounds.check : bounds.radio;
   const name = item.type === '多选' ? t('admin.limits.checkOption') : t('admin.limits.radioOption');
   if (item.options.some((option) => option.trim().length > max)) {
-    return `${name}最多 ${max} 个字符`;
+    return t('form.tooLong', { label: name, max });
   }
   return '';
 }

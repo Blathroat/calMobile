@@ -56,7 +56,7 @@ function exhibitorMeta(user: User): string {
   <template v-else>
     <div class="row" data-between="true">
       <span class="section-label">{{ t('admin.users.manage') }}</span>
-      <span class="pill">{{ `${userItems.length} 位用户` }}</span>
+      <span class="pill">{{ t('admin.users.count', { count: userItems.length }) }}</span>
     </div>
     <div class="field">
       <label for="admin-user-search">{{ t('admin.users.search') }}</label>
@@ -75,7 +75,7 @@ function exhibitorMeta(user: User): string {
 
     <StateBlock
       v-if="userItems.length === 0"
-      :title="query ? `没有找到与“${query}”相关的用户` : t('admin.users.empty')"
+      :title="query ? t('admin.users.noMatch', { query }) : t('admin.users.empty')"
     />
     <div v-else class="list" data-gap="sm" :data-busy="users.loading.value ? 'true' : undefined">
       <div v-for="user in userItems" :key="String(user.id)" class="card">
@@ -84,7 +84,7 @@ function exhibitorMeta(user: User): string {
           type="button"
           data-pressable="true"
           style="border: 0; padding: 0; background: transparent; width: 100%"
-          :aria-label="`查看 ${user.nickname} 的公开页`"
+          :aria-label="t('admin.users.viewPublicAria', { name: String(user.nickname ?? '') })"
           @click="emit('open-public', user)"
         >
           <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || '')" />

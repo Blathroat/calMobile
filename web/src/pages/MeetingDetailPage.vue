@@ -89,7 +89,7 @@ function askCancel(): void {
   const name = String(item.exhibitorName || '');
   confirmSheet({
     title: COPY.cancelTitle,
-    message: `确定撤销与「${name}」的这场会议吗？`,
+    message: t('meeting.detail.cancelConfirm', { name }),
     confirmLabel: COPY.confirm,
     tone: 'danger',
     onConfirm: async () => {

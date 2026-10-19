@@ -43,7 +43,9 @@ const users = computed(() => asList(results.value?.users));
 const hasContent = computed(() => results.value !== undefined);
 const isEmptyResult = computed(() => hasContent.value && exhibitions.value.length === 0 && users.value.length === 0);
 const countLabel = computed(() =>
-  !keyword.value.trim() || !hasContent.value ? t('search.zeroCount') : `${Number(results.value?.count) || 0} 条结果`,
+  !keyword.value.trim() || !hasContent.value
+    ? t('search.zeroCount')
+    : t('search.resultCount', { count: Number(results.value?.count) || 0 }),
 );
 
 let timer: number | undefined;
@@ -176,14 +178,14 @@ onBeforeUnmount(() => {
     <StateBlock
       v-else-if="isEmptyResult"
       icon="search"
-      :title="`没有找到与“${searched}”相关的结果`"
+      :title="t('search.noMatch', { query: searched })"
       :description="t('search.emptyHint')"
       :action-label="t('exhibition.detail.backHome')"
       @action="router.push('/home')"
     />
     <div v-else class="stack">
       <template v-if="exhibitions.length > 0">
-        <span class="section-label">展会 · {{ exhibitions.length }}</span>
+        <span class="section-label">{{ t('search.exhibitionSection', { count: exhibitions.length }) }}</span>
         <div class="list" data-gap="sm">
           <button
             v-for="item in exhibitions"
@@ -212,7 +214,7 @@ onBeforeUnmount(() => {
       </template>
 
       <template v-if="users.length > 0">
-        <span class="section-label">用户 · {{ users.length }}</span>
+        <span class="section-label">{{ t('search.userSection', { count: users.length }) }}</span>
         <div class="list" data-gap="sm">
           <button
             v-for="user in users"

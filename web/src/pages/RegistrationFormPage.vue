@@ -374,7 +374,7 @@ async function submit(): Promise<void> {
               :id="fieldId(field)"
               class="input"
               type="text"
-              :placeholder="`请输入${field.title}`"
+              :placeholder="t('registration.form.fieldPlaceholder', { title: field.title })"
               :maxlength="textFillMax"
               :value="textValue(field)"
               @input="onTextInput(field, $event)"

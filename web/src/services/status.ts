@@ -4,7 +4,11 @@
  * 中文标签的权威来源是后端的 `server/src/domain/labels.ts`：数据库只存英文代码，
  * 中文标签在那里映射一次后随接口下发。前端页面只按这里的值比较与渲染，
  * 不再写 `'已通过'` 这类字面量。改标签要同时改 labels.ts 与本文件。
+ *
+ * 下面这些常量是与后端逐字比对、并原样渲染的协议值，不进 i18n（翻译了就比不中）；
+ * 本文件里只有 `modeHint()` 返回的说明文案取 `zh.json`。
  */
+import { t } from '@/i18n';
 
 /** 报名审核状态。 */
 export const REGISTRATION_STATUS = {
@@ -46,12 +50,12 @@ export type StatusTone = 'ok' | 'pending' | 'danger' | 'warn' | 'info' | 'muted'
 /** 报名方式 → 说明文案。 */
 export function modeHint(status: string): string {
   if (status === EXHIBITION_STATUS.REVIEW_REQUIRED) {
-    return '用户提交后进入待审核，展商在报名管理中通过或拒绝。';
+    return t('review.modeHint.required');
   }
   if (status === EXHIBITION_STATUS.REVIEW_OPTIONAL) {
-    return '用户提交后直接视为通过，仍可在报名管理中调整。';
+    return t('review.modeHint.optional');
   }
-  return '只展示展会信息，报名入口保持禁用。';
+  return t('review.modeHint.displayOnly');
 }
 
 /**

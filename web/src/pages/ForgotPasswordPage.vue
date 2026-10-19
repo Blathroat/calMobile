@@ -267,9 +267,13 @@ function messageOf(reason: unknown): string {
     </div>
 
     <div class="field" :data-invalid="passwordError ? 'true' : undefined">
-      <label for="forgot-password"
-        >{{ t('auth.forgot.newPassword') }}（{{ secret.min }}–{{ secret.max }} 个字符）</label
-      >
+      <label for="forgot-password">{{
+        t('auth.fieldRange', {
+          label: t('auth.forgot.newPassword'),
+          min: secret.min ?? '',
+          max: secret.max ?? '',
+        })
+      }}</label>
       <input
         id="forgot-password"
         v-model="password"

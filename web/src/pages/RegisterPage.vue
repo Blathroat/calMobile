@@ -259,7 +259,13 @@ function messageOf(reason: unknown): string {
   <!-- 第一步：账号信息 -->
   <form v-if="step === 1" class="form" novalidate @submit.prevent="submitAccount">
     <div class="field" :data-invalid="fieldErrors.username ? 'true' : undefined">
-      <label for="register-username">{{ account.label }}（{{ account.min }}–{{ account.max }} 个字符）</label>
+      <label for="register-username">{{
+        t('auth.fieldRange', {
+          label: account.label ?? '',
+          min: account.min ?? '',
+          max: account.max ?? '',
+        })
+      }}</label>
       <input
         id="register-username"
         v-model="username"
@@ -298,7 +304,13 @@ function messageOf(reason: unknown): string {
     </div>
 
     <div class="field" :data-invalid="fieldErrors.password ? 'true' : undefined">
-      <label for="register-password">{{ secret.label }}（{{ secret.min }}–{{ secret.max }} 个字符）</label>
+      <label for="register-password">{{
+        t('auth.fieldRange', {
+          label: secret.label ?? '',
+          min: secret.min ?? '',
+          max: secret.max ?? '',
+        })
+      }}</label>
       <input
         id="register-password"
         v-model="password"
@@ -310,7 +322,7 @@ function messageOf(reason: unknown): string {
         @input="onFieldInput('password')"
         @blur="validateField('password')"
       />
-      <p class="field-hint">至少 {{ secret.min }} 个字符</p>
+      <p class="field-hint">{{ t('auth.register.minChars', { min: secret.min ?? '' }) }}</p>
       <p v-if="fieldErrors.password" class="field-error" role="alert">{{ fieldErrors.password }}</p>
       <span class="field-counter" :data-over="password.length > (secret.max ?? 0) ? 'true' : 'false'"
         >{{ password.length }}/{{ secret.max }}</span
