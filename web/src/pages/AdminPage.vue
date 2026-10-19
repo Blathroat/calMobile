@@ -26,10 +26,19 @@ import SegControl from '@/components/SegControl.vue';
 import AdminUsersSection from './AdminUsersSection.vue';
 import AdminExhibitionsSection from './AdminExhibitionsSection.vue';
 import AdminSettingsSection from './AdminSettingsSection.vue';
+import { USER_STATUS } from '@/services/status';
 import type { Bootstrap, Exhibition, JsonObject, User } from '@/api/types';
 import { t } from '@/i18n';
 
-const USER_STATUSES = [t('admin.users.normal'), t('admin.users.restricted'), t('admin.users.banned')];
+/**
+ * 账号状态面板：`value` 是回传给接口、并与 `user.status` 比较的协议值
+ * （后端 labels.ts 那一套中文码，不能翻译）；`label` 才是屏幕上的文案。
+ */
+const USER_STATUS_OPTIONS = [
+  { value: USER_STATUS.NORMAL, label: t('admin.users.normal') },
+  { value: USER_STATUS.RESTRICTED, label: t('admin.users.restricted') },
+  { value: USER_STATUS.BANNED, label: t('admin.users.banned') },
+];
 const ROLE_OPTIONS = [
   { code: 'user', label: t('admin.users.roleUser') },
   { code: 'exhibitor', label: t('admin.users.roleExhibitor') },
@@ -436,7 +445,7 @@ function manageRole(user: User): void {
   openSheet({
     title: t('admin.users.adjustRoleFor', { name: String(user.nickname ?? '') }),
     message: t('admin.users.registeredAt', {
-      role: String(user.role),
+      role: String(user.role ?? ''),
       time: String(user.registrationTime || t('admin.users.unknown')),
     }),
     actions,
@@ -463,19 +472,19 @@ async function updateUserRole(user: User, role: string, label: string): Promise<
 }
 
 function manageUser(user: User): void {
-  const actions: SheetAction[] = USER_STATUSES.map((status) => ({
-    label: status,
-    variant: user.status === status ? 'primary' : 'ghost',
+  const actions: SheetAction[] = USER_STATUS_OPTIONS.map((option) => ({
+    label: option.label,
+    variant: user.status === option.value ? 'primary' : 'ghost',
     onClick: async (close) => {
       close();
-      await updateUserStatus(user, status);
+      await updateUserStatus(user, option.value, option.label);
     },
   }));
   // 不放「取消」：点遮罩、按返回或 Esc 都能关，面板里多一个取消只会让状态选项更不显眼。
   openSheet({
     title: t('admin.users.adjustStatusFor', { name: String(user.nickname ?? '') }),
     message: t('admin.users.registeredAt', {
-      role: String(user.role),
+      role: String(user.role ?? ''),
       time: String(user.registrationTime || t('admin.users.unknown')),
     }),
     actions,
@@ -493,7 +502,7 @@ function openUserMeetings(user: User): void {
   void router.push(`/admin/meetings/${encodeURIComponent(String(user.id ?? ''))}`);
 }
 
-async function updateUserStatus(user: User, status: string): Promise<void> {
+async function updateUserStatus(user: User, status: string, label: string): Promise<void> {
   try {
     // 写接口统一返回 { ok, error }：只判断整个响应是否为真会把失败也当成成功。
     const result = await api.users.setStatus(String(user.id ?? ''), status);
@@ -501,7 +510,7 @@ async function updateUserStatus(user: User, status: string): Promise<void> {
     toast(
       String(
         ok
-          ? t('admin.users.setTo', { name: String(user.nickname ?? ''), value: status })
+          ? t('admin.users.setTo', { name: String(user.nickname ?? ''), value: label })
           : result?.error || t('admin.users.updateFailed'),
       ),
       ok ? 'success' : 'error',

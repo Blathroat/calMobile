@@ -61,11 +61,11 @@ function toggleLock(): void {
       <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
       <span class="row-copy">
         <strong class="row-title truncate">{{ item.title }}</strong>
-        <span class="row-meta">{{ `${formatDateWithWeekday(item.date)} ${item.time}` }}</span>
+        <span class="row-meta">{{ `${formatDateWithWeekday(item.date)} ${String(item.time ?? '')}`.trim() }}</span>
         <span class="row-meta truncate">{{ item.venue }}</span>
         <span class="row-meta">{{
           t('exhibition.list.statusWithRegistrations', {
-            status: String(item.status),
+            status: String(item.status ?? ''),
             count: String(item.registrationCount ?? 0),
           })
         }}</span>

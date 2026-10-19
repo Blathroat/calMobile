@@ -214,7 +214,7 @@ function openActions(record: Registration): void {
   }
   openSheet({
     title: t('registration.review.status'),
-    message: t('review.page.currentStatus', { status: String(record.status) }),
+    message: t('review.page.currentStatus', { status: String(record.status ?? '') }),
     // 与用户状态面板同一套排布：选项竖排，选中/主推动作一眼可辨。
     layout: 'stack',
     actions: targets
@@ -249,7 +249,7 @@ async function changeStatus(record: Registration, status: string): Promise<void>
 function askReject(record: Registration): void {
   openSheet({
     title: t('registration.review.reject'),
-    message: t('review.page.rejectConfirm', { name: String(record.visitorName) }),
+    message: t('review.page.rejectConfirm', { name: String(record.visitorName ?? '') }),
     actions: [
       { label: t('common.cancel'), onClick: (close) => close() },
       {
@@ -343,7 +343,7 @@ async function exportCsv(): Promise<void> {
             <strong class="row-title truncate">{{ item.title }}</strong>
             <span class="row-meta">{{
               t('review.page.exhibitionMeta', {
-                date: String(item.dateLabel),
+                date: String(item.dateLabel ?? ''),
                 count: String(item.registrationCount ?? 0),
               })
             }}</span>
@@ -395,7 +395,7 @@ async function exportCsv(): Promise<void> {
             v-if="record.visitorId"
             class="avatar"
             type="button"
-            :aria-label="t('review.page.viewProfile', { name: String(record.visitorName) })"
+            :aria-label="t('review.page.viewProfile', { name: String(record.visitorName ?? '') })"
             @click="openVisitor(record)"
           >
             {{ String(record.visitorName ?? t('registration.review.initialFallback')).slice(0, 1) }}
@@ -408,7 +408,7 @@ async function exportCsv(): Promise<void> {
             type="button"
             data-pressable="true"
             style="flex: 1 1 auto; min-width: 0; border: 0; padding: 0; background: transparent"
-            :aria-label="t('review.page.viewDetail', { name: String(record.visitorName) })"
+            :aria-label="t('review.page.viewDetail', { name: String(record.visitorName ?? '') })"
             @click="openDetail(record)"
           >
             <span class="row-copy">
@@ -417,7 +417,7 @@ async function exportCsv(): Promise<void> {
                 <RoleTag :role-code="String(record.visitorRole || '')" />
               </span>
               <span class="row-meta">{{
-                t('review.page.registeredAt', { time: String(record.registrationTime) })
+                t('review.page.registeredAt', { time: String(record.registrationTime ?? '') })
               }}</span>
               <span class="row-meta truncate">{{ truncate(record.summary, 34) }}</span>
             </span>

@@ -23,7 +23,7 @@ import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
 import { openProfileEditor } from '@/services/profile-editor';
 import { paths } from '@/app/surface';
-import { REGISTRATION_STATUS } from '@/services/status';
+import { REGISTRATION_STATUS, USER_STATUS } from '@/services/status';
 import { daysUntil, formatLocalChineseDate } from '@/services/format';
 import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
@@ -143,7 +143,8 @@ const identityLine = computed(() => {
   const role = String(user.value.roleLabel || '');
   const status = String(user.value.status || '');
   const statusCode = String(user.value.statusCode || '');
-  const normal = statusCode === 'active' || status === t('admin.users.normal');
+  // 状态比较只认协议值：status 是后端下发的中文标签，t('admin.users.normal') 会随语言变。
+  const normal = statusCode === 'active' || status === USER_STATUS.NORMAL;
   const tagged = code === 'exhibitor' || code === 'admin';
   if (normal) return tagged ? '' : role;
   if (tagged) return status;

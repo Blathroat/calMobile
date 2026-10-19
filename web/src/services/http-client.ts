@@ -191,7 +191,7 @@ export class HttpClient {
         controller.signal.throwIfAborted();
         // 5xx 常返回网关的 HTML 错误页，解析失败同样属于传输失败。
         throw new TransportError(
-          t('app.netBadJson', { detail: error instanceof Error ? error.message : String(error) }),
+          t('app.netBadJson', { detail: error instanceof Error ? error.message : String(error ?? '') }),
         );
       }
       controller.signal.throwIfAborted();
@@ -228,7 +228,7 @@ export class HttpClient {
       }
       // 其余都是网络层的原生错误（DNS、证书、连接被拒等），后端状态未知。
       throw new TransportError(
-        t('app.netUnreachable', { detail: error instanceof Error ? error.message : String(error) }),
+        t('app.netUnreachable', { detail: error instanceof Error ? error.message : String(error ?? '') }),
       );
     } finally {
       // 无论成败都要清定时器，否则每成功一次就多留一个待触发的 abort。

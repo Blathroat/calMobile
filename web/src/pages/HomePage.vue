@@ -505,7 +505,7 @@ onBeforeUnmount(() => {
       class="row-card"
       type="button"
       data-pressable="true"
-      :aria-label="t('exhibition.list.viewAria', { title: String(item.title) })"
+      :aria-label="t('exhibition.list.viewAria', { title: String(item.title ?? '') })"
       @pointerdown="warm(item.id)"
       @click="router.push(`/detail/${item.id}`)"
     >
@@ -525,7 +525,7 @@ onBeforeUnmount(() => {
       class="row-card"
       type="button"
       data-pressable="true"
-      :aria-label="t('home.meetingAria', { title: String(meeting.title) })"
+      :aria-label="t('home.meetingAria', { title: String(meeting.title ?? '') })"
       @click="router.push(paths.meetingDetail(String(meeting.id)))"
     >
       <span class="avatar" aria-hidden="true">{{ String(meeting.title || meetingInitial).slice(0, 1) }}</span>

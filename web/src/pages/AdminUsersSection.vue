@@ -95,7 +95,7 @@ function exhibitorMeta(user: User): string {
             </span>
             <span class="row-meta">{{
               t('admin.users.lastLogin', {
-                status: String(user.status),
+                status: String(user.status ?? ''),
                 time: String(user.lastLoginTime || t('admin.users.unknown')),
               })
             }}</span>

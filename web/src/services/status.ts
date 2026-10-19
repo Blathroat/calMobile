@@ -19,6 +19,17 @@ export const REGISTRATION_STATUS = {
   CANCELLED: '已撤销',
 } as const;
 
+/**
+ * 账号状态：接口与数据库用的是这套中文码——后端 `server/src/domain/labels.ts` 的
+ * `USER_STATUS` 是同一批字符串，前端只拿它比较与回传，**不能**换成译文；
+ * 屏幕上显示的名字走 `admin.users.normal` 这类文案键。
+ */
+export const USER_STATUS = {
+  NORMAL: '正常',
+  RESTRICTED: '受限',
+  BANNED: '封禁',
+} as const;
+
 /** 展会报名方式 / 报名状态。 */
 export const EXHIBITION_STATUS = {
   REVIEW_REQUIRED: '需审核',

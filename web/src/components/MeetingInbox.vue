@@ -288,7 +288,7 @@ async function copyLink(): Promise<void> {
             v-if="record.visitorId"
             class="avatar"
             type="button"
-            :aria-label="t('review.page.viewProfile', { name: String(record.visitorName) })"
+            :aria-label="t('review.page.viewProfile', { name: String(record.visitorName || COPY.visitorFallback) })"
             @click="openProfile(record)"
           >
             {{ String(record.visitorName || t('profile.avatarInitial')).slice(0, 1) }}
@@ -301,7 +301,7 @@ async function copyLink(): Promise<void> {
             type="button"
             data-pressable="true"
             style="flex: 1 1 auto; min-width: 0; border: 0; padding: 0; background: transparent"
-            :aria-label="t('meeting.inbox.viewDetail', { name: String(record.visitorName) })"
+            :aria-label="t('meeting.inbox.viewDetail', { name: String(record.visitorName || COPY.visitorFallback) })"
             @click="openDetail(record)"
           >
             <span class="row-copy">

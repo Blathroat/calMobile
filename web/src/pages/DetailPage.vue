@@ -123,7 +123,7 @@ function footerHint(): string {
   // 已报名的说明优先：报名关闭 / 受限都不影响「我已经报上了」这件事。
   if (myRegistration.value) return t('exhibition.detail.registeredHint');
   if (item.openForRegistration === false) {
-    return t('exhibition.detail.closedWithMode', { mode: String(item.modeLabel || item.status) });
+    return t('exhibition.detail.closedWithMode', { mode: String(item.modeLabel || item.status || '') });
   }
   if (registerLimited.value) return t('exhibition.detail.registerRestricted');
   // 访客进不来这一页（守守卫按「访客只可访问首页」处理），所以这里不再区分「先登录」的引导。
@@ -229,7 +229,7 @@ function share(): void {
   const link = registrationLink(bootstrap.publicBaseUrl, item.id);
   const text = [
     String(item.title ?? ''),
-    `${formatDateWithWeekday(item.date)} ${item.time}`,
+    `${formatDateWithWeekday(item.date)} ${String(item.time ?? '')}`.trim(),
     String(item.venue ?? ''),
     link ? t('exhibition.detail.registrationLinkPrefix', { link }) : '',
   ]
@@ -317,7 +317,7 @@ onMounted(() => {
       :aria-label="COPY.openViewer"
       @click="viewerOpen = true"
     >
-      <img :src="cover" :alt="t('exhibition.detail.coverAlt', { title: String(exhibition.title) })" />
+      <img :src="cover" :alt="t('exhibition.detail.coverAlt', { title: String(exhibition.title ?? '') })" />
     </button>
     <div v-else class="hero ph-img" aria-hidden="true" />
 
@@ -351,7 +351,7 @@ onMounted(() => {
       class="row-card"
       type="button"
       data-pressable="true"
-      :aria-label="t('exhibition.detail.exhibitorHomeAria', { exhibitor: String(exhibition.exhibitor) })"
+      :aria-label="t('exhibition.detail.exhibitorHomeAria', { exhibitor: String(exhibition.exhibitor ?? '') })"
       @click="router.push(`/user-public/${encodeURIComponent(String(exhibition.exhibitor))}`)"
     >
       <AvatarBox :name="String(exhibition.exhibitor || '')" />
@@ -379,7 +379,7 @@ onMounted(() => {
           fields.length > 0
             ? t('exhibition.detail.fieldsSummary', {
                 count: fields.length,
-                titles: fields.map((field) => String(field.title)).join('、'),
+                titles: fields.map((field) => String(field.title ?? '')).join('、'),
               })
             : t('exhibition.detail.noExtraRegistrationInfo')
         }}
@@ -424,7 +424,7 @@ onMounted(() => {
   <ImageViewer
     v-if="viewerOpen && exhibition && cover"
     :src="cover"
-    :alt="t('exhibition.detail.coverAlt', { title: String(exhibition.title) })"
+    :alt="t('exhibition.detail.coverAlt', { title: String(exhibition.title ?? '') })"
     @close="viewerOpen = false"
   />
 </template>

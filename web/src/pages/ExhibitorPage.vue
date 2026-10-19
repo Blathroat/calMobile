@@ -225,7 +225,7 @@ usePullRefresh(
             <span class="row-meta truncate">{{ item.venue }}</span>
             <span class="row-meta">{{
               t('exhibition.list.statusWithRegistrations', {
-                status: String(item.status),
+                status: String(item.status ?? ''),
                 count: String(item.registrationCount ?? 0),
               })
             }}</span>
