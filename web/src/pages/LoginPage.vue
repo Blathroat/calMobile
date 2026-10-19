@@ -64,7 +64,7 @@ const methodHint = computed(() => {
 });
 
 const resendLabel = computed(() => {
-  if (remaining.value > 0) return `${remaining.value} ${t('auth.login.secondsUntilResend')}`;
+  if (remaining.value > 0) return t('auth.login.secondsUntilResend', { seconds: remaining.value });
   return emailSent.value ? t('auth.login.resendCode') : t('auth.login.sendEmailCode');
 });
 

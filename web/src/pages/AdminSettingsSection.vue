@@ -115,7 +115,9 @@ function inviteStatusLabel(status: string): string {
 
 /** 展商时长：0 天是永久，其余按天显示。 */
 function inviteDurationLabel(item: InviteItem): string {
-  return item.durationDays > 0 ? `${item.durationDays} ${t('admin.invites.dayUnit')}` : t('admin.invites.permanent');
+  return item.durationDays > 0
+    ? t('admin.invites.durationDays', { days: item.durationDays })
+    : t('admin.invites.permanent');
 }
 </script>
 

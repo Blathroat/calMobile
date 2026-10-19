@@ -48,7 +48,7 @@ const confirmError = ref('');
 
 const secret = computed(() => passwordRule());
 const resendLabel = computed(() =>
-  remaining.value > 0 ? `${remaining.value} ${t('auth.login.secondsUntilResend')}` : t('auth.login.resendCode'),
+  remaining.value > 0 ? t('auth.login.secondsUntilResend', { seconds: remaining.value }) : t('auth.login.resendCode'),
 );
 
 let timer: number | undefined;

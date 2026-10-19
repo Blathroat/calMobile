@@ -151,7 +151,7 @@ function dayRows(key: 'exhibitions' | 'meetings'): JsonObject[] {
 
 function meetingLine(meeting: JsonObject): string {
   const time = formatChineseTime(meeting.meetingTime);
-  return time ? `${time} · ${t('registration.list.privateMeeting')}` : t('registration.list.privateMeeting');
+  return time ? t('registration.list.privateMeetingAt', { time }) : t('registration.list.privateMeeting');
 }
 
 const eventDays = (): number[] =>

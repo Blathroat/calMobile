@@ -454,7 +454,13 @@ function requestEmailResend(): void {
   </div>
 
   <div v-else-if="view === 'totp'" class="form" data-gap="sm">
-    <p class="field-hint">{{ qrError ? `${qrError}，${copy.manualSecret}` : t('security.setup.scanOrEnter') }}</p>
+    <p class="field-hint">
+      {{
+        qrError
+          ? t('security.setup.scanFailed', { reason: qrError, manual: copy.manualSecret })
+          : t('security.setup.scanOrEnter')
+      }}
+    </p>
     <div class="qr-wrap"><QrCanvas :text="otpauthUri || ''" :size="200" @error="qrError = $event" /></div>
     <code class="qr-code-text">{{ secretGroups }}</code>
     <div class="field">

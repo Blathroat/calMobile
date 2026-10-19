@@ -38,8 +38,8 @@ function exhibitorMeta(user: User): string {
   const date = formatLocalChineseDate(user.exhibitorExpiresAt);
   if (!date) return '';
   return user.exhibitorExpired === true
-    ? `${t('admin.users.exhibitorExpired')} ${date}`
-    : `${t('admin.users.exhibitorUntil')} ${date}`;
+    ? t('admin.users.exhibitorExpired', { date })
+    : t('admin.users.exhibitorUntil', { date });
 }
 </script>
 
@@ -94,7 +94,10 @@ function exhibitorMeta(user: User): string {
               <RoleTag :role-code="String(user.roleCode || '')" />
             </span>
             <span class="row-meta">{{
-              `${user.status} · 最近登录 ${user.lastLoginTime || t('admin.users.unknown')}`
+              t('admin.users.lastLogin', {
+                status: String(user.status),
+                time: String(user.lastLoginTime || t('admin.users.unknown')),
+              })
             }}</span>
             <span v-if="exhibitorMeta(user)" class="row-meta">{{ exhibitorMeta(user) }}</span>
             <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>

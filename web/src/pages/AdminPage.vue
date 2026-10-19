@@ -435,7 +435,10 @@ function manageRole(user: User): void {
   }));
   openSheet({
     title: `调整 ${user.nickname} 的权限`,
-    message: `${user.role} · 注册于 ${user.registrationTime || t('admin.users.unknown')}`,
+    message: t('admin.users.registeredAt', {
+      role: String(user.role),
+      time: String(user.registrationTime || t('admin.users.unknown')),
+    }),
     actions,
     layout: 'stack',
   });
@@ -467,7 +470,10 @@ function manageUser(user: User): void {
   // 不放「取消」：点遮罩、按返回或 Esc 都能关，面板里多一个取消只会让状态选项更不显眼。
   openSheet({
     title: `调整 ${user.nickname} 的状态`,
-    message: `${user.role} · 注册于 ${user.registrationTime || t('admin.users.unknown')}`,
+    message: t('admin.users.registeredAt', {
+      role: String(user.role),
+      time: String(user.registrationTime || t('admin.users.unknown')),
+    }),
     actions,
     layout: 'stack',
   });
@@ -670,9 +676,11 @@ const storagePercent = computed(() => {
   if (limit <= 0) return 0;
   return Math.min(100, Math.round((storageUsage.value.usedBytes / limit) * 100));
 });
-const storageCaption = computed(
-  () =>
-    `${t('admin.media.used')} ${formatStorage(storageUsage.value.usedBytes)} / ${formatStorage(storageUsage.value.limitBytes)}`,
+const storageCaption = computed(() =>
+  t('admin.media.usage', {
+    used: formatStorage(storageUsage.value.usedBytes),
+    limit: formatStorage(storageUsage.value.limitBytes),
+  }),
 );
 
 /**

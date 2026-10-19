@@ -12,7 +12,10 @@
  * - 语言包或中文表里该条是空串时返回空串，不会继续往下走。
  * - **不是响应式的**。切换语言后整页重新加载。模块顶层取到的值会固定，
  *   正确做法仍是存路径、渲染时再 `t(path)`。
- * - 不做插值 / 复数 / 占位符。
+ * - 只做一种插值：文案里写 `{name}`，取值时用第二个参数按名字替换（见 `t()`）。
+ *   没有复数、没有性别、没有嵌套。参数里缺的名字原样留在屏幕上——跟整条缺失时显示路径
+ *   同一个道理，缺哪条一眼能看见。值只接受字符串与数字。
+ *   带变量的整句写进 `zh.json`，调用处不要再把取到的文案拼给别人看。
  * - 下载语言包不走 `api/client.ts`：链接是用户或服务器给的任意地址，不能带上接口令牌。
  * - 这里只提供纯函数 `chineseTemplate()`：落到文件、系统「另存为」和提示都属于页面层，
  *   而且不能在这里 import `services/device-services.ts`——`native-bridge` 反过来 import 本模块，会成环。
@@ -90,13 +93,29 @@ function lookup(path: string): string | undefined {
   return undefined;
 }
 
+/** 插值参数：名字对应文案里的 `{name}`，值是字符串或数字。 */
+export type TParams = Record<string, string | number>;
+
+/** 占位的形状：名字用字母、数字与下划线。 */
+const PLACEHOLDER = /\{([A-Za-z0-9_]+)\}/g;
+
+/** 把文案里的 `{name}` 换成参数值；参数里没有的名字、或值不是字符串与数字，都原样留着。 */
+function fill(text: string, params: TParams | undefined): string {
+  if (!params) return text;
+  return text.replace(PLACEHOLDER, (whole, name: string) => {
+    const value = params[name];
+    return typeof value === 'string' || typeof value === 'number' ? String(value) : whole;
+  });
+}
+
 /**
  * 取一条界面文案。
  * @param path 点分路径，例如 `auth.login.title`
+ * @param params 占位值，对应文案里的 `{name}`；可以是字符串或数字，缺哪个占位就原样留着
  * @param fallback 中文表也没有该条时的回退；缺省回退为路径本身
  */
-export function t(path: string, fallback = path): string {
-  return lookup(path) ?? fallback;
+export function t(path: string, params?: TParams, fallback = path): string {
+  return fill(lookup(path) ?? fallback, params);
 }
 
 export function languageChoice(): string {

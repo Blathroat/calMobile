@@ -77,7 +77,7 @@ const account = computed(() => usernameRule());
 const secret = computed(() => passwordRule());
 const strength = computed(() => passwordStrength(password.value));
 const resendLabel = computed(() =>
-  remaining.value > 0 ? `${remaining.value} ${t('auth.login.secondsUntilResend')}` : t('auth.login.resendCode'),
+  remaining.value > 0 ? t('auth.login.secondsUntilResend', { seconds: remaining.value }) : t('auth.login.resendCode'),
 );
 
 const RULES: Record<FieldName, () => CheckOptions> = {

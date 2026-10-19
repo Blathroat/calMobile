@@ -6,6 +6,7 @@ import {
   installPackFromText,
   resetLangForTests,
   t,
+  type TParams,
 } from './index';
 import builtinNested from './zh.json';
 
@@ -41,10 +42,55 @@ describe('t', () => {
     resetLangForTests();
   });
 
+  /** 装一个只有这几条的语言包并选中：断言占位替换时不受中文表措辞影响。 */
+  function usePack(paths: Record<string, string>): void {
+    localStorage.setItem(
+      'calmobile.lang.packs',
+      JSON.stringify([{ id: 'en', name: 'English', strings: nested(paths) }]),
+    );
+    localStorage.setItem('calmobile.lang.choice', 'en');
+    resetLangForTests();
+  }
+
   it('读内置中文，没有这条时才用调用方的回退', () => {
     expect(t('auth.login.title')).toBe(builtin['auth.login.title']);
-    expect(t('missing', '默认文案')).toBe('默认文案');
+    expect(t('missing', undefined, '默认文案')).toBe('默认文案');
     expect(t('missing')).toBe('missing');
+  });
+
+  it('第二个参数按名字替换 {占位}，数字也受理，同名的占位都换', () => {
+    usePack({ 'demo.line': '{seconds} 秒后可重发，共 {seconds} 秒' });
+    expect(t('demo.line', { seconds: 30 })).toBe('30 秒后可重发，共 30 秒');
+    usePack({ 'demo.line': '{who} 的邀请码' });
+    expect(t('demo.line', { who: '小林' })).toBe('小林 的邀请码');
+  });
+
+  it('参数里没有的名字原样留着，多给的参数与原样的值不报错', () => {
+    usePack({ 'demo.line': '{a} 与 {b}' });
+    expect(t('demo.line', { a: '甲', c: '丙' })).toBe('甲 与 {b}');
+    // 运行时值不受类型约束：不是字符串或数字就按「没给」处理，屏幕上看得见。
+    expect(t('demo.line', { a: true } as unknown as TParams)).toBe('{a} 与 {b}');
+  });
+
+  it('回退文案里的占位同样替换', () => {
+    expect(t('missing', { seconds: 3 }, '{seconds} 秒后重试')).toBe('3 秒后重试');
+  });
+
+  it('明确给了空串就换成空串；不传第二个参数时占位原样返回', () => {
+    usePack({ 'demo.line': '{who} 邀请了你' });
+    expect(t('demo.line', { who: '' })).toBe(' 邀请了你');
+    expect(t('demo.line')).toBe('{who} 邀请了你');
+  });
+
+  it('只认字母数字下划线拼的名字，别的大括号原样留着', () => {
+    usePack({ 'demo.line': '{a-b} 与 {} 都不是占位' });
+    expect(t('demo.line', { 'a-b': 'x' })).toBe('{a-b} 与 {} 都不是占位');
+  });
+
+  it('内置中文的整句占位也走同一条路', () => {
+    const source = String(builtin['auth.login.secondsUntilResend']);
+    expect(source).toContain('{seconds}');
+    expect(t('auth.login.secondsUntilResend', { seconds: 30 })).toBe(source.replace('{seconds}', '30'));
   });
 
   it('别的语言缺一条就回中文，空串不回退', () => {

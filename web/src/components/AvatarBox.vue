@@ -16,7 +16,7 @@ const initial = (): string => (props.name || t('profile.avatarInitial')).slice(0
   <span
     class="avatar"
     :class="{ 'has-image': Boolean(props.src), 'avatar-lg': props.large }"
-    :aria-label="`${props.name || t('admin.users.title')}的头像`"
+    :aria-label="t('profile.avatarLabel', { name: props.name || t('admin.users.title') })"
   >
     <img v-if="props.src" :key="props.src" :src="resolveMediaUrl(props.src)" alt="" />
     <span v-else aria-hidden="true">{{ initial() }}</span>

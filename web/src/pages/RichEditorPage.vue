@@ -90,10 +90,13 @@ const media = computed<MediaTile[]>(() => {
 const mediaHint = computed(() => {
   const imageCount = Number(bootstrap.media.imageCount) || 8;
   const imageSize = Number(bootstrap.media.imageSizeMb) || 10;
-  return (
-    `媒体数量与大小受服务器设置限制：图片 ${imageCount} 张 / 单张 ${imageSize} MB，` +
-    `视频 ${uploadCountLimit('video')} 个 / 单个不超过 ${uploadSizeLimitMb('video')} MB；${t('exhibition.editor.mediaUsesShortUrl')}`
-  );
+  return t('exhibition.editor.mediaHint', {
+    imageCount,
+    imageSize,
+    videoCount: uploadCountLimit('video'),
+    videoSize: uploadSizeLimitMb('video'),
+    shortUrl: t('exhibition.editor.mediaUsesShortUrl'),
+  });
 });
 
 // ── 取数 ─────────────────────────────────────────────────────────

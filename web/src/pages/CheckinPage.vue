@@ -331,7 +331,7 @@ async function startScan(): Promise<void> {
     setStage(
       'error',
       t('checkin.scan.openFailed'),
-      `${message || t('checkin.scan.previewFailed')}。可以改用“手动输入报名码”。`,
+      t('checkin.scan.openFailedHint', { reason: message || t('checkin.scan.previewFailed') }),
     );
     clearStatus();
     return;

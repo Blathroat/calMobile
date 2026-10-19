@@ -381,7 +381,9 @@ function editDescription(): void {
 function askDelete(): void {
   confirmSheet({
     title: t('exhibition.form.deleteExhibition'),
-    message: `删除「${form.title || t('exhibition.form.thisExhibition')}」后，展会信息与报名收集项都会移除，且无法恢复。`,
+    message: t('exhibition.form.deleteConfirm', {
+      title: form.title || t('exhibition.form.thisExhibition'),
+    }),
     confirmLabel: t('common.delete'),
     tone: 'danger',
     onConfirm: async () => {

@@ -231,7 +231,7 @@ function share(): void {
     String(item.title ?? ''),
     `${formatDateWithWeekday(item.date)} ${item.time}`,
     String(item.venue ?? ''),
-    link ? `${t('exhibition.detail.registrationLinkPrefix')}${link}` : '',
+    link ? t('exhibition.detail.registrationLinkPrefix', { link }) : '',
   ]
     .filter(Boolean)
     .join('\n');

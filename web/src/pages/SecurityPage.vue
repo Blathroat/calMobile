@@ -71,12 +71,14 @@ const availableModeOptions = computed(() =>
 const emailLabel = computed(() => {
   const email = String(info.email || '');
   if (!email) return t('security.email.unbound');
-  return `${email}${info.emailVerified === true ? t('security.email.verified') : t('security.email.unverified')}`;
+  return info.emailVerified === true
+    ? t('security.email.verified', { email })
+    : t('security.email.unverified', { email });
 });
 const methodHint = computed(() => {
   if (!enabled.value) return canEnable.value ? t('security.chooseMethod') : t('security.email.unavailable');
   const name = activeMode.value === 'totp' ? t('security.totp.recommended') : t('security.email.enableWithCode');
-  return `${t('security.currentMethod')}：${name}；${t('security.backupCodesLeft')} ${Number(info.backupCodesLeft) || 0} ${t('admin.limits.items')}`;
+  return t('security.methodSummary', { method: name, codes: Number(info.backupCodesLeft) || 0 });
 });
 
 function errorText(reason: unknown): string {

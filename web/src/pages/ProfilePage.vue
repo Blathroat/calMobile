@@ -156,7 +156,7 @@ const identityLine = computed(() => {
 const membershipLine = computed(() => {
   if (String(user.value.role || '') !== 'exhibitor') return '';
   const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
-  return date ? `${t('profile.membership.until')}${date}` : '';
+  return date ? t('profile.membership.until', { date }) : '';
 });
 
 /** 7 天内到期的提醒：说明还能用多久、可以续期。 */
@@ -164,14 +164,14 @@ const membershipSoon = computed(() => {
   if (String(user.value.role || '') !== 'exhibitor') return '';
   const days = daysUntil(user.value.exhibitorExpiresAt);
   if (days === null || days > 7) return '';
-  return `${t('profile.membership.soon')}${days}${t('profile.membership.soonTail')}`;
+  return t('profile.membership.soon', { days });
 });
 
 /** 已经自动到期的账号：说明原因与续期方式（管理员手动降级会清掉到期时间，不会走到这里）。 */
 const membershipExpired = computed(() => {
   if (user.value.exhibitorExpired !== true) return '';
   const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
-  return date ? `${t('profile.membership.expired')}${date}${t('profile.membership.expiredHint')}` : '';
+  return date ? t('profile.membership.expired', { date }) : '';
 });
 
 function hasProfileValue(key: string): boolean {
