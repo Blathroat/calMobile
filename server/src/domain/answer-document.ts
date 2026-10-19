@@ -1,6 +1,8 @@
 /**
  * 收集项回答的文稿。
  *
+ * 收集项类型是协议值 code（text / radio / checkbox，见 labels.ts 的 FIELD_TYPE），不认中文。
+ *
  * 两张申请页和两条报名路由共用这一处：编码、按标题解码、必填、文本长度、选项和整段上限。
  * 空项在文稿里写成「未填写」，调用方拿到的值是空字符串。不传收集项时只按行切开，供详情展示历史原文。
  * 带上限校验时必须同时传入收集项。一份都没有时保留原文，只检查整段长度。
@@ -152,7 +154,7 @@ function storedValue(text: string, title: string): string {
 }
 
 function readValue(field: NormalizedField, raw: unknown): string | string[] {
-  if (field.type === '多选') return choices(raw);
+  if (field.type === 'checkbox') return choices(raw);
   return scalar(raw);
 }
 
@@ -175,7 +177,7 @@ function choices(raw: unknown): string[] {
 }
 
 function shownValue(field: NormalizedField, value: string | string[] | undefined): string {
-  if (field.type === '多选') return Array.isArray(value) ? value.join('、') : '';
+  if (field.type === 'checkbox') return Array.isArray(value) ? value.join('、') : '';
   return typeof value === 'string' ? value : '';
 }
 
@@ -211,19 +213,19 @@ function problemsFor(
 
 function fieldProblem(field: NormalizedField, value: string | string[] | undefined, textFill: number): string {
   if (isEmpty(field, value)) return field.required ? `请填写「${field.title}」` : '';
-  if (field.type !== '单选' && field.type !== '多选') {
+  if (field.type !== 'radio' && field.type !== 'checkbox') {
     const text = typeof value === 'string' ? value : '';
     if (textFill > 0 && text.length > textFill) return `「${field.title}」最多 ${textFill} 个字符`;
     return '';
   }
   const options = optionList(field.options);
   if (options.length === 0) return '';
-  const chosen = field.type === '多选' && Array.isArray(value) ? value : [String(value ?? '')];
+  const chosen = field.type === 'checkbox' && Array.isArray(value) ? value : [String(value ?? '')];
   if (chosen.some((item) => !options.includes(item))) return `「${field.title}」只能选择：${options.join(' / ')}`;
   return '';
 }
 
 function isEmpty(field: NormalizedField, value: string | string[] | undefined): boolean {
-  if (field.type === '多选') return !Array.isArray(value) || value.length === 0;
+  if (field.type === 'checkbox') return !Array.isArray(value) || value.length === 0;
   return String(value ?? '').trim() === '';
 }

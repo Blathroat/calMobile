@@ -82,7 +82,9 @@ async function monthMeetings(year: number, month: number, userId: string) {
       id: row.id,
       day: row.day,
       meetingTime: row.meeting_time || '',
+      // 兼容字段（中文）；新代码读 statusCode。
       status: labels.REGISTRATION_STATUS[row.status] || '',
+      statusCode: row.status,
       role: host ? 'host' : 'visitor',
       title: host ? row.visitor_name : row.exhibitor_name,
       titleRole: host ? row.visitor_role || '' : row.exhibitor_role || '',
@@ -97,7 +99,9 @@ function monthSummary(item: ReturnType<typeof exhibitionPayload>) {
     title: item.title,
     time: item.time,
     venue: item.venue,
+    // 兼容字段（中文）与协议值都在这里给全：月视图的卡片按 statusCode 取文案。
     status: item.status,
+    statusCode: item.statusCode,
     modeLabel: item.modeLabel,
     openForRegistration: item.openForRegistration,
     imageUri: item.imageUri,

@@ -45,7 +45,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
       '/api/v1/meetings/settings',
       {
         acceptMeetings: true,
-        fields: [{ title: '来意', type: '文本', required: true, options: [] }],
+        fields: [{ title: '来意', type: 'text', required: true, options: [] }],
       },
       { token: tokens.exhibitor.token },
     );
@@ -66,7 +66,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     const adminHost = 'usr-1';
     const adminSaved = await put(
       '/api/v1/meetings/settings',
-      { acceptMeetings: true, fields: [{ title: '议题', type: '文本', required: true, options: [] }] },
+      { acceptMeetings: true, fields: [{ title: '议题', type: 'text', required: true, options: [] }] },
       { token: tokens.admin.token },
     );
     assert.strictEqual(adminSaved.body.ok, true, JSON.stringify(adminSaved.body));
@@ -136,7 +136,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
 
     const approved = await put(
       `/api/v1/meetings/${meetingId}/status`,
-      { status: '已通过' },
+      { status: 'approved' },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(approved.body.ok, true, JSON.stringify(approved.body));
@@ -185,13 +185,13 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     assert.strictEqual(locked.body.meeting.locked, true);
     const exhibitorBlocked = await put(
       `/api/v1/meetings/${meetingId}/status`,
-      { status: '已拒绝' },
+      { status: 'rejected' },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(exhibitorBlocked.status, 403);
     const adminStatus = await put(
       `/api/v1/meetings/${meetingId}/status`,
-      { status: '已拒绝' },
+      { status: 'rejected' },
       { token: tokens.admin.token },
     );
     assert.strictEqual(adminStatus.body.meeting.status, '已拒绝');
@@ -206,7 +206,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
     assert.strictEqual(unlocked.body.meeting.locked, false);
     const exhibitorAgain = await put(
       `/api/v1/meetings/${meetingId}/status`,
-      { status: '已通过' },
+      { status: 'approved' },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(exhibitorAgain.body.ok, true);
@@ -242,7 +242,7 @@ test('私人会议：申请、审核、额度、限制与日历圆点', async ()
         acceptMeetings: true,
         allowCancel: true,
         notice: '请提前一天确认时间',
-        fields: [{ title: '来意', type: '文本', required: true, options: [] }],
+        fields: [{ title: '来意', type: 'text', required: true, options: [] }],
       },
       { token: tokens.exhibitor.token },
     );

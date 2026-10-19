@@ -203,7 +203,7 @@ test('展会媒体上传到服务器，打不开或不再引用的文件会被�
         venue: '测试展馆',
         time: '09:00-17:00',
         date: '2026-09-20',
-        status: '需审核',
+        status: 'review',
         category: '智能家居',
         description: `![图](${linkedUrl})`,
       },

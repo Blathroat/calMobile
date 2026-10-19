@@ -55,7 +55,7 @@ test('公开页的已参加展会数不受隐私开关限制', async () => {
       time: '09:00-17:00',
       date: isoDateAfter(31),
       category: '智能家居',
-      status: '无需审核',
+      status: 'optional',
       qrEnabled: false,
     },
     { token: tokens.exhibitor.token },
@@ -85,7 +85,7 @@ test('公开页的已参加展会数不受隐私开关限制', async () => {
     // 已通过 → 已参加 受「允许修改已通过或已拒绝的报名」限制；管理员始终可以改，这里用管理员账号。
     const attended = await put(
       `/api/v1/review/${registrationId}/status`,
-      { status: '已参加' },
+      { status: 'attended' },
       { token: tokens.admin.token },
     );
     assert.strictEqual(attended.body.ok, true, JSON.stringify(attended.body));
@@ -125,7 +125,7 @@ test('公开页带上该用户开办的展会', async () => {
       time: '09:00-17:00',
       date: isoDateAfter(21),
       category: '智能家居',
-      status: '无需审核',
+      status: 'optional',
       qrEnabled: false,
     },
     { token: tokens.exhibitor.token },
@@ -163,7 +163,7 @@ test('公开页不下发报名码，本人与管理员仍能拿到', async () =>
       time: '09:00-17:00',
       date: isoDateAfter(30),
       category: '智能家居',
-      status: '无需审核',
+      status: 'optional',
       qrEnabled: true,
     },
     { token: tokens.exhibitor.token },

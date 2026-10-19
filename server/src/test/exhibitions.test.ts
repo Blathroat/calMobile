@@ -137,7 +137,7 @@ test('展会的增删改受角色与归属限制', async () => {
       registrationStart: '2026-08-01',
       registrationEnd: '2026-09-10',
       category: '智能家居',
-      status: '需审核',
+      status: 'review',
       description: '契约测试用',
     },
     { token: tokens.exhibitor.token },
@@ -157,7 +157,7 @@ test('展会的增删改受角色与归属限制', async () => {
       date: '2026-09-20',
       registrationStart: '2026-09-10',
       registrationEnd: '2026-08-01',
-      status: '需审核',
+      status: 'review',
     },
     { token: tokens.exhibitor.token },
   );
@@ -171,7 +171,7 @@ test('展会的增删改受角色与归属限制', async () => {
       venue: '测试展馆',
       time: '09:00-17:00',
       date: '2026-02-31',
-      status: '需审核',
+      status: 'review',
     },
     { token: tokens.exhibitor.token },
   );
@@ -184,7 +184,7 @@ test('展会的增删改受角色与归属限制', async () => {
       venue: '测试展馆',
       time: '09:00-17:00',
       date: '2026-09-20',
-      status: '需审核',
+      status: 'review',
     },
     { token: tokens.exhibitor.token },
   );
@@ -195,7 +195,7 @@ test('展会的增删改受角色与归属限制', async () => {
   assert.strictEqual(otherUser.status, 403);
 
   // 管理员可以改
-  const asAdmin = await put(`/api/v1/exhibitions/${id}/status`, { status: '无需审核' }, { token: tokens.admin.token });
+  const asAdmin = await put(`/api/v1/exhibitions/${id}/status`, { status: 'optional' }, { token: tokens.admin.token });
   assert.strictEqual(asAdmin.body.ok, true, JSON.stringify(asAdmin.body));
   assert.strictEqual((await get(`/api/v1/exhibitions/${id}`)).body.exhibition.status, '无需审核');
 
@@ -210,8 +210,8 @@ test('展会收集项可以整体覆盖并读回', async () => {
     '/api/v1/exhibitions/exh-2/fields',
     {
       fields: [
-        { title: '姓名 / 公司名称', type: '文本', required: true, options: [] },
-        { title: '参观身份', type: '单选', required: true, options: ['专业观众', '媒体'] },
+        { title: '姓名 / 公司名称', type: 'text', required: true, options: [] },
+        { title: '参观身份', type: 'radio', required: true, options: ['专业观众', '媒体'] },
       ],
     },
     { token: tokens.exhibitor.token },
@@ -240,7 +240,7 @@ test('收集项的文本填写和选项长度按管理设置拦住', async () =>
 
     const longRadio = await put(
       '/api/v1/exhibitions/exh-1/fields',
-      { fields: [{ title: '来源', type: '单选', required: false, options: ['朋友们'] }] },
+      { fields: [{ title: '来源', type: 'radio', required: false, options: ['朋友们'] }] },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(longRadio.body.ok, false, '超长单选选项必须被拒');
@@ -248,7 +248,7 @@ test('收集项的文本填写和选项长度按管理设置拦住', async () =>
 
     const longCheck = await put(
       '/api/v1/exhibitions/exh-1/fields',
-      { fields: [{ title: '需求', type: '多选', required: false, options: ['停车位'] }] },
+      { fields: [{ title: '需求', type: 'checkbox', required: false, options: ['停车位'] }] },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(longCheck.body.ok, false, '超长多选选项必须被拒');
@@ -256,7 +256,7 @@ test('收集项的文本填写和选项长度按管理设置拦住', async () =>
 
     const longTitle = await put(
       '/api/v1/exhibitions/exh-1/fields',
-      { fields: [{ title: '标'.repeat(31), type: '文本', required: false, options: [] }] },
+      { fields: [{ title: '标'.repeat(31), type: 'text', required: false, options: [] }] },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(longTitle.body.ok, false, '超长文本框标题必须被拒');
@@ -264,7 +264,7 @@ test('收集项的文本填写和选项长度按管理设置拦住', async () =>
 
     const kept = await put(
       '/api/v1/exhibitions/exh-1/fields',
-      { fields: [{ title: '来意', type: '文本', required: true, options: [] }] },
+      { fields: [{ title: '来意', type: 'text', required: true, options: [] }] },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(kept.body.ok, true, JSON.stringify(kept.body));
@@ -283,7 +283,7 @@ test('收集项的文本填写和选项长度按管理设置拦住', async () =>
 
     const meetingFields = await put(
       '/api/v1/meetings/settings',
-      { acceptMeetings: true, fields: [{ title: '来意', type: '文本', required: true, options: [] }] },
+      { acceptMeetings: true, fields: [{ title: '来意', type: 'text', required: true, options: [] }] },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(meetingFields.body.ok, true, JSON.stringify(meetingFields.body));

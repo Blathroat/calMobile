@@ -27,7 +27,7 @@ import RoleTag from '@/components/RoleTag.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import ImageViewer from '@/components/ImageViewer.vue';
 import { formatDateWithWeekday } from '@/services/format';
-import { REGISTRATION_STATUS } from '@/services/status';
+import { REGISTRATION_STATUS, modeLabel, statusTone } from '@/services/status';
 import type { ExhibitionDetail, JsonObject, Registration } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -96,7 +96,8 @@ const myRegistration = computed<Registration | null>(() => {
   if (!id) return null;
   return (
     registrations.value.find(
-      (record) => String(record.exhibitionId ?? '') === id && record.status !== REGISTRATION_STATUS.CANCELLED,
+      (record) =>
+        String(record.exhibitionId ?? '') === id && String(record.statusCode ?? '') !== REGISTRATION_STATUS.CANCELLED,
     ) ?? null
   );
 });
@@ -123,7 +124,7 @@ function footerHint(): string {
   // 已报名的说明优先：报名关闭 / 受限都不影响「我已经报上了」这件事。
   if (myRegistration.value) return t('exhibition.detail.registeredHint');
   if (item.openForRegistration === false) {
-    return t('exhibition.detail.closedWithMode', { mode: String(item.modeLabel || item.status || '') });
+    return t('exhibition.detail.closedWithMode', { mode: modeLabel(String(item.statusCode || '')) });
   }
   if (registerLimited.value) return t('exhibition.detail.registerRestricted');
   // 访客进不来这一页（守守卫按「访客只可访问首页」处理），所以这里不再区分「先登录」的引导。
@@ -338,7 +339,10 @@ onMounted(() => {
         <span class="row-meta">{{ exhibition.venue }}</span>
       </div>
       <div class="row" data-gap="md">
-        <StatusTag :text="String(exhibition.modeLabel || exhibition.status || '')" />
+        <StatusTag
+          :text="modeLabel(String(exhibition.statusCode || ''))"
+          :tone="statusTone(String(exhibition.statusCode || ''))"
+        />
         <span class="row-meta">{{
           exhibition.openForRegistration
             ? t('exhibition.detail.registrationNeeded')

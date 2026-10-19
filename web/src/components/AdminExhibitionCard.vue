@@ -8,7 +8,7 @@ import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
-import { EXHIBITION_STATUS, statusTone } from '@/services/status';
+import { EXHIBITION_STATUS, modeLabel, statusTone } from '@/services/status';
 import { coverOf } from '@/services/cover';
 import { formatDateWithWeekday } from '@/services/format';
 import MediaBox from '@/components/MediaBox.vue';
@@ -65,12 +65,12 @@ function toggleLock(): void {
         <span class="row-meta truncate">{{ item.venue }}</span>
         <span class="row-meta">{{
           t('exhibition.list.statusWithRegistrations', {
-            status: String(item.status ?? ''),
+            status: modeLabel(String(item.statusCode ?? '')),
             count: String(item.registrationCount ?? 0),
           })
         }}</span>
       </span>
-      <StatusTag :text="String(item.modeLabel || item.status || '')" :tone="statusTone(String(item.status || ''))" />
+      <StatusTag :text="modeLabel(String(item.statusCode || ''))" :tone="statusTone(String(item.statusCode || ''))" />
     </button>
     <div class="grid-cols-2">
       <button

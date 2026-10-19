@@ -197,8 +197,8 @@ export const STEPS: MigrationStep[] = [
             id              TEXT PRIMARY KEY,
             exhibition_id   TEXT NOT NULL REFERENCES exhibitions(id) ON DELETE CASCADE,
             title           TEXT NOT NULL,
-            type            TEXT NOT NULL DEFAULT '文本'
-                            CHECK (type IN ('文本', '单选', '多选')),
+            type            TEXT NOT NULL DEFAULT 'text'
+                            CHECK (type IN ('text', 'radio', 'checkbox')),
             required        BOOLEAN NOT NULL DEFAULT false,
             options         JSONB NOT NULL DEFAULT '[]'::jsonb,
             position        INTEGER NOT NULL DEFAULT 0
@@ -512,8 +512,8 @@ export const STEPS: MigrationStep[] = [
             id              TEXT PRIMARY KEY,
             exhibitor_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             title           TEXT NOT NULL,
-            type            TEXT NOT NULL DEFAULT '文本'
-                            CHECK (type IN ('文本', '单选', '多选')),
+            type            TEXT NOT NULL DEFAULT 'text'
+                            CHECK (type IN ('text', 'radio', 'checkbox')),
             required        BOOLEAN NOT NULL DEFAULT false,
             options         JSONB NOT NULL DEFAULT '[]'::jsonb,
             position        INTEGER NOT NULL DEFAULT 0
@@ -601,6 +601,41 @@ export const STEPS: MigrationStep[] = [
         CREATE INDEX IF NOT EXISTS users_exhibitor_expiry_idx
             ON users (exhibitor_expires_at)
             WHERE role = 'exhibitor' AND exhibitor_expires_at IS NOT NULL;
+        `,
+  },
+  {
+    // 收集项类型从「中文标签」改成 code（text / radio / checkbox）：协议值、前端比较与
+    // 表单回传都用 code，中文只留在兼容字段里。两张收集项表都要迁：展会的
+    // exhibition_fields 与私人会议的 meeting_fields。
+    // Postgres 的 CHECK 约束自动名是 <表>_type_check，所以先 DROP IF EXISTS 再按 code 重建；
+    // UPDATE 只认老中文，已经写进 code 的行与重复执行都不受影响。
+    id: '0018-field-type-codes',
+    sql: `
+        ALTER TABLE exhibition_fields DROP CONSTRAINT IF EXISTS exhibition_fields_type_check;
+        UPDATE exhibition_fields
+           SET type = CASE type
+                        WHEN '文本' THEN 'text'
+                        WHEN '单选' THEN 'radio'
+                        WHEN '多选' THEN 'checkbox'
+                        ELSE type
+                      END
+         WHERE type IN ('文本', '单选', '多选');
+        ALTER TABLE exhibition_fields ALTER COLUMN type SET DEFAULT 'text';
+        ALTER TABLE exhibition_fields ADD CONSTRAINT exhibition_fields_type_check
+            CHECK (type IN ('text', 'radio', 'checkbox'));
+
+        ALTER TABLE meeting_fields DROP CONSTRAINT IF EXISTS meeting_fields_type_check;
+        UPDATE meeting_fields
+           SET type = CASE type
+                        WHEN '文本' THEN 'text'
+                        WHEN '单选' THEN 'radio'
+                        WHEN '多选' THEN 'checkbox'
+                        ELSE type
+                      END
+         WHERE type IN ('文本', '单选', '多选');
+        ALTER TABLE meeting_fields ALTER COLUMN type SET DEFAULT 'text';
+        ALTER TABLE meeting_fields ADD CONSTRAINT meeting_fields_type_check
+            CHECK (type IN ('text', 'radio', 'checkbox'));
         `,
   },
 ];
@@ -840,9 +875,9 @@ export async function seed(): Promise<void> {
     // 示例展会的报名收集项：**只写在这里**，是给演示用的数据。
     // 展会本身没有「默认收集项」这回事 —— 展商新建展会时没填收集项，报名页就是空的。
     const fields: [string, string, boolean, string[]][] = [
-      ['姓名 / 公司名称', '文本', true, []],
-      ['参观身份', '单选', true, ['专业观众', '采购负责人', '媒体']],
-      ['报名需求', '多选', false, ['希望安排展商洽谈', '需要停车位', '需要翻译服务']],
+      ['姓名 / 公司名称', 'text', true, []],
+      ['参观身份', 'radio', true, ['专业观众', '采购负责人', '媒体']],
+      ['报名需求', 'checkbox', false, ['希望安排展商洽谈', '需要停车位', '需要翻译服务']],
     ];
     for (const exhibition of exhibitions) {
       const existing = await client.query<{ total: number }>(

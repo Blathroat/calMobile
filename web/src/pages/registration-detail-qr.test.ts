@@ -31,7 +31,7 @@ beforeEach(() => {
       exhibitionId: 'exh-1',
       exhibitionTitle: '秋季展会',
       visitorName: '张三',
-      statusLabel: '已通过',
+      statusCode: 'approved',
       checkInCode: 'CALMOBILE-CHECKIN|秋季展会|报名-1',
     },
   });
@@ -82,6 +82,11 @@ async function hold(node: Element): Promise<void> {
 }
 
 describe('报名二维码长按保存', () => {
+  it('状态按 code 查表显示中文文案', async () => {
+    await mountPage();
+    expect(document.body.textContent).toContain('已通过');
+  });
+
   it('二维码下方给出长按提示', async () => {
     await mountPage();
     const hints = [...document.querySelectorAll<HTMLElement>('.field-hint')].map((node) => node.textContent ?? '');

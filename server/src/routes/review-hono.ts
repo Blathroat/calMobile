@@ -79,7 +79,9 @@ function reviewPayload(row: ReviewRecordRow) {
     registrationTime: row.registration_time || '',
     answers: row.answers || '',
     summary: summaryOf(row.answers),
+    // 兼容字段（中文）；新代码读 statusCode（筛选条与状态标签都按 code 走）。
     status: labels.REGISTRATION_STATUS[row.status] || '',
+    statusCode: row.status,
   };
 }
 async function assertExhibitionScope(exhibitionId: string, user: { userId: string; role: string }) {
@@ -110,16 +112,16 @@ app.get('/', authenticateHono, async (c) => {
     scope.push(`e.exhibitor_id = $${scopeParams.length}`);
   }
   const scopeSql = scope.length ? `WHERE ${scope.join(' AND ')}` : '';
-  const counts: { total: number; [label: string]: number } = { total: 0 };
-  for (const label of Object.values(labels.REGISTRATION_STATUS)) counts[label] = 0;
+  // counts 的键是协议值 code（筛选条按 code 取数），不是中文标签。
+  const counts: { total: number; [statusCode: string]: number } = { total: 0 };
+  for (const statusCode of Object.keys(labels.REGISTRATION_STATUS)) counts[statusCode] = 0;
   const grouped = await query<StatusCountRow>(
     `SELECT r.status, count(*)::int AS total ${REVIEW_FROM} ${scopeSql} GROUP BY r.status`,
     scopeParams,
   );
   for (const row of grouped.rows) {
     counts.total += row.total;
-    const label = labels.REGISTRATION_STATUS[row.status];
-    if (label) counts[label] = row.total;
+    if (labels.REGISTRATION_STATUS[row.status]) counts[row.status] = row.total;
   }
   const recordParams = [...scopeParams];
   let recordsSql = scopeSql;
@@ -187,7 +189,7 @@ app.put('/:id/status', authenticateHono, async (c) => {
         throw badRequest('该用户在这场展会上已有未撤销的报名，不能把这条改成此状态');
       throw error;
     }
-    return { record: { ...reviewPayload(row), status: labels.REGISTRATION_STATUS[status] } };
+    return { record: { ...reviewPayload(row), status: labels.REGISTRATION_STATUS[status], statusCode: status } };
   });
 });
 

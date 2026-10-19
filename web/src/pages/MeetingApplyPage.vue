@@ -12,6 +12,7 @@ import { useAsync } from '@/composables/useAsync';
 import { toast } from '@/services/toast';
 import { answerDocument } from '@domain/answer-document';
 import { limit } from '@/services/validate';
+import { FIELD_TYPE } from '@/services/status';
 import RadioChoices from '@/components/RadioChoices.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -208,7 +209,7 @@ async function submit(): Promise<void> {
 
       <template v-for="field in fields" :key="field.title">
         <fieldset
-          v-if="field.type === '单选'"
+          v-if="field.type === FIELD_TYPE.RADIO"
           class="choice-group"
           :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
         >
@@ -222,7 +223,7 @@ async function submit(): Promise<void> {
           <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
         </fieldset>
         <fieldset
-          v-else-if="field.type === '多选'"
+          v-else-if="field.type === FIELD_TYPE.CHECKBOX"
           class="choice-group"
           :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
         >

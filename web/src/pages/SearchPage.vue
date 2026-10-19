@@ -23,6 +23,7 @@ import RoleTag from '@/components/RoleTag.vue';
 import { truncate } from '@/services/format';
 import { coverOf } from '@/services/cover';
 import type { JsonObject } from '@/api/types';
+import { modeLabel, roleLabel, statusTone, userStatusLabel } from '@/services/status';
 import { t } from '@/i18n';
 
 /** 输入防抖：停手 220ms 才真正发请求，避免逐字打字打出一串请求。 */
@@ -204,7 +205,10 @@ onBeforeUnmount(() => {
             <span class="row-copy">
               <span class="row" data-gap="md">
                 <strong class="row-title truncate">{{ item.title }}</strong>
-                <StatusTag :text="String(item.modeLabel || item.status || '')" />
+                <StatusTag
+                  :text="modeLabel(String(item.statusCode || ''))"
+                  :tone="statusTone(String(item.statusCode || ''))"
+                />
               </span>
               <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
               <span class="row-meta truncate">{{ item.venue }}</span>
@@ -231,13 +235,16 @@ onBeforeUnmount(() => {
                 <strong class="row-title truncate">{{
                   user.roleCode === 'exhibitor' || user.roleCode === 'admin'
                     ? user.nickname
-                    : `${user.nickname} · ${user.role}`
+                    : `${user.nickname} · ${roleLabel(String(user.roleCode || ''))}`
                 }}</strong>
                 <RoleTag :role-code="String(user.roleCode || '')" />
               </span>
               <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
             </span>
-            <StatusTag :text="String(user.status || '')" />
+            <StatusTag
+              :text="userStatusLabel(String(user.statusCode || ''))"
+              :tone="statusTone(String(user.statusCode || ''))"
+            />
           </button>
         </div>
       </template>

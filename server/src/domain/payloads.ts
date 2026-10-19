@@ -122,8 +122,11 @@ export function exhibitionPayload(row: ExhibitionRow) {
     category: row.category || '',
     description: row.description || '',
     descriptionFormat: row.description_format === 'html' ? 'html' : 'md',
+    // 兼容字段：给还没更新快照的旧页面用的中文标签，新代码读 statusCode。
     status: labels.EXHIBITION_STATUS[statusCode] || labels.EXHIBITION_STATUS.review,
+    statusCode,
     mode: labels.modeOf(statusCode),
+    // 兼容字段（中文），规则与前端 `modeLabel(code)` 一致。
     modeLabel: labels.modeLabel(statusCode),
     openForRegistration: labels.acceptsRegistration(statusCode),
     year: row.year,
@@ -184,8 +187,10 @@ export function registrationPayload(row: RegistrationRow) {
     visitorName: row.visitor_name,
     visitorType: row.visitor_type,
     answers: row.answers || '',
+    // 兼容字段：status 与 statusLabel 都是中文标签，只给还没更新快照的旧页面；新代码读 statusCode。
     status: labels.REGISTRATION_STATUS[statusCode] || '',
     statusLabel: labels.REGISTRATION_STATUS[statusCode] || '',
+    statusCode,
     qrEnabled: row.exhibition_qr_enabled === true,
     allowCancel: row.exhibition_allow_cancel !== false,
     checkInCode: codeAllowed ? labels.checkInCode(row.exhibition_id, row.id, secret) : '',
@@ -218,6 +223,7 @@ export function userPayload(row: UserRow, can: Capabilities) {
     guest: false,
     id: row.id,
     role: row.role,
+    // 兼容字段：中文角色标签，只给还没更新快照的旧页面；新代码读上面的 role（本身就是 code）。
     roleLabel: labels.ROLE_LABEL[row.role] || labels.ROLE_LABEL.user,
     username: row.username,
     nickname: row.nickname,
@@ -258,8 +264,9 @@ export function guestPayload() {
     socialMedia: '',
     avatar: '',
     showRegistrations: false,
+    // 访客没有账号状态：status 与 statusCode 都是空串（词表里只有 active / limited / banned）。
     status: '',
-    statusCode: 'guest',
+    statusCode: '',
     lastLoginTime: '',
     registrationTime: '',
     exhibitorExpiresAt: '',
@@ -276,9 +283,13 @@ export function adminUserPayload(row: AdminUserRow, index: number) {
     nickname: row.nickname,
     email: row.email || '',
     avatar: row.avatar || '',
-    role: labels.ROLE_LABEL[row.role] || row.role,
+    // role 与 roleCode 都是 code（协议值）；roleLabel 是兼容字段，给还没更新快照的旧页面。
+    role: row.role,
+    roleLabel: labels.ROLE_LABEL[row.role] || row.role,
     roleCode: row.role,
+    // status 是兼容字段（中文）；新代码读 statusCode。
     status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active || '',
+    statusCode: row.status || 'active',
     // 管理员据此决定要不要显示「关闭两步验证」这个兜底入口
     emailVerified: row.email_verified === true,
     twoFactorEnabled: row.two_factor_enabled === true,

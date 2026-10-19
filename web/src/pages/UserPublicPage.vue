@@ -26,6 +26,7 @@ import RoleTag from '@/components/RoleTag.vue';
 import { formatRecordDate } from '@/services/format';
 import { coverOf } from '@/services/cover';
 import type { JsonObject } from '@/api/types';
+import { exhibitionStatusLabel, registrationStatusLabel, statusTone } from '@/services/status';
 import { t } from '@/i18n';
 
 const route = useRoute();
@@ -248,7 +249,10 @@ usePullRefresh(
             <span class="row-meta">{{ `${item.dateLabel || item.date} · ${item.venue}` }}</span>
             <span class="row-meta">{{ registrationCountLabel(item) }}</span>
           </span>
-          <StatusTag :text="String(item.status || '')" />
+          <StatusTag
+            :text="exhibitionStatusLabel(String(item.statusCode || ''))"
+            :tone="statusTone(String(item.statusCode || ''))"
+          />
         </button>
       </div>
     </div>
@@ -263,9 +267,14 @@ usePullRefresh(
           <MediaBox class-name="thumb thumb-cover thumb-sm" />
           <span class="row-copy">
             <strong class="row-title truncate">{{ record.exhibitionTitle }}</strong>
-            <span class="row-meta">{{ formatRecordDate(record) }} · {{ record.statusLabel }}</span>
+            <span class="row-meta"
+              >{{ formatRecordDate(record) }} · {{ registrationStatusLabel(String(record.statusCode || '')) }}</span
+            >
           </span>
-          <StatusTag :text="String(record.statusLabel || '')" />
+          <StatusTag
+            :text="registrationStatusLabel(String(record.statusCode || ''))"
+            :tone="statusTone(String(record.statusCode || ''))"
+          />
         </div>
       </div>
       <p v-else class="row-meta">

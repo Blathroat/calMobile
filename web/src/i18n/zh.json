@@ -149,7 +149,6 @@
       "adjustRoleFor": "调整 {name} 的权限",
       "adjustStatus": "调整状态",
       "adjustStatusFor": "调整 {name} 的状态",
-      "banned": "封禁",
       "count": "{count} 位用户",
       "disableTwoFactor": "关闭两步验证",
       "disableTwoFactorConfirm": "关闭后 {name} 登录时只校验密码。请确认这是账号本人提出的请求。",
@@ -161,9 +160,7 @@
       "manageExhibitions": "管理展会",
       "manageMeetings": "管理会议",
       "noMatch": "没有找到与“{query}”相关的用户",
-      "normal": "正常",
       "registeredAt": "{role} · 注册于 {time}",
-      "restricted": "受限",
       "roleAdmin": "管理员",
       "roleExhibitor": "展商",
       "roleUser": "用户",
@@ -317,6 +314,7 @@
     "verifying": "正在核对报名信息…"
   },
   "common": {
+    "all": "全部",
     "back": "返回",
     "cancel": "取消",
     "close": "关闭",
@@ -502,6 +500,11 @@
     "registrationLinkCopied": "已复制报名链接",
     "sections": "展商分区",
     "title": "展商后台"
+  },
+  "fieldType": {
+    "checkbox": "多选",
+    "radio": "单选",
+    "text": "文本"
   },
   "form": {
     "badFormat": "{label}格式不正确",
@@ -819,6 +822,12 @@
       "viewProfile": "查看 {name} 的公开页"
     }
   },
+  "role": {
+    "admin": "管理员",
+    "exhibitor": "展商",
+    "guest": "访客",
+    "user": "普通用户"
+  },
   "search": {
     "emptyHint": "可以换一个关键词，或回到首页按日期浏览展会。",
     "exhibitionSection": "展会 · {count}",
@@ -998,5 +1007,30 @@
     },
     "title": "设置",
     "uploadAvatar": "上传头像"
+  },
+  "status": {
+    "exhibition": {
+      "closed": "截止报名",
+      "display": "仅展示",
+      "ended": "已结束",
+      "optional": "无需审核",
+      "review": "需审核"
+    },
+    "exhibitionWithRegistration": {
+      "optional": "报名中 · 无需审核",
+      "review": "报名中 · 需审核"
+    },
+    "registration": {
+      "approved": "已通过",
+      "attended": "已参加",
+      "cancelled": "已撤销",
+      "pending": "待审核",
+      "rejected": "已拒绝"
+    },
+    "user": {
+      "active": "正常",
+      "banned": "封禁",
+      "limited": "受限"
+    }
   }
 }

@@ -18,7 +18,7 @@ import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
 import { PATTERNS, allowedFormats, check, limit, validateAll } from '@/services/validate';
-import { EXHIBITION_STATUS, REGISTRATION_MODES } from '@/services/status';
+import { EXHIBITION_STATUS, FIELD_TYPE, REGISTRATION_MODES, exhibitionStatusLabel } from '@/services/status';
 import { device } from '@/services/device-services';
 import { publishImportedMedia } from '@/services/publish-media';
 import { loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
@@ -36,7 +36,7 @@ import SegControl from '@/components/SegControl.vue';
 import type { ExhibitionDetail, JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
-const MODES = REGISTRATION_MODES.map((value) => ({ value, label: value }));
+const MODES = REGISTRATION_MODES.map((value) => ({ value, label: exhibitionStatusLabel(value) }));
 /** 分类下拉的占位项：清单由管理员维护，这里只提示「还没选」。 */
 const categoryPlaceholder = t('exhibition.form.chooseCategory');
 
@@ -226,7 +226,7 @@ function fillFrom(item: JsonObject, data: ExhibitionDetail): void {
   form.venue = String(item.venue ?? '');
   form.date = String(item.date ?? '');
   form.time = String(item.time ?? '');
-  const status = String(item.status ?? '');
+  const status = String(item.statusCode ?? '');
   form.status = MODES.some((mode) => mode.value === status) ? status : EXHIBITION_STATUS.REVIEW_REQUIRED;
   form.category = String(item.category ?? '');
   form.description = String(item.description ?? '');
@@ -237,7 +237,7 @@ function fillFrom(item: JsonObject, data: ExhibitionDetail): void {
   form.allowCancel = item.allowCancel !== false;
   fields.value = (data.fields ?? []).map((field) => ({
     title: String(field.title ?? ''),
-    type: String(field.type ?? '文本'),
+    type: String(field.type ?? FIELD_TYPE.TEXT),
     required: field.required === true,
     // 选项在模型里统一为数组，界面上按条目增删。
     options: normalizeOptions(field.options),
@@ -430,7 +430,7 @@ function buildPayload(): JsonObject {
         title: item.title.trim(),
         type: item.type,
         required: item.required,
-        options: item.type === '文本' ? [] : item.options.map((option) => option.trim()).filter(Boolean),
+        options: item.type === FIELD_TYPE.TEXT ? [] : item.options.map((option) => option.trim()).filter(Boolean),
       })),
   };
 }

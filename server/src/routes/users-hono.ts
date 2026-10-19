@@ -46,9 +46,11 @@ function statusPayload(row: UserRow) {
   return {
     id: row.id,
     nickname: row.nickname,
+    // role 是兼容字段（中文），roleCode 才是协议值；status 与 statusCode 同理。
     role: labels.ROLE_LABEL[row.role] || row.role,
     roleCode: row.role,
     status: labels.USER_STATUS[row.status as string] || labels.USER_STATUS.active,
+    statusCode: row.status || 'active',
     exhibitorExpiresAt: iso(row.exhibitor_expires_at),
     exhibitorExpired: isPastExpiry(row.exhibitor_expires_at),
   };

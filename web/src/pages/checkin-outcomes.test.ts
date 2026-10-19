@@ -59,6 +59,7 @@ beforeEach(() => {
   vi.mocked(createQrDecoder).mockReturnValue(decoder);
   vi.mocked(api.checkIn).mockResolvedValue({
     ok: true,
+    statusCode: 'attended',
     status: '已参加',
     message: '已核销 张三 的报名',
     record: RECORD,

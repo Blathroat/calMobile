@@ -14,7 +14,7 @@ import { useAsync } from '@/composables/useAsync';
 import { usePullRefresh } from '@/services/pull-refresh';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
-import { REGISTRATION_STATUS, statusTone } from '@/services/status';
+import { REGISTRATION_STATUS, registrationStatusLabel, statusTone } from '@/services/status';
 import { answerDocument } from '@domain/answer-document';
 import { formatMeetingWhen } from '@/services/format';
 import StateBlock from '@/components/StateBlock.vue';
@@ -36,7 +36,7 @@ const meeting = computed<JsonObject | undefined>(() => {
   return record && typeof record === 'object' ? (record as JsonObject) : undefined;
 });
 const answers = computed(() => answerDocument({ source: { text: meeting.value?.answers } }).lines);
-const status = computed(() => String(meeting.value?.status || ''));
+const status = computed(() => String(meeting.value?.statusCode || ''));
 const pending = computed(() => status.value === REGISTRATION_STATUS.PENDING);
 const approved = computed(() => status.value === REGISTRATION_STATUS.APPROVED);
 const cancelled = computed(() => status.value === REGISTRATION_STATUS.CANCELLED);
@@ -100,7 +100,7 @@ function askCancel(): void {
           toast(String(result.error || COPY.cancelFailed), 'error');
           return;
         }
-        item.status = REGISTRATION_STATUS.CANCELLED;
+        item.statusCode = REGISTRATION_STATUS.CANCELLED;
         toast(COPY.cancelDone, 'success');
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -154,7 +154,7 @@ function askCancel(): void {
     <div class="card">
       <span class="section-label">{{ COPY.status }}</span>
       <div class="row" data-gap="md">
-        <StatusTag :text="status" :tone="statusTone(status)" />
+        <StatusTag :text="registrationStatusLabel(status)" :tone="statusTone(status)" />
         <span class="row-meta">{{ statusHint() }}</span>
       </div>
     </div>
@@ -164,7 +164,7 @@ function askCancel(): void {
     <div class="page-foot">
       <div class="stack" data-gap="sm">
         <button class="cta danger" type="button" :disabled="!canCancel || cancelling" @click="askCancel">
-          {{ cancelled ? REGISTRATION_STATUS.CANCELLED : COPY.cancel }}
+          {{ cancelled ? registrationStatusLabel(REGISTRATION_STATUS.CANCELLED) : COPY.cancel }}
         </button>
         <p class="field-hint text-center">{{ statusHint() }}</p>
       </div>

@@ -11,7 +11,7 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { formatLocalChineseDate, truncate } from '@/services/format';
-import { statusTone } from '@/services/status';
+import { statusTone, userStatusLabel } from '@/services/status';
 import type { Ref } from 'vue';
 import type { User } from '@/api/types';
 import { t } from '@/i18n';
@@ -95,7 +95,7 @@ function exhibitorMeta(user: User): string {
             </span>
             <span class="row-meta">{{
               t('admin.users.lastLogin', {
-                status: String(user.status ?? ''),
+                status: userStatusLabel(String(user.statusCode ?? '')),
                 time: String(user.lastLoginTime || t('admin.users.unknown')),
               })
             }}</span>
@@ -103,7 +103,10 @@ function exhibitorMeta(user: User): string {
             <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
             <span v-if="user.twoFactorEnabled === true" class="row-meta">{{ t('admin.users.twoFactorEnabled') }}</span>
           </span>
-          <StatusTag :text="String(user.status || '')" :tone="statusTone(String(user.status || ''))" />
+          <StatusTag
+            :text="userStatusLabel(String(user.statusCode || ''))"
+            :tone="statusTone(String(user.statusCode || ''))"
+          />
         </button>
         <div class="action-row">
           <!-- 到期的展商已降为普通用户，但他们的展会/会议还在，管理员仍要能从卡片接管 -->

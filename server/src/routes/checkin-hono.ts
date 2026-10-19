@@ -62,11 +62,13 @@ app.post('/', authenticateHono, async (c) => {
   if (!secret || secret !== parsed.secret)
     return jsonResponse(c, { ok: false, error: '报名码已失效，请在报名详情里重新打开二维码', record });
   const statusLabel = labels.REGISTRATION_STATUS[row.status] || '';
+  // status 是兼容字段（中文），新代码读 statusCode。
   if (row.status === 'attended')
     return jsonResponse(c, {
       ok: false,
       duplicated: true,
       status: statusLabel,
+      statusCode: row.status,
       error: `${row.visitor_name} 的报名码已经核销过了`,
       record,
     });
@@ -74,6 +76,7 @@ app.post('/', authenticateHono, async (c) => {
     return jsonResponse(c, {
       ok: false,
       status: statusLabel,
+      statusCode: row.status,
       error: `当前状态为「${statusLabel}」，只有已通过的报名可以核销`,
       record,
     });
@@ -92,6 +95,7 @@ app.post('/', authenticateHono, async (c) => {
       ok: false,
       duplicated: true,
       status: labels.REGISTRATION_STATUS.attended,
+      statusCode: 'attended',
       error: `${row.visitor_name} 的报名码已经核销过了`,
       record: { ...record, checkInTime: raced.rows[0]?.check_in_time_text || '' },
     });
@@ -100,6 +104,7 @@ app.post('/', authenticateHono, async (c) => {
     ok: true,
     duplicated: false,
     status: labels.REGISTRATION_STATUS.attended,
+    statusCode: 'attended',
     message: `已核销 ${row.visitor_name} 的报名`,
     error: '',
     record: { ...record, checkInTime: updated.rows[0]?.check_in_time_text || '' },

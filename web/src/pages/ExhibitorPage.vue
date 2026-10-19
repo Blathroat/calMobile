@@ -22,7 +22,7 @@ import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
 import { registrationLink } from '@/services/registration-link';
-import { statusTone } from '@/services/status';
+import { modeLabel, statusTone } from '@/services/status';
 import AppIcon from '@/components/AppIcon.vue';
 import HintNote from '@/components/HintNote.vue';
 import SegControl from '@/components/SegControl.vue';
@@ -225,13 +225,16 @@ usePullRefresh(
             <span class="row-meta truncate">{{ item.venue }}</span>
             <span class="row-meta">{{
               t('exhibition.list.statusWithRegistrations', {
-                status: String(item.status ?? ''),
+                status: modeLabel(String(item.statusCode ?? '')),
                 count: String(item.registrationCount ?? 0),
               })
             }}</span>
             <span v-if="item.qrEnabled === true" class="row-meta">{{ t('exhibitor.qrEnabled') }}</span>
           </span>
-          <StatusTag :text="String(item.modeLabel || '')" :tone="statusTone(String(item.status || ''))" />
+          <StatusTag
+            :text="modeLabel(String(item.statusCode || ''))"
+            :tone="statusTone(String(item.statusCode || ''))"
+          />
         </button>
         <div class="action-row">
           <button

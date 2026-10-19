@@ -17,7 +17,7 @@ import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { answerDocument } from '@domain/answer-document';
 import { limit } from '@/services/validate';
-import { EXHIBITION_STATUS } from '@/services/status';
+import { EXHIBITION_STATUS, FIELD_TYPE, modeLabel, statusTone } from '@/services/status';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
@@ -131,7 +131,7 @@ function seed(list: unknown[], existing: Registration | null): void {
     if (!title) continue;
     const options = splitOptions(field.options);
     const stored = decoded[title];
-    if (field.type === '单选') {
+    if (field.type === FIELD_TYPE.RADIO) {
       const value = typeof stored === 'string' ? stored : '';
       answers[title] = existing
         ? (options.find((option) => option === value) ?? '')
@@ -140,7 +140,7 @@ function seed(list: unknown[], existing: Registration | null): void {
           : '';
       continue;
     }
-    if (field.type === '多选') {
+    if (field.type === FIELD_TYPE.CHECKBOX) {
       const chosen = Array.isArray(stored) ? stored : [];
       answers[title] = options.filter((option) => chosen.includes(option));
       continue;
@@ -235,7 +235,8 @@ async function submit(): Promise<void> {
 
   const profile = session.user;
   const visitorName = String(profile.nickname || profile.username || t('registration.form.fallbackName'));
-  const visitorType = String(profile.roleLabel || t('registration.form.regularUser'));
+  // 回传的是角色 code（协议值），不是展示文案：文案按 code 在展示处查表。
+  const visitorType = String(profile.role || 'user');
 
   busy.value = true;
   try {
@@ -253,7 +254,7 @@ async function submit(): Promise<void> {
       error.value = String(result?.error || t('registration.form.submitFailed'));
       return;
     }
-    approved.value = result.autoApproved === true || item.status === EXHIBITION_STATUS.REVIEW_OPTIONAL;
+    approved.value = result.autoApproved === true || item.statusCode === EXHIBITION_STATUS.REVIEW_OPTIONAL;
     success.value = true;
     toast(approved.value ? t('registration.form.submittedAndApproved') : t('registration.form.submitted'), 'success');
     // 提交成功后的短暂停留：定时器随页面一起取消，用户已经返回时不再被拉回列表。
@@ -315,7 +316,10 @@ async function submit(): Promise<void> {
         <span class="row-meta"
           >{{ formatDateWithWeekday(exhibition.date) }} {{ exhibition.time }} · {{ exhibition.venue }}</span
         >
-        <StatusTag :text="String(exhibition.modeLabel || exhibition.status || '')" />
+        <StatusTag
+          :text="modeLabel(String(exhibition.statusCode || ''))"
+          :tone="statusTone(String(exhibition.statusCode || ''))"
+        />
       </div>
 
       <div v-if="joinDescription" class="rich-content" v-html="joinDescription" />
@@ -324,7 +328,7 @@ async function submit(): Promise<void> {
         <template v-for="field in fields" :key="field.title">
           <!-- 单选：一组互斥选项 -->
           <fieldset
-            v-if="field.type === '单选'"
+            v-if="field.type === FIELD_TYPE.RADIO"
             class="choice-group"
             :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
           >
@@ -340,7 +344,7 @@ async function submit(): Promise<void> {
 
           <!-- 多选：可同时勾选多项 -->
           <fieldset
-            v-else-if="field.type === '多选'"
+            v-else-if="field.type === FIELD_TYPE.CHECKBOX"
             class="choice-group"
             :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
           >

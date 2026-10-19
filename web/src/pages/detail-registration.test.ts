@@ -122,7 +122,9 @@ describe('展会详情底部报名按钮', () => {
   });
 
   it('已报名本场时变「查看我的报名」，点击进入报名详情', async () => {
-    vi.mocked(api.registrations.list).mockResolvedValue([{ id: 'reg-9', exhibitionId: 'exh-1', status: '已通过' }]);
+    vi.mocked(api.registrations.list).mockResolvedValue([
+      { id: 'reg-9', exhibitionId: 'exh-1', statusCode: 'approved' },
+    ]);
     const router = await mountDetail({ loggedIn: true });
     await vi.waitFor(() => expect(registerButton()?.textContent?.trim()).toBe('查看我的报名'));
     expect(footerHint()).toContain('已报名这场展会');
@@ -131,7 +133,9 @@ describe('展会详情底部报名按钮', () => {
   });
 
   it('已撤销的报名不算已报名', async () => {
-    vi.mocked(api.registrations.list).mockResolvedValue([{ id: 'reg-9', exhibitionId: 'exh-1', status: '已撤销' }]);
+    vi.mocked(api.registrations.list).mockResolvedValue([
+      { id: 'reg-9', exhibitionId: 'exh-1', statusCode: 'cancelled' },
+    ]);
     const router = await mountDetail({ loggedIn: true });
     await flush();
     expect(api.registrations.list).toHaveBeenCalledTimes(1);
@@ -142,7 +146,9 @@ describe('展会详情底部报名按钮', () => {
   });
 
   it('已报名时按钮不被报名关闭 / 受限账号禁用', async () => {
-    vi.mocked(api.registrations.list).mockResolvedValue([{ id: 'reg-9', exhibitionId: 'exh-1', status: '待审核' }]);
+    vi.mocked(api.registrations.list).mockResolvedValue([
+      { id: 'reg-9', exhibitionId: 'exh-1', statusCode: 'pending' },
+    ]);
     const router = await mountDetail({ loggedIn: true, canRegister: false, detail: CLOSED_DETAIL });
     await vi.waitFor(() => expect(registerButton()?.textContent?.trim()).toBe('查看我的报名'));
     expect(registerButton()?.disabled).toBe(false);

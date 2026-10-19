@@ -18,7 +18,7 @@ import { toast } from '@/services/toast';
 import { device } from '@/services/device-services';
 import { nativeBridge } from '@/services/native-bridge';
 import { confirmSheet } from '@/services/sheet';
-import { REGISTRATION_STATUS } from '@/services/status';
+import { REGISTRATION_STATUS, registrationStatusLabel, roleLabel, statusTone } from '@/services/status';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
@@ -37,17 +37,17 @@ const query = useAsync<RegistrationDetail>();
 const record = computed<Registration | undefined>(() => query.data.value?.registration);
 const answers = computed(() => answerDocument({ source: { text: record.value?.answers } }).lines);
 
-const cancelled = computed(() => record.value?.statusLabel === REGISTRATION_STATUS.CANCELLED);
+const cancelled = computed(() => record.value?.statusCode === REGISTRATION_STATUS.CANCELLED);
 /** 已参加是终态：后端不允许再撤销，按钮就不要画成可点的。 */
-const attended = computed(() => record.value?.statusLabel === REGISTRATION_STATUS.ATTENDED);
-const approved = computed(() => record.value?.statusLabel === REGISTRATION_STATUS.APPROVED);
+const attended = computed(() => record.value?.statusCode === REGISTRATION_STATUS.ATTENDED);
+const approved = computed(() => record.value?.statusCode === REGISTRATION_STATUS.APPROVED);
 /** 已通过的报名还要看展商是否允许撤销。待审核不受这个开关影响。 */
 const hostBlocksCancel = computed(() => approved.value && record.value?.allowCancel === false);
 const canCancel = computed(() => !cancelled.value && !attended.value && !hostBlocksCancel.value);
 const hostCancelHint = t('registration.detail.approvedCancelBlocked');
 /** 待审核的报名始终可以改；其余状态由管理员的「是否需要重新审核」决定。 */
 const canRevise = computed(
-  () => bootstrap.review.canRevise === true || record.value?.statusLabel === REGISTRATION_STATUS.PENDING,
+  () => bootstrap.review.canRevise === true || record.value?.statusCode === REGISTRATION_STATUS.PENDING,
 );
 
 const cancelling = ref(false);
@@ -107,8 +107,7 @@ function askCancel(): void {
         }
         // 撤销是服务端已经完成的终态，就地更新本页状态与页脚；
         // 不重新取数：`registrations.get` 的缓存键（`registration:…`）不在 cancel 的失效前缀里。
-        item.statusLabel = REGISTRATION_STATUS.CANCELLED;
-        item.status = REGISTRATION_STATUS.CANCELLED;
+        item.statusCode = REGISTRATION_STATUS.CANCELLED;
         toast(t('registration.detail.registrationCancelled'), 'success');
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -242,7 +241,7 @@ onBeforeUnmount(cancelQrHold);
         </div>
         <div class="row" data-between="true">
           <span class="row-meta">{{ t('registration.detail.identity') }}</span>
-          <span class="strong truncate">{{ record.visitorType || '—' }}</span>
+          <span class="strong truncate">{{ roleLabel(String(record.visitorType || '')) || '—' }}</span>
         </div>
         <template v-if="answers.length > 0">
           <div v-for="(line, index) in answers" :key="`${line.label}-${index}`" class="row" data-between="true">
@@ -260,8 +259,11 @@ onBeforeUnmount(cancelQrHold);
     <div class="card">
       <span class="section-label">{{ t('exhibition.detail.currentStatus') }}</span>
       <div class="row" data-gap="md">
-        <StatusTag :text="String(record.statusLabel || '')" />
-        <span class="row-meta">{{ statusHint(record.statusLabel) }}</span>
+        <StatusTag
+          :text="registrationStatusLabel(String(record.statusCode || ''))"
+          :tone="statusTone(String(record.statusCode || ''))"
+        />
+        <span class="row-meta">{{ statusHint(record.statusCode) }}</span>
       </div>
     </div>
 

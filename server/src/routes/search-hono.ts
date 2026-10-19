@@ -22,7 +22,9 @@ function searchUserPayload(row: UserRow) {
     roleCode,
     email: row.email || '',
     avatar: row.avatar || '',
+    // 兼容字段（中文）；新代码读 statusCode。
     status: labels.USER_STATUS[row.status || ''] || labels.USER_STATUS.active,
+    statusCode: row.status || 'active',
     registrationTime: row.registration_time || '',
     lastLoginTime: row.last_login_time || '',
   };

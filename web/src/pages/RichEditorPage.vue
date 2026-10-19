@@ -388,7 +388,7 @@ async function save(): Promise<void> {
       title: exhibition.value.title,
       venue: exhibition.value.venue,
       time: exhibition.value.time,
-      status: exhibition.value.status,
+      status: exhibition.value.statusCode,
       category: exhibition.value.category,
       date: exhibition.value.date,
       description: markdown,

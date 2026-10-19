@@ -88,7 +88,7 @@ export const ENDPOINT_SAMPLES: Record<string, unknown>[] = [
     year: 2026,
     month: 6,
     day: 1,
-    status: '待审核',
+    status: 'pending',
     code: 'c',
   },
 ];

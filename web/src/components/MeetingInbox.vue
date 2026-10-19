@@ -18,7 +18,7 @@ import { toast } from '@/services/toast';
 import { confirmSheet, openSheet } from '@/services/sheet';
 import type { SheetAction } from '@/services/sheet';
 import { meetingLink } from '@/services/registration-link';
-import { REGISTRATION_STATUS, statusTone } from '@/services/status';
+import { REGISTRATION_STATUS, registrationStatusLabel, statusTone } from '@/services/status';
 import { answerDocument } from '@domain/answer-document';
 import { formatMeetingWhen, truncate } from '@/services/format';
 import StateBlock from '@/components/StateBlock.vue';
@@ -46,7 +46,7 @@ const records = computed<JsonObject[]>(() =>
 );
 const hasRecords = computed(() => data.value !== undefined);
 const pendingCount = computed(
-  () => records.value.filter((record) => String(record.status || '') === REGISTRATION_STATUS.PENDING).length,
+  () => records.value.filter((record) => String(record.statusCode || '') === REGISTRATION_STATUS.PENDING).length,
 );
 const exhibitorId = computed(() =>
   String(data.value?.exhibitorId || props.exhibitorId || (props.mode === 'exhibitor' ? session.user.id : '') || ''),
@@ -99,7 +99,7 @@ function summary(record: JsonObject): string {
 }
 
 function reviewed(record: JsonObject): boolean {
-  const status = String(record.status || '');
+  const status = String(record.statusCode || '');
   return (
     status === REGISTRATION_STATUS.APPROVED ||
     status === REGISTRATION_STATUS.REJECTED ||
@@ -194,8 +194,8 @@ function openDetail(record: JsonObject): void {
     size: 'full',
     component: RegistrationDetailSheet,
     props: {
-      status: String(record.status || ''),
-      statusTone: statusTone(String(record.status || '')),
+      status: registrationStatusLabel(String(record.statusCode || '')),
+      statusTone: statusTone(String(record.statusCode || '')),
       registrationTime: when,
       answers: answers.map((line) => ({
         label: line.label || t('exhibition.detail.additionalInfo'),
@@ -312,7 +312,10 @@ async function copyLink(): Promise<void> {
               <span class="row-meta">{{ formatMeetingWhen(record.meetingDate, record.meetingTime) }}</span>
               <span class="row-meta truncate">{{ summary(record) }}</span>
             </span>
-            <StatusTag :text="String(record.status || '')" :tone="statusTone(String(record.status || ''))" />
+            <StatusTag
+              :text="registrationStatusLabel(String(record.statusCode || ''))"
+              :tone="statusTone(String(record.statusCode || ''))"
+            />
           </button>
         </div>
 

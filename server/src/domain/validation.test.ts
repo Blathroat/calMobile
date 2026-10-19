@@ -144,20 +144,22 @@ test('展会 schema 拒绝非法日期并保留报名日期顺序规则', () => 
 test('收集项的选项按单选和多选各自的上限拦住', () => {
   assert.equal(
     messageOf(() =>
-      parseSchema(fieldsSchema({ ...limits, radioOption: 2 }), [{ title: '来源', type: '单选', options: ['朋友们'] }]),
+      parseSchema(fieldsSchema({ ...limits, radioOption: 2 }), [{ title: '来源', type: 'radio', options: ['朋友们'] }]),
     ),
     '单选选项最多 2 个字符',
   );
   assert.equal(
     messageOf(() =>
-      parseSchema(fieldsSchema({ ...limits, checkOption: 2 }), [{ title: '需求', type: '多选', options: ['停车位'] }]),
+      parseSchema(fieldsSchema({ ...limits, checkOption: 2 }), [
+        { title: '需求', type: 'checkbox', options: ['停车位'] },
+      ]),
     ),
     '多选选项最多 2 个字符',
   );
   assert.deepEqual(
     parseSchema(fieldsSchema({ ...limits, radioOption: 2, checkOption: 2 }), [
-      { title: '来源', type: '单选', options: ['友'] },
-      { title: '需求', type: '多选', options: ['车'] },
+      { title: '来源', type: 'radio', options: ['友'] },
+      { title: '需求', type: 'checkbox', options: ['车'] },
     ]).map((item) => item.options),
     [['友'], ['车']],
   );
@@ -165,7 +167,7 @@ test('收集项的选项按单选和多选各自的上限拦住', () => {
 
 test('收集项 schema 限制数组长度、项类型和动态标题上限', () => {
   assert.deepEqual(
-    parseSchema(fieldsSchema(limits), [{ title: '说明', type: '文本', options: ['x'.repeat(61)] }])[0]?.options,
+    parseSchema(fieldsSchema(limits), [{ title: '说明', type: 'text', options: ['x'.repeat(61)] }])[0]?.options,
     [],
   );
   assert.equal(
@@ -178,7 +180,7 @@ test('收集项 schema 限制数组长度、项类型和动态标题上限', () 
   );
   assert.equal(
     messageOf(() => parseSchema(fieldsSchema(limits), [{ title: '有效标题', type: '未知' }])),
-    '收集项类型只能是 文本 / 单选 / 多选',
+    '收集项类型只能是 text / radio / checkbox',
   );
   assert.equal(
     messageOf(() => parseSchema(fieldsSchema({ ...limits, fieldTitle: 2 }), [{ title: '过长标题' }])),
@@ -238,25 +240,34 @@ test('登录、重置密码和修改密码的中文错误保持一致', () => {
 });
 
 test('状态白名单和月份范围由 schema 校验', () => {
+  // 协议值是 code；旧中文仍要能写进来（老客户端 / 老表单），两套都验一遍。
+  assert.equal(parseSchema(exhibitionStatusSchema, { status: 'review' }).status, 'review');
   assert.equal(parseSchema(exhibitionStatusSchema, { status: '需审核' }).status, 'review');
   assert.equal(
     messageOf(() => parseSchema(exhibitionStatusSchema, { status: '未知' })),
-    '报名方式只能是 需审核 / 无需审核 / 仅展示 / 截止报名 / 已结束',
+    '报名方式只能是 review / optional / display / closed / ended',
   );
+  assert.equal(parseSchema(reviewStatusSchema, { status: 'approved' }).status, 'approved');
   assert.equal(parseSchema(reviewStatusSchema, { status: '已通过' }).status, 'approved');
   assert.equal(
     messageOf(() => parseSchema(reviewStatusSchema, { status: '未知' })),
-    '报名状态只能是 待审核 / 已通过 / 已拒绝 / 已撤销 / 已参加',
+    '报名状态只能是 pending / approved / rejected / cancelled / attended',
   );
   assert.deepEqual(parseSchema(reviewQuerySchema, { status: ' 已通过 ' }), {
     statusLabel: '已通过',
     statusCode: 'approved',
   });
   assert.deepEqual(parseSchema(reviewQuerySchema, { status: '全部' }), { statusLabel: '全部', statusCode: '' });
+  // 'all' 是新前端的筛选哨兵，同样表示「不筛选」。
+  assert.deepEqual(parseSchema(reviewQuerySchema, { status: 'all' }), { statusLabel: 'all', statusCode: '' });
+  assert.deepEqual(parseSchema(reviewQuerySchema, { status: 'pending' }), {
+    statusLabel: 'pending',
+    statusCode: 'pending',
+  });
   assert.equal(parseSchema(userStatusSchema, { status: '封禁' }).status, 'banned');
   assert.equal(
     messageOf(() => parseSchema(userStatusSchema, { status: '未知' })),
-    '账号状态只能是 正常 / 受限 / 封禁',
+    '账号状态只能是 active / limited / banned',
   );
   assert.equal(
     messageOf(() => parseSchema(monthQuerySchema, { year: 2026, month: 13 })),

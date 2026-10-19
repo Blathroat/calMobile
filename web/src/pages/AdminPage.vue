@@ -26,19 +26,15 @@ import SegControl from '@/components/SegControl.vue';
 import AdminUsersSection from './AdminUsersSection.vue';
 import AdminExhibitionsSection from './AdminExhibitionsSection.vue';
 import AdminSettingsSection from './AdminSettingsSection.vue';
-import { USER_STATUS } from '@/services/status';
+import { USER_STATUSES, modeLabel, roleLabel, userStatusLabel } from '@/services/status';
 import type { Bootstrap, Exhibition, JsonObject, User } from '@/api/types';
 import { t } from '@/i18n';
 
 /**
- * 账号状态面板：`value` 是回传给接口、并与 `user.status` 比较的协议值
- * （后端 labels.ts 那一套中文码，不能翻译）；`label` 才是屏幕上的文案。
+ * 账号状态面板：`value` 是回传接口、并与 `user.statusCode` 比较的 code（不随语言变），
+ * `label` 才是屏幕上的文案。
  */
-const USER_STATUS_OPTIONS = [
-  { value: USER_STATUS.NORMAL, label: t('admin.users.normal') },
-  { value: USER_STATUS.RESTRICTED, label: t('admin.users.restricted') },
-  { value: USER_STATUS.BANNED, label: t('admin.users.banned') },
-];
+const USER_STATUS_OPTIONS = USER_STATUSES.map((value) => ({ value, label: userStatusLabel(value) }));
 const ROLE_OPTIONS = [
   { code: 'user', label: t('admin.users.roleUser') },
   { code: 'exhibitor', label: t('admin.users.roleExhibitor') },
@@ -445,7 +441,7 @@ function manageRole(user: User): void {
   openSheet({
     title: t('admin.users.adjustRoleFor', { name: String(user.nickname ?? '') }),
     message: t('admin.users.registeredAt', {
-      role: String(user.role ?? ''),
+      role: roleLabel(String(user.role || user.roleCode || '')),
       time: String(user.registrationTime || t('admin.users.unknown')),
     }),
     actions,
@@ -474,7 +470,7 @@ async function updateUserRole(user: User, role: string, label: string): Promise<
 function manageUser(user: User): void {
   const actions: SheetAction[] = USER_STATUS_OPTIONS.map((option) => ({
     label: option.label,
-    variant: user.status === option.value ? 'primary' : 'ghost',
+    variant: user.statusCode === option.value ? 'primary' : 'ghost',
     onClick: async (close) => {
       close();
       await updateUserStatus(user, option.value, option.label);
@@ -484,7 +480,7 @@ function manageUser(user: User): void {
   openSheet({
     title: t('admin.users.adjustStatusFor', { name: String(user.nickname ?? '') }),
     message: t('admin.users.registeredAt', {
-      role: String(user.role ?? ''),
+      role: roleLabel(String(user.role || user.roleCode || '')),
       time: String(user.registrationTime || t('admin.users.unknown')),
     }),
     actions,
@@ -575,7 +571,7 @@ async function exportCsv(): Promise<void> {
       String(item.venue ?? ''),
       String(item.date ?? item.dateLabel ?? ''),
       String(item.time ?? ''),
-      String(item.modeLabel ?? item.status ?? ''),
+      modeLabel(String(item.statusCode ?? '')),
       String(item.category ?? ''),
       String(item.description ?? '').replace(/\n/g, ' '),
     ]),

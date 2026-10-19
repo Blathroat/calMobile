@@ -20,7 +20,14 @@ import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
 import type { SheetAction } from '@/services/sheet';
 import { device } from '@/services/device-services';
-import { REGISTRATION_STATUS, REVIEW_FILTERS, statusTone } from '@/services/status';
+import {
+  FILTER_ALL,
+  REGISTRATION_STATUS,
+  REVIEW_FILTERS,
+  exhibitionStatusLabel,
+  registrationStatusLabel,
+  statusTone,
+} from '@/services/status';
 import { answerDocument } from '@domain/answer-document';
 import { truncate } from '@/services/format';
 import SegControl from '@/components/SegControl.vue';
@@ -65,22 +72,22 @@ const reviewLoading = computed(() => review.loading.value && !hasRecords.value);
 const filterItems = computed(() =>
   REVIEW_FILTERS.map((value) => ({
     value,
-    label: `${value} ${countOf(value)}`,
+    label: `${value === FILTER_ALL ? t('common.all') : registrationStatusLabel(value)} ${countOf(value)}`,
   })),
 );
 
 /** 当前筛选下的记录：`全部` 不过滤，其余按状态。 */
 const filtered = computed<Registration[]>(() =>
-  filter.value === '全部' ? records.value : records.value.filter((item) => item.status === filter.value),
+  filter.value === FILTER_ALL ? records.value : records.value.filter((item) => item.statusCode === filter.value),
 );
 
 const pendingCount = computed(() => countOf(REGISTRATION_STATUS.PENDING));
 
 function countOf(status: string): number {
-  const known = status === '全部' ? counts.value.total : counts.value[status];
+  const known = status === FILTER_ALL ? counts.value.total : counts.value[status];
   if (typeof known === 'number') return known;
-  if (status === '全部') return records.value.length;
-  return records.value.filter((item) => item.status === status).length;
+  if (status === FILTER_ALL) return records.value.length;
+  return records.value.filter((item) => item.statusCode === status).length;
 }
 
 // ── 取数 ─────────────────────────────────────────────────────────
@@ -122,7 +129,7 @@ const TRANSITIONS: Record<string, string[]> = {
 };
 
 function targetsFor(record: Registration): string[] {
-  const status = String(record.status ?? '');
+  const status = String(record.statusCode ?? '');
   // 已参加不是终态，但默认只有管理员能动：管理员没打开 canReviseAttended 时
   // 展商看不到「调整状态」（详情里的 attendedLocked 提示仍会说明原因）。
   if (status === REGISTRATION_STATUS.ATTENDED) {
@@ -148,7 +155,7 @@ function targetLabel(target: string): string {
 function statusMessage(status: string): string {
   if (status === REGISTRATION_STATUS.APPROVED) return t('registration.review.approvedToast');
   if (status === REGISTRATION_STATUS.REJECTED) return t('registration.review.rejectedToast');
-  return t('review.page.markedStatus', { status });
+  return t('review.page.markedStatus', { status: registrationStatusLabel(status) });
 }
 
 /**
@@ -171,7 +178,7 @@ function openDetail(record: Registration): void {
   const answers = answerDocument({ source: { text: record.answers } }).lines;
   const targets = targetsFor(record);
   const hint =
-    record.status === REGISTRATION_STATUS.ATTENDED
+    record.statusCode === REGISTRATION_STATUS.ATTENDED
       ? t('registration.review.attendedLocked')
       : t('registration.review.reviseDenied');
   const actions: SheetAction[] = [];
@@ -192,8 +199,8 @@ function openDetail(record: Registration): void {
     size: 'full',
     component: RegistrationDetailSheet,
     props: {
-      status: String(record.status ?? ''),
-      statusTone: statusTone(String(record.status ?? '')),
+      status: registrationStatusLabel(String(record.statusCode ?? '')),
+      statusTone: statusTone(String(record.statusCode ?? '')),
       registrationTime: String(record.registrationTime ?? ''),
       answers: answers.map((line) => ({
         label: line.label || t('exhibition.detail.additionalInfo'),
@@ -214,7 +221,7 @@ function openActions(record: Registration): void {
   }
   openSheet({
     title: t('registration.review.status'),
-    message: t('review.page.currentStatus', { status: String(record.status ?? '') }),
+    message: t('review.page.currentStatus', { status: registrationStatusLabel(String(record.statusCode ?? '')) }),
     // 与用户状态面板同一套排布：选项竖排，选中/主推动作一眼可辨。
     layout: 'stack',
     actions: targets
@@ -287,7 +294,7 @@ async function exportCsv(): Promise<void> {
     ...filtered.value.map((record) => [
       String(record.visitorName ?? ''),
       String(record.registrationTime ?? ''),
-      String(record.status ?? ''),
+      registrationStatusLabel(String(record.statusCode ?? '')),
       String(record.answers ?? '').replace(/\n/g, ' '),
     ]),
   ];
@@ -348,7 +355,10 @@ async function exportCsv(): Promise<void> {
               })
             }}</span>
           </span>
-          <StatusTag :text="String(item.status || '')" :tone="statusTone(String(item.status || ''))" />
+          <StatusTag
+            :text="exhibitionStatusLabel(String(item.statusCode || ''))"
+            :tone="statusTone(String(item.statusCode || ''))"
+          />
         </button>
       </div>
     </template>
@@ -384,7 +394,7 @@ async function exportCsv(): Promise<void> {
     <StateBlock
       v-else-if="filtered.length === 0"
       icon="ticket"
-      :title="t('review.page.emptyTitle', { scope: filter === '全部' ? '' : filter })"
+      :title="t('review.page.emptyTitle', { scope: filter === FILTER_ALL ? '' : registrationStatusLabel(filter) })"
       :description="t('registration.review.emptyHint')"
     />
 
@@ -421,10 +431,13 @@ async function exportCsv(): Promise<void> {
               }}</span>
               <span class="row-meta truncate">{{ truncate(record.summary, 34) }}</span>
             </span>
-            <StatusTag :text="String(record.status || '')" :tone="statusTone(String(record.status || ''))" />
+            <StatusTag
+              :text="registrationStatusLabel(String(record.statusCode || ''))"
+              :tone="statusTone(String(record.statusCode || ''))"
+            />
           </button>
         </div>
-        <div v-if="record.status === REGISTRATION_STATUS.PENDING" class="action-row">
+        <div v-if="record.statusCode === REGISTRATION_STATUS.PENDING" class="action-row">
           <button
             class="cta"
             data-size="small"

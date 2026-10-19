@@ -26,7 +26,7 @@ test('核销响应带原始多行 answers 与秒级 checkInTime，重复核销�
       time: '09:00-17:00',
       date: isoDateAfter(21),
       category: '智能家居',
-      status: '无需审核',
+      status: 'optional',
       qrEnabled: true,
     },
     { token: tokens.exhibitor.token },

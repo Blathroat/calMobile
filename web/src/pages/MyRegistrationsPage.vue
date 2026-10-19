@@ -2,7 +2,7 @@
 /**
  * 屏幕 07 · 我的活动（列表）
  *
- * 展会报名与私人会议申请放在同一页。状态文字由后端下发，颜色只作辅助线索。
+ * 展会报名与私人会议申请放在同一页。状态由后端下发 code，文案按 code 查表，颜色只作辅助线索。
  * 报名和会议卡片都进入各自的详情页。
  */
 import { computed, onMounted } from 'vue';
@@ -18,6 +18,7 @@ import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MediaBox from '@/components/MediaBox.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import { registrationStatusLabel, statusTone } from '@/services/status';
 import RoleTag from '@/components/RoleTag.vue';
 import { formatMeetingWhen, formatRecordDate, truncate } from '@/services/format';
 import type { JsonObject, Registration } from '@/api/types';
@@ -175,7 +176,10 @@ function openLogin(): void {
                   t('registration.list.answersLine', { summary: summary(record) })
                 }}</span>
               </span>
-              <StatusTag :text="String(record.statusLabel || record.status || '')" />
+              <StatusTag
+                :text="registrationStatusLabel(String(record.statusCode || ''))"
+                :tone="statusTone(String(record.statusCode || ''))"
+              />
             </button>
           </TransitionGroup>
         </template>
@@ -204,7 +208,10 @@ function openLogin(): void {
                 <span class="row-meta">{{ formatMeetingWhen(meeting.meetingDate, meeting.meetingTime) }}</span>
                 <span class="row-meta truncate">{{ meetingSummary(meeting) }}</span>
               </span>
-              <StatusTag :text="String(meeting.status || '')" />
+              <StatusTag
+                :text="registrationStatusLabel(String(meeting.statusCode || ''))"
+                :tone="statusTone(String(meeting.statusCode || ''))"
+              />
             </button>
           </TransitionGroup>
         </template>

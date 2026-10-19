@@ -16,6 +16,7 @@ import { openSheet } from '@/services/sheet';
 import { meetingLink } from '@/services/registration-link';
 import { limit } from '@/services/validate';
 import { firstCollectFieldError } from '@/services/collect-fields';
+import { FIELD_TYPE } from '@/services/status';
 import AppIcon from '@/components/AppIcon.vue';
 import CollectFieldsCard, { type CollectField } from '@/components/CollectFieldsCard.vue';
 import StateBlock from '@/components/StateBlock.vue';
@@ -82,7 +83,7 @@ function apply(data: JsonObject): void {
     const item = field as JsonObject;
     return {
       title: String(item.title || ''),
-      type: String(item.type || '文本'),
+      type: String(item.type || FIELD_TYPE.TEXT),
       required: item.required === true,
       options: Array.isArray(item.options) ? item.options.map((option) => String(option)) : [],
     };
@@ -126,7 +127,7 @@ async function save(): Promise<void> {
           title: item.title.trim(),
           type: item.type,
           required: item.required,
-          options: item.type === '文本' ? [] : item.options.map((option) => option.trim()).filter(Boolean),
+          options: item.type === FIELD_TYPE.TEXT ? [] : item.options.map((option) => option.trim()).filter(Boolean),
         })),
     });
     if (result?.ok === false) {

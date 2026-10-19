@@ -235,18 +235,21 @@ export const adminTwoFactorSchema = z.object({
 export const exhibitionStatusSchema = z.object({
   status: z.preprocess(labels.toExhibitionStatus, z.string({ error: labels.EXHIBITION_STATUS_HINT })),
 });
+/** 筛选条上的「不筛选」：'all' 是新前端的哨兵（只在本机用），'全部' 是旧前端传过的值。 */
+const ALL_FILTERS = ['all', '全部'];
 export const reviewQuerySchema = z
   .object({
     status: inputString
       .transform((value) => value.trim())
       .refine(
-        (value) => !value || value === '全部' || Boolean(labels.toRegistrationStatus(value)),
+        (value) => !value || ALL_FILTERS.includes(value) || Boolean(labels.toRegistrationStatus(value)),
         labels.REGISTRATION_STATUS_HINT,
       ),
   })
   .transform(({ status }) => ({
+    // statusLabel 是兼容字段：原样回显客户端传的值；协议值看 statusCode。
     statusLabel: status || '全部',
-    statusCode: !status || status === '全部' ? '' : labels.toRegistrationStatus(status) || '',
+    statusCode: !status || ALL_FILTERS.includes(status) ? '' : labels.toRegistrationStatus(status) || '',
   }));
 
 export const monthQuerySchema = z.object({
@@ -258,21 +261,20 @@ export const monthQuerySchema = z.object({
 export function fieldSchema(limits: Limits) {
   const objectSchema = z
     .object({
-      type: z
-        .preprocess((value) => String(value === undefined || value === null ? '文本' : value).trim(), z.string())
-        .refine(
-          (value): value is (typeof labels.EXHIBITION_FIELD_TYPES)[number] =>
-            (labels.EXHIBITION_FIELD_TYPES as readonly string[]).includes(value),
-          '收集项类型只能是 文本 / 单选 / 多选',
-        ),
+      // 收集项类型：协议值是 code；老客户端 / 旧数据可能还传中文，这里统一成 code。
+      type: z.preprocess(
+        (value) => labels.toFieldType(value === undefined || value === null ? labels.EXHIBITION_FIELD_TYPES[0] : value),
+        z.enum(labels.EXHIBITION_FIELD_TYPES, { error: labels.FIELD_TYPE_HINT }),
+      ),
       title: textSchema({ label: '文本框标题', max: limits.fieldTitle }),
       required: boolSchema(false),
       options: z.unknown().optional(),
     })
     .transform((field, ctx) => {
-      if (field.type === '文本') return { ...field, options: [] };
-      const optionMax = field.type === '多选' ? limits.checkOption : limits.radioOption;
-      const optionLabel = field.type === '多选' ? '多选选项' : '单选选项';
+      // 文本项不接受选项；单选 / 多选各自有选项长度上限（提示文案是给人看的，保持中文）。
+      if (field.type === 'text') return { ...field, options: [] };
+      const optionMax = field.type === 'checkbox' ? limits.checkOption : limits.radioOption;
+      const optionLabel = field.type === 'checkbox' ? '多选选项' : '单选选项';
       const options = stringListSchema({ label: optionLabel, itemMax: optionMax }).safeParse(field.options);
       if (!options.success) {
         ctx.addIssue({ code: 'custom', message: options.error.issues[0]?.message || '请求参数不正确' });

@@ -34,7 +34,7 @@ test('已参加默认是终态：本人不能撤销，展商默认也不能再�
       time: '09:00-17:00',
       date: isoDateAfter(20),
       category: '智能家居',
-      status: '无需审核',
+      status: 'optional',
       qrEnabled: true,
     },
     { token: tokens.exhibitor.token },
@@ -72,7 +72,7 @@ test('已参加默认是终态：本人不能撤销，展商默认也不能再�
     // 打开后的行为见「已参加能否退回由…单独控制」那条用例。
     const reopen = await put(
       `/api/v1/review/${registrationId}/status`,
-      { status: '已通过' },
+      { status: 'approved' },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(
@@ -87,13 +87,13 @@ test('已参加默认是终态：本人不能撤销，展商默认也不能再�
 });
 
 test('审核列表给出五种状态计数，且只能看自己举办的展会', async () => {
-  const list = await get('/api/v1/review?exhibitionId=exh-1&status=全部', { token: tokens.exhibitor.token });
+  const list = await get('/api/v1/review?exhibitionId=exh-1&status=all', { token: tokens.exhibitor.token });
   assert.strictEqual(list.status, 200);
   assert.ok(Array.isArray(list.body.records));
-  for (const key of ['total', '待审核', '已通过', '已拒绝', '已参加']) {
+  for (const key of ['total', 'pending', 'approved', 'rejected', 'attended']) {
     assert.strictEqual(typeof list.body.counts[key], 'number', `counts 缺少 ${key}`);
   }
-  const pending = await get('/api/v1/review?exhibitionId=exh-1&status=待审核', { token: tokens.exhibitor.token });
+  const pending = await get('/api/v1/review?exhibitionId=exh-1&status=pending', { token: tokens.exhibitor.token });
   assert.ok(
     pending.body.records.every((item: any) => item.status === '待审核'),
     '筛选项混入了其它状态',
@@ -109,13 +109,13 @@ test('审核列表给出五种状态计数，且只能看自己举办的展会',
 });
 
 test('审核状态可以流转，非法状态被拒', async () => {
-  const list = await get('/api/v1/review?exhibitionId=exh-2&status=全部', { token: tokens.exhibitor.token });
+  const list = await get('/api/v1/review?exhibitionId=exh-2&status=all', { token: tokens.exhibitor.token });
   const target = list.body.records.find((item: any) => item.status === '待审核');
   assert.ok(target, 'exh-2 应当有待审核的报名');
 
   const approved = await put(
     `/api/v1/review/${target.id}/status`,
-    { status: '已通过' },
+    { status: 'approved' },
     { token: tokens.exhibitor.token },
   );
   assert.strictEqual(approved.body.ok, true, JSON.stringify(approved.body));
@@ -128,7 +128,7 @@ test('审核状态可以流转，非法状态被拒', async () => {
   );
   assert.strictEqual(invalid.body.ok, false);
 
-  const asUser = await put(`/api/v1/review/${target.id}/status`, { status: '已拒绝' }, { token: tokens.user.token });
+  const asUser = await put(`/api/v1/review/${target.id}/status`, { status: 'rejected' }, { token: tokens.user.token });
   assert.strictEqual(asUser.status, 403);
 });
 
@@ -145,7 +145,7 @@ test('审核流转受状态机与「允许修改已审核报名」策略限制',
       time: '09:00-17:00',
       date: isoDateAfter(30),
       category: '智能家居',
-      status: '需审核',
+      status: 'review',
     },
     { token: tokens.exhibitor.token },
   );
@@ -170,11 +170,15 @@ test('审核流转受状态机与「允许修改已审核报名」策略限制',
     assert.strictEqual(submitted.body.registration.statusLabel, '待审核');
 
     // 待审核 → 已通过：canRevise=false 不影响展商的日常审核
-    const approved = await put(`/api/v1/review/${id}/status`, { status: '已通过' }, { token: tokens.exhibitor.token });
+    const approved = await put(
+      `/api/v1/review/${id}/status`,
+      { status: 'approved' },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(approved.body.ok, true, JSON.stringify(approved.body));
 
     // canRevise=false：展商不能改已通过的记录（越权 → 403，不是 200 的业务信封）
-    const locked = await put(`/api/v1/review/${id}/status`, { status: '已拒绝' }, { token: tokens.exhibitor.token });
+    const locked = await put(`/api/v1/review/${id}/status`, { status: 'rejected' }, { token: tokens.exhibitor.token });
     assert.strictEqual(
       locked.status,
       403,
@@ -183,22 +187,30 @@ test('审核流转受状态机与「允许修改已审核报名」策略限制',
     assert.ok(locked.body.error, '403 要带可展示的原因');
 
     // 管理员不受这条策略限制，可以在已通过 / 已拒绝之间切换
-    const adminReject = await put(`/api/v1/review/${id}/status`, { status: '已拒绝' }, { token: tokens.admin.token });
+    const adminReject = await put(`/api/v1/review/${id}/status`, { status: 'rejected' }, { token: tokens.admin.token });
     assert.strictEqual(adminReject.body.ok, true, JSON.stringify(adminReject.body));
     assert.strictEqual(adminReject.body.record.status, '已拒绝');
-    const adminApprove = await put(`/api/v1/review/${id}/status`, { status: '已通过' }, { token: tokens.admin.token });
+    const adminApprove = await put(
+      `/api/v1/review/${id}/status`,
+      { status: 'approved' },
+      { token: tokens.admin.token },
+    );
     assert.strictEqual(adminApprove.body.ok, true, JSON.stringify(adminApprove.body));
 
     // 管理员开放修改已审核报名后，展商可以继续流转：已通过 → 已参加
     await put('/api/v1/settings', { canRevise: true }, { token: tokens.admin.token });
-    const attended = await put(`/api/v1/review/${id}/status`, { status: '已参加' }, { token: tokens.exhibitor.token });
+    const attended = await put(
+      `/api/v1/review/${id}/status`,
+      { status: 'attended' },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(attended.body.ok, true, JSON.stringify(attended.body));
     assert.strictEqual(attended.body.record.status, '已参加');
 
     // 已参加另有独立开关（见专门用例）：这里没打开，展商退回是权限失败（403），不是业务信封
     const attendedLocked = await put(
       `/api/v1/review/${id}/status`,
-      { status: '已通过' },
+      { status: 'approved' },
       {
         token: tokens.exhibitor.token,
       },
@@ -211,12 +223,12 @@ test('审核流转受状态机与「允许修改已审核报名」策略限制',
     assert.ok(attendedLocked.body.error.includes('已参加'), attendedLocked.body.error);
 
     // 管理员始终可以改：已参加 → 已拒绝 是合法流转
-    const adminRevoke = await put(`/api/v1/review/${id}/status`, { status: '已拒绝' }, { token: tokens.admin.token });
+    const adminRevoke = await put(`/api/v1/review/${id}/status`, { status: 'rejected' }, { token: tokens.admin.token });
     assert.strictEqual(adminRevoke.body.ok, true, JSON.stringify(adminRevoke.body));
     assert.strictEqual(adminRevoke.body.record.status, '已拒绝');
 
     // 状态机仍然拦非法流转（管理员也一样）：已拒绝 → 待审核 不在允许列表里
-    const illegal = await put(`/api/v1/review/${id}/status`, { status: '待审核' }, { token: tokens.admin.token });
+    const illegal = await put(`/api/v1/review/${id}/status`, { status: 'pending' }, { token: tokens.admin.token });
     assert.strictEqual(illegal.status, 200, '非法流转应当是业务失败，而不是权限失败');
     assert.strictEqual(illegal.body.ok, false, '已拒绝 → 待审核 必须被拒');
   } finally {
@@ -239,7 +251,7 @@ test('已参加能否退回由「允许修改已参加的报名」单独控制',
       time: '09:00-17:00',
       date: isoDateAfter(25),
       category: '智能家居',
-      status: '无需审核',
+      status: 'optional',
       qrEnabled: true,
     },
     { token: tokens.exhibitor.token },
@@ -272,7 +284,7 @@ test('已参加能否退回由「允许修改已参加的报名」单独控制',
     assert.ok(checkedRow.rows[0]?.check_in_time, '核销后应当记下核销时间');
 
     // 默认关闭：展商改已参加是权限失败（403），且记录原封不动
-    const locked = await put(`/api/v1/review/${id}/status`, { status: '已通过' }, { token: tokens.exhibitor.token });
+    const locked = await put(`/api/v1/review/${id}/status`, { status: 'approved' }, { token: tokens.exhibitor.token });
     assert.strictEqual(locked.status, 403, `默认关闭时应当是 403：${locked.status} ${JSON.stringify(locked.body)}`);
     assert.ok(locked.body.error.includes('已参加'), locked.body.error);
     const untouched = await pool.query<{ status: string; check_in_time: Date | null }>(
@@ -285,7 +297,11 @@ test('已参加能否退回由「允许修改已参加的报名」单独控制',
     // 打开后：展商可以把已参加退回已通过，核销时间同时清空
     // （核销时间是「曾经核销」的事实，状态退回后不该再挂着）
     await put('/api/v1/settings', { canReviseAttended: true }, { token: tokens.admin.token });
-    const reopened = await put(`/api/v1/review/${id}/status`, { status: '已通过' }, { token: tokens.exhibitor.token });
+    const reopened = await put(
+      `/api/v1/review/${id}/status`,
+      { status: 'approved' },
+      { token: tokens.exhibitor.token },
+    );
     assert.strictEqual(reopened.body.ok, true, JSON.stringify(reopened.body));
     assert.strictEqual(reopened.body.record.status, '已通过');
     const cleared = await pool.query<{ status: string; check_in_time: Date | null }>(
@@ -305,7 +321,7 @@ test('已参加能否退回由「允许修改已参加的报名」单独控制',
     await put('/api/v1/settings', { canReviseAttended: false }, { token: tokens.admin.token });
     const adminChange = await put(
       `/api/v1/review/${id}/status`,
-      { status: '已拒绝' },
+      { status: 'rejected' },
       {
         token: tokens.admin.token,
       },
@@ -319,7 +335,7 @@ test('已参加能否退回由「允许修改已参加的报名」单独控制',
 });
 
 test('核销把已通过推进为已参加，重复核销与非法码都有明确提示', async () => {
-  const list = await get('/api/v1/review?exhibitionId=exh-1&status=已通过', { token: tokens.exhibitor.token });
+  const list = await get('/api/v1/review?exhibitionId=exh-1&status=approved', { token: tokens.exhibitor.token });
   const approved = list.body.records[0];
   assert.ok(approved, 'exh-1 应当有已通过的报名');
   assert.ok(list.body.records.some((item: { visitorRole?: string }) => item.visitorRole === 'exhibitor'));
@@ -352,7 +368,7 @@ test('核销把已通过推进为已参加，重复核销与非法码都有明�
       time: '09:00-17:00',
       date: isoDateAfter(22),
       category: '智能家居',
-      status: '需审核',
+      status: 'review',
       qrEnabled: true,
     },
     { token: tokens.exhibitor.token },
@@ -377,7 +393,7 @@ test('核销把已通过推进为已参加，重复核销与非法码都有明�
     // 待审核 → 已通过（展商日常审核），这时才有码下发
     const approvedAgain = await put(
       `/api/v1/review/${statusRegistrationId}/status`,
-      { status: '已通过' },
+      { status: 'approved' },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(approvedAgain.body.ok, true, JSON.stringify(approvedAgain.body));
@@ -386,7 +402,7 @@ test('核销把已通过推进为已参加，重复核销与非法码都有明�
     // 已通过 → 已拒绝 用管理员（展商默认没有改已通过报名的权限），凭据不轮换
     const rejectedStatus = await put(
       `/api/v1/review/${statusRegistrationId}/status`,
-      { status: '已拒绝' },
+      { status: 'rejected' },
       { token: tokens.admin.token },
     );
     assert.strictEqual(rejectedStatus.body.ok, true, JSON.stringify(rejectedStatus.body));
@@ -416,7 +432,7 @@ test('已参加退回已通过后换新报名码，旧码立即失效，新码�
       time: '09:00-17:00',
       date: isoDateAfter(26),
       category: '智能家居',
-      status: '无需审核',
+      status: 'optional',
       qrEnabled: true,
     },
     { token: tokens.exhibitor.token },
@@ -461,7 +477,7 @@ test('已参加退回已通过后换新报名码，旧码立即失效，新码�
     // 退回已通过 → 换新码（这就是需求点：同一个报名不能一直用同一张码）
     const reopened = await put(
       `/api/v1/review/${registrationId}/status`,
-      { status: '已通过' },
+      { status: 'approved' },
       { token: tokens.exhibitor.token },
     );
     assert.strictEqual(reopened.body.ok, true, JSON.stringify(reopened.body));

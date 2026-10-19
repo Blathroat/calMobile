@@ -1,5 +1,9 @@
 <script setup lang="ts">
-/** 状态标签：颜色 + 文字双重线索，颜色只表示语义。 */
+/**
+ * 状态标签：颜色 + 文字双重线索，颜色只表示语义。
+ * `text` 是给人看的文案（调用方按协议 code 用 `registrationStatusLabel()` 这类函数取好）；
+ * 颜色由调用方按 code 传 `tone`（`statusTone(code)`），这里不再从中文文案反推。
+ */
 import { statusTone, type StatusTone } from '@/services/status';
 
 const props = withDefaults(defineProps<{ text?: string; tone?: StatusTone }>(), { text: '', tone: undefined });

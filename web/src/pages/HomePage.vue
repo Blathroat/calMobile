@@ -41,6 +41,7 @@ import {
   monthLabel,
 } from '@/services/format';
 import type { JsonObject } from '@/api/types';
+import { modeLabel, registrationStatusLabel, statusTone } from '@/services/status';
 import { t } from '@/i18n';
 
 const WEEK_LABELS = [
@@ -513,7 +514,10 @@ onBeforeUnmount(() => {
       <span class="row-copy">
         <span class="row" data-gap="md">
           <strong class="row-title truncate">{{ item.title }}</strong>
-          <StatusTag :text="String(item.modeLabel || item.status || '')" />
+          <StatusTag
+            :text="modeLabel(String(item.statusCode || ''))"
+            :tone="statusTone(String(item.statusCode || ''))"
+          />
         </span>
         <span class="row-meta">{{ item.time }} · {{ item.venue }}</span>
         <span class="row-meta truncate">{{ item.category || '' }}</span>
@@ -536,7 +540,10 @@ onBeforeUnmount(() => {
         </span>
         <span class="row-meta">{{ meetingLine(meeting) }}</span>
       </span>
-      <StatusTag :text="String(meeting.status || '')" />
+      <StatusTag
+        :text="registrationStatusLabel(String(meeting.statusCode || ''))"
+        :tone="statusTone(String(meeting.statusCode || ''))"
+      />
     </button>
   </TransitionGroup>
 </template>
