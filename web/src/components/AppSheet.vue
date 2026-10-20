@@ -84,20 +84,49 @@ watch(
       <!-- custom content：面板组件自己管输入与校验，关闭仍走 closeSheet -->
       <component :is="sheet.current.component" v-if="sheet.current.component" v-bind="sheet.current.props" />
       <div v-if="sheet.current.actions.length > 0" class="sheet-actions" :data-layout="sheet.current.layout">
-        <button
-          v-for="(action, index) in sheet.current.actions"
-          :key="index"
-          class="cta"
-          :class="{
-            ghost: action.variant !== 'primary' && action.variant !== 'danger',
-            danger: action.variant === 'danger',
-          }"
-          type="button"
-          :disabled="typeof action.disabled === 'function' ? action.disabled() : action.disabled"
-          @click="run(action)"
-        >
-          {{ action.label }}
-        </button>
+        <template v-if="sheet.current.layout === 'list'">
+          <button
+            v-for="(action, index) in sheet.current.actions"
+            :key="index"
+            class="sheet-option"
+            type="button"
+            :data-checked="action.checked === true ? 'true' : 'false'"
+            :aria-pressed="action.checked === true ? 'true' : 'false'"
+            :disabled="typeof action.disabled === 'function' ? action.disabled() : action.disabled"
+            @click="run(action)"
+          >
+            <span>{{ action.label }}</span>
+            <svg
+              v-if="action.checked === true"
+              class="sheet-option-check"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m5 12.5 4.5 4.5 9-10" />
+            </svg>
+          </button>
+        </template>
+        <template v-else>
+          <button
+            v-for="(action, index) in sheet.current.actions"
+            :key="index"
+            class="cta"
+            :class="{
+              ghost: action.variant !== 'primary' && action.variant !== 'danger',
+              danger: action.variant === 'danger',
+            }"
+            type="button"
+            :disabled="typeof action.disabled === 'function' ? action.disabled() : action.disabled"
+            @click="run(action)"
+          >
+            {{ action.label }}
+          </button>
+        </template>
       </div>
     </div>
   </div>

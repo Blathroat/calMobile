@@ -14,6 +14,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
 import { usePullRefresh } from '@/services/pull-refresh';
+import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import MediaBox from '@/components/MediaBox.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -156,7 +157,7 @@ onBeforeUnmount(() => {
   </div>
 
   <!-- 已有内容时刷新失败：旧结果留在屏幕上，错误只作为附加说明，不再整块换成错误页。 -->
-  <div v-if="query.error.value && hasContent" class="notice" data-tone="accent">
+  <div v-if="query.error.value && hasContent" class="notice" data-tone="error">
     <span>{{ query.error.value.message }}</span>
   </div>
 
@@ -191,7 +192,7 @@ onBeforeUnmount(() => {
           <button
             v-for="item in exhibitions"
             :key="String(item.id)"
-            class="row-card"
+            class="row-card search-row"
             type="button"
             data-pressable="true"
             @pointerdown="warmExhibition(item.id)"
@@ -203,7 +204,8 @@ onBeforeUnmount(() => {
               :alt="String(item.title || '')"
             />
             <span class="row-copy">
-              <span class="row" data-gap="md">
+              <!-- 信号灯贴标题行右端，箭头留在整行最右，两者不挤在同一侧 -->
+              <span class="search-title-line">
                 <strong class="row-title truncate">{{ item.title }}</strong>
                 <StatusTag
                   :text="modeLabel(String(item.statusCode || ''))"
@@ -213,6 +215,7 @@ onBeforeUnmount(() => {
               <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
               <span class="row-meta truncate">{{ item.venue }}</span>
             </span>
+            <AppIcon name="chevronRight" class="chev" size="icon icon-sm" />
           </button>
         </div>
       </template>
@@ -223,7 +226,7 @@ onBeforeUnmount(() => {
           <button
             v-for="user in users"
             :key="String(user.id)"
-            class="row-card"
+            class="row-card search-row"
             type="button"
             data-pressable="true"
             @pointerdown="warmUser(user)"
@@ -231,23 +234,60 @@ onBeforeUnmount(() => {
           >
             <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || '')" />
             <span class="row-copy">
-              <span class="name-line">
+              <span class="search-title-line">
                 <strong class="row-title truncate">{{
                   user.roleCode === 'exhibitor' || user.roleCode === 'admin'
                     ? user.nickname
                     : `${user.nickname} · ${roleLabel(String(user.roleCode || ''))}`
                 }}</strong>
-                <RoleTag :role-code="String(user.roleCode || '')" />
+                <StatusTag
+                  :text="userStatusLabel(String(user.statusCode || ''))"
+                  :tone="statusTone(String(user.statusCode || ''))"
+                />
               </span>
-              <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
+              <span class="search-meta-line">
+                <RoleTag :role-code="String(user.roleCode || '')" />
+                <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
+              </span>
             </span>
-            <StatusTag
-              :text="userStatusLabel(String(user.statusCode || ''))"
-              :tone="statusTone(String(user.statusCode || ''))"
-            />
+            <AppIcon name="chevronRight" class="chev" size="icon icon-sm" />
           </button>
         </div>
       </template>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 标题行：名字吃掉剩余宽度，信号灯固定在右端。 */
+.search-title-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.search-title-line > .row-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 第二行：角色签 + 邮箱，角色签不抢标题行的宽度（320 宽也能保留标题）。 */
+.search-meta-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.search-meta-line > .row-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 行尾箭头比状态灯更弱：它只提示「可以进去」。 */
+.search-row > .chev {
+  flex: none;
+  color: var(--ink-3);
+}
+</style>

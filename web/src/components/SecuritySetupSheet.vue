@@ -571,11 +571,28 @@ function requestEmailResend(): void {
   </div>
 
   <div v-else class="stack" data-gap="sm">
-    <strong>{{ t('security.setup.writeBackupCodes') }}</strong>
+    <h3 class="sheet-step">{{ t('security.setup.writeBackupCodes') }}</h3>
     <p class="field-hint">{{ t('security.setup.backupCodesOnce') }}</p>
-    <div class="stack" data-gap="xs">
+    <!-- 备用码：等宽字体两列，抄写时一列一列读 -->
+    <div class="codes-grid">
       <code v-for="item in backupCodes" :key="item" class="qr-code-text">{{ item }}</code>
     </div>
     <button class="cta" type="button" @click="closeSheet()">{{ t('security.setup.writtenDown') }}</button>
   </div>
 </template>
+
+<style>
+/* 步骤标题：与弹层标题同一档字号，只调整字重与行高。 */
+.sheet-step {
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+}
+
+/* 备用码网格：两列等宽，等宽字体保证一组码对齐。 */
+.codes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s2);
+}
+</style>

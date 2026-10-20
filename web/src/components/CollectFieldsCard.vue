@@ -102,27 +102,35 @@ function itemLabel(index: number): string {
     <p v-if="fields.length === 0" class="field-hint">{{ COPY.empty }}</p>
     <div v-if="fields.length" class="collect-list">
       <div v-for="(item, index) in fields" :key="index" class="collect-item">
-        <div class="collect-primary">
-          <label class="notch">
-            <span class="notch-label">{{ COPY.title }}</span>
-            <input
-              v-model="item.title"
-              class="notch-input"
-              type="text"
-              :placeholder="COPY.placeholder"
-              :maxlength="titleMax"
-              :disabled="disabled"
-              :aria-label="t('registration.fields.fieldTitle')"
-            />
-          </label>
+        <div class="collect-head">
+          <span class="collect-ordinal">{{ itemLabel(index) }}</span>
           <SegControl
+            class="collect-type"
             :model-value="item.type"
             :items="TYPE_ITEMS"
             :label="COPY.type"
             :disabled="disabled"
             @update:model-value="(value) => changeFieldType(item, value)"
           />
+          <button
+            class="icon-button collect-remove"
+            type="button"
+            :disabled="disabled"
+            :aria-label="t('registration.fields.removeField')"
+            @click="removeField(index)"
+          >
+            <AppIcon name="trash" size="icon icon-sm" />
+          </button>
         </div>
+        <input
+          v-model="item.title"
+          class="input collect-title"
+          type="text"
+          :placeholder="COPY.placeholder"
+          :maxlength="titleMax"
+          :disabled="disabled"
+          :aria-label="t('registration.fields.fieldTitle')"
+        />
         <p class="collect-note">{{ typeHint(item) }}</p>
         <div
           v-if="isChoice(item)"
@@ -150,7 +158,7 @@ function itemLabel(index: number): string {
               <AppIcon name="trash" size="icon icon-sm" />
             </button>
           </div>
-          <button class="collect-quiet" type="button" :disabled="disabled" @click="addOption(item)">
+          <button class="text-action collect-add-option" type="button" :disabled="disabled" @click="addOption(item)">
             {{ t('registration.fields.addOption') }}
           </button>
         </div>
@@ -159,81 +167,99 @@ function itemLabel(index: number): string {
             <input v-model="item.required" type="checkbox" :disabled="disabled" />
             <span>{{ item.required ? t('registration.fields.required') : t('registration.fields.optional') }}</span>
           </label>
-          <span class="collect-ordinal">{{ itemLabel(index) }}</span>
-          <button
-            class="collect-quiet collect-remove"
-            type="button"
-            :disabled="disabled"
-            :aria-label="t('registration.fields.removeField')"
-            @click="removeField(index)"
-          >
-            {{ COPY.remove }}
-          </button>
         </div>
       </div>
     </div>
-    <button class="cta ghost" type="button" :disabled="disabled" @click="addField">
-      {{ t('registration.fields.addField') }}
+    <button class="collect-add" type="button" :disabled="disabled" @click="addField">
+      <AppIcon name="plus" size="icon icon-sm" />
+      <span>{{ t('registration.fields.addField') }}</span>
     </button>
   </div>
 </template>
 
-<style>
-/* 收集项：同一张卡里按分隔线排列，选项行比标题更紧、更淡。 */
+<style scoped>
+/* 收集项仍是同一张卡里用横线分隔的几段（不改成嵌套子卡片）。
+   段内自上而下：序号 + 类型 + 删除、标题输入、类型提示、选项、必填。 */
 .collect-list {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  /* 分隔线贴着卡片左右边缘；内容仍与卡片标题对齐。 */
-  margin-inline: calc(var(--s4) * -1);
-  /* 第一项的浮动标题要伸出输入框上沿，留出这一截避免被裁切。 */
-  padding-top: var(--s2);
 }
 
 .collect-item {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: var(--s2);
   min-width: 0;
-  padding-inline: var(--s4);
-  padding-bottom: var(--s2);
+  padding-block: var(--s3);
+}
+
+.collect-item:first-child {
+  padding-top: 0;
 }
 
 .collect-item + .collect-item {
   border-top: var(--hairline) solid var(--stroke);
-  /* 浮动标题会向上探出半截，多留一截才看得出项与项的分隔。 */
-  padding-top: var(--s6);
 }
 
-.collect-primary {
+.collect-head {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--s2);
   min-width: 0;
 }
 
-.collect-note {
-  margin: 0;
+.collect-ordinal {
+  flex: none;
   color: var(--ink-3);
   font-size: var(--fs-tag);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* 类型分段压进标题行：按钮按剩余宽度均分，窄屏也不换行。 */
+.collect-type {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.collect-type :deep(button) {
+  min-width: 0;
+  padding-inline: var(--s2);
+}
+
+.collect-remove {
+  flex: none;
+  color: var(--ink-3);
+  margin-inline-end: calc(var(--s2) * -1);
+}
+
+.collect-remove:disabled {
+  color: var(--f2);
+  cursor: not-allowed;
+}
+
+.collect-title {
+  font-size: var(--fs-body);
+}
+
+.collect-note {
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
   line-height: 1.35;
 }
 
 .collect-options {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: var(--s1);
   min-width: 0;
 }
 
-.collect-options > .collect-quiet {
-  padding-inline-start: calc(var(--fs-tag) * 1.5 + var(--s1));
-}
-
+/* 选项行：序号 + 输入 + 删除。输入吃剩余宽度（tokens 里已有 .option-row .input）。 */
 .option-row {
   display: flex;
   align-items: center;
-  gap: var(--s1);
+  gap: var(--s2);
   min-width: 0;
 }
 
@@ -242,102 +268,24 @@ function itemLabel(index: number): string {
   width: 1.5em;
   color: var(--ink-3);
   font-size: var(--fs-tag);
-  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   text-align: center;
-}
-
-.option-input {
-  min-height: var(--touch);
-  padding-inline: var(--s2);
-  background: transparent;
-  color: var(--ink-2);
-  font-size: var(--fs-label);
 }
 
 .option-remove {
   flex: none;
-  border: 0;
-  background: transparent;
   color: var(--ink-3);
+  margin-inline-end: calc(var(--s3) * -1);
 }
 
-.collect-quiet {
-  min-height: var(--touch);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: flex-start;
-  padding: 0 var(--s2);
-  border: 0;
-  background: transparent;
-  color: var(--ink-2);
-  font-size: var(--fs-label);
-  font-weight: 600;
-}
-
-.collect-quiet:disabled {
-  color: var(--ink-3);
+.option-remove:disabled {
+  color: var(--f2);
   cursor: not-allowed;
 }
 
-.notch {
-  position: relative;
-  display: block;
-  min-width: 0;
-  border: var(--hairline) solid var(--stroke);
-  border-radius: var(--r-input);
-  background: var(--f3);
-}
-
-.notch-label {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  inset-inline-start: var(--s3);
-  transform: translateY(-50%);
-  padding: 0 var(--s1);
-  background: var(--screen);
-  color: var(--ink-2);
-  font-size: var(--fs-meta);
-  font-weight: 700;
-  line-height: 1.2;
-  pointer-events: none;
-}
-
-.notch-input {
-  width: 100%;
-  height: var(--ctrl);
-  min-height: var(--ctrl);
-  padding: 0 var(--s3);
-  border: 0;
-  border-radius: var(--r-input);
-  background: transparent;
-  color: var(--ink);
-  font-size: var(--fs-body);
-  line-height: var(--ctrl);
-  text-align: start;
-}
-
-.notch-input::placeholder {
-  color: var(--ink-3);
-}
-
-.notch-input:focus-visible {
-  outline: none;
-}
-
-.notch:focus-within {
-  border-color: var(--accent);
-  background-color: var(--screen);
-}
-
-.notch:focus-within .notch-label {
-  background: var(--screen);
-  color: var(--accent-ink);
-}
-
-.notch:has(:disabled) {
-  opacity: 0.55;
+.collect-add-option {
+  align-self: flex-start;
+  padding-inline-start: calc(1.5em + var(--s2));
 }
 
 .collect-foot {
@@ -348,36 +296,15 @@ function itemLabel(index: number): string {
   min-width: 0;
 }
 
-.collect-ordinal {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ink-3);
-  font-size: var(--fs-tag);
-  line-height: 1.35;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.collect-foot > .collect-quiet {
-  flex: none;
-  align-self: center;
-}
-
-.collect-remove {
-  color: var(--danger-ink);
-  font-weight: 700;
-}
-
+/* 必填开关：小方框，选中时落成主题色。 */
 .tick {
   min-height: var(--touch);
   display: inline-flex;
   align-items: center;
   gap: var(--s2);
-  flex: none;
   color: var(--ink-2);
   font-size: var(--fs-label);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .tick[data-on='true'] {
@@ -385,38 +312,36 @@ function itemLabel(index: number): string {
 }
 
 .tick input {
-  appearance: none;
-  width: 22px;
-  height: 22px;
-  margin: 0;
   flex: none;
-  border: var(--hairline) solid var(--stroke);
-  border-radius: var(--r-chip);
-  background: var(--screen);
-  display: grid;
-  place-items: center;
-}
-
-.tick input:checked {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-
-.tick input:checked::after {
-  content: '';
-  width: 5px;
-  height: 9px;
-  border: solid var(--on-dark);
-  border-width: 0 2px 2px 0;
-  transform: translateY(-1px) rotate(45deg);
-}
-
-.tick input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 .tick input:disabled {
   opacity: 0.5;
+}
+
+/* 新增收集项：虚线整行按钮，是这张卡的收尾。 */
+.collect-add {
+  width: 100%;
+  min-height: var(--touch);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: var(--hairline) dashed var(--stroke);
+  border-radius: var(--r-input);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+
+.collect-add:disabled {
+  color: var(--f2);
+  cursor: not-allowed;
 }
 </style>

@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
 import { confirmSheet } from '@/services/sheet';
+import AppIcon from '@/components/AppIcon.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import { t } from '@/i18n';
@@ -145,18 +146,21 @@ function revokeAll(): void {
     @action="load"
   />
   <template v-else>
-    <div class="card stack" data-gap="sm">
-      <p class="field-hint">{{ copy.deviceRevocationHint }}</p>
-      <p v-if="notice" class="field-error" role="alert">{{ notice }}</p>
+    <div class="devices-page">
+      <!-- 首行说明：下线会立刻结束该设备上的登录 -->
+      <p class="notice">{{ copy.deviceRevocationHint }}</p>
+      <p v-if="notice" class="notice" data-tone="error" role="alert">{{ notice }}</p>
+
       <StateBlock v-if="devices.length === 0" :title="copy.emptyTitle" :description="copy.emptyDescription" />
-      <article v-for="device in devices" :key="device.id" class="stack" data-gap="sm">
-        <div class="row" data-between="true">
-          <div class="row-copy">
-            <strong class="row-title">{{ device.deviceName || copy.unnamedDevice }}</strong>
-            <span class="row-meta">{{ device.current ? copy.currentDevice : copy.otherDevice }}</span>
+
+      <!-- 一台设备一条行卡：线框设备图标 + 名称与时间 + 右端砖红下线 -->
+      <article v-for="device in devices" :key="device.id" class="row-card device-row">
+        <span class="device-icon" aria-hidden="true"><AppIcon name="device" /></span>
+        <div class="device-body">
+          <div class="device-head">
+            <strong class="row-title device-name">{{ device.deviceName || copy.unnamedDevice }}</strong>
+            <span v-if="device.current" class="pill">{{ copy.currentDevice }}</span>
           </div>
-        </div>
-        <div class="stack" data-gap="xs">
           <span class="row-meta">{{
             t('security.devices.recentActivityLine', { time: dateLabel(device.lastActive) })
           }}</span>
@@ -168,7 +172,7 @@ function revokeAll(): void {
           }}</span>
         </div>
         <button
-          class="cta ghost"
+          class="text-action device-action"
           type="button"
           :disabled="busyId === device.id || allBusy"
           @click="revokeDevice(device)"
@@ -176,6 +180,7 @@ function revokeAll(): void {
           {{ busyId === device.id ? copy.processing : copy.revokeThisDevice }}
         </button>
       </article>
+
       <button
         v-if="devices.length > 0"
         class="cta danger"
@@ -188,3 +193,79 @@ function revokeAll(): void {
     </div>
   </template>
 </template>
+
+<style>
+/* 设备页：说明在上，设备逐条排下来，底部是「全部下线」。 */
+.devices-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+/* 一行一台设备：图标 / 名称与时间 / 右端下线，三列。 */
+.devices-page .device-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--s3);
+}
+
+/* 设备图标：一枚 40px 的线框圆，和头像同一档视觉重量。 */
+.device-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-pill);
+  background: var(--f3);
+  color: var(--ink-2);
+}
+
+.device-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.device-body {
+  display: grid;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.device-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+/* 设备名过长时截断，不把行撑开。 */
+.device-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 下线：右端砖红文字按钮，命中区按 --touch 补齐。 */
+.devices-page .device-action {
+  align-self: center;
+  min-height: var(--touch);
+  padding-inline: 0;
+  color: var(--danger-ink);
+  white-space: nowrap;
+}
+
+.devices-page .device-action[disabled] {
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.devices-page > .cta.danger {
+  margin-top: var(--s1);
+}
+</style>

@@ -256,7 +256,8 @@ describe('个人页资料展示与编辑', () => {
     await vi.waitFor(() => expect(document.body.textContent).toContain('展商身份已于'));
     expect(document.body.textContent).toContain('到期，可在设置里填写邀请码续期。');
     expect(cards()[0]?.textContent).not.toContain('展商有效期至');
-    expect(document.querySelector('.notice[data-tone="accent"]')).not.toBeNull();
+    // 到期属于「要注意但没坏」的提醒，tone 是 warn。
+    expect(document.querySelector('.notice[data-tone="warn"]')).not.toBeNull();
   });
 
   it('晚到的旧资料不会盖掉刚换上的头像', async () => {

@@ -149,7 +149,7 @@ usePullRefresh(
   </div>
 
   <!-- 已有资料时刷新失败：旧资料留在屏幕上，错误只作为附加说明。 -->
-  <div v-if="query.error.value && profile" class="notice" data-tone="accent">
+  <div v-if="query.error.value && profile" class="notice" data-tone="error">
     <span>{{ query.error.value.message }}</span>
   </div>
 
@@ -172,41 +172,38 @@ usePullRefresh(
     @action="router.push('/home')"
   />
   <template v-else>
-    <div class="card">
-      <div class="row" data-gap="md">
-        <AvatarBox :src="avatarSrc" :name="String(profile.nickname || '')" />
-        <span class="row-copy">
-          <span class="name-line">
-            <strong class="row-title">{{ profile.nickname }}</strong>
-            <RoleTag :role-code="String(profile.roleCode || '')" />
-          </span>
-          <!-- 分隔用的「 · 」留在模板里而不放进文案资源：Android 的 string 资源会裁掉首尾空白。 -->
-          <span v-if="identityLine" class="row-meta">{{ identityLine }}</span>
-          <span class="row-meta">{{ profile.bio || t('profile.public.bioEmpty') }}</span>
-        </span>
-        <StatusTag :text="visibilityLabel" :tone="adminView || showRegistrations ? 'ok' : 'muted'" />
-      </div>
+    <!-- 扉页：头像居中、昵称、角色与已参加数、简介、一行公开范围。整段直接排在纸面上。 -->
+    <header class="public-leaf">
+      <AvatarBox :src="avatarSrc" :name="String(profile.nickname || '')" large class="public-avatar" />
+      <strong class="public-name">{{ profile.nickname }}</strong>
+      <p class="public-role">
+        <RoleTag :role-code="String(profile.roleCode || '')" />
+        <!-- 分隔用的「 · 」留在模板里而不放进文案资源：Android 的 string 资源会裁掉首尾空白。 -->
+        <span v-if="identityLine" class="public-role-text">{{ identityLine }}</span>
+      </p>
       <!-- 已参加展会数不受隐私开关影响：开关只决定下方的报名记录列表 -->
-      <hr class="divider" />
       <div class="profile-stats">
         <span class="profile-stat">
           <strong>{{ attendedCount }}</strong>
-          <span class="row-meta">{{ t('profile.stats.attended') }}</span>
+          <span class="public-stat-label">{{ t('profile.stats.attended') }}</span>
         </span>
       </div>
-    </div>
+      <p class="public-bio">{{ profile.bio || t('profile.public.bioEmpty') }}</p>
+      <p class="public-scope">
+        <StatusTag :text="visibilityLabel" :tone="adminView || showRegistrations ? 'ok' : 'muted'" />
+      </p>
+    </header>
 
-    <div class="card">
+    <!-- 公开资料：两列 label / value -->
+    <section class="public-section">
       <span class="section-label">{{ t('profile.public.details') }}</span>
-      <div class="row" data-between="true">
-        <span class="row-meta">{{ t('settings.profile.region') }}</span>
-        <span class="strong truncate">{{ profile.region || t('profile.public.regionUndisclosed') }}</span>
-      </div>
-      <div class="row" data-between="true">
-        <span class="row-meta">{{ t('settings.profile.social') }}</span>
-        <span class="strong truncate">{{ profile.socialMedia || t('profile.public.socialHidden') }}</span>
-      </div>
-    </div>
+      <dl class="public-facts">
+        <dt>{{ t('settings.profile.region') }}</dt>
+        <dd>{{ profile.region || t('profile.public.regionUndisclosed') }}</dd>
+        <dt>{{ t('settings.profile.social') }}</dt>
+        <dd>{{ profile.socialMedia || t('profile.public.socialHidden') }}</dd>
+      </dl>
+    </section>
 
     <div v-if="canManageMeetings || canRequestMeeting" class="stack" data-gap="sm">
       <div v-if="canManageMeetings" class="grid-cols-2">
@@ -228,9 +225,9 @@ usePullRefresh(
       </button>
     </div>
 
-    <!-- 开办的展会：展商主页的主要内容，放在「已参加展会」之前 -->
-    <div v-if="hosted.length > 0" class="card">
-      <div class="row" data-between="true">
+    <!-- 开办的展会：行卡列表，缩略图 44×78 的海报比例 -->
+    <section v-if="hosted.length > 0" class="public-section">
+      <div class="public-section-head">
         <span class="section-label">{{ COPY.hostedTitle }}</span>
         <span class="pill">{{ t('profile.public.hostedCount', { count: hosted.length }) }}</span>
       </div>
@@ -243,7 +240,7 @@ usePullRefresh(
           data-pressable="true"
           @click="router.push(`/detail/${encodeURIComponent(String(item.id))}`)"
         >
-          <MediaBox class-name="thumb thumb-cover thumb-sm" :src="coverOf(item.imageUri)" />
+          <MediaBox class-name="thumb thumb-cover public-thumb" :src="coverOf(item.imageUri)" />
           <span class="row-copy">
             <strong class="row-title truncate">{{ item.title }}</strong>
             <span class="row-meta">{{ `${item.dateLabel || item.date} · ${item.venue}` }}</span>
@@ -255,31 +252,210 @@ usePullRefresh(
           />
         </button>
       </div>
-    </div>
+    </section>
 
-    <div class="card">
-      <div class="row" data-between="true">
+    <!-- 已参加展会：两列竖版 3:4 海报格；图下两行小字（展会名 + 日期），状态压在图上角 -->
+    <section class="public-section">
+      <div class="public-section-head">
         <span class="section-label">{{ t('profile.public.attendedExhibitions') }}</span>
         <span class="pill">{{ t('profile.public.recordCount', { count: registrations.length }) }}</span>
       </div>
-      <div v-if="registrations.length > 0" class="list" data-gap="sm">
-        <div v-for="record in registrations" :key="String(record.id || record.exhibitionTitle)" class="row-card">
-          <MediaBox class-name="thumb thumb-cover thumb-sm" />
-          <span class="row-copy">
-            <strong class="row-title truncate">{{ record.exhibitionTitle }}</strong>
-            <span class="row-meta"
-              >{{ formatRecordDate(record) }} · {{ registrationStatusLabel(String(record.statusCode || '')) }}</span
-            >
-          </span>
-          <StatusTag
-            :text="registrationStatusLabel(String(record.statusCode || ''))"
-            :tone="statusTone(String(record.statusCode || ''))"
-          />
+      <div v-if="registrations.length > 0" class="attended-grid">
+        <div v-for="record in registrations" :key="String(record.id || record.exhibitionTitle)" class="attended-tile">
+          <div class="tile-cover-wrap">
+            <MediaBox class-name="tile-cover" />
+            <span class="tile-status">
+              <StatusTag
+                :text="registrationStatusLabel(String(record.statusCode || ''))"
+                :tone="statusTone(String(record.statusCode || ''))"
+              />
+            </span>
+          </div>
+          <strong class="tile-name clamp-2">{{ record.exhibitionTitle }}</strong>
+          <span class="tile-date">{{ formatRecordDate(record) }}</span>
         </div>
       </div>
       <p v-else class="row-meta">
         {{ showRegistrations ? t('profile.public.noRegistrations') : t('profile.public.registrationsHidden') }}
       </p>
-    </div>
+    </section>
   </template>
 </template>
+
+<style>
+/* 扉页：居中排版，靠一条发丝线与下方分区断开；这里不是卡片。 */
+.public-leaf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s3);
+  padding-bottom: var(--s5);
+  border-bottom: var(--hairline) solid var(--stroke);
+  text-align: center;
+}
+
+/* 96px 圆头像：圆环由 .avatar 自带的 1px --stroke 描边提供。 */
+.public-leaf .public-avatar {
+  width: 96px;
+  height: 96px;
+  font-size: var(--fs-h1);
+}
+
+/* 昵称：整页最大字号。 */
+.public-name {
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: var(--lh-tight);
+  overflow-wrap: anywhere;
+}
+
+.public-role {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+}
+
+.public-role-text {
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+/* 已参加数：数字大一号，标签弱化；整行居中。 */
+.public-leaf .profile-stats {
+  width: auto;
+  justify-content: center;
+  gap: var(--s2);
+}
+
+.public-leaf .profile-stat > strong {
+  font-size: var(--fs-h2);
+  font-weight: 700;
+}
+
+.public-stat-label {
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+}
+
+.public-bio {
+  max-width: 34em;
+  color: var(--ink-2);
+  font-size: var(--fs-body);
+  line-height: 1.68;
+  overflow-wrap: anywhere;
+}
+
+.public-scope {
+  display: flex;
+  justify-content: center;
+}
+
+/* 分区：组标题在上，内容在下，不加卡片。 */
+.public-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.public-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+/* 公开资料：两列 label / value。 */
+.public-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--s4);
+  row-gap: var(--s3);
+  margin: 0;
+}
+
+.public-facts dt {
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.public-facts dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink);
+  font-size: var(--fs-body);
+  overflow-wrap: anywhere;
+}
+
+/* 开办的展会缩略图：设计稿的 44×78 海报比例（令牌里的 .thumb 是 36×64，这里按任务值覆盖）。 */
+/* 比 .thumb 高一档，样式顺序不影响尺寸。 */
+.row-card .public-thumb {
+  width: 44px;
+  height: 78px;
+}
+
+/* 已参加展会：两列竖版海报格，格子间距 --s3。 */
+.attended-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s3);
+}
+
+.attended-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.tile-cover-wrap {
+  position: relative;
+}
+
+/* 3:4 竖版，不是 9:16 也不是方形；底色与斜线占位沿用 .ph-img。 */
+.tile-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  overflow: hidden;
+}
+
+/* 状态信号灯压在图上角：纸色小底保证在任何封面上都读得清。 */
+.tile-status {
+  position: absolute;
+  top: var(--s2);
+  inset-inline-start: var(--s2);
+  display: inline-flex;
+  align-items: center;
+  padding: 3px var(--s2);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-pill);
+  background: var(--screen);
+}
+
+.tile-name {
+  color: var(--ink);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+}
+
+.tile-date {
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+}
+
+/* 宽屏上仍是同一套格子，只是多给一列，免得海报被拉到过大。 */
+@media (min-width: 640px) {
+  .attended-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+</style>

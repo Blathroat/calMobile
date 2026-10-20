@@ -263,24 +263,32 @@ function logout(): void {
     />
 
     <template v-else>
-      <div v-if="loadFailed" class="notice" data-tone="accent">
+      <!-- 已有资料时刷新失败：旧内容留在屏幕上，错误只作为附加说明 -->
+      <div v-if="loadFailed" class="notice" data-tone="error">
         <span>{{ loadError }}</span>
       </div>
-      <div class="profile-stack" :data-busy="loading ? 'true' : undefined">
-        <!-- 身份卡：头像、昵称、角色与账号状态；底部是活动概览。 -->
-        <div class="card" data-tone="fill">
-          <div class="row" data-gap="md">
-            <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || user.username || '')" large />
-            <span class="row-copy">
-              <span class="name-line">
-                <strong class="identity-name">{{ user.nickname || user.username }}</strong>
+
+      <div class="profile-page" :data-busy="loading ? 'true' : undefined">
+        <!-- 身份区：不是卡片（.card 只是 profile-page.test.ts 的索引钩子，
+             本页 [data-plain] 把边框、底色、阴影、内距都去掉）。 -->
+        <div class="card profile-leaf" data-plain="true">
+          <div class="leaf-top">
+            <AvatarBox
+              :src="String(user.avatar || '')"
+              :name="String(user.nickname || user.username || '')"
+              large
+              class="leaf-avatar"
+            />
+            <div class="leaf-copy">
+              <strong class="identity-name leaf-name">{{ user.nickname || user.username }}</strong>
+              <div class="leaf-meta">
                 <RoleTag :role-code="String(user.role || '')" />
-              </span>
-              <span v-if="identityLine" class="row-meta">{{ identityLine }}</span>
-              <span v-if="membershipLine" class="row-meta">{{ membershipLine }}</span>
-            </span>
+                <span v-if="identityLine" class="leaf-eyebrow">{{ identityLine }}</span>
+              </div>
+              <span v-if="membershipLine" class="leaf-expiry">{{ membershipLine }}</span>
+            </div>
             <button
-              class="icon-button"
+              class="icon-button leaf-edit"
               type="button"
               :aria-label="t('settings.profile.editProfile')"
               :disabled="limited"
@@ -290,17 +298,17 @@ function logout(): void {
               <AppIcon name="edit" />
             </button>
           </div>
-          <!-- 活动概览：整行可点，进入我的活动；取不到数据时整块不渲染 -->
+          <!-- 活动概览：分隔线之上一行数字，整行可点进我的活动；取不到数据时整块不渲染 -->
           <template v-if="activity">
             <hr class="divider" />
             <button class="profile-stats" type="button" @click="router.push(paths.registrations)">
               <span class="profile-stat">
                 <strong>{{ activity.attended }}</strong>
-                <span class="row-meta">{{ t('profile.stats.attended') }}</span>
+                <span class="profile-stat-label">{{ t('profile.stats.attended') }}</span>
               </span>
               <span class="profile-stat">
                 <strong>{{ activity.total }}</strong>
-                <span class="row-meta">{{ t('profile.stats.registrations') }}</span>
+                <span class="profile-stat-label">{{ t('profile.stats.registrations') }}</span>
               </span>
               <AppIcon name="chevronRight" />
             </button>
@@ -308,26 +316,26 @@ function logout(): void {
         </div>
 
         <!-- 受限：说明为什么编辑入口不可用 -->
-        <div v-if="limited" class="notice" data-tone="accent">
+        <div v-if="limited" class="notice" data-tone="warn">
           <strong>{{ limitHint }}</strong>
         </div>
 
         <!-- 限时展商：快到期与已到期都说明原因和续期方式，避免身份标签悄悄消失 -->
-        <div v-if="membershipSoon" class="notice" data-tone="accent">
+        <div v-if="membershipSoon" class="notice" data-tone="warn">
           <span>{{ membershipSoon }}</span>
         </div>
-        <div v-if="membershipExpired" class="notice" data-tone="accent">
+        <div v-if="membershipExpired" class="notice" data-tone="warn">
           <span>{{ membershipExpired }}</span>
         </div>
 
-        <!-- 个人简介：有内容时按正文排版，空态给出可点的「填写简介」 -->
-        <div class="card">
+        <!-- 个人简介：组标题在上，正文按 1.68 行高排，保留用户输入的换行 -->
+        <div class="card profile-block" data-plain="true">
           <span class="section-label">{{ t('profile.bio') }}</span>
           <p v-if="hasBio" class="bio-text">{{ String(profile.bio) }}</p>
           <div v-else class="bio-empty">
             <p class="field-hint">{{ t('profile.bioEmpty') }}</p>
             <button
-              class="text-action"
+              class="text-action bio-fill"
               type="button"
               :disabled="limited"
               :title="limited ? limitHint : undefined"
@@ -338,24 +346,22 @@ function logout(): void {
           </div>
         </div>
 
-        <!-- 公开资料：地区与社交账号都是「标签 + 值」，空值弱化显示 -->
-        <div class="card">
+        <!-- 公开资料：两列 label / value，空值用 --ink-3 -->
+        <div class="card profile-block" data-plain="true">
           <span class="section-label">{{ t('profile.public.details') }}</span>
-          <div class="row" data-between="true">
-            <span class="row-meta">{{ t('settings.profile.region') }}</span>
-            <strong class="truncate" :class="hasProfileValue('region') ? 'strong' : 'dim'">{{
-              profileValue('region', 'profile.notFilled')
-            }}</strong>
-          </div>
-          <div class="row" data-between="true">
-            <span class="row-meta">{{ t('settings.profile.social') }}</span>
-            <strong class="truncate" :class="hasProfileValue('socialMedia') ? 'strong' : 'dim'">{{
-              profileValue('socialMedia', 'profile.notFilled')
-            }}</strong>
-          </div>
+          <dl class="profile-facts">
+            <dt>{{ t('settings.profile.region') }}</dt>
+            <dd :class="hasProfileValue('region') ? undefined : 'dim'">
+              {{ profileValue('region', 'profile.notFilled') }}
+            </dd>
+            <dt>{{ t('settings.profile.social') }}</dt>
+            <dd :class="hasProfileValue('socialMedia') ? undefined : 'dim'">
+              {{ profileValue('socialMedia', 'profile.notFilled') }}
+            </dd>
+          </dl>
         </div>
 
-        <!-- 入口：公开主页、用户设置、安全设置各自一行，不套卡片 -->
+        <!-- 入口：公开主页、用户设置、安全设置各自一行，行间距 --s2 -->
         <div class="list" data-gap="sm">
           <button
             v-if="publicPath"
@@ -364,70 +370,224 @@ function logout(): void {
             data-pressable="true"
             @click="router.push(publicPath)"
           >
-            <span class="dim" aria-hidden="true"><AppIcon name="user" size="icon icon-sm" /></span>
+            <span class="row-icon" aria-hidden="true"><AppIcon name="user" /></span>
             <span class="row-copy">
               <strong class="row-title">{{ t('profile.previewPublic') }}</strong>
               <span class="row-meta">{{ publicMeta }}</span>
             </span>
-            <AppIcon name="chevronRight" />
+            <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
           </button>
           <button class="row-card" type="button" data-pressable="true" @click="router.push('/settings')">
-            <span class="dim" aria-hidden="true"><AppIcon name="settings" size="icon icon-sm" /></span>
+            <span class="row-icon" aria-hidden="true"><AppIcon name="settings" /></span>
             <span class="row-copy">
               <strong class="row-title">{{ t('settings.title') }}</strong>
               <span class="row-meta">{{ COPY.settingsMeta }}</span>
             </span>
-            <AppIcon name="chevronRight" />
+            <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
           </button>
           <button class="row-card" type="button" data-pressable="true" @click="router.push('/security')">
-            <span class="dim" aria-hidden="true"><AppIcon name="shield" size="icon icon-sm" /></span>
+            <span class="row-icon" aria-hidden="true"><AppIcon name="shield" /></span>
             <span class="row-copy">
               <strong class="row-title">{{ t('security.title') }}</strong>
               <span class="row-meta">{{ t('settings.securityMeta') }}</span>
             </span>
-            <AppIcon name="chevronRight" />
+            <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
           </button>
         </div>
 
-        <!-- 退出登录：整页唯一的破坏性动作，放在最底部并走二次确认 -->
-        <button class="cta ghost" type="button" :disabled="logoutBusy" @click="logout">
-          {{ t('profile.logout') }}
-        </button>
+        <!-- 退出登录：整页唯一的破坏性动作，居中文字按钮，上方留 --s7 -->
+        <div class="profile-logout">
+          <button class="text-action logout-action" type="button" :disabled="logoutBusy" @click="logout">
+            {{ t('profile.logout') }}
+          </button>
+        </div>
       </div>
     </template>
   </template>
 </template>
 
 <style>
-/* 外壳只给 .page-surface 的直接子元素留间距。忙碌标记需要包一层，间距在这一层补回。 */
-.profile-stack {
+/* 页面纵向节奏：区块之间 --s5。 */
+.profile-page {
   display: flex;
   flex-direction: column;
   gap: var(--s5);
 }
 
-.profile-stack > * {
+.profile-page > * {
   flex: none;
 }
 
-/* 简介正文：正文色与正文行高，保留用户输入的换行。 */
+/* 身份 / 简介 / 公开资料三块保留 .card 类（测试索引），视觉上去掉卡片外观。 */
+.profile-page .card[data-plain='true'] {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 身份区：底边一条发丝线收口。 */
+.profile-page .card.profile-leaf[data-plain='true'] {
+  gap: var(--s3);
+  padding-bottom: var(--s5);
+  border-bottom: var(--hairline) solid var(--stroke);
+}
+
+.leaf-top {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+/* 96px 圆头像：圆环由 .avatar 自带的 1px --stroke 描边提供。 */
+.profile-page .leaf-avatar {
+  width: 96px;
+  height: 96px;
+  font-size: var(--fs-h1);
+}
+
+.leaf-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding-top: var(--s1);
+  /* 给右上角的铅笔让位，长昵称不会钻到按钮下面。 */
+  padding-inline-end: var(--touch);
+}
+
+/* 昵称：整页最大字号，只有字重和字号，不换字体。 */
+.profile-page .leaf-name {
+  font-size: var(--fs-h1);
+  font-weight: 700;
+}
+
+.leaf-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+/* 角色与账号状态：一行小字距标签，不抢昵称。 */
+.leaf-eyebrow {
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+/* 展商有效期：一行弱化说明。 */
+.leaf-expiry {
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+}
+
+.leaf-edit {
+  position: absolute;
+  top: 0;
+  inset-inline-end: 0;
+  color: var(--ink-2);
+}
+
+/* 活动概览：两个数字（--fs-h2、700）配下面小标签，右端静默箭头由令牌给。 */
+.profile-page .profile-stats {
+  gap: var(--s7);
+}
+
+.profile-page .profile-stat > strong {
+  font-size: var(--fs-h2);
+  font-weight: 700;
+}
+
+.profile-stat-label {
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+}
+
+/* 简介与公开资料：组标题 + 内容。 */
+.profile-page .profile-block {
+  gap: var(--s3);
+}
+
 .bio-text {
   color: var(--ink);
   font-size: var(--fs-body);
-  line-height: var(--lh-base);
+  line-height: 1.68;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-/* 简介空态：一句说明 + 一个可点的入口，不占用正文的位置。 */
+/* 简介空态：一句说明 + 一个可点的入口，不占正文的位置。 */
 .bio-empty {
   display: grid;
   gap: var(--s1);
   justify-items: start;
 }
 
-.bio-empty .text-action[disabled] {
+.profile-page .bio-fill {
+  min-height: var(--touch);
+  padding-inline: 0;
+}
+
+.profile-page .bio-fill[disabled] {
   color: var(--ink-3);
   cursor: not-allowed;
+}
+
+/* 公开资料：两列 label / value。 */
+.profile-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--s4);
+  row-gap: var(--s3);
+  margin: 0;
+}
+
+.profile-facts dt {
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.profile-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--fs-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-facts dd.dim {
+  color: var(--ink-3);
+}
+
+/* 入口行左侧的静默图标与右侧箭头。 */
+.row-icon,
+.row-chev {
+  flex: none;
+  display: inline-flex;
+  color: var(--ink-3);
+}
+
+/* 退出登录：居中 danger 文字按钮；父级 gap 之外再补到 --s7。 */
+.profile-logout {
+  display: flex;
+  justify-content: center;
+  margin-top: calc(var(--s7) - var(--s5));
+}
+
+.profile-page .logout-action {
+  min-height: var(--touch);
+  padding-inline: var(--s5);
+  color: var(--danger-ink);
 }
 </style>

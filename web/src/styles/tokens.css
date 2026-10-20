@@ -13,7 +13,7 @@
   --screen: #ffffff; /* 页面与卡片底色 */
   --ink: #20252b; /* 主要文字 */
   --ink-2: #626a74; /* 次要文字 */
-  --ink-3: #969da7; /* 占位与弱化文字 */
+  --ink-3: #666d76; /* 占位与弱化文字：对纸面 4.8:1、对白卡 5.2:1，13px 也读得清 */
   --f1: #e7e9ec; /* 结构块填充（浅） */
   --f2: #cfd4da; /* 结构块填充（深） */
   --f3: #f1f2f4; /* 输入框与信息块填充 */
@@ -28,7 +28,7 @@
   --dark: #48515d; /* 主按钮与选中态 */
   --ok: #e4efe8; /* 成功底色 */
   --ok-ink: #28754a; /* 成功文字。浅色下贴近蓝字亮度，白底和成功底都可读。 */
-  --warn-ink: #b17d2c; /* 待审核文字 */
+  --warn-ink: #8f6318; /* 待审核文字：对白卡 5.3:1，原来偏亮，标签读不清 */
   --warn-tint: #f6eedd;
   --danger-ink: #a33a2a; /* 已拒绝文字 */
   --danger-tint: #f7e6e2;
@@ -109,7 +109,7 @@
     --screen: #171a1f;
     --ink: #eceef1;
     --ink-2: #a8b0b9;
-    --ink-3: #7a828c;
+    --ink-3: #8e96a0;
     --f1: #23272e;
     --f2: #2f343c;
     --f3: #1e2229;
@@ -120,7 +120,7 @@
     --dark: #8e9aa8;
     --ok: #1b2b22;
     --ok-ink: #6ec48c;
-    --warn-ink: #d7ab5f;
+    --warn-ink: #e0b878;
     --warn-tint: #2a2318;
     --danger-ink: #e08a78;
     --danger-tint: #2c1d1a;
@@ -146,7 +146,7 @@
   --screen: #171a1f;
   --ink: #eceef1;
   --ink-2: #a8b0b9;
-  --ink-3: #7a828c;
+  --ink-3: #8e96a0;
   --f1: #23272e;
   --f2: #2f343c;
   --f3: #1e2229;
@@ -157,7 +157,7 @@
   --dark: #8e9aa8;
   --ok: #1b2b22;
   --ok-ink: #6ec48c;
-  --warn-ink: #d7ab5f;
+  --warn-ink: #e0b878;
   --warn-tint: #2a2318;
   --danger-ink: #e08a78;
   --danger-tint: #2c1d1a;
@@ -643,6 +643,15 @@ label {
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;
+}
+
+/* 行数上限：少了这两条，display:-webkit-box 不会真的截断。 */
+.clamp-2 {
+  -webkit-line-clamp: 2;
+}
+
+.clamp-3 {
+  -webkit-line-clamp: 3;
 }
 
 .clamp-3 {
@@ -1159,6 +1168,300 @@ button.avatar {
 }
 
 .text-action {
+  display: inline-flex;
+  align-items: center;
+  /* 命中区不小于 44px：文字按钮也点得中，但视觉上仍是一行字。 */
+  min-height: var(--touch);
+  padding: 0 var(--s2);
+  border-radius: var(--r-chip);
+  background: transparent;
+  color: var(--accent-ink);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.link-button {
+  padding: 0;
+  background: none;
+  color: var(--accent-ink);
+  font-size: inherit;
+  font-weight: 700;
+  text-align: start;
+}
+
+/* ============================================================================
+ * 表单
+ * ==========================================================================*/
+
+.form {
+  display: grid;
+  gap: var(--s4);
+}
+
+.field {
+  display: grid;
+  gap: var(--s2);
+}
+
+.field > label,
+.field > .field-label,
+.choice-group > legend {
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.field .required {
+  color: var(--accent-ink);
+}
+
+/* 输入框统一成「下划线」：只有底边一条线，聚焦时一条主题色下划线从左侧长满，
+   失焦时缩回去。渐变层就是那条会长出来的线——0% 宽时露出的是 --stroke 的底边，
+   100% 时整条被主题色盖住，所以不需要额外的元素或伪类动画。
+   页面不要再给输入框写边框、底色或自绘下划线，一律用这三个类。 */
+.input,
+.textarea,
+.select {
+  width: 100%;
+  min-height: var(--ctrl);
+  padding: 0 var(--s3);
+  border: 0;
+  border-bottom: 1px solid var(--stroke);
+  border-radius: var(--r-chip) var(--r-chip) 0 0;
+  background-color: var(--screen);
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-repeat: no-repeat;
+  background-position: left bottom;
+  background-size: 0% 2px;
+  color: var(--ink);
+  font-size: var(--fs-body);
+  display: flex;
+  align-items: center;
+  transition:
+    background-size 320ms var(--ease-out),
+    background-color var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease);
+}
+
+/* 原生日期 / 时间控件有约 145px 的固有最小宽度，放进两列布局会把页面撑出横向滚动。 */
+.input[type='date'],
+.input[type='time'],
+.input[type='datetime-local'],
+.input[type='month'],
+.field > .input,
+.field > .select {
+  min-width: 0;
+}
+
+.textarea {
+  min-height: 105px;
+  padding: var(--s3);
+  display: block;
+  resize: vertical;
+  line-height: var(--lh-base);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--ink-3);
+}
+
+/* 下拉框：下划线之外再叠一个自绘的细线箭头。两层背景共用 background-size 列表，
+   聚焦时只放大第一层（下划线），箭头保持原尺寸。 */
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: var(--s7);
+  background-image:
+    linear-gradient(var(--accent), var(--accent)),
+    url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23626a74' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9.5 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat;
+  background-position:
+    left bottom,
+    right var(--s2) center;
+  background-size:
+    0% 2px,
+    18px 18px;
+}
+
+:root[data-mode='dark'] .select {
+  background-image:
+    linear-gradient(var(--accent), var(--accent)),
+    url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8b0b9' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9.5 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mode='light']) .select {
+    background-image:
+      linear-gradient(var(--accent), var(--accent)),
+      url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8b0b9' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9.5 6 6 6-6'/%3E%3C/svg%3E");
+  }
+}
+
+/* 聚焦：下划线长满，底色提亮一档。 */
+.input:focus,
+.textarea:focus,
+.select:focus,
+.input:focus-visible,
+.textarea:focus-visible,
+.select:focus-visible {
+  background-color: var(--screen);
+  background-size: 100% 2px;
+}
+
+.select:focus,
+.select:focus-visible {
+  background-size:
+    100% 2px,
+    18px 18px;
+}
+
+/* 校验失败：下划线直接长满并变砖红，底色压成浅红。 */
+.field[data-invalid='true'] .input,
+.field[data-invalid='true'] .textarea,
+.field[data-invalid='true'] .select {
+  background-color: var(--danger-tint);
+  background-image: linear-gradient(var(--danger-ink), var(--danger-ink));
+  background-size: 100% 2px;
+  border-bottom-color: transparent;
+}
+
+.field[data-invalid='true'] .select {
+  background-size:
+    100% 2px,
+    18px 18px;
+}
+
+.field-counter {
+  align-self: flex-end;
+  color: var(--ink-3);
+  font-size: var(--fs-tag);
+  font-variant-numeric: tabular-nums;
+}
+
+.field-counter[data-over='true'] {
+  color: var(--danger-ink);
+}
+
+/* ============================================================================
+ * 状态标签：颜色 + 文字双重线索
+ * ==========================================================================*/
+
+.pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-pill);
+  background: var(--screen);
+  color: var(--ink-2);
+  font-size: var(--fs-tag);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ============================================================================
+ * 按钮
+ * ==========================================================================*/
+
+.cta {
+  width: 100%;
+  min-height: var(--ctrl);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: 0 var(--s4);
+  border-radius: var(--r-input);
+  background: var(--accent);
+  color: var(--on-dark);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition:
+    background var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+/* 次按钮：浅色底与页面底色一致（白底 / 深色模式下的页面底），
+   应用配色只改变它的边框与字体颜色，不改变底色。 */
+.cta.ghost {
+  background: var(--screen);
+  color: var(--accent-ink);
+  border: 1.5px solid var(--accent-edge);
+}
+
+.cta.danger {
+  background: var(--danger-ink);
+  color: var(--screen);
+}
+
+.cta[disabled],
+.cta[aria-disabled='true'] {
+  background: var(--f1);
+  color: var(--ink-3);
+  border-color: transparent;
+  cursor: not-allowed;
+}
+
+.cta[data-loading='true'] {
+  color: transparent;
+  position: relative;
+}
+
+.cta[data-loading='true']::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  color: var(--on-dark);
+  animation: spin 0.7s linear infinite;
+}
+
+.cta.ghost[data-loading='true']::after {
+  color: var(--accent-ink);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 右下角圆形按钮 */
+.round-action {
+  width: 51px;
+  height: 51px;
+  min-width: 51px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-dark);
+  font-size: 0;
+  box-shadow: var(--shadow-float);
+}
+
+.round-action svg {
+  width: 21px;
+  height: 21px;
+}
+
+.round-action[data-variant='ghost'] {
+  background: var(--screen);
+  color: var(--accent-ink);
+  border: 1.5px solid var(--accent-edge);
+  box-shadow: none;
+}
+
+.text-action {
   padding: var(--s2);
   border-radius: var(--r-chip);
   background: transparent;
@@ -1202,46 +1505,8 @@ button.avatar {
   color: var(--accent-ink);
 }
 
-.input,
-.textarea,
-.select {
-  width: 100%;
-  min-height: var(--ctrl);
-  padding: 0 var(--s3);
-  border: var(--hairline) solid var(--stroke);
-  border-radius: var(--r-input);
-  background: var(--f3);
-  color: var(--ink);
-  font-size: var(--fs-body);
-  display: flex;
-  align-items: center;
-}
-
-.textarea {
-  min-height: 105px;
-  padding: var(--s3);
-  display: block;
-  resize: vertical;
-  line-height: var(--lh-base);
-}
-
-.input::placeholder,
-.textarea::placeholder {
-  color: var(--ink-3);
-}
-
-.input:focus-visible,
-.textarea:focus-visible,
-.select:focus-visible {
-  background: var(--screen);
-}
-
-.field[data-invalid='true'] .input,
-.field[data-invalid='true'] .textarea,
-.field[data-invalid='true'] .select {
-  border-color: var(--danger-ink);
-  background: var(--danger-tint);
-}
+/* 输入框的下划线样式（含聚焦生长动画）在文件靠前的「表单」段里定义一次，
+   这里不再重复一份方框版本，否则后者会覆盖前者。 */
 
 .field-error {
   color: var(--danger-ink);
@@ -1532,6 +1797,21 @@ button.avatar {
   color: var(--danger-ink);
 }
 
+/* 提醒：受限、身份将到期这类「要注意但没坏」的提示。以前只能塞进 accent，
+   读起来像给页面加了个主题色块，语义也不对。 */
+.notice[data-tone='warn'] {
+  border-color: var(--warn-ink);
+  background: var(--warn-tint);
+  color: var(--warn-ink);
+}
+
+/* 成功：操作已完成。 */
+.notice[data-tone='ok'] {
+  border-color: var(--ok-ink);
+  background: var(--ok);
+  color: var(--ok-ink);
+}
+
 /* ============================================================================
  * 弹层：底部面板与确认对话框
  * ==========================================================================*/
@@ -1656,6 +1936,57 @@ button.avatar {
 .sheet-actions[data-layout='close-below'] .cta:last-child {
   flex: 1 1 100%;
   width: 100%;
+}
+
+/* 选项列表：整行可点、行与行之间一条分隔线，当前值右侧带对勾。 */
+.sheet-actions[data-layout='list'] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  border-top: var(--hairline) solid var(--stroke);
+}
+
+.sheet-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  width: 100%;
+  min-height: 52px;
+  padding: 0 var(--s1);
+  border: 0;
+  border-bottom: var(--hairline) solid var(--stroke);
+  border-radius: 0;
+  background: var(--screen);
+  color: var(--ink);
+  font-size: var(--fs-body);
+  text-align: start;
+  transition:
+    background var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+.sheet-option:disabled {
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.sheet-option[data-checked='true'] {
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.sheet-option-check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+
+@media (hover: hover) {
+  .sheet-option:not(:disabled):hover {
+    background: var(--f3);
+  }
 }
 
 @keyframes fade-in {

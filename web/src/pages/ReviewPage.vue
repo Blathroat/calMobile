@@ -387,7 +387,7 @@ async function exportCsv(): Promise<void> {
     />
 
     <!-- 切换筛选时旧结果留在原位，只标记忙碌，不清空 -->
-    <div v-if="review.error.value && hasRecords" class="notice" data-tone="accent">
+    <div v-if="review.error.value && hasRecords" class="notice" data-tone="error">
       <span>{{ review.error.value.message }}</span>
     </div>
 
@@ -399,44 +399,47 @@ async function exportCsv(): Promise<void> {
     />
 
     <div v-else class="list" data-gap="sm" :data-busy="review.loading.value ? 'true' : undefined">
-      <div v-for="record in filtered" :key="String(record.id)" class="card">
-        <div class="row" data-gap="md">
+      <article v-for="record in filtered" :key="String(record.id)" class="card review-card">
+        <div class="review-main">
           <button
             v-if="record.visitorId"
-            class="avatar"
+            class="avatar review-avatar"
             type="button"
             :aria-label="t('review.page.viewProfile', { name: String(record.visitorName ?? '') })"
             @click="openVisitor(record)"
           >
             {{ String(record.visitorName ?? t('registration.review.initialFallback')).slice(0, 1) }}
           </button>
-          <span v-else class="avatar" aria-hidden="true">{{
+          <span v-else class="avatar review-avatar" aria-hidden="true">{{
             String(record.visitorName ?? t('registration.review.initialFallback')).slice(0, 1)
           }}</span>
+
           <button
-            class="row-card"
+            class="review-body"
             type="button"
             data-pressable="true"
-            style="flex: 1 1 auto; min-width: 0; border: 0; padding: 0; background: transparent"
             :aria-label="t('review.page.viewDetail', { name: String(record.visitorName ?? '') })"
             @click="openDetail(record)"
           >
-            <span class="row-copy">
-              <span class="name-line">
-                <strong class="row-title">{{ record.visitorName }}</strong>
-                <RoleTag :role-code="String(record.visitorRole || '')" />
-              </span>
+            <span class="review-name-line">
+              <strong class="row-title truncate">{{ record.visitorName }}</strong>
+              <StatusTag
+                :text="registrationStatusLabel(String(record.statusCode || ''))"
+                :tone="statusTone(String(record.statusCode || ''))"
+              />
+            </span>
+            <span class="review-meta-line">
               <span class="row-meta">{{
                 t('review.page.registeredAt', { time: String(record.registrationTime ?? '') })
               }}</span>
-              <span class="row-meta truncate">{{ truncate(record.summary, 34) }}</span>
+              <RoleTag :role-code="String(record.visitorRole || '')" />
             </span>
-            <StatusTag
-              :text="registrationStatusLabel(String(record.statusCode || ''))"
-              :tone="statusTone(String(record.statusCode || ''))"
-            />
+            <span class="row-meta truncate">{{ truncate(record.summary, 34) }}</span>
           </button>
         </div>
+
+        <hr class="divider" />
+
         <div v-if="record.statusCode === REGISTRATION_STATUS.PENDING" class="action-row">
           <button
             class="cta"
@@ -464,7 +467,7 @@ async function exportCsv(): Promise<void> {
             {{ COPY.detail }}
           </button>
         </div>
-      </div>
+      </article>
     </div>
 
     <button class="cta ghost" type="button" :disabled="filtered.length === 0" @click="exportCsv">
@@ -473,3 +476,60 @@ async function exportCsv(): Promise<void> {
     </button>
   </template>
 </template>
+
+<style scoped>
+/* 审核卡：上半是身份与状态，发丝线之后才是动作行。 */
+.review-main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+/* 48px 圆头像：比列表默认的 44px 略大一档，卡片主体更有分量。 */
+.review-avatar {
+  width: 48px;
+  height: 48px;
+}
+
+/* 卡内主体整块可点：进报名详情。按钮自身不带边框与底色。 */
+.review-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  gap: var(--s1);
+  padding: 0;
+  color: inherit;
+  text-align: start;
+}
+
+/* 姓名行：名字可截断，信号灯固定在右端。 */
+.review-name-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  min-width: 0;
+}
+
+.review-name-line > .row-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 报名时间与角色同排：角色签不抢姓名行的宽度。 */
+.review-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1) var(--s2);
+  min-width: 0;
+}
+
+/* 320 宽下两颗小按钮可能顶满一行：允许折行，避免横向溢出。 */
+.review-card .action-row .cta {
+  white-space: normal;
+  line-height: 1.2;
+}
+</style>

@@ -8,6 +8,7 @@ import { useBootstrapStore } from '@/stores/bootstrap';
 import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
 import SecuritySetupSheet from '@/components/SecuritySetupSheet.vue';
+import AppIcon from '@/components/AppIcon.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SegControl from '@/components/SegControl.vue';
@@ -426,85 +427,131 @@ async function rebindTotp(): Promise<void> {
     @action="load"
   />
   <template v-else>
-    <div class="card">
-      <span class="section-label">{{ t('security.section') }}</span>
-      <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-      <p v-if="notice" class="notice" data-tone="accent" role="status">{{ notice }}</p>
+    <!-- 账号安全清单：密码 / 邮箱 / 两步验证 / 登录设备，每项一条行卡，
+         左侧图标 + 中间标题与状态说明 + 右端动作，旧的卡片分组头去掉。 -->
+    <div class="security-page">
+      <p v-if="error" class="notice" data-tone="error" role="alert">{{ error }}</p>
+      <p v-if="notice" class="notice" data-tone="ok" role="status">{{ notice }}</p>
 
-      <div class="row email-row" data-between="true">
+      <!-- 密码 -->
+      <button class="row-card security-row" type="button" data-pressable="true" @click="openPasswordChange">
+        <span class="security-icon" aria-hidden="true"><AppIcon name="lock" /></span>
         <span class="row-copy">
-          <span class="row-title">{{ t('auth.register.email') }}</span>
+          <strong class="row-title">{{ copy.passwordTitle }}</strong>
+          <span class="row-meta">{{ copy.passwordDescription }}</span>
+        </span>
+        <span class="security-action">{{ t('security.password.change') }}</span>
+      </button>
+
+      <!-- 邮箱 -->
+      <button class="row-card security-row" type="button" data-pressable="true" @click="openEmailChange">
+        <span class="security-icon" aria-hidden="true"><AppIcon name="mail" /></span>
+        <span class="row-copy">
+          <strong class="row-title">{{ t('auth.register.email') }}</strong>
           <span class="row-meta truncate">{{ emailLabel }}</span>
         </span>
-        <button class="cta ghost" data-size="small" type="button" :disabled="busy" @click="openEmailChange">
-          {{ copy.changeEmail }}
-        </button>
-      </div>
+        <span class="security-action">{{ copy.changeEmail }}</span>
+      </button>
 
-      <div class="stack" data-gap="xs">
-        <span class="row-title">{{ t('auth.login.twoFactor') }}</span>
+      <!-- 两步验证：三选一的分段控件就是状态说明；它横跨整行，窄屏下三个选项才放得下 -->
+      <section class="row-card security-row security-factor">
+        <span class="security-icon" aria-hidden="true"><AppIcon name="shield" /></span>
+        <div class="factor-body">
+          <strong class="row-title">{{ t('auth.login.twoFactor') }}</strong>
+          <p class="field-hint">{{ methodHint }}</p>
+        </div>
         <SegControl
           :items="availableModeOptions"
           :model-value="selectedMode"
           :disabled="busy"
           :label="t('auth.login.twoFactor')"
-          @update:model-value="(value) => chooseMode(value as FactorMode)"
+          @update:model-value="(value: string) => chooseMode(value as FactorMode)"
         />
-      </div>
-      <p class="field-hint">{{ methodHint }}</p>
+        <div v-if="enabled || totpEnabled" class="security-actions">
+          <button v-if="enabled" class="text-action" type="button" :disabled="busy" @click="askRegenerate">
+            {{ t('security.regenerateBackupCodes') }}
+          </button>
+          <button v-if="totpEnabled" class="text-action" type="button" :disabled="busy" @click="rebindTotp">
+            {{ copy.rotateTotp }}
+          </button>
+        </div>
+      </section>
 
-      <div v-if="enabled || totpEnabled" class="row" data-gap="sm">
-        <button
-          v-if="enabled"
-          class="cta ghost"
-          data-size="small"
-          type="button"
-          :disabled="busy"
-          @click="askRegenerate"
-        >
-          {{ t('security.regenerateBackupCodes') }}
-        </button>
-        <button
-          v-if="totpEnabled"
-          class="cta ghost"
-          data-size="small"
-          type="button"
-          :disabled="busy"
-          @click="rebindTotp"
-        >
-          {{ copy.rotateTotp }}
-        </button>
-      </div>
-    </div>
-
-    <div class="card">
-      <span class="section-label">{{ copy.passwordTitle }}</span>
-      <button class="row-card" type="button" data-pressable="true" @click="openPasswordChange">
+      <!-- 登录设备：列出当前账号的活动会话，可远程下线 -->
+      <button
+        class="row-card security-row"
+        type="button"
+        data-pressable="true"
+        @click="router.push('/security/devices')"
+      >
+        <span class="security-icon" aria-hidden="true"><AppIcon name="device" /></span>
         <span class="row-copy">
-          <strong class="row-title">{{ t('security.password.change') }}</strong>
-          <span class="row-meta">{{ copy.passwordDescription }}</span>
+          <strong class="row-title">{{ copy.devicesTitle }}</strong>
+          <span class="row-meta">{{ copy.devicesDescription }}</span>
         </span>
-        <span class="dim" aria-hidden="true">›</span>
-      </button>
-    </div>
-
-    <div class="card">
-      <span class="section-label">{{ copy.devicesTitle }}</span>
-      <p class="field-hint">{{ copy.devicesDescription }}</p>
-      <button class="cta ghost" type="button" @click="router.push('/security/devices')">
-        {{ copy.manageDevices }}
+        <span class="security-action">{{ copy.manageDevices }}</span>
       </button>
     </div>
   </template>
 </template>
 
 <style>
-/* 「更换邮箱」按内容取宽：`.cta` 默认 width:100%，在 `.row[data-between]` 里会被拉成整行。
-   高度仍由 `.cta[data-size='small']` 的 min-height: var(--touch) 保证 44px。
-   选择器只命中本页这一行。 */
-.email-row > .cta[data-size='small'] {
+/* 清单：行与行之间 --s2，整列直接排在纸面上。 */
+.security-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.security-icon {
   flex: none;
-  width: auto;
+  display: inline-flex;
+  color: var(--ink-3);
+}
+
+/* 右端动作：小字距标签，点整行都会打开对应抽屉。 */
+.security-action {
+  flex: none;
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.04em;
   white-space: nowrap;
+}
+
+/* 两步验证块内容更多：左侧图标 + 右侧内容，分段控件与动作横跨整行。 */
+.security-page .security-factor {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s3);
+}
+
+.factor-body {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.security-factor > .seg,
+.security-actions {
+  grid-column: 1 / -1;
+}
+
+/* 三选一在窄行里要放得下：行内边距收窄一档，仍用令牌。 */
+.security-factor .seg button {
+  padding-inline: var(--s2);
+}
+
+/* 备用码相关操作：两颗文字按钮，行内排。 */
+.security-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1) var(--s3);
+}
+
+.security-actions .text-action {
+  min-height: var(--touch);
+  padding-inline: 0;
 }
 </style>
