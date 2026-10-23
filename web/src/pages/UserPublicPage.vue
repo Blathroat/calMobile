@@ -324,11 +324,16 @@ usePullRefresh(
   font-weight: 700;
 }
 
-/* 已参加数：数字大一号，标签弱化；整行居中。 */
+/* 已参加数：数字大一号、标签弱化，整体居中——单个数字居中才像「扉页上的一个事实」。 */
 .public-leaf .profile-stats {
   width: auto;
   justify-content: center;
-  gap: var(--s2);
+  gap: 0;
+}
+
+.public-leaf .profile-stat {
+  align-items: center;
+  text-align: center;
 }
 
 .public-leaf .profile-stat > strong {
@@ -339,6 +344,7 @@ usePullRefresh(
 .public-stat-label {
   color: var(--ink-3);
   font-size: var(--fs-label);
+  text-align: center;
 }
 
 .public-bio {

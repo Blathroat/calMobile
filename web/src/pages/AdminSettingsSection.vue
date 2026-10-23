@@ -599,18 +599,24 @@ function inviteDurationLabel(item: InviteItem): string {
 </template>
 
 <style scoped>
-/* 设置项紧凑行：标签在左（--fs-meta、--ink-2），控件在右；数字框 96px，长文本 148px。 */
+/* 卡片内的节奏：组标题到第一行留 12px，组与组之间 20px（在 .list 层）。
+   设置项本身「一行标题 + 一行说明」为一组，组与组之间 16px。 */
+.card {
+  gap: var(--s3);
+}
+
 .settings-rows {
   display: grid;
-  gap: var(--s3);
+  gap: var(--s5);
   min-width: 0;
 }
 
 .setting-row {
   display: flex;
   align-items: center;
-  gap: var(--s3);
+  gap: var(--s4);
   min-width: 0;
+  /* 命中区仍是 44px；标签与控件在垂直方向居中对齐，长短说明不会把行撑歪。 */
   min-height: var(--touch);
 }
 
@@ -657,14 +663,19 @@ function inviteDurationLabel(item: InviteItem): string {
   white-space: nowrap;
 }
 
+/* 一项设置 = 标题行 + 说明。说明紧贴标题（2px），组与组之间才拉开，
+   这样「标题 / 说明」读成一块，而不是四行等距的散点。 */
 .setting-block {
   display: grid;
-  gap: var(--s1);
+  gap: 0;
+  align-content: start;
   min-width: 0;
 }
 
 .setting-block .field-hint {
-  margin: 0;
+  margin: 2px 0 0;
+  /* 说明比标题弱一档，长度也收住，避免一行拉到屏幕边缘。 */
+  max-width: 34em;
 }
 
 /* 存储条：一条填充线，用满时换成砖红。 */
@@ -721,8 +732,8 @@ function inviteDurationLabel(item: InviteItem): string {
 /* 文字长度分组：同一张卡里用分隔线隔开，组内两列自适应。 */
 .limit-group {
   display: grid;
-  gap: var(--s3);
-  padding-top: var(--s3);
+  gap: var(--s5);
+  padding-top: var(--s4);
   border-top: var(--hairline) solid var(--stroke);
 }
 
@@ -733,10 +744,38 @@ function inviteDurationLabel(item: InviteItem): string {
   letter-spacing: 0.02em;
 }
 
+/* 组标题后面紧跟的说明段落：比它到下一组更近一档，才不会读成「下一组的开头」。 */
+.section-label + .field-hint {
+  margin-top: calc(var(--s1) * -1);
+  max-width: 34em;
+}
+
+/* 卡里剩下几处「标签在上、控件在下」的字段（邀请码三列）：标题与输入框之间 8px，
+   与设置项的标题同一档字号与字重，整页读起来是一套。 */
+.card > .field {
+  gap: var(--s2);
+}
+
+.card > .field > label {
+  color: var(--ink);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.grid-cols-3 > .field {
+  gap: 6px;
+}
+
+/* 邀请码列表前的说明与生成按钮之间留一档，不贴着列表第一行。 */
+.invite-list {
+  margin-top: var(--s1);
+}
+
 .limit-pair {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
-  gap: var(--s3);
+  align-items: start;
+  gap: var(--s5) var(--s6);
 }
 
 /* 邀请码列表：等宽码在左，右端两枚图标按钮；已用完的行压暗。 */

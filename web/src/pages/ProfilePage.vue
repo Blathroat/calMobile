@@ -500,12 +500,6 @@ function logout(): void {
   gap: var(--s7);
 }
 
-/* 数字与标签居中：两列数字不是左对齐的正文，居中读起来才像「概览」。 */
-.profile-page .profile-stat {
-  align-items: center;
-  text-align: center;
-}
-
 .profile-page .profile-stat > strong {
   font-size: var(--fs-h2);
   font-weight: 700;
@@ -514,7 +508,6 @@ function logout(): void {
 .profile-stat-label {
   color: var(--ink-3);
   font-size: var(--fs-label);
-  text-align: center;
 }
 
 /* 简介与公开资料：组标题 + 内容。 */
