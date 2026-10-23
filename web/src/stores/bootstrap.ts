@@ -54,6 +54,11 @@ export interface BootstrapState {
   cover: JsonObject;
   /** 展商端策略：`maxFutureExhibitions` / `maxFutureMeetings` 为 0 时表示不限 */
   exhibitor: JsonObject;
+  /**
+   * 管理员配置的软件包下载：`source` 是 `url`（直链）或 `github`（追踪最新 release），
+   * `url` 已经由服务端解析好；空串表示还没配，报名站的下载条据此决定要不要出现。
+   */
+  download: JsonObject & { source?: string; version?: string; url?: string };
   /** 报名站根地址（`PUBLIC_BASE_URL`）。空串表示没配域名，分享时不要拼本机地址。 */
   publicBaseUrl: string;
   /** 隐私政策地址（`PRIVACY_POLICY_URL`）。空串表示没配，注册页只显示收集说明。 */
@@ -82,6 +87,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
     theme: {},
     cover: {},
     exhibitor: {},
+    download: {},
     publicBaseUrl: '',
     privacyPolicyUrl: '',
     lang: { defaultPack: '', packs: [] },
@@ -107,6 +113,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
       this.theme = { ...this.theme, ...asObject(data.theme) };
       this.cover = { ...this.cover, ...asObject(data.cover) };
       this.exhibitor = { ...this.exhibitor, ...asObject(data.exhibitor) };
+      this.download = { ...this.download, ...asObject(data.download) };
       if (typeof data.publicBaseUrl === 'string') this.publicBaseUrl = data.publicBaseUrl;
       if (typeof data.privacyPolicyUrl === 'string') this.privacyPolicyUrl = data.privacyPolicyUrl;
       const lang = asLang(data.lang);

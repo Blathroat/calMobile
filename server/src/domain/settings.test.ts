@@ -163,6 +163,48 @@ test('邀请码时长默认 0（永久），提交时夹到 0..3650 天', () => 
   assert.equal(applyServerPatch(current, { inviteUses: 3 }).invite.uses, 3);
 });
 
+test('下载源默认直链且为空，合法值按段保存', () => {
+  assert.deepEqual(DEFAULT_SETTINGS.download, { source: 'url', url: '', repo: '' });
+  const next = applyServerPatch(defaults(), {
+    download: { source: 'github', url: 'https://example.com/app.apk', repo: 'owner/repo' },
+  });
+  assert.deepEqual(next.download, {
+    source: 'github',
+    url: 'https://example.com/app.apk',
+    repo: 'owner/repo',
+  });
+  // 扁平写法与管理端整段提交等价
+  assert.deepEqual(
+    applyServerPatch(defaults(), {
+      downloadSource: 'url',
+      downloadUrl: 'http://example.com/app.apk',
+      downloadRepo: '',
+    }).download,
+    { source: 'url', url: 'http://example.com/app.apk', repo: '' },
+  );
+});
+
+test('下载源的非法值按规则失败，空串合法，未提交的字段保持原值', () => {
+  assert.throws(() => applyServerPatch(defaults(), { download: { source: 'ftp' } }), /下载源只能是直链或 GitHub 仓库/);
+  assert.throws(() => applyServerPatch(defaults(), { downloadUrl: 'example.com/app.apk' }), /http:\/\/ 或 https:\/\//);
+  assert.throws(() => applyServerPatch(defaults(), { downloadRepo: 'owner' }), /owner\/repo/);
+  assert.throws(() => applyServerPatch(defaults(), { download: 'nope' }), /下载源设置格式不正确/);
+
+  const current = defaults();
+  current.download = { source: 'github', url: 'https://example.com/app.apk', repo: 'owner/repo' };
+  const next = applyServerPatch(current, { download: { repo: 'new/repo' } });
+  assert.deepEqual(next.download, {
+    source: 'github',
+    url: 'https://example.com/app.apk',
+    repo: 'new/repo',
+  });
+  assert.deepEqual(applyServerPatch(current, { download: { url: '' } }).download, {
+    source: 'github',
+    url: '',
+    repo: 'owner/repo',
+  });
+});
+
 test('themeIndex 采用补齐后的色板长度夹取', () => {
   const legacy = { ...defaults(), theme: { index: 0, colors: DEFAULT_SETTINGS.theme.colors.slice(0, 4) } };
   // 老库的色板只有 4 项，但提交 7 / 11 应当落在新色板的范围内（补齐后 12 色），而不是被夹到 3

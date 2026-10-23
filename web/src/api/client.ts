@@ -42,6 +42,7 @@ import type {
   JsonObject,
   Registration,
   RegistrationDetail,
+  ReleaseInfo,
   ReviewList,
   SearchResult,
   User,
@@ -72,6 +73,8 @@ export interface ApiClient {
   session: SessionClient;
   /** 启动数据（身份、权限、限制、主题）。刻意不走缓存：切账号后必须拿最新的一份。 */
   bootstrap(): Promise<Bootstrap>;
+  /** 最新版本与下载地址（公开）。检查更新与报名站的下载条都用它，永远取实时值。 */
+  release(): Promise<ReleaseInfo>;
   /** 登录、注册、找回密码。只有会下发令牌的方法内部才更新会话并清空缓存。 */
   auth: {
     /** 账号密码登录。返回体带令牌即登录成功；也可能是「还需要两步验证」的中间结果（无令牌）。 */
@@ -83,6 +86,10 @@ export interface ApiClient {
      * 返回体带 `resendAfterSec` / `emailSent` 供页面做倒计时，**不发令牌**，所以不走 afterAuth。
      */
     loginCode(ticket: string): Promise<ApiResult>;
+    /** 通行密钥登录第一步：用登录票换一份 WebAuthn 认证选项。 */
+    passkeyOptions(ticket: string): Promise<JsonObject>;
+    /** 通行密钥登录第二步：提交断言；成功后与验证码一样直接建立会话。 */
+    passkeyVerify(payload: JsonObject): Promise<AuthResult>;
     /** 提交注册申请。此时还没有令牌，注册验证通过后才发放。 */
     register(payload: JsonObject): Promise<ApiResult>;
     /** 注册的邮箱验证码确认，成功后发放令牌并清空缓存。 */
@@ -146,6 +153,14 @@ export interface ApiClient {
     changeEmail(email: string, stepUpToken: string): Promise<JsonObject>;
     /** 更换邮箱第二步：验证新地址；成功后失效 `profile`（用户名/邮箱展示会变）。 */
     verifyEmail(email: string, code: string): Promise<JsonObject>;
+    /** 绑定通行密钥第一步：身份复核通过后下发 WebAuthn 注册选项。 */
+    passkeyOptions(stepUpToken: string): Promise<JsonObject>;
+    /** 绑定通行密钥第二步：提交注册结果，成功后返回该账号的全部凭据。 */
+    passkeyRegister(payload: JsonObject): Promise<JsonObject>;
+    /** 删除一枚通行密钥；最后一枚且正在用它做两步验证时会被拒绝。 */
+    passkeyRemove(id: Id): Promise<JsonObject>;
+    /** 把两步验证方式切换到通行密钥（需要已绑定至少一枚，并带身份复核票）。 */
+    passkeyEnable(stepUpToken: string): Promise<JsonObject>;
     /** 生成 TOTP（验证器应用）绑定用的密钥与二维码地址。 */
     totpSetup(stepUpToken: string): Promise<JsonObject>;
     /** 重新开启保留的验证器密钥，不重新绑定。 */
@@ -355,6 +370,8 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
     session,
     // 不走 read()：身份来源必须是最新的，不能命中缓存。
     bootstrap: () => http.request<Bootstrap>('/bootstrap'),
+    /** 最新版本与下载地址（公开）。检查更新与报名站下载条都用它。 */
+    release: () => http.request<ReleaseInfo>('/app/release'),
     auth: {
       login: async (username, password) =>
         afterAuth(
@@ -371,6 +388,15 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
           }),
         ),
       loginCode: (ticket) => http.request<ApiResult>('/auth/login/code', { method: 'POST', body: { ticket } }),
+      passkeyOptions: (ticket) =>
+        http.request<JsonObject>('/auth/login/passkey/options', { method: 'POST', body: { ticket } }, false),
+      passkeyVerify: async (payload) =>
+        afterAuth(
+          await http.request<AuthResult>('/auth/login/passkey/verify', {
+            method: 'POST',
+            body: { ...payload, ...(await devicePayload()) },
+          }),
+        ),
       register: (payload) => http.request<ApiResult>('/auth/register', { method: 'POST', body: payload }),
       registerVerify: async (payload) =>
         afterAuth(
@@ -455,6 +481,14 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
         http.request<JsonObject>('/profile/2fa/totp/enable', { method: 'POST', body: { code, stepUpToken } }),
       backupCodes: (password) =>
         http.request<JsonObject>('/profile/2fa/backup-codes', { method: 'POST', body: { password } }),
+      passkeyOptions: (stepUpToken) =>
+        http.request<JsonObject>('/profile/2fa/passkey/options', { method: 'POST', body: { stepUpToken } }),
+      passkeyRegister: (payload) =>
+        http.request<JsonObject>('/profile/2fa/passkey/verify', { method: 'POST', body: payload }),
+      passkeyRemove: (id) =>
+        http.request<JsonObject>(`/profile/2fa/passkey/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      passkeyEnable: (stepUpToken) =>
+        http.request<JsonObject>('/profile/2fa/passkey/enable', { method: 'POST', body: { stepUpToken } }),
       sessions: () => http.request<JsonObject>('/profile/sessions'),
       revokeSession: (deviceId) =>
         write<ApiResult>(`/profile/sessions/${encodeURIComponent(deviceId)}`, { method: 'DELETE' }),

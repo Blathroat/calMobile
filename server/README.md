@@ -56,6 +56,7 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 - 密码用 `bcryptjs`。访问令牌用 `jose`，固定 HS256。刷新令牌是随机串，只存哈希。
 - 请求校验用 Zod，类型从 schema 推导。
 - 限流、TOTP 和迁移保持自研。登录限流在 `await next()` 之后用 `c.res.clone()` 看信封的 `ok === false`，只记失败。
+- 通行密钥（WebAuthn）用 `@simplewebauthn/server`。解析认证器数据、校验 COSE 公钥与签名、比对 challenge / origin / RP ID 都在库里；服务端不自己写 CBOR 解析器，也不自己实现签名校验——密码学路径自己写一遍就是新的攻击面。客户端只用浏览器原生 WebAuthn API（`navigator.credentials`），不引入第三方 JS。
 - 不引入 `hono/compress`。状态页在 `status-page/` 分开维护，构建后运行时仍是单文件 HTML，样式不复用应用的 `tokens.css`。
 
 ## 开发模式与生产模式
@@ -89,6 +90,34 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 - `src/services/mail-templates.ts`
 
 本地收件箱是 `docker-compose.yml` 里的 Mailpit。生产自检会拒绝 `console` 和 `memory`，也会警告指向 `127.0.0.1` 的 SMTP。
+
+## 通行密钥（两步验证）
+
+两步验证除了邮箱验证码与验证器（TOTP），还支持通行密钥（passkey / WebAuthn）。**绑定与启用是两步**：
+
+1. `POST /api/v1/profile/2fa/passkey/options`：需要登录 + 身份复核票（`stepUpToken`，scope `factor`，与 TOTP 绑定一致）。返回 `{ ok:true, challengeId, options }`，`options` 是给 `navigator.credentials.create()` 的 JSON（challenge 与 user.id 都是 base64url）。
+2. `POST /api/v1/profile/2fa/passkey/verify`：提交 `{ challengeId, credential, name? }`。校验通过后只**保存凭据**，不改两步验证方式；响应 `{ ok:true, passkeys }`。`name` 为空时用「通行密钥」。
+3. `POST /api/v1/profile/2fa/passkey/enable`：再要一张身份复核票（scope `factor`），把 `two_factor_enabled = true`、`two_factor_method = 'passkey'`。一枚凭据都没有时返回 `ok:false` + `security.passkeyRequired`。
+4. `DELETE /api/v1/profile/2fa/passkey/:id`：只删自己的凭据，响应 `{ ok:true, passkeys }`。**最后一枚且当前方式就是 passkey** 时拒绝（`security.passkeyLastOne`）——删掉就登不进来了；先切换方式或再加一枚。
+
+登录：
+
+- `POST /api/v1/auth/login` 的第一步在 `methods` 里多一个 `passkey`（该账号绑过凭据就是 true），`email` 只在当前方式是邮箱时为 true。
+- `POST /api/v1/auth/login/passkey/options`：`{ ticket }` 换断言选项（`allowCredentials` 只放该账号自己的凭据）。票不存在 / 过期与现有登录验证同一句文案，不泄露票是否存在。
+- `POST /api/v1/auth/login/passkey/verify`：`{ ticket, challengeId, credential, deviceToken?, deviceName?, trustDevice? }`，成功后的响应与 `POST /auth/login/verify` **完全同形**（访问令牌、刷新令牌、`user`）。失败记在同一条预认证票的失败计数上。
+- 挑战 10 分钟有效、一次一用：注册与登录的挑战分 `kind` 存放，拿注册的挑战去登录会被拒。
+- 当前方式为 `passkey` 时，邮箱验证码与验证器码通道都关闭（`/auth/login/code` 拒绝发码，`/auth/login/verify` 拒绝验证码）；备用码仍然可用。关闭两步验证**保留**已绑定的凭据，与保留 TOTP 密钥一致。
+- `GET /api/v1/profile/security` 下发 `passkeyBound` 与 `passkeys`（`{ id, name, createdAt, lastUsedAt, transports }`，不含 credentialId 与公钥）。
+
+环境变量：
+
+| 变量               | 默认值                                                                              | 说明                                                         |
+| ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `WEBAUTHN_RP_ID`   | `PUBLIC_BASE_URL` 的主机名，没配时 `localhost`                                      | 依赖方 ID，域名或 IP，不带协议与端口；必须和页面所在域名一致 |
+| `WEBAUTHN_RP_NAME` | 管理设置里的中文标题，读不到用 `CalMobile`                                          | 系统弹窗里的服务名                                           |
+| `WEBAUTHN_ORIGINS` | `PUBLIC_BASE_URL` 的 origin + `http://localhost:<PORT>` + `http://127.0.0.1:<PORT>` | 逗号分隔的完整来源，校验注册 / 断言响应时使用                |
+
+凭据存 `passkey_credentials`（credential id 与 COSE 公钥都是 base64url，counter 每次登录后回写），挑战存 `webauthn_challenges`。
 
 ## 响应约定
 
@@ -150,6 +179,17 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 
 下发的 `theme.index` 是该调用者实际生效的下标：`users.ui_theme ?? app_settings.theme.index`。`PUT /settings/ui-theme` 越界是 200 + `ok:false`，不夹取。`PUT /settings` 的全局 `themeIndex` 仍按补齐后的色板长度夹取。色板扩容后，老库不用迁移：`readServerSettings()` 的 `normalizeThemeColors()` 会在读取时把存着的短色板补齐到当前 12 色。
 
+## 更新检查 / 下载源
+
+管理端只配下载源，最新版本与下载地址由服务端解析。设置段 `download` 的形状是 `{ source: 'url' | 'github', url: string, repo: string }`，默认 `{ source: 'url', url: '', repo: '' }`（空串 = 没配，页面隐藏下载入口）。
+
+- `GET /api/v1/settings` 与 `PUT /api/v1/settings` 都带 `download`。保存时 `source` 只允许 `url` / `github`；`url` 必须以 `http(s)://` 开头（空串合法）；`repo` 必须匹配 `owner/repo`（空串合法）。非法值按写接口约定回 200 + `ok:false`，错误码 `settings.download*`。也接受 `downloadSource` / `downloadUrl` / `downloadRepo` 的扁平写法。
+- `GET /api/v1/app/release`（公开，`Cache-Control: no-store`）返回 `{ ok:true, source, version, notes, url, publishedAt }`。
+  - `source = url`：`url` 是设置里的直链，`version` / `notes` / `publishedAt` 为空。
+  - `source = github`：读 `https://api.github.com/repos/<repo>/releases/latest`，请求头 `Accept: application/vnd.github+json`、`User-Agent: calMobile-server`，配了 `GITHUB_TOKEN` 时带 `Authorization: Bearer`。`version` 是 `tag_name` 去掉一个前缀 `v`，`notes` 是 `body` 原文，`publishedAt` 是 `published_at`。下载地址取第一个文件名以 `.apk` 结尾的资产；没有这样的资产时退回 Release 页面 `html_url`。
+  - 成功缓存 5 分钟、失败缓存 60 秒（模块级 Map，按 repo 存）；请求超时 4 秒。GitHub 限流、超时、仓库写错都只让 `url` 为空并写服务端日志，**不抛 5xx**。
+- `GET /api/v1/bootstrap` 的 `download` 是同一份解析结果的摘要：`{ source, version, url }`（报名站在系统浏览器打开时用它显示下载条）；解析失败时给 `{ source:'url', version:'', url:'' }`。
+
 ## 数据模型
 
 - 状态存英文代码。中文标签只在 `src/domain/labels.ts` 映射，与前端的状态词汇是同一批字符串。
@@ -159,6 +199,8 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - 邮箱大小写无关唯一，空串例外。验证码只存哈希。注册时的待建账号暂存在 `email_codes.payload`。两步验证的预认证票在 `preauth_tickets`。发信留痕在 `mail_log`。
 - `refresh_tokens.session_id` 对应 JWT 的 `sid`。远程撤销后，访问令牌也立即失效。服务端只保存设备凭据的哈希。
 - 展商时长是 `users.exhibitor_expires_at`（NULL 永久）。邀请码的 `duration_days` 默认 0，老码和老账号因此保持永久。默认值存在 `app_settings.invite.durationDays`。
+- 通行密钥凭据在 `passkey_credentials`（credential id 与 COSE 公钥按 base64url 存，counter 用于识别被克隆的认证器），一次性的 WebAuthn 挑战在 `webauthn_challenges`（10 分钟过期，签发时清掉过期超过一天的旧行）。
+- 客户端下载源存在 `app_settings.download`，没有单独的数据库列；最新 Release 的存在进程内存缓存里（5 分钟），不落库。
 
 表结构以迁移脚本为准。
 

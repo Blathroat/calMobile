@@ -13,6 +13,7 @@ import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { check, limit } from '@/services/validate';
+import { getCredential, isPasskeySupported } from '@/services/webauthn';
 import type { AuthResult } from '@/api/types';
 import { isJoinSurface, paths } from '@/app/surface';
 import { t } from '@/i18n';
@@ -49,12 +50,18 @@ const ticket = ref('');
 /** 验证码已消费时只重试启动数据；换会话后不能沿用这个完成标记。 */
 let verifiedSession: AbortSignal | undefined;
 const maskedEmail = ref('');
-/** 这个账号能用哪些第二因子（由第一步下发）：验证器 / 邮箱验证码 / 备用码。 */
-const methods = ref({ totp: false, email: true, backup: false });
+/** 这个账号能用哪些第二因子（由第一步下发）：验证器 / 邮箱验证码 / 备用码 / 通行密钥。 */
+const methods = ref({ totp: false, email: true, backup: false, passkey: false });
+/** 当前环境能不能唤起系统通行密钥；不能时只摆验证码，不摆点不动的按钮。 */
+const passkeySupported = ref(isPasskeySupported());
+const passkeyBusy = ref(false);
 /** 第一步有没有真的发出邮件验证码（绑了验证器时不会发）。 */
 const emailSent = ref(false);
 const remaining = ref(0);
 let timer: number | undefined;
+
+/** 第一步说这个账号可以走通行密钥，且当前环境真的支持，才显示那个主按钮。 */
+const passkeyAvailable = computed(() => methods.value.passkey === true && passkeySupported.value);
 
 const methodHint = computed(() => {
   const lines: string[] = [];
@@ -155,6 +162,34 @@ async function verify(): Promise<void> {
     verifyError.value = message(reason);
   } finally {
     busy.value = false;
+  }
+}
+
+/** 用系统通行密钥完成第二步：用户取消不算失败；失败仍可继续输验证码。 */
+async function loginWithPasskey(): Promise<void> {
+  if (!ticket.value || passkeyBusy.value) return;
+  verifyError.value = '';
+  passkeyBusy.value = true;
+  let verified = false;
+  try {
+    const options = await api.auth.passkeyOptions(ticket.value);
+    const credential = await getCredential(options.options);
+    // 用户在系统面板里取消：不弹错误，仍可用下面的验证码登录
+    if (!credential) return;
+    await api.auth.passkeyVerify({
+      ticket: ticket.value,
+      challengeId: String(options.challengeId || ''),
+      credential,
+      trustDevice: trustThisDevice.value,
+    });
+    // 断言通过等同于验证码通过：票已经换成会话，剩下只是等启动数据
+    verified = true;
+    verifiedSession = api.session.signal;
+    await enterAs();
+  } catch (reason) {
+    verifyError.value = verified ? message(reason) : t('auth.login.passkeyFailed');
+  } finally {
+    passkeyBusy.value = false;
   }
 }
 
@@ -298,6 +333,20 @@ onBeforeUnmount(stopCountdown);
         <p class="field-hint">{{ t('auth.login.codeHint') }}</p>
         <p v-if="methodHint" class="field-hint">{{ methodHint }}</p>
       </div>
+      <!-- 通行密钥优先：账号支持且环境可用时先给主按钮，验证码作为退路留在下面 -->
+      <div v-if="passkeyAvailable" class="stack" data-gap="sm">
+        <p class="field-hint">{{ t('auth.login.passkeyHint') }}</p>
+        <button
+          class="cta"
+          type="button"
+          :disabled="passkeyBusy"
+          :data-loading="passkeyBusy ? 'true' : 'false'"
+          @click="loginWithPasskey"
+        >
+          {{ t('auth.login.usePasskey') }}
+        </button>
+      </div>
+      <p v-if="passkeyAvailable" class="or-code-title">{{ t('auth.login.orUseCode') }}</p>
       <div class="field">
         <label for="login-code">{{ t('auth.login.emailCode') }}</label>
         <input
@@ -321,7 +370,13 @@ onBeforeUnmount(stopCountdown);
         </label>
       </div>
       <p v-if="verifyError" class="field-error" role="alert">{{ verifyError }}</p>
-      <button class="cta" type="submit" :disabled="busy" :data-loading="busy ? 'true' : 'false'">
+      <button
+        class="cta"
+        :class="{ ghost: passkeyAvailable }"
+        type="submit"
+        :disabled="busy"
+        :data-loading="busy ? 'true' : 'false'"
+      >
         {{ t('auth.login.verifyAndLogin') }}
       </button>
       <!-- 邮箱验证码不可用（邮箱没验证）时，别摆一个点了会报错的按钮 -->
@@ -365,6 +420,15 @@ onBeforeUnmount(stopCountdown);
 
 .auth-entry[data-flush='true'] {
   padding: 0 var(--s3);
+}
+
+/* 通行密钥与验证码之间的分隔小标题：小字加粗，弱化但不抢主按钮。 */
+.or-code-title {
+  margin-top: var(--s1);
+  color: var(--ink-3);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 /* 入口页的品牌标记：线框的 .brand-mark（圆角方底 + 品牌首字）。

@@ -11,7 +11,7 @@ const clientTarget = JSON.parse(
     cwd: fileURLToPath(new URL('..', import.meta.url)),
     encoding: 'utf8',
   }),
-) as { apiBase: string };
+) as { apiBase: string; versionCode: number; versionName: string };
 
 function releaseManifest(): Plugin {
   return {
@@ -28,6 +28,10 @@ export default defineConfig({
   base: '/app/',
   define: {
     'import.meta.env.VITE_API_BASE': JSON.stringify(clientTarget.apiBase),
+    // 应用版本来自与 Gradle 同一份构建目标（scripts/client-target.mjs）。
+    // 页面用它判断「有没有新版本」，与 APK 的 versionName 保持一致。
+    __APP_VERSION__: JSON.stringify(clientTarget.versionName),
+    __APP_VERSION_CODE__: JSON.stringify(clientTarget.versionCode),
   },
   plugins: [vue(), releaseManifest()],
   resolve: {

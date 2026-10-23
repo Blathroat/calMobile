@@ -47,6 +47,8 @@ interface AdminSettingsForm {
   inviteValidHours: number;
   /** 兑换后展商身份保留的天数；0 表示永久 */
   inviteDurationDays: number;
+  /** 软件包下载源：直链地址或 GitHub 仓库（owner/repo） */
+  download: { source: 'url' | 'github'; url: string; repo: string };
 }
 
 interface InviteItem {
@@ -100,6 +102,12 @@ const emit = defineEmits<{
   revoke: [id: string];
   copy: [code: string];
 }>();
+
+/** 下载源选项：直链直接填 APK 地址，GitHub 仓库由服务器追踪最新 Release。 */
+const downloadSources = computed(() => [
+  { value: 'url', label: t('admin.download.sourceUrl') },
+  { value: 'github', label: t('admin.download.sourceGithub') },
+]);
 
 /** 过期和已删除的码由服务端清掉；这里再滤一次，避免缓存里的旧行继续占位。 */
 const visibleInvites = computed(() =>
@@ -574,6 +582,49 @@ function inviteDurationLabel(item: InviteItem): string {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- 软件包下载：检查更新和报名站下载条都读这一份配置。
+         直链只填 APK 地址；GitHub 仓库交给服务器追踪最新 Release。 -->
+    <div class="card">
+      <span class="section-label">{{ t('admin.download.title') }}</span>
+      <div class="field">
+        <span class="field-label">{{ t('admin.download.source') }}</span>
+        <SegControl
+          :model-value="form.download.source"
+          :items="downloadSources"
+          :label="t('admin.download.source')"
+          @update:model-value="form.download.source = $event === 'github' ? 'github' : 'url'"
+        />
+        <p class="field-hint">{{ t('admin.download.hint') }}</p>
+      </div>
+      <div v-if="form.download.source === 'url'" class="field">
+        <label for="settings-download-url">{{ t('admin.download.url') }}</label>
+        <input
+          id="settings-download-url"
+          v-model="form.download.url"
+          class="input input-line"
+          type="url"
+          inputmode="url"
+          autocomplete="off"
+          :placeholder="t('admin.download.urlPlaceholder')"
+        />
+      </div>
+      <template v-else>
+        <div class="field">
+          <label for="settings-download-repo">{{ t('admin.download.repo') }}</label>
+          <input
+            id="settings-download-repo"
+            v-model="form.download.repo"
+            class="input input-line"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            :placeholder="t('admin.download.repoPlaceholder')"
+          />
+        </div>
+        <p class="field-hint">{{ t('admin.download.githubHint') }}</p>
+      </template>
     </div>
 
     <p v-if="settingsError" class="field-error" role="alert">{{ settingsError }}</p>

@@ -6,7 +6,15 @@ import { PATTERNS, check } from '@/services/validate';
 import QrCanvas from '@/components/QrCanvas.vue';
 import { t } from '@/i18n';
 
-type SheetKind = 'change-email' | 'email-factor' | 'totp' | 'password' | 'change-password' | 'identity-only';
+type SheetKind =
+  | 'change-email'
+  | 'email-factor'
+  | 'totp'
+  | 'password'
+  | 'change-password'
+  | 'identity-only'
+  | 'passkey'
+  | 'passkey-enable';
 type IdentityScope = 'password' | 'email' | 'totp' | 'factor';
 type IdentityMethod = 'email' | 'totp';
 interface SubmitPayload {
@@ -136,6 +144,12 @@ async function run(action: string, values: Omit<SubmitPayload, 'action'> = {}): 
     return result;
   } catch (reason) {
     error.value = errorText(reason);
+    // 身份复核票是一次性的：失败后清掉，回到身份复核视图重新取一张
+    if (props.kind === 'passkey') {
+      identityTicket.value = '';
+      identityCodeSent.value = false;
+      view.value = 'identity';
+    }
     props.onIdentityFailure?.();
     const failed = reason as SubmitError;
     if (action === 'email-send' && props.identityScope) {
@@ -194,9 +208,16 @@ async function confirmIdentity(): Promise<void> {
       const started = await props.submitAction({ action: 'email-factor-start', stepUpToken: result.stepUpToken });
       if (started?.maskedEmail) maskedEmail.value = started.maskedEmail;
     }
-    if (props.kind === 'identity-only') {
+    if (props.kind === 'identity-only' || props.kind === 'passkey-enable') {
       await props.submitAction({ action: props.action, stepUpToken: result.stepUpToken });
       closeSheet();
+      return;
+    }
+    if (props.kind === 'passkey') {
+      // 身份复核通过后停在「添加」这一步：再点一次才唤起系统通行密钥面板
+      identityCodeSent.value = false;
+      code.value = '';
+      view.value = 'passkey';
       return;
     }
     if (props.kind === 'change-email' && props.identityScope === 'email' && resendingEmail.value) {
@@ -212,6 +233,12 @@ async function confirmIdentity(): Promise<void> {
     view.value = props.kind;
   } catch (reason) {
     error.value = errorText(reason);
+    // 一次性身份复核票已经被上一次请求用掉：回到复核这一步重新取票，避免重试必然过期
+    if (props.kind === 'passkey' || props.kind === 'passkey-enable') {
+      identityTicket.value = '';
+      identityCodeSent.value = false;
+      view.value = 'identity';
+    }
     props.onIdentityFailure?.();
   } finally {
     busy.value = false;
@@ -283,6 +310,10 @@ async function submit(): Promise<void> {
     return;
   }
   if (view.value === 'identity-only') {
+    await run(props.action);
+    return;
+  }
+  if (view.value === 'passkey') {
     await run(props.action);
     return;
   }
@@ -525,6 +556,18 @@ function requestEmailResend(): void {
     <div class="row" data-gap="sm">
       <button class="cta danger" type="button" :disabled="busy" @click="submit">
         {{ t('security.confirmDisable') }}
+      </button>
+      <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('common.cancel') }}</button>
+    </div>
+  </div>
+
+  <div v-else-if="view === 'passkey'" class="form" data-gap="sm">
+    <p class="field-hint">{{ t('security.passkey.intro') }}</p>
+    <p class="field-hint">{{ t('security.passkey.methodHint') }}</p>
+    <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+    <div class="row" data-gap="sm">
+      <button class="cta" type="button" :disabled="busy" :data-loading="busy ? 'true' : 'false'" @click="submit">
+        {{ busy ? t('security.passkey.adding') : t('security.passkey.add') }}
       </button>
       <button class="cta ghost" type="button" :disabled="busy" @click="closeSheet()">{{ t('common.cancel') }}</button>
     </div>

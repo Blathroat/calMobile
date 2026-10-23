@@ -23,6 +23,7 @@ import { createReviewRoutes } from '../routes/review-hono.js';
 import { createCheckinRoutes } from '../routes/checkin-hono.js';
 import { createProfileRoutes } from '../routes/profile-hono.js';
 import { createBootstrapRoutes } from '../routes/bootstrap-hono.js';
+import { createAppRoutes } from '../routes/app-hono.js';
 import { createUsersRoutes } from '../routes/users-hono.js';
 import { createSearchRoutes } from '../routes/search-hono.js';
 import { createSettingsRoutes } from '../routes/settings-hono.js';
@@ -132,6 +133,8 @@ export function createApp(options: AppOptions): Hono {
   app.route('/api/v1/auth', createAuthRoutes({ trustProxy: options.trustProxy }));
   app.route('/api/v1/profile', createProfileRoutes({ trustProxy: options.trustProxy }));
   app.route('/api/v1', createBootstrapRoutes());
+  // 公开的「最新版本 / 下载地址」：网页端检查更新与报名站下载条共用。
+  app.route('/api/v1', createAppRoutes());
   app.route('/api/v1/users', createUsersRoutes());
   app.route('/api/v1/search', createSearchRoutes());
   app.route('/api/v1/settings', createSettingsRoutes());

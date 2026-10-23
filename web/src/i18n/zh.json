@@ -173,6 +173,19 @@
       "unknown": "未知",
       "updateFailed": "更新失败",
       "viewPublicAria": "查看 {name} 的公开页"
+    },
+    "download": {
+      "title": "软件包下载",
+      "source": "下载源",
+      "sourceUrl": "直链地址",
+      "sourceGithub": "GitHub 仓库",
+      "url": "APK 下载地址",
+      "urlPlaceholder": "https://example.com/app.apk",
+      "repo": "GitHub 仓库",
+      "repoPlaceholder": "例如：owner/repo",
+      "hint": "选 GitHub 仓库时，服务器自动追踪最新 Release 里以 .apk 结尾的资产；选直链时直接用下面的地址。",
+      "githubHint": "仓库要发布带 APK 资产的 Release，更新日志取该 Release 的说明。",
+      "invalid": "请填写 http(s) 地址或 owner/repo 形式的仓库"
     }
   },
   "app": {
@@ -237,7 +250,11 @@
       "trustDevice": "以后此设备登录时无需验证",
       "twoFactor": "两步验证",
       "verifyAndLogin": "验证并登录",
-      "welcomeBack": "欢迎回来，{name}"
+      "welcomeBack": "欢迎回来，{name}",
+      "usePasskey": "使用通行密钥登录",
+      "passkeyHint": "用这台设备的指纹、面容或锁屏密码确认身份。",
+      "orUseCode": "改用验证码登录",
+      "passkeyFailed": "通行密钥验证没有通过，可以改用验证码登录。"
     },
     "register": {
       "backToEdit": "返回修改",
@@ -551,7 +568,9 @@
   "join": {
     "documentTitle": "报名",
     "needSharedLink": "这个地址不能浏览展会。请打开展商发给你的报名链接。",
-    "title": "请使用展商分享的链接"
+    "title": "请使用展商分享的链接",
+    "downloadBar": "在应用里用更顺手",
+    "downloadApp": "下载应用"
   },
   "media": {
     "avatarSaveFailed": "头像保存失败",
@@ -928,7 +947,28 @@
     },
     "twoFactorOff": "两步验证已关闭",
     "twoFactorOn": "两步验证已开启",
-    "viewDevices": "查看当前账号已登录的设备，并可远程下线。"
+    "viewDevices": "查看当前账号已登录的设备，并可远程下线。",
+    "passkey": {
+      "title": "通行密钥",
+      "recommended": "推荐",
+      "intro": "用手机的指纹、面容或设备锁屏密码确认登录，不用等验证码。",
+      "add": "添加通行密钥",
+      "adding": "正在添加…",
+      "none": "还没有添加通行密钥",
+      "name": "通行密钥名称",
+      "defaultName": "通行密钥",
+      "remove": "删除",
+      "removeConfirm": "删除后这台设备不能再用来登录。",
+      "lastOne": "这是最后一枚通行密钥，请先切换到其它验证方式。",
+      "added": "通行密钥已添加",
+      "removed": "已删除通行密钥",
+      "unsupported": "当前环境不支持通行密钥，请在系统浏览器或支持通行密钥的设备上添加。",
+      "failed": "通行密钥验证没有通过，请重试。",
+      "createdAt": "添加于 {time}",
+      "lastUsed": "最近使用：{time}",
+      "neverUsed": "还没有使用过",
+      "methodHint": "登录时用指纹或面容确认，不需要输入验证码。"
+    }
   },
   "server": {
     "app": {
@@ -1086,7 +1126,13 @@
       "twoFactorRequiredForBackup": "请先开启两步验证，再生成备用码",
       "twoFactorSelfOnly": "两步验证只能由本人开启（需要验证码）",
       "verifyCurrentEmailFirst": "请先验证当前邮箱",
-      "verifyEmailBeforeTwoFactor": "请先验证邮箱，再开启两步验证"
+      "verifyEmailBeforeTwoFactor": "请先验证邮箱，再开启两步验证",
+      "passkeyRequired": "请先添加一枚通行密钥",
+      "passkeyInvalid": "通行密钥验证没有通过，请重试",
+      "passkeyLastOne": "这是最后一枚通行密钥，请先切换到其它验证方式",
+      "passkeyNotFound": "这枚通行密钥不存在或已删除",
+      "passkeyChallenge": "这次验证已过期，请重新开始",
+      "passkeyOrigin": "当前地址不允许使用通行密钥，请用应用的正式地址打开"
     },
     "session": {
       "accountUnavailable": "账号不可用，请重新登录",
@@ -1105,7 +1151,10 @@
       "themeIndexInvalid": "配色下标必须是 0 到 {max} 之间的整数",
       "themeLoginRequired": "请先登录后再保存配色",
       "uiModeLoginRequired": "请先登录后再保存外观模式",
-      "userStatusInvalid": "账号状态只能是 正常 / 受限 / 封禁"
+      "userStatusInvalid": "账号状态只能是 正常 / 受限 / 封禁",
+      "downloadSourceInvalid": "下载源只能是直链或 GitHub 仓库",
+      "downloadUrlInvalid": "下载地址需要以 http:// 或 https:// 开头",
+      "downloadRepoInvalid": "GitHub 仓库需要写成 owner/repo"
     },
     "users": {
       "cannotChangeOwnRole": "不能修改自己的权限",
@@ -1231,7 +1280,23 @@
       "light": "浅色"
     },
     "title": "设置",
-    "uploadAvatar": "上传头像"
+    "uploadAvatar": "上传头像",
+    "update": {
+      "title": "应用更新",
+      "check": "检查更新",
+      "auto": "自动检查更新",
+      "autoHint": "打开后，每次进入应用时在后台检查一次。",
+      "checking": "正在检查…",
+      "upToDate": "已是最新版本",
+      "failed": "检查更新失败，请稍后重试",
+      "availableTitle": "发现新版本 {version}",
+      "availableNoVersion": "发现新版本",
+      "download": "下载并安装",
+      "notes": "更新日志",
+      "noNotes": "该下载源没有提供更新日志。",
+      "currentVersion": "当前版本 {version}",
+      "unavailable": "管理员还没有设置下载地址"
+    }
   },
   "status": {
     "exhibition": {

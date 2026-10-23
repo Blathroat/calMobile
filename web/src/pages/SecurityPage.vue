@@ -7,6 +7,8 @@ import { useSessionStore } from '@/stores/session';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
+import { formatLocalChineseDate } from '@/services/format';
+import { createCredential, isPasskeySupported } from '@/services/webauthn';
 import SecuritySetupSheet from '@/components/SecuritySetupSheet.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -15,7 +17,7 @@ import SegControl from '@/components/SegControl.vue';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
-type FactorMode = 'off' | 'totp' | 'email';
+type FactorMode = 'off' | 'passkey' | 'totp' | 'email';
 type SheetAction =
   | 'email-factor-start'
   | 'email-send'
@@ -24,12 +26,23 @@ type SheetAction =
   | 'factor-totp'
   | 'disable'
   | 'password-change'
-  | 'regenerate';
+  | 'regenerate'
+  | 'passkey-add'
+  | 'passkey-enable';
 type IdentityScope = 'password' | 'email' | 'totp' | 'factor';
 type IdentityMethod = 'email' | 'totp';
+/** 已绑定的一枚通行密钥，时间在渲染前先格式化好。 */
+interface PasskeyRow {
+  id: string;
+  name: string;
+  createdLabel: string;
+  lastUsedLabel: string;
+}
+// 通行密钥排第一并带「推荐」；TOTP 把原来的「推荐」让出来。
 const modeOptions: Array<{ value: FactorMode; label: string }> = [
   { value: 'off', label: t('common.close') },
-  { value: 'totp', label: t('security.totp.recommended') },
+  { value: 'passkey', label: `${t('security.passkey.title')} · ${t('security.passkey.recommended')}` },
+  { value: 'totp', label: 'TOTP' },
   { value: 'email', label: t('auth.login.emailCode') },
 ];
 const copy = {
@@ -54,6 +67,10 @@ const error = ref('');
 const notice = ref('');
 const busy = ref(false);
 const selectedMode = ref<FactorMode>('off');
+/** 当前环境能不能唤起系统通行密钥（安全上下文 + 原生接口）。 */
+const passkeySupported = ref(isPasskeySupported());
+/** 正在删除的凭据 id：期间禁用该行按钮，避免重复提交。 */
+const removingPasskeyId = ref('');
 let drawerCommitted = false;
 
 const enabled = computed(() => info.twoFactorEnabled === true);
@@ -61,8 +78,26 @@ const totpEnabled = computed(() => info.totpEnabled === true);
 const canEnable = computed(() => info.canEnable === true);
 const activeMode = computed<FactorMode>(() => {
   if (!enabled.value) return 'off';
+  if (info.twoFactorMethod === 'passkey') return 'passkey';
   return info.twoFactorMethod === 'totp' ? 'totp' : 'email';
 });
+const passkeyRows = computed<PasskeyRow[]>(() => {
+  const list: unknown[] = Array.isArray(info.passkeys) ? info.passkeys : [];
+  return list
+    .filter((item): item is JsonObject => typeof item === 'object' && item !== null)
+    .map((item) => {
+      const created = formatLocalChineseDate(item.createdAt);
+      const used = formatLocalChineseDate(item.lastUsedAt);
+      return {
+        id: String(item.id ?? ''),
+        name: String(item.name ?? '') || t('security.passkey.defaultName'),
+        createdLabel: created ? t('security.passkey.createdAt', { time: created }) : '',
+        lastUsedLabel: used ? t('security.passkey.lastUsed', { time: used }) : t('security.passkey.neverUsed'),
+      };
+    });
+});
+/** 服务端标记或列表任一条都算「已绑定至少一枚」。 */
+const passkeyBound = computed(() => info.passkeyBound === true || passkeyRows.value.length > 0);
 const availableModeOptions = computed(() =>
   modeOptions.map((option) => ({
     ...option,
@@ -78,7 +113,12 @@ const emailLabel = computed(() => {
 });
 const methodHint = computed(() => {
   if (!enabled.value) return canEnable.value ? t('security.chooseMethod') : t('security.email.unavailable');
-  const name = activeMode.value === 'totp' ? t('security.totp.recommended') : t('security.email.enableWithCode');
+  const name =
+    activeMode.value === 'totp'
+      ? 'TOTP'
+      : activeMode.value === 'passkey'
+        ? t('security.passkey.title')
+        : t('security.email.enableWithCode');
   return t('security.methodSummary', { method: name, codes: Number(info.backupCodesLeft) || 0 });
 });
 
@@ -112,7 +152,15 @@ onMounted(load);
 
 function openFormSheet(options: {
   title: string;
-  kind: 'change-email' | 'email-factor' | 'totp' | 'password' | 'change-password' | 'identity-only';
+  kind:
+    | 'change-email'
+    | 'email-factor'
+    | 'totp'
+    | 'password'
+    | 'change-password'
+    | 'identity-only'
+    | 'passkey'
+    | 'passkey-enable';
   action: SheetAction;
   identityScope?: IdentityScope;
   totpAvailable?: boolean;
@@ -229,11 +277,32 @@ async function submitSheetAction(payload: {
         drawerCommitted = true;
         await refresh();
         return { backupCodes: Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [], close: true };
+      case 'passkey-add': {
+        const registered = await registerPasskey(String(payload.stepUpToken || ''));
+        // 用户在系统面板里取消：静默收起抽屉，不当失败提示
+        if (!registered) return { close: true };
+        applyPasskeys(registered);
+        drawerCommitted = true;
+        await refresh();
+        notice.value = t('security.passkey.added');
+        toast(t('security.passkey.added'), 'success');
+        return { close: true };
+      }
+      case 'passkey-enable':
+        result = await api.security.passkeyEnable(String(payload.stepUpToken || ''));
+        assertOk(result);
+        drawerCommitted = true;
+        await refresh();
+        notice.value = t('security.passkey.methodHint');
+        toast(t('security.passkey.methodHint'), 'success');
+        return { close: true };
       default:
         throw new Error(t('auth.register.failed'));
     }
   } catch (reason) {
-    if (['factor-email', 'factor-totp', 'disable'].includes(payload.action)) selectedMode.value = activeMode.value;
+    if (['factor-email', 'factor-totp', 'disable', 'passkey-enable'].includes(payload.action)) {
+      selectedMode.value = activeMode.value;
+    }
     throw reason;
   }
 }
@@ -279,6 +348,88 @@ async function verifyIdentity(method: IdentityMethod, code: string, scope: Ident
     return { stepUpToken };
   }
   return { stepUpToken };
+}
+
+/**
+ * 绑定一枚通行密钥：身份复核票换注册选项 → 系统面板创建 → 只保存凭据。
+ * 绑定本身不切换两步验证方式；用户取消时返回 null（不抛错）。
+ */
+async function registerPasskey(stepUpToken: string): Promise<JsonObject | null> {
+  try {
+    const challenge = await api.security.passkeyOptions(stepUpToken);
+    const credential = await createCredential(challenge.options);
+    if (!credential) return null;
+    const registered = await api.security.passkeyRegister({
+      challengeId: String(challenge.challengeId || ''),
+      credential,
+      name: t('security.passkey.defaultName'),
+    });
+    assertOk(registered);
+    return registered;
+  } catch (reason) {
+    // 系统面板拒绝、验证过期、服务端规则失败都落在这一条：不再暴露底层英文报错
+    if (reason instanceof Error && reason.name === 'ApiError') throw reason;
+    throw new Error(t('security.passkey.failed'));
+  }
+}
+
+/** 用列表接口的返回同步凭据，随后由 refresh() 对齐两步验证状态。 */
+function applyPasskeys(result: JsonObject): void {
+  if (Array.isArray(result.passkeys)) info.passkeys = result.passkeys;
+  info.passkeyBound = Array.isArray(info.passkeys) ? info.passkeys.length > 0 : info.passkeyBound === true;
+}
+
+/** 打开添加通行密钥的身份复核抽屉。 */
+function startAddPasskey(): void {
+  if (!passkeySupported.value) return;
+  error.value = '';
+  notice.value = '';
+  openFormSheet({
+    title: t('security.passkey.add'),
+    kind: 'passkey',
+    action: 'passkey-add',
+    identityScope: 'factor',
+    totpAvailable: totpEnabled.value,
+    maskedEmail: maskedCurrentEmail(),
+  });
+}
+
+/** 删除一枚凭据：先确认，失败时直接展示服务端已本地化的文案。 */
+function askRemovePasskey(passkey: PasskeyRow): void {
+  openSheet({
+    title: t('security.passkey.remove'),
+    message: t('security.passkey.removeConfirm'),
+    actions: [
+      { label: t('common.cancel'), onClick: (close) => close() },
+      {
+        label: t('security.passkey.remove'),
+        variant: 'danger',
+        onClick: (close) => {
+          close();
+          void removePasskey(passkey);
+        },
+      },
+    ],
+  });
+}
+
+async function removePasskey(passkey: PasskeyRow): Promise<void> {
+  if (removingPasskeyId.value) return;
+  removingPasskeyId.value = passkey.id;
+  error.value = '';
+  try {
+    const result = await api.security.passkeyRemove(passkey.id);
+    assertOk(result);
+    applyPasskeys(result);
+    await refresh();
+    notice.value = t('security.passkey.removed');
+    toast(t('security.passkey.removed'), 'success');
+  } catch (reason) {
+    // 最后一枚且正作为两步验证方式时服务端会拒绝，文案已经是本机语言
+    toast(reason instanceof Error && reason.message ? reason.message : t('security.passkey.failed'), 'error');
+  } finally {
+    removingPasskeyId.value = '';
+  }
 }
 
 function openEmailChange(): void {
@@ -348,6 +499,23 @@ async function chooseMode(target: FactorMode): Promise<void> {
   if (!canEnable.value) {
     selectedMode.value = previous;
     error.value = t('security.email.unavailable');
+    return;
+  }
+  if (target === 'passkey') {
+    if (!passkeyBound.value) {
+      selectedMode.value = previous;
+      error.value = t('security.passkey.none');
+      return;
+    }
+    // 已有凭据：先做一次身份复核，通过后才把两步验证方式切到通行密钥
+    openFormSheet({
+      title: t('security.passkey.title'),
+      kind: 'passkey-enable',
+      action: 'passkey-enable',
+      identityScope: 'factor',
+      totpAvailable: totpEnabled.value,
+      maskedEmail: maskedCurrentEmail(),
+    });
     return;
   }
 
@@ -453,7 +621,7 @@ async function rebindTotp(): Promise<void> {
         <span class="security-action">{{ copy.changeEmail }}</span>
       </button>
 
-      <!-- 两步验证：三选一的分段控件就是状态说明；它横跨整行，窄屏下三个选项才放得下 -->
+      <!-- 两步验证：四选一的分段控件就是状态说明；它横跨整行，窄屏下四个选项才放得下 -->
       <section class="row-card security-row security-factor">
         <span class="security-icon" aria-hidden="true"><AppIcon name="shield" /></span>
         <div class="factor-body">
@@ -473,6 +641,46 @@ async function rebindTotp(): Promise<void> {
           </button>
           <button v-if="totpEnabled" class="text-action" type="button" :disabled="busy" @click="rebindTotp">
             {{ copy.rotateTotp }}
+          </button>
+        </div>
+      </section>
+
+      <!-- 通行密钥：这里只增删凭据，至于用它做两步验证，由上面的分段控件切换 -->
+      <section class="row-card security-row security-passkey">
+        <span class="security-icon" aria-hidden="true"><AppIcon name="lock" /></span>
+        <div class="passkey-body">
+          <strong class="row-title">{{ t('security.passkey.title') }}</strong>
+          <p class="field-hint">{{ t('security.passkey.intro') }}</p>
+          <ul v-if="passkeyRows.length > 0" class="passkey-list">
+            <li v-for="item in passkeyRows" :key="item.id" class="passkey-item">
+              <span class="passkey-copy">
+                <strong class="passkey-name">{{ item.name }}</strong>
+                <span class="row-meta">
+                  <template v-if="item.createdLabel">{{ item.createdLabel }}</template>
+                  <template v-if="item.createdLabel && item.lastUsedLabel"> · </template>
+                  <template v-if="item.lastUsedLabel">{{ item.lastUsedLabel }}</template>
+                </span>
+              </span>
+              <button
+                class="text-action passkey-remove"
+                type="button"
+                :disabled="removingPasskeyId === item.id"
+                :aria-label="`${t('security.passkey.remove')} ${item.name}`"
+                @click="askRemovePasskey(item)"
+              >
+                {{ t('security.passkey.remove') }}
+              </button>
+            </li>
+          </ul>
+          <p v-else class="field-hint">{{ t('security.passkey.none') }}</p>
+          <p v-if="!passkeySupported" class="field-hint">{{ t('security.passkey.unsupported') }}</p>
+          <button
+            class="cta ghost passkey-add"
+            type="button"
+            :disabled="!passkeySupported || Boolean(removingPasskeyId)"
+            @click="startAddPasskey"
+          >
+            {{ t('security.passkey.add') }}
           </button>
         </div>
       </section>
@@ -538,7 +746,7 @@ async function rebindTotp(): Promise<void> {
   grid-column: 1 / -1;
 }
 
-/* 三选一在窄行里要放得下：行内边距收窄一档，仍用令牌。 */
+/* 四个选项在窄行里要放得下：行内边距收窄一档，仍用令牌。 */
 .security-factor .seg button {
   padding-inline: var(--s2);
 }
@@ -553,5 +761,63 @@ async function rebindTotp(): Promise<void> {
 .security-actions .text-action {
   min-height: var(--touch);
   padding-inline: 0;
+}
+
+/* 通行密钥块：图标 + 内容两列；凭据逐条排，底部整行是添加按钮。 */
+.security-page .security-passkey {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s3);
+}
+
+.passkey-body {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.passkey-list {
+  display: grid;
+  gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.passkey-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-width: 0;
+  padding-top: var(--s2);
+  border-top: var(--hairline) solid var(--stroke);
+}
+
+.passkey-copy {
+  display: grid;
+  flex: 1 1 auto;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.passkey-name {
+  overflow: hidden;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.passkey-item .passkey-remove {
+  min-height: var(--touch);
+  padding-inline: 0;
+  color: var(--danger-ink);
+  white-space: nowrap;
+}
+
+.passkey-item .passkey-remove[disabled] {
+  color: var(--ink-3);
+  cursor: not-allowed;
 }
 </style>

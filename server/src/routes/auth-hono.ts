@@ -34,6 +34,17 @@ import { issueCode, consumeCode, peekPendingPayload, isCodeRejected, maskEmail }
 import { assertInviteUsable, consumeInvite } from '../domain/invites.js';
 import { settleExpiredExhibitor } from '../domain/membership.js';
 import { secondFactorState, verifySecondFactor, type SecondFactorUser } from '../domain/two-factor.js';
+import {
+  buildAuthenticationOptions,
+  consumeChallenge,
+  findCredentialByCredentialId,
+  issueChallenge,
+  listCredentialDescriptors,
+  passkeyVerifyFailure,
+  touchCredential,
+  verifyPasskeyAuthentication,
+} from '../domain/passkeys.js';
+import { loadProcessConfig } from '../config/env.js';
 import { issueTicket, findTicket, consumeTicket, countTicketFailure } from '../domain/preauth.js';
 import { ApiError, badRequest, unauthorized } from '../domain/errors.js';
 import { failureResponse, jsonResponse, okResponse } from '../http/respond.js';
@@ -131,6 +142,12 @@ function sessionDevice(token: unknown, name: unknown): SessionDevice {
       .trim()
       .slice(0, 80),
   };
+}
+
+/** 通行密钥登录的依赖方参数（断言校验只需要 rpId 与来源列表）。 */
+function passkeyRelyingParty() {
+  const config = loadProcessConfig().webauthn;
+  return { rpId: config.rpId, origins: config.origins };
 }
 
 function authLimiter(trustProxy: TrustProxy) {
@@ -238,6 +255,8 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
           totp: Boolean(factors && factors.method === 'totp' && factors.totpBound),
           email: emailUsable,
           backup: Boolean(factors && factors.backupCodesLeft > 0),
+          // 绑过通行密钥就允许用它当第二因子（与当前选中的方式无关，换方式不用重新绑定）。
+          passkey: Boolean(factors && factors.passkeyBound),
         },
       });
     }
@@ -291,6 +310,9 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     if (row.two_factor_enabled === true && row.two_factor_method === 'totp') {
       return failureResponse(c, '当前启用的是验证器方式，不能发送邮箱验证码');
     }
+    if (row.two_factor_enabled === true && row.two_factor_method === 'passkey') {
+      return failureResponse(c, '当前启用了通行密钥验证，不能发送邮箱验证码');
+    }
     const sent = await issueCode({
       purpose: 'login',
       email: row.email,
@@ -298,6 +320,99 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
       ip: requestIp(c, options.trustProxy),
     });
     return jsonResponse(c, { ok: true, error: '', ...sent, maskedEmail: maskEmail(row.email) });
+  });
+
+  /**
+   * 通行密钥登录第一步：用预认证票换断言选项。
+   *
+   * 票不存在 / 已过期与现有登录验证给同一句文案，不泄露票是否存在；
+   * allowCredentials 只放这个账号自己的凭据。
+   */
+  app.post('/login/passkey/options', limited, async (c) => {
+    const parsed = safeParseSchema(ticketSchema, await bodyOf(c));
+    if (!parsed.success) return failureResponse(c, parsed.error, parsed.errorDetail);
+    const found = await findTicket(String(parsed.data.ticket || ''));
+    if (!found) return failureResponse(c, '验证已过期，请重新登录');
+    const account = await query<LoginFactorRow>(
+      'SELECT id, username, role, email, email_verified, totp_secret, two_factor_method, status FROM users WHERE id = $1',
+      [found.userId],
+    );
+    const row = account.rows[0];
+    if (!row || row.status === 'banned') return failureResponse(c, '账号不可用，请联系管理员');
+    const descriptors = await listCredentialDescriptors(row.id);
+    if (descriptors.length === 0) {
+      return failureResponse(c, '该账号还没有绑定通行密钥，请改用其它方式验证');
+    }
+    const options = await buildAuthenticationOptions({
+      rpId: passkeyRelyingParty().rpId,
+      allowCredentials: descriptors,
+    });
+    const challengeId = await issueChallenge(row.id, 'authentication', options.challenge);
+    return jsonResponse(c, { ok: true, challengeId, options });
+  });
+
+  /**
+   * 通行密钥登录第二步：校验断言，成功后与 POST /auth/login/verify 完全同形。
+   *
+   * 挑战先原子消费（一次一用）；失败记在预认证票上（与验证码错几次同一个计数），
+   * 失败文案统一，不区分「凭据不存在」与「签名不对」。
+   */
+  app.post('/login/passkey/verify', limited, async (c) => {
+    const body = await bodyOf(c);
+    const found = await findTicket(String(body.ticket || '').trim());
+    if (!found) return failureResponse(c, '验证已过期，请重新登录');
+    const account = await query<LoginFactorRow>(
+      'SELECT id, username, role, email, email_verified, totp_secret, two_factor_method, status FROM users WHERE id = $1',
+      [found.userId],
+    );
+    const row = account.rows[0];
+    if (!row || row.status === 'banned') return failureResponse(c, '账号不可用，请联系管理员');
+    const device = sessionDevice(body.deviceToken, body.deviceName);
+    const challenge = await consumeChallenge(body.challengeId, row.id, 'authentication');
+    if (!challenge) {
+      await countTicketFailure(found.id);
+      return failureResponse(c, '这次验证已过期，请重新开始', { code: 'security.passkeyChallenge' });
+    }
+    const credential = body.credential as Record<string, any>;
+    if (!credential || typeof credential !== 'object' || Array.isArray(credential)) {
+      await countTicketFailure(found.id);
+      return failureResponse(c, '通行密钥验证没有通过，请重试', { code: 'security.passkeyInvalid' });
+    }
+    const credentialId = String(credential.id || '').trim();
+    const stored = credentialId ? await findCredentialByCredentialId(credentialId) : null;
+    if (!stored || stored.userId !== row.id) {
+      await countTicketFailure(found.id);
+      return failureResponse(c, '通行密钥验证没有通过，请重试', { code: 'security.passkeyInvalid' });
+    }
+    const rp = passkeyRelyingParty();
+    let verified;
+    try {
+      verified = await verifyPasskeyAuthentication({
+        response: credential as Parameters<typeof verifyPasskeyAuthentication>[0]['response'],
+        expectedChallenge: challenge,
+        rp: { rpId: rp.rpId, origins: rp.origins },
+        credential: {
+          id: stored.credentialId,
+          publicKey: stored.publicKey,
+          counter: stored.counter,
+          transports: stored.transports,
+        },
+      });
+    } catch (error: unknown) {
+      await countTicketFailure(found.id);
+      const failure = passkeyVerifyFailure(error);
+      return failureResponse(c, failure.error, { code: failure.errorCode });
+    }
+    if (!verified) {
+      await countTicketFailure(found.id);
+      return failureResponse(c, '通行密钥验证没有通过，请重试', { code: 'security.passkeyInvalid' });
+    }
+    await touchCredential(stored.id, verified.counter);
+    if (!(await consumeTicket(found.id))) return failureResponse(c, '验证已使用，请重新登录');
+    if (body.trustDevice === true) await rememberTrustedDevice(row.id, device);
+    await query('UPDATE users SET last_login_time = now() WHERE id = $1', [row.id]);
+    const session = await issueSession(row, device);
+    return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(row.id) });
   });
 
   app.post('/register', limited, async (c) => {

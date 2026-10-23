@@ -46,6 +46,8 @@ async function settingsPayload(userId: string | null | undefined, role?: string 
     cover: settings.cover,
     exhibitor: settings.exhibitor,
     invite: settings.invite,
+    // 客户端安装包的下载源（直链 / GitHub 仓库）。最新版本由 GET /app/release 解析。
+    download: settings.download,
     notify: await readNotificationPreferences(userId),
     ...(storage ? { storage } : {}),
     ...(invites ? { invites } : {}),

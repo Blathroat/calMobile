@@ -32,6 +32,7 @@ interface FactorStateRow {
   two_factor_method?: string | null;
   totp_secret?: string | null;
   backup_left?: number | null;
+  passkey_count?: number | null;
 }
 
 interface BackupCodeRow {
@@ -57,8 +58,11 @@ export interface SecondFactorUser {
  */
 export async function secondFactorState(userId: string): Promise<{
   enabled: boolean;
-  method: 'off' | 'totp' | 'email';
+  method: 'off' | 'totp' | 'email' | 'passkey';
   totpBound: boolean;
+  /** 绑定过至少一枚通行密钥（不代表当前方式就是 passkey）。 */
+  passkeyBound: boolean;
+  passkeyCount: number;
   email: string;
   emailVerified: boolean;
   backupCodesLeft: number;
@@ -67,7 +71,9 @@ export async function secondFactorState(userId: string): Promise<{
     `
         SELECT u.email, u.email_verified, u.two_factor_enabled, u.two_factor_method, u.totp_secret,
                (SELECT count(*)::int FROM backup_codes c
-                 WHERE c.user_id = u.id AND c.used_at IS NULL) AS backup_left
+                 WHERE c.user_id = u.id AND c.used_at IS NULL) AS backup_left,
+               (SELECT count(*)::int FROM passkey_credentials p
+                 WHERE p.user_id = u.id) AS passkey_count
           FROM users u
          WHERE u.id = $1
     `,
@@ -78,10 +84,20 @@ export async function secondFactorState(userId: string): Promise<{
     return null;
   }
   const email = String(row.email || '');
+  const passkeyCount = Number(row.passkey_count) || 0;
   return {
     enabled: row.two_factor_enabled === true,
-    method: row.two_factor_enabled !== true ? 'off' : row.two_factor_method === 'totp' ? 'totp' : 'email',
+    method:
+      row.two_factor_enabled !== true
+        ? 'off'
+        : row.two_factor_method === 'totp'
+          ? 'totp'
+          : row.two_factor_method === 'passkey'
+            ? 'passkey'
+            : 'email',
     totpBound: String(row.totp_secret || '') !== '',
+    passkeyBound: passkeyCount > 0,
+    passkeyCount,
     email,
     emailVerified: row.email_verified === true,
     backupCodesLeft: Number(row.backup_left) || 0,
@@ -183,6 +199,12 @@ export async function verifySecondFactor(
     });
   }
 
+  if (user.two_factor_method === 'passkey') {
+    // 当前方式选中了通行密钥：验证码通道整条关掉（验证器和邮箱码都算）。
+    // 否则「用通行密钥保护账号」等于没保护 —— 能拿到邮箱的人可以改走验证码登录。
+    throw new CodeRejected('当前启用了通行密钥验证，请用通行密钥登录');
+  }
+
   const stored = String(user.totp_secret || '');
   const selectedMethod = user.two_factor_method === 'totp' ? 'totp' : 'email';
   if (selectedMethod === 'totp') {
@@ -241,6 +263,26 @@ export async function activateBoundTotp(userId: string): Promise<boolean> {
     `UPDATE users
         SET two_factor_enabled = true, two_factor_method = 'totp', updated_at = now()
       WHERE id = $1 AND email_verified = true AND email <> '' AND totp_secret <> ''
+      RETURNING id`,
+    [userId],
+  );
+  return result.rowCount === 1;
+}
+
+/**
+ * 把第二因子切成通行密钥。
+ *
+ * 绑定（保存凭据）与启用是两步：先加一枚通行密钥，再用身份复核票确认切换。
+ * 库里必须有凭据、邮箱已验证，才允许开启 —— 与邮箱方式的前置条件一致，
+ * 否则登录第一步会因为「两步验证邮箱不可用」直接被拦住。
+ */
+export async function activatePasskeyMethod(userId: string): Promise<boolean> {
+  const result = await query(
+    `UPDATE users
+        SET two_factor_enabled = true, two_factor_method = 'passkey', updated_at = now()
+      WHERE id = $1
+        AND email_verified = true AND email <> ''
+        AND EXISTS (SELECT 1 FROM passkey_credentials p WHERE p.user_id = users.id)
       RETURNING id`,
     [userId],
   );

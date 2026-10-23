@@ -6,7 +6,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { parseEnv } from './env.js';
+import { parseEnv, resolveWebAuthnConfig } from './env.js';
 import { resolveMailConfig } from './mail.js';
 import { resolveRuntime } from './runtime.js';
 import { decryptSecret, encryptSecret, encryptionKey } from '../domain/totp.js';
@@ -155,6 +155,49 @@ test('对外部署的三项配置：域名归一化、FORCE_HTTPS 与 HSTS 取�
   assert.equal(parseEnv(validEnv({ HSTS_MAX_AGE: 'off' })).runtime.hstsMaxAge, 0);
   // 乱填的值回落到默认，而不是 0（不能因为打错一个字就把 HSTS 关掉）
   assert.equal(parseEnv(validEnv({ HSTS_MAX_AGE: 'abc' })).runtime.hstsMaxAge, 15_552_000);
+});
+
+test('通行密钥 RP：默认取对外地址的主机名，来源含对外 origin 与本机两个端口', () => {
+  const local = resolveWebAuthnConfig({}, { port: 3000 });
+  assert.equal(local.rpId, 'localhost', '没配对外地址时用 localhost');
+  assert.equal(local.rpName, '', '显示名留空，由路由读服务器设置里的中文标题');
+  assert.deepEqual(local.origins, ['http://localhost:3000', 'http://127.0.0.1:3000']);
+
+  const configured = resolveWebAuthnConfig({}, { publicBaseUrl: 'https://app.example.com', port: 8080 });
+  assert.equal(configured.rpId, 'app.example.com', 'rpId 不带协议与端口');
+  assert.deepEqual(configured.origins, ['https://app.example.com', 'http://localhost:8080', 'http://127.0.0.1:8080']);
+
+  // 端口带在对外地址里时，rpId 仍只取主机名
+  assert.equal(resolveWebAuthnConfig({}, { publicBaseUrl: 'http://127.0.0.1:3000', port: 3000 }).rpId, '127.0.0.1');
+});
+
+test('通行密钥的三项环境变量覆盖默认值，写错的来源被丢掉', () => {
+  const config = resolveWebAuthnConfig(
+    {
+      WEBAUTHN_RP_ID: 'example.com',
+      WEBAUTHN_RP_NAME: '展助手',
+      WEBAUTHN_ORIGINS: 'https://a.example.com/, http://127.0.0.1:3000, 不是地址, ftp://bad.example.com',
+    },
+    { publicBaseUrl: 'https://app.example.com', port: 3000 },
+  );
+  assert.equal(config.rpId, 'example.com');
+  assert.equal(config.rpName, '展助手');
+  assert.deepEqual(config.origins, ['https://a.example.com', 'http://127.0.0.1:3000'], '去尾斜杠、丢掉非法项');
+
+  // RP ID 不是主机名形状时回退到对外地址的主机名，而不是让服务起不来
+  assert.equal(
+    resolveWebAuthnConfig({ WEBAUTHN_RP_ID: 'https://bad/id' }, { publicBaseUrl: 'https://app.example.com' }).rpId,
+    'app.example.com',
+  );
+
+  // parseEnv 里也带上这份配置（与 runtime 的 publicBaseUrl、process 的 port 一致）
+  const parsed = parseEnv(validEnv({ PUBLIC_BASE_URL: 'https://app.example.com', PORT: '8080' }));
+  assert.equal(parsed.webauthn.rpId, 'app.example.com');
+  assert.deepEqual(parsed.webauthn.origins, [
+    'https://app.example.com',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+  ]);
 });
 
 test('数据库配置从注入的环境取值，未知 NODE_ENV 回退到 development', () => {

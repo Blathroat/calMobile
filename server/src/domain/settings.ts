@@ -83,6 +83,12 @@ export interface ServerPatch {
   inviteUses?: unknown;
   inviteValidHours?: unknown;
   inviteDurationDays?: unknown;
+  /** 下载源整段提交：{ source, url, repo }。 */
+  download?: unknown;
+  /** 也接受管理端表单的扁平写法（downloadSource / downloadUrl / downloadRepo）。 */
+  downloadSource?: unknown;
+  downloadUrl?: unknown;
+  downloadRepo?: unknown;
 }
 
 interface SettingRow {
@@ -233,6 +239,11 @@ export async function readServerSettings(): Promise<ServerSettings> {
   // 否则读出来是 undefined，路由里的 `=== true` 判断与前端开关都拿不到 false。
   settings.review = { ...DEFAULT_SETTINGS.review, ...settings.review };
   settings.invite = normalizeInvite(settings.invite);
+  // 老库没有 download 这一项；补上默认值（默认直链且为空 = 不显示下载入口）。
+  settings.download = {
+    ...DEFAULT_SETTINGS.download,
+    ...(settings.download && typeof settings.download === 'object' ? settings.download : {}),
+  };
   // 老库的 limits JSON 没有文本填写和选项上限。缺的键用默认值补上，避免读出来是 undefined。
   const storedLimits = settings.limits;
   settings.limits = {
@@ -374,6 +385,26 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     };
   }
   if (
+    Object.prototype.hasOwnProperty.call(source, 'download') ||
+    Object.prototype.hasOwnProperty.call(source, 'downloadSource') ||
+    Object.prototype.hasOwnProperty.call(source, 'downloadUrl') ||
+    Object.prototype.hasOwnProperty.call(source, 'downloadRepo')
+  ) {
+    // 下载源整段提交，或按管理端表单的扁平字段逐项提交；两种写法合并后校验同一套规则。
+    const patch: Record<string, unknown> = {};
+    if (Object.prototype.hasOwnProperty.call(source, 'download')) {
+      const value = source.download;
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw badRequest('下载源设置格式不正确', { code: 'settings.downloadSourceInvalid' });
+      }
+      Object.assign(patch, value as Record<string, unknown>);
+    }
+    if (Object.prototype.hasOwnProperty.call(source, 'downloadSource')) patch.source = source.downloadSource;
+    if (Object.prototype.hasOwnProperty.call(source, 'downloadUrl')) patch.url = source.downloadUrl;
+    if (Object.prototype.hasOwnProperty.call(source, 'downloadRepo')) patch.repo = source.downloadRepo;
+    next.download = normalizeDownload(next.download || DEFAULT_SETTINGS.download, patch);
+  }
+  if (
     Object.prototype.hasOwnProperty.call(source, 'inviteUses') ||
     Object.prototype.hasOwnProperty.call(source, 'inviteValidHours') ||
     Object.prototype.hasOwnProperty.call(source, 'inviteDurationDays')
@@ -386,6 +417,47 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     };
   }
 
+  return next;
+}
+
+/** 下载源只允许两种：直链，或追踪 GitHub 仓库的最新 Release。 */
+const DOWNLOAD_SOURCES = ['url', 'github'];
+
+/** GitHub 仓库写成 owner/repo：两段都只允许字母、数字、下划线、点与横线。 */
+const DOWNLOAD_REPO_PATTERN = /^[\w.-]+\/[\w.-]+$/;
+
+/**
+ * 校验并合并下载源设置。
+ *
+ * 只处理提交过的字段；空串是合法值（表示「没有配置」）。非法值按规则失败，
+ * 而不是悄悄夹取 —— 下载地址写成半截时，更新检查会把用户带到一个打不开的链接。
+ */
+function normalizeDownload(
+  current: ServerSettings['download'],
+  patch: Record<string, unknown>,
+): ServerSettings['download'] {
+  const next = { ...current };
+  if (Object.prototype.hasOwnProperty.call(patch, 'source')) {
+    const source = String(patch.source ?? '').trim();
+    if (!DOWNLOAD_SOURCES.includes(source)) {
+      throw badRequest('下载源只能是直链或 GitHub 仓库', { code: 'settings.downloadSourceInvalid' });
+    }
+    next.source = source as ServerSettings['download']['source'];
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'url')) {
+    const url = String(patch.url ?? '').trim();
+    if (url && !/^https?:\/\//i.test(url)) {
+      throw badRequest('下载地址需要以 http:// 或 https:// 开头', { code: 'settings.downloadUrlInvalid' });
+    }
+    next.url = url.slice(0, 1000);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'repo')) {
+    const repo = String(patch.repo ?? '').trim();
+    if (repo && !DOWNLOAD_REPO_PATTERN.test(repo)) {
+      throw badRequest('GitHub 仓库需要写成 owner/repo', { code: 'settings.downloadRepoInvalid' });
+    }
+    next.repo = repo.slice(0, 200);
+  }
   return next;
 }
 
