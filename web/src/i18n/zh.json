@@ -254,7 +254,13 @@
       "usePasskey": "使用通行密钥登录",
       "passkeyHint": "用这台设备的指纹、面容或锁屏密码确认身份。",
       "orUseCode": "改用验证码登录",
-      "passkeyFailed": "通行密钥验证没有通过，可以改用验证码登录。"
+      "passkeyFailed": "通行密钥验证没有通过，可以改用验证码登录。",
+      "passkeyFailedOnly": "通行密钥验证没有通过。确认这台设备上已经绑定了这个账号的通行密钥，再试一次。",
+      "backupCode": "备用码",
+      "backupPlaceholder": "XXXXX-XXXXX",
+      "backupOnlyHint": "这个账号的第二因子是通行密钥：通行密钥用不了时，用开启两步验证时抄下的备用码（XXXXX-XXXXX）登录。",
+      "passkeyOnlyHint": "这个账号用通行密钥登录：点上面的按钮，用指纹、面容或锁屏密码确认。",
+      "passkeyUnsupportedHint": "这台设备不能使用通行密钥。请换一台已绑定通行密钥的设备登录，或用备用码。"
     },
     "register": {
       "backToEdit": "返回修改",

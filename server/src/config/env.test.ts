@@ -200,6 +200,28 @@ test('通行密钥的三项环境变量覆盖默认值，写错的来源被丢�
   ]);
 });
 
+test('App 内的通行密钥来源（android:apk-key-hash:）不会被当成非法地址丢掉', () => {
+  const appOrigin = 'android:apk-key-hash:1LL9J4FTte5s7ecdZxboDg8HJhGbilIPWuei0EaUzss';
+  const config = resolveWebAuthnConfig(
+    { WEBAUTHN_ORIGINS: `https://app.example.com, ${appOrigin}` },
+    { publicBaseUrl: 'https://app.example.com', port: 3000 },
+  );
+  assert.deepEqual(config.origins, ['https://app.example.com', appOrigin], 'App 来源不是 http(s) 地址，仍要保留');
+
+  // 形状不对的写法（长度不对、带填充）仍然丢掉；全丢光时回落到默认那组
+  const wrong = resolveWebAuthnConfig(
+    {
+      WEBAUTHN_ORIGINS: [
+        'android:apk-key-hash:short',
+        'android:apk-key-hash:1LL9J4FTte5s7ecdZxboDg8HJhGbilIPWuei0EaUzss=',
+        'android:apk-key-hash:',
+      ].join(','),
+    },
+    { publicBaseUrl: 'https://app.example.com', port: 3000 },
+  );
+  assert.deepEqual(wrong.origins, ['https://app.example.com', 'http://localhost:3000', 'http://127.0.0.1:3000']);
+});
+
 test('数据库配置从注入的环境取值，未知 NODE_ENV 回退到 development', () => {
   const config = parseEnv(
     validEnv({

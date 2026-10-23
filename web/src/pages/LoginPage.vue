@@ -70,6 +70,16 @@ const methodHint = computed(() => {
   return lines.join(' ');
 });
 
+/**
+ * 第二步还能用哪种「手输码」：邮箱验证码、备用码，或者都没有。
+ * 第二因子选了通行密钥时服务端会关掉邮箱验证码通道，界面不能再摆一个点了会失败的输入框。
+ */
+const codeChannel = computed<'email' | 'backup' | 'none'>(() => {
+  if (methods.value.email) return 'email';
+  if (methods.value.backup) return 'backup';
+  return 'none';
+});
+
 const resendLabel = computed(() => {
   if (remaining.value > 0) return t('auth.login.secondsUntilResend', { seconds: remaining.value });
   return emailSent.value ? t('auth.login.resendCode') : t('auth.login.sendEmailCode');
@@ -187,7 +197,11 @@ async function loginWithPasskey(): Promise<void> {
     verifiedSession = api.session.signal;
     await enterAs();
   } catch (reason) {
-    verifyError.value = verified ? message(reason) : t('auth.login.passkeyFailed');
+    verifyError.value = verified
+      ? message(reason)
+      : codeChannel.value === 'none'
+        ? t('auth.login.passkeyFailedOnly')
+        : t('auth.login.passkeyFailed');
   } finally {
     passkeyBusy.value = false;
   }
@@ -328,9 +342,14 @@ onBeforeUnmount(stopCountdown);
         <p v-if="emailSent" class="muted">
           {{ t('auth.login.codeSentTo') }}<strong>{{ maskedEmail }}</strong>
         </p>
+        <!-- 邮箱验证码通道关着时（第二因子是通行密钥），说清楚还能用什么 -->
+        <p v-else-if="codeChannel === 'none'" class="muted">
+          {{ passkeySupported ? t('auth.login.passkeyOnlyHint') : t('auth.login.passkeyUnsupportedHint') }}
+        </p>
+        <p v-else-if="codeChannel === 'backup'" class="muted">{{ t('auth.login.backupOnlyHint') }}</p>
         <!-- 绑了验证器时第一步不会自动发邮件（省一封多半用不上的信，也避开 60 秒冷却） -->
         <p v-else class="muted">{{ t('auth.login.totpOrEmailHint') }}</p>
-        <p class="field-hint">{{ t('auth.login.codeHint') }}</p>
+        <p v-if="codeChannel !== 'none'" class="field-hint">{{ t('auth.login.codeHint') }}</p>
         <p v-if="methodHint" class="field-hint">{{ methodHint }}</p>
       </div>
       <!-- 通行密钥优先：账号支持且环境可用时先给主按钮，验证码作为退路留在下面 -->
@@ -346,9 +365,11 @@ onBeforeUnmount(stopCountdown);
           {{ t('auth.login.usePasskey') }}
         </button>
       </div>
-      <p v-if="passkeyAvailable" class="or-code-title">{{ t('auth.login.orUseCode') }}</p>
-      <div class="field">
-        <label for="login-code">{{ t('auth.login.emailCode') }}</label>
+      <p v-if="passkeyAvailable && codeChannel === 'email'" class="or-code-title">{{ t('auth.login.orUseCode') }}</p>
+      <div v-if="codeChannel !== 'none'" class="field">
+        <label for="login-code">
+          {{ codeChannel === 'email' ? t('auth.login.emailCode') : t('auth.login.backupCode') }}
+        </label>
         <input
           id="login-code"
           v-model="code"
@@ -356,7 +377,7 @@ onBeforeUnmount(stopCountdown);
           type="text"
           inputmode="numeric"
           :maxlength="CODE_MAX"
-          :placeholder="t('auth.login.codeOrBackup')"
+          :placeholder="codeChannel === 'email' ? t('auth.login.codeOrBackup') : t('auth.login.backupPlaceholder')"
           autocomplete="one-time-code"
         />
         <span class="field-counter" aria-live="polite" :data-over="code.length > CODE_MAX ? 'true' : 'false'">
@@ -371,6 +392,7 @@ onBeforeUnmount(stopCountdown);
       </div>
       <p v-if="verifyError" class="field-error" role="alert">{{ verifyError }}</p>
       <button
+        v-if="codeChannel !== 'none'"
         class="cta"
         :class="{ ghost: passkeyAvailable }"
         type="submit"

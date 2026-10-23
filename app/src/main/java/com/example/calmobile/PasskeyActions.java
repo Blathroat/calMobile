@@ -17,8 +17,22 @@ import androidx.credentials.GetPublicKeyCredentialOption;
 import androidx.credentials.PublicKeyCredential;
 import androidx.credentials.exceptions.CreateCredentialCancellationException;
 import androidx.credentials.exceptions.CreateCredentialException;
+import androidx.credentials.exceptions.CreateCredentialInterruptedException;
+import androidx.credentials.exceptions.CreateCredentialNoCreateOptionException;
+import androidx.credentials.exceptions.CreateCredentialProviderConfigurationException;
+import androidx.credentials.exceptions.CreateCredentialUnsupportedException;
 import androidx.credentials.exceptions.GetCredentialCancellationException;
 import androidx.credentials.exceptions.GetCredentialException;
+import androidx.credentials.exceptions.GetCredentialInterruptedException;
+import androidx.credentials.exceptions.GetCredentialProviderConfigurationException;
+import androidx.credentials.exceptions.GetCredentialUnsupportedException;
+import androidx.credentials.exceptions.NoCredentialException;
+import androidx.credentials.exceptions.domerrors.AbortError;
+import androidx.credentials.exceptions.domerrors.DomError;
+import androidx.credentials.exceptions.domerrors.NotAllowedError;
+import androidx.credentials.exceptions.domerrors.TimeoutError;
+import androidx.credentials.exceptions.publickeycredential.CreatePublicKeyCredentialDomException;
+import androidx.credentials.exceptions.publickeycredential.GetPublicKeyCredentialDomException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -41,11 +55,21 @@ import java.util.concurrent.Executor;
  * 页面跑在 App 还是浏览器里。App 的 clientDataJSON 里 origin 是
  * `android:apk-key-hash:<签名证书 SHA-256 的 base64url>`，服务端的 WEBAUTHN_ORIGINS 要包含它。
  *
- * 用户取消统一回 `cancelled`（前端据此静默），其余失败带一句能照着做的说明。
+ * **取消要按实际情况判定**：用户在系统面板上划掉或按返回时，凭据提供方回的是
+ * `CreatePublicKeyCredentialDomException`（DOM 类型 AbortError / NotAllowedError / TimeoutError），
+ * 不是 CancellationException —— 只认后者会把「用户自己关掉了面板」显示成一条失败提示。
+ * 这三类 DOM 错误与 Cancellation / Interrupted 一起归成 `cancelled`，页面据此静默。
+ *
+ * 其余失败给一句**中文说明**：系统的英文原文（例如 `Request doesn't finish on time!`）
+ * 只写进 logcat，不抛给用户。
  */
 final class PasskeyActions {
 
     private static final String TAG = "PasskeyActions";
+
+    /** 系统凭据服务另两个错误类型：库里没有对应常量类，按契约里的字符串比较。 */
+    private static final String DOM_SECURITY_ERROR = "androidx.credentials.TYPE_SECURITY_ERROR";
+    private static final String DOM_INVALID_STATE_ERROR = "androidx.credentials.TYPE_INVALID_STATE_ERROR";
 
     /** Credential Manager 的回调要回主线程：桥接结果最终也是回主线程写回页面。 */
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -96,17 +120,11 @@ final class PasskeyActions {
 
                         @Override
                         public void onError(CreateCredentialException error) {
-                            if (error instanceof CreateCredentialCancellationException) {
-                                callback.failure(WebAppBridge.CODE_CANCELLED, "已取消添加通行密钥");
-                                return;
-                            }
-                            Log.w(TAG, "添加通行密钥失败", error);
-                            callback.failure(messageOf(error));
+                            fail(error, "添加通行密钥", "已取消添加通行密钥", callback);
                         }
                     });
         } catch (Exception error) {
-            Log.w(TAG, "无法发起通行密钥注册", error);
-            callback.failure(messageOf(error));
+            fail(error, "添加通行密钥", "已取消添加通行密钥", callback);
         }
     }
 
@@ -141,17 +159,11 @@ final class PasskeyActions {
 
                         @Override
                         public void onError(GetCredentialException error) {
-                            if (error instanceof GetCredentialCancellationException) {
-                                callback.failure(WebAppBridge.CODE_CANCELLED, "已取消通行密钥验证");
-                                return;
-                            }
-                            Log.w(TAG, "通行密钥验证失败", error);
-                            callback.failure(messageOf(error));
+                            fail(error, "通行密钥验证", "已取消通行密钥验证", callback);
                         }
                     });
         } catch (Exception error) {
-            Log.w(TAG, "无法发起通行密钥验证", error);
-            callback.failure(messageOf(error));
+            fail(error, "通行密钥验证", "已取消通行密钥验证", callback);
         }
     }
 
@@ -160,23 +172,75 @@ final class PasskeyActions {
         return value == null ? "" : String.valueOf(value).trim();
     }
 
+    /** 统一的失败出口：用户自己关掉面板算取消，其余给一句中文说明。 */
+    private static void fail(Exception error, String action, String cancelledText,
+            WebAppBridge.ResultCallback callback) {
+        if (userGaveUp(error)) {
+            callback.failure(WebAppBridge.CODE_CANCELLED, cancelledText);
+            return;
+        }
+        Log.w(TAG, action + "失败", error);
+        callback.failure(messageOf(error));
+    }
+
     /**
-     * 异常消息优先用系统给的说明；没有说明时带上错误类型（例如
-     * `androidx.credentials.TYPE_CREATE_PUBLIC_KEY_CREDENTIAL_DOM_EXCEPTION`），
-     * 至少能定位是哪一类失败，而不是一句空话。
+     * 用户放弃这次操作：划掉面板、按返回、面板自己超时，或者系统打断了这次调用。
+     * 这些都不该在页面上变成一条失败提示。
+     */
+    private static boolean userGaveUp(Exception error) {
+        if (error instanceof CreateCredentialCancellationException
+                || error instanceof GetCredentialCancellationException
+                || error instanceof CreateCredentialInterruptedException
+                || error instanceof GetCredentialInterruptedException) {
+            return true;
+        }
+        DomError dom = domErrorOf(error);
+        if (dom == null) {
+            return false;
+        }
+        String type = dom.getType();
+        return AbortError.TYPE_CREATE_PUBLIC_KEY_CREDENTIAL_ABORT_ERROR.equals(type)
+                || NotAllowedError.TYPE_CREATE_PUBLIC_KEY_CREDENTIAL_NOT_ALLOWED_ERROR.equals(type)
+                || TimeoutError.TYPE_CREATE_PUBLIC_KEY_CREDENTIAL_TIMEOUT_ERROR.equals(type);
+    }
+
+    /** 取失败里的 DOM 错误（注册与断言各有一种包装类）；不是 DOM 错误时返回 null。 */
+    private static DomError domErrorOf(Exception error) {
+        if (error instanceof CreatePublicKeyCredentialDomException) {
+            return ((CreatePublicKeyCredentialDomException) error).getDomError();
+        }
+        if (error instanceof GetPublicKeyCredentialDomException) {
+            return ((GetPublicKeyCredentialDomException) error).getDomError();
+        }
+        return null;
+    }
+
+    /**
+     * 把失败翻译成用户能照着做的一句话。系统的英文原文与 DOM 类型留在 logcat，
+     * 页面只拿中文，否则中文界面里会冒出 "Request doesn't finish on time!"。
      */
     private static String messageOf(Exception error) {
-        String detail = error.getMessage() == null ? "" : error.getMessage().trim();
-        if (!detail.isEmpty()) return detail;
-        String type = "";
-        if (error instanceof GetCredentialException) {
-            type = ((GetCredentialException) error).getType();
-        } else if (error instanceof CreateCredentialException) {
-            type = ((CreateCredentialException) error).getType();
+        if (error instanceof CreateCredentialNoCreateOptionException || error instanceof NoCredentialException) {
+            return "这台设备上还没有能保存通行密钥的账户，先登录系统账号再试";
         }
-        if (type != null && !type.trim().isEmpty()) {
-            return "设备无法完成这次通行密钥操作（" + type + "）";
+        if (error instanceof CreateCredentialProviderConfigurationException
+                || error instanceof GetCredentialProviderConfigurationException) {
+            return "系统凭据服务还没准备好，重启应用或设备后再试";
         }
-        return "通行密钥操作失败";
+        if (error instanceof CreateCredentialUnsupportedException || error instanceof GetCredentialUnsupportedException) {
+            return "这台设备不支持通行密钥，改用验证码登录";
+        }
+        DomError dom = domErrorOf(error);
+        if (dom != null) {
+            Log.w(TAG, "系统返回的通行密钥错误类型：" + dom.getType());
+            if (DOM_INVALID_STATE_ERROR.equals(dom.getType())) {
+                return "这个账号在这台设备上已经有通行密钥了";
+            }
+            if (DOM_SECURITY_ERROR.equals(dom.getType())) {
+                return "系统拒绝了这次请求：域名与应用还没建立关联，检查部署配置后再试";
+            }
+            return "系统没能完成这次通行密钥操作，稍后再试";
+        }
+        return "通行密钥操作失败，稍后再试";
     }
 }
