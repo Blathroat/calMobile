@@ -46,7 +46,10 @@ export type NativeAction =
   | 'session.save'
   | 'session.load'
   | 'session.clear'
-  | 'session.device';
+  | 'session.device'
+  | 'passkey.available'
+  | 'passkey.create'
+  | 'passkey.get';
 
 /**
  * 稳定错误码：只有这两类在原生侧被规范化，其余失败的 `code` 是 undefined。
@@ -94,6 +97,15 @@ export interface NativeActionPayloads {
   'session.clear': Record<string, never>;
   /** 生成或读取本机稳定的设备凭据；退出登录时不清除，用于记住设备与会话管理。 */
   'session.device': Record<string, never>;
+  /**
+   * 设备上能不能用通行密钥。App 里由 Android Credential Manager 提供；
+   * 浏览器里没有这个动作，前端直接走原生 WebAuthn。
+   */
+  'passkey.available': Record<string, never>;
+  /** 通行密钥注册：把服务端的创建选项原样交给系统凭据提供方。 */
+  'passkey.create': { optionsJson: string };
+  /** 通行密钥断言（登录）。 */
+  'passkey.get': { optionsJson: string };
 }
 
 /** 每个动作成功回调的返回体。只保证列出的字段存在，新增字段先在这里登记再使用。 */
@@ -130,6 +142,11 @@ export interface NativeActionResults {
   'session.load': { refreshToken: string; username: string };
   'session.clear': { ok: boolean };
   'session.device': { deviceToken: string };
+  'passkey.available': { supported: boolean };
+  /** 系统返回的标准 RegistrationResponseJSON（base64url 字段），原样转给服务端。 */
+  'passkey.create': { credentialJson: string };
+  /** 系统返回的标准 AuthenticationResponseJSON。 */
+  'passkey.get': { credentialJson: string };
 }
 
 /**
@@ -175,6 +192,8 @@ const INTERACTIVE_ACTIONS = new Set<NativeAction>([
   'media.saveImage',
   'camera.ensurePermission',
   'notify.requestPermission',
+  'passkey.create',
+  'passkey.get',
 ]);
 
 /** 交互动作的兜底超时：5 分钟。选图、保存文件这类操作可能被用户撂在一边很久。 */

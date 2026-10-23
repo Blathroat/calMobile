@@ -9,6 +9,7 @@ import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
 import { formatLocalChineseDate } from '@/services/format';
 import { createCredential, isPasskeySupported } from '@/services/webauthn';
+import { nativeBridge } from '@/services/native-bridge';
 import SecuritySetupSheet from '@/components/SecuritySetupSheet.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -148,7 +149,25 @@ async function refresh(): Promise<void> {
   selectedMode.value = activeMode.value;
 }
 
-onMounted(load);
+onMounted(() => {
+  void load();
+  void probePasskeySupport();
+});
+
+/**
+ * App 里 `isPasskeySupported()` 只能说「有原生桥」，真正有没有凭据提供方要在设备上问一次。
+ * 探测失败（动作不存在、设备没有 Play 服务等）时按不支持处理：按钮置灰并给出原因，
+ * 不要让用户点开一个必然失败的流程。
+ */
+async function probePasskeySupport(): Promise<void> {
+  if (!nativeBridge.hasNative() || !passkeySupported.value) return;
+  try {
+    const result = await nativeBridge.call('passkey.available', {});
+    passkeySupported.value = result.supported === true;
+  } catch {
+    passkeySupported.value = false;
+  }
+}
 
 function openFormSheet(options: {
   title: string;

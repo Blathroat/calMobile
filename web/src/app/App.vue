@@ -51,31 +51,11 @@ const bodyEl = ref<HTMLElement>();
 
 /**
  * 报名站的下载条：只有在**系统浏览器**里打开报名站时才出现（应用内已经有 App 了），
- * 并且管理员必须配过下载地址。用户点过关闭之后不再出现，记在本机。
+ * 并且管理员必须配过下载地址。这条提示常驻，不提供关闭——报名站本身没有 App 完整，
+ * 让用户随时能找到回去的路比「少一条横幅」更重要。
  */
-const DOWNLOAD_BAR_KEY = 'calmobile.joinDownloadDismissed';
-const downloadBarDismissed = ref(readDismissed());
 const downloadUrl = computed(() => String((bootstrap.download?.url as string) || ''));
-const showDownloadBar = computed(
-  () => isJoinSurface && !nativeBridge.hasNative() && downloadUrl.value !== '' && !downloadBarDismissed.value,
-);
-
-function readDismissed(): boolean {
-  try {
-    return window.localStorage.getItem(DOWNLOAD_BAR_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function dismissDownloadBar(): void {
-  downloadBarDismissed.value = true;
-  try {
-    window.localStorage.setItem(DOWNLOAD_BAR_KEY, '1');
-  } catch {
-    // 隐私模式存不下就只在本次隐藏
-  }
-}
+const showDownloadBar = computed(() => isJoinSurface && !nativeBridge.hasNative() && downloadUrl.value !== '');
 
 /** 交给系统浏览器下载：WebView 里除 /app/ 之外的链接本来就交给浏览器处理。 */
 function openDownload(): void {
@@ -226,15 +206,6 @@ onBeforeUnmount(() => unbindPull?.());
           <span class="join-download-version" v-if="bootstrap.download?.version">{{ bootstrap.download.version }}</span>
         </span>
         <button class="cta" type="button" @click="openDownload">{{ t('join.downloadApp') }}</button>
-        <button
-          class="icon-button join-download-close"
-          type="button"
-          :aria-label="t('common.close')"
-          :title="t('common.close')"
-          @click="dismissDownloadBar"
-        >
-          <AppIcon name="close" />
-        </button>
       </div>
       <RouterView v-slot="{ Component }">
         <!-- 单独一层承载页面切换动画：`.app-body` 在切换之间是同一个元素，
@@ -301,12 +272,5 @@ onBeforeUnmount(() => unbindPull?.());
   min-height: 36px;
   padding-inline: var(--s3);
   font-size: var(--fs-label);
-}
-
-.join-download-close {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  color: var(--accent-ink);
 }
 </style>

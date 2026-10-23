@@ -27,7 +27,7 @@
 - 两步验证的通行密钥走 WebAuthn：服务端用 `@simplewebauthn/server` 生成选项并校验结果（挑战存 `webauthn_challenges`、凭据存 `passkey_credentials`）；前端 `web/src/services/webauthn.ts` 只用浏览器原生 `navigator.credentials`，自己负责 base64url ↔ ArrayBuffer 的转换，不引客户端库。绑定需要身份复核票；环境不支持 WebAuthn 时页面隐藏添加入口并说明原因。
 - 应用版本在构建期由 `scripts/client-target.mjs` 注入成 `__APP_VERSION__` / `__APP_VERSION_CODE__`（App 与报名站两份构建都注入），与服务端解析出的最新版本比较。`GET /app/release` 公开、`no-store`，GitHub 源由服务端带缓存地读 Release API（不受浏览器 CORS 与额度限制影响）。
 - 「下载并安装」只是打开下载地址：应用里除 `/app/` 之外的链接交给系统浏览器，安装由系统完成，不需要新的原生权限或桥接动作。
-- 报名站的下载条在应用外壳里（`App.vue`），条件是「报名站构建 + 没有原生桥 + 管理员配了下载地址」；用户关闭后记在本机 `calmobile.joinDownloadDismissed`。自动检查更新是设备级偏好，存在本机 `calmobile.autoUpdate`。表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`。后端再校验一次。
+- 报名站的下载条在应用外壳里（`App.vue`），条件是「报名站构建 + 没有原生桥 + 管理员配了下载地址」，常驻不可关闭（报名站本身不完整，用户随时要能找到下载入口）。自动检查更新是设备级偏好，存在本机 `calmobile.autoUpdate`。表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`。后端再校验一次。
 
 角色由服务端判定。展商身份可以按天发放（`users.exhibitor_expires_at`，NULL 表示永久）：到期在服务端认证解析时惰性结算成普通用户，页面只读后端下发的有效角色、`exhibitorExpiresAt` 与 `exhibitorExpired` 做展示，不自己算过期，也不在页面里另写一套续期规则。
 
@@ -68,7 +68,9 @@
 
 ## 原生桥接
 
-原生只处理设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出、网页里的文件选择（`WebShellActivity` 的 `onShowFileChooser`）、文本文件读取与另存为（`media.importText` / `export.text`）、图片写进系统相册（`media.saveImage`），以及会话刷新令牌与可信设备凭据的设备存储（`session.save` / `session.load` / `session.clear` / `session.device`，见 `SessionStore.java`）。网页关着文件与 `content://` 访问，因此从文件安装语言包时正文由原生读出来回传，底稿另存为与二维码保存也走原生。可信设备的随机凭据由原生 `session.device` 生成并保存在设备私有目录。浏览器预览使用本机存储。
+原生只处理设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出、网页里的文件选择（`WebShellActivity` 的 `onShowFileChooser`）、文本文件读取与另存为（`media.importText` / `export.text`）、图片写进系统相册（`media.saveImage`）、会话刷新令牌与可信设备凭据的设备存储（`session.save` / `session.load` / `session.clear` / `session.device`，见 `SessionStore.java`），以及通行密钥（`passkey.available` / `passkey.create` / `passkey.get`，见 `PasskeyActions.java`）。
+
+**为什么通行密钥在原生**：WebView 里 `navigator.credentials` 不可靠（多数版本没有 WebAuthn），而系统凭据提供方（Android 14 的 Credential Manager，低版本由 Google Play 服务提供）能用指纹 / 面容 / 锁屏密码完成同一件事。桥接传的入参与回调都是**标准 WebAuthn JSON**（base64url 字符串），服务端校验逻辑不区分请求来自 App 还是浏览器。页面侧统一走 `web/src/services/webauthn.ts`：有原生桥就调用桥，没有就用浏览器原生接口；用户取消由原生回 `cancelled`，前端归一成「没做这件事」。App 的 `clientDataJSON` 里 origin 是 `android:apk-key-hash:<签名证书 SHA-256 的 base64url>`，所以服务端的 `WEBAUTHN_ORIGINS` 必须包含它（见 `operations.md`）。网页关着文件与 `content://` 访问，因此从文件安装语言包时正文由原生读出来回传，底稿另存为与二维码保存也走原生。可信设备的随机凭据由原生 `session.device` 生成并保存在设备私有目录。浏览器预览使用本机存储。
 
 `WebAppActions.handle()` 的动作表是唯一原生入口。业务数据动作留在服务端。动作失败回调 `callback.failure`。`AppSettings` 是后端设置的设备镜像，权威值由 `ui.sync` 下发。
 

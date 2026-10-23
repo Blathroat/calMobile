@@ -28,6 +28,7 @@ import java.util.Map;
  * | `export.text` | 语言包底稿等文本同样走系统「另存为」面板，由用户选位置 |
  * | `media.saveImage` | 图片写进系统相册（API 29+ 走 MediaStore，老系统回落「另存为」） |
  * | `session.save` / `session.load` / `session.clear` / `session.device` | 会话与可信设备凭据属于设备状态，存应用私有目录（{@link SessionStore}） |
+ * | `passkey.available` / `passkey.create` / `passkey.get` | WebView 没有可靠的 WebAuthn，通行密钥交给系统凭据提供方（Credential Manager，{@link PasskeyActions}） |
  *
  * 数据行由前端传进来（它已经从后端拿到数据），原生只负责落盘与格式。
  */
@@ -94,6 +95,15 @@ final class WebAppActions {
                 return;
             case "session.device":
                 callback.success(SessionActions.device(activity));
+                return;
+            case "passkey.available":
+                PasskeyActions.available(bridge, callback);
+                return;
+            case "passkey.create":
+                PasskeyActions.create(bridge, payload, callback);
+                return;
+            case "passkey.get":
+                PasskeyActions.get(bridge, payload, callback);
                 return;
             default:
                 callback.failure("未实现的动作：" + action);

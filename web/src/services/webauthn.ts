@@ -1,5 +1,11 @@
 /**
- * 浏览器原生 WebAuthn 的薄封装（不引第三方库）。
+ * 通行密钥的调用层：App 里走原生桥（Android Credential Manager），浏览器里走原生 WebAuthn。
+ *
+ * 两条路返回的东西是一样的：服务端要的 `{ id, rawId, type, response }`，
+ * 字段全是 base64url 字符串。所以上层（安全页、登录页）只认本模块的三个导出，
+ * 不需要知道当前跑在哪种容器里。
+ *
+ * 浏览器分支是「原生 WebAuthn 的薄封装」（不引第三方库）。
  *
  * 服务端下发的注册 / 认证选项里，`challenge`、`user.id` 以及凭据描述符的 `id`
  * 都是 base64url 字符串；浏览器只认 ArrayBuffer，所以进入时还原、提交时再序列化回
@@ -9,6 +15,8 @@
  * 模块顶层不碰 window：测试与 SSR 在导入时没有浏览器环境。
  */
 
+import { nativeBridge, NativeBridgeError } from './native-bridge';
+
 /** 提交给服务端的凭据：字段全是 base64url 字符串。 */
 export interface PasskeyCredentialPayload {
   id: string;
@@ -17,11 +25,48 @@ export interface PasskeyCredentialPayload {
   response: Record<string, string>;
 }
 
-/** 浏览器 WebAuthn 是否可用：接口存在，且当前是安全上下文（https / localhost）。 */
+/**
+ * 当前环境能不能用通行密钥。
+ *
+ * App 里有原生桥就认为可用（真正的能力由 `passkey.available` 在调用时报错说明）；
+ * 浏览器里要求 WebAuthn 接口存在且是安全上下文（https / localhost）。
+ */
 export function isPasskeySupported(): boolean {
+  if (nativeBridge.hasNative()) return true;
   return (
     typeof window !== 'undefined' && window.isSecureContext === true && typeof window.PublicKeyCredential === 'function'
   );
+}
+
+/** 解析原生返回的标准 WebAuthn 响应 JSON。字段已经是 base64url，不用再转换。 */
+function parseBridgeCredential(raw: unknown): PasskeyCredentialPayload | null {
+  if (typeof raw !== 'string' || raw === '') return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed) || !isRecord(parsed.response)) return null;
+    return parsed as unknown as PasskeyCredentialPayload;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 走原生桥拿凭据。
+ *
+ * 用户在系统面板上取消时原生回 `cancelled`，这里和浏览器分支一样归一成 `null`；
+ * 其余失败原样抛出，由页面显示能照着做的说明（例如设备没有可用的凭据提供方）。
+ */
+async function requestFromBridge(
+  action: 'passkey.create' | 'passkey.get',
+  options: unknown,
+): Promise<PasskeyCredentialPayload | null> {
+  try {
+    const result = await nativeBridge.call(action, { optionsJson: JSON.stringify(options ?? {}) });
+    return parseBridgeCredential(result.credentialJson);
+  } catch (reason) {
+    if (reason instanceof NativeBridgeError && reason.code === 'cancelled') return null;
+    throw reason;
+  }
 }
 
 /** ArrayBuffer → base64url（去掉尾部填充）。 */
@@ -123,6 +168,8 @@ async function requestCredential(run: () => Promise<Credential | null>): Promise
  * @returns 可直接提交给 passkeyRegister 的普通对象；用户取消或环境不支持时返回 null
  */
 export async function createCredential(options: unknown): Promise<PasskeyCredentialPayload | null> {
+  // App 里由系统凭据提供方（Credential Manager）完成，选项 JSON 原样交给它。
+  if (nativeBridge.hasNative()) return requestFromBridge('passkey.create', options);
   const publicKey = hydrateCreationOptions(options);
   if (!publicKey) return null;
   return requestCredential(() => navigator.credentials.create({ publicKey }));
@@ -134,6 +181,7 @@ export async function createCredential(options: unknown): Promise<PasskeyCredent
  * @returns 可直接提交给 passkeyVerify 的普通对象；用户取消或环境不支持时返回 null
  */
 export async function getCredential(options: unknown): Promise<PasskeyCredentialPayload | null> {
+  if (nativeBridge.hasNative()) return requestFromBridge('passkey.get', options);
   const publicKey = hydrateRequestOptions(options);
   if (!publicKey) return null;
   return requestCredential(() => navigator.credentials.get({ publicKey }));
