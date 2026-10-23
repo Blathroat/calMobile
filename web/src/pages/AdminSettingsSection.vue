@@ -151,7 +151,7 @@ function inviteDurationLabel(item: InviteItem): string {
             <input
               id="settings-storage-mb"
               v-model.number="form.storageMb"
-              class="input setting-num"
+              class="input input-line setting-num"
               type="number"
               min="64"
               max="10240"
@@ -181,7 +181,7 @@ function inviteDurationLabel(item: InviteItem): string {
             <input
               id="settings-title-zh"
               v-model="form.brand.zh"
-              class="input setting-text"
+              class="input input-line setting-text"
               type="text"
               maxlength="20"
               :placeholder="t('admin.settings.brandZhPlaceholder')"
@@ -194,7 +194,7 @@ function inviteDurationLabel(item: InviteItem): string {
             <input
               id="settings-title-en"
               v-model="form.brand.en"
-              class="input setting-text"
+              class="input input-line setting-text"
               type="text"
               maxlength="24"
               :placeholder="t('admin.settings.brandEnPlaceholder')"
@@ -250,7 +250,7 @@ function inviteDurationLabel(item: InviteItem): string {
               <input
                 id="settings-max-future-exhibitions"
                 v-model.number="form.maxFutureExhibitions"
-                class="input setting-num"
+                class="input input-line setting-num"
                 type="number"
                 min="0"
                 inputmode="numeric"
@@ -267,7 +267,7 @@ function inviteDurationLabel(item: InviteItem): string {
               <input
                 id="settings-max-future-meetings"
                 v-model.number="form.maxFutureMeetings"
-                class="input setting-num"
+                class="input input-line setting-num"
                 type="number"
                 min="0"
                 inputmode="numeric"
@@ -332,7 +332,7 @@ function inviteDurationLabel(item: InviteItem): string {
           <input
             id="settings-invite-uses"
             v-model.number="form.inviteUses"
-            class="input"
+            class="input input-line"
             type="number"
             min="1"
             max="100"
@@ -345,7 +345,7 @@ function inviteDurationLabel(item: InviteItem): string {
           <input
             id="settings-invite-days"
             v-model.number="form.inviteValidHours"
-            class="input"
+            class="input input-line"
             type="number"
             min="0"
             max="8760"
@@ -358,7 +358,7 @@ function inviteDurationLabel(item: InviteItem): string {
           <input
             id="settings-invite-duration"
             v-model.number="form.inviteDurationDays"
-            class="input"
+            class="input input-line"
             type="number"
             min="0"
             max="3650"
@@ -430,7 +430,7 @@ function inviteDurationLabel(item: InviteItem): string {
             <input
               id="settings-image-count"
               v-model.number="form.imageCount"
-              class="input setting-num"
+              class="input input-line setting-num"
               type="number"
               min="0"
               inputmode="numeric"
@@ -444,7 +444,7 @@ function inviteDurationLabel(item: InviteItem): string {
             <input
               id="settings-image-size"
               v-model.number="form.imageSizeMb"
-              class="input setting-num"
+              class="input input-line setting-num"
               type="number"
               min="0"
               inputmode="numeric"
@@ -458,7 +458,7 @@ function inviteDurationLabel(item: InviteItem): string {
             <input
               id="settings-video-count"
               v-model.number="form.videoCount"
-              class="input setting-num"
+              class="input input-line setting-num"
               type="number"
               min="0"
               inputmode="numeric"
@@ -472,7 +472,7 @@ function inviteDurationLabel(item: InviteItem): string {
             <input
               id="settings-video-size"
               v-model.number="form.videoSizeMb"
-              class="input setting-num"
+              class="input input-line setting-num"
               type="number"
               min="0"
               inputmode="numeric"
@@ -492,7 +492,7 @@ function inviteDurationLabel(item: InviteItem): string {
             <input
               id="settings-image-formats"
               v-model="form.imageFormats"
-              class="input setting-text"
+              class="input input-line setting-text"
               type="text"
               maxlength="120"
               placeholder="jpg,jpeg,png,webp"
@@ -505,7 +505,7 @@ function inviteDurationLabel(item: InviteItem): string {
             <input
               id="settings-video-formats"
               v-model="form.videoFormats"
-              class="input setting-text"
+              class="input input-line setting-text"
               type="text"
               maxlength="120"
               placeholder="mp4,mov,webm"
@@ -524,7 +524,7 @@ function inviteDurationLabel(item: InviteItem): string {
             <input
               id="settings-avatar-size"
               v-model.number="form.avatarSizeMb"
-              class="input setting-num"
+              class="input input-line setting-num"
               type="number"
               min="1"
               max="20"
@@ -539,7 +539,7 @@ function inviteDurationLabel(item: InviteItem): string {
             <input
               id="settings-avatar-formats"
               v-model="form.avatarFormats"
-              class="input setting-text"
+              class="input input-line setting-text"
               type="text"
               maxlength="80"
               placeholder="jpg,jpeg,png,webp"
@@ -562,7 +562,7 @@ function inviteDurationLabel(item: InviteItem): string {
                 <input
                   :id="'limit-' + item.key"
                   v-model.number="form.limits[item.key]"
-                  class="input setting-num"
+                  class="input input-line setting-num"
                   type="number"
                   min="0"
                   inputmode="numeric"
@@ -614,11 +614,16 @@ function inviteDurationLabel(item: InviteItem): string {
   min-height: var(--touch);
 }
 
-.setting-row > label {
+/* 设置项标题：比下面的说明文字更重、更大、更黑，否则读不出层级。
+   说明文字走 .field-hint（--fs-meta、--ink-3）。 */
+.setting-row > label,
+.setting-block > label,
+.setting-block > .field-label {
   flex: 1 1 auto;
   min-width: 0;
-  color: var(--ink-2);
-  font-size: var(--fs-meta);
+  color: var(--ink);
+  font-size: var(--fs-body);
+  font-weight: 700;
   line-height: 1.35;
 }
 
@@ -722,9 +727,10 @@ function inviteDurationLabel(item: InviteItem): string {
 }
 
 .limit-group-title {
-  color: var(--ink-2);
-  font-size: var(--fs-label);
+  color: var(--ink);
+  font-size: var(--fs-meta);
   font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .limit-pair {

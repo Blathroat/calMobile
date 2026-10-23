@@ -599,7 +599,7 @@ function normalizeOptions(options: unknown): string[] {
         <input
           id="form-title"
           v-model="form.title"
-          class="input"
+          class="input input-line"
           type="text"
           :placeholder="t('exhibition.form.titlePlaceholder')"
           :maxlength="limit('exhibitionTitle', 60)"
@@ -612,7 +612,7 @@ function normalizeOptions(options: unknown): string[] {
         <input
           id="form-venue"
           v-model="form.venue"
-          class="input"
+          class="input input-line"
           type="text"
           :placeholder="t('exhibition.form.venuePlaceholder')"
           :maxlength="limit('exhibitionVenue', 60)"
@@ -626,7 +626,7 @@ function normalizeOptions(options: unknown): string[] {
           <label for="form-date"
             >{{ t('exhibition.form.openDate') }}<span class="required" aria-hidden="true"> *</span></label
           >
-          <input id="form-date" v-model="form.date" class="input" type="date" />
+          <input id="form-date" v-model="form.date" class="input input-line" type="date" />
           <p v-if="isInvalid('date')" class="field-error" role="alert">{{ formError }}</p>
         </div>
         <div class="field" :data-invalid="isInvalid('time') ? 'true' : 'false'">
@@ -635,7 +635,7 @@ function normalizeOptions(options: unknown): string[] {
             <input
               id="form-time"
               v-model="timeStart"
-              class="input"
+              class="input input-line"
               type="time"
               step="60"
               :aria-label="t('exhibition.form.openTime')"
@@ -644,7 +644,7 @@ function normalizeOptions(options: unknown): string[] {
             <input
               id="form-time-end"
               v-model="timeEnd"
-              class="input"
+              class="input input-line"
               type="time"
               step="60"
               :aria-label="t('exhibition.form.openTime')"
@@ -657,12 +657,12 @@ function normalizeOptions(options: unknown): string[] {
       <div class="grid-cols-2">
         <div class="field" :data-invalid="isInvalid('registrationStart') ? 'true' : 'false'">
           <label for="form-reg-start">{{ t('exhibition.form.registrationOpens') }}</label>
-          <input id="form-reg-start" v-model="form.registrationStart" class="input" type="date" />
+          <input id="form-reg-start" v-model="form.registrationStart" class="input input-line" type="date" />
           <p v-if="isInvalid('registrationStart')" class="field-error" role="alert">{{ formError }}</p>
         </div>
         <div class="field" :data-invalid="isInvalid('registrationEnd') ? 'true' : 'false'">
           <label for="form-reg-end">{{ t('exhibition.form.registrationCloses') }}</label>
-          <input id="form-reg-end" v-model="form.registrationEnd" class="input" type="date" />
+          <input id="form-reg-end" v-model="form.registrationEnd" class="input input-line" type="date" />
           <p v-if="isInvalid('registrationEnd')" class="field-error" role="alert">{{ formError }}</p>
         </div>
       </div>
@@ -672,7 +672,7 @@ function normalizeOptions(options: unknown): string[] {
         <span id="form-category-label" class="field-label">{{ t('admin.limits.category') }}</span>
         <button
           id="form-category"
-          class="input category-trigger"
+          class="input input-line category-trigger"
           type="button"
           aria-haspopup="dialog"
           aria-labelledby="form-category-label"

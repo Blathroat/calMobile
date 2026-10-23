@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
- * 名字后面的蓝色小标签，样子跟展会卡片上的「仅展示」一样。
- * 展商写「展商」，管理员写「管理员」，普通用户和访客不显示。
+ * 名字后面的身份小签（展商 / 管理员）。普通用户与访客不显示。
+ *
+ * 身份不是状态，所以这里**不用** `StatusTag` 的信号灯，而是保留项目原来的方框小签：
+ * 浅底 + 细描边 + 强调色文字，跟状态标签在视觉上区分得开。
  */
-import StatusTag from './StatusTag.vue';
 import { t } from '@/i18n';
 
 const props = defineProps<{ roleCode?: string }>();
@@ -21,5 +22,22 @@ function label(): string {
 </script>
 
 <template>
-  <StatusTag :text="label()" tone="info" />
+  <span v-if="label()" class="role-tag">{{ label() }}</span>
 </template>
+
+<style>
+.role-tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border: var(--hairline) solid var(--accent-edge);
+  border-radius: var(--r-chip);
+  background: var(--screen);
+  color: var(--accent-ink);
+  font-size: var(--fs-tag);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+</style>

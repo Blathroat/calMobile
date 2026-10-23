@@ -179,21 +179,15 @@ usePullRefresh(
   />
 
   <template v-else>
-    <!-- 顶部并排两颗入口：核销与报名管理是现场最常走的两步 -->
-    <div class="grid-cols-2">
-      <button
-        class="cta ghost"
-        type="button"
-        :disabled="limited"
-        :title="limited ? t('exhibitor.cannotCheckin') : undefined"
-        @click="openCheckin"
-      >
-        {{ t('exhibitor.checkin') }}
-      </button>
-      <button class="cta ghost" type="button" @click="router.push('/review')">
-        {{ t('registration.review.title') }}
-      </button>
-    </div>
+    <button
+      class="cta ghost"
+      type="button"
+      :disabled="limited"
+      :title="limited ? t('exhibitor.cannotCheckin') : undefined"
+      @click="openCheckin"
+    >
+      {{ t('exhibitor.checkin') }}
+    </button>
 
     <div v-if="limited" class="notice" data-tone="accent">
       <strong>{{ t('exhibition.form.publishBlocked') }}</strong>
@@ -231,38 +225,38 @@ usePullRefresh(
             :alt="String(item.title || '')"
           />
           <span class="row-copy">
-            <!-- 信号灯收在卡片右上角：不与标题抢宽度，窄屏下标题也能排满整行 -->
-            <span class="exh-tag-row">
-              <StatusTag
-                :text="modeLabel(String(item.statusCode || ''))"
-                :tone="statusTone(String(item.statusCode || ''))"
-              />
-            </span>
             <strong class="row-title exh-title">{{ item.title }}</strong>
             <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
             <span class="row-meta truncate">{{ item.venue }}</span>
-            <span class="row-meta">{{
-              t('exhibition.list.statusWithRegistrations', {
-                status: modeLabel(String(item.statusCode ?? '')),
-                count: String(item.registrationCount ?? 0),
-              })
-            }}</span>
+            <!-- 状态与报名数合成一条信号灯：既没有「左边空着」的单独一行，
+                 也不会和标题抢宽度。 -->
+            <StatusTag
+              :text="
+                t('exhibition.list.statusWithRegistrations', {
+                  status: modeLabel(String(item.statusCode ?? '')),
+                  count: String(item.registrationCount ?? 0),
+                })
+              "
+              :tone="statusTone(String(item.statusCode || ''))"
+            />
             <span v-if="item.qrEnabled === true" class="row-meta">{{ t('exhibitor.qrEnabled') }}</span>
           </span>
         </button>
 
         <hr class="divider" />
 
-        <div class="action-row exh-actions">
+        <div class="action-row">
           <button
-            class="text-action"
+            class="cta ghost"
+            data-size="small"
             type="button"
             @click="router.push(`/review?exhibitionId=${encodeURIComponent(String(item.id))}`)"
           >
             {{ t('admin.exhibitions.viewRegistrations') }}
           </button>
           <button
-            class="text-action"
+            class="cta ghost"
+            data-size="small"
             type="button"
             :disabled="limited"
             :title="limited ? t('exhibition.form.editBlocked') : undefined"
@@ -270,7 +264,7 @@ usePullRefresh(
           >
             {{ t('admin.exhibitions.edit') }}
           </button>
-          <button class="text-action" type="button" @click="copyJoinLink(item.id)">
+          <button class="cta ghost" data-size="small" type="button" @click="copyJoinLink(item.id)">
             {{ joinLinkCopy }}
           </button>
         </div>
@@ -313,13 +307,6 @@ usePullRefresh(
   text-align: start;
 }
 
-/* 信号灯独占右上角一行并靠右，不与标题抢宽度。 */
-.exh-tag-row {
-  display: flex;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
 /* 标题最多两行：320 宽下也不会被截成四五个字。 */
 .exh-title {
   display: -webkit-box;
@@ -327,27 +314,6 @@ usePullRefresh(
   -webkit-line-clamp: 2;
   overflow: hidden;
   overflow-wrap: anywhere;
-}
-
-/* 配置动作：默认次要墨色，悬停才主题色，整屏不会满地强调色。 */
-.exh-actions {
-  flex-wrap: wrap;
-}
-
-.exh-actions .text-action {
-  padding-inline: var(--s1);
-  color: var(--ink-2);
-}
-
-.exh-actions .text-action[disabled] {
-  color: var(--ink-3);
-  cursor: not-allowed;
-}
-
-@media (hover: hover) {
-  .exh-actions .text-action:hover:not([disabled]) {
-    color: var(--accent-ink);
-  }
 }
 
 /* 右下角悬浮圆形按钮：避开底部导航与安全区。 */
