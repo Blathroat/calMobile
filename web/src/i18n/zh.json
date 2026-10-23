@@ -905,6 +905,11 @@
     "generateBackupCodes": "生成新备用码",
     "manageDevices": "管理登录设备",
     "methodSummary": "当前验证方式：{method}；备用码还剩 {codes} 个",
+    "methodSummaryNoCodes": "当前验证方式：{method}",
+    "backupCodesMissing": "还没有备用码：手机和邮箱都用不了时就无法登录。现在生成一份，抄下来放好。",
+    "backupCodesLow": "备用码只剩 {count} 个，建议现在重新生成一份。",
+    "backupCodesCreate": "生成备用码",
+    "backupCodesFirst": "生成一批一次性备用码：手机和邮箱都用不了时用它登录，每枚只能用一次，关闭后不再显示。",
     "password": {
       "account": "账号密码",
       "change": "修改密码",

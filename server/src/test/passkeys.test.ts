@@ -123,6 +123,7 @@ test('绑定通行密钥：要身份复核、挑战一次一用、列表不下�
 
 test('启用通行密钥、登录第一步的 methods、验证码通道关闭与关闭后保留凭据', async () => {
   await pool.query("UPDATE users SET two_factor_enabled = false, two_factor_method = 'email' WHERE id = 'usr-pk'");
+  await pool.query("DELETE FROM backup_codes WHERE user_id = 'usr-pk'");
   const session = await login('passkeyuser');
 
   // 一枚凭据都没有：启用被拒（errorCode 让前端提示先添加）
@@ -145,11 +146,20 @@ test('启用通行密钥、登录第一步的 methods、验证码通道关闭与
   assert.strictEqual(enabled.body.ok, true, JSON.stringify(enabled.body));
   assert.strictEqual(enabled.body.twoFactorEnabled, true);
   assert.strictEqual(enabled.body.twoFactorMethod, 'passkey');
+  // 切到通行密钥时如果还没有备用码，顺手补一批并回给前端（丢设备时就靠它）
+  assert.strictEqual(enabled.body.backupCodes.length, 10, JSON.stringify(enabled.body.backupCodes));
 
   const security = await get('/api/v1/profile/security', { token: session.token });
   assert.strictEqual(security.body.twoFactorEnabled, true);
   assert.strictEqual(security.body.twoFactorMethod, 'passkey');
   assert.strictEqual(security.body.passkeyBound, true);
+  assert.strictEqual(security.body.backupCodesLeft, 10);
+
+  // 再启用一次：已有备用码就一枚都不动，响应里给空数组
+  const againProof = await identityTicket(session.token, 'passkey@example.com', 'factor');
+  const again = await post('/api/v1/profile/2fa/passkey/enable', { stepUpToken: againProof }, { token: session.token });
+  assert.strictEqual(again.body.ok, true, JSON.stringify(again.body));
+  assert.deepStrictEqual(again.body.backupCodes, [], '已有备用码时不轮换，避免悄悄作废旧码');
 
   const step1 = await post('/api/v1/auth/login', { username: 'passkeyuser', password: 'password' });
   assert.strictEqual(step1.body.twoFactorRequired, true);

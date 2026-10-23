@@ -52,6 +52,8 @@ const props = defineProps<{
   otpauthUri?: string;
   identityScope?: IdentityScope;
   totpAvailable?: boolean;
+  /** 输密码那一步的说明：没有旧备用码时不用吓唬「旧码会失效」。 */
+  passwordHint?: string;
   passwordMin?: number;
   passwordMax?: number;
   sendIdentityCode?: () => Promise<string>;
@@ -528,7 +530,11 @@ function requestEmailResend(): void {
 
   <div v-else-if="view === 'password'" class="form" data-gap="sm">
     <p class="field-hint">
-      {{ action === 'disable' ? t('security.setup.disableNeedsPassword') : t('security.backupCodesInvalidate') }}
+      {{
+        action === 'disable'
+          ? t('security.setup.disableNeedsPassword')
+          : passwordHint || t('security.backupCodesInvalidate')
+      }}
     </p>
     <div class="field">
       <label for="security-sheet-password">{{ t('security.setup.currentPassword') }}</label>

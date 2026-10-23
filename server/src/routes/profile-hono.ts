@@ -563,6 +563,9 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
    *
    * 绑定与启用分开：先绑好至少一枚，再用身份复核票切换。关闭两步验证不会删除凭据，
    * 重新开启时可以沿用（与保留 TOTP 密钥一致）。
+   *
+   * **备用码兜底**：切到通行密钥时如果还没有备用码，顺手生成一批并随响应返回（只在这一刻看得到）。
+   * 通行密钥依赖设备，丢设备就等于丢了唯一的登录方式；已有备用码时不动它们，避免悄悄作废旧码。
    */
   app.post('/2fa/passkey/enable', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
@@ -580,7 +583,14 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       // 走到这里只可能是凭据在两步之间被删掉了（或邮箱被并发改动）：按「先加凭据」提示。
       return jsonResponse(c, { ok: false, error: '请先添加一枚通行密钥', errorCode: 'security.passkeyRequired' });
     }
-    return jsonResponse(c, { ok: true, error: '', twoFactorEnabled: true, twoFactorMethod: 'passkey' });
+    const backupCodes = factors.backupCodesLeft === 0 ? await regenerateBackupCodes(user.userId) : [];
+    return jsonResponse(c, {
+      ok: true,
+      error: '',
+      twoFactorEnabled: true,
+      twoFactorMethod: 'passkey',
+      backupCodes,
+    });
   });
 
   /**

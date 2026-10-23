@@ -112,6 +112,8 @@ const emailLabel = computed(() => {
     ? t('security.email.verified', { email })
     : t('security.email.unverified', { email });
 });
+/** 还能用的备用码数量：0 是「最后一道退路没了」，界面要明说。 */
+const backupCount = computed(() => Number(info.backupCodesLeft) || 0);
 const methodHint = computed(() => {
   if (!enabled.value) return canEnable.value ? t('security.chooseMethod') : t('security.email.unavailable');
   const name =
@@ -120,7 +122,10 @@ const methodHint = computed(() => {
       : activeMode.value === 'passkey'
         ? t('security.passkey.title')
         : t('security.email.enableWithCode');
-  return t('security.methodSummary', { method: name, codes: Number(info.backupCodesLeft) || 0 });
+  // 0 枚时不再说「还剩 0 个」：下面那条提示负责把话说清楚。
+  return backupCount.value > 0
+    ? t('security.methodSummary', { method: name, codes: backupCount.value })
+    : t('security.methodSummaryNoCodes', { method: name });
 });
 
 function errorText(reason: unknown): string {
@@ -183,6 +188,7 @@ function openFormSheet(options: {
   action: SheetAction;
   identityScope?: IdentityScope;
   totpAvailable?: boolean;
+  passwordHint?: string;
   initialEmail?: string;
   maskedEmail?: string;
   secret?: string;
@@ -205,6 +211,7 @@ function openFormSheet(options: {
       otpauthUri: options.otpauthUri,
       identityScope: options.identityScope,
       totpAvailable: options.totpAvailable,
+      passwordHint: options.passwordHint,
       passwordMin: Number(bootstrap.limits.passwordMin) || 6,
       passwordMax: Number(bootstrap.limits.passwordMax) || 32,
       sendIdentityCode: requestIdentityCode,
@@ -307,14 +314,17 @@ async function submitSheetAction(payload: {
         toast(t('security.passkey.added'), 'success');
         return { close: true };
       }
-      case 'passkey-enable':
+      case 'passkey-enable': {
         result = await api.security.passkeyEnable(String(payload.stepUpToken || ''));
         assertOk(result);
         drawerCommitted = true;
         await refresh();
+        // 切到通行密钥时服务端会补一批备用码（原本一枚都没有时）：当场展示一次，别让它只存在库里
+        const codes = Array.isArray(result.backupCodes) ? result.backupCodes.map(String) : [];
         notice.value = t('security.passkey.methodHint');
         toast(t('security.passkey.methodHint'), 'success');
-        return { close: true };
+        return codes.length ? { backupCodes: codes, close: true } : { close: true };
+      }
       default:
         throw new Error(t('auth.register.failed'));
     }
@@ -574,17 +584,25 @@ async function chooseMode(target: FactorMode): Promise<void> {
 }
 
 function askRegenerate(): void {
+  // 一枚都没有时这是「第一次生成」：不要说「旧码会失效」，也就没有旧码可谈。
+  const first = backupCount.value === 0;
+  const title = first ? t('security.backupCodesCreate') : t('security.regenerateBackupCodes');
   openSheet({
-    title: t('security.regenerateBackupCodes'),
-    message: t('security.backupCodesInvalidate'),
+    title,
+    message: first ? t('security.backupCodesFirst') : t('security.backupCodesInvalidate'),
     actions: [
       { label: t('common.cancel'), onClick: (close) => close() },
       {
-        label: t('security.generateBackupCodes'),
+        label: title,
         variant: 'danger',
         onClick: (close) => {
           close();
-          openFormSheet({ title: t('security.regenerateBackupCodes'), kind: 'password', action: 'regenerate' });
+          openFormSheet({
+            title,
+            kind: 'password',
+            action: 'regenerate',
+            ...(first ? { passwordHint: t('security.backupCodesFirst') } : {}),
+          });
         },
       },
     ],
@@ -654,9 +672,16 @@ async function rebindTotp(): Promise<void> {
           :label="t('auth.login.twoFactor')"
           @update:model-value="(value: string) => chooseMode(value as FactorMode)"
         />
+        <!-- 备用码是通行密钥 / 验证器丢失时唯一的退路：没有就明说，快用完也提醒 -->
+        <p v-if="enabled && backupCount === 0" class="notice" data-tone="warn" role="status">
+          {{ t('security.backupCodesMissing') }}
+        </p>
+        <p v-else-if="enabled && backupCount <= 2" class="notice" data-tone="warn" role="status">
+          {{ t('security.backupCodesLow', { count: backupCount }) }}
+        </p>
         <div v-if="enabled || totpEnabled" class="security-actions">
           <button v-if="enabled" class="text-action" type="button" :disabled="busy" @click="askRegenerate">
-            {{ t('security.regenerateBackupCodes') }}
+            {{ backupCount === 0 ? t('security.backupCodesCreate') : t('security.regenerateBackupCodes') }}
           </button>
           <button v-if="totpEnabled" class="text-action" type="button" :disabled="busy" @click="rebindTotp">
             {{ copy.rotateTotp }}
@@ -761,8 +786,14 @@ async function rebindTotp(): Promise<void> {
 }
 
 .security-factor > .seg,
+.security-factor > .notice,
 .security-actions {
   grid-column: 1 / -1;
+}
+
+/* 提示块贴边铺满整行时不再额外加左右内距，卡片自己的内距已经够了。 */
+.security-factor > .notice {
+  margin: 0;
 }
 
 /* 四个选项在窄行里要放得下：行内边距收窄一档，仍用令牌。 */

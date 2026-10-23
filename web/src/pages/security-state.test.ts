@@ -33,14 +33,18 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 
 let app: App | undefined;
-const securityInfo = (mode: 'off' | 'email' | 'totp' = 'off', totpConfigured = mode === 'totp') => ({
+const securityInfo = (
+  mode: 'off' | 'email' | 'totp' = 'off',
+  totpConfigured = mode === 'totp',
+  backupCodesLeft = 0,
+) => ({
   email: 'user@example.com',
   emailVerified: true,
   canEnable: true,
   twoFactorEnabled: mode !== 'off',
   twoFactorMethod: mode,
   totpEnabled: totpConfigured,
-  backupCodesLeft: 0,
+  backupCodesLeft,
 });
 
 const TestRoot = defineComponent({
@@ -60,8 +64,12 @@ function selected(mode: 'off' | 'email' | 'totp'): boolean {
   return choice(mode).getAttribute('aria-pressed') === 'true';
 }
 
-async function mount(mode: 'off' | 'email' | 'totp' = 'off', totpConfigured = mode === 'totp'): Promise<void> {
-  vi.mocked(api.security.get).mockResolvedValue(securityInfo(mode, totpConfigured));
+async function mount(
+  mode: 'off' | 'email' | 'totp' = 'off',
+  totpConfigured = mode === 'totp',
+  backupCodesLeft = 0,
+): Promise<void> {
+  vi.mocked(api.security.get).mockResolvedValue(securityInfo(mode, totpConfigured, backupCodesLeft));
   document.body.innerHTML = '<div id="security-test"></div>';
   app = createApp(TestRoot);
   app.use(createPinia()).mount('#security-test');
@@ -206,5 +214,35 @@ describe('安全方式切换与抽屉', () => {
     await clickPrimary();
     expect(selected('off')).toBe(true);
     expect(document.querySelector('.sheet-panel [role="alert"]')?.textContent).toBe('验证码不正确');
+  });
+});
+
+describe('备用码余量提示', () => {
+  it('一枚备用码都没有时给出警告，并把动作改成「生成备用码」', async () => {
+    await mount('email', false, 0);
+    const warn = document.querySelector('.security-factor .notice[data-tone="warn"]');
+    expect(warn?.textContent).toContain('还没有备用码');
+    expect(document.querySelector('.security-factor .field-hint')?.textContent).toBe('当前验证方式：用邮箱验证码开启');
+    expect(Array.from(document.querySelectorAll('.security-factor .text-action')).map((el) => el.textContent?.trim())).toContain(
+      '生成备用码',
+    );
+  });
+
+  it('只剩两枚以内时提醒重新生成，说明行仍报数量', async () => {
+    await mount('email', false, 2);
+    const warn = document.querySelector('.security-factor .notice[data-tone="warn"]');
+    expect(warn?.textContent).toContain('备用码只剩 2 个');
+    expect(document.querySelector('.security-factor .field-hint')?.textContent).toBe(
+      '当前验证方式：用邮箱验证码开启；备用码还剩 2 个',
+    );
+    expect(Array.from(document.querySelectorAll('.security-factor .text-action')).map((el) => el.textContent?.trim())).toContain(
+      '重新生成备用码',
+    );
+  });
+
+  it('余量充足时没有警告', async () => {
+    await mount('email', false, 8);
+    expect(document.querySelector('.security-factor .notice[data-tone="warn"]')).toBeNull();
+    expect(document.querySelector('.security-factor .text-action')?.textContent?.trim()).toBe('重新生成备用码');
   });
 });
