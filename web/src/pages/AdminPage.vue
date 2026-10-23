@@ -229,6 +229,8 @@ const form = reactive({
   inviteValidHours: 168,
   /** 兑换后展商身份保留的天数；0 表示永久 */
   inviteDurationDays: 0,
+  /** 软件包下载源：直链地址或 GitHub 仓库（owner/repo） */
+  download: { source: 'url' as 'url' | 'github', url: '', repo: '' },
 });
 
 /** 管理页自己的文案：提示与开关说明放在这里，提取脚本会换成文案 key。 */
@@ -654,6 +656,10 @@ function fillForm(data: JsonObject): void {
   form.inviteValidHours = Number(storedHours);
   if (!Number.isFinite(form.inviteValidHours)) form.inviteValidHours = 168;
   form.inviteDurationDays = Number(invite.durationDays ?? form.inviteDurationDays) || 0;
+  const download = (data.download ?? {}) as JsonObject;
+  form.download.source = download.source === 'github' ? 'github' : 'url';
+  form.download.url = String(download.url ?? '');
+  form.download.repo = String(download.repo ?? '');
   if (Array.isArray(data.invites)) {
     invites.value = data.invites.map((item) => {
       const row = (item ?? {}) as JsonObject;
@@ -817,6 +823,11 @@ async function saveSettings(): Promise<void> {
       inviteDurationDays: Number(form.inviteDurationDays) || 0,
       storageMb: Number(form.storageMb) || 0,
       whenFull: form.whenFull,
+      download: {
+        source: form.download.source,
+        url: form.download.url.trim(),
+        repo: form.download.repo.trim(),
+      },
     };
     for (const item of LIMIT_ITEMS) payload[item.key] = numberField(item.key);
 

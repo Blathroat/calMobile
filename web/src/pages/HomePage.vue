@@ -553,7 +553,8 @@ onBeforeUnmount(() => {
   padding: var(--s2);
   border: var(--hairline) solid var(--stroke);
   border-radius: var(--r-panel);
-  background: var(--f3);
+  /* 纸面底色：日期数字压在浅灰填充上对比度只有 4.4:1，换白卡后灰显日期也够读。 */
+  background: var(--screen);
   will-change: transform;
 }
 

@@ -9,14 +9,14 @@
  * 表单只填一次（`built` 闸）：首屏取数回来才落模型，之后的渲染不再覆盖用户输入。
  * 校验规则与上限统一走 `@/services/validate`，错误就地显示在 `.field-error` 并标 `data-invalid`。
  */
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
-import { confirmSheet } from '@/services/sheet';
+import { confirmSheet, openSheet } from '@/services/sheet';
 import { PATTERNS, allowedFormats, check, limit, validateAll } from '@/services/validate';
 import { EXHIBITION_STATUS, FIELD_TYPE, REGISTRATION_MODES, exhibitionStatusLabel } from '@/services/status';
 import { device } from '@/services/device-services';
@@ -33,6 +33,7 @@ import {
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import SegControl from '@/components/SegControl.vue';
+import AppIcon from '@/components/AppIcon.vue';
 import type { ExhibitionDetail, JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -84,6 +85,86 @@ const form = reactive({
   allowCancel: true,
 });
 const fields = ref<CollectField[]>([]);
+
+// ── 开展时间：两个系统时间选择框 ─────────────────────────────────
+
+/**
+ * 数据仍只有 `form.time` 一个字段（`HH:MM-HH:MM`），界面上拆成开始 / 结束两个
+ * `type="time"`。两个都填了才拼成区间；只填一个时留空，仍按原有「时间选填」规则校验，
+ * 提交的接口字段名与校验规则都不变。
+ */
+const timeStart = ref('');
+const timeEnd = ref('');
+/** 拆分写回时防止两个 watch 互相触发。 */
+let composingTime = false;
+
+/** 把 `9:00` 补成 `09:00`：历史数据可能没补零，type="time" 只认两位小时。 */
+function normalizeTime(value: string): string {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  const hour = match?.[1] ?? '';
+  const minute = match?.[2] ?? '';
+  return hour && minute ? `${hour.padStart(2, '0')}:${minute}` : '';
+}
+
+/** 拆分历史值：认 `HH:MM-HH:MM` 与 `H:MM - H:MM` 两种写法，其它当作没填。 */
+function splitTime(value: string): [string, string] {
+  const match = /^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/.exec(String(value).trim());
+  return [normalizeTime(match?.[1] ?? ''), normalizeTime(match?.[2] ?? '')];
+}
+
+function composeTime(): string {
+  return timeStart.value && timeEnd.value ? `${timeStart.value}-${timeEnd.value}` : '';
+}
+
+watch([timeStart, timeEnd], () => {
+  composingTime = true;
+  const next = composeTime();
+  if (form.time !== next) form.time = next;
+  composingTime = false;
+});
+
+/** `form.time` 是唯一数据源：取数或回填草稿后，把两个时间框同步过来。 */
+watch(
+  () => form.time,
+  (value) => {
+    if (composingTime) return;
+    const [start, end] = splitTime(value);
+    timeStart.value = start;
+    timeEnd.value = end;
+  },
+  { immediate: true, flush: 'sync' },
+);
+
+// ── 分类抽屉 ─────────────────────────────────────────────────────
+
+/**
+ * 分类是管理员维护的固定清单，不用系统下拉框：点击字段行打开底部抽屉，
+ * 选项整行可点、当前值带对勾，点一下即选中并收起。
+ */
+function openCategorySheet(): void {
+  openSheet({
+    title: t('admin.limits.category'),
+    layout: 'list',
+    actions: [
+      {
+        label: categoryPlaceholder,
+        checked: form.category.trim() === '',
+        onClick: (close) => {
+          form.category = '';
+          close();
+        },
+      },
+      ...categoryOptions.value.map((item) => ({
+        label: item,
+        checked: form.category === item,
+        onClick: (close: () => void) => {
+          form.category = item;
+          close();
+        },
+      })),
+    ],
+  });
+}
 /** 表单只填一次：编辑页的数据到了才落模型，之后渲染不再覆盖用户输入。 */
 const built = ref(false);
 const formError = ref('');
@@ -518,7 +599,7 @@ function normalizeOptions(options: unknown): string[] {
         <input
           id="form-title"
           v-model="form.title"
-          class="input"
+          class="input input-line"
           type="text"
           :placeholder="t('exhibition.form.titlePlaceholder')"
           :maxlength="limit('exhibitionTitle', 60)"
@@ -531,82 +612,102 @@ function normalizeOptions(options: unknown): string[] {
         <input
           id="form-venue"
           v-model="form.venue"
-          class="input"
+          class="input input-line"
           type="text"
           :placeholder="t('exhibition.form.venuePlaceholder')"
           :maxlength="limit('exhibitionVenue', 60)"
         />
       </div>
-      <div class="grid-cols-2">
+
+      <!-- 开展日期｜开展时间：宽屏两列、窄屏自动落成一行，避免原生日期控件截字。
+           开展时间内部是两个系统时间选择框，中间一横把起止分开，值仍写回 form.time。 -->
+      <div class="form-pair">
         <div class="field" :data-invalid="isInvalid('date') ? 'true' : 'false'">
           <label for="form-date"
             >{{ t('exhibition.form.openDate') }}<span class="required" aria-hidden="true"> *</span></label
           >
-          <input id="form-date" v-model="form.date" class="input" type="date" />
+          <input id="form-date" v-model="form.date" class="input input-line" type="date" />
           <p v-if="isInvalid('date')" class="field-error" role="alert">{{ formError }}</p>
         </div>
         <div class="field" :data-invalid="isInvalid('time') ? 'true' : 'false'">
           <label for="form-time">{{ t('exhibition.form.openTime') }}</label>
-          <input
-            id="form-time"
-            v-model="form.time"
-            class="input"
-            type="text"
-            placeholder="09:00-17:00"
-            maxlength="20"
-          />
+          <div class="time-range">
+            <input
+              id="form-time"
+              v-model="timeStart"
+              class="input input-line"
+              type="time"
+              step="60"
+              :aria-label="t('exhibition.form.openTime')"
+            />
+            <span class="time-sep" aria-hidden="true">–</span>
+            <input
+              id="form-time-end"
+              v-model="timeEnd"
+              class="input input-line"
+              type="time"
+              step="60"
+              :aria-label="t('exhibition.form.openTime')"
+            />
+          </div>
           <p v-if="isInvalid('time')" class="field-error" role="alert">{{ formError }}</p>
         </div>
       </div>
+
       <div class="grid-cols-2">
         <div class="field" :data-invalid="isInvalid('registrationStart') ? 'true' : 'false'">
           <label for="form-reg-start">{{ t('exhibition.form.registrationOpens') }}</label>
-          <input id="form-reg-start" v-model="form.registrationStart" class="input" type="date" />
+          <input id="form-reg-start" v-model="form.registrationStart" class="input input-line" type="date" />
           <p v-if="isInvalid('registrationStart')" class="field-error" role="alert">{{ formError }}</p>
         </div>
         <div class="field" :data-invalid="isInvalid('registrationEnd') ? 'true' : 'false'">
           <label for="form-reg-end">{{ t('exhibition.form.registrationCloses') }}</label>
-          <input id="form-reg-end" v-model="form.registrationEnd" class="input" type="date" />
+          <input id="form-reg-end" v-model="form.registrationEnd" class="input input-line" type="date" />
           <p v-if="isInvalid('registrationEnd')" class="field-error" role="alert">{{ formError }}</p>
         </div>
       </div>
+
+      <!-- 分类是管理员在「管理后台-设置」里维护的清单：一行可点的字段，点开抽屉选值 -->
       <div class="field" :data-invalid="isInvalid('category') ? 'true' : 'false'">
-        <label for="form-category">{{ t('admin.limits.category') }}</label>
-        <!-- 分类是管理员在「管理后台-设置」里维护的清单，展商这里只能从清单里选 -->
-        <select id="form-category" v-model="form.category" class="select">
-          <option value="">{{ categoryPlaceholder }}</option>
-          <option v-for="item in categoryOptions" :key="item" :value="item">{{ item }}</option>
-        </select>
+        <span id="form-category-label" class="field-label">{{ t('admin.limits.category') }}</span>
+        <button
+          id="form-category"
+          class="input input-line category-trigger"
+          type="button"
+          aria-haspopup="dialog"
+          aria-labelledby="form-category-label"
+          @click="openCategorySheet"
+        >
+          <span class="category-value" :data-empty="form.category ? 'false' : 'true'">{{
+            form.category || categoryPlaceholder
+          }}</span>
+          <AppIcon name="chevronDown" size="icon icon-sm" />
+        </button>
         <p v-if="isInvalid('category')" class="field-error" role="alert">{{ formError }}</p>
       </div>
+
       <p v-if="formError && !invalidField" class="field-error" role="alert">{{ formError }}</p>
       <p v-if="isInvalid('fields')" class="field-error" role="alert">{{ formError }}</p>
     </div>
 
-    <!-- 封面：1080×1920 竖版海报，可上传 / 更换 / 移除 -->
+    <!-- 封面：1080×1920 竖版，左侧预览、右侧上传 / 更换 / 移除与格式说明 -->
     <div class="card">
-      <div class="row" data-between="true">
-        <span class="section-label">{{ t('exhibition.form.cover') }}</span>
-        <span class="pill">1080 × 1920</span>
-      </div>
-      <div v-if="form.imageUri" class="hero ph-img hero-compact">
-        <img :src="form.imageUri" :alt="t('exhibition.form.cover')" />
-      </div>
-      <div v-else class="hero ph-img hero-compact" aria-hidden="true" />
-      <div class="row" data-gap="md">
-        <button class="cta ghost" data-size="small" type="button" style="flex: 1 1 0" @click="pickCover">
-          {{ form.imageUri ? t('admin.media.changeCover') : t('admin.media.uploadCover') }}
-        </button>
-        <button
-          v-if="form.imageUri"
-          class="cta ghost"
-          data-size="small"
-          type="button"
-          style="flex: 1 1 0"
-          @click="removeCover"
-        >
-          {{ t('admin.media.removeCover') }}
-        </button>
+      <span class="section-label">{{ t('exhibition.form.cover') }}</span>
+      <div class="cover-row">
+        <div v-if="form.imageUri" class="cover-frame ph-img">
+          <img :src="form.imageUri" :alt="t('exhibition.form.cover')" />
+        </div>
+        <div v-else class="cover-frame ph-img" aria-hidden="true" />
+        <div class="cover-side">
+          <button class="cta ghost" data-size="small" type="button" @click="pickCover">
+            {{ form.imageUri ? t('admin.media.changeCover') : t('admin.media.uploadCover') }}
+          </button>
+          <button v-if="form.imageUri" class="cta ghost" data-size="small" type="button" @click="removeCover">
+            {{ t('admin.media.removeCover') }}
+          </button>
+          <p class="field-hint">1080 × 1920</p>
+          <p class="field-hint">{{ formatHint }}</p>
+        </div>
       </div>
     </div>
 
@@ -668,7 +769,7 @@ function normalizeOptions(options: unknown): string[] {
     />
 
     <!-- 删除放在内容最下，保存仍固定在页脚。新建还没有展会，按钮不可点。 -->
-    <div class="card">
+    <div class="card danger-zone">
       <span class="section-label">{{ t('exhibition.form.dangerZone') }}</span>
       <button class="cta danger" type="button" :disabled="isCreate" @click="askDelete">
         {{ isCreate ? t('exhibition.form.deleteAfterSave') : t('exhibition.form.deleteExhibition') }}
@@ -689,23 +790,107 @@ function normalizeOptions(options: unknown): string[] {
   </Teleport>
 </template>
 
-<style>
+<style scoped>
+/* 只作用于本页自己的类名：卡片内距由外壳与 .card 给，这里不再补左右 padding。 */
 .clamp-2 {
   -webkit-line-clamp: 2;
 }
 
-.select {
-  appearance: none;
-  padding-inline-end: var(--s6);
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
-    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
-  background-position:
-    calc(100% - 20px) 50%,
-    calc(100% - 14px) 50%;
-  background-size:
-    6px 6px,
-    6px 6px;
-  background-repeat: no-repeat;
+/* 表单列宽跟容器走：隐式 auto 轨道会被子项的 max-content 撑宽，320 宽时会横向溢出。 */
+.form {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 开展日期｜开展时间：宽屏两列、窄屏自动落成一行（原生日期控件窄于一列会截字）。 */
+.form-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--s4);
+}
+
+/* 开展时间：开始 – 结束两个系统时间选择框，共用一条基线。 */
+.time-range {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.time-range .input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.time-sep {
+  flex: none;
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+}
+
+/* 分类字段：借用 .input 的外观（下划线随底座走），只补布局：文字靠左、chevron 靠右。 */
+.category-trigger {
+  justify-content: space-between;
+  gap: var(--s2);
+  text-align: start;
+}
+
+.category-trigger svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-3);
+}
+
+.category-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 还没选：按占位文字的层级弱化一档。 */
+.category-value[data-empty='true'] {
+  color: var(--ink-3);
+}
+
+/* 封面：左 96×170 竖版预览，右边竖排两颗次按钮与两行格式说明；窄屏上下堆叠。 */
+.cover-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--s4);
+}
+
+.cover-frame {
+  flex: 0 0 96px;
+  width: 96px;
+  aspect-ratio: 1080 / 1920;
+  border-radius: var(--r-card);
+}
+
+.cover-side {
+  flex: 1 1 150px;
+  min-width: 0;
+  display: grid;
+  gap: var(--s2);
+  align-content: start;
+}
+
+.cover-side .cta {
+  width: 100%;
+}
+
+.cover-side .field-hint {
+  margin: 0;
+}
+
+/* 危险区：卡片不变，只有标题与小色条换成砖红，不整框染色。 */
+.danger-zone .section-label,
+.danger-zone .section-label::before {
+  color: var(--danger-ink);
+}
+
+.danger-zone .section-label::before {
+  background: var(--danger-ink);
 }
 </style>

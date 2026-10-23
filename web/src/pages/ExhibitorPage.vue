@@ -179,12 +179,15 @@ usePullRefresh(
   />
 
   <template v-else>
-    <div class="row" data-between="true">
-      <span class="section-label">{{ t('exhibitor.hostedExhibitions') }}</span>
-      <span class="pill">{{
-        t('exhibition.list.countLabel', { count: items.length, registrations: registrationTotal })
-      }}</span>
-    </div>
+    <button
+      class="cta ghost"
+      type="button"
+      :disabled="limited"
+      :title="limited ? t('exhibitor.cannotCheckin') : undefined"
+      @click="openCheckin"
+    >
+      {{ t('exhibitor.checkin') }}
+    </button>
 
     <div v-if="limited" class="notice" data-tone="accent">
       <strong>{{ t('exhibition.form.publishBlocked') }}</strong>
@@ -195,47 +198,51 @@ usePullRefresh(
       <span>{{ query.error.value.message }}</span>
     </div>
 
-    <button
-      class="cta ghost"
-      type="button"
-      :disabled="limited"
-      :title="limited ? t('exhibitor.cannotCheckin') : undefined"
-      @click="openCheckin"
-    >
-      {{ t('exhibitor.checkin') }}
-    </button>
+    <div class="row" data-between="true">
+      <span class="section-label">{{ t('exhibitor.hostedExhibitions') }}</span>
+      <span class="pill">{{
+        t('exhibition.list.countLabel', { count: items.length, registrations: registrationTotal })
+      }}</span>
+    </div>
+
     <!-- 一次性提示：进过一次核销页（这条提示指的就是那个入口）就不再显示 -->
     <HintNote v-if="hintVisible" :text="t('exhibitor.checkinHint')" @dismiss="dismissHint" />
 
+    <!-- 每张卡只有一层纸：上半整块可点进详情，一条分隔线下面放展会配置动作 -->
     <div class="list" data-gap="sm">
       <div v-for="item in items" :key="String(item.id)" class="card">
         <button
-          class="row-card"
+          class="exh-main"
           type="button"
           data-pressable="true"
-          style="border: 0; padding: 0; background: transparent"
           :aria-label="t('exhibition.list.viewAria', { title: item.title })"
           @pointerdown="warm(item.id)"
           @click="router.push(`/detail/${item.id}`)"
         >
-          <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
+          <MediaBox
+            :src="coverOf(item.imageUri)"
+            class-name="thumb thumb-cover exh-thumb"
+            :alt="String(item.title || '')"
+          />
           <span class="row-copy">
-            <strong class="row-title truncate">{{ item.title }}</strong>
+            <strong class="row-title exh-title">{{ item.title }}</strong>
             <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
             <span class="row-meta truncate">{{ item.venue }}</span>
-            <span class="row-meta">{{
-              t('exhibition.list.statusWithRegistrations', {
-                status: modeLabel(String(item.statusCode ?? '')),
-                count: String(item.registrationCount ?? 0),
-              })
-            }}</span>
+            <!-- 状态与报名数合成一条信号灯：既没有「左边空着」的单独一行，
+                 也不会和标题抢宽度。 -->
+            <StatusTag
+              :text="
+                t('exhibition.list.statusWithRegistrations', {
+                  status: modeLabel(String(item.statusCode ?? '')),
+                  count: String(item.registrationCount ?? 0),
+                })
+              "
+              :tone="statusTone(String(item.statusCode || ''))"
+            />
             <span v-if="item.qrEnabled === true" class="row-meta">{{ t('exhibitor.qrEnabled') }}</span>
           </span>
-          <StatusTag
-            :text="modeLabel(String(item.statusCode || ''))"
-            :tone="statusTone(String(item.statusCode || ''))"
-          />
         </button>
+
         <div class="action-row">
           <button
             class="cta ghost"
@@ -261,15 +268,63 @@ usePullRefresh(
         </div>
       </div>
     </div>
+  </template>
 
+  <!-- 右下角悬浮新建：空态里 StateBlock 已有入口，所以只在有列表时出现。
+       投递到 body：路由容器带着页面切换动画的 transform，会成为 fixed 的包含块，
+       留在页面里会跟着内容走而不是固定在视口右下角。 -->
+  <Teleport v-if="tab === 'exhibitions' && items.length > 0" to="body">
     <button
-      class="cta"
+      class="round-action exh-fab"
       type="button"
       :disabled="limited"
-      :title="limited ? t('exhibition.form.publishBlocked') : undefined"
+      :aria-label="t('exhibition.editor.newExhibition')"
+      :title="limited ? t('exhibition.form.publishBlocked') : t('exhibition.editor.newExhibition')"
       @click="createExhibition"
     >
-      {{ t('exhibition.editor.newExhibition') }}
+      <AppIcon name="plus" />
     </button>
-  </template>
+  </Teleport>
 </template>
+
+<style scoped>
+/* 缩略图按设计稿的 44×78 竖版；全局 .thumb 是 36×64，只在本页放大一档。 */
+.exh-thumb {
+  width: 44px;
+  height: 78px;
+}
+
+/* 卡片主体：整块可点，纸面的内距交给外层 .card，这里只排内容 */
+.exh-main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  text-align: start;
+}
+
+/* 标题最多两行：320 宽下也不会被截成四五个字。 */
+.exh-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* 右下角悬浮圆形按钮：避开底部导航与安全区。 */
+.exh-fab {
+  position: fixed;
+  right: var(--s5);
+  bottom: calc(var(--s6) + var(--safe-bottom) + 56px);
+  z-index: 6;
+}
+
+.exh-fab[disabled] {
+  background: var(--f1);
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+</style>

@@ -143,13 +143,13 @@ describe('设置页独立取数状态', () => {
     expect(sheet.current?.closing).toBe(true);
   });
 
-  it('按账号、通知与隐私、外观、语言、邀请码分组', async () => {
+  it('按账号、通知与隐私、外观、语言、邀请码、应用更新分组', async () => {
     await mountSettings();
     await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
     const labels = [...document.querySelectorAll('.settings-section .section-label')].map((node) =>
       node.textContent?.trim(),
     );
-    expect(labels).toEqual(['账号', '通知与隐私', '外观', '语言', '邀请码']);
+    expect(labels).toEqual(['账号', '通知与隐私', '外观', '语言', '邀请码', '应用更新']);
   });
 
   it('配色色板按服务端色板渲染，选中项用对勾标出', async () => {
@@ -179,12 +179,17 @@ describe('设置页独立取数状态', () => {
     expect(document.body.textContent).not.toContain('安全设置');
   });
 
-  it('邀请码卡片在页面最底部：普通用户与限时展商可兑换，永久展商和管理员只看说明', async () => {
+  it('邀请码卡片在应用更新之前：普通用户与限时展商可兑换，永久展商和管理员只看说明', async () => {
     await mountSettings();
     await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
-    const lastSection = (): HTMLElement | null =>
-      (document.querySelector('.settings-groups')?.lastElementChild as HTMLElement | undefined) ?? null;
-    expect(lastSection()?.querySelector('.section-label')?.textContent?.trim()).toBe('邀请码');
+    // 「应用更新」组排在最后，邀请码卡片是它前面的一组。
+    const sections = [...document.querySelectorAll<HTMLElement>('.settings-groups > *')];
+    const inviteSection = sections.find(
+      (node) => node.querySelector('.section-label')?.textContent?.trim() === '邀请码',
+    );
+    expect(inviteSection).toBeDefined();
+    expect(sections.at(-1)?.querySelector('.section-label')?.textContent?.trim()).toBe('应用更新');
+    const lastSection = (): HTMLElement | null => inviteSection ?? null;
     expect(lastSection()?.querySelector('#settings-invite')).not.toBeNull();
 
     // 限时展商可以续期：输入框还在，并写明当前到期日与顺延规则

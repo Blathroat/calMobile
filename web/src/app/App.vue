@@ -16,7 +16,8 @@ import AppTabBar from '@/components/AppTabBar.vue';
 import AppToasts from '@/components/AppToasts.vue';
 import AppSheet from '@/components/AppSheet.vue';
 import { bodyAttrs, tabItems } from '@/app/shell';
-import { paths } from '@/app/surface';
+import { isJoinSurface, paths } from '@/app/surface';
+import { nativeBridge } from '@/services/native-bridge';
 import { navigation } from '@/app/navigation';
 import { preloadTabs, resetPreload } from '@/app/preload';
 import {
@@ -47,6 +48,20 @@ const topAction = computed(() => route.meta.topAction);
 const attrs = computed(() => bodyAttrs(route.meta));
 const logoutBusy = ref(false);
 const bodyEl = ref<HTMLElement>();
+
+/**
+ * 报名站的下载条：只有在**系统浏览器**里打开报名站时才出现（应用内已经有 App 了），
+ * 并且管理员必须配过下载地址。这条提示常驻，不提供关闭——报名站本身没有 App 完整，
+ * 让用户随时能找到回去的路比「少一条横幅」更重要。
+ */
+const downloadUrl = computed(() => String((bootstrap.download?.url as string) || ''));
+const showDownloadBar = computed(() => isJoinSurface && !nativeBridge.hasNative() && downloadUrl.value !== '');
+
+/** 交给系统浏览器下载：WebView 里除 /app/ 之外的链接本来就交给浏览器处理。 */
+function openDownload(): void {
+  if (!downloadUrl.value) return;
+  window.open(downloadUrl.value, '_blank', 'noopener');
+}
 /**
  * 指示圈只在手动下拉这一轮出现：手指压着、内容被拉下、滑入 / 滑出或正在转都算。
  * 页面自己的后台刷新（切底部导航的预取、返回旧页面）不改这几个状态，所以不闪圈；
@@ -185,6 +200,13 @@ onBeforeUnmount(() => unbindPull?.());
         <span class="pull-spinner" :data-spin="pullSpinning ? 'true' : undefined" />
         <span class="sr-only">{{ showPull ? t('common.refreshing') : t('common.pullRefresh') }}</span>
       </div>
+      <div v-if="showDownloadBar" class="join-download" role="complementary">
+        <span class="join-download-copy">
+          <strong>{{ t('join.downloadBar') }}</strong>
+          <span class="join-download-version" v-if="bootstrap.download?.version">{{ bootstrap.download.version }}</span>
+        </span>
+        <button class="cta" type="button" @click="openDownload">{{ t('join.downloadApp') }}</button>
+      </div>
       <RouterView v-slot="{ Component }">
         <!-- 单独一层承载页面切换动画：`.app-body` 在切换之间是同一个元素，
              动画需要挂在每次都重建的节点上。
@@ -206,3 +228,49 @@ onBeforeUnmount(() => unbindPull?.());
     <AppSheet />
   </div>
 </template>
+
+<style>
+/* 报名站的下载条：吸在内容区顶部的一条悬浮带，滚走内容时仍贴着顶栏。
+   只在系统浏览器里出现（见 showDownloadBar），应用内不会渲染。 */
+.join-download {
+  position: sticky;
+  top: 0;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: calc(var(--s4) * -1) calc(var(--s4) * -1) 0;
+  padding: var(--s2) var(--s4);
+  background: var(--accent-tint);
+  border-bottom: var(--hairline) solid var(--accent-edge);
+}
+
+.join-download-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.join-download-copy > strong {
+  color: var(--accent-ink);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.join-download-version {
+  color: var(--ink-3);
+  font-size: var(--fs-tag);
+  font-variant-numeric: tabular-nums;
+}
+
+.join-download .cta {
+  flex: none;
+  width: auto;
+  min-height: 36px;
+  padding-inline: var(--s3);
+  font-size: var(--fs-label);
+}
+</style>

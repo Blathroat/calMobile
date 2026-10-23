@@ -23,11 +23,10 @@ import AppIcon from '@/components/AppIcon.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
-import RoleTag from '@/components/RoleTag.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import ImageViewer from '@/components/ImageViewer.vue';
 import { formatDateWithWeekday } from '@/services/format';
-import { REGISTRATION_STATUS, modeLabel, statusTone } from '@/services/status';
+import { REGISTRATION_STATUS, modeLabel, roleLabel, statusTone } from '@/services/status';
 import type { ExhibitionDetail, JsonObject, Registration } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -323,7 +322,7 @@ onMounted(() => {
     <div v-else class="hero ph-img" aria-hidden="true" />
 
     <div class="stack" data-gap="sm">
-      <h2>{{ exhibition.title }}</h2>
+      <h2 class="detail-title">{{ exhibition.title }}</h2>
       <p class="muted">
         {{ exhibition.exhibitor || t('exhibition.detail.brandMark') }} · {{ exhibition.exhibitorNote }}
       </p>
@@ -361,8 +360,11 @@ onMounted(() => {
       <AvatarBox :name="String(exhibition.exhibitor || '')" />
       <span class="row-copy">
         <span class="name-line">
-          <strong class="row-title">{{ exhibition.exhibitor }}</strong>
-          <RoleTag :role-code="String(exhibition.exhibitorRole || '')" />
+          <strong class="row-title truncate">{{ exhibition.exhibitor }}</strong>
+          <!-- 身份是中性信息，用 pill；报名方式才用信号灯 -->
+          <span v-if="exhibition.exhibitorRole === 'exhibitor' || exhibition.exhibitorRole === 'admin'" class="pill">{{
+            roleLabel(String(exhibition.exhibitorRole))
+          }}</span>
         </span>
         <span class="row-meta">{{ t('exhibition.detail.viewExhibitorHome') }}</span>
       </span>
@@ -442,5 +444,14 @@ onMounted(() => {
   color: inherit;
   cursor: pointer;
   appearance: none;
+}
+</style>
+
+<style scoped>
+/* 展会名是本页主标题：比顶栏的「展会详情」大一档，靠字号与字重强调。 */
+.detail-title {
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: var(--lh-tight);
 }
 </style>

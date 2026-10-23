@@ -166,20 +166,29 @@ function openLogin(): void {
               @pointerdown="warm(record.id)"
               @click="router.push(paths.registrationDetail(String(record.id)))"
             >
-              <!-- 报名接口不下发展会封面，这里保留线框的斜线占位 -->
-              <MediaBox class-name="thumb" />
+              <!-- 报名接口不下发展会封面，这里保留 9:16 竖版的线框占位 -->
+              <MediaBox class-name="thumb thumb-cover reg-thumb" />
               <span class="row-copy">
-                <strong class="row-title truncate">{{ record.exhibitionTitle }}</strong>
-                <span class="row-meta">{{ formatRecordDate(record) }} {{ record.exhibitionTime }}</span>
+                <!-- 第一行：标题单行截断占满剩余宽度，状态信号灯贴行尾；
+                     去掉右侧独立状态列之后，下面三行能拿到整行宽度 -->
+                <span class="name-line">
+                  <strong class="row-title truncate reg-title">{{ record.exhibitionTitle }}</strong>
+                  <StatusTag
+                    :text="registrationStatusLabel(String(record.statusCode || ''))"
+                    :tone="statusTone(String(record.statusCode || ''))"
+                  />
+                </span>
+                <span class="row-meta reg-when">
+                  {{ formatRecordDate(record) }}
+                  <span v-if="record.exhibitionTime" class="reg-when-time"
+                    >· <span class="reg-time">{{ record.exhibitionTime }}</span></span
+                  >
+                </span>
                 <span class="row-meta truncate">{{ record.exhibitionVenue }}</span>
-                <span class="row-meta truncate">{{
+                <span class="row-meta clamp-2">{{
                   t('registration.list.answersLine', { summary: summary(record) })
                 }}</span>
               </span>
-              <StatusTag
-                :text="registrationStatusLabel(String(record.statusCode || ''))"
-                :tone="statusTone(String(record.statusCode || ''))"
-              />
             </button>
           </TransitionGroup>
         </template>
@@ -197,21 +206,23 @@ function openLogin(): void {
               @pointerdown="warmMeeting(meeting.id)"
               @click="router.push(paths.meetingDetail(String(meeting.id)))"
             >
-              <span class="avatar" aria-hidden="true">{{
+              <span class="avatar reg-avatar" aria-hidden="true">{{
                 String(meeting.exhibitorName || t('exhibition.detail.brandMark')).slice(0, 1)
               }}</span>
               <span class="row-copy">
+                <!-- 姓名行：名字 + 角色签 + 行尾信号灯；下面两行拿整行宽度 -->
                 <span class="name-line">
                   <strong class="row-title truncate">{{ meeting.exhibitorName }}</strong>
                   <RoleTag :role-code="String(meeting.exhibitorRole || '')" />
+                  <StatusTag
+                    class="reg-status"
+                    :text="registrationStatusLabel(String(meeting.statusCode || ''))"
+                    :tone="statusTone(String(meeting.statusCode || ''))"
+                  />
                 </span>
                 <span class="row-meta">{{ formatMeetingWhen(meeting.meetingDate, meeting.meetingTime) }}</span>
-                <span class="row-meta truncate">{{ meetingSummary(meeting) }}</span>
+                <span class="row-meta clamp-2">{{ meetingSummary(meeting) }}</span>
               </span>
-              <StatusTag
-                :text="registrationStatusLabel(String(meeting.statusCode || ''))"
-                :tone="statusTone(String(meeting.statusCode || ''))"
-              />
             </button>
           </TransitionGroup>
         </template>
@@ -219,8 +230,45 @@ function openLogin(): void {
     </div>
 
     <!-- 刷新失败但屏幕上还有旧记录：原位提示，不清空已有内容 -->
-    <div v-if="query.error.value && hasContent" class="notice" data-tone="accent">
+    <div v-if="query.error.value && hasContent" class="notice" data-tone="error">
       <span>{{ query.error.value.message }}</span>
     </div>
   </template>
 </template>
+
+<style scoped>
+/* 缩略图按设计稿的 44×78 竖版；全局 .thumb 是 36×64，只在本页放大一档。 */
+.reg-thumb {
+  width: 44px;
+  height: 78px;
+}
+
+/* tokens 里的 .clamp-2 只建了 -webkit-box，没有写行数，这里补上两行截断。 */
+.clamp-2 {
+  -webkit-line-clamp: 2;
+}
+
+/* 标题占满剩余宽度，信号灯被推到行尾。 */
+.reg-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 「日期 · 时间」：时间整段不换行，窄屏放不下时整段落到下一行，不会被截成 09:3… */
+.reg-time,
+.reg-when-time {
+  white-space: nowrap;
+}
+
+/* 会议卡的头像收到 32px：它只是身份线索，不和展会海报抢版面。 */
+.reg-avatar {
+  width: 32px;
+  height: 32px;
+  font-size: var(--fs-tag);
+}
+
+/* 会议姓名行：状态信号灯贴行尾。 */
+.reg-status {
+  margin-inline-start: auto;
+}
+</style>

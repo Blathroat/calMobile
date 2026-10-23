@@ -8,6 +8,8 @@
  *   因此收回到一个组件里（核销手动输入、富文本粘贴都是这么接的）。
  *
  * `layout: 'stack'` 把按钮竖着排（选项多、文字长短不一时比并排更好读）。
+ * `layout: 'list'` 把选项排成一列整行可点的行，`checked` 的那条右侧带对勾：
+ * 用来表达「从一组互斥的值里选一个」（展会分类、调整权限），比一排胶囊更好扫。
  * `layout: 'close-below'` 把最后一颗按钮独占下一行并拉满宽度，用来放「关闭」。
  */
 import { markRaw, reactive, shallowReadonly, type Component } from 'vue';
@@ -17,6 +19,8 @@ export interface SheetAction {
   label: string;
   disabled?: boolean | (() => boolean);
   variant?: 'primary' | 'ghost' | 'danger';
+  /** `layout: 'list'` 时标记当前选中项：右侧画一个对勾，文字加粗。 */
+  checked?: boolean;
   onClick?: (close: () => void) => void | Promise<void>;
 }
 
@@ -27,7 +31,7 @@ export interface SheetState {
   /** 自定义内容组件；与 `message` 二选一，通常只用其中一个 */
   component: Component | null;
   props: Record<string, unknown>;
-  layout: 'row' | 'stack' | 'close-below';
+  layout: 'row' | 'stack' | 'list' | 'close-below';
   size: 'auto' | 'full';
   closing: boolean;
   onClose?: () => void;
@@ -52,7 +56,7 @@ export function openSheet(options: {
   actions?: SheetAction[];
   component?: Component;
   props?: Record<string, unknown>;
-  layout?: 'row' | 'stack' | 'close-below';
+  layout?: 'row' | 'stack' | 'list' | 'close-below';
   size?: 'auto' | 'full';
   onClose?: () => void;
 }): void {

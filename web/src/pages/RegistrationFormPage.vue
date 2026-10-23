@@ -304,18 +304,18 @@ async function submit(): Promise<void> {
     />
 
     <template v-else-if="exhibition">
-      <MediaBox
-        v-if="isJoinSurface"
-        :src="coverOf(exhibition.imageUri)"
-        class-name="thumb thumb-cover"
-        :alt="String(exhibition.title || '')"
-      />
-      <!-- 展会摘要：提交前确认名称与报名方式 -->
-      <div class="card" data-tone="fill">
-        <strong>{{ exhibition.title }}</strong>
-        <span class="row-meta"
-          >{{ formatDateWithWeekday(exhibition.date) }} {{ exhibition.time }} · {{ exhibition.venue }}</span
-        >
+      <!-- 展会小名片：44×78 缩略图 + 标题 + 日期时间地点 + 信号灯 -->
+      <div class="row-card reg-exhibition">
+        <MediaBox
+          :src="coverOf(exhibition.imageUri)"
+          class-name="thumb thumb-cover reg-thumb"
+          :alt="String(exhibition.title || '')"
+        />
+        <span class="row-copy">
+          <strong class="row-title truncate">{{ exhibition.title }}</strong>
+          <span class="row-meta">{{ formatDateWithWeekday(exhibition.date) }} {{ exhibition.time }}</span>
+          <span class="row-meta truncate">{{ exhibition.venue }}</span>
+        </span>
         <StatusTag
           :text="modeLabel(String(exhibition.statusCode || ''))"
           :tone="statusTone(String(exhibition.statusCode || ''))"
@@ -332,7 +332,9 @@ async function submit(): Promise<void> {
             class="choice-group"
             :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
           >
-            <legend>{{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span></legend>
+            <legend class="reg-question">
+              {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
+            </legend>
             <RadioChoices
               :name="fieldId(field)"
               :options="splitOptions(field.options)"
@@ -348,7 +350,9 @@ async function submit(): Promise<void> {
             class="choice-group"
             :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
           >
-            <legend>{{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span></legend>
+            <legend class="reg-question">
+              {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
+            </legend>
             <div class="check-row">
               <label
                 v-for="(option, index) in splitOptions(field.options)"
@@ -371,7 +375,7 @@ async function submit(): Promise<void> {
 
           <!-- 文本：默认类型 -->
           <div v-else class="field" :data-invalid="fieldErrors[field.title] ? 'true' : undefined">
-            <label :for="fieldId(field)">
+            <label class="reg-question" :for="fieldId(field)">
               {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
             </label>
             <input
@@ -415,3 +419,30 @@ async function submit(): Promise<void> {
     </div>
   </Teleport>
 </template>
+
+<style scoped>
+/* 展会小名片：与列表里的行卡片同一套读法，提交前再确认一次是哪一场。 */
+.reg-exhibition {
+  align-items: center;
+}
+
+/* 缩略图按 44×78 展示（比列表里的 36×64 大一档）。 */
+.reg-thumb {
+  width: 44px;
+  height: 78px;
+}
+
+/* 收集项是「问题」：比普通字段标签大一号、加重，输入框仍是 .input 下划线。 */
+.reg-question {
+  color: var(--ink);
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+}
+
+/* 必填星号：强调色小字，紧跟在问题后面。 */
+.reg-question .required {
+  color: var(--accent-ink);
+  font-size: var(--fs-label);
+}
+</style>

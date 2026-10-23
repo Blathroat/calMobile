@@ -272,6 +272,11 @@ export const serverSettingsPatchSchema = z
     inviteUses: z.unknown(),
     inviteValidHours: z.unknown(),
     inviteDurationDays: z.unknown(),
+    // 下载源：整段 { source, url, repo } 或以 downloadSource / downloadUrl / downloadRepo 扁平提交。
+    download: z.unknown(),
+    downloadSource: z.unknown(),
+    downloadUrl: z.unknown(),
+    downloadRepo: z.unknown(),
     notify: notifySchema,
   })
   .partial()

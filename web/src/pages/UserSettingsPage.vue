@@ -32,15 +32,27 @@ import { toast } from '@/services/toast';
 import { avatarExportMime } from '@/services/validate';
 import { formatLocalChineseDate } from '@/services/format';
 import { openProfileEditor } from '@/services/profile-editor';
+import { openSheet } from '@/services/sheet';
+import {
+  autoUpdateEnabled,
+  markUpdateChecked,
+  markUpdatePrompted,
+  promptedUpdate,
+  setAutoUpdateEnabled,
+  shouldAutoCheck,
+  shouldPrompt,
+  updateMarker,
+} from '@/services/update-check';
 import LanguagePackCard from '@/components/LanguagePackCard.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import RoleTag from '@/components/RoleTag.vue';
 import AvatarCropper from '@/components/AvatarCropper.vue';
+import UpdateSheet from '@/components/UpdateSheet.vue';
 import SegControl from '@/components/SegControl.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
-import type { JsonObject } from '@/api/types';
+import type { JsonObject, ReleaseInfo } from '@/api/types';
 import { t } from '@/i18n';
 
 const router = useRouter();
@@ -156,6 +168,10 @@ async function loadNotifications(): Promise<void> {
 }
 
 onMounted(load);
+// 自动检查更新：开关打开且距上次检查超过六小时，静默跑一次（失败不提示）。
+onMounted(() => {
+  void checkUpdate(true);
+});
 
 usePullRefresh(
   () => load(),
@@ -427,6 +443,68 @@ async function changeMode(value: string): Promise<void> {
     toast(errorText(reason) || t('exhibition.form.saveFailed'), 'error');
   }
 }
+
+// ── 应用更新：检查服务器解析出的最新版本，下载交给系统浏览器 ─────────
+
+/** 自动检查开关，初值来自本机；开关本身只写 localStorage，不上服务端。 */
+const autoUpdate = ref(autoUpdateEnabled());
+const updateBusy = ref(false);
+
+function toggleAutoUpdate(value: boolean): void {
+  autoUpdate.value = value;
+  // 设备级偏好：每台设备各自决定要不要后台检查，不跟账号走。
+  setAutoUpdateEnabled(value);
+}
+
+/** 打开更新抽屉：版本、更新日志与下载按钮都由 UpdateSheet 渲染。 */
+function showRelease(release: ReleaseInfo): void {
+  openSheet({
+    title: t('settings.update.title'),
+    component: UpdateSheet,
+    props: { release },
+  });
+}
+
+/**
+ * 检查更新。
+ *
+ * `auto` 为真时不显示加载态、失败也不提示；命中新版本且本机还没自动提示过
+ * 同一个标记（GitHub 是版本号，直链是下载地址）时才弹抽屉。
+ */
+async function checkUpdate(auto = false): Promise<void> {
+  if (auto) {
+    if (!shouldAutoCheck()) return;
+  } else {
+    if (updateBusy.value) return;
+    updateBusy.value = true;
+  }
+  try {
+    const release = await api.release();
+    // 自动检查和手动检查都记时间，避免刚手动查过又立刻后台再查一次。
+    markUpdateChecked();
+    if (auto) {
+      const marker = updateMarker(release);
+      if (!marker || marker === promptedUpdate() || !shouldPrompt(release)) return;
+      markUpdatePrompted(marker);
+      showRelease(release);
+      return;
+    }
+    // 管理员还没配下载地址：有版本号也没法装，按「不可用」提示。
+    if (!String(release?.url ?? '').trim()) {
+      toast(t('settings.update.unavailable'));
+      return;
+    }
+    if (shouldPrompt(release)) {
+      showRelease(release);
+      return;
+    }
+    toast(t('settings.update.upToDate'));
+  } catch {
+    if (!auto) toast(t('settings.update.failed'), 'error');
+  } finally {
+    if (!auto) updateBusy.value = false;
+  }
+}
 </script>
 
 <template>
@@ -651,6 +729,38 @@ async function changeMode(value: string): Promise<void> {
             </button>
           </template>
           <p v-else class="field-hint">{{ inviteRoleHint }}</p>
+        </div>
+      </section>
+
+      <!-- 应用更新：固定在页面最底部；检查读取服务器解析出的版本与地址 -->
+      <section class="settings-section">
+        <span class="section-label">{{ t('settings.update.title') }}</span>
+        <div class="card">
+          <button
+            class="cta"
+            type="button"
+            :disabled="updateBusy"
+            :data-loading="updateBusy ? 'true' : undefined"
+            @click="checkUpdate()"
+          >
+            {{ updateBusy ? t('settings.update.checking') : t('settings.update.check') }}
+          </button>
+          <hr class="divider" />
+          <div class="switch-row" data-flush="true">
+            <span class="switch-copy">
+              <strong>{{ t('settings.update.auto') }}</strong>
+              <span class="row-meta">{{ t('settings.update.autoHint') }}</span>
+            </span>
+            <label class="switch" for="settings-auto-update">
+              <input
+                id="settings-auto-update"
+                type="checkbox"
+                :checked="autoUpdate"
+                @change="toggleAutoUpdate(($event.target as HTMLInputElement).checked)"
+              />
+              <span />
+            </label>
+          </div>
         </div>
       </section>
     </div>

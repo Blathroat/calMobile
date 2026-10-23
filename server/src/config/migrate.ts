@@ -88,6 +88,14 @@ export interface ServerSettings {
    * durationDays 是兑换后展商身份保留的天数，0 表示永久。
    */
   invite: { uses: number; validHours: number; durationDays: number };
+  /**
+   * 客户端安装包下载源（管理端设置）。
+   *
+   * - url：直接用管理员填的直链；
+   * - github：追踪 repo 仓库的最新 Release，取第一个 .apk 资产的下载地址。
+   * 空串表示没配，更新检查与报名站的下载条据此隐藏下载入口。
+   */
+  download: { source: 'url' | 'github'; url: string; repo: string };
 }
 
 /**
@@ -638,6 +646,39 @@ export const STEPS: MigrationStep[] = [
             CHECK (type IN ('text', 'radio', 'checkbox'));
         `,
   },
+  {
+    // 通行密钥（WebAuthn / passkey）：第二因子从「验证器 / 邮箱码 / 备用码」再扩一种。
+    //
+    // credential_id 与 public_key 都存 base64url：前者是浏览器交给我们的凭据 id，
+    // 后者是 COSE 编码的公钥（由 @simplewebauthn/server 解析并校验，服务端不自己解 CBOR）。
+    // counter 用于识别被克隆的认证器：每次断言成功都要把新计数写回来。
+    // 挑战一次一用、10 分钟过期：只存服务端生成的那一串，消费时原子删除。
+    id: '0019-passkeys',
+    sql: `
+        CREATE TABLE IF NOT EXISTS passkey_credentials (
+            id            TEXT PRIMARY KEY,
+            user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            credential_id TEXT NOT NULL UNIQUE,          -- base64url
+            public_key    TEXT NOT NULL,                 -- base64url（COSE 公钥）
+            counter       BIGINT NOT NULL DEFAULT 0,
+            transports    TEXT NOT NULL DEFAULT '[]',    -- JSON 数组
+            name          TEXT NOT NULL DEFAULT '',
+            created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+            last_used_at  TIMESTAMPTZ
+        );
+        CREATE INDEX IF NOT EXISTS passkey_credentials_user ON passkey_credentials (user_id);
+
+        CREATE TABLE IF NOT EXISTS webauthn_challenges (
+            id         TEXT PRIMARY KEY,
+            user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            kind       TEXT NOT NULL CHECK (kind IN ('registration', 'authentication')),
+            challenge  TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            expires_at TIMESTAMPTZ NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS webauthn_challenges_user ON webauthn_challenges (user_id);
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
@@ -679,6 +720,8 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   // 0 = 不限。演示环境默认放开，部署方按运营策略调小。
   exhibitor: { maxFutureExhibitions: 0, maxFutureMeetings: 0 },
   invite: { uses: 1, validHours: 168, durationDays: 0 },
+  // 默认是直链且地址为空：升级后的老库不会凭空多出一个下载入口。
+  download: { source: 'url', url: '', repo: '' },
 };
 
 function errorMessage(error: unknown): string {

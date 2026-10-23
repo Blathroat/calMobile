@@ -111,7 +111,7 @@ test('验证器（TOTP）与备用码：绑定要过码，登录三选一，备�
     // 登录第一步要告诉页面能用哪些方式
     const step1 = await post('/api/v1/auth/login', { username: 'totpuser', password: 'password' });
     assert.strictEqual(step1.body.twoFactorRequired, true);
-    assert.deepStrictEqual(step1.body.methods, { totp: true, email: false, backup: true });
+    assert.deepStrictEqual(step1.body.methods, { totp: true, email: false, backup: true, passkey: false });
     assert.strictEqual(step1.body.token, undefined, '第一步仍然不能有令牌');
     const emailedDespiteTotp = await post('/api/v1/auth/login/code', { ticket: step1.body.ticket });
     assert.strictEqual(emailedDespiteTotp.body.ok, false, '选择 TOTP 后不能绕过选择改走邮箱验证码');

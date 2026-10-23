@@ -123,3 +123,17 @@ export interface ReviewList extends JsonObject {
   records: Registration[];
   counts: Record<string, number>;
 }
+
+/**
+ * 最新版本与下载地址（`GET /app/release`，公开）。
+ *
+ * `source` 是管理端设置的下载源：`github` 时 `version` / `notes` 来自最新 release，
+ * 直链时两者为空。`url` 为空表示管理员还没配下载地址，界面不要渲染下载入口。
+ */
+export interface ReleaseInfo extends JsonObject {
+  source: 'url' | 'github';
+  version: string;
+  notes: string;
+  url: string;
+  publishedAt: string;
+}

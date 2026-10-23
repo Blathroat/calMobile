@@ -30,8 +30,8 @@ test('前端每个数据动作都对应后端已注册的路由', () => {
   const actions = Object.keys(endpoints);
   assert.strictEqual(
     actions.length,
-    76,
-    `前端数据动作数量变了（期望 76）：${actions.length} 个 —— ${actions.join(', ')}`,
+    83,
+    `前端数据动作数量变了（期望 83）：${actions.length} 个 —— ${actions.join(', ')}`,
   );
 
   const declared = backendRoutes();

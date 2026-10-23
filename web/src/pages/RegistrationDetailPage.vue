@@ -234,7 +234,7 @@ onBeforeUnmount(cancelQrHold);
 
     <div class="card">
       <span class="section-label">{{ t('exhibition.detail.registrationInfo') }}</span>
-      <div class="stack" data-gap="sm">
+      <div class="stack info-rows" data-gap="sm">
         <div class="row" data-between="true">
           <span class="row-meta">{{ t('registration.detail.registrant') }}</span>
           <span class="strong truncate">{{ record.visitorName || '—' }}</span>
@@ -256,15 +256,18 @@ onBeforeUnmount(cancelQrHold);
       </div>
     </div>
 
+    <!-- 状态区：小标 → 大号状态词（按语义上色）→ 信号灯 → 一行说明 -->
     <div class="card">
       <span class="section-label">{{ t('exhibition.detail.currentStatus') }}</span>
-      <div class="row" data-gap="md">
-        <StatusTag
-          :text="registrationStatusLabel(String(record.statusCode || ''))"
-          :tone="statusTone(String(record.statusCode || ''))"
-        />
-        <span class="row-meta">{{ statusHint(record.statusCode) }}</span>
-      </div>
+      <strong class="reg-status-word" :data-tone="statusTone(String(record.statusCode || ''))">
+        {{ registrationStatusLabel(String(record.statusCode || '')) }}
+      </strong>
+      <StatusTag
+        class="reg-status-tag"
+        :text="registrationStatusLabel(String(record.statusCode || ''))"
+        :tone="statusTone(String(record.statusCode || ''))"
+      />
+      <p class="reg-status-hint">{{ statusHint(record.statusCode) }}</p>
     </div>
 
     <!-- 报名码：只有后端下发了 checkInCode（已通过 / 已参加且展商启用二维码）才渲染 -->
@@ -351,5 +354,62 @@ onBeforeUnmount(cancelQrHold);
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+</style>
+
+<style scoped>
+/* ── 状态区 ───────────────────────────────────────────────────── */
+
+/* 大号状态词：字号抬到 h1、字重 700，颜色只取语义色。 */
+.reg-status-word {
+  color: var(--ink);
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.reg-status-word[data-tone='ok'] {
+  color: var(--ok-ink);
+}
+
+.reg-status-word[data-tone='pending'],
+.reg-status-word[data-tone='warn'] {
+  color: var(--warn-ink);
+}
+
+.reg-status-word[data-tone='danger'] {
+  color: var(--danger-ink);
+}
+
+.reg-status-word[data-tone='info'] {
+  color: var(--info-ink);
+}
+
+/* 信号灯独立一行，靠左对齐卡片内距。 */
+.reg-status-tag {
+  justify-self: start;
+}
+
+.reg-status-hint {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+}
+
+/* ── 报名信息 ─────────────────────────────────────────────────── */
+
+/* 「标签 / 值」逐条排列：标签不压缩，值可能很长，允许断行并右对齐，不把卡片撑宽。 */
+.info-rows .row {
+  align-items: flex-start;
+}
+
+.info-rows .row > .row-meta {
+  flex: none;
+}
+
+.info-rows .row > .strong {
+  min-width: 0;
+  max-width: 66%;
+  text-align: end;
+  overflow-wrap: anywhere;
 }
 </style>

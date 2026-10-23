@@ -778,29 +778,27 @@ async function submitManual(close: () => void): Promise<void> {
     />
 
     <div class="stack" data-gap="sm">
-      <!-- 摄像头与选图并排等宽：两条识别入口等价，「手动输入」仍整行在下方 -->
-      <div class="grid-cols-2">
-        <button
-          ref="startButton"
-          class="cta"
-          type="button"
-          data-action="start-scan"
-          :disabled="starting"
-          :data-loading="starting ? 'true' : 'false'"
-          @click="toggleScan"
-        >
-          {{ t('checkin.scan.start') }}
-        </button>
-        <button
-          class="cta ghost"
-          type="button"
-          data-action="pick-image"
-          :disabled="starting || picking"
-          @click="pickImage"
-        >
-          {{ t('checkin.scan.pickImage') }}
-        </button>
-      </div>
+      <!-- 三条识别入口竖排整宽：摄像头是主操作（实心），另两条是降级链路 -->
+      <button
+        ref="startButton"
+        class="cta"
+        type="button"
+        data-action="start-scan"
+        :disabled="starting"
+        :data-loading="starting ? 'true' : 'false'"
+        @click="toggleScan"
+      >
+        {{ t('checkin.scan.start') }}
+      </button>
+      <button
+        class="cta ghost"
+        type="button"
+        data-action="pick-image"
+        :disabled="starting || picking"
+        @click="pickImage"
+      >
+        {{ t('checkin.scan.pickImage') }}
+      </button>
       <button class="cta ghost" type="button" data-action="manual" @click="openManual">
         {{ t('checkin.manual.enterCode') }}
       </button>
@@ -819,16 +817,23 @@ async function submitManual(close: () => void): Promise<void> {
 
     <!-- 核销结果：常驻列表，最新一条排最前，刷新 / 重开页面后仍在 -->
     <div v-if="outcomes.length > 0" class="list" data-gap="sm" data-testid="checkin-outcomes">
-      <div v-for="row in outcomeRows" :key="row.item.id" class="card" data-testid="checkin-outcome">
-        <div class="row" data-between="true">
-          <span class="section-label">{{ row.item.ok ? t('checkin.succeeded') : t('checkin.unsuccessful') }}</span>
+      <article v-for="row in outcomeRows" :key="row.item.id" class="card checkin-outcome" data-testid="checkin-outcome">
+        <!-- 信号灯 + 大号结论：结论比状态词更响，两者同一行 -->
+        <header class="checkin-verdict">
           <StatusTag
             :text="row.item.ok ? registrationStatusLabel(REGISTRATION_STATUS.ATTENDED) : row.item.statusText"
             :tone="row.item.ok ? 'ok' : 'danger'"
           />
-        </div>
+          <h2 class="checkin-verdict-title">
+            {{ row.item.ok ? t('checkin.succeeded') : t('checkin.unsuccessful') }}
+          </h2>
+        </header>
         <p class="row-meta">{{ row.item.message }}</p>
-        <div class="card" data-tone="fill">
+
+        <hr class="divider" />
+
+        <!-- 逐行明细：展会、报名人、核销 / 报名时间与收集项 -->
+        <div class="checkin-detail">
           <div class="row" data-between="true">
             <span class="row-meta">{{ t('admin.exhibitions.title') }}</span>
             <span class="strong truncate">{{ row.item.record.exhibitionTitle || '—' }}</span>
@@ -857,10 +862,11 @@ async function submitManual(close: () => void): Promise<void> {
             <span class="strong">{{ t('registration.detail.noCollectedInfo') }}</span>
           </div>
         </div>
+
         <button class="cta ghost" type="button" @click="openReview(row.item.record)">
           {{ t('admin.exhibitions.viewRegistrations') }}
         </button>
-      </div>
+      </article>
 
       <!-- 继续核销：只清当前状态与错误，历史记录留着 -->
       <button class="cta" type="button" data-action="continue" @click="restart">
@@ -882,7 +888,7 @@ async function submitManual(close: () => void): Promise<void> {
   aspect-ratio: 1;
   border: var(--hairline) solid var(--stroke);
   border-radius: var(--r-card);
-  background: #000;
+  background: var(--frame);
   overflow: hidden;
 }
 
@@ -912,6 +918,41 @@ async function submitManual(close: () => void): Promise<void> {
   overflow-wrap: anywhere;
 }
 
+/* 核销结论卡：信号灯与大号结论同一行，明细在发丝线之后。 */
+.checkin-outcome {
+  gap: var(--s3);
+}
+
+.checkin-verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.checkin-verdict-title {
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+}
+
+/* 逐行明细：标签在左、值在右，长值允许换行。 */
+.checkin-detail {
+  display: grid;
+  gap: var(--s1);
+}
+
+.checkin-detail > .row > .strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.checkin-detail > .row > .row-meta {
+  flex: none;
+}
+
 /* 取景提示框：细线方框加四角强调色，不影响识别区域 */
 .scan-frame {
   position: absolute;
@@ -922,7 +963,7 @@ async function submitManual(close: () => void): Promise<void> {
   transform: translate(-50%, -50%);
   border: 2px solid var(--accent);
   border-radius: var(--r-input);
-  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.28);
+  box-shadow: 0 0 0 100vmax var(--scrim);
   pointer-events: none;
 }
 </style>

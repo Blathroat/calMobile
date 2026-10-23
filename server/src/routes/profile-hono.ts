@@ -34,9 +34,22 @@ import {
   confirmTotpSetup,
   verifyBoundTotp,
   activateBoundTotp,
+  activatePasskeyMethod,
   regenerateBackupCodes,
   disableSecondFactor,
 } from '../domain/two-factor.js';
+import {
+  buildRegistrationOptions,
+  consumeChallenge,
+  issueChallenge,
+  listCredentialDescriptors,
+  listCredentials,
+  passkeyVerifyFailure,
+  removeCredential,
+  saveCredential,
+  verifyPasskeyRegistration,
+} from '../domain/passkeys.js';
+import { loadProcessConfig } from '../config/env.js';
 import {
   clearSecurityStepUpFailures,
   consumeSecurityStepUp,
@@ -107,6 +120,23 @@ function requestIp(c: HonoContext, trustProxy: TrustProxy): string {
     { remoteAddress: env?.incoming?.socket?.remoteAddress, forwardedFor: c.req.header('x-forwarded-for') },
     trustProxy,
   );
+}
+
+/**
+ * 通行密钥的依赖方参数：rpId / origins 来自环境变量，显示名默认用服务器设置里的中文标题。
+ *
+ * rpId 与 origins 必须和浏览器注册时使用的那一组一致，否则合法凭据会被判成伪造。
+ */
+async function passkeyRelyingParty() {
+  const config = loadProcessConfig().webauthn;
+  const settings = await readServerSettings().catch(() => null);
+  const rpName = config.rpName || String((settings?.brand && settings.brand.zh) || '').trim() || 'CalMobile';
+  return { rpId: config.rpId, rpName, origins: config.origins };
+}
+
+/** 数据库唯一冲突（credential_id 已经绑过）。 */
+function uniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505';
 }
 
 async function currentAvatar(userId: string): Promise<string> {
@@ -281,6 +311,9 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       twoFactorMethod: factors.method,
       totpEnabled: factors.totpBound,
       backupCodesLeft: factors.backupCodesLeft,
+      // 已绑定的通行密钥（不含 credentialId / 公钥）与「有没有绑过」。
+      passkeyBound: factors.passkeyBound,
+      passkeys: await listCredentials(user.userId),
       canEnable: factors.emailVerified && factors.email !== '',
     });
   });
@@ -440,6 +473,156 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       }
       throw error;
     }
+  });
+
+  /**
+   * 绑定通行密钥第一步：身份复核通过后下发注册选项。
+   *
+   * 与 TOTP 绑定一致，用 factor 用途的身份复核票；挑战 10 分钟、一次一用。
+   */
+  app.post('/2fa/passkey/options', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    const body = bodyRecord(await readJsonBody(c));
+    await consumeSecurityStepUp(body.stepUpToken, user.userId, stepUpSessionId(c, user), 'factor');
+    const found = await query<{ id: string; username: string; email: string; nickname: string }>(
+      'SELECT id, username, email, nickname FROM users WHERE id = $1',
+      [user.userId],
+    );
+    const account = found.rows[0];
+    if (!account) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
+    const rp = await passkeyRelyingParty();
+    const excludeCredentials = await listCredentialDescriptors(user.userId);
+    const options = await buildRegistrationOptions({
+      rp: { rpId: rp.rpId, rpName: rp.rpName },
+      user: {
+        id: account.id,
+        username: account.username,
+        email: account.email,
+        displayName: account.nickname || account.username,
+      },
+      excludeCredentials,
+    });
+    const challengeId = await issueChallenge(user.userId, 'registration', options.challenge);
+    return jsonResponse(c, { ok: true, challengeId, options });
+  });
+
+  /** 绑定通行密钥第二步：校验注册响应并保存凭据；只保存，不切换两步验证方式。 */
+  app.post('/2fa/passkey/verify', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    const body = bodyRecord(await readJsonBody(c));
+    const challenge = await consumeChallenge(body.challengeId, user.userId, 'registration');
+    if (!challenge) {
+      return jsonResponse(c, {
+        ok: false,
+        error: '这次验证已过期，请重新开始',
+        errorCode: 'security.passkeyChallenge',
+      });
+    }
+    const rp = await passkeyRelyingParty();
+    let registration;
+    try {
+      registration = await verifyPasskeyRegistration({
+        response: body.credential as Parameters<typeof verifyPasskeyRegistration>[0]['response'],
+        expectedChallenge: challenge,
+        rp: { rpId: rp.rpId, origins: rp.origins },
+      });
+    } catch (error: unknown) {
+      return jsonResponse(c, { ok: false, ...passkeyVerifyFailure(error) });
+    }
+    if (!registration) {
+      return jsonResponse(c, {
+        ok: false,
+        error: '通行密钥验证没有通过，请重试',
+        errorCode: 'security.passkeyInvalid',
+      });
+    }
+    const name =
+      String(body.name ?? '')
+        .trim()
+        .slice(0, 40) || '通行密钥';
+    try {
+      await saveCredential({
+        userId: user.userId,
+        credentialId: registration.credentialId,
+        publicKey: registration.publicKey,
+        counter: registration.counter,
+        transports: registration.transports,
+        name,
+      });
+    } catch (error: unknown) {
+      if (uniqueViolation(error)) {
+        return jsonResponse(c, { ok: false, error: '这枚通行密钥已经绑定过了' });
+      }
+      throw error;
+    }
+    return jsonResponse(c, { ok: true, error: '', passkeys: await listCredentials(user.userId) });
+  });
+
+  /**
+   * 启用通行密钥作为两步验证方式。
+   *
+   * 绑定与启用分开：先绑好至少一枚，再用身份复核票切换。关闭两步验证不会删除凭据，
+   * 重新开启时可以沿用（与保留 TOTP 密钥一致）。
+   *
+   * **备用码兜底**：切到通行密钥时如果还没有备用码，顺手生成一批并随响应返回（只在这一刻看得到）。
+   * 通行密钥依赖设备，丢设备就等于丢了唯一的登录方式；已有备用码时不动它们，避免悄悄作废旧码。
+   */
+  app.post('/2fa/passkey/enable', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    const body = bodyRecord(await readJsonBody(c));
+    await consumeSecurityStepUp(body.stepUpToken, user.userId, stepUpSessionId(c, user), 'factor');
+    const factors = await secondFactorState(user.userId);
+    if (!factors) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
+    if (factors.passkeyCount === 0) {
+      return jsonResponse(c, { ok: false, error: '请先添加一枚通行密钥', errorCode: 'security.passkeyRequired' });
+    }
+    if (!factors.emailVerified || !factors.email) {
+      throw badRequest('请先验证邮箱，再开启两步验证', { code: 'security.verifyEmailBeforeTwoFactor' });
+    }
+    if (!(await activatePasskeyMethod(user.userId))) {
+      // 走到这里只可能是凭据在两步之间被删掉了（或邮箱被并发改动）：按「先加凭据」提示。
+      return jsonResponse(c, { ok: false, error: '请先添加一枚通行密钥', errorCode: 'security.passkeyRequired' });
+    }
+    const backupCodes = factors.backupCodesLeft === 0 ? await regenerateBackupCodes(user.userId) : [];
+    return jsonResponse(c, {
+      ok: true,
+      error: '',
+      twoFactorEnabled: true,
+      twoFactorMethod: 'passkey',
+      backupCodes,
+    });
+  });
+
+  /**
+   * 删除一枚通行密钥。
+   *
+   * 最后一枚且当前方式正是通行密钥时拒绝：删掉就再也登不进来了。
+   * 用户要先把方式切换成邮箱或验证器（或先加第二枚）再删。
+   */
+  app.delete('/2fa/passkey/:id', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) });
+    const id = c.req.param('id').trim();
+    const missing = { ok: false, error: '这枚通行密钥不存在或已删除', errorCode: 'security.passkeyNotFound' };
+    if (!id || id.length > 80) {
+      return jsonResponse(c, missing);
+    }
+    const factors = await secondFactorState(user.userId);
+    if (!factors) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
+    const own = await listCredentials(user.userId);
+    if (!own.some((item) => item.id === id)) {
+      return jsonResponse(c, missing);
+    }
+    if (own.length <= 1 && factors.enabled && factors.method === 'passkey') {
+      return jsonResponse(c, {
+        ok: false,
+        error: '请先切换到其它验证方式',
+        errorCode: 'security.passkeyLastOne',
+      });
+    }
+    if (!(await removeCredential(user.userId, id))) {
+      return jsonResponse(c, missing);
+    }
+    return jsonResponse(c, { ok: true, error: '', passkeys: await listCredentials(user.userId) });
   });
 
   app.post('/2fa/backup-codes', authenticateHono, async (c) => {
@@ -649,6 +832,10 @@ export const PROFILE_ENDPOINTS: readonly [string, string][] = [
   ['POST', '/2fa/totp/setup'],
   ['POST', '/2fa/totp/activate'],
   ['POST', '/2fa/totp/enable'],
+  ['POST', '/2fa/passkey/options'],
+  ['POST', '/2fa/passkey/verify'],
+  ['POST', '/2fa/passkey/enable'],
+  ['DELETE', '/2fa/passkey/:id'],
   ['POST', '/2fa/backup-codes'],
   ['POST', '/2fa/disable'],
   ['POST', '/email'],
