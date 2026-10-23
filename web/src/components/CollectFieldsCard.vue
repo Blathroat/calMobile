@@ -104,12 +104,13 @@ function itemLabel(index: number): string {
       <div v-for="(item, index) in fields" :key="index" class="collect-item">
         <div class="collect-primary">
           <label class="notch">
-            <span class="notch-label">{{ COPY.title }}</span>
+            <!-- 标题不再浮在输入框上方：「标题」两个字作为占位符显示在框内，
+                 空着时看得见要填什么，填了之后就让位给内容。 -->
             <input
               v-model="item.title"
               class="notch-input"
               type="text"
-              :placeholder="COPY.placeholder"
+              :placeholder="COPY.title"
               :maxlength="titleMax"
               :disabled="disabled"
               :aria-label="t('registration.fields.fieldTitle')"
@@ -186,8 +187,6 @@ function itemLabel(index: number): string {
   min-width: 0;
   /* 分隔线贴着卡片左右边缘；内容仍与卡片标题对齐。 */
   margin-inline: calc(var(--s4) * -1);
-  /* 第一项的浮动标题要伸出输入框上沿，留出这一截避免被裁切。 */
-  padding-top: var(--s2);
 }
 
 .collect-item {
@@ -196,13 +195,14 @@ function itemLabel(index: number): string {
   gap: var(--s2);
   min-width: 0;
   padding-inline: var(--s4);
-  padding-bottom: var(--s2);
+  /* 每一项上方留一档：没有浮动标题之后，靠这段空隙把项与项分开。 */
+  padding-top: var(--s3);
+  padding-bottom: var(--s3);
 }
 
 .collect-item + .collect-item {
   border-top: var(--hairline) solid var(--stroke);
-  /* 浮动标题会向上探出半截，多留一截才看得出项与项的分隔。 */
-  padding-top: var(--s6);
+  padding-top: var(--s4);
 }
 
 .collect-primary {
@@ -292,21 +292,6 @@ function itemLabel(index: number): string {
   background: transparent;
 }
 
-.notch-label {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  inset-inline-start: var(--s3);
-  transform: translateY(-50%);
-  padding: 0 var(--s1);
-  background: var(--screen);
-  color: var(--ink-2);
-  font-size: var(--fs-meta);
-  font-weight: 700;
-  line-height: 1.2;
-  pointer-events: none;
-}
-
 .notch-input {
   width: 100%;
   height: var(--ctrl);
@@ -342,11 +327,6 @@ function itemLabel(index: number): string {
 .notch-input:focus,
 .notch-input:focus-visible {
   background-size: 100% 2px;
-}
-
-.notch:focus-within .notch-label {
-  background: var(--screen);
-  color: var(--accent-ink);
 }
 
 .notch:has(:disabled) {

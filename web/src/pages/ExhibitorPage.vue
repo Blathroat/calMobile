@@ -243,8 +243,6 @@ usePullRefresh(
           </span>
         </button>
 
-        <hr class="divider" />
-
         <div class="action-row">
           <button
             class="cta ghost"
