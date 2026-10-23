@@ -223,9 +223,9 @@ describe('备用码余量提示', () => {
     const warn = document.querySelector('.security-factor .notice[data-tone="warn"]');
     expect(warn?.textContent).toContain('还没有备用码');
     expect(document.querySelector('.security-factor .field-hint')?.textContent).toBe('当前验证方式：用邮箱验证码开启');
-    expect(Array.from(document.querySelectorAll('.security-factor .text-action')).map((el) => el.textContent?.trim())).toContain(
-      '生成备用码',
-    );
+    expect(
+      Array.from(document.querySelectorAll('.security-factor .text-action')).map((el) => el.textContent?.trim()),
+    ).toContain('生成备用码');
   });
 
   it('只剩两枚以内时提醒重新生成，说明行仍报数量', async () => {
@@ -235,9 +235,9 @@ describe('备用码余量提示', () => {
     expect(document.querySelector('.security-factor .field-hint')?.textContent).toBe(
       '当前验证方式：用邮箱验证码开启；备用码还剩 2 个',
     );
-    expect(Array.from(document.querySelectorAll('.security-factor .text-action')).map((el) => el.textContent?.trim())).toContain(
-      '重新生成备用码',
-    );
+    expect(
+      Array.from(document.querySelectorAll('.security-factor .text-action')).map((el) => el.textContent?.trim()),
+    ).toContain('重新生成备用码');
   });
 
   it('余量充足时没有警告', async () => {
