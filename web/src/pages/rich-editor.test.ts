@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, nextTick, type App } from 'vue';
+import { createApp, h, nextTick, type App } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { createMemoryHistory, createRouter } from 'vue-router';
+import { RouterView, createMemoryHistory, createRouter } from 'vue-router';
 import RichEditorPage from './RichEditorPage.vue';
 import { api } from '@/app/runtime';
+import { closeSheet, sheet } from '@/services/sheet';
 import { clearExhibitionDraft, readExhibitionDraft, stashExhibitionDraft } from '@/services/exhibition-draft';
 import { loadHtmlConverter, loadMarkdownParser, markdownToHtml } from '@/services/markdown';
 import type { ExhibitionDetail } from '@/api/types';
@@ -16,6 +17,8 @@ vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 let app: App | undefined;
 
 beforeEach(async () => {
+  closeSheet();
+  await new Promise((resolve) => setTimeout(resolve, 260));
   document.body.innerHTML = '<div id="app-foot"></div><div id="editor-test"></div>';
   vi.clearAllMocks();
   await loadMarkdownParser();
@@ -25,13 +28,14 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  closeSheet();
   app?.unmount();
   app = undefined;
   document.body.innerHTML = '';
   clearExhibitionDraft();
 });
 
-async function mountEditor(path = '/rich-editor?id=exh-1'): Promise<void> {
+async function mountEditor(path = '/rich-editor?id=exh-1') {
   const pinia = createPinia();
   setActivePinia(pinia);
   const router = createRouter({
@@ -44,9 +48,13 @@ async function mountEditor(path = '/rich-editor?id=exh-1'): Promise<void> {
   });
   await router.push('/exhibition-form');
   await router.push(path);
-  app = createApp(RichEditorPage).use(pinia).use(router);
+  // 必须经 RouterView 挂载：onBeforeRouteLeave 要拿到当前路由记录才能注册。
+  app = createApp({ render: () => h(RouterView) })
+    .use(pinia)
+    .use(router);
   app.mount('#editor-test');
   await nextTick();
+  return router;
 }
 
 describe('简介加载、编辑与保存', () => {
@@ -121,6 +129,44 @@ describe('简介加载、编辑与保存', () => {
     expect(saved.querySelector('video')?.getAttribute('src')).toBe('https://example.com/demo.mp4');
   });
 
+  it('没有改动时直接退出，不弹确认', async () => {
+    vi.mocked(api.exhibitions.get).mockResolvedValue({
+      found: true,
+      exhibition: { id: 'exh-1', title: '秋季展会', description: '原简介', descriptionFormat: 'md' },
+    });
+    const router = await mountEditor();
+    await vi.waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('原简介'));
+    router.back();
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/exhibition-form'));
+    expect(sheet.current).toBeNull();
+  });
+
+  it('有未保存的正文时退出先确认；继续编辑留在原地，放弃才离开', async () => {
+    vi.mocked(api.exhibitions.get).mockResolvedValue({
+      found: true,
+      exhibition: { id: 'exh-1', title: '秋季展会', description: '原简介', descriptionFormat: 'md' },
+    });
+    const router = await mountEditor();
+    await vi.waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('原简介'));
+    const area = document.querySelector<HTMLTextAreaElement>('textarea');
+    if (!area) throw new Error('缺少编辑区');
+    area.value = '改过的简介';
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+
+    router.back();
+    await vi.waitFor(() => expect(sheet.current?.title).toBe('有未保存的更改'));
+    expect(router.currentRoute.value.path).toBe('/rich-editor');
+    sheet.current!.actions[0]!.onClick!(closeSheet);
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    expect(router.currentRoute.value.path).toBe('/rich-editor');
+
+    router.back();
+    await vi.waitFor(() => expect(sheet.current?.title).toBe('有未保存的更改'));
+    sheet.current!.actions[1]!.onClick!(closeSheet);
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/exhibition-form'));
+  });
+
   it('新建展会没有 id 时把简介写回稿，不请求保存接口', async () => {
     stashExhibitionDraft({
       title: '新展会',
@@ -139,7 +185,8 @@ describe('简介加载、编辑与保存', () => {
     });
     await mountEditor('/rich-editor?draft=1');
     await vi.waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('草稿'));
-    expect(document.querySelector('.card strong')?.textContent).toBe('新展会');
+    // 顶部不再重复展会标题：标题只在外壳顶栏出现。
+    expect(document.querySelector('#editor-test .card strong')).toBeNull();
     const area = document.querySelector<HTMLTextAreaElement>('textarea');
     if (!area) throw new Error('缺少编辑区');
     area.value = '改过的简介';

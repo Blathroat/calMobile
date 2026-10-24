@@ -10,6 +10,7 @@ import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
@@ -50,6 +51,8 @@ const showPreview = ref(false);
 const editor = ref<HTMLTextAreaElement>();
 /** 内容只从取回的详情写一次，之后预览 / 打字都不再被覆盖。 */
 const seeded = ref(false);
+/** 上次载入或保存后的正文：退出时据此判断有没有未保存的改动。 */
+let savedContent = '';
 const canSave = computed(
   () =>
     seeded.value &&
@@ -126,6 +129,7 @@ async function load(): Promise<void> {
     if (seeded.value || !query.data.value) return;
     content.value = draft.description;
     seeded.value = true;
+    savedContent = content.value;
     return;
   }
   if (!exhibitionId.value) {
@@ -141,10 +145,16 @@ async function load(): Promise<void> {
   if (!data || data.found === false || seeded.value) return;
   content.value = initialContent((data.exhibition ?? {}) as JsonObject);
   seeded.value = true;
+  savedContent = content.value;
 }
 
 onMounted(() => {
   void load();
+});
+
+useUnsavedGuard(() => seeded.value && content.value !== savedContent, {
+  // 登录失效必须能直接回登录页，不能被确认面板挡住。
+  skip: (to) => to.path === '/login',
 });
 
 // ── 编辑区与工具条 ───────────────────────────────────────────────
@@ -369,6 +379,8 @@ async function save(): Promise<void> {
     saving.value = true;
     try {
       patchExhibitionDraft(markdown);
+      // 先清脏标记再返回：这次导航是保存成功后的正常离开。
+      savedContent = content.value;
       const summary = plainText(markdownToHtml(markdown), 20);
       toast(
         markdown ? t('exhibition.editor.descriptionSaved', { summary }) : t('exhibition.editor.descriptionCleared'),
@@ -403,6 +415,7 @@ async function save(): Promise<void> {
       toast(String(result?.error || t('exhibition.form.saveFailed')), 'error');
       return;
     }
+    savedContent = content.value;
     const summary = plainText(markdownToHtml(markdown), 20);
     toast(
       markdown ? t('exhibition.editor.descriptionSaved', { summary }) : t('exhibition.editor.descriptionCleared'),
@@ -447,10 +460,6 @@ function escapeRegExp(value: string): string {
   />
 
   <template v-else>
-    <div class="card" data-tone="fill">
-      <strong>{{ exhibition.title || t('exhibition.editor.newExhibition') }}</strong>
-    </div>
-
     <!-- 工具条只留格式。预览和粘贴在编辑区下方，避免同一颗粘贴出现两次。 -->
     <div class="toolbar" role="toolbar" :aria-label="t('exhibition.editor.title')">
       <button type="button" :aria-pressed="false" :title="t('exhibition.editor.heading')" @click="prefixLine('## ')">

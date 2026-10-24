@@ -342,12 +342,16 @@
     "cancel": "取消",
     "close": "关闭",
     "delete": "删除",
+    "discardChanges": "放弃更改",
     "failed": "操作失败",
+    "keepEditing": "继续编辑",
     "loadFailed": "加载失败",
     "pullRefresh": "下拉刷新",
     "refreshing": "正在更新",
     "retry": "重试",
-    "save": "保存"
+    "save": "保存",
+    "unsavedMessage": "离开这一页后，本次修改不会保留。",
+    "unsavedTitle": "有未保存的更改"
   },
   "device": {
     "actionIncomplete": "操作未完成",

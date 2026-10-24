@@ -28,7 +28,6 @@ const emit = defineEmits<{
   'open-public': [user: User];
   manage: [user: User];
   'adjust-role': [user: User];
-  'disable-two-factor': [user: User];
   'open-exhibitions': [user: User];
   'open-meetings': [user: User];
 }>();
@@ -128,16 +127,6 @@ function exhibitorMeta(user: User): string {
             {{ copy.adjustRole }}
           </button>
         </div>
-        <!-- 兜底出口：用户邮箱用不了（离职、邮箱被回收）时，只有管理员能帮他关掉两步验证 -->
-        <button
-          v-if="user.twoFactorEnabled === true"
-          class="cta ghost"
-          data-size="small"
-          type="button"
-          @click="emit('disable-two-factor', user)"
-        >
-          {{ t('admin.users.disableTwoFactor') }}
-        </button>
       </div>
     </div>
   </template>

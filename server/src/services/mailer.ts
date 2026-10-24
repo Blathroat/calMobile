@@ -3,6 +3,8 @@
  *
  * 上层（`domain/otp.ts`）只认 `send(message)`，不关心码是怎么出去的：
  * 本地走 `console`（打进日志）或 `smtp`（打进 Mailpit），测试走 `memory`（留在内存里）。
+ * 开发环境无论走哪条非 console 通道，都会把整封邮件（含验证码）再打一份到控制台，
+ * 省得为了抄一个码去开 Mailpit。生产与测试不打。
  * 换生产通道（阿里云邮件推送 / 腾讯云 SES / Resend 的 SMTP）只改 `.env`，代码不动。
  *
  * 两个刻意的设计：
@@ -164,20 +166,34 @@ export function closeTransporter(): void {
   transporterKey = '';
 }
 
-/** console 通道的排版：本地不开容器也能把验证码抄下来。 */
-function logToConsole(built: BuiltMessage, purpose: unknown): void {
+/** 邮件在控制台里的排版：本地不开容器也能把验证码抄下来。 */
+function formatMailForConsole(built: BuiltMessage, note: string, purpose: unknown): string {
   const line = '─'.repeat(56);
-  console.log(
-    [
-      line,
-      `邮件（console 通道，未真正发送${purpose ? `；用途 ${purpose}` : ''}）`,
-      `收件人：${built.to}`,
-      `主　题：${built.subject}`,
-      line,
-      built.text,
-      line,
-    ].join('\n'),
-  );
+  return [
+    line,
+    `邮件（${note}${purpose ? `；用途 ${purpose}` : ''}）`,
+    `收件人：${built.to}`,
+    `主　题：${built.subject}`,
+    line,
+    built.text,
+    line,
+  ].join('\n');
+}
+
+/** console 通道：不真发信，整封打进日志。 */
+function logToConsole(built: BuiltMessage, purpose: unknown): void {
+  console.log(formatMailForConsole(built, 'console 通道，未真正发送', purpose));
+}
+
+/**
+ * 开发环境的副本：走 smtp（Mailpit）时码只在浏览器收件箱里，终端里看不到；
+ * 这里在发信前把同一封邮件再打一份 —— 连不上 SMTP 时也照样拿得到码。
+ *
+ * 只在 `NODE_ENV=development` 且不是 console 通道时打印。生产不把验证码写进日志；
+ * 测试用 memory 收件箱，不需要噪声。
+ */
+function logDevelopmentCopy(built: BuiltMessage, purpose: unknown, transport: string): void {
+  console.log(formatMailForConsole(built, `开发环境副本，${transport} 通道正在发送`, purpose));
 }
 
 /**
@@ -210,6 +226,10 @@ export async function send(message: MailMessage, options: { config?: MailConfig 
   }
 
   try {
+    // 先打副本再发信：SMTP 挂了也不影响开发者把验证码抄下来。
+    if (!config.isProduction && config.nodeEnv === 'development' && config.transport !== 'console') {
+      logDevelopmentCopy(built, message.purpose, config.transport);
+    }
     if (config.transport === 'memory') {
       if (config.isProduction) {
         // resolveMailConfig 已经拦下了这种组合；这里再兜一次，防止有人绕过去构造配置。

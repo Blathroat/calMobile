@@ -27,6 +27,16 @@ export async function loadMarkdownParser(): Promise<void> {
   });
 }
 
+/**
+ * 解析器与清洗器是否都已就绪。
+ *
+ * 页面先画查询缓存时必须问一句：简介的渲染依赖这两个按需加载的模块，
+ * 缓存命中时它们可能还没加载完，直接渲染会在 computed 里抛错（整页白屏）。
+ */
+export function markdownReady(): boolean {
+  return Boolean(parser && purifier);
+}
+
 /** 仅历史 HTML 简介进入编辑页时加载转换器。 */
 export async function loadHtmlConverter(): Promise<void> {
   if (converter) return;

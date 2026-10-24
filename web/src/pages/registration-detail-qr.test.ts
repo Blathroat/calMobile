@@ -82,9 +82,14 @@ async function hold(node: Element): Promise<void> {
 }
 
 describe('报名二维码长按保存', () => {
-  it('状态按 code 查表显示中文文案', async () => {
+  it('状态按 code 查表显示中文文案，且状态卡只保留大号状态词', async () => {
     await mountPage();
-    expect(document.body.textContent).toContain('已通过');
+    const card = [...document.querySelectorAll<HTMLElement>('.card')].find((node) =>
+      node.textContent?.includes('当前状态'),
+    );
+    expect(card?.textContent).toContain('已通过');
+    expect(card?.querySelector('.reg-status-word')?.textContent).toContain('已通过');
+    expect(card?.querySelector('.status-tag')).toBeNull();
   });
 
   it('二维码下方给出长按提示', async () => {

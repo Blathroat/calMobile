@@ -5,6 +5,7 @@ import { EXHIBITION_COLUMNS, EXHIBITION_FROM } from '../domain/queries.js';
 import { exhibitionPayload, fieldPayload, type ExhibitionRow, type FieldRow } from '../domain/payloads.js';
 import { requireExhibitor, assertCanManageExhibition, assertNotLimited } from '../domain/permissions.js';
 import { readSection } from '../domain/settings.js';
+import { calendarToday, defaultCalendarDay } from '../domain/calendar.js';
 import { withExhibitionQuota } from '../domain/exhibition-quota.js';
 import { limits, parseSchema } from '../domain/validation.js';
 import {
@@ -33,14 +34,6 @@ function likePattern(keyword: string) {
 async function findRow(id: string) {
   const result = await query<ExhibitionRow>(`SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM} WHERE e.id = $1`, [id]);
   return result.rows[0] || null;
-}
-async function landingMonth() {
-  const result = await query<{ year: number; month: number }>(`SELECT EXTRACT(YEAR FROM exhibition_date)::int AS year,
-    EXTRACT(MONTH FROM exhibition_date)::int AS month FROM exhibitions ORDER BY exhibition_date LIMIT 1`);
-  const row = result.rows[0];
-  if (row) return { year: row.year, month: row.month };
-  const now = new Date();
-  return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 interface MonthMeetingRow {
   id: string;
@@ -171,12 +164,12 @@ app.get('/', optionalAuthHono, async (c) => {
   return jsonResponse(c, result.rows.map(exhibitionPayload));
 });
 app.get('/month', optionalAuthHono, async (c) => {
+  const today = await calendarToday();
   let requestedYear: unknown = c.req.query('year');
   let requestedMonth: unknown = c.req.query('month');
   if (!requestedYear || !requestedMonth) {
-    const landing = await landingMonth();
-    requestedYear ||= landing.year;
-    requestedMonth ||= landing.month;
+    requestedYear ||= today.year;
+    requestedMonth ||= today.month;
   }
   const month = parseSchema(monthQuerySchema, {
     year: requestedYear,
@@ -193,7 +186,6 @@ app.get('/month', optionalAuthHono, async (c) => {
   );
   const items = result.rows.map(exhibitionPayload);
   const eventDays = [...new Set(items.map((item) => item.day))].sort((a, b) => Number(a) - Number(b));
-  if (day <= 0) day = eventDays[0] || 0;
   // 圆点只标「和当前用户有关」的日期；有展会的日期仍由 eventDays 表示（日历把日期加粗）。
   const viewer = userOf(c);
   let markedDays: number[] = [];
@@ -223,6 +215,11 @@ app.get('/month', optionalAuthHono, async (c) => {
       [year, monthNumber, viewer.userId],
     );
     markedDays = marked.rows.map((row) => row.day);
+  }
+  // 缺省选中日：当前月优先今天以后第一个有活动的日子（含本人会议），本月没有就今天；
+  // 用户自己翻到的其它月份仍按该月第一个有活动的日子。
+  if (day <= 0) {
+    day = defaultCalendarDay({ year, month: monthNumber, today, activityDays: [...eventDays, ...markedDays] });
   }
   const meetings = viewer?.userId ? await monthMeetings(year, monthNumber, viewer.userId) : [];
   return jsonResponse(c, {

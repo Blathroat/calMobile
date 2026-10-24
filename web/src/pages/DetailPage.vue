@@ -15,7 +15,7 @@ import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { registrationLink } from '@/services/registration-link';
 import { device } from '@/services/device-services';
-import { loadMarkdownParser, markdownToHtml, plainText, sanitizeHtml } from '@/services/markdown';
+import { loadMarkdownParser, markdownReady, markdownToHtml, plainText, sanitizeHtml } from '@/services/markdown';
 import { coverOf } from '@/services/cover';
 import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
@@ -23,10 +23,11 @@ import AppIcon from '@/components/AppIcon.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import RoleTag from '@/components/RoleTag.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import ImageViewer from '@/components/ImageViewer.vue';
 import { formatDateWithWeekday } from '@/services/format';
-import { REGISTRATION_STATUS, modeLabel, roleLabel, statusTone } from '@/services/status';
+import { REGISTRATION_STATUS, modeLabel, statusTone } from '@/services/status';
 import type { ExhibitionDetail, JsonObject, Registration } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -152,12 +153,16 @@ async function load(): Promise<void> {
   calendarRequested = false;
   const data = await query.run(() => {
     const pending = api.exhibitions.get(exhibitionId.value) as CachedRead<ExhibitionDetail>;
+    // 缓存里有简介时，解析器没就绪不能先画：description 计算属性会在渲染时直接用它，
+    // 报错会中止整页渲染，表现成第一次进入白屏、第二次（模块已加载）才正常。
+    const cached =
+      pending.cached && (!pending.cached.exhibition?.description || markdownReady()) ? pending.cached : undefined;
     return tagRead(
       pending.then(async (detail) => {
         if (detail.exhibition?.description) await loadMarkdownParser();
         return detail;
       }),
-      pending.cached,
+      cached,
       pending.revalidating,
     );
   });
@@ -361,10 +366,8 @@ onMounted(() => {
       <span class="row-copy">
         <span class="name-line">
           <strong class="row-title truncate">{{ exhibition.exhibitor }}</strong>
-          <!-- 身份是中性信息，用 pill；报名方式才用信号灯 -->
-          <span v-if="exhibition.exhibitorRole === 'exhibitor' || exhibition.exhibitorRole === 'admin'" class="pill">{{
-            roleLabel(String(exhibition.exhibitorRole))
-          }}</span>
+          <!-- 身份小签与其它页面卡片一致（主题色方框）；报名方式才用信号灯 -->
+          <RoleTag :role-code="String(exhibition.exhibitorRole || '')" />
         </span>
         <span class="row-meta">{{ t('exhibition.detail.viewExhibitorHome') }}</span>
       </span>

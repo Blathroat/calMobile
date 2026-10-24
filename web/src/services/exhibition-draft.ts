@@ -7,6 +7,8 @@
 import type { CollectField } from '@/components/CollectFieldsCard.vue';
 
 export interface ExhibitionDraft {
+  /** 所属展会 id；新建展会还没有 id 时为空。返回表单时按它判断是不是这一页的稿。 */
+  exhibitionId?: string;
   title: string;
   venue: string;
   date: string;

@@ -35,6 +35,7 @@ const DETAIL: ExhibitionDetail = {
     time: '09:00-17:00',
     venue: '会展中心',
     exhibitor: '示例展商',
+    exhibitorRole: 'exhibitor',
     openForRegistration: true,
   },
 };
@@ -172,5 +173,16 @@ describe('展会详情底部报名按钮', () => {
     await flush();
     expect(api.registrations.list).not.toHaveBeenCalled();
     expect(registerButton()?.textContent?.trim()).toBe('登录后报名');
+  });
+});
+
+describe('展会详情举办者卡片', () => {
+  it('身份用与其它页卡片一致的主题色小签，不再用普通 pill', async () => {
+    await mountDetail();
+    const organizer = [...document.querySelectorAll<HTMLElement>('.row-card')].find((node) =>
+      node.textContent?.includes('示例展商'),
+    );
+    expect(organizer?.querySelector('.role-tag')?.textContent).toBe('展商');
+    expect(organizer?.querySelector('.pill')).toBeNull();
   });
 });

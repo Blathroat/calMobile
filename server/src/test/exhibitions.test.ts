@@ -7,6 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import { DEFAULT_SETTINGS } from '../config/migrate.js';
+import { pool } from '../config/pool.js';
 import { del, get, post, put, startContract, stopContract, tokens } from './contract-harness.js';
 
 beforeAll(startContract);
@@ -57,32 +58,39 @@ test('展会列表字段覆盖页面渲染所需的全部字段', async () => {
   }
 });
 
-test('月视图返回三块数据，且原样返回请求的月份与日期', async () => {
-  // 示例展会相对今天生成，落点月份就是「第一场展会所在的月份」。
-  const bootstrap = await get('/api/v1/bootstrap');
-  const landing = bootstrap.body.calendar.landing;
-  const june = await get(`/api/v1/exhibitions/month?year=${landing.year}&month=${landing.month}`);
-  assert.strictEqual(june.body.year, landing.year);
-  assert.strictEqual(june.body.month, landing.month);
-  assert.ok(june.body.eventDays.length > 0, '落点月份应当有展会');
-  assert.ok(june.body.monthLabel.includes(String(landing.year)));
-  assert.ok(june.body.eventDays.includes(june.body.day), '缺省选中日期应当是有展会的日期');
-  assert.ok(Array.isArray(june.body.exhibitions) && Array.isArray(june.body.selected));
-  assert.deepStrictEqual(june.body.markedDays, [], '未登录不返回个人活动圆点');
-  assert.deepStrictEqual(june.body.meetings, [], '未登录不返回私人会议卡片');
+test('月视图缺省落在当前月今天以后第一个有活动的日子，本月没有就今天', async () => {
+  const current = await pool.query<{ year: number; month: number; day: number }>(
+    `SELECT EXTRACT(YEAR FROM CURRENT_DATE)::int AS year,
+            EXTRACT(MONTH FROM CURRENT_DATE)::int AS month,
+            EXTRACT(DAY FROM CURRENT_DATE)::int AS day`,
+  );
+  const today = current.rows[0]!;
+  const month = await get('/api/v1/exhibitions/month');
+  assert.strictEqual(month.body.year, today.year);
+  assert.strictEqual(month.body.month, today.month, '首页缺省落在当前月');
+  assert.ok(month.body.monthLabel.includes(String(today.year)));
+  assert.ok(Array.isArray(month.body.exhibitions) && Array.isArray(month.body.selected));
+  assert.deepStrictEqual(month.body.markedDays, [], '未登录不返回个人活动圆点');
+  assert.deepStrictEqual(month.body.meetings, [], '未登录不返回私人会议卡片');
+
+  const activityDays = [...new Set([...(month.body.eventDays as number[]), ...(month.body.markedDays as number[])])]
+    .map(Number)
+    .sort((left, right) => left - right);
+  const expectedDay = activityDays.find((day) => day >= today.day) ?? today.day;
+  assert.strictEqual(month.body.day, expectedDay, '缺省选中日应当是今天以后第一个有活动的日子，本月没有就今天');
 
   // 指定了没有展会的日期：原样返回，由页面显示空状态
-  const firstEventDay = june.body.eventDays[0];
-  const otherDay = firstEventDay === 1 ? 2 : 1;
-  const emptyDay = await get(`/api/v1/exhibitions/month?year=${landing.year}&month=${landing.month}&day=${otherDay}`);
+  const otherDay = month.body.day === 1 ? 2 : 1;
+  const emptyDay = await get(`/api/v1/exhibitions/month?year=${today.year}&month=${today.month}&day=${otherDay}`);
   assert.strictEqual(emptyDay.body.day, otherDay, '选中日期被服务端改写了');
   assert.strictEqual(emptyDay.body.selected.length, 0);
 
-  // 空月份：原样返回，不回落到有数据的月份
-  const emptyMonth = await get(
-    `/api/v1/exhibitions/month?year=${landing.year}&month=${((landing.month + 5) % 12) + 1}`,
-  );
-  assert.strictEqual(emptyMonth.body.month, ((landing.month + 5) % 12) + 1);
+  // 空月份：原样返回，不回落到有数据的月份；非当前月没有活动时不选中
+  const targetYear = today.month + 5 > 12 ? today.year + 1 : today.year;
+  const targetMonth = ((today.month + 5 - 1) % 12) + 1;
+  const emptyMonth = await get(`/api/v1/exhibitions/month?year=${targetYear}&month=${targetMonth}`);
+  assert.strictEqual(emptyMonth.body.year, targetYear);
+  assert.strictEqual(emptyMonth.body.month, targetMonth);
   assert.strictEqual(emptyMonth.body.eventDays.length, 0);
   assert.strictEqual(emptyMonth.body.day, 0);
 });

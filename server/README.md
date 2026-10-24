@@ -89,7 +89,7 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 - `src/services/mailer.ts`
 - `src/services/mail-templates.ts`
 
-本地收件箱是 `docker-compose.yml` 里的 Mailpit。生产自检会拒绝 `console` 和 `memory`，也会警告指向 `127.0.0.1` 的 SMTP。
+本地收件箱是 `docker-compose.yml` 里的 Mailpit。生产自检会拒绝 `console` 和 `memory`，也会警告指向 `127.0.0.1` 的 SMTP。开发环境（`NODE_ENV=development`）发信时，配置的通道照走，同时把整封邮件（含验证码）再打一份到服务端控制台；生产和测试不打。
 
 ## 通行密钥（两步验证）
 

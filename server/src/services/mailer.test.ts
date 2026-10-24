@@ -72,6 +72,59 @@ test('console 通道把整封邮件打进日志：本地不开容器也能拿到
   assert.equal(outbox().length, 0, 'console 通道不该往内存收件箱里塞东西');
 });
 
+test('开发环境除了走配置的通道，还把验证码再打一份到日志：省得去 Mailpit 翻邮件', async () => {
+  const lines: string[] = [];
+  const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+    lines.push(args.join(' '));
+  });
+  let result;
+  try {
+    result = await send(
+      {
+        to: 'user@example.com',
+        subject: '【发现展会】注册验证码',
+        text: '验证码：135790',
+        purpose: 'register',
+      },
+      { config: memoryConfig({ NODE_ENV: 'development' }) },
+    );
+  } finally {
+    spy.mockRestore();
+  }
+
+  assert.equal(result.ok, true);
+  assert.equal(result.transport, 'memory', '副本不影响原来的通道');
+  const output = lines.join('\n');
+  assert.ok(output.includes('user@example.com'), '副本里要能看出收件人');
+  assert.ok(output.includes('135790'), '开发环境的副本里要有验证码');
+  assert.ok(output.includes('开发环境副本'), '要说明这是额外打印的一份，不是 console 通道');
+});
+
+test('测试环境不打印开发副本：memory 收件箱已经拿得到码', async () => {
+  const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  try {
+    await send({ to: 'user@example.com', subject: '主题', text: '验证码：111111' }, { config: memoryConfig() });
+  } finally {
+    spy.mockRestore();
+  }
+  assert.equal(spy.mock.calls.length, 0);
+});
+
+test('生产配置下不打印开发副本：验证码不能进线上日志', async () => {
+  const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  let result;
+  try {
+    result = await send(
+      { to: 'user@example.com', subject: '主题', text: '验证码：222222' },
+      { config: { ...memoryConfig(), isProduction: true } },
+    );
+  } finally {
+    spy.mockRestore();
+  }
+  assert.equal(result.ok, false, '生产不允许 memory 通道，顺带确认这条路径');
+  assert.equal(spy.mock.calls.length, 0);
+});
+
 test('通道没配好时不抛异常，返回 ok:false 并说清缺什么', async () => {
   // 生产 + 默认 smtp 且什么都没配：最典型的「上线忘了配」现场
   const broken = resolveMailConfig({ NODE_ENV: 'production' });

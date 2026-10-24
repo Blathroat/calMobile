@@ -370,7 +370,8 @@ function requestEmailResend(): void {
         {{ copy.emailMethod }}
       </button>
     </div>
-    <p v-if="identityMethod === 'email'" class="field-hint">
+    <!-- 没点发送前不能写「已发送」：只有真正发出去（identityCodeSent）才显示收件地址 -->
+    <p v-if="identityMethod === 'email' && identityCodeSent" class="field-hint">
       {{ t('security.setup.codeSentToEmail', { email: identityEmail }) }}
     </p>
     <button

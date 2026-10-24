@@ -256,17 +256,13 @@ onBeforeUnmount(cancelQrHold);
       </div>
     </div>
 
-    <!-- 状态区：小标 → 大号状态词（按语义上色）→ 信号灯 → 一行说明 -->
+    <!-- 状态区：小标 → 大号状态词（按语义上色）→ 一行说明。
+         状态词已经说明了参加状态，不再重复一颗信号灯。 -->
     <div class="card">
       <span class="section-label">{{ t('exhibition.detail.currentStatus') }}</span>
       <strong class="reg-status-word" :data-tone="statusTone(String(record.statusCode || ''))">
         {{ registrationStatusLabel(String(record.statusCode || '')) }}
       </strong>
-      <StatusTag
-        class="reg-status-tag"
-        :text="registrationStatusLabel(String(record.statusCode || ''))"
-        :tone="statusTone(String(record.statusCode || ''))"
-      />
       <p class="reg-status-hint">{{ statusHint(record.statusCode) }}</p>
     </div>
 
@@ -383,11 +379,6 @@ onBeforeUnmount(cancelQrHold);
 
 .reg-status-word[data-tone='info'] {
   color: var(--info-ink);
-}
-
-/* 信号灯独立一行，靠左对齐卡片内距。 */
-.reg-status-tag {
-  justify-self: start;
 }
 
 .reg-status-hint {

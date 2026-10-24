@@ -7,6 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import { CORS_ORIGIN_FOR_TESTS, get, request, startContract, stopContract, tokens } from './contract-harness.js';
+import { pool } from '../config/pool.js';
 
 beforeAll(startContract);
 afterAll(stopContract);
@@ -76,12 +77,22 @@ test('带令牌的 bootstrap 返回真实用户态与个人外观模式', async 
   assert.ok(['auto', 'light', 'dark'].includes(body.ui.mode));
 });
 
-test('bootstrap 的日历落点月份确实有展会', async () => {
+test('bootstrap 的日历落点是当前月份', async () => {
+  const current = await pool.query<{ year: number; month: number }>(
+    `SELECT EXTRACT(YEAR FROM CURRENT_DATE)::int AS year,
+            EXTRACT(MONTH FROM CURRENT_DATE)::int AS month`,
+  );
   const { body } = await get('/api/v1/bootstrap');
   const landing = body.calendar.landing;
   assert.ok(landing && landing.year && landing.month, '必须下发 calendar.landing');
-  const month = await get(`/api/v1/exhibitions/month?year=${landing.year}&month=${landing.month}`);
-  assert.ok(month.body.eventDays.length > 0, '落点月份没有展会');
+  assert.deepStrictEqual(
+    { year: landing.year, month: landing.month },
+    current.rows[0],
+    '首页默认落在当前月份，不再落到最早一场展会所在的月份',
+  );
+  const month = await get('/api/v1/exhibitions/month');
+  assert.strictEqual(month.body.year, landing.year);
+  assert.strictEqual(month.body.month, landing.month);
 });
 
 test('搜索同时返回展会与用户，空关键词返回空结果', async () => {

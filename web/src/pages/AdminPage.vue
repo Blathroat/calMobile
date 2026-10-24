@@ -478,6 +478,18 @@ function manageUser(user: User): void {
       await updateUserStatus(user, option.value, option.label);
     },
   }));
+  // 兜底出口收进状态面板：用户邮箱用不了时，只有管理员能帮他关掉两步验证。
+  // 没开两步验证的账号不摆这颗按钮，免得点出一张「关闭后只校验密码」的空确认。
+  if (user.twoFactorEnabled === true) {
+    actions.push({
+      label: t('admin.users.disableTwoFactor'),
+      variant: 'danger',
+      onClick: (close) => {
+        close();
+        disableTwoFactor(user);
+      },
+    });
+  }
   // 不放「取消」：点遮罩、按返回或 Esc 都能关，面板里多一个取消只会让状态选项更不显眼。
   openSheet({
     title: t('admin.users.adjustStatusFor', { name: String(user.nickname ?? '') }),
@@ -958,7 +970,6 @@ async function copyInvite(code: string): Promise<void> {
     @open-public="openPublic"
     @manage="manageUser"
     @adjust-role="manageRole"
-    @disable-two-factor="disableTwoFactor"
     @open-exhibitions="openUserExhibitions"
     @open-meetings="openUserMeetings"
   />

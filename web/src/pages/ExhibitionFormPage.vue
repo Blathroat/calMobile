@@ -10,9 +10,10 @@
  * 校验规则与上限统一走 `@/services/validate`，错误就地显示在 `.field-error` 并标 `data-invalid`。
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
+import { useUnsavedGuard } from '@/composables/useUnsavedGuard';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
@@ -21,7 +22,6 @@ import { PATTERNS, allowedFormats, check, limit, validateAll } from '@/services/
 import { EXHIBITION_STATUS, FIELD_TYPE, REGISTRATION_MODES, exhibitionStatusLabel } from '@/services/status';
 import { device } from '@/services/device-services';
 import { publishImportedMedia } from '@/services/publish-media';
-import { loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
 import CollectFieldsCard, { type CollectField } from '@/components/CollectFieldsCard.vue';
 import { firstCollectFieldError } from '@/services/collect-fields';
 import {
@@ -176,12 +176,6 @@ const invalidField = ref('');
 const formatHint = computed(() => {
   const list = allowedFormats('image');
   return list.length > 0 ? list.map((item) => `.${item}`).join('/') : t('exhibition.form.commonImageFormats');
-});
-
-/** 简介预览：Markdown 先渲染再抽纯文本，摘要与详情页看到的一致。 */
-const descriptionSummary = computed(() => {
-  if (!form.description) return t('exhibition.form.emptyDescription');
-  return plainText(markdownToHtml(form.description), 70) || t('exhibition.form.markdownDescriptionSet');
 });
 
 const qrHint = computed(() => (form.qrEnabled ? t('exhibition.form.checkInQrOn') : t('exhibition.form.checkInQrOff')));
@@ -348,6 +342,7 @@ function applyDraft(draft: ExhibitionDraft): void {
 
 function currentDraft(): ExhibitionDraft {
   return {
+    exhibitionId: exhibitionId.value || undefined,
     title: form.title,
     venue: form.venue,
     date: form.date,
@@ -364,37 +359,59 @@ function currentDraft(): ExhibitionDraft {
   };
 }
 
+/**
+ * 上次载入或保存时的表单快照。
+ *
+ * 用 JSON 串而不是对象引用：fields 是数组，直接存对象会把后续输入一起带进去，
+ * 脏检查永远相等。快照只在载入、保存成功、删除成功后重取。
+ */
+let savedSnapshot = '';
+function markClean(): void {
+  savedSnapshot = JSON.stringify(currentDraft());
+}
+function hasUnsavedChanges(): boolean {
+  return built.value && JSON.stringify(currentDraft()) !== savedSnapshot;
+}
+
 /** 新建展会没有要取的数据。从简介页返回时把内存里的稿填回来。 */
 async function load(): Promise<void> {
   if (isCreate.value) {
     built.value = true;
+    markClean();
     return;
   }
-  const data = await detail.run(async () => {
-    const result = await api.exhibitions.get(exhibitionId.value);
-    if (result.exhibition?.description) await loadMarkdownParser();
-    return result;
-  });
+  const data = await detail.run(() => api.exhibitions.get(exhibitionId.value));
   if (!data || data.found === false) return;
   if (built.value) return;
   built.value = true;
   fillFrom(data.exhibition ?? {}, data);
+  // 基准先取服务端的数据：从简介页返回后填回的内存稿仍未保存，要能识别出来。
+  markClean();
+  const draft = readExhibitionDraft();
+  if (draft && draft.exhibitionId === exhibitionId.value) applyDraft(draft);
 }
 
 if (isCreate.value) {
-  const draft = readExhibitionDraft();
-  if (draft) applyDraft(draft);
   built.value = true;
+  // 基准是空表单：从简介页带回来的内存稿还没保存，退出时同样要确认。
+  markClean();
+  const draft = readExhibitionDraft();
+  if (draft && !draft.exhibitionId) applyDraft(draft);
 }
 
 onMounted(() => {
   if (!built.value) void load();
 });
 
-/** 离开新建页时丢掉内存稿。去简介编辑器除外，否则返回后填不回表单。 */
-onBeforeRouteLeave((to) => {
-  if (!isCreate.value || to.path === '/rich-editor') return;
-  clearExhibitionDraft();
+useUnsavedGuard(hasUnsavedChanges, {
+  // 去简介编辑器不算离开编辑流程：表单先存进内存稿（含展览会 id），返回后按 id 填回。
+  // 登录失效必须能直接走，不能拿确认面板挡住换号。
+  skip: (to) => to.path === '/rich-editor' || to.path === '/login',
+  // 真的离开这一页时才丢掉属于本页的内存稿；选「继续编辑」或去简介编辑器时保留。
+  onLeave: () => {
+    const draft = readExhibitionDraft();
+    if (isCreate.value || (draft && draft.exhibitionId === exhibitionId.value)) clearExhibitionDraft();
+  },
 });
 
 // ── 封面 ─────────────────────────────────────────────────────────
@@ -443,6 +460,7 @@ async function saveStatusOnly(): Promise<void> {
       toast(String(saved?.error || t('exhibition.form.modeSaveFailed')), 'error');
       return;
     }
+    markClean();
     toast(t('exhibition.form.modeUpdated'), 'success');
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -450,9 +468,10 @@ async function saveStatusOnly(): Promise<void> {
 }
 
 function editDescription(): void {
+  // 先把当前表单（含未保存改动）放进内存稿：简介页返回时按 id 填回，不丢输入。
+  stashExhibitionDraft(currentDraft());
   const id = createdId.value || exhibitionId.value;
   if (!id) {
-    stashExhibitionDraft(currentDraft());
     void router.push('/rich-editor?draft=1');
     return;
   }
@@ -476,7 +495,10 @@ function askDelete(): void {
           String(ok ? t('exhibition.form.deleted') : result?.error || t('exhibition.form.deleteFailed')),
           ok ? 'success' : 'error',
         );
-        if (ok) await router.replace('/exhibitor');
+        if (ok) {
+          markClean();
+          await router.replace('/exhibitor');
+        }
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
       }
@@ -531,6 +553,8 @@ async function submit(): Promise<void> {
     createdId.value = String(exhibition.id ?? createdId.value);
     form.description = String(exhibition.description ?? form.description);
     form.imageUri = String(exhibition.imageUri ?? form.imageUri);
+    // 保存成功后先清脏标记，再换地址：否则离开守卫会把这次正常跳转拦下来。
+    markClean();
     toast(isCreate.value ? t('exhibition.form.created') : t('exhibition.form.saved'), 'success');
     clearExhibitionDraft();
     // 新建成功后换成编辑地址：再点保存就是更新，删除按钮也出现。
@@ -732,7 +756,6 @@ function normalizeOptions(options: unknown): string[] {
             {{ t('exhibition.form.editDescription') }}
           </button>
         </div>
-        <p class="row-meta clamp-2">{{ descriptionSummary }}</p>
       </div>
       <hr class="divider" />
       <div class="switch-row">

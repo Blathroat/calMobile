@@ -4,17 +4,13 @@ import { readServerSettings, readUiMode, readUiTheme } from '../domain/settings.
 import { USER_COLUMNS, USER_FROM } from '../domain/queries.js';
 import { userPayload, guestPayload, type UserRow } from '../domain/payloads.js';
 import { capabilities } from '../domain/permissions.js';
+import { calendarToday } from '../domain/calendar.js';
 import { jsonResponse } from '../http/respond.js';
 import { resolveRelease } from '../services/release.js';
 import { langPacks, privacyPolicyUrl, publicBaseUrl } from '../config/runtime.js';
 import { optionalAuthHono, userOf, type HonoEnv } from './hono-utils.js';
 
 const app = new Hono<HonoEnv>();
-
-interface LandingMonthRow {
-  year: number;
-  month: number;
-}
 
 /**
  * 启动数据里的下载摘要：只有 source / version / url。
@@ -31,21 +27,11 @@ async function releaseDownload(settings: Awaited<ReturnType<typeof readServerSet
   }
 }
 
-async function landingMonth() {
-  const result = await query<LandingMonthRow>(`
-    SELECT EXTRACT(YEAR FROM exhibition_date)::int AS year,
-           EXTRACT(MONTH FROM exhibition_date)::int AS month
-    FROM exhibitions ORDER BY exhibition_date LIMIT 1
-  `);
-  const row = result.rows[0];
-  if (row) return { year: row.year, month: row.month };
-  const now = new Date();
-  return { year: now.getFullYear(), month: now.getMonth() + 1 };
-}
-
 app.get('/bootstrap', optionalAuthHono, async (c) => {
   const userOfRequest = userOf(c);
   const settings = await readServerSettings();
+  // 首页默认落在当前月；具体高亮哪一天由 /exhibitions/month 的缺省日决定。
+  const today = await calendarToday();
   const mode = await readUiMode(userOfRequest?.userId, settings);
   // 配色下标是**该用户实际生效**的那个：登录账号选过就用自己那份（`users.ui_theme`），
   // 没选过或未登录时用全局默认 `app_settings.theme.index`。
@@ -81,7 +67,7 @@ app.get('/bootstrap', optionalAuthHono, async (c) => {
     // 最新版本的下载地址：报名站（系统浏览器打开时）据此决定要不要显示下载条。
     // 与 GET /app/release 读同一份缓存；解析失败时给空地址，启动数据本身不失败。
     download: await releaseDownload(settings),
-    calendar: { available: false, landing: await landingMonth() },
+    calendar: { available: false, landing: { year: today.year, month: today.month } },
     // 报名站的规范来源。空串表示没配，客户端不得自行编造 127.0.0.1 链接。
     publicBaseUrl,
     privacyPolicyUrl,
