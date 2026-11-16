@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { forceReleaseScope, isMergeCommit, masterCiGate, releaseScope } from './release-scope.mjs';
+import { forceReleaseScope, isMergeCommit, masterCiGate, releaseScope, runtimePublish } from './release-scope.mjs';
 
 function flags(paths) {
   return releaseScope(paths);
@@ -171,4 +171,18 @@ test('同一次推送里各算各的', () => {
     app: false,
     join: false,
   });
+});
+
+test('任一类改动都发布运行时包，全不命中才跳过', () => {
+  assert.equal(runtimePublish({ apk: true, server: false, app: false, join: false }), true);
+  assert.equal(runtimePublish({ apk: false, server: true, app: false, join: false }), true);
+  assert.equal(runtimePublish({ apk: false, server: false, app: true, join: false }), true);
+  assert.equal(runtimePublish({ apk: false, server: false, app: false, join: true }), true);
+  assert.equal(runtimePublish({ apk: false, server: false, app: false, join: false }), false);
+});
+
+test('更新器和打包脚本都会触发运行时包发布', () => {
+  assert.equal(flags(['deploy/calmobile-update.mjs']).server, true);
+  assert.equal(flags(['deploy/calmobile-update.timer']).server, true);
+  assert.equal(flags(['scripts/runtime-bundle.mjs']).server, true);
 });

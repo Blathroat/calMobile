@@ -1,20 +1,23 @@
 /**
- * 把仓库和 GitHub 上的新配置补进服务器环境文件。
+ * 把运行时包里的默认配置补进服务器环境文件。
  *
  * 只补还没有的键。服务器上已有的非空值保持不动，文件里多出来的键也保留。
  * 空字符串不算提供了值，不会覆盖，也不会写成空键。
  * 必填密钥在服务器和传入值里都没有时，返回错误，不产出文件内容。
  *
- * 纯函数不读磁盘。命令行 `--apply` 只从进程环境读取 `SERVER_VALUE_KEYS`，
- * 避免把 PATH 或其他密钥写进服务器。新增一个键时，这里和
- * `.github/workflows/release.yml` 的部署环境要一起改。
+ * 服务器更新器调用命令行时只给 `--current`、`--template`、`--out`，不传任何环境变量：
+ * `/etc/calmobile.env` 是生产配置的唯一来源。传入值只留给本地或手工迁移使用。
+ *
+ * 纯函数不读磁盘。命令行只从进程环境读取 `SERVER_VALUE_KEYS`，避免把 PATH
+ * 或其他变量写进服务器。新增一个键时：非密钥默认值写进 `deploy/production.env`；
+ * 必填密钥加进下面的 `REQUIRED_SERVER_SECRETS`，并先在服务器环境文件里配好。
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseEnvFile } from './client-target.mjs';
 
-/** 两边都没有就拒绝部署的密钥。用户名和邮箱一并放在 GitHub Secrets。 */
+/** 服务器上缺了、又没有传入值的必填密钥。更新器会因此拒绝切换版本。 */
 export const REQUIRED_SERVER_SECRETS = [
   'JWT_SECRET',
   'TOTP_SECRET_KEY',
@@ -26,8 +29,8 @@ export const REQUIRED_SERVER_SECRETS = [
 ];
 
 /**
- * 允许从 GitHub 补进服务器的键。固定非密钥项在 `deploy/production.env`，不在这张表里。
- * 构建用的 `ANDROID_*` 不进服务器。
+ * 允许作为传入值补进服务器的键。固定非密钥项在 `deploy/production.env`，不在这张表里。
+ * 生产更新器不传这些值，密钥和按机器变化的值只在服务器环境文件里维护。
  */
 export const SERVER_VALUE_KEYS = [
   ...REQUIRED_SERVER_SECRETS,

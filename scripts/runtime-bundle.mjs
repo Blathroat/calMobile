@@ -1,0 +1,279 @@
+/**
+ * 把构建产物暂存成可以直接 `npm publish` 的运行时包。
+ *
+ * 包内保持部署根的样子：`server/` 与 `web/` 同级。服务端用
+ * `new URL('../../../web/dist', import.meta.url)` 找页面产物，解压后必须仍然是
+ * `releases/<版本>/server/dist/server/...` 与 `releases/<版本>/web/dist/...`。
+ *
+ * 只复制运行时要用的文件。源码、测试、开发脚本和 `.env` 不进包。
+ */
+
+import { copyFile, cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+export const PACKAGE_NAME = 'calmobile-server';
+
+/** 版本号与仓库里 `0.1.<运行编号>` 的发布口径一致。 */
+const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+
+/** 包根相对路径 ← 仓库根相对路径。目录整份复制。 */
+export const RUNTIME_ENTRIES = [
+  ['server/package.json', 'server/package.json'],
+  ['server/pnpm-lock.yaml', 'server/pnpm-lock.yaml'],
+  ['server/pnpm-workspace.yaml', 'server/pnpm-workspace.yaml'],
+  ['server/dist', 'server/dist'],
+  ['web/dist', 'web/dist'],
+  ['web/dist-join', 'web/dist-join'],
+  ['deploy/production.env', 'deploy/production.env'],
+  ['deploy/calmobile-update.mjs', 'deploy/calmobile-update.mjs'],
+  ['scripts/sync-production-env.mjs', 'scripts/sync-production-env.mjs'],
+  ['scripts/client-target.mjs', 'scripts/client-target.mjs'],
+];
+
+/** 服务器更新器解压后必须能找到的文件。 */
+export const REQUIRED_ENTRIES = [
+  'package.json',
+  'server/package.json',
+  'server/pnpm-lock.yaml',
+  'server/pnpm-workspace.yaml',
+  'server/dist/index.js',
+  'server/dist/config/migrate.js',
+  'server/dist/server/app-shell.js',
+  'server/dist/server/join-site.js',
+  'web/dist/index.html',
+  'web/dist/release.json',
+  'web/dist-join/join.html',
+  'deploy/production.env',
+  'deploy/calmobile-update.mjs',
+  'scripts/sync-production-env.mjs',
+  'scripts/client-target.mjs',
+];
+
+/** 这些路径出现在包里说明复制范围写错了。 */
+export const FORBIDDEN_PATHS = [
+  /^server\/src\//,
+  /^server\/test\//,
+  /^server\/scripts\//,
+  /^server\/status-page\//,
+  /^server\/\.env/,
+  /^web\/src\//,
+  /(^|\/)node_modules\//,
+  /(^|\/)\.git\//,
+];
+
+/**
+ * @param {string} version
+ * @returns {{ name: string, version: string, description: string, private: boolean, license: string, engines: { node: string } }}
+ */
+export function runtimePackageJson(version) {
+  const text = String(version);
+  if (!VERSION_PATTERN.test(text)) throw new Error(`运行时包版本号必须是 x.y.z：${text}`);
+  return {
+    name: PACKAGE_NAME,
+    version: text,
+    description: '展会排期助手运行时包：服务端与两份页面产物',
+    private: false,
+    license: 'UNLICENSED',
+    repository: { type: 'git', url: 'git+https://github.com/Blathroat/calMobile.git' },
+    engines: { node: '^24.15.0 || >=26.0.0' },
+  };
+}
+
+/**
+ * 版本号同时写进 `server/package.json`，`/api/v1/status` 的 `serviceVersion` 才是当前发布的版本。
+ *
+ * @param {string} text
+ * @param {string} version
+ */
+export function rewriteServerPackage(text, version) {
+  const pkg = JSON.parse(String(text));
+  if (typeof pkg !== 'object' || pkg === null) throw new Error('server/package.json 不是对象');
+  pkg.version = version;
+  return `${JSON.stringify(pkg, null, 2)}\n`;
+}
+
+/**
+ * @param {string} root
+ * @returns {Promise<string[]>} 相对路径，分隔符统一成 `/`。
+ */
+export async function listFiles(root) {
+  /** @type {string[]} */
+  const files = [];
+  async function walk(dir) {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      const relative = path.relative(root, full).split(path.sep).join('/');
+      if (entry.isDirectory()) {
+        await walk(full);
+        continue;
+      }
+      files.push(relative);
+    }
+  }
+  await walk(root);
+  return files.sort();
+}
+
+/**
+ * @param {string[]} files 相对路径
+ * @returns {string[]} 问题清单，空数组表示通过。
+ */
+export function verifyRuntimeManifest(files) {
+  const present = new Set(files);
+  const problems = [];
+  for (const entry of REQUIRED_ENTRIES) {
+    if (!present.has(entry)) problems.push(`缺少 ${entry}`);
+  }
+  for (const file of files) {
+    if (FORBIDDEN_PATHS.some((pattern) => pattern.test(file))) {
+      problems.push(`不该打包：${file}`);
+    }
+  }
+  return problems;
+}
+
+/**
+ * @param {string} root
+ * @returns {Promise<Record<string, unknown>>}
+ */
+async function readJson(root, relative) {
+  return JSON.parse(await readFile(path.join(root, relative), 'utf8'));
+}
+
+/**
+ * 校验一个已经暂存好的运行时包目录。
+ *
+ * @param {string} dir
+ * @param {string} [expectedVersion]
+ */
+export async function verifyRuntimePackage(dir, expectedVersion) {
+  const root = path.resolve(dir);
+  const files = await listFiles(root);
+  const problems = verifyRuntimeManifest(files);
+  let version = '';
+  if (!problems.length) {
+    const rootPackage = await readJson(root, 'package.json');
+    version = typeof rootPackage.version === 'string' ? rootPackage.version : '';
+    if (rootPackage.name !== PACKAGE_NAME) problems.push(`包名必须是 ${PACKAGE_NAME}：${String(rootPackage.name)}`);
+    if (expectedVersion && rootPackage.version !== expectedVersion) {
+      problems.push(`包版本必须是 ${expectedVersion}：${String(rootPackage.version)}`);
+    }
+    const serverPackage = await readJson(root, 'server/package.json');
+    if (serverPackage.version !== version) {
+      problems.push(`server/package.json 的版本是 ${String(serverPackage.version)}，与包版本 ${version} 不一致`);
+    }
+    if (expectedVersion && serverPackage.version !== expectedVersion) {
+      problems.push(`server/package.json 版本必须是 ${expectedVersion}：${String(serverPackage.version)}`);
+    }
+  }
+  if (problems.length) throw new Error(`运行时包不完整：\n${problems.join('\n')}`);
+  return { version, files };
+}
+
+/**
+ * @param {{ repoRoot: string, outDir: string, version: string }} input
+ */
+export async function stageRuntimePackage(input) {
+  const repoRoot = path.resolve(input.repoRoot);
+  const outDir = path.resolve(input.outDir);
+  const version = String(input.version);
+  runtimePackageJson(version);
+
+  const missing = [];
+  for (const [from] of RUNTIME_ENTRIES) {
+    try {
+      await stat(path.join(repoRoot, from));
+    } catch {
+      missing.push(from);
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `缺少构建产物：${missing.join('、')}。先执行 pnpm --dir server build 与 pnpm --dir web build。`,
+    );
+  }
+
+  await rm(outDir, { recursive: true, force: true });
+  await mkdir(outDir, { recursive: true });
+  for (const [from, to] of RUNTIME_ENTRIES) {
+    const source = path.join(repoRoot, from);
+    const target = path.join(outDir, to);
+    await mkdir(path.dirname(target), { recursive: true });
+    const info = await stat(source);
+    if (info.isDirectory()) {
+      await cp(source, target, { recursive: true });
+    } else {
+      await copyFile(source, target);
+    }
+  }
+
+  await writeFile(
+    path.join(outDir, 'package.json'),
+    `${JSON.stringify(runtimePackageJson(version), null, 2)}\n`,
+    'utf8',
+  );
+  const serverPackagePath = path.join(outDir, 'server/package.json');
+  await writeFile(
+    serverPackagePath,
+    rewriteServerPackage(await readFile(serverPackagePath, 'utf8'), version),
+    'utf8',
+  );
+
+  const result = await verifyRuntimePackage(outDir, version);
+  return { dir: outDir, version, files: result.files };
+}
+
+/**
+ * @param {string[]} argv
+ * @returns {{ mode: 'stage' | 'check', version: string, outDir: string }}
+ */
+function parseArgs(argv) {
+  /** @type {{ mode: 'stage' | 'check', version: string, outDir: string }} */
+  const options = { mode: 'stage', version: '', outDir: '' };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '--version') {
+      options.version = argv[index + 1] ?? '';
+      index += 1;
+    } else if (arg === '--out') {
+      options.outDir = argv[index + 1] ?? '';
+      index += 1;
+    } else if (arg === '--check') {
+      options.mode = 'check';
+      options.outDir = argv[index + 1] ?? '';
+      index += 1;
+    } else {
+      throw new Error(`不认识的参数：${arg}`);
+    }
+  }
+  return options;
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  if (options.mode === 'check') {
+    if (!options.outDir) throw new Error('用法：runtime-bundle.mjs --check <目录>');
+    const result = await verifyRuntimePackage(options.outDir);
+    process.stdout.write(`运行时包完整：${result.files.length} 个文件（版本 ${result.version || '未声明'}）\n`);
+    return;
+  }
+  if (!options.version || !options.outDir) {
+    throw new Error('用法：runtime-bundle.mjs --version <x.y.z> --out <目录>');
+  }
+  const result = await stageRuntimePackage({
+    repoRoot: fileURLToPath(new URL('..', import.meta.url)),
+    outDir: options.outDir,
+    version: options.version,
+  });
+  process.stdout.write(`运行时包已暂存：${result.dir}（${result.files.length} 个文件，版本 ${result.version}）\n`);
+}
+
+const entry = process.argv[1];
+if (entry && import.meta.url === pathToFileURL(entry).href) {
+  main().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exit(1);
+  });
+}
