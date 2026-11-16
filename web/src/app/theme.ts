@@ -92,12 +92,18 @@ export function applyMode(mode: string): UiMode {
   return next;
 }
 
+/** 当前实际生效的强调色：色板当前下标，缺色时退回首色。 */
+export function currentAccentColor(): string {
+  const colors = palette();
+  const index = Number(useBootstrapStore().theme.index) || 0;
+  return colors[index] || colors[0] || '#41707E';
+}
+
 /** 管理员配色写入 CSS 变量。 */
 export function applyTheme(): void {
   const bootstrap = useBootstrapStore();
-  const colors = Array.isArray(bootstrap.theme.colors) ? bootstrap.theme.colors : [];
   const index = Number(bootstrap.theme.index) || 0;
-  const accent = String(colors[index] || '#c05621');
+  const accent = currentAccentColor();
   const root = document.documentElement;
   const mode = effectiveMode();
   const screen = cssColor('--screen', mode === 'dark' ? '#171a1f' : '#ffffff');
@@ -122,6 +128,8 @@ export async function syncDevice(): Promise<void> {
     const result = (await device.sync({
       mode: settings.mode,
       themeIndex: Number(bootstrap.theme.index) || 0,
+      // 管理端下发的首色可能覆盖色板 0；系统栏要用页面当前实际生效的这一色。
+      accentColor: currentAccentColor(),
       media: bootstrap.media,
       upload: bootstrap.server,
     })) as { notificationsGranted?: boolean } | null | undefined;

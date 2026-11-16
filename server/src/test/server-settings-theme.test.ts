@@ -17,11 +17,12 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
   const asUser = await put('/api/v1/settings', { appTitleZh: 'x' }, { token: tokens.user.token });
   assert.strictEqual(asUser.status, 403);
 
-  // 色板是 12 种，且 index 0 仍是默认的焦糖橙（老用户的强调色不能变）
+  // 色板是 12 种，首色是钢青；管理端可以下发色号覆盖
   const paletteBefore = await get('/api/v1/settings');
   assert.strictEqual(paletteBefore.body.theme.colors.length, DEFAULT_SETTINGS.theme.colors.length);
   assert.strictEqual(paletteBefore.body.theme.colors.length, 12, '配色面板要有 12 个色块');
-  assert.strictEqual(paletteBefore.body.theme.colors[0], '#C05621', 'index 0 必须还是默认的焦糖橙');
+  assert.strictEqual(paletteBefore.body.theme.colors[0], '#41707E', '首色默认是钢青');
+  assert.strictEqual(paletteBefore.body.theme.accentColor, '#41707E');
   assert.deepStrictEqual(
     paletteBefore.body.theme.colors,
     DEFAULT_SETTINGS.theme.colors,
@@ -87,6 +88,23 @@ test('服务器设置只有管理员能改，保存后可读回', async () => {
   );
 });
 
+test('管理员下发首色：settings 与 bootstrap 首色被覆盖，默认下标仍是 0', async () => {
+  const saved = await put('/api/v1/settings', { themeAccent: '#112233' }, { token: tokens.admin.token });
+  assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+  assert.strictEqual(saved.body.settings.theme.accentColor, '#112233');
+  assert.strictEqual(saved.body.settings.theme.colors[0], '#112233');
+
+  const bootstrap = await get('/api/v1/bootstrap');
+  assert.strictEqual(bootstrap.body.theme.colors[0], '#112233');
+  assert.strictEqual(bootstrap.body.theme.index, 0, '默认选中首色');
+
+  const invalid = await put('/api/v1/settings', { themeAccent: 'nope' }, { token: tokens.admin.token });
+  assert.strictEqual(invalid.body.ok, false);
+  assert.strictEqual(invalid.body.errorCode, 'settings.themeAccentInvalid');
+
+  await put('/api/v1/settings', { themeAccent: '#41707E' }, { token: tokens.admin.token });
+});
+
 test('新增 review.canReviseAttended：老库缺键兜底 false，保存后可读回', async () => {
   const before = await get('/api/v1/settings');
   const canReviseBefore = before.body.review.canRevise === true;
@@ -141,8 +159,12 @@ test('老库的 4 色色板：读取时补到 12 色，且已有的 index 不变
       DEFAULT_SETTINGS.theme.colors,
       `补齐后必须是新的 12 色色板：${JSON.stringify(bootstrap.body.theme.colors)}`,
     );
-    assert.strictEqual(bootstrap.body.theme.index, 3, '已有用户选中的 index 不能被迁移改掉');
-    assert.strictEqual(bootstrap.body.theme.colors[3], legacyColors[3], 'index 3 的色值语义保持不变');
+    assert.strictEqual(bootstrap.body.theme.index, 3, '已有用户选中的 index 不能被读取路径改掉');
+    assert.strictEqual(
+      bootstrap.body.theme.colors[3],
+      DEFAULT_SETTINGS.theme.colors[3],
+      'index 语义按新色板走，老库颜色数组不再决定顺序',
+    );
 
     const settings = await get('/api/v1/settings');
     assert.deepStrictEqual(settings.body.theme.colors, DEFAULT_SETTINGS.theme.colors);
@@ -162,8 +184,8 @@ test('老库色板被手工改坏（非法值 / 重复值）时，读取与夹�
   ]);
   try {
     const bootstrap = await get('/api/v1/bootstrap');
-    assert.strictEqual(bootstrap.body.theme.colors.length, 12, '非法与重复的颜色应当被丢掉后补齐');
-    assert.strictEqual(bootstrap.body.theme.colors[0], '#C05621', '库里的合法项要保留');
+    assert.strictEqual(bootstrap.body.theme.colors.length, 12, '非法与重复的颜色会被固定色板覆盖');
+    assert.strictEqual(bootstrap.body.theme.colors[0], '#41707E', '坏色板也回到默认首色');
     assert.strictEqual(bootstrap.body.theme.index, 6, 'index 落在补齐后的范围里，应当保留');
     assert.strictEqual(bootstrap.body.theme.colors[6], DEFAULT_SETTINGS.theme.colors[6]);
 

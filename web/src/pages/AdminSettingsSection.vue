@@ -24,6 +24,8 @@ interface LimitItem {
 /** 与 AdminPage 里那份 reactive 表单同形；嵌套字段由子组件直接改。 */
 interface AdminSettingsForm {
   brand: { zh: string; en: string };
+  /** 管理端下发的首色调（#RRGGBB），同时覆盖色板下标 0。 */
+  themeAccent: string;
   announcement: string;
   announcementEnabled: boolean;
   categories: string;
@@ -210,6 +212,30 @@ function inviteDurationLabel(item: InviteItem): string {
           </span>
         </div>
       </div>
+    </div>
+
+    <!-- 首色调：下发到色板下标 0，应用默认选中它；默认占位就是当前钢青 #41707E。 -->
+    <div class="card">
+      <span class="section-label">{{ t('admin.settings.appearance') }}</span>
+      <div class="settings-rows">
+        <div class="setting-row">
+          <label for="settings-theme-accent">{{ t('admin.settings.accent') }}</label>
+          <span class="setting-control">
+            <input
+              id="settings-theme-accent"
+              v-model="form.themeAccent"
+              class="input input-line setting-text"
+              type="text"
+              maxlength="7"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="#41707E"
+              :aria-label="t('admin.settings.accent')"
+            />
+          </span>
+        </div>
+      </div>
+      <p class="field-hint">{{ t('admin.settings.accentHint') }}</p>
     </div>
 
     <!-- 缺省展会封面：展会自己没有封面时用它替掉占位图；留空即回到占位图。

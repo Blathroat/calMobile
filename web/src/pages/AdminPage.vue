@@ -199,6 +199,8 @@ const settingsQuery = useAsync<JsonObject>();
 /** 服务端设置的可编辑副本：一次取回，保存时整体回填。 */
 const form = reactive({
   brand: { zh: '', en: '' },
+  /** 首色调（#RRGGBB），同时覆盖色板下标 0；空串/非法值保存时拒绝。 */
+  themeAccent: '#41707E',
   announcement: '',
   announcementEnabled: false,
   categories: '',
@@ -618,6 +620,7 @@ function fillForm(data: JsonObject): void {
 
   form.brand.zh = String(brand.zh ?? bootstrap.brand.zh ?? '');
   form.brand.en = String(brand.en ?? bootstrap.brand.en ?? '');
+  form.themeAccent = String(theme.accentColor ?? (Array.isArray(theme.colors) ? theme.colors[0] : '') ?? '#41707E');
   form.announcement = String(announcement.text ?? '');
   form.announcementEnabled = announcement.enabled === true;
   form.categories = (Array.isArray(data.categories) ? data.categories : []).map((item) => String(item)).join('\n');
@@ -786,6 +789,16 @@ async function saveSettings(): Promise<void> {
         patternMessage: t('admin.media.videoSuffixPattern'),
       }),
     ],
+    [
+      t('admin.settings.accent'),
+      check(form.themeAccent, {
+        label: t('admin.settings.accent'),
+        required: true,
+        max: 7,
+        pattern: /^#[0-9A-Fa-f]{6}$/,
+        patternMessage: t('admin.settings.accentInvalid'),
+      }),
+    ],
   ];
   for (const [, message] of checks) {
     if (message) {
@@ -799,6 +812,7 @@ async function saveSettings(): Promise<void> {
     const payload: JsonObject = {
       appTitleZh: form.brand.zh.trim(),
       appTitleEn: form.brand.en.trim(),
+      themeAccent: form.themeAccent.trim(),
       announcement: form.announcement.trim(),
       announcementEnabled: form.announcementEnabled,
       categories: form.categories

@@ -63,7 +63,14 @@ export type NativeErrorCode = 'cancelled' | 'timeout';
  */
 export interface NativeActionPayloads {
   // 外观与上传限制的镜像：设备侧只用到这些，权威值仍在后端。
-  'ui.sync': { mode?: string; themeIndex?: number; media?: Record<string, unknown>; upload?: Record<string, unknown> };
+  'ui.sync': {
+    mode?: string;
+    themeIndex?: number;
+    /** 管理端下发的首色（#RRGGBB）；原生用它画系统栏。 */
+    accentColor?: string;
+    media?: Record<string, unknown>;
+    upload?: Record<string, unknown>;
+  };
   // 无参数动作也传空对象（不是 undefined），序列化后原生拿到的是 {}。
   'camera.ensurePermission': Record<string, never>;
   // 键名与 SystemActions.calendarStatus / applyCalendarChange 读取的一致：

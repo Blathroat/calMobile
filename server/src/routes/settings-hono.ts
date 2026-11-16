@@ -34,7 +34,7 @@ async function settingsPayload(userId: string | null | undefined, role?: string 
   // 页面据此画选中环，不必自己判断「我有没有单独选过配色」。
   const themeIndex = await readUiTheme(userId, settings.theme.index, settings.theme.colors);
   return {
-    theme: { index: themeIndex, colors: settings.theme.colors },
+    theme: { index: themeIndex, colors: settings.theme.colors, accentColor: settings.theme.accentColor },
     ui: { mode: await readUiMode(userId, settings) },
     announcement: settings.announcement,
     brand: settings.brand,
