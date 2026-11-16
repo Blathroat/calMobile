@@ -662,6 +662,18 @@ async function restartService(config) {
 }
 
 /**
+ * 应用页面的健康检查只关心「产物是否真的缺失」。服务端在请求 Host 与
+ * `PUBLIC_BASE_URL` 不一致时会返回 308，更新器访问 127.0.0.1 时必然遇到，
+ * 不能把它当成页面产物缺失。
+ *
+ * @param {{ status: number }} response
+ * @returns {boolean}
+ */
+export function appShellAvailable(response) {
+  return response.status < 400;
+}
+
+/**
  * @param {typeof DEFAULT_CONFIG} config
  */
 async function waitHealthy(config) {
@@ -671,8 +683,13 @@ async function waitHealthy(config) {
       const response = await fetch(config.healthUrl, { signal: AbortSignal.timeout(2000) });
       if (response.ok) {
         if (config.appUrl) {
-          const app = await fetch(config.appUrl, { signal: AbortSignal.timeout(2000) }).catch(() => null);
-          if (!app?.ok) warn(`应用页面产物暂时不可用：${config.appUrl}`);
+          const app = await fetch(config.appUrl, {
+            signal: AbortSignal.timeout(2000),
+            redirect: 'manual',
+          }).catch(() => null);
+          if (!app || !appShellAvailable(app)) {
+            warn(`应用页面产物暂时不可用：${config.appUrl}${app ? `（HTTP ${app.status}）` : ''}`);
+          }
         }
         return;
       }

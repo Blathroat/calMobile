@@ -7,6 +7,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import {
   DEFAULT_CONFIG,
+  appShellAvailable,
   compareVersions,
   decideUpdate,
   ensureTarball,
@@ -105,6 +106,13 @@ test('命令行参数解析', () => {
   assert.deepEqual(parseCli(['--pin', '0.1.5']), { mode: 'pin', force: false, version: '0.1.5' });
   assert.deepEqual(parseCli(['--unpin']), { mode: 'unpin', force: false, version: '' });
   assert.throws(() => parseCli(['--nope']), /不认识的参数/);
+});
+
+test('健康检查接受 3xx 重定向，不把 Host 不一致当缺产物', () => {
+  assert.equal(appShellAvailable({ status: 200 }), true);
+  assert.equal(appShellAvailable({ status: 308 }), true);
+  assert.equal(appShellAvailable({ status: 404 }), false);
+  assert.equal(appShellAvailable({ status: 500 }), false);
 });
 
 test('版本格式', () => {
