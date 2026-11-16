@@ -32,8 +32,7 @@ import StatusTag from '@/components/StatusTag.vue';
 import type { ApiResult, JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
-/** 报名码前缀，与原生 WebAppActions.REGISTRATION_CODE_PREFIX 保持一致。 */
-const CODE_PREFIX = 'CALMOBILE-CHECKIN|';
+/** 取景画面的解码宽度：越小越快，640 足够分辨报名码。 */
 const DECODE_WIDTH = 640;
 /** 识别节流：约每 120ms 解一帧，既跟得上手势又不占满 CPU。 */
 const DECODE_INTERVAL = 120;
@@ -264,9 +263,22 @@ function stageIcon(): string {
   return stageMode.value === 'detected' ? 'check' : 'image';
 }
 
-/** 识别到的内容是不是本应用的报名码：不是也要说清楚，而不是笼统失败。 */
+/**
+ * 识别到的内容像不像报名码：报名码是竖线分隔的「前缀|展会|报名|凭据」格式。
+ * 这里只做形状判断，前缀由服务器按实例配置，真正的校验交给核销接口；
+ * 完全不像才提示「不是本应用的报名码」，避免把格式正确的码误判成垃圾内容。
+ * @param raw 扫码 / 手动输入得到的原始文本
+ */
+function looksLikeCheckInCode(raw: string): boolean {
+  const text = String(raw || '').trim();
+  if (!text || /\s/.test(text)) return false;
+  const parts = text.split('|');
+  return parts.length >= 3 && parts[0] !== '' && parts[1] !== '';
+}
+
+/** 识别后的状态文案：格式对就说「正在核销」，格式不对才说不是本应用的码。 */
 function previewOf(raw: string): string {
-  return String(raw || '').startsWith(CODE_PREFIX) ? t('checkin.verifying') : t('checkin.notAppCode');
+  return looksLikeCheckInCode(raw) ? t('checkin.verifying') : t('checkin.notAppCode');
 }
 
 // ── 取景与识别 ─────────────────────────────────────────────────

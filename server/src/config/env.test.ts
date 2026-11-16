@@ -6,7 +6,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { parseEnv, resolveWebAuthnConfig } from './env.js';
+import { parseEnv, resolveCheckinCodePrefix, resolveWebAuthnConfig } from './env.js';
 import { resolveMailConfig } from './mail.js';
 import { resolveRuntime } from './runtime.js';
 import { decryptSecret, encryptSecret, encryptionKey } from '../domain/totp.js';
@@ -243,4 +243,12 @@ test('数据库配置从注入的环境取值，未知 NODE_ENV 回退到 develo
 
   const testDb = parseEnv(validEnv({ NODE_ENV: 'test' }));
   assert.equal(testDb.database.database, 'calmobile_test');
+});
+
+test('报名码前缀默认沿历史值，非法值退回默认', () => {
+  assert.equal(resolveCheckinCodePrefix({}), 'CALMOBILE-CHECKIN');
+  assert.equal(resolveCheckinCodePrefix({ CHECKIN_CODE_PREFIX: 'CHECKIN' }), 'CHECKIN');
+  assert.equal(resolveCheckinCodePrefix({ CHECKIN_CODE_PREFIX: 'CHECKIN|' }), 'CHECKIN', '结尾竖线自动去掉');
+  assert.equal(resolveCheckinCodePrefix({ CHECKIN_CODE_PREFIX: '带空格 的' }), 'CALMOBILE-CHECKIN');
+  assert.equal(parseEnv(validEnv({ CHECKIN_CODE_PREFIX: 'TICKET' })).checkin.codePrefix, 'TICKET');
 });

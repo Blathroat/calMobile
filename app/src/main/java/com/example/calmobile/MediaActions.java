@@ -678,7 +678,7 @@ final class MediaActions {
             callback.failure("没有可导出的数据");
             return;
         }
-        String fileName = ExportManager.fileName("calmobile-exhibitions");
+        String fileName = ExportManager.fileName(BuildConfig.BRAND_SLUG + "-exhibitions");
 
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -774,7 +774,7 @@ final class MediaActions {
         String mimeType = WebAppBridge.text(payload, "mimeType", "application/json");
         String fileName = WebAppBridge.text(payload, "fileName", "");
         if (fileName.isEmpty()) {
-            fileName = ExportManager.fileName("calmobile-text", ExportManager.textExtension(mimeType));
+            fileName = ExportManager.fileName(BuildConfig.BRAND_SLUG + "-text", ExportManager.textExtension(mimeType));
         }
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -874,9 +874,9 @@ final class MediaActions {
         ContentValues values = new ContentValues();
         values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
         values.put(MediaStore.Images.Media.MIME_TYPE, mime);
-        // 归到自己的目录，用户在相册里能按 Pictures/calMobile 找到导出的二维码。
+        // 归到自己的目录，用户在相册里能按 Pictures/<品牌短名> 找到导出的二维码。
         values.put(MediaStore.Images.Media.RELATIVE_PATH,
-                Environment.DIRECTORY_PICTURES + "/calMobile");
+                Environment.DIRECTORY_PICTURES + "/" + BuildConfig.BRAND_SLUG);
         Uri target = context.getContentResolver()
                 .insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
         if (target == null) {
@@ -944,7 +944,7 @@ final class MediaActions {
         return "image/png".equals(mime) || "image/jpeg".equals(mime) || "image/jpg".equals(mime);
     }
 
-    /** 相册里的展示名：调用方没给就用 calmobile-qr-时间戳.后缀。 */
+    /** 相册里的展示名：调用方没给就用 <品牌短名>-qr-时间戳.后缀。 */
     static String galleryFileName(String mime, String provided) {
         if (provided != null && !provided.trim().isEmpty()) {
             return provided.trim();
@@ -952,7 +952,7 @@ final class MediaActions {
         String extension = "image/png".equals(mime) ? "png" : "jpg";
         String stamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
                 .format(new java.util.Date());
-        return "calmobile-qr-" + stamp + "." + extension;
+        return BuildConfig.BRAND_SLUG + "-qr-" + stamp + "." + extension;
     }
 
     /** 选择图片：把结果交回前端做裁剪等后续处理。 */

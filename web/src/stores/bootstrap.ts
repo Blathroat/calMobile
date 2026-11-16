@@ -18,10 +18,9 @@
  * - `booted` 只由 `apply()` 置 true，是「后端数据已到」的唯一信号；`App.vue` 用它和
  *   `loggedIn`、`role` 拼成重算外壳的键，别在别处改写它。
  * - 没有清空动作：这些数据与账号无关，登出后继续沿用，重新登录时不会闪回默认值。
- * - `state` 里的值只是首帧兜底（品牌回退中文名 + `calMobile`，其余空对象），
+ * - `state` 里的值只是首帧兜底（品牌留空，其余空对象），
  *   不代表后端一定下发过；读取时一律当作可能缺字段，用完自己兜底。
  */
-import { t } from '@/i18n';
 import { defineStore } from 'pinia';
 import type { Bootstrap, JsonObject } from '@/api/types';
 
@@ -32,7 +31,7 @@ export interface BootstrapState {
   categories: unknown[];
   /** 服务端下发的字段长度上限，键名由后端定，`services/validate.ts` 按 key 取 */
   limits: JsonObject;
-  /** 站点品牌名（`zh` / `en`）；首帧兜底中文名 + `calMobile` */
+  /** 站点品牌名（`zh` / `en`）；首帧留空，等后端下发 */
   brand: JsonObject;
   /** 公告（`text` / `enabled`），只有 `enabled === true` 时登录页与首页才展示 */
   announcement: JsonObject;
@@ -77,8 +76,8 @@ export const useBootstrapStore = defineStore('bootstrap', {
     booted: false,
     categories: [],
     limits: {},
-    // 品牌名兜底：文案注入晚于模块求值时 t() 只能退回 key，这里至少保证结构完整
-    brand: { zh: t('app.brand'), en: 'calMobile' },
+    // 品牌名首帧留空：站点名由后端设置决定，写死任何一个名字都会在启动瞬间闪错品牌
+    brand: { zh: '', en: '' },
     announcement: {},
     calendar: {},
     media: {},

@@ -73,3 +73,16 @@ test('签名变量原样交给 Gradle，不在这里判断正式包', () => {
     keyPassword: 'secret',
   });
 });
+
+test('品牌短名与显示名可覆盖，默认沿用主实例', () => {
+  const plain = resolveClientTarget({});
+  assert.equal(plain.brandSlug, 'calmobile');
+  assert.equal(plain.appLabel, '@string/app_name');
+
+  const custom = resolveClientTarget({ ANDROID_BRAND_SLUG: 'citron', ANDROID_APP_LABEL: 'Citron Expo' });
+  assert.equal(custom.brandSlug, 'citron');
+  assert.equal(custom.appLabel, 'Citron Expo');
+
+  assert.throws(() => resolveClientTarget({ ANDROID_BRAND_SLUG: 'bad/slug' }), /ANDROID_BRAND_SLUG/);
+  assert.throws(() => resolveClientTarget({ ANDROID_APP_LABEL: 'has"quote' }), /ANDROID_APP_LABEL/);
+});

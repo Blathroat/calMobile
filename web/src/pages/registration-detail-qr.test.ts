@@ -18,7 +18,7 @@ vi.mock('@/services/device-services', () => ({ device: { saveImage: vi.fn() } })
 vi.mock('@/services/native-bridge', () => ({ nativeBridge: { hasNative: vi.fn(() => true) } }));
 
 const DATA_URL = 'data:image/png;base64,QR';
-const FILE_NAME = 'calmobile-qr.png';
+const FILE_NAME = 'check-in-qr.png';
 const HOLD_WAIT_MS = 650;
 let app: App | undefined;
 

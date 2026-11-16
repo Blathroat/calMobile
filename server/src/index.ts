@@ -25,6 +25,7 @@ import { defaultJoinRoot, joinSiteMissingMessage, joinSiteReady } from './server
 import { adminIdentity, productionProblems } from './config/production.js';
 import { demoAccountsUsingExamplePassword, ensureProductionAdmin } from './config/bootstrap-admin.js';
 import { isDatabaseUnavailable } from './domain/errors.js';
+import { configureCheckinCodePrefix } from './domain/labels.js';
 import { pool } from './config/pool.js';
 import packageJson from '../package.json' with { type: 'json' };
 
@@ -33,6 +34,9 @@ type NodeServer = ReturnType<typeof createAdaptorServer>;
 
 const config = loadProcessConfig();
 const PORT = config.port;
+
+// 报名码前缀由实例配置决定，必须在建应用、签发 / 解析报名码之前落定。
+configureCheckinCodePrefix(config.checkin.codePrefix);
 
 /**
  * 报名站产物在加载时定下来：有 `join.html` 才托管。

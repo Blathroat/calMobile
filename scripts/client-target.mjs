@@ -118,6 +118,34 @@ function versionNameOf(env) {
   return value;
 }
 
+/**
+ * 品牌短名：导出文件名与相册目录用它，默认沿用主实例的 calmobile。
+ * 只允许字母、数字、下划线、横线：它会被拼进文件名与 directories。
+ * @param {Record<string, string | undefined>} env
+ */
+function brandSlugOf(env) {
+  const value = String(env.ANDROID_BRAND_SLUG ?? '').trim();
+  if (!value) return 'calmobile';
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$/.test(value)) {
+    throw new Error(`ANDROID_BRAND_SLUG 只允许字母、数字、下划线、横线且不超过 24 位：${value}`);
+  }
+  return value;
+}
+
+/**
+ * 桌面显示名：不配时用资源里的 app_name（`@string/app_name`）。
+ * 这里只做单行文本校验，避免引号/换行把 AndroidManifest 的占位符弄坏。
+ * @param {Record<string, string | undefined>} env
+ */
+function appLabelOf(env) {
+  const value = String(env.ANDROID_APP_LABEL ?? '').trim();
+  if (!value) return '@string/app_name';
+  if (value.length > 40 || /["\\\r\n]/.test(value)) {
+    throw new Error(`ANDROID_APP_LABEL 不能带引号、反斜杠或换行，且不超过 40 个字符：${value}`);
+  }
+  return value;
+}
+
 /** @param {Record<string, string | undefined>} env */
 export function resolveClientTarget(env) {
   const configured = String(env.APP_API_BASE ?? '').trim();
@@ -132,6 +160,8 @@ export function resolveClientTarget(env) {
     applicationId: applicationIdOf(env),
     versionCode: versionCodeOf(env),
     versionName: versionNameOf(env),
+    brandSlug: brandSlugOf(env),
+    appLabel: appLabelOf(env),
     signing: {
       storeFile: String(env.ANDROID_KEYSTORE_PATH ?? '').trim(),
       storePassword: String(env.ANDROID_KEYSTORE_PASSWORD ?? ''),
