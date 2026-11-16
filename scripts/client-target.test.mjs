@@ -79,9 +79,9 @@ test('品牌短名与显示名可覆盖，默认沿用主实例', () => {
   assert.equal(plain.brandSlug, 'calmobile');
   assert.equal(plain.appLabel, '@string/app_name');
 
-  const custom = resolveClientTarget({ ANDROID_BRAND_SLUG: 'citron', ANDROID_APP_LABEL: 'Citron Expo' });
-  assert.equal(custom.brandSlug, 'citron');
-  assert.equal(custom.appLabel, 'Citron Expo');
+  const custom = resolveClientTarget({ ANDROID_BRAND_SLUG: 'sample-app', ANDROID_APP_LABEL: 'Sample App' });
+  assert.equal(custom.brandSlug, 'sample-app');
+  assert.equal(custom.appLabel, 'Sample App');
 
   assert.throws(() => resolveClientTarget({ ANDROID_BRAND_SLUG: 'bad/slug' }), /ANDROID_BRAND_SLUG/);
   assert.throws(() => resolveClientTarget({ ANDROID_APP_LABEL: 'has"quote' }), /ANDROID_APP_LABEL/);
