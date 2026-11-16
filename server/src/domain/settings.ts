@@ -45,6 +45,8 @@ export const MODES = ['auto', 'light', 'dark'];
 
 export interface ServerPatch {
   themeIndex?: unknown;
+  /** 管理端下发的首色调（`#RRGGBB`），同时覆盖色板下标 0。 */
+  themeAccent?: unknown;
   announcement?: unknown;
   announcementEnabled?: unknown;
   appTitleZh?: unknown;
@@ -117,58 +119,38 @@ function clone<T>(value: T): T {
 }
 
 /**
- * 归一化配色：保证 `theme.colors` 永远是当前的默认色板。
- *
- * 数据库里的 `theme` 那一项可能是**旧版本**写入的：色板只有 4 项（甚至被手工改成了
- * 非法值、重复值）。`theme.colors` 不是可以「缺项补默认」的段（读取时整段覆盖），
- * 若原样下发，前端配色面板就永远比后端少几个色块，而且 `themeIndex` 的夹取会按一个
- * 更短的范围收敛 —— 同一份代码在老库和新库上行为不一致。
- *
- * 规则：保留库里**合法且不重复**的颜色（顺序不变），再按默认色板顺序补上缺的颜色，
- * 补不满（或库里的值全部非法）时退回默认色板。下标语义因此与默认色板一致。
+ * 归一化管理端下发的首色。空值、非字符串或不是 `#RRGGBB` 时退回默认首色，
+ * 前端 `applyTheme()` 会把它直接写进 CSS 变量，不能留非法值。
  */
-export function normalizeThemeColors(colors: unknown): string[] {
-  const stored: string[] = [];
-  const seen = new Set<string>();
-  if (Array.isArray(colors)) {
-    for (const item of colors) {
-      const color = typeof item === 'string' ? item.trim() : '';
-      // 大小写不敏感地去重：`#c05621` 与 `#C05621` 是同一个色，留两个只会白占一格色板。
-      // 超长（被手工改成多于默认色板）时只取前 N 个，保证下发长度与 index 的取值范围一致。
-      if (stored.length >= DEFAULT_SETTINGS.theme.colors.length) {
-        break;
-      }
-      if (COLOR_PATTERN.test(color) && !seen.has(color.toLowerCase())) {
-        seen.add(color.toLowerCase());
-        stored.push(color);
-      }
-    }
-  }
-  if (stored.length === 0) {
-    return [...DEFAULT_SETTINGS.theme.colors];
-  }
-  for (const color of DEFAULT_SETTINGS.theme.colors) {
-    if (stored.length >= DEFAULT_SETTINGS.theme.colors.length) {
-      break;
-    }
-    if (!seen.has(color.toLowerCase())) {
-      seen.add(color.toLowerCase());
-      stored.push(color);
-    }
-  }
-  return stored;
+export function normalizeAccentColor(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  return COLOR_PATTERN.test(text) ? text : DEFAULT_SETTINGS.theme.accentColor;
 }
 
 /**
- * 归一化整段配色：色板补齐到默认色板，`index` 按**补齐后**的长度夹取。
+ * 生成下发色板：固定 12 位顺序，首色换成管理设置下发的色号。
+ *
+ * 老库存的 `theme.colors` 不再参与排序：色板从来没有管理端逐色编辑入口，
+ * 首色在 0020 迁移里已经改成「钢青 + 可下发」，其余位置固定，避免老库里的旧顺序
+ * 把 `theme.index` 的语义又拉回去。长度与 `DEFAULT_SETTINGS.theme.colors` 一致。
+ */
+export function normalizeThemeColors(accentColor: unknown): string[] {
+  const colors = [...DEFAULT_SETTINGS.theme.colors];
+  colors[0] = normalizeAccentColor(accentColor);
+  return colors;
+}
+
+/**
+ * 归一化整段配色：色板固定为默认顺序（首色可被管理设置覆盖），`index` 按长度夹取。
  * 读取（老库）与保存（管理端提交）都过这里，两边的合法范围因此永远一致。
  */
 export function normalizeTheme(
-  theme: { index?: unknown; colors?: unknown } | null | undefined,
+  theme: { index?: unknown; colors?: unknown; accentColor?: unknown } | null | undefined,
 ): ServerSettings['theme'] {
-  const colors = normalizeThemeColors(theme?.colors);
+  const accentColor = normalizeAccentColor(theme?.accentColor);
+  const colors = normalizeThemeColors(accentColor);
   const index = clampInt(theme?.index, 0, [0, Math.max(0, colors.length - 1)]);
-  return { index, colors };
+  return { index, colors, accentColor };
 }
 
 /**
@@ -271,6 +253,14 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   // 色板先归一化再夹取 index：老库（4 色）与手改过的色板都按补齐后的长度收敛，
   // 否则同一段代码在两次读取之间会给出不同的合法范围。
   next.theme = normalizeTheme(next.theme);
+  if (Object.prototype.hasOwnProperty.call(source, 'themeAccent')) {
+    const raw = String(source.themeAccent ?? '').trim();
+    if (!COLOR_PATTERN.test(raw)) {
+      throw badRequest('色号必须是 #RRGGBB 格式', { code: 'settings.themeAccentInvalid' });
+    }
+    next.theme.accentColor = normalizeAccentColor(raw);
+    next.theme.colors = normalizeThemeColors(next.theme.accentColor);
+  }
   if (Object.prototype.hasOwnProperty.call(source, 'themeIndex')) {
     next.theme.index = clampInt(source.themeIndex, next.theme.index, [0, Math.max(0, next.theme.colors.length - 1)]);
   }

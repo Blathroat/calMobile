@@ -233,6 +233,7 @@ export const notifySchema = z
 export const serverSettingsPatchSchema = z
   .object({
     themeIndex: z.unknown(),
+    themeAccent: z.unknown(),
     announcement: z.unknown(),
     announcementEnabled: z.unknown(),
     appTitleZh: z.unknown(),

@@ -37,7 +37,7 @@ export interface MigrationStep {
 }
 
 export interface ServerSettings {
-  theme: { index: number; colors: string[] };
+  theme: { index: number; colors: string[]; accentColor: string };
   ui: { mode: string };
   capabilities: { calendar: boolean; notifications: boolean; richText: boolean; export: boolean };
   categories: string[];
@@ -101,31 +101,30 @@ export interface ServerSettings {
 /**
  * 应用配色的默认色板（12 种）。
  *
- * 契约：**index 与语义稳定，位置一旦发布不得改动**。
- * `theme.index` 是存下来的用户选择，前端 `applyTheme()` 与原生 `ui.sync` 都按下标取色，
- * 换位置等于换掉所有老用户当前的强调色，因此新色只能往后追加。0..7 是首版发布的 8 色，
- * 8..11 是后来追加的 4 色；老库存的短色板由 `normalizeThemeColors()` 在读取时补齐。
+ * 2026-11 起首色由「钢青」担任，并允许管理设置下发色号覆盖它；原先的焦糖橙移到 1。
+ * `users.ui_theme` 里的旧下标由迁移 `0020-theme-accent` 平移，老用户选中的颜色不变；
+ * 新用户的默认下标是 0（钢青或管理设置下发的色号）。
+ * 其余位置仍按「新色只能往后追加」维护，不要再重排 1..11。
  *
  * 每个色都能同时充当「实心按钮底色 + 白字」：与白色的对比度均 ≥ 4.5:1
  * （最浅的 #C05621 约 4.6:1），与深色模式页面底色（#171A1F）的对比度均 ≥ 2.1:1，
  * 因此深色模式下也认得出是「有彩色」而不是糊成一块深灰。
  *
  * 定义放在 `STEPS` 之前：迁移 `0006` 的 `params` 读它，位置在后会踩到 TDZ。
- * 色板一旦发布只能追加，因此**不要**为了好看重排这个数组。
  */
 export const THEME_COLORS: readonly string[] = [
-  '#C05621', // 0 焦糖橙（默认）：现在的强调色，老用户不动它
-  '#48515D', // 1 石墨蓝灰：中性冷色，用于沉稳、少彩的界面临时切换
-  '#245D3C', // 2 森林绿：成功、环保与健康类主题
-  '#2F6F8F', // 3 海湾青蓝：信息、科技与数据类主题
-  '#334E7D', // 4 靛蓝：偏正式的商务蓝，比 3 更深更冷
-  '#0E6E62', // 5 墨绿（偏青）：介于绿与蓝之间，区分度落在 2 与 3 之间
-  '#6B3FA0', // 6 紫：活动、创意与展演类主题
-  '#A32C5E', // 7 玫红：促销、节庆等强情绪主题
-  '#5F6B2A', // 8 橄榄绿：偏黄绿，和 2 的森林绿、5 的墨绿拉开一档
-  '#A33B3B', // 9 深红：比 7 的玫红更沉，适合展陈、纪实类主题
-  '#8E4A76', // 10 梅紫：介于 6 的紫与 7 的玫红之间，更柔和
-  '#41707E', // 11 钢青：比 3 更偏灰青，适合冷静、工具感的界面
+  '#41707E', // 0 钢青（默认）：可由管理设置下发色号覆盖
+  '#C05621', // 1 焦糖橙：原默认色，老用户已选过它的会由 0020 迁移保持
+  '#48515D', // 2 石墨蓝灰：中性冷色，用于沉稳、少彩的界面临时切换
+  '#245D3C', // 3 森林绿：成功、环保与健康类主题
+  '#2F6F8F', // 4 海湾青蓝：信息、科技与数据类主题
+  '#334E7D', // 5 靛蓝：偏正式的商务蓝，比 4 更深更冷
+  '#0E6E62', // 6 墨绿（偏青）：介于绿与蓝之间，区分度落在 3 与 4 之间
+  '#6B3FA0', // 7 紫：活动、创意与展演类主题
+  '#A32C5E', // 8 玫红：促销、节庆等强情绪主题
+  '#5F6B2A', // 9 橄榄绿：偏黄绿，和 3 的森林绿、6 的墨绿拉开一档
+  '#A33B3B', // 10 深红：比 8 的玫红更沉，适合展陈、纪实类主题
+  '#8E4A76', // 11 梅紫：介于 7 的紫与 8 的玫红之间，更柔和
 ];
 
 /** 迁移步骤：id 一旦发布就不要改内容，只能追加新步骤。 */
@@ -679,10 +678,51 @@ export const STEPS: MigrationStep[] = [
         CREATE INDEX IF NOT EXISTS webauthn_challenges_user ON webauthn_challenges (user_id);
         `,
   },
+  {
+    // 首色从「钢青 #41707E」担任，并允许管理设置下发色号覆盖；原焦糖橙移到 1。
+    // 老用户的 `ui_theme` 下标整体平移：0→1、1→2 … 10→11、11→0（钢青留在 0）。
+    id: '0020-theme-accent',
+    sql: `
+        UPDATE users
+           SET ui_theme = CASE ui_theme
+                 WHEN 11 THEN 0
+                 WHEN 0 THEN 1
+                 WHEN 1 THEN 2
+                 WHEN 2 THEN 3
+                 WHEN 3 THEN 4
+                 WHEN 4 THEN 5
+                 WHEN 5 THEN 6
+                 WHEN 6 THEN 7
+                 WHEN 7 THEN 8
+                 WHEN 8 THEN 9
+                 WHEN 9 THEN 10
+                 WHEN 10 THEN 11
+                 ELSE ui_theme
+               END
+         WHERE ui_theme IS NOT NULL;
+        `,
+  },
+  {
+    // 全局默认固定为 0（新首色），并写入可下发的首色字段。
+    // 带 params 的迁移只能有一条 SQL：pg 的扩展协议不接受一次多条语句。
+    id: '0021-theme-accent-default',
+    sql: `
+        UPDATE app_settings
+           SET value = jsonb_set(
+                 jsonb_set(
+                   jsonb_set(value, '{colors}', $1::jsonb, true),
+                   '{accentColor}', to_jsonb($2::text), true
+                 ),
+                 '{index}', '0'::jsonb, true
+               )
+         WHERE key = 'theme';
+        `,
+    params: (palette: readonly string[]) => [JSON.stringify(palette), palette[0] ?? ''],
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
-  theme: { index: 0, colors: [...THEME_COLORS] },
+  theme: { index: 0, colors: [...THEME_COLORS], accentColor: THEME_COLORS[0] ?? '#41707E' },
   ui: { mode: 'auto' },
   capabilities: { calendar: false, notifications: false, richText: true, export: true },
   categories: ['智能家居', '物流技术', '医疗健康', '新材料'],

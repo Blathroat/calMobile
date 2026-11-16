@@ -92,11 +92,12 @@ test('老库里缺少 videoSizeMb 时以默认值兜底，不给出 undefined', 
   assert.equal(next.media.imageCount, 4);
 });
 
-test('默认色板是 12 种，index 0 仍是老用户的焦糖橙', () => {
-  assert.equal(DEFAULT_SETTINGS.theme.colors.length, 12, '配色扩到 12 种');
+test('默认色板是 12 种，首色为可下发的钢青，index 0 默认选中它', () => {
+  assert.equal(DEFAULT_SETTINGS.theme.colors.length, 12, '配色仍为 12 种');
   assert.deepEqual(DEFAULT_SETTINGS.theme.colors, [...THEME_COLORS]);
-  assert.equal(DEFAULT_SETTINGS.theme.colors[0], '#C05621', 'index 0 的语义不能变');
-  assert.equal(DEFAULT_SETTINGS.theme.index, 0);
+  assert.equal(DEFAULT_SETTINGS.theme.colors[0], '#41707E', '首色是钢青');
+  assert.equal(DEFAULT_SETTINGS.theme.accentColor, '#41707E', '首色默认值就是钢青');
+  assert.equal(DEFAULT_SETTINGS.theme.index, 0, '默认选中首色');
   // 色值必须是 #RRGGBB：前端会直接把它写进 CSS 变量
   for (const color of DEFAULT_SETTINGS.theme.colors) {
     assert.match(color, /^#[0-9A-F]{6}$/, `${color} 不是 #RRGGBB`);
@@ -104,32 +105,50 @@ test('默认色板是 12 种，index 0 仍是老用户的焦糖橙', () => {
   assert.equal(new Set(DEFAULT_SETTINGS.theme.colors).size, 12, '色板里不能有重复色');
 });
 
-test('老库的 4 色色板在读取路径上被补齐到 12 色，index 不越界', () => {
-  // 老库：只有旧色板的 4 项，index 3 是当时合法的选择
+test('管理端下发的首色覆盖色板 0；非法色号退回默认', () => {
+  const custom = normalizeTheme({ index: 0, accentColor: '#abcdef' });
+  assert.equal(custom.accentColor, '#ABCDEF');
+  assert.equal(custom.colors[0], '#ABCDEF');
+  assert.equal(custom.colors[1], '#C05621', '其余色号顺序不变');
+  const fallback = normalizeTheme({ index: 0, accentColor: 'red' });
+  assert.equal(fallback.accentColor, '#41707E');
+  assert.equal(fallback.colors[0], '#41707E');
+});
+
+test('老库的短色板在读取路径上按新顺序归一化，index 仍夹在 0..11', () => {
   const legacy = { index: 3, colors: DEFAULT_SETTINGS.theme.colors.slice(0, 4) };
   const next = normalizeTheme(legacy);
 
-  assert.deepEqual(next.colors, DEFAULT_SETTINGS.theme.colors, '保留已有项、按默认色板追加新色');
-  assert.equal(next.index, 3, 'index 不变，老用户选中的强调色不动');
+  assert.deepEqual(next.colors, DEFAULT_SETTINGS.theme.colors, '色板顺序以当前默认值为准');
+  assert.equal(next.index, 3, 'index 不越界；老用户的旧下标由 0020 迁移平移');
 
-  // 越界（老库被手工改大）时夹到补齐后的最后一位，而不是 undefined
+  // 越界（老库被手工改大）时夹到新色板的最后一位，而不是 undefined
   assert.equal(normalizeTheme({ index: 42, colors: legacy.colors }).index, 11);
   assert.equal(normalizeTheme({ index: -1, colors: legacy.colors }).index, 0);
 });
 
 test('非法 / 重复 / 缺失 / 超长的颜色都不会让色板长度跑偏', () => {
   const next = normalizeTheme({ index: 5, colors: ['#C05621', '#C05621', 'red', '', null, '#c05621'] });
-  assert.equal(next.colors.length, 12, '非法与重复项被丢掉后要补齐');
-  assert.equal(next.colors[0], '#C05621');
+  assert.equal(next.colors.length, 12, '色板长度固定');
+  assert.equal(next.colors[0], '#41707E');
   assert.equal(next.colors[5], DEFAULT_SETTINGS.theme.colors[5]);
-  assert.equal(normalizeTheme({ colors: [] }).colors.length, 12, '空色板退回默认色板');
-  assert.equal(normalizeTheme({ colors: 'nope' }).colors.length, 12, '非数组也退回默认色板');
+  assert.equal(normalizeTheme({ colors: [] }).colors.length, 12, '空色板使用默认色板');
+  assert.equal(normalizeTheme({ colors: 'nope' }).colors.length, 12, '非数组也使用默认色板');
   // 缺 colors 的 theme（老到没有这一项）同样可用
   assert.deepEqual(normalizeTheme({ index: 2 }).colors, DEFAULT_SETTINGS.theme.colors);
-  // 多于默认色板（手工塞过）时只取前 12 个，index 的范围与长度始终一致
+  // 多于默认色板（手工塞过）时按固定长度下发
   const extra = normalizeTheme({ index: 13, colors: [...DEFAULT_SETTINGS.theme.colors, '#111111', '#222222'] });
   assert.equal(extra.colors.length, 12, '超长色板要被截到默认长度');
   assert.equal(extra.index, 11, 'index 要按截断后的长度夹取');
+});
+
+test('管理端色号保存：合法值写入首色，非法值按规则失败', () => {
+  const next = applyServerPatch(defaults(), { themeAccent: '#0A0B0C' });
+  assert.equal(next.theme.accentColor, '#0A0B0C');
+  assert.equal(next.theme.colors[0], '#0A0B0C');
+  assert.throws(() => applyServerPatch(defaults(), { themeAccent: '0A0B0C' }), /#RRGGBB/);
+  assert.throws(() => applyServerPatch(defaults(), { themeAccent: '#12345' }), /#RRGGBB/);
+  assert.equal(applyServerPatch(defaults(), { themeAccent: '#abcdef' }).theme.colors[0], '#ABCDEF');
 });
 
 test('收集项的新长度上限缺省时补默认值，提交时按范围收敛', () => {

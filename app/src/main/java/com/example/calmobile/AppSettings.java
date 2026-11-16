@@ -29,6 +29,8 @@ import java.util.Locale;
 public final class AppSettings {
     private static final String PREFS = "app_settings";
     private static final String KEY_THEME = "theme";
+    /** 管理端下发的首色（#RRGGBB）；存在时优先于预设色板。 */
+    private static final String KEY_ACCENT_COLOR = "accent_color";
     private static final String KEY_MEDIA_IMAGE_COUNT = "media_image_count";
     private static final String KEY_MEDIA_IMAGE_SIZE = "media_image_size";
     private static final String KEY_MEDIA_VIDEO_COUNT = "media_video_count";
@@ -56,18 +58,18 @@ public final class AppSettings {
     // 直接写 0xAARRGGBB 字面量而不是 Color.rgb(...)：静态初始化不碰 Android API，
     // 这两个归一化函数才能在普通 JVM 单测里跑。
     private static final int[] ACCENTS = {
-            0xFFC05621,   // 0 #C05621 焦糖橙（默认）
-            0xFF48515D,   // 1 #48515D 石墨蓝灰
-            0xFF245D3C,   // 2 #245D3C 森林绿
-            0xFF2F6F8F,   // 3 #2F6F8F 海湾青蓝
-            0xFF334E7D,   // 4 #334E7D 靛蓝
-            0xFF0E6E62,   // 5 #0E6E62 墨绿
-            0xFF6B3FA0,   // 6 #6B3FA0 紫
-            0xFFA32C5E,   // 7 #A32C5E 玫红
-            0xFF5F6B2A,   // 8 #5F6B2A 橄榄绿
-            0xFFA33B3B,   // 9 #A33B3B 深红
-            0xFF8E4A76,   // 10 #8E4A76 梅紫
-            0xFF41707E    // 11 #41707E 钢青
+            0xFF41707E,   // 0 #41707E 钢青（默认；管理端可下发色号覆盖）
+            0xFFC05621,   // 1 #C05621 焦糖橙
+            0xFF48515D,   // 2 #48515D 石墨蓝灰
+            0xFF245D3C,   // 3 #245D3C 森林绿
+            0xFF2F6F8F,   // 4 #2F6F8F 海湾青蓝
+            0xFF334E7D,   // 5 #334E7D 靛蓝
+            0xFF0E6E62,   // 6 #0E6E62 墨绿
+            0xFF6B3FA0,   // 7 #6B3FA0 紫
+            0xFFA32C5E,   // 8 #A32C5E 玫红
+            0xFF5F6B2A,   // 9 #5F6B2A 橄榄绿
+            0xFFA33B3B,   // 10 #A33B3B 深红
+            0xFF8E4A76    // 11 #8E4A76 梅紫
     };
 
     private AppSettings() { }
@@ -84,11 +86,37 @@ public final class AppSettings {
     }
 
     public static int getAccentColor(Context context) {
-        return accentColorAt(getThemeIndex(context));
+        String custom = prefs(context).getString(KEY_ACCENT_COLOR, "");
+        int parsed = parseAccentColor(custom);
+        return parsed != 0 ? parsed : accentColorAt(getThemeIndex(context));
     }
 
     /**
-     * 按下标取强调色；越界回落到 0（默认的焦糖橙）。
+     * 同步管理端下发的首色。空串或非法值会清掉自定义色，回到色板下标取色。
+     * `Color.parseColor` 在坏输入上抛异常，这里用纯解析，桥接层不必 try/catch。
+     */
+    public static void setAccentColor(Context context, String value) {
+        int parsed = parseAccentColor(value);
+        if (parsed == 0) {
+            prefs(context).edit().remove(KEY_ACCENT_COLOR).apply();
+            return;
+        }
+        prefs(context).edit().putString(KEY_ACCENT_COLOR, String.format(Locale.US, "#%06X", parsed & 0xFFFFFF)).apply();
+    }
+
+    /**
+     * 解析 `#RRGGBB`；非法值返回 0。纯函数，方便在 JVM 单测里断言。
+     */
+    static int parseAccentColor(String value) {
+        String text = value == null ? "" : value.trim();
+        if (!text.matches("^#[0-9a-fA-F]{6}$")) {
+            return 0;
+        }
+        return 0xFF000000 | Integer.parseInt(text.substring(1), 16);
+    }
+
+    /**
+     * 按下标取强调色；越界回落到 0（默认的钢青 / 管理端下发的首色）。
      *
      * 纯函数：不读 Android API，因此可以在普通 JVM 单测里断言「下标与色板逐位对齐」。
      */

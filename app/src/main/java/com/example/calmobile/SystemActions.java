@@ -33,6 +33,11 @@ final class SystemActions {
         if (payload != null && payload.containsKey("themeIndex")) {
             AppSettings.setThemeIndex(activity, WebAppBridge.number(payload, "themeIndex", 0));
         }
+        // 管理端下发的首色：页面已经用它画强调色，系统栏要跟着同一个色；
+        // 没带这个字段时不覆盖，避免旧前端把自定义色清掉。
+        if (payload != null && payload.containsKey("accentColor")) {
+            AppSettings.setAccentColor(activity, WebAppBridge.text(payload, "accentColor", ""));
+        }
 
         Map<String, Object> media = WebAppBridge.map(payload, "media");
         if (!media.isEmpty()) {

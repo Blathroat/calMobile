@@ -115,15 +115,26 @@ public class AppSettingsTest {
     @Test
     public void accentIndexesMatchServerPalette() {
         int[] expected = {
-                0xFFC05621, 0xFF48515D, 0xFF245D3C, 0xFF2F6F8F,
-                0xFF334E7D, 0xFF0E6E62, 0xFF6B3FA0, 0xFFA32C5E,
-                0xFF5F6B2A, 0xFFA33B3B, 0xFF8E4A76, 0xFF41707E,
+                0xFF41707E, 0xFFC05621, 0xFF48515D, 0xFF245D3C,
+                0xFF2F6F8F, 0xFF334E7D, 0xFF0E6E62, 0xFF6B3FA0,
+                0xFFA32C5E, 0xFF5F6B2A, 0xFFA33B3B, 0xFF8E4A76,
         };
         for (int index = 0; index < expected.length; index++) {
             assertEquals("下标 " + index + " 的强调色与后端不一致", expected[index], AppSettings.accentColorAt(index));
         }
-        // 越界回落到默认的焦糖橙，而不是抛异常或取到别的色
-        assertEquals(0xFFC05621, AppSettings.accentColorAt(-1));
-        assertEquals(0xFFC05621, AppSettings.accentColorAt(expected.length));
+        // 越界回落到默认首色（钢青），而不是抛异常或取到别的色
+        assertEquals(0xFF41707E, AppSettings.accentColorAt(-1));
+        assertEquals(0xFF41707E, AppSettings.accentColorAt(expected.length));
+    }
+
+    /** 管理端下发的 #RRGGBB 色号只在合法时接受，非法值回落到按色板取色。 */
+    @Test
+    public void parsesCustomAccentColor() {
+        assertEquals(0xFF0A0B0C, AppSettings.parseAccentColor("#0a0b0c"));
+        assertEquals(0xFFABCDEF, AppSettings.parseAccentColor(" #ABCDEF "));
+        assertEquals(0, AppSettings.parseAccentColor(""));
+        assertEquals(0, AppSettings.parseAccentColor("#12345"));
+        assertEquals(0, AppSettings.parseAccentColor("red"));
+        assertEquals(0, AppSettings.parseAccentColor(null));
     }
 }

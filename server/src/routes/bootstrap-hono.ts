@@ -59,7 +59,7 @@ app.get('/bootstrap', optionalAuthHono, async (c) => {
   }
   return jsonResponse(c, {
     user,
-    theme: { index: themeIndex, colors: settings.theme.colors },
+    theme: { index: themeIndex, colors: settings.theme.colors, accentColor: settings.theme.accentColor },
     ui: { mode },
     capabilities: { ...settings.capabilities },
     categories: settings.categories,

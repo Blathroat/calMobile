@@ -28,6 +28,7 @@ import { useHint } from '@/composables/useHint';
 import { useAsync } from '@/composables/useAsync';
 import { useRevealReady } from '@/composables/useReveal';
 import { suppressPull, usePullRefresh } from '@/services/pull-refresh';
+import { resolveCalendarSwipe } from '@/services/calendar-swipe';
 import type { CachedRead } from '@/services/query-cache';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
@@ -53,7 +54,6 @@ const WEEK_LABELS = [
   t('home.weekdaySat'),
   t('home.weekdaySun'),
 ];
-const SWIPE_THRESHOLD = 46;
 
 const router = useRouter();
 const bootstrap = useBootstrapStore();
@@ -233,6 +233,7 @@ let pendingMonth: { year: number; month: number } | undefined;
 
 /** 切换月份：先让当前卡片滑出，再载入新月份并滑入，让「月份变了」在视觉上连续。 */
 function shiftMonth(delta: number): void {
+  if (monthSliding) return;
   const current = pendingMonth ?? view.value;
   const next = addMonths(current.year, current.month, delta);
   pendingMonth = next;
@@ -265,10 +266,76 @@ function shiftMonth(delta: number): void {
   }, 140);
 }
 
+let monthSliding = false;
+
+/**
+ * 松手后切月：卡片从手指停下的位置直接滑出，换完月份再从反方向滑入。
+ *
+ * 旧实现先把卡片弹回 0，再播 leave/enter 两段 CSS 动画，手指位置和动画起点之间
+ * 会有一跳；这里把两段接成一条连续的位移。
+ */
+function slideMonth(direction: number): void {
+  const card = calendarHost.value;
+  if (!card || monthSliding) return;
+  if (prefersReducedMotion()) {
+    shiftMonth(direction);
+    return;
+  }
+  monthSliding = true;
+  window.clearTimeout(monthTimer);
+  monthQuery.cancel();
+  landingApplied.value = true;
+  leave.value = '';
+  enter.value = '';
+  const width = card.getBoundingClientRect().width || card.clientWidth || 320;
+  const out = direction > 0 ? -width : width;
+  const comeFrom = direction > 0 ? width : -width;
+  let swapped = false;
+  let settled = false;
+
+  const settle = (event?: TransitionEvent): void => {
+    if (event && (event.target !== card || event.propertyName !== 'transform')) return;
+    if (settled) return;
+    settled = true;
+    card.style.transition = 'none';
+    card.style.transform = '';
+    monthSliding = false;
+  };
+
+  const swap = (event?: TransitionEvent): void => {
+    if (event && (event.target !== card || event.propertyName !== 'transform')) return;
+    if (swapped) return;
+    swapped = true;
+    const current = pendingMonth ?? view.value;
+    const next = addMonths(current.year, current.month, direction);
+    pendingMonth = undefined;
+    view.value.year = next.year;
+    view.value.month = next.month;
+    // 新月份自己挑第一个有展会的日期。
+    view.value.day = 0;
+    card.style.transition = 'none';
+    card.style.transform = `translate3d(${comeFrom}px, 0, 0)`;
+    void load();
+    requestAnimationFrame(() => {
+      card.style.transition = 'transform var(--motion-normal) var(--ease-out)';
+      card.style.transform = 'translate3d(0, 0, 0)';
+    });
+    card.addEventListener('transitionend', settle, { once: true });
+    // transition 不触发（例如页面在后台）时的兜底，避免卡片停在屏外。
+    window.setTimeout(() => settle(), 600);
+  };
+
+  card.style.transition = 'transform var(--motion-quick) var(--ease-out)';
+  card.style.transform = `translate3d(${out}px, 0, 0)`;
+  card.addEventListener('transitionend', (event) => swap(event), { once: true });
+  window.setTimeout(() => swap(), 260);
+}
+
 /**
  * 左右滑动切换月份。
  *
- * 手指刚按下就先预取该展会详情（与列表项的 pointerdown 同理），点进详情时数据已在缓存里。
+ * 拖动 1:1 跟手；松手时按「超过卡片宽度 1/4」或「快速甩动」判定切月。
+ * 切月直接接续手指位置滑出，再从另一侧滑入（见 `slideMonth`），不再先弹回中间。
  */
 function enableSwipe(): void {
   const host = swipeHost.value;
@@ -280,21 +347,37 @@ function enableSwipe(): void {
   let startY = 0;
   let deltaX = 0;
   let axis = '';
+  let lastX = 0;
+  let lastTime = 0;
+  let velocityX = 0;
 
-  const reset = (animate: boolean): void => {
-    card.style.transition = animate ? 'transform var(--motion-normal) var(--ease-out)' : 'none';
-    card.style.transform = '';
+  const clear = (): void => {
     pointerId = null;
     axis = '';
     deltaX = 0;
+    velocityX = 0;
+  };
+
+  const snapBack = (): void => {
+    card.dataset.drag = 'false';
+    card.style.transition = 'transform var(--motion-normal) var(--ease-out)';
+    card.style.transform = '';
+    clear();
+    window.setTimeout(() => {
+      card.style.transition = '';
+    }, 260);
   };
 
   host.addEventListener('pointerdown', (event) => {
     if (pointerId !== null || event.pointerType === 'mouse') return;
+    if (monthSliding) return;
     pointerId = event.pointerId;
     startX = event.clientX;
     startY = event.clientY;
+    lastX = event.clientX;
+    lastTime = performance.now();
     deltaX = 0;
+    velocityX = 0;
     axis = '';
   });
 
@@ -315,38 +398,39 @@ function enableSwipe(): void {
       }
     }
     if (axis !== 'x') return;
+    const now = performance.now();
+    const elapsed = Math.max(1, now - lastTime);
+    velocityX = (event.clientX - lastX) / elapsed;
+    lastX = event.clientX;
+    lastTime = now;
     deltaX = dx;
-    // 拖到边界外时阻尼，给出「到头了」的手感。
-    const damped = Math.sign(deltaX) * Math.min(Math.abs(deltaX), 96);
-    card.style.transform = `translate3d(${damped * 0.6}px, 0, 0)`;
+    // 1:1 跟手，最多跟到卡片宽度；超出后停住，不把整张卡拖出屏幕。
+    const width = card.getBoundingClientRect().width || card.clientWidth || 320;
+    const bounded = Math.max(-width, Math.min(width, dx));
+    card.style.transform = `translate3d(${bounded}px, 0, 0)`;
     event.preventDefault();
   });
 
   const finish = (event: PointerEvent): void => {
     if (event.pointerId !== pointerId) return;
-    const committed = axis === 'x' && Math.abs(deltaX) >= SWIPE_THRESHOLD;
-    const direction = deltaX < 0 ? 1 : -1;
     card.dataset.drag = 'false';
-    reset(!committed);
-    if (committed) {
-      shiftMonth(direction);
-      // 真的滑动切过月份了：这条「可以左右滑动」的提示就算教完了
+    const width = card.getBoundingClientRect().width || card.clientWidth || 320;
+    const outcome = resolveCalendarSwipe({ deltaX, velocityX, width });
+    if (outcome.commit) {
+      clear();
       void dismissHint();
+      slideMonth(outcome.direction);
+      return;
     }
+    snapBack();
   };
 
   host.addEventListener('pointerup', finish);
   host.addEventListener('pointercancel', (event) => {
-    if (event.pointerId === pointerId) {
-      card.dataset.drag = 'false';
-      reset(true);
-    }
+    if (event.pointerId === pointerId) snapBack();
   });
   host.addEventListener('pointerleave', (event) => {
-    if (event.pointerId === pointerId) {
-      card.dataset.drag = 'false';
-      reset(true);
-    }
+    if (event.pointerId === pointerId) snapBack();
   });
 }
 
