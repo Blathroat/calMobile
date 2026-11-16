@@ -1,0 +1,11 @@
+[Unit]
+Description=定时检查 calMobile npm 运行时包
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Unit=calmobile-update.service
+
+[Install]
+WantedBy=timers.target

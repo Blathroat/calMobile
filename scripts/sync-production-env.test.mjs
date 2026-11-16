@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { parseEnvFile } from './client-target.mjs';
-import { REQUIRED_SERVER_SECRETS, SERVER_VALUE_KEYS, syncProductionEnv } from './sync-production-env.mjs';
+import { REQUIRED_SERVER_SECRETS, syncProductionEnv } from './sync-production-env.mjs';
 
 const template = `
 # 注释不进服务器
@@ -153,13 +153,17 @@ test('缺必填密钥时命令行失败且不写输出文件', () => {
   assert.throws(() => readFileSync(outPath, 'utf8'));
 });
 
-test('发布工作流把名单里的每个键都传给部署，签名密钥不进这一步', () => {
-  const yaml = readFileSync(join(import.meta.dirname, '..', '.github', 'workflows', 'release.yml'), 'utf8');
-  const deploy = yaml.split(/^  deploy-server:/m)[1] ?? '';
-  assert.notEqual(deploy, '');
-  for (const key of SERVER_VALUE_KEYS) {
-    assert.match(deploy, new RegExp(`^\\s+${key}:`, 'm'));
-  }
-  assert.doesNotMatch(deploy, /ANDROID_/);
-  assert.ok(SERVER_VALUE_KEYS.every((key) => !key.startsWith('ANDROID_')));
+test('运行时包带环境模板和合并脚本，发布工作流不再推送服务器配置', () => {
+  const repoRoot = join(import.meta.dirname, '..');
+  const yaml = readFileSync(join(repoRoot, '.github', 'workflows', 'release.yml'), 'utf8');
+  assert.doesNotMatch(yaml, /DEPLOY_/);
+  assert.doesNotMatch(yaml, /SERVER_VALUE_KEYS/);
+
+  const bundle = readFileSync(join(repoRoot, 'scripts', 'runtime-bundle.mjs'), 'utf8');
+  assert.match(bundle, /deploy\/production\.env/);
+  assert.match(bundle, /scripts\/sync-production-env\.mjs/);
+
+  const updater = readFileSync(join(repoRoot, 'deploy', 'calmobile-update.mjs'), 'utf8');
+  assert.match(updater, /sync-production-env\.mjs/);
+  assert.match(updater, /--template/);
 });

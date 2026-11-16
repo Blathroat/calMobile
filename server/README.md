@@ -77,6 +77,8 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 
 判定在 `src/config/runtime.ts` 的 `resolveRuntime`。启动自检在 `src/config/production.ts`。直接 `tsx src/index.ts`、不带参数，是开发模式。
 
+生产环境由公开 npm 包 `calmobile-server` 分发，服务器上的 `calmobile-update.timer` 从 npm 拉取新版本，安装、迁移、切换目录并重启。发布、目录布局和回滚见 [`docs/operations.md`](../docs/operations.md)。
+
 数据库不可用时进程仍会启动。开发模式下打开 `http://127.0.0.1:3000/status` 可以看到通用失败提示。JSON 探活是 `GET /api/v1/status`。页面源码在 `status-page/`，`pnpm build` 把它内联成单文件。
 
 ## 邮件

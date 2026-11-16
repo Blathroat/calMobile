@@ -12,7 +12,7 @@
 |---|---|
 | Vue 页面、组件、样式、界面文案 | `pnpm --dir web typecheck`、`pnpm --dir web lint`、`pnpm --dir web fmt:check`、`pnpm --dir web test`、`pnpm --dir web build`。打 APK 时 `preBuild` 把 `web/dist` 同步到 WebView 资源 |
 | 路由与加载 | `pnpm --dir web test` |
-| 后端规则或响应 | `pnpm --dir server lint`、`pnpm --dir server fmt:check`、`pnpm --dir server test`，以及 `pnpm --dir server test:contract`（需要 PostgreSQL）。改了已加载的 `server/src` 后重启不用 watch 起的进程 |
+| 后端规则或响应 | `pnpm --dir server lint`、`pnpm --dir server fmt:check`、`pnpm --dir server test`，以及 `pnpm --dir server test:contract`（需要 PostgreSQL）。`pnpm --dir server test` 同时跑发布脚本的 Node 测试。改了已加载的 `server/src` 后重启不用 watch 起的进程 |
 | Java 或桥接 | `gradlew.bat :app:testDebugUnitTest`。出包或资源变更再跑 `gradlew.bat :app:assembleDebug` |
 
 契约测试先由 `server/test/global-setup-contract.ts` 建一个模板库，每个测试文件从它克隆一份自己的库：文件之间互不干扰，因此可以并行跑，迁移与示例数据只跑一次。行尾由根目录 `.gitattributes` 统一成 LF，检出后不用手工调整。
@@ -62,41 +62,98 @@ server {
 
 `./gradlew :app:assembleDebug` 使用当前这份配置，不要求公网地址或签名。`./gradlew :app:assembleRelease` 会拒绝：地址不是公网 https、包名是 `com.example`、签名四项缺一或密钥文件不存在。
 
-推送到 `master` 的合并提交在 CI 成功之后，`.github/workflows/release.yml` 按这次推送的路径发布。普通提交跳过发布和部署。功能分支和拉取请求不发布。会触发发布、部署或页面同步的改动走 PR，用合并提交合入，不要直接推到 `master`。合入前要等该拉取请求自己的 CI 成功。检查还在跑或失败时不要合并。合并之后 `master` 上还会再跑一次推送 CI，那一次才决定自动 Release。
+### 发布链路
 
-已经在 `master` 上、并且这次提交的 CI 已经成功时，可以在 Actions 里手动运行 Release，强制发布当时的 `master`。四个开关默认都开：发 APK、重启服务、同步应用页面和报名站。不需要的关掉。发 APK 时总会同步应用页面。重启服务时总会同步报名站。强制发布不看这次推送改了哪些文件，构建的是当前提交。功能分支不能强制发布。检查还在跑、或者还没有成功的 master CI 时，强制发布会拒绝。撤回合并再发布会部署撤回之后的旧代码，不要用撤回来补发。
+推送到 `master` 的合并提交在 CI 成功之后，`.github/workflows/release.yml` 按这次推送的路径发布。普通提交只跑 CI，不发布；功能分支和拉取请求不发布。会触发发布或更新的改动走 PR，用合并提交合入，不要直接推到 `master`。合入前要等该拉取请求自己的 CI 成功。检查还在跑或失败时不要合并。合并之后 `master` 上还会再跑一次推送 CI，那一次才决定自动 Release。
 
-`versionCode` 是这个工作流自己的运行编号，`versionName` 是 `0.1.` 加同一个编号，标签是 `v0.1.<编号>`。只有这次真的发布 APK 才占用这个编号建 Release，中间跳过的运行不会建标签，编号可以不连续。删掉或换掉这个工作流文件会让编号从 1 重新计。
+一次 Release 产出两件东西：
 
-合并进 `master` 并且推送 CI 成功后，会自动再跑一次 Release。路径不需要发布时，这次仍然成功，但发 APK 和部署都会跳过，也不建标签。手动强制发布是另一次运行。两次各占一个运行编号，所以标签可以跳号。
+- GitHub Releases 上的 APK，标签 `v0.1.<运行编号>`；
+- 公开 npm 上的运行时包 `calmobile-server@0.1.<运行编号>`。
 
-路径归类在 `scripts/release-scope.mjs`。CI 在 push 时记下 `before..after` 的文件清单，Release 读取它：
+运行时包里有 `server/dist`、`web/dist`、`web/dist-join`、服务端依赖清单和更新器脚本。服务器解压后 `server/` 与 `web/` 同级，服务端据此找到页面产物。`web/src` 和 `server/src` 不进包；界面文案在构建时已经打进两份页面产物的脚本里。
 
-- 原生外壳（`app/src/main`、`app/build.gradle`、Gradle、`scripts/client-target.mjs`）发布 APK。`client-target.mjs` 同时同步应用页面。
-- 服务端运行时代码、依赖锁、`deploy/`、`scripts/remote-release.sh`、`scripts/sync-production-env.mjs` 部署并重启。
-- 只进应用页面包的源（例如 `web/src/pages/HomePage.vue`、`web/src/main.ts`、`web/vite.config.ts`、`web/release-manifest.mjs`）同步 `web/dist` 到 `/app/`，不发 APK，不重启。
-- 报名站专有源（`web/src/join/`、`web/join.html`、`web/vite.join.config.ts`、`server/scripts/build-join.ts`）只同步 `web/dist-join`，不重启。服务按请求读文件。
-- 两边都会打进去的 `web/src`（文案、外壳、组件，以及报名站用到的页面）两份一起同步。同步的是构建产物，不是源文件。
-- `server/src/domain/answer-document.ts` 重启服务，并同步两份页面。
+路径归类在 [`scripts/release-scope.mjs`](../scripts/release-scope.mjs)。CI 在 push 时记下 `before..after` 的文件清单，Release 读取它：
+
+- 原生外壳（`app/src/main`、`app/build.gradle`、Gradle、`scripts/client-target.mjs`）发布 APK。
+- 服务端运行时代码、依赖锁、`deploy/`、`scripts/runtime-bundle.mjs`、`scripts/sync-production-env.mjs` 发布运行时包。
+- 只进应用页面包的源（例如 `web/src/pages/HomePage.vue`、`web/src/main.ts`、`web/vite.config.ts`、`web/release-manifest.mjs`）、报名站专有源（`web/src/join/`、`web/join.html`、`web/vite.join.config.ts`、`server/scripts/build-join.ts`）、两边共用的 `web/src` 都发布运行时包。
+- `server/src/domain/answer-document.ts` 发布运行时包。
 - 文档、测试、`server/src/dev/` 不触发。
 
-没把 `DEPLOY_ENABLED` 设成 `true` 时，只有 APK 会发布；页面、报名站和服务端都不同步。设成 `true`，并且配了 `DEPLOY_HOST`、`DEPLOY_USER` 和 `DEPLOY_SSH_KEY` 之后：需要重启的那次把 `server/dist`、`server/package.json`、`server/pnpm-lock.yaml` 放到 `DEPLOY_PATH`（默认 `/opt/calmobile`），并带上这次构建出来的 `web/dist-join`；应用页面有改动时再同步 `web/dist`。只改页面时只同步对应目录，不安装依赖、不迁移、不重启。报名站在部署目录的 `web/dist-join`，应用页面在 `web/dist`，都和 `server/dist` 同级。`web/src` 不上传。`web/src/i18n/zh.json` 在构建时打进这两份产物的脚本里，服务器上没有这个源文件。同步用 `rsync --delete`，会换掉对应目录里的旧脚本。用户安装的语言包在各自浏览器或应用的本机存储里，不在 `web/dist` 中，这次同步不会删除它们。需要重启时，同步前把现有 `server/dist` 复制为 `server/dist.prev`，然后补齐 `/etc/calmobile.env`，在服务器上执行 `pnpm install --frozen-lockfile --prod` 和 `pnpm db:migrate:prod`，再重启 `calmobile.service`。
+运行时包总是整包发布，不按目录拆分：任一类改动命中就发一次，包内同时带服务端和两份页面。发 APK 时也会发布运行时包——APK 里的页面和服务器上的 `/app/` 页面都带同一个 `0.1.<运行编号>` 版本号，不同步会让应用内更新检查一直认为有更新。只有四类改动都不命中时整次跳过。
 
-应用页面打进 APK 一份。正式包打开接口所在源的 `/app/index.html`，WebView 把这个路径拦截到本机快照，页面切换不访问网络。快照没有，或不是当前 `versionCode`，就用包内那份。首屏出来之后才后台拉取 `/app/release.json`；有新版本才下到待用目录，下次冷启动再换上，使用中不重载。调试包（接口是 http）不热更新。改 `APP_API_BASE` 仍要重新构建 APK：文档源写在外壳里。页面包在同步时用同一个 `APP_API_BASE` 构建。
+`versionCode` 是这个工作流自己的运行编号，`versionName` 是 `0.1.` 加同一个编号，APK 标签是 `v0.1.<编号>`，npm 包版本也是 `0.1.<编号>`。中间跳过的运行不发布，编号可以不连续。删掉或换掉这个工作流文件会让编号从 1 重新计。
 
-环境文件只补还没有的键。服务器上已有的非空值不会被覆盖，文件里多出来的键会保留。空的密钥不会写入。`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL` 在服务器和 GitHub Secrets 里都没有时，部署失败，也不会把空值写进去。要改一个已经存在的值，直接改服务器上的 `/etc/calmobile.env`。只改同名的 GitHub Secret 或 Variable 不会替换它。固定的非密钥项在 `deploy/production.env`。域名、数据库主机和发件人地址放在 GitHub Variables。服务器地址不要放进 Variables：变量值会原样写进 Actions 日志，仓库一旦公开，日志也公开。地址放在 Secret `DEPLOY_HOST`，日志里会打成星号。口令、签名和 SSH 私钥同样只放 Secrets，不进仓库。
+路径不需要发布时，Release 仍然成功，但 APK 和运行时包都跳过，也不建标签。手动强制发布是另一次运行。两次各占一个运行编号，所以标签和包版本可以跳号。
 
-进程里已有的非空变量仍然优先于 `server/.env`。生产单元用 `EnvironmentFile=/etc/calmobile.env` 把这份文件注进进程。部署目录里不要再放一份开发用的 `.env`。上传目录用绝对路径，放在部署目录外面。
+已经在 `master` 上、并且这次提交的 CI 已经成功时，可以在 Actions 里手动运行 Release，强制发布当时的 `master`。四个开关默认都开：发 APK、服务端、应用页面、报名站。`server` / `app` / `join` 任选其一就会发布完整运行时包，包内不会只带其中一部分。发 APK 时总会发布运行时包。强制发布不看这次推送改了哪些文件，构建的是当前提交。功能分支不能强制发布。检查还在跑、或者还没有成功的 master CI 时，强制发布会拒绝。撤回合并再发布会发布撤回之后的旧代码，不要用撤回来补发。
 
-服务器上要已经有 `calmobile.service`。部署不会创建它。单元里要有这三处：
+npm 上同一个版本已经存在时，发布步骤会跳过，不会让重跑失败。npm 发布带 provenance，仓库和包都公开。
+
+### 服务器更新
+
+服务器不再由 CI 通过 SSH 推送，而是由 systemd timer 从 npm 拉取：
 
 ```
-WorkingDirectory=/opt/calmobile/server
+/opt/calmobile/current -> releases/0.1.<编号>
+/opt/calmobile/releases/0.1.<编号>/{server,web}
+/opt/calmobile/releases/0.1.<编号>/deploy/、scripts/
+/opt/calmobile/state/{pin,update.lock,cache/}
+```
+
+生产单元里要有这三处：
+
+```
+WorkingDirectory=/opt/calmobile/current/server
 EnvironmentFile=/etc/calmobile.env
 ExecStart=/usr/bin/node dist/index.js --production
 ```
 
-`WorkingDirectory` 跟实际的 `DEPLOY_PATH` 走。部署账号对 `DEPLOY_PATH` 可写；不是 root 时还要能免密 `sudo`，用来安装环境文件和重启。服务器上的 Node 要满足 `engines`，并且部署账号的 `PATH` 里有 `node` 和 `pnpm`。失败时旧进程继续跑，磁盘上的 `server/dist` 可能已经换成新的，上一份在 `server/dist.prev`。数据库要另外从备份恢复。
+更新器是 `/usr/local/lib/calmobile/calmobile-update.mjs`，随运行时包一起发布；一次成功切换后会把自己更新到新版本。`calmobile-update.timer` 每 5 分钟触发一次 `calmobile-update.service`，开机 3 分钟后第一次。配置从 `/etc/calmobile-update.json` 读，样例见仓库 `deploy/calmobile-update.json.example`；`CALMOBILE_REGISTRY`、`CALMOBILE_PACKAGE` 等环境变量可以覆盖。国内网络访问 npm 官方源慢时，把 `registry` 改成可达的镜像；镜像同步有延迟，更新会晚一点。
+
+手动操作：
+
+```
+node /usr/local/lib/calmobile/calmobile-update.mjs --check
+sudo systemctl start calmobile-update.service
+journalctl -u calmobile-update -n 100
+node /usr/local/lib/calmobile/calmobile-update.mjs --rollback
+node /usr/local/lib/calmobile/calmobile-update.mjs --unpin
+```
+
+一次更新依次做：校验 npm 元数据和 tarball 完整性 → 解压到 `releases/.tmp-*` → `pnpm install --frozen-lockfile --prod` → 补齐 `/etc/calmobile.env` 缺失的键 → 用新版本代码跑迁移 → 原子切换 `current` → 重启 `calmobile.service` → 轮询 `/ping`。成功后删除超出 `keep`（默认 3）的旧版本和旧缓存。
+
+失败时不会把线上搞挂：
+
+- 下载、校验、依赖安装、环境文件合并或迁移失败：不切换，旧版本继续服务，timer 下次重试。
+- 切换后启动失败或 `/ping` 超过 30 秒不返回 200：自动切回上一版本、重启并写 `state/pin`，需要修好之后执行 `--unpin`（或 `--update --force`）恢复自动更新。
+- 回滚只换程序，不撤销数据库迁移。迁移只追加，旧版本可以读新库；高风险迁移前另外备份数据库。
+- 手动 `--rollback` 同样会写 pin，避免 5 分钟后被自动更新拉回坏版本。
+
+服务器上要能不用密码执行 `sudo`（安装环境文件、执行迁移、重启服务），Node 要满足 `engines`，`pnpm` 和 `tar` 在 `PATH` 里，运行更新的账号对 `/opt/calmobile` 可写。磁盘至少留 `minFreeMb`（默认 512 MB）。
+
+首次从 SSH 部署切换到 npm：
+
+1. 等一次 Release 成功，确认 npm 上已经有 `calmobile-server@0.1.<编号>`。
+2. 把 `deploy/calmobile-update.mjs` 放到 `/usr/local/lib/calmobile/calmobile-update.mjs`，把 `deploy/calmobile-update.json.example` 复制成 `/etc/calmobile-update.json`。
+3. 运行 `node /usr/local/lib/calmobile/calmobile-update.mjs --update`：建立 `releases/0.1.<编号>`、`current`，完成依赖安装和迁移。此时 `calmobile.service` 还指向旧目录，这一步只是重启旧服务，不影响访问。
+4. 把 `calmobile.service` 的 `WorkingDirectory` 改成 `/opt/calmobile/current/server`，`systemctl daemon-reload` 后重启。
+5. 安装 `deploy/calmobile-update.service` 与 `deploy/calmobile-update.timer`，`systemctl enable --now calmobile-update.timer`。
+6. 确认 `/ping`、`/`、`/app/index.html`、`/app/release.json`、`/join` 都正常后，删除旧的 `/opt/calmobile/server`、`/opt/calmobile/web` 和 `dist.prev`。
+7. 在 GitHub 删除不再使用的 `DEPLOY_*` Secrets / Variables。
+
+### 环境文件
+
+进程里已有的非空变量仍然优先于 `server/.env`。生产单元用 `EnvironmentFile=/etc/calmobile.env` 把这份文件注进进程。部署目录里不要再放一份开发用的 `.env`。上传目录用绝对路径，放在部署目录外面，不随版本切换。
+
+`/etc/calmobile.env` 是服务器运行配置的唯一来源。更新器只把运行时包里 `deploy/production.env` 有、而服务器上没有的键补进去；服务器上已有的非空值不覆盖，文件里多出来的键保留，空的密钥不写入。`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL` 缺失时更新器在合并环境文件的阶段就中止，不会切换版本。要改一个已经存在的值，直接改服务器上的 `/etc/calmobile.env` 并重启服务。GitHub Variables 不再写进服务器；数据库、邮件等按机器变化的值只维护在服务器上。
+
+新增一个键时：非密钥的固定项写进 `deploy/production.env`，下一次更新自动补进还没有它的服务器；密钥或必须按机器填的值直接写进服务器 `/etc/calmobile.env`。缺了它会让生产自检拒绝启动的必填密钥，还要加进 `scripts/sync-production-env.mjs` 的 `REQUIRED_SERVER_SECRETS`，更新器会在切换版本前拦住。
+
+应用页面打进 APK 一份。正式包打开接口所在源的 `/app/index.html`，WebView 把这个路径拦截到本机快照，页面切换不访问网络。快照没有，或不是当前 `versionCode`，就用包内那份。首屏出来之后才后台拉取 `/app/release.json`；有新版本才下到待用目录，下次冷启动再换上，使用中不重载。调试包（接口是 http）不热更新。改 `APP_API_BASE` 仍要重新构建 APK：文档源写在外壳里。运行时包里的页面用同一个 `APP_API_BASE` 构建。
+
+### 反向代理、证书与通行密钥
 
 正式签名只生成一次，密钥文件自己保管。丢了就不能给已经安装的 `com.blathroat.calmobile` 发更新。
 
@@ -106,7 +163,7 @@ keytool -genkeypair -v -keystore calmobile-release.jks -alias upload -keyalg RSA
 
 把 `calmobile-release.jks` 做一次 base64，放进 GitHub Secret `ANDROID_KEYSTORE_BASE64`。口令和别名放进下面的 Secrets。不要把密钥文件或口令提交进仓库。
 
-GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`）、`PUBLIC_BASE_URL`（`https://域名`）、`PRIVACY_POLICY_URL`、`LANG_PACK_DEFAULT`（默认语言包名称）、`LANG_PACK_URLS`（`名称=链接`，逗号或空白分开）。**通行密钥在 App 内工作还需要两件部署侧的事**：① 把 App 的签名证书哈希加进 `WEBAUTHN_ORIGINS`（形如 `android:apk-key-hash:<base64url>`，用 `keytool -list -v -keystore <keystore> -alias <alias>` 取 SHA-256 后按 base64url 编码，去掉填充）。整串原样粘进去，服务端按 43 位 base64url 的形状校验，写错的条目会被丢掉；② 在 `https://<域名>/.well-known/assetlinks.json` 声明应用与域名的关联（`package_name` 用 `ANDROID_APPLICATION_ID`，`sha256_cert_fingerprints` 用同一份证书摘要），系统凭据提供方据此确认「这个应用可以代表这个域名使用通行密钥」。两个来源都要列（写着 WEBAUTHN_ORIGINS 就等于替换掉默认那组，所以 `https://<域名>` 那一条也别漏）。浏览器里使用通行密钥不需要这两步。
+**通行密钥在 App 内工作还需要两件部署侧的事**：① 把 App 的签名证书哈希加进 `WEBAUTHN_ORIGINS`（形如 `android:apk-key-hash:<base64url>`，用 `keytool -list -v -keystore <keystore> -alias <alias>` 取 SHA-256 后按 base64url 编码，去掉填充）。整串原样粘进去，服务端按 43 位 base64url 的形状校验，写错的条目会被丢掉；② 在 `https://<域名>/.well-known/assetlinks.json` 声明应用与域名的关联（`package_name` 用 `ANDROID_APPLICATION_ID`，`sha256_cert_fingerprints` 用同一份证书摘要），系统凭据提供方据此确认「这个应用可以代表这个域名使用通行密钥」。两个来源都要列（写着 WEBAUTHN_ORIGINS 就等于替换掉默认那组，所以 `https://<域名>` 那一条也别漏）。浏览器里使用通行密钥不需要这两步。
 
 **assetlinks.json 怎么放**：反代在这个仓库外面，服务器上按静态文件提供 —— 文件放 `/var/www/calmobile/.well-known/assetlinks.json`，nginx 的 443 段加一条精确匹配：
 
@@ -117,13 +174,17 @@ location = /.well-known/assetlinks.json {
 }
 ```
 
-`content-type` 必须是 `application/json`，系统凭据提供方只认根路径这一个地址；改完记得 `nginx -t` 再 reload。这份文件不在部署产物里，换证书或换包名要手动覆盖。
+`content-type` 必须是 `application/json`，系统凭据提供方只认根路径这一个地址；改完记得 `nginx -t` 再 reload。这份文件不随 npm 包发布，换证书或换包名要手动覆盖。
 
-通行密钥与更新检查还会读三个可选变量：`WEBAUTHN_RP_ID`（默认取 `PUBLIC_BASE_URL` 的主机名，**必须与用户实际打开页面的域名一致**，否则浏览器拒绝调用）、`WEBAUTHN_RP_NAME`、`WEBAUTHN_ORIGINS`（逗号分隔的完整来源，默认含 `PUBLIC_BASE_URL` 与本地 `http://localhost:<PORT>`；**App 内使用通行密钥时还必须加上 `android:apk-key-hash:<签名证书 SHA-256 的 base64url>`**，否则系统凭据提供方发回的断言会因来源不符被拒）；下载源选 GitHub 仓库时可以配 `GITHUB_TOKEN` 提高 GitHub API 额度（不配也能用，只是每小时次数少）。语言包不随页面发布：它放在用户机器的本机存储里，由 `LANG_PACK_URLS` 指向的任意 https 地址下载（或用户在设置里选 JSON 文件安装）。报名站只有在默认名称非空、且这个名称写在 `LANG_PACK_URLS` 里时才用该语言，否则用中文。部署只把这两个键补进还没有它们的环境文件，不会改服务器上已有的值；改已有值要直接改 `/etc/calmobile.env` 并重启。要部署服务器时再加 `DEPLOY_ENABLED`（`true` 才部署）、`DEPLOY_USER`、`DEPLOY_PATH`，以及实际用到的 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_SSL`、`MAIL_SMTP_HOST`、`MAIL_SMTP_PORT`、`MAIL_SMTP_SECURE`、`MAIL_SMTP_TLS_REJECT_UNAUTHORIZED`、`MAIL_SMTP_USER`、`MAIL_FROM_ADDRESS`、`MAIL_REPLY_TO`、`FORCE_HTTPS`、`HSTS_MAX_AGE`、`UPLOAD_DIR`、`MEDIA_BASE_URL`、`UPLOAD_MAX_MB`、`JWT_EXPIRES_IN`、`REFRESH_TOKEN_TTL`。这些值会出现在 Actions 日志里，不要把服务器地址或口令写进来。
+通行密钥与更新检查还会读三个可选变量：`WEBAUTHN_RP_ID`（默认取 `PUBLIC_BASE_URL` 的主机名，**必须与用户实际打开页面的域名一致**，否则浏览器拒绝调用）、`WEBAUTHN_RP_NAME`、`WEBAUTHN_ORIGINS`（逗号分隔的完整来源，默认含 `PUBLIC_BASE_URL` 与本地 `http://localhost:<PORT>`；**App 内使用通行密钥时还必须加上 `android:apk-key-hash:<签名证书 SHA-256 的 base64url>`**，否则系统凭据提供方发回的断言会因来源不符被拒）；下载源选 GitHub 仓库时可以配 `GITHUB_TOKEN` 提高 GitHub API 额度（不配也能用，只是每小时次数少）。语言包不随页面发布：它放在用户机器的本机存储里，由 `LANG_PACK_URLS` 指向的任意 https 地址下载（或用户在设置里选 JSON 文件安装）。报名站只有在默认名称非空、且这个名称写在 `LANG_PACK_URLS` 里时才用该语言，否则用中文。这些值直接写在服务器 `/etc/calmobile.env`，更新器只补缺失键，不改已有值；改已有值要直接改文件并重启。
 
-GitHub Secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。要部署服务器时再加 `DEPLOY_HOST`、`DEPLOY_SSH_KEY`、`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL`。
+### GitHub Variables 与 Secrets
 
-新增一个要下发的键时，非密钥的固定项写进 `deploy/production.env`；密钥或按机器变化的值写进 `scripts/sync-production-env.mjs` 的 `SERVER_VALUE_KEYS`，并在 `release.yml` 的部署步骤里传入。下一次部署只会把它补进还没有这个键的服务器。
+GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`）、`PUBLIC_BASE_URL`（`https://域名`）、`PRIVACY_POLICY_URL`、`LANG_PACK_DEFAULT`（默认语言包名称）、`LANG_PACK_URLS`（`名称=链接`，逗号或空白分开）。这些值会出现在 Actions 日志里，服务器地址、口令和私钥不要写进来。
+
+GitHub Secrets：`NPM_TOKEN`（能发布 `calmobile-server` 的 npm automation token，允许绕过 2FA）、`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。
+
+### 发布前检查
 
 发布前下面每一项都成立：
 
@@ -132,9 +193,9 @@ GitHub Secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDR
 3. 确认 https 全站可用之后，再开 `FORCE_HTTPS` 和长 `HSTS_MAX_AGE`。
 4. `CORS_ORIGIN` 写成真实来源。
 5. 状态页保持关闭，或在反代上加 Basic Auth 并只允许内网访问。公网探活只用 `/ping`。
-6. `JWT_SECRET` 与 `TOTP_SECRET_KEY` 各自至少 32 个随机字符。数据库口令不是示例值。`MAIL_FROM_ADDRESS` 已显式配置。生产发信走托管中继，SPF 只 include 中继方，不把源站地址写进 DNS。中继的登录口令放在 Secret `MAIL_SMTP_PASSWORD`。本地开发用 Mailpit。
-7. Node 版本满足 `engines`。在 `server/` 执行 `pnpm install --frozen-lockfile` 与 `pnpm build`，再执行 `pnpm db:migrate:prod`，迁移完成后再切流量。
+6. `JWT_SECRET` 与 `TOTP_SECRET_KEY` 各自至少 32 个随机字符。数据库口令不是示例值。`MAIL_FROM_ADDRESS` 已显式配置。生产发信走托管中继，SPF 只 include 中继方，不把源站地址写进 DNS。中继的登录口令放在服务器 `/etc/calmobile.env`。本地开发用 Mailpit。
+7. 服务器上的 Node 满足 `engines`，`pnpm`、`tar` 在 `PATH` 里，运行更新的账号能免密 `sudo`。首次切换到 npm 更新时按上面的步骤完成一次 `--update`，确认迁移和重启成功。
 8. 数据库时区是 `Asia/Shanghai`。原因写在仓库根 `docker-compose.yml`。备份和恢复演练已经做过。
 9. `client_max_body_size` 盖住视频单文件上限。视频默认 50MB 时至少写 `64m`。头像那一道传输硬顶盖不住视频。上传目录和开关见 `server/.env.example`。存满之后的产品行为见 [`product.md`](product.md)。
 10. 注册页有收集说明。`PRIVACY_POLICY_URL` 是 https 政策地址。当前邮件只有验证码，没有营销信。
-11. 外壳有改动时，正式包用 `./gradlew :app:assembleRelease`，或由上面的 Release 工作流在 `master` 的合并提交通过 CI 后构建。`APP_API_BASE` 是与 `PUBLIC_BASE_URL` 同一个源的 `https://域名/api/v1`。包名是 `com.blathroat.calmobile`。签名四项指向正式密钥。`ENABLE_WEB=true`，`web/dist-join` 已构建，并且 `web/dist` 已放到站点的 `/app/`。
+11. 外壳有改动时，正式包用 `./gradlew :app:assembleRelease`，或由上面的 Release 工作流在 `master` 的合并提交通过 CI 后构建。`APP_API_BASE` 是与 `PUBLIC_BASE_URL` 同一个源的 `https://域名/api/v1`。包名是 `com.blathroat.calmobile`。签名四项指向正式密钥。`ENABLE_WEB=true`，运行时包里的 `web/dist-join` 已由更新器放到当前版本目录。

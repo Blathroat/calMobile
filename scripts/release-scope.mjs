@@ -1,11 +1,11 @@
 /**
- * 判断一次推送要不要发 APK、重启服务、同步应用页面或报名站。
+ * 判断一次推送要不要发 APK、发布运行时包。
  *
  * CI 把 `git diff --name-only` 的结果交过来。这里只看路径，不读文件内容。
- * 静态页面宁可多同步一次，也不要为此发 APK 或重启服务。
  *
- * 手动强制发布不看路径。发 APK 时总会同步应用页面，避免新包装上之后热更新回旧页面。
- * 重启服务时总会同步报名站，和部署脚本的行为一致。
+ * 四类改动（apk / server / app / join）派生 `publish`。运行时包总是整包发布，
+ * 四类命中任一类就发一次；发 APK 时也重发，因为 APK 里的页面与 `/app/` 页面
+ * 必须带同一个版本号。四类都不命中时整次跳过。
  */
 
 import { readFileSync } from 'node:fs';
@@ -109,12 +109,12 @@ function isApk(file) {
   return file.startsWith('app/src/main/') || file === 'app/build.gradle' || file.startsWith('gradle/');
 }
 
-/** @param {string} file */
+/** 服务端运行时代码、依赖锁、部署与打包脚本：发布运行时包。 */
 function isServer(file) {
   if (
     file.startsWith('deploy/') ||
-    file === 'scripts/remote-release.sh' ||
-    file === 'scripts/sync-production-env.mjs'
+    file === 'scripts/sync-production-env.mjs' ||
+    file === 'scripts/runtime-bundle.mjs'
   ) {
     return true;
   }
@@ -195,12 +195,25 @@ export function forceReleaseScope(flags) {
   }
   // 新包装的是当前页面。服务器上的 /app/ 还是旧的时，热更新会在下次冷启动换回去。
   if (scope.apk) scope.app = true;
-  // 部署脚本在重启服务时总会同步报名站。
+  // 运行时包一次带齐服务端、应用页面和报名站。
   if (scope.server) scope.join = true;
   if (!scope.apk && !scope.server && !scope.app && !scope.join) {
     throw new Error('强制发布至少要选一项');
   }
   return scope;
+}
+
+/**
+ * 运行时包要发布吗？
+ *
+ * APK 里打进去的页面和服务器上的 `/app/` 页面都带同一份 `0.1.<运行编号>` 版本号，
+ * 所以发 APK 时也重发运行时包，否则热更新会把页面版本换回旧的。
+ *
+ * @param {{ apk: boolean, server: boolean, app: boolean, join: boolean }} scope
+ * @returns {boolean}
+ */
+export function runtimePublish(scope) {
+  return Boolean(scope.apk || scope.server || scope.app || scope.join);
 }
 
 /**
@@ -223,7 +236,9 @@ export function masterCiGate(runs) {
 
 /** @param {{ apk: boolean, server: boolean, app: boolean, join: boolean }} scope */
 function writeScope(scope) {
-  process.stdout.write(`apk=${scope.apk}\nserver=${scope.server}\napp=${scope.app}\njoin=${scope.join}\n`);
+  process.stdout.write(
+    `apk=${scope.apk}\nserver=${scope.server}\napp=${scope.app}\njoin=${scope.join}\npublish=${runtimePublish(scope)}\n`,
+  );
 }
 
 /**
