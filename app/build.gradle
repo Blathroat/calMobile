@@ -19,10 +19,15 @@ android {
         targetSdk = 36.1
         versionCode = clientTarget.versionCode as int
         versionName = clientTarget.versionName
-        manifestPlaceholders = [allowCleartext: clientTarget.allowCleartext ? 'true' : 'false']
+        manifestPlaceholders = [
+            allowCleartext: clientTarget.allowCleartext ? 'true' : 'false',
+            appLabel: clientTarget.appLabel,
+        ]
         buildConfigField 'boolean', 'ALLOW_CLEARTEXT', clientTarget.allowCleartext ? 'true' : 'false'
         buildConfigField 'String', 'APP_ORIGIN', '"' + clientTarget.mediaOrigin + '"'
         buildConfigField 'String', 'APP_PAGE_URL', '"' + clientTarget.mediaOrigin + '/app/index.html"'
+        // 导出文件名和相册目录用的品牌短名（默认 calmobile）。
+        buildConfigField 'String', 'BRAND_SLUG', '"' + clientTarget.brandSlug + '"'
     }
 
     buildFeatures {

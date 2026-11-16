@@ -147,12 +147,32 @@ export function acceptsRegistration(statusCode: string): boolean {
 }
 
 /**
- * 报名码前缀：`CALMOBILE-CHECKIN|<展会 id>|<报名 id>|<凭据>`。
+ * 报名码前缀：`<前缀>|<展会 id>|<报名 id>|<凭据>`。
+ *
+ * 前缀按实例配置（`CHECKIN_CODE_PREFIX`），默认沿用历史值 `CALMOBILE-CHECKIN`；
+ * 解析时同时接受旧前缀，已经发出去的码不会因为站点换前缀而失效。
  *
  * 前两段只用来定位报名，第三段是**可轮换的凭据**：报名被退回重审后换一个，
  * 现场那张旧二维码随之失效（见 `routes/review-hono.ts` 的状态流转）。
  */
-export const CODE_PREFIX = 'CALMOBILE-CHECKIN|';
+const LEGACY_CODE_PREFIX = 'CALMOBILE-CHECKIN';
+let activeCodePrefix = LEGACY_CODE_PREFIX;
+
+/**
+ * 启动时把实例配置的前缀写进来；没调用或传了非法值时继续用默认前缀。
+ * @param value 形如 `CHECKIN`（不含结尾竖线）
+ */
+export function configureCheckinCodePrefix(value: unknown): void {
+  const text = String(value ?? '')
+    .trim()
+    .replace(/\|+$/, '');
+  activeCodePrefix = /^[A-Za-z0-9_-]{2,31}$/.test(text) ? text : LEGACY_CODE_PREFIX;
+}
+
+/** 当前实例使用的报名码前缀（不含结尾竖线）。 */
+export function checkinCodePrefix(): string {
+  return activeCodePrefix;
+}
 
 /**
  * 生成一个新的报名码凭据。
@@ -165,8 +185,13 @@ export function newCheckInSecret(): string {
 }
 
 /** 生成报名码；只有启用二维码、已通过（或已参加）且凭据非空的报名才应该下发。 */
-export function checkInCode(exhibitionId: string, registrationId: string, secret: string): string {
-  return `${CODE_PREFIX}${exhibitionId}|${registrationId}|${secret}`;
+export function checkInCode(
+  exhibitionId: string,
+  registrationId: string,
+  secret: string,
+  prefix: string = activeCodePrefix,
+): string {
+  return `${prefix}|${exhibitionId}|${registrationId}|${secret}`;
 }
 
 /**
@@ -174,15 +199,19 @@ export function checkInCode(exhibitionId: string, registrationId: string, secret
  *
  * 旧的两段码（没有凭据那一段）解析成空 secret，而不是直接判为无法识别：
  * 它到核销那一步会得到「报名码已失效」的明确提示，用户才知道去重新打开二维码。
+ * 前缀同时接受当前配置值与历史值，换过前缀的实例仍能核销旧码。
  */
 export function parseCheckInCode(
   raw: unknown,
+  prefix: string = activeCodePrefix,
 ): { exhibitionId: string; registrationId: string; secret: string } | null {
   const text = String(raw || '').trim();
-  if (!text.startsWith(CODE_PREFIX)) {
+  const prefixes = prefix === LEGACY_CODE_PREFIX ? [LEGACY_CODE_PREFIX] : [prefix, LEGACY_CODE_PREFIX];
+  const matched = prefixes.find((item) => text.startsWith(`${item}|`));
+  if (!matched) {
     return null;
   }
-  const [exhibitionId = '', registrationId = '', secret = ''] = text.slice(CODE_PREFIX.length).split('|');
+  const [exhibitionId = '', registrationId = '', secret = ''] = text.slice(matched.length + 1).split('|');
   if (!exhibitionId.trim() || !registrationId.trim()) {
     return null;
   }

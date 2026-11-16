@@ -41,12 +41,19 @@ export function resetBootForTests(): void {
 }
 
 /**
- * 页面标题（浏览器页签、分享预览）。HTML 里只留品牌，语言相关的名字在这里落一次：
- * 应用与报名站各有各的名字，靠 `isJoinSurface` 区分。切语言会整页重载，所以不用监听。
+ * 页面标题（浏览器页签、分享预览）。HTML 里只留通用名，品牌名由启动数据补齐：
+ * 应用页用「品牌 · 展会排期助手」，报名站用「报名」；品牌读不到时只留通用名。
+ * 切语言会整页重载，所以不用监听。
  */
 function applyDocumentTitle(): void {
   if (typeof document === 'undefined') return;
-  document.title = t(isJoinSurface ? 'join.documentTitle' : 'app.documentTitle');
+  if (isJoinSurface) {
+    document.title = t('join.documentTitle');
+    return;
+  }
+  const brand = String(useBootstrapStore().brand.zh || '').trim();
+  const title = t('app.documentTitle');
+  document.title = brand ? `${brand} · ${title}` : title;
 }
 
 /** 每次身份切换后重读整份启动数据，偏好与权限落定后才允许进入下一屏。 */
@@ -66,6 +73,8 @@ export async function refreshRuntimeBootstrap(): Promise<void> {
 export function applyRuntimeBootstrap(data: Bootstrap): void {
   useSessionStore().applyUser(data.user);
   useBootstrapStore().apply(data);
+  // 品牌到了之后补一次标题：首帧只有通用名，拿不到品牌就保持通用名。
+  applyDocumentTitle();
   useCapabilitiesStore().apply(asObject(data.capabilities));
   // 色板与全局默认下标留在 bootstrap store；这里只落明暗模式那一段。
   useSettingsStore().apply({ ui: data.ui });

@@ -35,6 +35,29 @@ export interface WebAuthnConfig {
   origins: string[];
 }
 
+/** 报名码前缀配置：不同站点可以带自己的前缀，扫码解析与页面展示都跟着它走。 */
+export interface CheckinCodeConfig {
+  /** 前缀（不含结尾竖线）；旧码里的老前缀仍可解析。 */
+  codePrefix: string;
+}
+
+/**
+ * 默认前缀：公开主实例沿用旧值，其它实例用 `CHECKIN_CODE_PREFIX` 覆盖。
+ * 改前缀只影响新生成的码；解析时仍认旧前缀，已发出去的码不会失效。
+ */
+export const DEFAULT_CHECKIN_CODE_PREFIX = 'CALMOBILE-CHECKIN';
+
+/** 前缀只接受字母、数字、下划线、横线：它会进二维码文本，不能带分隔符或空白。 */
+const CHECKIN_CODE_PREFIX_PATTERN = /^[A-Za-z0-9_-]{2,31}$/;
+
+/** @param env 形如 `process.env`；写错或没配时退回默认前缀，不让服务起不来。 */
+export function resolveCheckinCodePrefix(env: EnvLike = {}): string {
+  const value = String(env.CHECKIN_CODE_PREFIX ?? '')
+    .trim()
+    .replace(/\|+$/, '');
+  return CHECKIN_CODE_PREFIX_PATTERN.test(value) ? value : DEFAULT_CHECKIN_CODE_PREFIX;
+}
+
 export interface ProcessConfig {
   env: EnvLike;
   runtime: Runtime;
@@ -46,6 +69,8 @@ export interface ProcessConfig {
   logLevel: string;
   corsOrigin: string;
   webauthn: WebAuthnConfig;
+  /** 报名码前缀：不同站点可以有自己的前缀，扫码与展示都跟着它走。 */
+  checkin: CheckinCodeConfig;
 }
 
 /**
@@ -78,6 +103,7 @@ export function parseEnv(env: EnvLike = {}, argv: string[] = []): ProcessConfig 
     logLevel: settings.logLevel,
     corsOrigin: settings.corsOrigin,
     webauthn: resolveWebAuthnConfig(env, { publicBaseUrl: runtime.publicBaseUrl, port: settings.port }),
+    checkin: { codePrefix: resolveCheckinCodePrefix(env) },
   };
 }
 

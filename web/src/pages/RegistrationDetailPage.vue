@@ -124,7 +124,7 @@ function askCancel(): void {
 const HOLD_MS = 550;
 const HOLD_MOVE_TOLERANCE = 10;
 /** 保存中的 PNG 文件名；原生只拿它当展示名，落盘名由原生补全。 */
-const QR_FILE_NAME = 'calmobile-qr.png';
+const QR_FILE_NAME = 'check-in-qr.png';
 
 const qrRef = ref<InstanceType<typeof QrCanvas> | null>(null);
 let holdTimer = 0;
