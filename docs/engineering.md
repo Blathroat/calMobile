@@ -65,6 +65,8 @@
 - `/e/:id/status`：报名状态页，公开，凭据在 `?token=`。按公开接口取数，并展示查询链接、复制按钮与「必须保存」提示；未登录页脚是「登录 / 注册」（带 `redirect` 回本页），已登录打开时先 `claim` 再 `replace` 到 `/mine/:id`。
 - `/u/:nickname`：用户公开页，`requiresAuth`。`/`、`/mine`、`/mine/:id`、`/m/:id` 保持原来的登录要求。
 
+守卫只在**已登录**时判 `roles` 与 `capability`：访客的用户态由后端下发 `can.register = false`，照着判会把免登录报名表单挡回登录页。访客能否报名由详情页按展会状态决定，服务端再兜一层。
+
 匿名报名与认领（服务端约定见 [`server/README.md`](../server/README.md)）：
 
 - 只有「报名站 + 未登录」才匿名：提交时不带 `Authorization`，服务端记 `visitor_id = NULL`、`visitor_type = 'guest'`、姓名必填。匿名提交响应里的 `queryToken`（32 字节 base64url）只出现这一次，库里只存 sha256（`registrations.query_token_hash`，唯一部分索引）；`GET /registrations/query/:token` 按哈希匹配，返回与本人报名详情同形（含报名码）。
@@ -101,6 +103,7 @@
 - **日期与时间用应用内抽屉**：范围日期（开展/闭展、报名开始/截止）走 `components/DatePickerSheet.vue` 的 `range` 模式，单日期（会议日期）走 `single` 模式；时间走 `components/TimeWheelSheet.vue` 的时 / 分滚轮。入口统一是 `services/pickers.ts` 的 `openDateRange` / `openSingleDate` / `openTime`，页面不要自己拼面板、也不要用系统原生控件。范围选择第一次点选就把起点回填给表单、第二次点选终点后自动收起（因此报名窗口可以只填开始）；已有一段完整区间时点任意一天从该天重新开始；终点早于起点禁用；「清除」清空两端。时间滚轮在值为空时按开始 `09:00` / 结束 `17:00` 摆位，只有点「确认」才写回，「清除」把时间留空（时间选填）。月历按月份分节、周日起排、今天带圆点，渲染从已选月份往前 12 个月到往后 24 个月。
 - **状态标签是「信号灯」**：`StatusTag` 只有色点 + 文字，没有边框与底色（ok 绿 / pending 琥珀 / danger 砖红 / info 灰蓝 / muted 灰），用在报名状态、展会报名方式与账号状态上。**身份标签不是状态**：展商 / 管理员走 `RoleTag`，保留原来的方框小签（浅底 + `--accent-edge` 描边 + 强调色文字），不要换成信号灯。
 - 需要从固定清单里选值的字段用**应用内抽屉**：`openSheet({ layout: 'list', actions: [{ label, checked }] })`，当前值带对勾；不要用系统 `<select>`。
+- 分段控件（`components/SegControl.vue`）在空间不够时**自动换行**，不做横向滚动：`.seg` 是 `flex-wrap: wrap`，所有分类一眼看全；选中滑块按按钮的 `offsetLeft / offsetTop / 尺寸` 定位，换行后仍贴在正确那一行，容器尺寸变化由 `ResizeObserver` 重新量。
 - 上传卡（封面、缺省封面）统一版式：左侧 96×170（9:16）预览，右侧竖排「上传/更换 / 移除」按钮与格式说明，窄屏上下堆叠。
 - 图标是 24 视窗、1.5 描边、无填充的细线。顶栏图标没有圆底。底部导航是图标加文字。
 - 触控命中区域至少 44px。生产界面以 1080×2400、xxhdpi（逻辑画布 360×800）为密度基准，字号、间距和圆角取 `web/src/styles/tokens.css` 的当前值。状态同时用文字和颜色或描边表达。空、加载、错误、成功和禁用状态在原位置给出下一步。
