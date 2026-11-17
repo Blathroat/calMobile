@@ -257,13 +257,14 @@ app.post('/', authenticateHono, async (c) => {
     const id = newId('exh');
     await withExhibitionQuota(user, { exhibitorId: user.userId, date: input.date }, async (client) => {
       await client.query(
-        `INSERT INTO exhibitions (id, title, venue, time, exhibition_date, status, category, description, description_format, image_uri, exhibitor_note, registration_start, registration_end, qr_enabled, allow_cancel, exhibitor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        `INSERT INTO exhibitions (id, title, venue, time, exhibition_date, exhibition_end_date, status, category, description, description_format, image_uri, exhibitor_note, registration_start, registration_end, qr_enabled, allow_cancel, exhibitor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
         [
           id,
           input.title,
           input.venue,
           input.time,
           input.date,
+          input.endDate || null,
           input.status,
           input.category,
           input.description,
@@ -295,13 +296,14 @@ app.put('/:id', authenticateHono, async (c) => {
       { id: existing.id, exhibitorId: existing.exhibitor_id, date: input.date },
       async (client) => {
         await client.query(
-          `UPDATE exhibitions SET title=$2, venue=$3, time=$4, exhibition_date=$5, status=$6, category=$7, description=$8, description_format=$9, image_uri=$10, exhibitor_note=$11, registration_start=$12, registration_end=$13, qr_enabled=$14, allow_cancel=$15, updated_at=now() WHERE id=$1`,
+          `UPDATE exhibitions SET title=$2, venue=$3, time=$4, exhibition_date=$5, exhibition_end_date=$6, status=$7, category=$8, description=$9, description_format=$10, image_uri=$11, exhibitor_note=$12, registration_start=$13, registration_end=$14, qr_enabled=$15, allow_cancel=$16, updated_at=now() WHERE id=$1`,
           [
             existing.id,
             input.title,
             input.venue,
             input.time,
             input.date,
+            input.endDate || null,
             input.status,
             input.category,
             input.description,

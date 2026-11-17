@@ -592,7 +592,7 @@ async function checkUpdate(auto = false): Promise<void> {
       <!-- 通知与隐私：通知偏好、系统通知权限与报名公开展示 -->
       <section class="settings-section">
         <span class="section-label">{{ t('settings.section.notifyPrivacy') }}</span>
-        <div class="card">
+        <div class="card user-settings-card">
           <SkeletonBlock v-if="notifyLoading" :rows="2" />
           <StateBlock
             v-else-if="notifyError"
@@ -638,7 +638,6 @@ async function checkUpdate(auto = false): Promise<void> {
           <button v-if="!notificationsGranted" class="cta ghost" type="button" @click="requestNotification">
             {{ t('settings.notify.requestPermission') }}
           </button>
-          <hr class="divider" />
           <div class="switch-row" data-flush="true">
             <span class="switch-copy">
               <strong>{{ t('settings.showRegistrations') }}</strong>
@@ -662,7 +661,7 @@ async function checkUpdate(auto = false): Promise<void> {
       <!-- 外观：配色与明暗都点一下就生效，没有保存按钮 -->
       <section class="settings-section">
         <span class="section-label">{{ t('settings.section.appearance') }}</span>
-        <div class="card">
+        <div class="card user-settings-card">
           <span class="row-title">{{ t('settings.theme.accent') }}</span>
           <div class="swatch-grid">
             <button
@@ -681,7 +680,6 @@ async function checkUpdate(auto = false): Promise<void> {
             </button>
           </div>
           <p class="field-hint">{{ COPY.accentHint }}</p>
-          <hr class="divider" />
           <span class="row-title">{{ t('settings.theme.darkMode') }}</span>
           <SegControl
             :model-value="mode"
@@ -735,7 +733,7 @@ async function checkUpdate(auto = false): Promise<void> {
       <!-- 应用更新：固定在页面最底部；检查读取服务器解析出的版本与地址 -->
       <section class="settings-section">
         <span class="section-label">{{ t('settings.update.title') }}</span>
-        <div class="card">
+        <div class="card user-settings-card">
           <button
             class="cta"
             type="button"
@@ -745,7 +743,6 @@ async function checkUpdate(auto = false): Promise<void> {
           >
             {{ updateBusy ? t('settings.update.checking') : t('settings.update.check') }}
           </button>
-          <hr class="divider" />
           <div class="switch-row" data-flush="true">
             <span class="switch-copy">
               <strong>{{ t('settings.update.auto') }}</strong>
@@ -792,6 +789,12 @@ async function checkUpdate(auto = false): Promise<void> {
 
 .settings-section > .section-label {
   justify-self: start;
+}
+
+/* 同一张卡里的分区（通知 / 隐私、配色 / 明暗、检查更新 / 自动更新）只用留白分开，
+   不再画分隔横线：卡片行距比默认多一档，读起来仍然是独立的设置项。 */
+.user-settings-card {
+  gap: var(--s4);
 }
 
 /* 配色色板：12 色排成两行小圆点。每个按钮保留 44px 命中区，圆点只是视觉尺寸；

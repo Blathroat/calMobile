@@ -139,14 +139,12 @@ function askCancel(): void {
       <p class="meeting-hint">{{ statusHint() }}</p>
     </header>
 
-    <!-- 明细收成一张卡三段：会议时间 / 对方名片 / 填写内容，段间一条发丝线 -->
+    <!-- 明细收成一张卡三段：会议时间 / 对方名片 / 填写内容，段间只留白 -->
     <div class="card meeting-card">
       <section class="meeting-block">
         <span class="section-label">{{ t('meeting.apply.time') }}</span>
         <p class="meeting-when">{{ formatMeetingWhen(meeting.meetingDate, meeting.meetingTime) }}</p>
       </section>
-
-      <hr class="divider" />
 
       <section class="meeting-block meeting-person">
         <AvatarBox :name="String(meeting.exhibitorName || '')" />
@@ -157,8 +155,6 @@ function askCancel(): void {
           </span>
         </span>
       </section>
-
-      <hr class="divider" />
 
       <section class="meeting-block">
         <span class="section-label">{{ COPY.answers }}</span>
@@ -201,7 +197,11 @@ function askCancel(): void {
   font-size: var(--fs-meta);
 }
 
-/* 单卡三段：每段自己排，段与段之间由 hr.divider 断开。 */
+/* 单卡三段：每段自己排，段与段之间用留白分开，不画分隔线。 */
+.meeting-card {
+  gap: var(--s5);
+}
+
 .meeting-block {
   display: grid;
   gap: var(--s2);

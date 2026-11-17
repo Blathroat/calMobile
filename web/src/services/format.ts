@@ -28,6 +28,24 @@ export function formatDateWithWeekday(iso: unknown): string {
   return `${date.month}月${date.day}日（${weekday}）`;
 }
 
+/**
+ * 展会日期区间：有闭展日期且与开展不同才显示成区间，否则就是单日。
+ *
+ * 例：`11月17日（周二） - 11月22日（周日）`。闭展为空、非法或与开展同一天时只显示开展，
+ * 与后端「闭展为空 = 单日展会」的口径一致。
+ */
+export function formatDateRange(start: unknown, end?: unknown): string {
+  const first = formatDateWithWeekday(start);
+  if (!first) return '';
+  const last = formatDateWithWeekday(end);
+  return last && last !== first ? `${first} - ${last}` : first;
+}
+
+/** 日历分节的月份标题：2026年11月（与 `monthLabel` 的「2026 年 11 月」不同，这里给选择器用）。 */
+export function formatMonthHeading(year: number, month: number): string {
+  return `${year}年${month}月`;
+}
+
 /** 2026-10-22 → 2026年10月22日。非法日期返回空串。 */
 export function formatChineseDate(iso: unknown): string {
   const date = parseDate(iso);

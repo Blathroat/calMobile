@@ -10,6 +10,8 @@ export interface ExhibitionDraft {
   title: string;
   venue: string;
   date: string;
+  /** 闭展日期；空串（或缺省）表示单日展会。 */
+  endDate?: string;
   time: string;
   status: string;
   category: string;

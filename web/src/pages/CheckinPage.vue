@@ -842,8 +842,6 @@ async function submitManual(close: () => void): Promise<void> {
         </header>
         <p class="row-meta">{{ row.item.message }}</p>
 
-        <hr class="divider" />
-
         <!-- 逐行明细：展会、报名人、核销 / 报名时间与收集项 -->
         <div class="checkin-detail">
           <div class="row" data-between="true">
@@ -930,7 +928,7 @@ async function submitManual(close: () => void): Promise<void> {
   overflow-wrap: anywhere;
 }
 
-/* 核销结论卡：信号灯与大号结论同一行，明细在发丝线之后。 */
+/* 核销结论卡：信号灯与大号结论同一行，明细用留白隔开，不画分隔线。 */
 .checkin-outcome {
   gap: var(--s3);
 }

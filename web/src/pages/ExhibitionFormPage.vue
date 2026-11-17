@@ -2,7 +2,9 @@
 /**
  * 屏幕 11 · 展会编辑（新建 / 编辑）
  *
- * 展商后台卡片上的「报名方式」「编辑简介」收进本页的「报名与简介设置」栏。
+ * 展商后台卡片上的「报名方式」「编辑简介」收进本页：「报名方式」在「报名设置」卡里，
+ * 「编辑简介」并进展会封面卡（「展会封面与简介」）。日期与时间都走应用内抽屉：
+ * 开展 / 闭展、报名开始 / 截止各是一组日期范围，开展时间是两个时 / 分滚轮。
  * 「删除展会」放在页面内容最下方。新建与编辑共用同一页：
  * 路由带 `:id` 就是编辑（先取详情），不带就是新建（空表单），保存成功后换成编辑地址。
  *
@@ -17,6 +19,8 @@ import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { confirmSheet, openSheet } from '@/services/sheet';
+import { openDateRange, openTime } from '@/services/pickers';
+import { formatDateWithWeekday } from '@/services/format';
 import { PATTERNS, allowedFormats, check, limit, validateAll } from '@/services/validate';
 import { EXHIBITION_STATUS, FIELD_TYPE, REGISTRATION_MODES, exhibitionStatusLabel } from '@/services/status';
 import { device } from '@/services/device-services';
@@ -74,6 +78,8 @@ const form = reactive({
   title: '',
   venue: '',
   date: '',
+  /** 闭展日期；空串表示单日展会（库里存 NULL）。 */
+  endDate: '',
   time: '09:00-17:00',
   status: EXHIBITION_STATUS.REVIEW_REQUIRED as string,
   category: '',
@@ -86,11 +92,11 @@ const form = reactive({
 });
 const fields = ref<CollectField[]>([]);
 
-// ── 开展时间：两个系统时间选择框 ─────────────────────────────────
+// ── 开展时间：两个时间滚轮 ───────────────────────────────────────
 
 /**
- * 数据仍只有 `form.time` 一个字段（`HH:MM-HH:MM`），界面上拆成开始 / 结束两个
- * `type="time"`。两个都填了才拼成区间；只填一个时留空，仍按原有「时间选填」规则校验，
+ * 数据仍只有 `form.time` 一个字段（`HH:MM-HH:MM`），界面上拆成开始 / 结束两个滚轮：
+ * 两个都填了才拼成区间；只填一个时留空，仍按原有「时间选填」规则校验，
  * 提交的接口字段名与校验规则都不变。
  */
 const timeStart = ref('');
@@ -98,7 +104,7 @@ const timeEnd = ref('');
 /** 拆分写回时防止两个 watch 互相触发。 */
 let composingTime = false;
 
-/** 把 `9:00` 补成 `09:00`：历史数据可能没补零，type="time" 只认两位小时。 */
+/** 把 `9:00` 补成 `09:00`：历史数据可能没补零，拼区间前统一成两位小时。 */
 function normalizeTime(value: string): string {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
   const hour = match?.[1] ?? '';
@@ -123,7 +129,7 @@ watch([timeStart, timeEnd], () => {
   composingTime = false;
 });
 
-/** `form.time` 是唯一数据源：取数或回填草稿后，把两个时间框同步过来。 */
+/** `form.time` 是唯一数据源：取数或回填草稿后，把两个时间滚轮同步过来。 */
 watch(
   () => form.time,
   (value) => {
@@ -134,6 +140,70 @@ watch(
   },
   { immediate: true, flush: 'sync' },
 );
+
+// ── 日期 / 时间抽屉 ──────────────────────────────────────────────
+
+/** 开展与闭展共用一组日期范围：点任意一侧都从同一段区间开始选，选完一起回填。 */
+function openExhibitionDateRange(): void {
+  openDateRange({
+    start: form.date,
+    end: form.endDate,
+    startLabel: t('exhibition.form.openDateShort'),
+    endLabel: t('exhibition.form.endDateShort'),
+    onChange: ({ start, end }) => {
+      form.date = start;
+      // 闭展与开展同一天没有额外信息：按「单日展会」存空值。
+      form.endDate = end && end !== start ? end : '';
+    },
+  });
+}
+
+/** 报名开始 / 截止同样是一组日期范围；两项都可留空，清空即表示不设报名窗口。 */
+function openRegistrationDateRange(): void {
+  openDateRange({
+    start: form.registrationStart,
+    end: form.registrationEnd,
+    startLabel: t('exhibition.form.registrationStartShort'),
+    endLabel: t('exhibition.form.registrationEndShort'),
+    onChange: ({ start, end }) => {
+      form.registrationStart = start;
+      form.registrationEnd = end;
+    },
+  });
+}
+
+/** 开展时间的两端各开一个滚轮；留空仍表示不填。 */
+function openStartTime(): void {
+  openTime({
+    value: timeStart.value,
+    fallback: '09:00',
+    onConfirm: (value) => {
+      timeStart.value = value;
+    },
+    onClear: () => {
+      timeStart.value = '';
+    },
+  });
+}
+
+function openEndTime(): void {
+  openTime({
+    value: timeEnd.value,
+    fallback: '17:00',
+    onConfirm: (value) => {
+      timeEnd.value = value;
+    },
+    onClear: () => {
+      timeEnd.value = '';
+    },
+  });
+}
+
+/** 触发按钮上的日期文案：与详情页一致，用「11月17日（周二）」这种简短写法。 */
+const dateText = computed(() => formatDateWithWeekday(form.date));
+const endDateText = computed(() => formatDateWithWeekday(form.endDate));
+const registrationStartText = computed(() => formatDateWithWeekday(form.registrationStart));
+const registrationEndText = computed(() => formatDateWithWeekday(form.registrationEnd));
 
 // ── 分类抽屉 ─────────────────────────────────────────────────────
 
@@ -225,6 +295,16 @@ function fieldChecks(): Array<[string, () => string]> {
         }),
     ],
     [
+      'endDate',
+      () =>
+        check(form.endDate, {
+          label: t('exhibition.form.endDate'),
+          pattern: PATTERNS.date,
+          custom: () =>
+            form.endDate && form.date && form.endDate < form.date ? t('exhibition.form.endBeforeStart') : '',
+        }),
+    ],
+    [
       'time',
       () =>
         check(form.time, {
@@ -306,6 +386,7 @@ function fillFrom(item: JsonObject, data: ExhibitionDetail): void {
   form.title = String(item.title ?? '');
   form.venue = String(item.venue ?? '');
   form.date = String(item.date ?? '');
+  form.endDate = String(item.endDate ?? '');
   form.time = String(item.time ?? '');
   const status = String(item.statusCode ?? '');
   form.status = MODES.some((mode) => mode.value === status) ? status : EXHIBITION_STATUS.REVIEW_REQUIRED;
@@ -329,6 +410,7 @@ function applyDraft(draft: ExhibitionDraft): void {
   form.title = draft.title;
   form.venue = draft.venue;
   form.date = draft.date;
+  form.endDate = draft.endDate ?? '';
   form.time = draft.time;
   form.status = MODES.some((mode) => mode.value === draft.status) ? draft.status : EXHIBITION_STATUS.REVIEW_REQUIRED;
   form.category = draft.category;
@@ -351,6 +433,7 @@ function currentDraft(): ExhibitionDraft {
     title: form.title,
     venue: form.venue,
     date: form.date,
+    endDate: form.endDate,
     time: form.time,
     status: form.status,
     category: form.category,
@@ -493,6 +576,7 @@ function buildPayload(): JsonObject {
     title: form.title.trim(),
     venue: form.venue.trim(),
     date: form.date,
+    endDate: form.endDate,
     day: Number(form.date.slice(8, 10)) || 0,
     time: form.time.trim(),
     status: form.status,
@@ -619,50 +703,114 @@ function normalizeOptions(options: unknown): string[] {
         />
       </div>
 
-      <!-- 开展日期｜开展时间：宽屏两列、窄屏自动落成一行，避免原生日期控件截字。
-           开展时间内部是两个系统时间选择框，中间一横把起止分开，值仍写回 form.time。 -->
+      <!-- 开展 / 闭展是一组日期范围：点任意一侧都打开同一个范围抽屉，选完一起回填。
+           闭展可以留空（单日展会）；「清除」把两个日期一起清掉。 -->
       <div class="form-pair">
         <div class="field" :data-invalid="isInvalid('date') ? 'true' : 'false'">
-          <label for="form-date"
-            >{{ t('exhibition.form.openDate') }}<span class="required" aria-hidden="true"> *</span></label
+          <span id="form-date-label" class="field-label"
+            >{{ t('exhibition.form.openDate') }}<span class="required" aria-hidden="true"> *</span></span
           >
-          <input id="form-date" v-model="form.date" class="input input-line" type="date" />
+          <button
+            id="form-date"
+            class="input input-line picker-trigger"
+            type="button"
+            aria-haspopup="dialog"
+            aria-labelledby="form-date-label"
+            @click="openExhibitionDateRange"
+          >
+            <span class="picker-trigger-value" :data-empty="form.date ? 'false' : 'true'">{{
+              dateText || t('picker.selectDate')
+            }}</span>
+            <AppIcon name="chevronDown" size="icon icon-sm" />
+          </button>
           <p v-if="isInvalid('date')" class="field-error" role="alert">{{ formError }}</p>
         </div>
-        <div class="field" :data-invalid="isInvalid('time') ? 'true' : 'false'">
-          <label for="form-time">{{ t('exhibition.form.openTime') }}</label>
-          <div class="time-range">
-            <input
-              id="form-time"
-              v-model="timeStart"
-              class="input input-line"
-              type="time"
-              step="60"
-              :aria-label="t('exhibition.form.openTime')"
-            />
-            <span class="time-sep" aria-hidden="true">–</span>
-            <input
-              id="form-time-end"
-              v-model="timeEnd"
-              class="input input-line"
-              type="time"
-              step="60"
-              :aria-label="t('exhibition.form.openTime')"
-            />
-          </div>
-          <p v-if="isInvalid('time')" class="field-error" role="alert">{{ formError }}</p>
+        <div class="field" :data-invalid="isInvalid('endDate') ? 'true' : 'false'">
+          <span id="form-end-date-label" class="field-label">{{ t('exhibition.form.endDate') }}</span>
+          <button
+            id="form-end-date"
+            class="input input-line picker-trigger"
+            type="button"
+            aria-haspopup="dialog"
+            aria-labelledby="form-end-date-label"
+            @click="openExhibitionDateRange"
+          >
+            <span class="picker-trigger-value" :data-empty="form.endDate ? 'false' : 'true'">{{
+              endDateText || t('picker.selectDate')
+            }}</span>
+            <AppIcon name="chevronDown" size="icon icon-sm" />
+          </button>
+          <p v-if="isInvalid('endDate')" class="field-error" role="alert">{{ formError }}</p>
         </div>
       </div>
 
-      <div class="grid-cols-2">
+      <!-- 开展时间：两个时间滚轮，中间一横把起止分开，值仍写回 form.time。 -->
+      <div class="field" :data-invalid="isInvalid('time') ? 'true' : 'false'">
+        <span id="form-time-label" class="field-label">{{ t('exhibition.form.openTime') }}</span>
+        <div class="time-range">
+          <button
+            id="form-time"
+            class="input input-line picker-trigger"
+            type="button"
+            aria-haspopup="dialog"
+            aria-labelledby="form-time-label"
+            @click="openStartTime"
+          >
+            <span class="picker-trigger-value" :data-empty="timeStart ? 'false' : 'true'">{{
+              timeStart || t('exhibition.form.timeStart')
+            }}</span>
+          </button>
+          <span class="time-sep" aria-hidden="true">–</span>
+          <button
+            id="form-time-end"
+            class="input input-line picker-trigger"
+            type="button"
+            aria-haspopup="dialog"
+            aria-labelledby="form-time-label"
+            @click="openEndTime"
+          >
+            <span class="picker-trigger-value" :data-empty="timeEnd ? 'false' : 'true'">{{
+              timeEnd || t('exhibition.form.timeEnd')
+            }}</span>
+          </button>
+        </div>
+        <p v-if="isInvalid('time')" class="field-error" role="alert">{{ formError }}</p>
+      </div>
+
+      <!-- 报名开始 / 截止也是一组日期范围；两项都可留空，清空即不设报名窗口。 -->
+      <div class="form-pair">
         <div class="field" :data-invalid="isInvalid('registrationStart') ? 'true' : 'false'">
-          <label for="form-reg-start">{{ t('exhibition.form.registrationOpens') }}</label>
-          <input id="form-reg-start" v-model="form.registrationStart" class="input input-line" type="date" />
+          <span id="form-reg-start-label" class="field-label">{{ t('exhibition.form.registrationOpens') }}</span>
+          <button
+            id="form-reg-start"
+            class="input input-line picker-trigger"
+            type="button"
+            aria-haspopup="dialog"
+            aria-labelledby="form-reg-start-label"
+            @click="openRegistrationDateRange"
+          >
+            <span class="picker-trigger-value" :data-empty="form.registrationStart ? 'false' : 'true'">{{
+              registrationStartText || t('picker.selectDate')
+            }}</span>
+            <AppIcon name="chevronDown" size="icon icon-sm" />
+          </button>
           <p v-if="isInvalid('registrationStart')" class="field-error" role="alert">{{ formError }}</p>
         </div>
         <div class="field" :data-invalid="isInvalid('registrationEnd') ? 'true' : 'false'">
-          <label for="form-reg-end">{{ t('exhibition.form.registrationCloses') }}</label>
-          <input id="form-reg-end" v-model="form.registrationEnd" class="input input-line" type="date" />
+          <span id="form-reg-end-label" class="field-label">{{ t('exhibition.form.registrationCloses') }}</span>
+          <button
+            id="form-reg-end"
+            class="input input-line picker-trigger"
+            type="button"
+            aria-haspopup="dialog"
+            aria-labelledby="form-reg-end-label"
+            @click="openRegistrationDateRange"
+          >
+            <span class="picker-trigger-value" :data-empty="form.registrationEnd ? 'false' : 'true'">{{
+              registrationEndText || t('picker.selectDate')
+            }}</span>
+            <AppIcon name="chevronDown" size="icon icon-sm" />
+          </button>
           <p v-if="isInvalid('registrationEnd')" class="field-error" role="alert">{{ formError }}</p>
         </div>
       </div>
@@ -690,9 +838,10 @@ function normalizeOptions(options: unknown): string[] {
       <p v-if="isInvalid('fields')" class="field-error" role="alert">{{ formError }}</p>
     </div>
 
-    <!-- 封面：1080×1920 竖版，左侧预览、右侧上传 / 更换 / 移除与格式说明 -->
-    <div class="card">
-      <span class="section-label">{{ t('exhibition.form.cover') }}</span>
+    <!-- 封面与简介：1080×1920 竖版封面在上，简介入口与摘要跟在下面。
+         简介原先在「报名与简介设置」里，按需求并进封面卡，入口与草稿逻辑不变。 -->
+    <div class="card cover-card">
+      <span class="section-label">{{ t('exhibition.form.coverAndDescription') }}</span>
       <div class="cover-row">
         <div v-if="form.imageUri" class="cover-frame ph-img">
           <img :src="form.imageUri" :alt="t('exhibition.form.cover')" />
@@ -709,10 +858,18 @@ function normalizeOptions(options: unknown): string[] {
           <p class="field-hint">{{ formatHint }}</p>
         </div>
       </div>
+      <div class="stack" data-gap="sm">
+        <div class="row">
+          <button class="cta ghost" data-size="small" type="button" @click="editDescription">
+            {{ t('exhibition.form.editDescription') }}
+          </button>
+        </div>
+        <p class="row-meta clamp-2">{{ descriptionSummary }}</p>
+      </div>
     </div>
 
-    <!-- 报名与简介设置：报名方式是三个互斥分段按钮，简介收在这一栏 -->
-    <div class="card">
+    <!-- 报名设置：报名方式、报名二维码与通过后撤销，三块之间只留白，不再画分隔线。 -->
+    <div class="card registration-settings-groups">
       <span class="section-label">{{ t('exhibition.form.registrationSettings') }}</span>
       <div class="field">
         <span class="field-label">{{ t('exhibition.form.registrationMode') }}</span>
@@ -723,30 +880,19 @@ function normalizeOptions(options: unknown): string[] {
           @update:model-value="changeMode"
         />
       </div>
-      <hr class="divider" />
       <div class="stack" data-gap="sm">
-        <!-- 不再重复「展会简介」小标题：这一栏的「报名与简介设置」已经说明了用途，
-             按钮本身就是入口，左边留标题只会让这一行更挤。 -->
-        <div class="row">
-          <button class="cta ghost" data-size="small" type="button" @click="editDescription">
-            {{ t('exhibition.form.editDescription') }}
-          </button>
+        <div class="switch-row">
+          <span class="switch-copy">
+            <strong>{{ t('exhibition.form.enableCheckInQr') }}</strong>
+            <span class="row-meta">{{ t('exhibition.form.checkInQrExplainer') }}</span>
+          </span>
+          <label class="switch" for="form-qr-enabled">
+            <input id="form-qr-enabled" v-model="form.qrEnabled" type="checkbox" />
+            <span />
+          </label>
         </div>
-        <p class="row-meta clamp-2">{{ descriptionSummary }}</p>
+        <p class="field-hint">{{ qrHint }}</p>
       </div>
-      <hr class="divider" />
-      <div class="switch-row">
-        <span class="switch-copy">
-          <strong>{{ t('exhibition.form.enableCheckInQr') }}</strong>
-          <span class="row-meta">{{ t('exhibition.form.checkInQrExplainer') }}</span>
-        </span>
-        <label class="switch" for="form-qr-enabled">
-          <input id="form-qr-enabled" v-model="form.qrEnabled" type="checkbox" />
-          <span />
-        </label>
-      </div>
-      <p class="field-hint">{{ qrHint }}</p>
-      <hr class="divider" />
       <div class="switch-row">
         <span class="switch-copy">
           <strong>{{ allowCancelLabel }}</strong>
@@ -801,7 +947,7 @@ function normalizeOptions(options: unknown): string[] {
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* 开展日期｜开展时间：宽屏两列、窄屏自动落成一行（原生日期控件窄于一列会截字）。 */
+/* 日期 / 时间字段成组排：宽屏两列、窄屏自动落成一行，触发按钮不会截字。 */
 .form-pair {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -827,21 +973,25 @@ function normalizeOptions(options: unknown): string[] {
   font-size: var(--fs-meta);
 }
 
-/* 分类字段：借用 .input 的外观（下划线随底座走），只补布局：文字靠左、chevron 靠右。 */
-.category-trigger {
+/* 分类 / 日期 / 时间触发按钮：借用 .input 的外观（下划线随底座走），
+   只补布局：文字靠左、chevron 靠右，值过长时截断。 */
+.category-trigger,
+.picker-trigger {
   justify-content: space-between;
   gap: var(--s2);
   text-align: start;
 }
 
-.category-trigger svg {
+.category-trigger svg,
+.picker-trigger svg {
   flex: none;
   width: 16px;
   height: 16px;
   color: var(--ink-3);
 }
 
-.category-value {
+.category-value,
+.picker-trigger-value {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -849,8 +999,15 @@ function normalizeOptions(options: unknown): string[] {
 }
 
 /* 还没选：按占位文字的层级弱化一档。 */
-.category-value[data-empty='true'] {
+.category-value[data-empty='true'],
+.picker-trigger-value[data-empty='true'] {
   color: var(--ink-3);
+}
+
+/* 封面卡把简介并进来后，封面与简介之间多留一档；报名设置里各组之间只靠留白分区。 */
+.cover-card,
+.registration-settings-groups {
+  gap: var(--s3);
 }
 
 /* 封面：左 96×170 竖版预览，右边竖排两颗次按钮与两行格式说明；窄屏上下堆叠。 */

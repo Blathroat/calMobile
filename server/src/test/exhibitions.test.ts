@@ -34,6 +34,7 @@ test('展会列表字段覆盖页面渲染所需的全部字段', async () => {
     'day',
     'date',
     'dateLabel',
+    'endDate',
     'exhibitor',
     'exhibitorRole',
     'exhibitorNote',
@@ -134,6 +135,7 @@ test('展会的增删改受角色与归属限制', async () => {
       venue: '测试展馆',
       time: '09:00-17:00',
       date: '2026-09-20',
+      endDate: '2026-09-22',
       registrationStart: '2026-08-01',
       registrationEnd: '2026-09-10',
       category: '智能家居',
@@ -145,7 +147,25 @@ test('展会的增删改受角色与归属限制', async () => {
   assert.strictEqual(created.body.ok, true, `新建失败：${JSON.stringify(created.body)}`);
   const id = created.body.exhibition.id;
   assert.strictEqual(created.body.exhibition.date, '2026-09-20');
+  assert.strictEqual(created.body.exhibition.endDate, '2026-09-22', '闭展日期要原样读回');
   assert.strictEqual(created.body.exhibition.day, 20, '日期必须按 SQL 派生，不能因时区差一天');
+
+  // 校验：闭展早于开展
+  const badEnd = await put(
+    `/api/v1/exhibitions/${id}`,
+    {
+      title: '接口测试展',
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date: '2026-09-20',
+      endDate: '2026-09-10',
+      status: 'review',
+    },
+    { token: tokens.exhibitor.token },
+  );
+  assert.strictEqual(badEnd.body.ok, false);
+  assert.ok(String(badEnd.body.error).includes('闭展'), `提示不对：${badEnd.body.error}`);
+  assert.strictEqual(badEnd.body.errorCode, 'validation.endDateBeforeStart');
 
   // 校验：截止早于开始、日期非法、标题超长
   const badRange = await put(

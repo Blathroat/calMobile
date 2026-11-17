@@ -298,9 +298,8 @@ function logout(): void {
               <AppIcon name="edit" />
             </button>
           </div>
-          <!-- 活动概览：分隔线之上一行数字，整行可点进我的活动；取不到数据时整块不渲染 -->
+          <!-- 活动概览：留白之下是两格数字，整行可点进我的活动；取不到数据时整块不渲染 -->
           <template v-if="activity">
-            <hr class="divider" />
             <button class="profile-stats" type="button" @click="router.push(paths.registrations)">
               <span class="profile-stat">
                 <strong>{{ activity.attended }}</strong>
