@@ -175,6 +175,9 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - 报名站分享链接允许未登录报名：`POST /api/v1/registrations` 带有效 `Authorization` 时行为与原来完全一致；**完全不带** `Authorization` 时按匿名报名处理（`visitor_id` NULL、`visitor_type = 'guest'`、姓名必填，上限 `limits.nickname`），响应额外带一次性 `queryToken`（32 字节 base64url，库里只存 sha256 hex）。带 `Authorization` 但令牌无效 / 过期仍是 401，不降级成匿名，避免应用内过期令牌提交出无主记录。匿名报名没有账号身份，不受「同一用户同一展会一条未撤销报名」约束。
 - `GET /api/v1/registrations/query/:token`（公开，`Cache-Control: no-store`）：按 sha256 匹配，返回与 `GET /registrations/:id` 同形的 `{ found, registration }`（含 `checkInCode`——凭据就是匿名报名人的身份）；无效凭据返回 200 + `{ found:false, error:'查询链接无效或已失效', errorCode:'registration.queryLinkInvalid' }`。
 - `POST /api/v1/registrations/claim`（需登录，body `{ token }`）：把凭据对应的、`visitor_id IS NULL` 的报名关联到当前账号，只补 `visitor_id`，保留匿名报名时填的姓名与 `visitor_type = 'guest'`；同账号幂等，被别的账号认领或与账号已有同展会报名冲突（唯一部分索引）时 200 + `ok:false`，已撤销的匿名报名也可以认领。
+- 操作日志（`app_logs`）：服务端在响应后异步写入，记录变更类请求（非 GET）、4xx / 5xx 响应以及登录 / 注册 / 找回密码的结果；读接口成功不记，**不记录请求体**，只留方法、路径、状态码、耗时、操作人（未登录记「访客」）与 IP。写日志失败只打服务端日志，不影响请求本身。
+- `GET /api/v1/logs`（仅管理员）：查询参数 `limit`（默认 100，最大 500）、`level`（info / warn / error）、`query`（对消息、分类、操作人、路径做子串匹配）；返回 `{ logs, stats: { storageMb, limitBytes, usedBytes, entryCount } }`。普通账号调用是 403。
+- 日志存储上限是 `app_settings.logs.storageMb`（默认 64，范围 1～10240，管理端通过 `PUT /settings` 的 `logs: { storageMb }` 或扁平 `logsStorageMb` 提交，越界会被夹取而不是拒绝）。超过上限时按累计大小删除最早的日志；写入后节流到每 30 秒检查一次，管理员把上限调小时立即清一次。设置接口的 `logs` 段只有管理员会多拿到 `usedBytes` / `entryCount`。
 - `PUT /exhibitions/:id/status` 同时接受中文标签和英文代码。
 - 用户协议是可选功能，正文与管理端开关存在 `app_settings.agreement`（Markdown 原文；`version` 只在正文变化时 +1，只拨开关不升版本；`updatedAt` 是正文最后更新时间）。管理端通过 `PUT /settings` 的 `agreement: { enabled, content }` 提交：开启时正文不能为空（`settings.agreementContentRequired`），正文上限 200000 字符（超出 `settings.agreementTooLong`）；`GET /settings` 只给管理员下发正文，其他角色拿 `{ enabled, version, updatedAt }`。
 - `GET /api/v1/agreement`（公开，`Cache-Control: no-store`）下发 `{ enabled, version, updatedAt, content }`，登录/注册页与协议浏览页在未登录时也能读；`GET /bootstrap` 只带 `{ enabled, version, updatedAt }` 摘要，不带正文。
@@ -208,6 +211,7 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - 展会日期只存 `exhibition_date`（开展）与 `exhibition_end_date`（闭展，NULL = 单日）。年、月、日由 SQL 派生，并用 `to_char` 取成字符串。
 - 报名记录不冗余展会标题、时间和地点。读取时 JOIN 展会表。匿名报名的查询凭据只存 sha256（`registrations.query_token_hash`，空串表示账号报名与老数据），唯一部分索引 `WHERE query_token_hash <> ''`。
 - 登录审计在 `users.last_login_time` / `last_login_ip` / `last_login_region`；IP 原文只落库，接口只下发格式化后的地区。
+- 操作日志在 `app_logs`（迁移 0026）：`level` / `category` / `message` / `actor_id` / `actor_name` / `method` / `path` / `status` / `duration_ms` / `ip` / `detail` / `size_bytes` / `created_at`。`size_bytes` 在写入时算好，清理按它累计；`actor_id` 不建外键，账号删除后日志保留当时的名字。
 - 用户协议同意状态在 `users.agreed_terms_version` / `users.agreed_terms_at`（迁移 0025）：0 表示从未同意，时间戳是最后一次同意的时间。协议正文与版本不单独建表，存在 `app_settings.agreement` 这一段 JSON 里。
 - 迁移按编号记在 `schema_migrations`，只跑没跑过的步骤。新字段追加新步骤。
 - 邮箱大小写无关唯一，空串例外。验证码只存哈希。注册时的待建账号暂存在 `email_codes.payload`。两步验证的预认证票在 `preauth_tickets`。发信留痕在 `mail_log`。

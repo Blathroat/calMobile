@@ -18,6 +18,8 @@
 
 页面不直接 `fetch`，也不通过原生桥接取业务数据。读取接口直接返回数据。写接口按响应约定返回信封。
 
+操作日志由服务端 `server/src/services/logs.ts` 在响应之后异步写入 `app_logs`：变更请求（非 GET）、4xx / 5xx、以及登录 / 注册 / 找回密码这类认证接口无论成功失败都记一条；读接口成功不记，不记录请求体（只留方法、路径、状态码、耗时、操作人与 IP）。写日志是旁路，失败只进服务端控制台，不影响请求本身。超过 `app_settings.logs.storageMb` 时按累计大小清理最早的记录（写入后节流清理，管理员调小上限时立刻清一次）。管理页 `/logs` 是通过 `GET /api/v1/logs` 读取的最近日志，仅管理员可见。
+
 正式包的文档地址是 `APP_API_BASE` 所在源的 `/app/index.html`。WebView 拦截 `/app/`，从本机快照读文件；还没有快照，或快照不是当前 `versionCode` 时，用 APK 里的那份。页面切换不再请求网络。首屏出来之后才在后台拉取 `/app/release.json`，新文件留到下次冷启动再换上。调试包（接口是 http）不热更新。只有 `/app/index.html` 能调用 `CalMobileNative`，其它链接交给系统浏览器。设备上选中、尚未上传的媒体仍从 `https://appassets.androidplatform.net/media/` 读取。页面要先 fetch 这份地址再上传，所以这份响应带上 `Access-Control-Allow-Origin`，值是页面文档的源。
 
 新接口同时改 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由和 `server/src/test/` 下的契约测试（前端动作总数在 `routes-contract.test.ts` 里钉成常量，加接口要一起改）。
@@ -82,6 +84,7 @@
 - 查询缓存集中在 `web/src/services/query-cache.ts`。缓存键包含稳定序列化后的参数，并对相同请求去重。底部导航按下时预取该页。月视图一次取整月，点日期在本地完成。
 - 写接口的失效前缀与读接口的缓存键前缀同族（`registrations` ↔ `registrations.record`、`users` ↔ `users.record`）。
 - 用户协议正文走 `api.agreement.get()` 直连，不进查询缓存（正文会随管理员保存变化）；`bootstrap` 只带 `{ enabled, version, updatedAt }` 摘要，登录/注册页据此决定是否展示勾选框。
+- 最近日志页（`web/src/pages/LogsPage.vue`）用 `api.logs.list()` 直连，也不进查询缓存：日志随时在增长，打开页面、切级别、下拉刷新都取最新的一批；统计（条数、已用 / 上限）与列表来自同一次响应。
 - 展会详情页判断本人是否报过这场展会时复用 `registrations` 列表读缓存（与报名写入同族失效），只在已登录时请求；取不到就按未报名处理，不因为这条增强查询让整页失败。个人页的活动概览同样是一次增强查询：复用 `registrations` 列表缓存统计已参加与报名记录数，取不到就不显示这一行，不影响资料主状态。
 - 报名站的查询凭据（`/e/:id/status?token=`）走 `registrations.queryByToken` 直连，不进查询缓存（凭据不能进缓存键）；`claim` 成功后失效 `registrations` 与 `users.public` 前缀。
 - 核销结果按账号存在本机（`calmobile.checkin.outcomes.<用户 id>`，最多 20 条，最新的在前）；核销页顶栏的清理按钮清掉它，换号按新键重读。
@@ -106,7 +109,7 @@
 - **日期与时间用应用内抽屉**：范围日期（开展/闭展、报名开始/截止）走 `components/DatePickerSheet.vue` 的 `range` 模式，单日期（会议日期）走 `single` 模式；时间走 `components/TimeWheelSheet.vue` 的时 / 分滚轮。入口统一是 `services/pickers.ts` 的 `openDateRange` / `openSingleDate` / `openTime`，页面不要自己拼面板、也不要用系统原生控件。范围选择第一次点选就把起点回填给表单、第二次点选终点后自动收起（因此报名窗口可以只填开始）；已有一段完整区间时点任意一天从该天重新开始；终点早于起点禁用；「清除」清空两端。时间滚轮在值为空时按开始 `09:00` / 结束 `17:00` 摆位，只有点「确认」才写回，「清除」把时间留空（时间选填）。月历按月份分节、周日起排、今天带圆点，渲染从已选月份往前 12 个月到往后 24 个月。
 - **状态标签是「信号灯」**：`StatusTag` 只有色点 + 文字，没有边框与底色（ok 绿 / pending 琥珀 / danger 砖红 / info 灰蓝 / muted 灰），用在报名状态、展会报名方式与账号状态上。**身份标签不是状态**：展商 / 管理员走 `RoleTag`，保留原来的方框小签（浅底 + `--accent-edge` 描边 + 强调色文字），不要换成信号灯。
 - 需要从固定清单里选值的字段用**应用内抽屉**：`openSheet({ layout: 'list', actions: [{ label, checked }] })`，当前值带对勾；不要用系统 `<select>`。
-- **用户协议**：管理员在「管理-设置」用开关 + Markdown 文件上传正文（应用内 `device.importText('text/markdown,text/plain', 1MB)` 读正文，浏览器退回 `<input type=file>` + `File.text()`；正文上限 200000 字符，随保存一起 `PUT /settings` 的 `agreement: { enabled, content }` 提交）。开启后登录/注册页显示「我已阅读并同意《用户协议》」勾选框，链接是 `--accent-ink` 的蓝链、打开 `/agreement`；用户设置页最底部同一入口；关闭时这些入口与更新弹窗全部不渲染。协议浏览页用 `api.agreement.get()` 公开取数（不进查询缓存），正文走 `markdownToHtml()` 清洗后渲染到 `.rich-content`。登录/注册页的勾选在各提交点（密码登录、两步验证、通行密钥、注册发码与提交）拦截，会话建立后调 `POST /profile/agreement` 记录当前版本，失败静默交给全局更新弹窗兜底。
+- **用户协议**：登录/注册页的勾选行只是「勾选 + 蓝链」，不套卡片外框（`.agreement-consent .check-label` 去掉描边、底色与内距，保留 44px 命中区）。管理员在「管理-设置」用开关 + Markdown 文件上传正文（应用内 `device.importText('text/markdown,text/plain', 1MB)` 读正文，浏览器退回 `<input type=file>` + `File.text()`；正文上限 200000 字符，随保存一起 `PUT /settings` 的 `agreement: { enabled, content }` 提交）。开启后登录/注册页显示「我已阅读并同意《用户协议》」勾选框，链接是 `--accent-ink` 的蓝链、打开 `/agreement`；用户设置页最底部同一入口；关闭时这些入口与更新弹窗全部不渲染。协议浏览页用 `api.agreement.get()` 公开取数（不进查询缓存），正文走 `markdownToHtml()` 清洗后渲染到 `.rich-content`。登录/注册页的勾选在各提交点（密码登录、两步验证、通行密钥、注册发码与提交）拦截，会话建立后调 `POST /profile/agreement` 记录当前版本，失败静默交给全局更新弹窗兜底。
 - 分段控件（`components/SegControl.vue`）在空间不够时**自动换行**，不做横向滚动：`.seg` 是 `flex-wrap: wrap`，所有分类一眼看全；选中滑块按按钮的 `offsetLeft / offsetTop / 尺寸` 定位，换行后仍贴在正确那一行，容器尺寸变化由 `ResizeObserver` 重新量。
 - 上传卡（封面、缺省封面）统一版式：左侧 96×170（9:16）预览，右侧竖排「上传/更换 / 移除」按钮与格式说明，窄屏上下堆叠。
 - 图标是 24 视窗、1.5 描边、无填充的细线。顶栏图标没有圆底。底部导航是图标加文字。
