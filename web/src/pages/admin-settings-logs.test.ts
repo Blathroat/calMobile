@@ -123,15 +123,14 @@ function setInput(input: HTMLInputElement, value: string): void {
 }
 
 describe('管理后台 · 最近日志入口', () => {
-  it('日志卡片下方的按钮跳到日志页', async () => {
+  it('日志卡片里的整行主按钮跳到日志页', async () => {
     const container = await mountAdmin('/admin?tab=settings');
     await vi.waitFor(() => expect(container.querySelector('#settings-logs-mb')).not.toBeNull());
     const entry = buttonByText(container, '查看最近日志');
     expect(entry).not.toBeUndefined();
-    // 入口在日志卡下面：按钮必须是日志卡的相邻后继节点，不在页面顶部，也不在卡片内部。
+    // 入口在日志卡片内部：和其它卡片里的整行主操作一样，不是贴在卡片外面的小按钮。
     const logsCard = container.querySelector<HTMLElement>('#settings-logs-mb')!.closest('.card');
-    expect(logsCard?.nextElementSibling).toBe(entry);
-    expect(logsCard?.contains(entry!)).toBe(false);
+    expect(logsCard?.contains(entry!)).toBe(true);
     // 版式与其它卡片里的主操作一致：整行大按钮（默认 .cta），不是小的 ghost 按钮。
     expect(entry?.classList.contains('cta')).toBe(true);
     expect(entry?.classList.contains('ghost')).toBe(false);
