@@ -6,7 +6,7 @@
  * 并把验证码发到邮箱；这一步拿票 + 码换真正的会话。也就是说：密码对了但码没过，
  * 客户端手里没有任何可用凭据 —— 否则「密码泄露」就等于「账号到手」。
  */
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, refreshRuntimeBootstrap } from '@/app/runtime';
 import { useBootstrapStore } from '@/stores/bootstrap';
@@ -22,6 +22,40 @@ const route = useRoute();
 const router = useRouter();
 const session = useSessionStore();
 const bootstrap = useBootstrapStore();
+
+/**
+ * 用户协议：管理员开启后，登录的每一步（密码登录 / 两步验证 / 通行密钥）都要先勾选同意。
+ * 摘要来自启动数据（`bootstrap.agreement`），未登录也能读到；关闭时整块不渲染。
+ */
+const agreementEnabled = computed(() => bootstrap.agreement?.enabled === true);
+const agreementVersion = computed(() => Number(bootstrap.agreement?.version ?? 0) || 0);
+const agreed = ref(false);
+/** 勾选缺失的原因：显示在勾选框下面，不占表单顶部的请求错误行。 */
+const agreementError = ref('');
+
+watch(agreed, () => {
+  agreementError.value = '';
+});
+
+/** 协议开启但没勾选时拦下当前动作；访客入口不经过这里。 */
+function agreementBlocked(): boolean {
+  if (!agreementEnabled.value || agreed.value) return false;
+  agreementError.value = t('agreement.consentRequired');
+  return true;
+}
+
+/**
+ * 建立会话后记下同意：服务端按版本校验，失败静默 —— 外壳的全局弹窗还会再兜一次，
+ * 在登录页再弹一个红条只会让用户以为登录失败了。
+ */
+async function recordAgreementConsent(): Promise<void> {
+  if (!agreementEnabled.value || !agreed.value || agreementVersion.value <= 0) return;
+  try {
+    await api.profile.agree(agreementVersion.value);
+  } catch {
+    /* 静默失败：全局「用户协议更新」弹窗会兜底 */
+  }
+}
 
 const step = ref<1 | 2>(1);
 const account = ref('');
@@ -99,8 +133,9 @@ function goRegister(): void {
   );
 }
 
-/** 进入登录态之后的收尾：提示 + 跳回原页面（替换历史，不新增返回栈）。 */
+/** 进入登录态之后的收尾：记下协议同意 + 提示 + 跳回原页面（替换历史，不新增返回栈）。 */
 async function enterAs(): Promise<void> {
+  await recordAgreementConsent();
   await refreshRuntimeBootstrap();
   stopCountdown();
   toast(t('auth.login.welcomeBack', { name: String(session.user.nickname || session.user.username || '') }), 'success');
@@ -122,6 +157,7 @@ async function submit(): Promise<void> {
     error.value = validated;
     return;
   }
+  if (agreementBlocked()) return;
   busy.value = true;
   try {
     const result = (await api.auth.login(account.value.trim(), password.value)) as AuthResult;
@@ -165,6 +201,7 @@ async function verify(): Promise<void> {
     verifyError.value = invalid;
     return;
   }
+  if (agreementBlocked()) return;
   busy.value = true;
   try {
     if (needsVerification) {
@@ -186,6 +223,7 @@ async function verify(): Promise<void> {
 /** 用系统通行密钥完成第二步：用户取消不算失败；失败仍可继续输验证码。 */
 async function loginWithPasskey(): Promise<void> {
   if (!ticket.value || passkeyBusy.value) return;
+  if (agreementBlocked()) return;
   verifyError.value = '';
   passkeyBusy.value = true;
   let verified = false;
@@ -326,6 +364,17 @@ onBeforeUnmount(stopCountdown);
           {{ password.length }}/{{ passwordMax }}
         </span>
       </div>
+      <!-- 用户协议：开启时登录的每一步都要先勾选同意；关闭时整块不渲染。 -->
+      <div v-if="agreementEnabled" class="check-row agreement-consent">
+        <label class="check-label" for="login-agreement">
+          <input id="login-agreement" v-model="agreed" type="checkbox" />
+          <span class="check-copy">
+            {{ t('agreement.consentPrefix')
+            }}<RouterLink class="agreement-link" to="/agreement">{{ t('agreement.consentLink') }}</RouterLink>
+          </span>
+        </label>
+        <p v-if="agreementError" class="field-error" role="alert">{{ agreementError }}</p>
+      </div>
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
       <button class="cta" type="submit" :disabled="busy" :data-loading="busy ? 'true' : 'false'">
         {{ t('auth.login.title') }}
@@ -397,6 +446,17 @@ onBeforeUnmount(stopCountdown);
           <input id="login-trust-device" v-model="trustThisDevice" type="checkbox" />
           <span>{{ trustDeviceLabel }}</span>
         </label>
+      </div>
+      <!-- 两步验证是建立会话前的最后一步，协议同意在这一步也要能勾选与拦截。 -->
+      <div v-if="agreementEnabled" class="check-row agreement-consent">
+        <label class="check-label" for="login-agreement">
+          <input id="login-agreement" v-model="agreed" type="checkbox" />
+          <span class="check-copy">
+            {{ t('agreement.consentPrefix')
+            }}<RouterLink class="agreement-link" to="/agreement">{{ t('agreement.consentLink') }}</RouterLink>
+          </span>
+        </label>
+        <p v-if="agreementError" class="field-error" role="alert">{{ agreementError }}</p>
       </div>
       <p v-if="verifyError" class="field-error" role="alert">{{ verifyError }}</p>
       <button

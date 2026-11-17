@@ -30,6 +30,7 @@ import {
 } from '@/services/pull-refresh';
 import { api } from '@/app/runtime';
 import { closeSheet, confirmSheet, sheet } from '@/services/sheet';
+import { agreementConsentPending, openAgreementConsentPrompt } from '@/services/agreement-prompt';
 import { flushDeferredToast, toast } from '@/services/toast';
 import { watchSystemMode } from '@/app/theme';
 import { useBootstrapStore } from '@/stores/bootstrap';
@@ -150,6 +151,28 @@ watch(
     // 换页之后上一页的手势与动画一律作废，指示圈不能再留在屏幕上。
     resetPullVisual();
   },
+);
+
+/**
+ * 用户协议更新确认：已登录用户的已同意版本低于服务端当前版本时，弹一个不可关闭的抽屉。
+ *
+ * 三个信号放在同一个 watch 里，避免重复打开：
+ * - `route.fullPath`：协议页本身不叠弹窗；从协议页返回其它页面后条件仍成立就重新弹；
+ * - `needsConsent`：登录 / 重拉启动数据 / 同意后的刷新都会改变它；
+ * - `sheet.current`：抽屉已经打开（或别的面板占着）时不再开第二个。
+ * 用户不同意时走 `device.exitApp()` 关闭软件；同意后重拉启动数据，条件自然消失。
+ */
+const needsAgreementConsent = computed(() => agreementConsentPending());
+watch(
+  [() => route.fullPath, needsAgreementConsent, () => sheet.current],
+  () => {
+    if (!needsAgreementConsent.value) return;
+    // 用户正在看协议页：入口是弹窗自己给的，不能再盖一层。
+    if (route.path === '/agreement') return;
+    if (sheet.current) return;
+    openAgreementConsentPrompt({ onView: () => void router.push('/agreement') });
+  },
+  { immediate: true },
 );
 
 onMounted(() => {

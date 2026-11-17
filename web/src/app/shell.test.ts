@@ -27,6 +27,7 @@ const ROUTES = [
   '/login',
   '/register',
   '/forgot-password',
+  '/agreement',
   '/home',
   '/search',
   '/user-public/exhibitor',

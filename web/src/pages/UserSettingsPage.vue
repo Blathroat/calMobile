@@ -67,6 +67,8 @@ const loggedIn = computed(() => session.loggedIn);
 const limited = computed(() => user.value.can?.profile === false);
 /** 受限时统一用同一句说明原因，避免每个入口各写一套说法。 */
 const limitHint = computed(() => t('profile.restricted'));
+/** 用户协议：只有管理员开启后才有入口（关闭时所有入口都不渲染）。 */
+const agreementEnabled = computed(() => bootstrap.agreement?.enabled === true);
 /**
  * 谁能兑换邀请码：普通用户直接开通；限时展商可以续期（从原到期日顺延）；
  * 永久展商与管理员没有可兑换的东西，卡片里只显示身份说明。
@@ -758,6 +760,16 @@ async function checkUpdate(auto = false): Promise<void> {
               <span />
             </label>
           </div>
+        </div>
+      </section>
+
+      <!-- 用户协议：固定在页面最底部（应用更新之后）；管理员关闭时整组不渲染 -->
+      <section v-if="agreementEnabled" class="settings-section">
+        <span class="section-label">{{ t('agreement.title') }}</span>
+        <div class="card user-settings-card">
+          <button class="text-action agreement-link" type="button" @click="router.push('/agreement')">
+            {{ t('agreement.entry') }}
+          </button>
         </div>
       </section>
     </div>

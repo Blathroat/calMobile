@@ -27,8 +27,9 @@ import { hasRememberedSession } from '@/services/session-hint';
  * 直接放进需要权限的页面。
  *
  * **访客（guest）默认落首页，也只能待在首页**：访客不是登录态（`loggedIn === false`），
- * 所以除 `/login`、`/register`、`/forgot-password`、`/home` 之外的每一屏都写了 `requiresAuth`，
- * 需要登录的页面由守卫跳 `/login?redirect=`；登录页的「以访客身份浏览」仍回首页。
+ * 所以除 `/login`、`/register`、`/forgot-password`、`/agreement`、`/home` 之外的每一屏都写了
+ * `requiresAuth`，需要登录的页面由守卫跳 `/login?redirect=`；登录页的「以访客身份浏览」仍回首页。
+ * 其中 `/agreement` 与首页一样公开：登录与注册页的协议蓝链在未登录时就要能用。
  *
  * 坑：
  * - `roles` / `capability` 漏写不报错，但等于对所有登录用户开放，记得成对检查；
@@ -60,6 +61,7 @@ import DetailPage from '@/pages/DetailPage.vue';
 import RegistrationDetailPage from '@/pages/RegistrationDetailPage.vue';
 import RegistrationFormPage from '@/pages/RegistrationFormPage.vue';
 import MyRegistrationsPage from '@/pages/MyRegistrationsPage.vue';
+import AgreementPage from '@/pages/AgreementPage.vue';
 import MeetingSettingsPage from '@/pages/MeetingSettingsPage.vue';
 import MeetingApplyPage from '@/pages/MeetingApplyPage.vue';
 import MeetingDetailPage from '@/pages/MeetingDetailPage.vue';
@@ -124,6 +126,13 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
         path: '/forgot-password',
         component: ForgotPasswordPage,
         meta: { title: 'auth.forgot.title', back: true, bodyGap: 'tight' },
+      },
+      // 用户协议：登录 / 注册页的蓝链与已登录用户的更新提示都会进来，未登录也必须能看，
+      // 因此不写 requiresAuth（它是入口页之外的唯一公开屏）。
+      {
+        path: '/agreement',
+        component: AgreementPage,
+        meta: { title: 'agreement.title', back: true, bodyGap: 'tight' },
       },
       { path: '/home', component: HomePage, meta: { title: 'nav.home', tab: 'home', bodyGap: 'tight' } },
       // 首页是访客唯一的去处：日历与当天展会对所有人开放，其余页面一律要求登录

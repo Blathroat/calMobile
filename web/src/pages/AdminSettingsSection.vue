@@ -10,8 +10,11 @@ import AppIcon from '@/components/AppIcon.vue';
 import SegControl from '@/components/SegControl.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
-import { computed, type Ref } from 'vue';
+import { computed, ref, type Ref } from 'vue';
 import type { JsonObject } from '@/api/types';
+import { device } from '@/services/device-services';
+import { nativeBridge } from '@/services/native-bridge';
+import { formatLocalChineseDate } from '@/services/format';
 import { t } from '@/i18n';
 
 interface LimitItem {
@@ -51,6 +54,8 @@ interface AdminSettingsForm {
   inviteDurationDays: number;
   /** 软件包下载源：直链地址或 GitHub 仓库（owner/repo） */
   download: { source: 'url' | 'github'; url: string; repo: string };
+  /** 用户协议：开关与 Markdown 正文（保存时随其它设置一起提交） */
+  agreement: { enabled: boolean; content: string };
 }
 
 interface InviteItem {
@@ -95,6 +100,9 @@ const props = defineProps<{
   };
   invites: InviteItem[];
   inviteBusy: boolean;
+  /** 用户协议当前生效的版本与更新时间（来自 settings 接口，保存后由父组件回填） */
+  agreementVersion: number;
+  agreementUpdatedAt: string;
 }>();
 const emit = defineEmits<{
   retry: [];
@@ -128,6 +136,103 @@ function inviteDurationLabel(item: InviteItem): string {
   return item.durationDays > 0
     ? t('admin.invites.durationDays', { days: item.durationDays })
     : t('admin.invites.permanent');
+}
+
+// ── 用户协议：上传 Markdown 正文 ────────────────────────────────
+
+/** 正文上限：与服务端一致（200000 字符；超过时服务端回 `settings.agreementTooLong`）。 */
+const AGREEMENT_MAX_CHARS = 200_000;
+/** 单个文件上限：1 MB，与原生选择器的 maxBytes 一致。 */
+const AGREEMENT_MAX_BYTES = 1024 * 1024;
+
+/** 本机是否有原生桥：应用里由原生读文件（WebView 关着文件访问），浏览器预览用 input + File.text()。 */
+const hasNative = nativeBridge.hasNative();
+/** 本次选中的文件名；从服务端载入的正文没有文件名，只显示字数。 */
+const agreementFile = ref('');
+const agreementError = ref('');
+const agreementBusy = ref(false);
+
+const agreementContent = computed(() => props.form.agreement.content);
+const agreementCharCount = computed(() => agreementContent.value.length);
+/** 摘要只取正文前几行，不在管理页整篇渲染（完整效果去协议浏览页看）。 */
+const agreementSummary = computed(() =>
+  agreementContent.value
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('\n'),
+);
+const agreementMeta = computed(() => {
+  const count = agreementCharCount.value;
+  if (agreementFile.value) return t('admin.settings.agreementFileMeta', { name: agreementFile.value, count });
+  return t('admin.settings.agreementFileMetaNoName', { count });
+});
+
+/** 当前版本与更新时间；还没上传过正文时给「还没有上传内容」。 */
+const agreementVersionLabel = computed(() => {
+  if (!props.agreementVersion) return t('admin.settings.agreementNotSet');
+  const raw = String(props.agreementUpdatedAt ?? '');
+  const date = formatLocalChineseDate(raw) || raw;
+  return date
+    ? t('admin.settings.agreementVersionValue', { version: props.agreementVersion, date })
+    : t('admin.settings.agreementVersionOnly', { version: props.agreementVersion });
+});
+
+/** 读到的正文直接写进待保存表单；超长在这里拦下并保留原内容不变。 */
+function applyAgreementContent(text: string, name: string): void {
+  agreementError.value = '';
+  if (text.length > AGREEMENT_MAX_CHARS) {
+    agreementError.value = t('admin.settings.agreementTooLong', { max: AGREEMENT_MAX_CHARS });
+    return;
+  }
+  props.form.agreement.content = text;
+  agreementFile.value = name;
+}
+
+/** 应用内：原生把文件正文读出来回传；用户取消不算失败。 */
+async function importAgreementFromDevice(): Promise<void> {
+  agreementError.value = '';
+  agreementBusy.value = true;
+  try {
+    const picked = await device.importText('text/markdown,text/plain', AGREEMENT_MAX_BYTES);
+    applyAgreementContent(String(picked?.text ?? ''), String(picked?.fileName ?? ''));
+  } catch (reason) {
+    // 先看稳定错误码，不匹配文案（见 services/native-bridge.ts）。
+    if ((reason as { code?: string } | null)?.code === 'cancelled') return;
+    agreementError.value = t('admin.settings.agreementReadFailed');
+  } finally {
+    agreementBusy.value = false;
+  }
+}
+
+/** 浏览器预览：没有原生桥时才走这条路。 */
+async function importAgreementFromFile(event: Event): Promise<void> {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement)) return;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  agreementError.value = '';
+  if (file.size > AGREEMENT_MAX_BYTES) {
+    agreementError.value = t('admin.settings.agreementTooLarge', { kb: AGREEMENT_MAX_BYTES / 1024 });
+    return;
+  }
+  agreementBusy.value = true;
+  try {
+    applyAgreementContent(await file.text(), file.name);
+  } catch {
+    agreementError.value = t('admin.settings.agreementReadFailed');
+  } finally {
+    agreementBusy.value = false;
+  }
+}
+
+function clearAgreementContent(): void {
+  props.form.agreement.content = '';
+  agreementFile.value = '';
+  agreementError.value = '';
 }
 </script>
 
@@ -354,6 +459,59 @@ function inviteDurationLabel(item: InviteItem): string {
           <span />
         </label>
       </div>
+    </div>
+
+    <!-- 用户协议：上传 Markdown 作为协议浏览页正文。关闭时登录、注册、设置与更新提示里的入口全部隐藏；
+         卡片内分区只用留白，不加分隔线。 -->
+    <div class="card">
+      <span class="section-label">{{ t('admin.settings.agreement') }}</span>
+      <div class="switch-row" data-flush="true">
+        <span class="switch-copy">
+          <strong>{{ t('admin.settings.agreementEnabled') }}</strong>
+          <span class="field-hint">{{ t('admin.settings.agreementHint') }}</span>
+        </span>
+        <label class="switch" for="settings-agreement-enabled">
+          <input id="settings-agreement-enabled" v-model="form.agreement.enabled" type="checkbox" />
+          <span />
+        </label>
+      </div>
+      <div class="setting-block">
+        <div class="setting-row">
+          <span class="field-label">{{ t('admin.settings.agreementVersion') }}</span>
+          <span class="row-meta">{{ agreementVersionLabel }}</span>
+        </div>
+      </div>
+      <p class="field-hint">{{ t('admin.settings.agreementFileHint', { max: AGREEMENT_MAX_CHARS }) }}</p>
+      <button
+        v-if="hasNative"
+        class="cta ghost"
+        type="button"
+        :disabled="agreementBusy"
+        :data-loading="agreementBusy ? 'true' : undefined"
+        @click="importAgreementFromDevice"
+      >
+        {{ agreementContent.trim() ? t('admin.settings.agreementReplace') : t('admin.settings.agreementUpload') }}
+      </button>
+      <label v-else class="cta ghost" for="settings-agreement-file">
+        {{ agreementContent.trim() ? t('admin.settings.agreementReplace') : t('admin.settings.agreementUpload') }}
+      </label>
+      <input
+        id="settings-agreement-file"
+        class="sr-only"
+        type="file"
+        accept=".md,text/markdown,text/plain"
+        @change="importAgreementFromFile"
+      />
+      <div v-if="agreementContent.trim()" class="agreement-preview">
+        <span class="row-meta">{{ agreementMeta }}</span>
+        <span class="agreement-preview-title">{{ t('admin.settings.agreementPreviewTitle') }}</span>
+        <pre class="agreement-preview-text">{{ agreementSummary }}</pre>
+        <button class="text-action" type="button" @click="clearAgreementContent">
+          {{ t('admin.settings.agreementClear') }}
+        </button>
+      </div>
+      <p v-else class="field-hint">{{ t('admin.settings.agreementEmptyHint') }}</p>
+      <p v-if="agreementError" class="field-error" role="alert">{{ agreementError }}</p>
     </div>
 
     <div class="card">
@@ -897,6 +1055,33 @@ function inviteDurationLabel(item: InviteItem): string {
   display: flex;
   align-items: center;
   gap: var(--s1);
+}
+
+/* 用户协议摘要：只展示前几行，整篇效果去协议浏览页看。 */
+.agreement-preview {
+  display: grid;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.agreement-preview-title {
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.agreement-preview-text {
+  margin: 0;
+  padding: var(--s3);
+  overflow: hidden;
+  border: var(--hairline) dashed var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--f3);
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* 悬浮保存按钮：fixed 贴屏幕右下角，但横向要落在应用这条 720px 居中列内，

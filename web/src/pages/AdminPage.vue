@@ -233,6 +233,8 @@ const form = reactive({
   inviteDurationDays: 0,
   /** 软件包下载源：直链地址或 GitHub 仓库（owner/repo） */
   download: { source: 'url' as 'url' | 'github', url: '', repo: '' },
+  /** 用户协议：开关与 Markdown 正文，随其它设置一起保存（正文变化时服务端自增版本） */
+  agreement: { enabled: false, content: '' },
 });
 
 /** 管理页自己的文案：提示与开关说明放在这里，提取脚本会换成文案 key。 */
@@ -305,6 +307,9 @@ const invites = ref<
 >([]);
 const settingsError = ref('');
 const settingsSaving = ref(false);
+/** 用户协议当前生效的版本与更新时间：只读展示，保存后按服务端返回的设置回填。 */
+const agreementVersion = ref(0);
+const agreementUpdatedAt = ref('');
 const loaded = ref(false);
 const panelBusy = computed(() =>
   tab.value === 'users'
@@ -600,6 +605,8 @@ async function exportCsv(): Promise<void> {
 
 const formatPattern = /^[A-Za-z0-9]+(\s*,\s*[A-Za-z0-9]+)*$/;
 const titleEnPattern = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
+/** 用户协议正文上限：与服务端一致（超出时服务端回 `settings.agreementTooLong`）。 */
+const AGREEMENT_MAX_CHARS = 200_000;
 
 async function loadSettings(): Promise<void> {
   const data = await settingsQuery.run(() => api.settings.get());
@@ -663,6 +670,16 @@ function fillForm(data: JsonObject): void {
   form.download.source = download.source === 'github' ? 'github' : 'url';
   form.download.url = String(download.url ?? '');
   form.download.repo = String(download.repo ?? '');
+  // 用户协议：管理端额外拿到正文。只在数据里真有这一段时才回填，生成邀请码这类局部刷新
+  // 不带 agreement 时不能把正在编辑的正文冲掉；版本与更新时间同样按服务端返回更新。
+  const agreement = data.agreement;
+  if (agreement && typeof agreement === 'object' && !Array.isArray(agreement)) {
+    const record = agreement as JsonObject;
+    form.agreement.enabled = record.enabled === true;
+    form.agreement.content = String(record.content ?? '');
+    agreementVersion.value = Number(record.version) || 0;
+    agreementUpdatedAt.value = String(record.updatedAt ?? '');
+  }
   if (Array.isArray(data.invites)) {
     invites.value = data.invites.map((item) => {
       const row = (item ?? {}) as JsonObject;
@@ -799,6 +816,15 @@ async function saveSettings(): Promise<void> {
         patternMessage: t('admin.settings.accentInvalid'),
       }),
     ],
+    // 用户协议：开启时正文不能为空（服务端也会拒）；超长同样在本地先拦，不用等一轮请求。
+    [
+      t('admin.settings.agreement'),
+      form.agreement.enabled && !form.agreement.content.trim()
+        ? t('admin.settings.agreementContentRequired')
+        : form.agreement.content.length > AGREEMENT_MAX_CHARS
+          ? t('admin.settings.agreementTooLong', { max: AGREEMENT_MAX_CHARS })
+          : '',
+    ],
   ];
   for (const [, message] of checks) {
     if (message) {
@@ -841,6 +867,11 @@ async function saveSettings(): Promise<void> {
         source: form.download.source,
         url: form.download.url.trim(),
         repo: form.download.repo.trim(),
+      },
+      // 用户协议：正文变化时服务端自增版本并写更新时间；只开关不升版本。
+      agreement: {
+        enabled: form.agreement.enabled === true,
+        content: form.agreement.content,
       },
     };
     for (const item of LIMIT_ITEMS) payload[item.key] = numberField(item.key);
@@ -1007,6 +1038,8 @@ async function copyInvite(code: string): Promise<void> {
     :pair-limits="pairLimits"
     :copy="settingsCopy"
     :invites="invites"
+    :agreement-version="agreementVersion"
+    :agreement-updated-at="agreementUpdatedAt"
     :invite-busy="inviteBusy"
     @retry="loadSettings"
     @save="saveSettings"

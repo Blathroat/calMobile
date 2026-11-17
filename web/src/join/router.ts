@@ -21,6 +21,7 @@ import RegistrationDetailPage from '@/pages/RegistrationDetailPage.vue';
 import UserPublicPage from '@/pages/UserPublicPage.vue';
 import MeetingApplyPage from '@/pages/MeetingApplyPage.vue';
 import MeetingDetailPage from '@/pages/MeetingDetailPage.vue';
+import AgreementPage from '@/pages/AgreementPage.vue';
 import LinkOnlyPage from '@/join/LinkOnlyPage.vue';
 import { navigation } from '@/app/navigation';
 import { useSessionStore } from '@/stores/session';
@@ -40,6 +41,12 @@ export function createJoinRouter(history: RouterHistory = createWebHistory()) {
         path: '/forgot-password',
         component: ForgotPasswordPage,
         meta: { title: 'auth.forgot.title', back: true, bodyGap: 'tight' },
+      },
+      {
+        // 用户协议：登录 / 注册页的蓝链与已登录用户的更新提示共用；公开可读。
+        path: '/agreement',
+        component: AgreementPage,
+        meta: { title: 'agreement.title', back: true, bodyGap: 'tight' },
       },
       {
         // 分享链接的第一屏：公开的展会详情，未登录也能看（「立即报名」在详情页底部）。

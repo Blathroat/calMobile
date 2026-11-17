@@ -145,7 +145,26 @@
       "saveFailed": "保存失败，请稍后重试",
       "saved": "服务器设置已保存",
       "server": "服务器设置",
-      "serverScope": "这里的配置保存在服务端，保存后对所有用户与展商同时生效。"
+      "serverScope": "这里的配置保存在服务端，保存后对所有用户与展商同时生效。",
+      "agreement": "用户协议",
+      "agreementHint": "开启后，登录与注册页要求用户同意；协议内容更新后，已登录用户会看到确认提示。关闭后所有入口隐藏。",
+      "agreementEnabled": "开启用户协议",
+      "agreementVersion": "当前版本",
+      "agreementNotSet": "还没有上传内容",
+      "agreementVersionValue": "第 {version} 版 · 更新于 {date}",
+      "agreementUpload": "上传 Markdown 文件",
+      "agreementReplace": "重新上传",
+      "agreementClear": "清除内容",
+      "agreementEmptyHint": "还没有上传用户协议内容。开启用户协议前需要先上传 Markdown 文件。",
+      "agreementFileHint": "支持 .md / .txt，正文最多 {max} 字；保存后生效。",
+      "agreementFileMeta": "{name} · {count} 字",
+      "agreementFileMetaNoName": "{count} 字",
+      "agreementPreviewTitle": "内容预览",
+      "agreementReadFailed": "读取文件失败，请换一个 Markdown 文件",
+      "agreementTooLarge": "文件不能超过 {kb} KB",
+      "agreementContentRequired": "开启用户协议时，正文不能为空",
+      "agreementTooLong": "用户协议正文不能超过 {max} 字",
+      "agreementVersionOnly": "第 {version} 版"
     },
     "title": "管理后台",
     "users": {
@@ -176,7 +195,11 @@
       "twoFactorEnabled": "已开启两步验证",
       "unknown": "未知",
       "updateFailed": "更新失败",
-      "viewPublicAria": "查看 {name} 的公开页"
+      "viewPublicAria": "查看 {name} 的公开页",
+      "agreementAccepted": "用户协议：已同意 v{version}（{date}）",
+      "agreementAcceptedNoDate": "用户协议：已同意 v{version}",
+      "agreementOutdated": "用户协议：未同意当前版本（此前同意 v{version}）",
+      "agreementNever": "用户协议：未同意"
     },
     "download": {
       "title": "软件包下载",
@@ -1111,7 +1134,10 @@
       "avatarUploadOnly": "头像请通过上传更新",
       "emailTaken": "该邮箱已被其他账号使用",
       "emailUnchanged": "新邮箱与当前邮箱相同",
-      "inviteRoleInvalid": "当前身份不能使用邀请码"
+      "inviteRoleInvalid": "当前身份不能使用邀请码",
+      "agreementDisabled": "用户协议当前未开启",
+      "agreementVersionChanged": "用户协议已更新，请重新阅读并确认",
+      "loginRequired": "请先登录后再操作"
     },
     "quota": {
       "exhibitionsExceeded": "同时筹备的展会最多 {max} 个，请调整展会日期或删除已有展会"
@@ -1194,7 +1220,10 @@
       "userStatusInvalid": "账号状态只能是 正常 / 受限 / 封禁",
       "downloadSourceInvalid": "下载源只能是直链或 GitHub 仓库",
       "downloadUrlInvalid": "下载地址需要以 http:// 或 https:// 开头",
-      "downloadRepoInvalid": "GitHub 仓库需要写成 owner/repo"
+      "downloadRepoInvalid": "GitHub 仓库需要写成 owner/repo",
+      "agreementContentRequired": "开启用户协议前请先上传 Markdown 正文",
+      "agreementInvalid": "用户协议设置格式不正确",
+      "agreementTooLong": "用户协议正文过长（最多 {max} 字符）"
     },
     "users": {
       "cannotChangeOwnRole": "不能修改自己的权限",
@@ -1383,5 +1412,31 @@
     "hourUnit": "时",
     "minute": "分钟",
     "minuteUnit": "分"
+  },
+  "agreement": {
+    "title": "用户协议",
+    "loading": "正在加载用户协议…",
+    "loadFailed": "用户协议加载失败",
+    "disabledTitle": "用户协议暂未开启",
+    "disabledDescription": "管理员还没有开启用户协议，暂无内容可查看。",
+    "emptyTitle": "用户协议暂未设置",
+    "emptyDescription": "管理员还没有上传用户协议内容，请稍后再来。",
+    "versionDate": "第 {version} 版 · {date}",
+    "updatedOnly": "更新于 {date}",
+    "consentPrefix": "我已阅读并同意",
+    "consentLink": "《用户协议》",
+    "consentRequired": "请先阅读并同意《用户协议》",
+    "entry": "查看用户协议",
+    "prompt": {
+      "title": "用户协议更新",
+      "message": "用户协议已更新到第 {version} 版（{date}），请阅读并同意最新版本后继续使用。",
+      "messageNoDate": "用户协议已更新到第 {version} 版，请阅读并同意最新版本后继续使用。",
+      "view": "查看用户协议",
+      "disagree": "不同意并退出",
+      "agree": "同意",
+      "agreeFailed": "同意失败，请稍后重试",
+      "exitUnavailable": "无法自动关闭应用，请手动退出"
+    },
+    "versionOnly": "第 {version} 版"
   }
 }

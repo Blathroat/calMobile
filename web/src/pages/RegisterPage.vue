@@ -12,7 +12,7 @@
  * 校验规则来自「管理-设置」的服务器设置（bootstrap 下发的 `limits`），页面即时提示，
  * 后端保存前会再校验一次（server/src/routes/auth-hono.ts），绕过页面直接调接口同样被拦。
  */
-import { computed, nextTick, onBeforeUnmount, ref, type Ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, refreshRuntimeBootstrap } from '@/app/runtime';
 import { toast } from '@/services/toast';
@@ -59,6 +59,36 @@ const privacyPolicyUrl = computed(() => {
   const value = bootstrap.privacyPolicyUrl.trim();
   return value.startsWith('https://') ? value : '';
 });
+
+/**
+ * 用户协议：管理员开启后，注册页在发验证码之前就要先勾选同意；注册成功建立会话后
+ * 把同意的版本写回账号（失败静默，外壳的全局更新弹窗会兜底）。
+ */
+const agreementEnabled = computed(() => bootstrap.agreement?.enabled === true);
+const agreementVersion = computed(() => Number(bootstrap.agreement?.version ?? 0) || 0);
+const agreed = ref(false);
+const agreementError = ref('');
+
+watch(agreed, () => {
+  agreementError.value = '';
+});
+
+/** 协议开启但没勾选时拦下当前动作（发验证码 / 提交注册）。 */
+function agreementBlocked(): boolean {
+  if (!agreementEnabled.value || agreed.value) return false;
+  agreementError.value = t('agreement.consentRequired');
+  return true;
+}
+
+/** 建立会话后写回同意；失败静默，交给全局「用户协议更新」弹窗兜底。 */
+async function recordAgreementConsent(): Promise<void> {
+  if (!agreementEnabled.value || !agreed.value || agreementVersion.value <= 0) return;
+  try {
+    await api.profile.agree(agreementVersion.value);
+  } catch {
+    /* 静默失败：全局弹窗会再要求一次 */
+  }
+}
 
 const step = ref<1 | 2>(1);
 const username = ref('');
@@ -177,6 +207,7 @@ onBeforeUnmount(stopCountdown);
 async function submitAccount(): Promise<void> {
   error.value = '';
   if (!validateAccount()) return;
+  if (agreementBlocked()) return;
   accountBusy.value = true;
   try {
     const payload: JsonObject = {
@@ -231,6 +262,7 @@ async function verifyAccount(): Promise<void> {
       }
       verifiedSession = api.session.signal;
     }
+    await recordAgreementConsent();
     await refreshRuntimeBootstrap();
     stopCountdown();
     toast(t('auth.register.createdAndSignedIn'), 'success');
@@ -379,6 +411,18 @@ function messageOf(reason: unknown): string {
         :placeholder="t('auth.register.invitePlaceholder')"
       />
       <p class="field-hint">{{ t('auth.register.inviteHint') }}</p>
+    </div>
+
+    <!-- 用户协议：开启时先勾选才能发送验证码 / 注册；关闭时整块不渲染。 -->
+    <div v-if="agreementEnabled" class="check-row agreement-consent">
+      <label class="check-label" for="register-agreement">
+        <input id="register-agreement" v-model="agreed" type="checkbox" />
+        <span class="check-copy">
+          {{ t('agreement.consentPrefix')
+          }}<RouterLink class="agreement-link" to="/agreement">{{ t('agreement.consentLink') }}</RouterLink>
+        </span>
+      </label>
+      <p v-if="agreementError" class="field-error" role="alert">{{ agreementError }}</p>
     </div>
 
     <div class="row" data-between="true">
