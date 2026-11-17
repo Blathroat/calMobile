@@ -8,7 +8,9 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp, ref, type App } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
 import AdminUsersSection from './AdminUsersSection.vue';
+import { useBootstrapStore } from '@/stores/bootstrap';
 import type { User } from '@/api/types';
 
 let app: App | undefined;
@@ -19,9 +21,19 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-/** 挂载分区，返回整张卡片的可见文本。 */
-function mountCard(users: User[]): string {
+/** 挂载分区，返回整张卡片的可见文本。`agreement` 模拟启动数据里的用户协议摘要。 */
+function mountCard(
+  users: User[],
+  agreement: { enabled: boolean; version: number; updatedAt?: string } = {
+    enabled: false,
+    version: 0,
+    updatedAt: '',
+  },
+): string {
   document.body.innerHTML = '<div id="admin-users-test"></div>';
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  useBootstrapStore().apply({ agreement: { ...agreement, updatedAt: agreement.updatedAt ?? '' } });
   app = createApp(AdminUsersSection, {
     users: { data: ref(users), error: ref(undefined), loading: ref(false) },
     userItems: users,
@@ -33,6 +45,7 @@ function mountCard(users: User[]): string {
       manageMeetings: '管理会议',
     },
   });
+  app.use(pinia);
   app.mount('#admin-users-test');
   return document.body.textContent ?? '';
 }

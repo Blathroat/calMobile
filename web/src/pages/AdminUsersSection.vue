@@ -12,7 +12,8 @@ import StateBlock from '@/components/StateBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { formatLocalChineseDate, truncate } from '@/services/format';
 import { statusTone, userStatusLabel } from '@/services/status';
-import type { Ref } from 'vue';
+import { useBootstrapStore } from '@/stores/bootstrap';
+import { computed, type Ref } from 'vue';
 import type { User } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -53,6 +54,30 @@ function lastLoginMeta(user: User): string {
   const date = String(user.lastLoginTime || user.registrationTime || '') || t('admin.users.unknown');
   const region = String(user.lastLoginRegion || '');
   return t('admin.users.lastLogin', { time: region ? `${date} ${region}` : date });
+}
+
+/** 当前生效的用户协议版本；0 表示管理员没开启协议，卡片上不显示同意状态。 */
+const agreementVersion = computed(() => {
+  const agreement = useBootstrapStore().agreement;
+  return agreement?.enabled === true ? Number(agreement.version) || 0 : 0;
+});
+
+/**
+ * 用户协议同意状态：管理端要能一眼看出每个账号同意到哪一版。
+ * 只有协议开启（当前版本 > 0）时才显示；关闭时这些信息对管理员没有意义。
+ */
+function agreementMeta(user: User): string {
+  const current = agreementVersion.value;
+  if (current <= 0) return '';
+  const accepted = Number(user.agreedTermsVersion) || 0;
+  if (accepted >= current) {
+    const date = formatLocalChineseDate(user.agreedTermsAt);
+    return date
+      ? t('admin.users.agreementAccepted', { version: accepted, date })
+      : t('admin.users.agreementAcceptedNoDate', { version: accepted });
+  }
+  if (accepted > 0) return t('admin.users.agreementOutdated', { version: accepted });
+  return t('admin.users.agreementNever');
 }
 </script>
 
@@ -107,6 +132,10 @@ function lastLoginMeta(user: User): string {
               <RoleTag :role-code="String(user.roleCode || '')" />
             </span>
             <span class="row-meta">{{ lastLoginMeta(user) }}</span>
+            <!-- 用户协议开启时，每个账号同意到哪一版也要能看见（关闭时整行不渲染）。 -->
+            <span v-if="agreementMeta(user)" class="row-meta" data-agreement-status="true">{{
+              agreementMeta(user)
+            }}</span>
             <span v-if="exhibitorMeta(user)" class="row-meta">{{ exhibitorMeta(user) }}</span>
             <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
             <span v-if="user.twoFactorEnabled === true" class="row-meta">{{ t('admin.users.twoFactorEnabled') }}</span>
