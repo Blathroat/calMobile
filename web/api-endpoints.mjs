@@ -89,7 +89,11 @@ export const ENDPOINTS = {
   'users.status': (payload) => ({ method: 'PUT', path: `/users/${encodeURIComponent(payload.id)}/status` }),
   'users.role': (payload) => ({ method: 'PUT', path: `/users/${encodeURIComponent(payload.id)}/role` }),
   'users.disable2fa': (payload) => ({ method: 'PUT', path: `/users/${encodeURIComponent(payload.id)}/two-factor` }),
-  'users.updateProfile': (payload) => ({ method: 'PUT', path: `/users/${encodeURIComponent(payload.id)}/profile`, body: { nickname: 'n' } }),
+  'users.updateProfile': (payload) => ({
+    method: 'PUT',
+    path: `/users/${encodeURIComponent(payload.id)}/profile`,
+    body: { nickname: 'n' },
+  }),
   'users.public': (payload) => ({ method: 'GET', path: '/users/public', query: payload }),
   'search.query': (payload) => ({ method: 'GET', path: '/search', query: payload }),
   'settings.get': () => ({ method: 'GET', path: '/settings' }),
