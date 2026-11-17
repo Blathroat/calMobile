@@ -112,14 +112,15 @@ test('报名受展会状态与窗口限制，重复报名被拒', async () => {
   );
   assert.strictEqual(missing.body.ok, false);
 
-  // 访客不能报名
+  // 匿名报名在报名站是允许的，但姓名必填；完整流程见 registration-query-link.test.ts
   const anonymous = await post('/api/v1/registrations', {
     exhibitionId: 'exh-2',
-    visitorName: '测试',
     visitorType: '专业观众',
     answers: '',
   });
-  assert.strictEqual(anonymous.status, 401);
+  assert.strictEqual(anonymous.status, 200);
+  assert.strictEqual(anonymous.body.ok, false);
+  assert.ok(anonymous.body.error.includes('请输入姓名'), anonymous.body.error);
 });
 
 test('无需审核的展会提交即通过，撤销后可以重新报名', async () => {

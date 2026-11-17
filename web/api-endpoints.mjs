@@ -69,7 +69,13 @@ export const ENDPOINTS = {
   }),
   'registrations.list': () => ({ method: 'GET', path: '/registrations' }),
   'registrations.get': (payload) => ({ method: 'GET', path: `/registrations/${encodeURIComponent(payload.id)}` }),
+  // 公开的查询链接：凭据在路径里。样例没有 token 时用一个固定占位值，只用于对路由。
+  'registrations.queryByToken': (payload) => ({
+    method: 'GET',
+    path: `/registrations/query/${encodeURIComponent(payload.token || 'sample-token')}`,
+  }),
   'registrations.submit': () => ({ method: 'POST', path: '/registrations' }),
+  'registrations.claim': () => ({ method: 'POST', path: '/registrations/claim' }),
   'registrations.cancel': (payload) => ({ method: 'DELETE', path: `/registrations/${encodeURIComponent(payload.id)}` }),
   'review.list': (payload) => ({ method: 'GET', path: '/review', query: payload }),
   'review.get': (payload) => ({ method: 'GET', path: `/review/${encodeURIComponent(payload.id)}` }),

@@ -41,7 +41,9 @@ import type {
   Id,
   JsonObject,
   Registration,
+  RegistrationClaimResult,
   RegistrationDetail,
+  RegistrationSubmitResult,
   ReleaseInfo,
   ReviewList,
   SearchResult,
@@ -205,8 +207,15 @@ export interface ApiClient {
     // `registrations`，键写成 `registration` 会匹配不上，撤销后再取详情会拿到旧状态。
     /** 报名详情。键是 `registrations.record`，必须落在 `registrations` 前缀下，否则撤销后读到旧值。 */
     get(id: Id): Promise<RegistrationDetail>;
-    /** 提交报名；成功后连带失效审核与展会（名额、统计会变）。 */
-    submit(payload: JsonObject): Promise<ApiResult>;
+    /**
+     * 用查询凭据读报名（报名站的分享链接，公开）。**刻意不进查询缓存**：
+     * 凭据在 URL 里，进缓存等于把它留在内存键里；这一屏也只看一次，没有复用价值。
+     */
+    queryByToken(token: string): Promise<RegistrationDetail>;
+    /** 提交报名；成功后连带失效审核与展会（名额、统计会变）。匿名报名会多返回 `queryToken`。 */
+    submit(payload: JsonObject): Promise<RegistrationSubmitResult>;
+    /** 把查询链接对应的匿名报名认领到当前账号（需要登录）；成功后会出现在「我的活动」。 */
+    claim(token: string): Promise<RegistrationClaimResult>;
     /** 撤销报名；同样连带失效审核与展会。 */
     cancel(id: Id): Promise<ApiResult>;
   };
@@ -534,11 +543,19 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
       // 缓存键前缀必须与写接口的 invalidates 前缀同一族：撤销报名失效的是
       // `registrations`，键写成 `registration` 会匹配不上，撤销后再取详情会拿到旧状态。
       get: (id) => read<RegistrationDetail>('registrations.record', `/registrations/${encodeURIComponent(id)}`),
+      // 查询凭据在 URL 里，故意不走 read()：不进缓存（理由见 ApiClient 上的注释）。
+      queryByToken: (token) => http.request<RegistrationDetail>(`/registrations/query/${encodeURIComponent(token)}`),
       submit: (payload) =>
-        write<ApiResult>('/registrations', { method: 'POST', body: payload }, [
+        write<RegistrationSubmitResult>('/registrations', { method: 'POST', body: payload }, [
           'registrations',
           'review',
           'exhibitions',
+        ]),
+      // 认领把匿名报名并进账号：我的报名与用户公开页（已参加展会）都要失效重取。
+      claim: (token) =>
+        write<RegistrationClaimResult>('/registrations/claim', { method: 'POST', body: { token } }, [
+          'registrations',
+          'users.public',
         ]),
       cancel: (id) =>
         write<ApiResult>(`/registrations/${encodeURIComponent(id)}`, { method: 'DELETE' }, [

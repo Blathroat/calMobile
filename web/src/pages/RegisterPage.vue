@@ -13,7 +13,7 @@
  * 后端保存前会再校验一次（server/src/routes/auth-hono.ts），绕过页面直接调接口同样被拦。
  */
 import { computed, nextTick, onBeforeUnmount, ref, type Ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { api, refreshRuntimeBootstrap } from '@/app/runtime';
 import { toast } from '@/services/toast';
 import {
@@ -35,8 +35,25 @@ const EMAIL_MAX = 60;
 
 type FieldName = 'username' | 'email' | 'password' | 'confirm';
 
+const route = useRoute();
 const router = useRouter();
 const bootstrap = useBootstrapStore();
+
+/**
+ * 注册前所在页面（例如未登录报名的查询链接），注册成功后原样带回。
+ * 与登录页同一套约定：只认非空字符串，没带就回默认落点。
+ */
+function redirectTarget(): string {
+  const value = route.query.redirect;
+  return typeof value === 'string' && value ? value : paths.home;
+}
+
+/** 已经有账号：去登录页，并把回跳地址一起带过去。 */
+function goLogin(): void {
+  const value = route.query.redirect;
+  void router.replace(typeof value === 'string' && value ? { path: '/login', query: { redirect: value } } : '/login');
+}
+
 /** 只接受 https，避免把后端误发的地址当成可点链接。 */
 const privacyPolicyUrl = computed(() => {
   const value = bootstrap.privacyPolicyUrl.trim();
@@ -217,7 +234,9 @@ async function verifyAccount(): Promise<void> {
     await refreshRuntimeBootstrap();
     stopCountdown();
     toast(t('auth.register.createdAndSignedIn'), 'success');
-    await router.replace(paths.home);
+    // 从查询链接（或其他受保护页面）跳来的，注册成功后回到原地址；
+    // 那里可能正好触发展商页跳转或报名认领，不再多走一次首页。
+    await router.replace(redirectTarget());
   } catch (reason) {
     verifyError.value = messageOf(reason);
   } finally {
@@ -422,7 +441,7 @@ function messageOf(reason: unknown): string {
     <button class="cta ghost" type="button" @click="showStep(1)">{{ t('auth.register.backToEdit') }}</button>
   </form>
 
-  <button class="cta ghost" type="button" @click="router.replace('/login')">
+  <button class="cta ghost" type="button" @click="goLogin">
     {{ t('auth.register.backToLogin') }}
   </button>
 </template>
