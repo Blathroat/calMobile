@@ -115,6 +115,8 @@ const emit = defineEmits<{
   generate: [];
   revoke: [id: string];
   copy: [code: string];
+  /** 「查看最近日志」：列表在二级页 /logs，设置页只在日志卡下面放入口按钮。 */
+  'open-logs': [];
 }>();
 
 /** 下载源选项：直链直接填 APK 地址，GitHub 仓库由服务器追踪最新 Release。 */
@@ -352,6 +354,12 @@ function clearAgreementContent(): void {
       </div>
       <p class="field-hint">{{ t('admin.settings.logsHint') }}</p>
     </div>
+
+    <!-- 入口放在日志卡下面：先看到上限与用量，再决定要不要翻最近日志。 -->
+    <button class="cta ghost logs-entry" data-size="small" type="button" @click="emit('open-logs')">
+      <AppIcon name="list" />
+      {{ t('logs.entry') }}
+    </button>
 
     <div class="card">
       <span class="section-label">{{ t('admin.settings.brand') }}</span>
@@ -900,6 +908,13 @@ function clearAgreementContent(): void {
 </template>
 
 <style scoped>
+/* 日志入口：按内容取宽的 ghost 小按钮，跟在日志卡下方。 */
+.logs-entry {
+  width: auto;
+  align-self: flex-start;
+  padding-inline: var(--s3);
+}
+
 /* 卡片内的节奏：组标题到第一行留 12px，组与组之间 20px（在 .list 层）。
    设置项本身「一行标题 + 一行说明」为一组，组与组之间 16px。 */
 .card {

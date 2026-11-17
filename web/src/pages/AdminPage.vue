@@ -1021,15 +1021,6 @@ async function copyInvite(code: string): Promise<void> {
     <span class="pill">{{ t('admin.settings.loadingSecurity') }}</span>
   </div>
 
-  <!-- 最近日志入口：日志列表很长，放二级页；管理页顶部只留一颗 ghost 小按钮。 -->
-  <div class="row" data-between="true">
-    <span class="fill" />
-    <button class="cta ghost logs-entry" data-size="small" type="button" @click="openLogs">
-      <AppIcon name="list" />
-      {{ t('logs.entry') }}
-    </button>
-  </div>
-
   <SegControl :model-value="tab" :items="TABS" :label="t('admin.sections')" @update:model-value="changeTab" />
 
   <!-- ── 用户管理 ─────────────────────────────────────────────── -->
@@ -1089,13 +1080,8 @@ async function copyInvite(code: string): Promise<void> {
     @generate="generateInvite"
     @revoke="revokeInvite"
     @copy="copyInvite"
+    @open-logs="openLogs"
   />
 </template>
 
-<style>
-/* 管理页顶部的日志入口：整行只有这一颗 ghost 小按钮，按内容宽度收住，不拉满一行。 */
-.cta.logs-entry {
-  width: auto;
-  padding-inline: var(--s3);
-}
-</style>
+<style></style>

@@ -118,10 +118,15 @@ function setInput(input: HTMLInputElement, value: string): void {
 }
 
 describe('管理后台 · 最近日志入口', () => {
-  it('顶部按钮跳到日志页', async () => {
-    const container = await mountAdmin('/admin');
-    await vi.waitFor(() => expect(buttonByText(container, '查看最近日志')).not.toBeUndefined());
-    buttonByText(container, '查看最近日志')?.click();
+  it('日志卡片下方的按钮跳到日志页', async () => {
+    const container = await mountAdmin('/admin?tab=settings');
+    await vi.waitFor(() => expect(container.querySelector('#settings-logs-mb')).not.toBeNull());
+    const entry = buttonByText(container, '查看最近日志');
+    expect(entry).not.toBeUndefined();
+    // 入口在日志卡下面：按钮必须是日志卡的相邻后继节点，不在页面顶部。
+    const logsCard = container.querySelector<HTMLElement>('#settings-logs-mb')!.closest('.card');
+    expect(logsCard?.nextElementSibling).toBe(entry);
+    entry?.click();
     await vi.waitFor(() => expect(router?.currentRoute.value.path).toBe('/logs'));
   });
 });
