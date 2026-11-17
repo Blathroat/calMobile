@@ -348,7 +348,7 @@ onMounted(() => {
     >
       <img :src="cover" :alt="t('exhibition.detail.coverAlt', { title: String(exhibition.title ?? '') })" />
     </button>
-    <div v-else class="hero ph-img" aria-hidden="true" />
+    <div v-else class="hero ph-img hero-placeholder" aria-hidden="true" />
 
     <div class="stack" data-gap="sm">
       <h2 class="detail-title">{{ exhibition.title }}</h2>

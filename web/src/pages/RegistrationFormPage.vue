@@ -509,7 +509,7 @@ async function submit(): Promise<void> {
 
 /* 缩略图按 44×78 展示（比列表里的 36×64 大一档）。 */
 .reg-thumb {
-  width: 44px;
+  /* 高度固定，宽度随海报比例变化，卡片高度不变。 */
   height: 78px;
 }
 

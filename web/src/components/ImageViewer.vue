@@ -253,6 +253,9 @@ onBeforeUnmount(() => {
 }
 
 .viewer-image {
+  /* 灯箱只做等比缩放：整张海报放进屏幕，高度跟着图片比例走，不裁切、不拉变形。 */
+  width: auto;
+  height: auto;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;

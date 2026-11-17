@@ -329,7 +329,7 @@ usePullRefresh(
 <style scoped>
 /* 缩略图按设计稿的 44×78 竖版；全局 .thumb 是 36×64，只在本页放大一档。 */
 .exh-thumb {
-  width: 44px;
+  /* 高度固定，宽度由海报比例（9:16～3:4 纵向）算出来；卡片高度不变。 */
   height: 78px;
 }
 

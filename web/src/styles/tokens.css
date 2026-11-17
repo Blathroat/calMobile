@@ -935,11 +935,14 @@ label {
   color: var(--ink-3);
 }
 
-/* 展会图片统一按设计稿的 1080×1920（9:16）竖版比例展示，避免图片被拉成方块 */
+/* 展会海报缩略图：高度固定（同一列表的卡片高度因此不变），宽度随海报比例变化；
+   MediaBox 把图片真实比例收进 9:16～3:4 纵向之间，默认槽位是 9:16（36×64）。
+   超出范围的海报按最接近的一端填满，cover 只在这种情况下裁切。 */
 .thumb {
   flex: none;
-  width: 36px;
   height: 64px;
+  width: auto;
+  aspect-ratio: 1080 / 1920;
   border: var(--hairline) solid var(--stroke);
   border-radius: var(--r-input);
   background: var(--f3);
@@ -979,11 +982,11 @@ button.avatar {
 }
 
 .thumb-sm {
-  width: 32px;
   height: 56px;
 }
 
-/* 9:16 的短视频/封面槽位（展会卡片、报名记录等） */
+/* 9:16 的封面槽位（展会卡片、报名记录等）：图片加载出真实比例后由 MediaBox
+   的行内 aspect-ratio 覆盖；这里是没有图片 / 加载前的高度基准。 */
 .thumb-cover {
   aspect-ratio: 1080 / 1920;
 }
@@ -1015,10 +1018,11 @@ button.avatar {
   display: block;
 }
 
-/* 展会封面：1080×1920 的竖版海报，宽度收窄后居中展示 */
+/* 展会封面（详情页大图）：等比缩放展示整张海报，不裁切；容器高度跟着图片走。
+   宽度仍然收窄到 228（窄屏 100%），特别长的海报用 max-height 兜住，
+   这时 object-fit: contain 保证海报不被拉伸。 */
 .hero {
   width: min(100%, 228px);
-  aspect-ratio: 1080 / 1920;
   margin-inline: auto;
   border: var(--hairline) solid var(--stroke);
   border-radius: var(--r-panel);
@@ -1026,15 +1030,21 @@ button.avatar {
   overflow: hidden;
 }
 
+/* 没有封面时的占位槽位：保留设计稿的 9:16 竖版框。 */
+.hero-placeholder {
+  aspect-ratio: 1080 / 1920;
+}
+
 .hero-compact {
   width: min(100%, 148px);
 }
 
 .hero > img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
   display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(70dvh, 600px);
+  object-fit: contain;
 }
 
 /* 表单字数计数与密码强度 */

@@ -401,7 +401,7 @@ usePullRefresh(
 /* 开办的展会缩略图：设计稿的 44×78 海报比例（令牌里的 .thumb 是 36×64，这里按任务值覆盖）。 */
 /* 比 .thumb 高一档，样式顺序不影响尺寸。 */
 .row-card .public-thumb {
-  width: 44px;
+  /* 高度固定，宽度随海报比例变化，行高不变。 */
   height: 78px;
 }
 
