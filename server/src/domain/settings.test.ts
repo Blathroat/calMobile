@@ -284,7 +284,8 @@ test('用户协议开启时正文必填，正文变化才升版本', () => {
   const updated = applyServerPatch(disabled, { agreement: { content: '# 条款 v2' } });
   assert.equal(updated.agreement.version, 2);
   assert.equal(updated.agreement.content, '# 条款 v2');
-  assert.notEqual(updated.agreement.updatedAt, first.agreement.updatedAt);
+  // CI 上两次保存可能落在同一毫秒，不能要求时间戳严格不同；但更新后不能倒退。
+  assert.ok(updated.agreement.updatedAt >= first.agreement.updatedAt, '更新时间不能倒退');
 });
 
 test('用户协议非法入参与超长正文按业务失败返回', () => {
