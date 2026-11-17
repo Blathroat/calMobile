@@ -606,8 +606,7 @@
     "missingVideo": "没有读到视频",
     "pinchZoom": "双指捏合缩放",
     "unreadableFile": "读不到刚选择的文件",
-    "usePhoto": "使用这张",
-    "viewerHint": "双指缩放 · 放大后拖动 · 双击复位"
+    "usePhoto": "使用这张"
   },
   "meeting": {
     "apply": {
