@@ -48,6 +48,8 @@ const categoryPlaceholder = t('exhibition.form.chooseCategory');
 const route = useRoute();
 const router = useRouter();
 const bootstrap = useBootstrapStore();
+/** 单个展会最长持续天数（管理-设置 → 展商相关）；0 表示不限。 */
+const maxExhibitionDays = computed(() => Math.max(0, Math.trunc(Number(bootstrap.exhibitor.maxExhibitionDays) || 0)));
 const session = useSessionStore();
 
 const exhibitionId = computed(() => String(route.params.id ?? ''));
@@ -300,8 +302,18 @@ function fieldChecks(): Array<[string, () => string]> {
         check(form.endDate, {
           label: t('exhibition.form.endDate'),
           pattern: PATTERNS.date,
-          custom: () =>
-            form.endDate && form.date && form.endDate < form.date ? t('exhibition.form.endBeforeStart') : '',
+          custom: () => {
+            if (form.endDate && form.date && form.endDate < form.date) return t('exhibition.form.endBeforeStart');
+            if (maxExhibitionDays.value > 0 && form.date && form.endDate) {
+              const start = Date.parse(`${form.date}T00:00:00Z`);
+              const end = Date.parse(`${form.endDate}T00:00:00Z`);
+              const days = Math.round((end - start) / 86_400_000) + 1;
+              if (Number.isFinite(days) && days > maxExhibitionDays.value) {
+                return t('exhibition.form.durationTooLong', { max: maxExhibitionDays.value });
+              }
+            }
+            return '';
+          },
         }),
     ],
     [
@@ -741,6 +753,9 @@ function normalizeOptions(options: unknown): string[] {
             <AppIcon name="chevronDown" size="icon icon-sm" />
           </button>
           <p v-if="isInvalid('endDate')" class="field-error" role="alert">{{ formError }}</p>
+          <p v-if="maxExhibitionDays > 0" class="field-hint">
+            {{ t('exhibition.form.durationHint', { max: maxExhibitionDays }) }}
+          </p>
         </div>
       </div>
 

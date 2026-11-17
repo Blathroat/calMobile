@@ -223,6 +223,8 @@ const form = reactive({
   maxFutureExhibitions: 0,
   /** 展商可同时筹备的私人会议数；0 表示不限 */
   maxFutureMeetings: 0,
+  /** 单个展会最长持续天数（按开展～闭展算）；0 表示不限 */
+  maxExhibitionDays: 0,
   /** 服务器存储上限，单位 MB */
   storageMb: 1024,
   /** 存满以后：拒绝新上传，或删掉最早的文件 */
@@ -245,10 +247,13 @@ const COPY = {
   coverTitle: t('admin.media.defaultCover'),
   coverHint: t('admin.media.defaultCoverFallback'),
   limitIntro: t('admin.limits.charCapIntro'),
+  exhibitorSection: t('admin.settings.exhibitorSection'),
   exhibitorLimit: t('admin.limits.concurrentExhibitions'),
   exhibitorLimitHint: t('admin.limits.concurrentExhibitionsRule'),
   meetingLimit: t('admin.limits.concurrentMeetings'),
   meetingLimitHint: t('admin.limits.concurrentMeetingsRule'),
+  maxExhibitionDays: t('admin.settings.maxExhibitionDays'),
+  maxExhibitionDaysHint: t('admin.settings.maxExhibitionDaysHint'),
   manageExhibitions: t('admin.users.manageExhibitions'),
   manageMeetings: t('admin.users.manageMeetings'),
   adjustStatus: t('admin.users.adjustStatus'),
@@ -279,10 +284,13 @@ const settingsCopy = {
   coverTitle: COPY.coverTitle,
   coverHint: COPY.coverHint,
   limitIntro: COPY.limitIntro,
+  exhibitorSection: COPY.exhibitorSection,
   exhibitorLimit: COPY.exhibitorLimit,
   exhibitorLimitHint: COPY.exhibitorLimitHint,
   meetingLimit: COPY.meetingLimit,
   meetingLimitHint: COPY.meetingLimitHint,
+  maxExhibitionDays: COPY.maxExhibitionDays,
+  maxExhibitionDaysHint: COPY.maxExhibitionDaysHint,
   avatarSection: COPY.avatarSection,
   avatarFormats: COPY.avatarFormats,
   storageTitle: COPY.storageTitle,
@@ -670,6 +678,7 @@ function fillForm(data: JsonObject): void {
   form.defaultCover = String(cover.defaultCover ?? bootstrap.cover.defaultCover ?? '');
   form.maxFutureExhibitions = Number(exhibitor.maxFutureExhibitions ?? bootstrap.exhibitor.maxFutureExhibitions ?? 0);
   form.maxFutureMeetings = Number(exhibitor.maxFutureMeetings ?? bootstrap.exhibitor.maxFutureMeetings ?? 0);
+  form.maxExhibitionDays = Number(exhibitor.maxExhibitionDays ?? bootstrap.exhibitor.maxExhibitionDays ?? 0);
   const invite = (data.invite ?? {}) as JsonObject;
   form.inviteUses = Number(invite.uses ?? form.inviteUses) || 1;
   const legacyDays = invite.validDays;
@@ -888,6 +897,7 @@ async function saveSettings(): Promise<void> {
       defaultCover: form.defaultCover.trim(),
       maxFutureExhibitions: Number(form.maxFutureExhibitions) || 0,
       maxFutureMeetings: Number(form.maxFutureMeetings) || 0,
+      maxExhibitionDays: Number(form.maxExhibitionDays) || 0,
       inviteUses: Number(form.inviteUses) || 1,
       inviteValidHours: Number(form.inviteValidHours) || 0,
       inviteDurationDays: Number(form.inviteDurationDays) || 0,

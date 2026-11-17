@@ -271,10 +271,11 @@ export const serverSettingsPatchSchema = z
     bio: z.unknown(),
     region: z.unknown(),
     answer: z.unknown(),
-    // 缺省展会封面（媒体短 URL）与「展商可同时筹备的展会数」上限（0 = 不限）
+    // 缺省展会封面（媒体短 URL）与展商策略：可同时筹备的展会 / 私人会议数、单个展会最长天数
     defaultCover: z.unknown(),
     maxFutureExhibitions: z.unknown(),
     maxFutureMeetings: z.unknown(),
+    maxExhibitionDays: z.unknown(),
     inviteUses: z.unknown(),
     inviteValidHours: z.unknown(),
     inviteDurationDays: z.unknown(),

@@ -46,6 +46,8 @@ interface AdminSettingsForm {
   defaultCover: string;
   maxFutureExhibitions: number;
   maxFutureMeetings: number;
+  /** 单个展会最长持续天数（按开展～闭展算）；0 表示不限 */
+  maxExhibitionDays: number;
   storageMb: number;
   whenFull: 'reject' | 'evict-oldest';
   /** 操作日志的存储上限，单位 MB（超过后服务端自动清掉最早的日志） */
@@ -91,10 +93,13 @@ const props = defineProps<{
     coverTitle: string;
     coverHint: string;
     limitIntro: string;
+    exhibitorSection: string;
     exhibitorLimit: string;
     exhibitorLimitHint: string;
     meetingLimit: string;
     meetingLimitHint: string;
+    maxExhibitionDays: string;
+    maxExhibitionDaysHint: string;
     avatarSection: string;
     avatarFormats: string;
     storageTitle: string;
@@ -450,9 +455,9 @@ function clearAgreementContent(): void {
       </div>
     </div>
 
-    <!-- 展商端策略：单个展商可同时筹备的展会数 -->
+    <!-- 展商相关：同时筹备的展会 / 会议数，以及单个展会最长持续天数 -->
     <div class="card">
-      <span class="section-label">{{ copy.exhibitorLimit }}</span>
+      <span class="section-label">{{ copy.exhibitorSection }}</span>
       <div class="settings-rows">
         <div class="setting-block">
           <div class="setting-row">
@@ -487,6 +492,24 @@ function clearAgreementContent(): void {
             </span>
           </div>
           <p class="field-hint">{{ copy.meetingLimitHint }}</p>
+        </div>
+        <div class="setting-block">
+          <div class="setting-row">
+            <label for="settings-max-exhibition-days">{{ copy.maxExhibitionDays }}</label>
+            <span class="setting-control">
+              <input
+                id="settings-max-exhibition-days"
+                v-model.number="form.maxExhibitionDays"
+                class="input input-line setting-num"
+                type="number"
+                min="0"
+                max="365"
+                inputmode="numeric"
+              />
+              <span class="setting-unit">{{ t('admin.settings.daysUnit') }}</span>
+            </span>
+          </div>
+          <p class="field-hint">{{ copy.maxExhibitionDaysHint }}</p>
         </div>
       </div>
     </div>

@@ -313,3 +313,12 @@ test('日志存储上限收敛到 1～10240 MB', () => {
   assert.equal(applyServerPatch(defaults(), {}).logs.storageMb, 64, '默认保留 64 MB');
   assert.throws(() => applyServerPatch(defaults(), { logs: 'x' }), /格式不正确/);
 });
+
+/** 展商策略：单个展会最长持续天数 0～365，0 表示不限（与前端表单上限一致）。 */
+test('单个展会最大持续天数收敛到 0～365', () => {
+  assert.equal(applyServerPatch(defaults(), { maxExhibitionDays: 7 }).exhibitor.maxExhibitionDays, 7);
+  assert.equal(applyServerPatch(defaults(), { maxExhibitionDays: 0 }).exhibitor.maxExhibitionDays, 0);
+  assert.equal(applyServerPatch(defaults(), { maxExhibitionDays: -5 }).exhibitor.maxExhibitionDays, 0);
+  assert.equal(applyServerPatch(defaults(), { maxExhibitionDays: 999 }).exhibitor.maxExhibitionDays, 365);
+  assert.equal(applyServerPatch(defaults(), {}).exhibitor.maxExhibitionDays, 0, '默认不限');
+});

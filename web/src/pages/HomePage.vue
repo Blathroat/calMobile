@@ -88,7 +88,11 @@ function dayRows(key: 'exhibitions' | 'meetings'): JsonObject[] {
   const day = view.value.day;
   if (day <= 0) return [];
   const all = Array.isArray(monthData.value?.[key]) ? (monthData.value?.[key] as JsonObject[]) : [];
-  return all.filter((item) => Number(item.day) === day);
+  return all.filter((item) => {
+    // 展会按「开展～闭展」覆盖的每一天出现在当天列表里；旧接口没有 days 时退回开展当天。
+    if (key === 'exhibitions' && Array.isArray(item.days)) return (item.days as unknown[]).includes(day);
+    return Number(item.day) === day;
+  });
 }
 
 function meetingLine(meeting: JsonObject): string {

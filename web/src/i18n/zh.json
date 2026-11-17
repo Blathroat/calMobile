@@ -169,7 +169,11 @@
       "logsCap": "日志大小上限",
       "logsHint": "单位为 MB，可填 1～10240；超过上限会自动清理最早的日志。",
       "logsUsage": "已存 {count} 条 · 已用 {used} / 上限 {limit}",
-      "logsUsageUnknown": "—"
+      "logsUsageUnknown": "—",
+      "exhibitorSection": "展商相关",
+      "maxExhibitionDays": "单个展会最大持续天数",
+      "maxExhibitionDaysHint": "0 表示不限；按开展～闭展计算，超过上限时展商不能保存展会。",
+      "daysUnit": "天"
     },
     "title": "管理后台",
     "users": {
@@ -542,7 +546,9 @@
       "openDateShort": "开展",
       "endDateShort": "闭展",
       "registrationStartShort": "开始",
-      "registrationEndShort": "截止"
+      "registrationEndShort": "截止",
+      "durationHint": "单个展会最长 {max} 天",
+      "durationTooLong": "单个展会最长 {max} 天，请缩短展期"
     },
     "list": {
       "countLabel": "{count} 个 · {registrations} 条报名",
@@ -1053,7 +1059,8 @@
       "recordMissing": "报名记录不存在，可能已被撤销"
     },
     "exhibition": {
-      "notFound": "展会不存在或已删除"
+      "notFound": "展会不存在或已删除",
+      "durationTooLong": "单个展会最长天数超过管理员限制"
     },
     "invite": {
       "exhausted": "邀请码已用完",

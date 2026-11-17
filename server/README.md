@@ -170,7 +170,7 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - 邀请码有两套时间：`expires_at` 是码本身的有效期（按小时，0 表示不过期）；`duration_days` 是兑换后展商身份保留的天数（0 表示永久，上限 3650）。用户行上的 `exhibitor_expires_at` 是到期时间，NULL 表示永久。删除是直接删行，列表时清掉已过期和已作废的码，这两类不再展示。注册时邀请码可选，先记在验证码票上，建号时与插入同一事务里消耗并写入到期时间。已登录用户用 `POST /profile/invite` 兑换：普通用户开通；限时展商从 `max(now(), 原到期时间)` 顺延，0 天码转为永久；永久展商与管理员拒绝且不消耗。受限账号不能兑换。
 - 展商到期按访问惰性结算，没有定时任务：认证解析（`middleware/auth.ts`）读到已到期的展商时把 `role` 改回 `user`、`accept_meetings` 关掉，并保留到期时间作为「已到期」历史。公开页、搜索和会议宿主这些读别人角色的地方用 `domain/membership.ts` 的 `effectiveRole()` / `canHostMeetings()` 判断，不依赖对方先登录。管理员用户列表在读取前批量结算一次。已到期的展商调用展商接口返回 403，文案说明「展商身份已到期」。
 - 登录成功（密码登录、两步验证通过、可信设备跳过验证、通行密钥验证通过，以及注册建号即登录）刷新 `users.last_login_time`、`users.last_login_ip`、`users.last_login_region`。地区由服务端用离线库解析：只支持 IPv4（IPv4-mapped IPv6 归一），私网 / 回环 / 链路本地 / CGNAT / 组播 / 保留段显示「内网」，纯 IPv6、非法地址与查不到给空串；展示为中国境内「省 + 市」（省市重复时去重，如「北京市」）、非中国「国家 + 省 + 市」，不展示运营商。IP 原文只落库、不下发；管理员用户列表下发 `lastLoginRegion`，`lastLoginTime` 为空时用 `registrationTime` 兜底。
-- 展会闭展日期选填（`exhibitions.exhibition_end_date`，NULL = 单日），不能早于开展日期；更新时没传 `endDate` 保留库里的值，传空串改回单日。
+- 展会闭展日期选填（`exhibitions.exhibition_end_date`，NULL = 单日），不能早于开展日期；更新时没传 `endDate` 保留库里的值，传空串改回单日。单个展会最长持续天数由 `app_settings.exhibitor.maxExhibitionDays` 控制（默认 0 = 不限，管理端 `PUT /settings` 提交，范围 0～365）：按开展～闭展含两端计算天数，超过时新建 / 更新都返回 `exhibition.durationTooLong`。
 - 注册用户名允许 Unicode 字母、数字、组合符（`\p{L}\p{N}\p{M}`）以及 `_ . -`，与前端 `services/validate.ts` 的 `PATTERNS.username` 是同一套规则；长度取管理员配置的 `limits.usernameMin/Max`，两侧空白 trim，不做 Unicode 归一化。内部空白、控制字符、标点与 emoji 拒绝，错误码 `validation.usernameCharset`。
 - 报名站分享链接允许未登录报名：`POST /api/v1/registrations` 带有效 `Authorization` 时行为与原来完全一致；**完全不带** `Authorization` 时按匿名报名处理（`visitor_id` NULL、`visitor_type = 'guest'`、姓名必填，上限 `limits.nickname`），响应额外带一次性 `queryToken`（32 字节 base64url，库里只存 sha256 hex）。带 `Authorization` 但令牌无效 / 过期仍是 401，不降级成匿名，避免应用内过期令牌提交出无主记录。匿名报名没有账号身份，不受「同一用户同一展会一条未撤销报名」约束。
 - `GET /api/v1/registrations/query/:token`（公开，`Cache-Control: no-store`）：按 sha256 匹配，返回与 `GET /registrations/:id` 同形的 `{ found, registration }`（含 `checkInCode`——凭据就是匿名报名人的身份）；无效凭据返回 200 + `{ found:false, error:'查询链接无效或已失效', errorCode:'registration.queryLinkInvalid' }`。
@@ -208,7 +208,7 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 ## 数据模型
 
 - 状态存英文代码。中文标签只在 `src/domain/labels.ts` 映射，与前端的状态词汇是同一批字符串。
-- 展会日期只存 `exhibition_date`（开展）与 `exhibition_end_date`（闭展，NULL = 单日）。年、月、日由 SQL 派生，并用 `to_char` 取成字符串。
+- 展会日期只存 `exhibition_date`（开展）与 `exhibition_end_date`（闭展，NULL = 单日）。年、月、日由 SQL 派生，并用 `to_char` 取成字符串。`GET /exhibitions/month` 按区间取“与本月有交集”的展会，并把每场展会展开成本月覆盖的 `days` 数组：`eventDays` 是并集，选中日按 `days` 命中，跨月展会拆到两个月分别返回。
 - 报名记录不冗余展会标题、时间和地点。读取时 JOIN 展会表。匿名报名的查询凭据只存 sha256（`registrations.query_token_hash`，空串表示账号报名与老数据），唯一部分索引 `WHERE query_token_hash <> ''`。
 - 登录审计在 `users.last_login_time` / `last_login_ip` / `last_login_region`；IP 原文只落库，接口只下发格式化后的地区。
 - 操作日志在 `app_logs`（迁移 0026）：`level` / `category` / `message` / `actor_id` / `actor_name` / `method` / `path` / `status` / `duration_ms` / `ip` / `detail` / `size_bytes` / `created_at`。`size_bytes` 在写入时算好，清理按它累计；`actor_id` 不建外键，账号删除后日志保留当时的名字。

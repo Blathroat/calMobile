@@ -81,8 +81,12 @@ export interface ServerSettings {
   brand: { zh: string; en: string };
   /** 缺省展会封面：展会自己没有封面时用它，空串表示继续用占位图。 */
   cover: { defaultCover: string };
-  /** 展商端策略：同时能筹备的展会数、私人会议数上限，0 表示不限。 */
-  exhibitor: { maxFutureExhibitions: number; maxFutureMeetings: number };
+  /**
+   * 展商端策略：
+   * - `maxFutureExhibitions` / `maxFutureMeetings`：同时能筹备的展会 / 私人会议数上限，0 表示不限；
+   * - `maxExhibitionDays`：单个展会最长持续天数（按开展～闭展算），0 表示不限。
+   */
+  exhibitor: { maxFutureExhibitions: number; maxFutureMeetings: number; maxExhibitionDays: number };
   /**
    * 邀请码生成默认值。uses 至少 1；validHours 为 0 表示不过期。
    * durationDays 是兑换后展商身份保留的天数，0 表示永久。
@@ -836,7 +840,7 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   // 缺省封面默认留空：升级后的老库行为不变（没有封面的展会继续显示占位图）。
   cover: { defaultCover: '' },
   // 0 = 不限。演示环境默认放开，部署方按运营策略调小。
-  exhibitor: { maxFutureExhibitions: 0, maxFutureMeetings: 0 },
+  exhibitor: { maxFutureExhibitions: 0, maxFutureMeetings: 0, maxExhibitionDays: 0 },
   invite: { uses: 1, validHours: 168, durationDays: 0 },
   // 默认是直链且地址为空：升级后的老库不会凭空多出一个下载入口。
   download: { source: 'url', url: '', repo: '' },

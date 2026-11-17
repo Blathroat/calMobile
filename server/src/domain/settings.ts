@@ -82,6 +82,8 @@ export interface ServerPatch {
   defaultCover?: unknown;
   maxFutureExhibitions?: unknown;
   maxFutureMeetings?: unknown;
+  /** 单个展会最长持续天数（按开展～闭展算），0 表示不限。 */
+  maxExhibitionDays?: unknown;
   inviteUses?: unknown;
   inviteValidHours?: unknown;
   inviteDurationDays?: unknown;
@@ -381,6 +383,13 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     next.exhibitor = {
       ...next.exhibitor,
       maxFutureMeetings: clampInt(source.maxFutureMeetings, next.exhibitor.maxFutureMeetings, [0, 100]),
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'maxExhibitionDays')) {
+    // 0 表示不限；上限 365 天是防呆，避免管理端误填一个超大值让限制失效。
+    next.exhibitor = {
+      ...next.exhibitor,
+      maxExhibitionDays: clampInt(source.maxExhibitionDays, next.exhibitor.maxExhibitionDays ?? 0, [0, 365]),
     };
   }
   if (

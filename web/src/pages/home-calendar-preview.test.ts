@@ -36,7 +36,7 @@ beforeEach(() => {
     day: 12,
     eventDays: [3, 12],
     markedDays: [12],
-    exhibitions: [{ id: 'june', day: 12, title: '六月展会' }],
+    exhibitions: [{ id: 'june', day: 12, days: [12, 13], title: '六月展会' }],
     meetings: [],
   });
   // 减少动效：切月会走「直接换月」分支，测试只关心拖动时的预览位移与结构。
@@ -115,6 +115,20 @@ describe('首页日历相邻月预览', () => {
     // 当前月（6 月）只有 30 天，7 月 31 日不会出现在当前面板
     const current = container.querySelector<HTMLElement>('.calendar:not(.calendar-preview) .calendar-grid')!;
     expect(current.querySelector('[data-day="31"][data-muted="false"]')).toBeNull();
+  });
+
+  it('选中跨天展会的中间一天，下面仍然展示这场展会', async () => {
+    const container = await mountHome();
+    await flush();
+    const current = container.querySelector<HTMLElement>('.calendar:not(.calendar-preview)')!;
+    const day13 = [...current.querySelectorAll<HTMLButtonElement>('.cal-day')].find(
+      (button) => button.dataset.day === '13' && button.dataset.muted === 'false',
+    );
+    day13?.click();
+    await flush();
+    // 展会 12～13 日：选中 13 日时列表仍要出现它（不是只在开展当天展示）。
+    expect(container.textContent).toContain('六月展会');
+    expect(container.textContent).toContain('6 月 13 日');
   });
 
   it('拖动时当前月与预览一起平移，露出的位置有下一月内容', async () => {
