@@ -163,6 +163,32 @@ describe('入口身份初始化', () => {
     }, 20_000);
   });
 
+  it('注册页允许中文用户名并进入验证码步骤', async () => {
+    const { container } = await loginScreen({ register: true });
+    expect(container.textContent).toContain('可用中文、字母、数字、下划线、点或横线');
+    fill(container, '#register-username', '中文用户');
+    fill(container, '#register-email', 'b@example.com');
+    fill(container, '#register-password', 'password');
+    fill(container, '#register-confirm', 'password');
+    await submitForm(container);
+    await vi.waitFor(() => expect(container.querySelector('#register-code')).not.toBeNull());
+  });
+
+  it('注册页拒绝带空白或符号的用户名并说明允许的字符', async () => {
+    const { container } = await loginScreen({ register: true });
+    fill(container, '#register-username', 'user name');
+    fill(container, '#register-email', 'b@example.com');
+    fill(container, '#register-password', 'password');
+    fill(container, '#register-confirm', 'password');
+    await submitForm(container);
+    await vi.waitFor(() =>
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        '只能使用中文、字母、数字、下划线、点或横线',
+      ),
+    );
+    expect(container.querySelector('#register-code')).toBeNull();
+  });
+
   it('注册页说明收集的资料，并只在 https 政策地址存在时给出链接', async () => {
     const { container, runtime } = await loginScreen({ register: true });
     expect(container.textContent).toContain('注册会收集用户名、邮箱和密码');

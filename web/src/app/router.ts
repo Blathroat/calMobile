@@ -16,25 +16,26 @@ import { hasRememberedSession } from '@/services/session-hint';
  * 1. 等待会话恢复：整页重载（切换语言、安装语言包）后首帧令牌还没进内存
  *    （`loggedIn === false`），本机又留着「上次离开时是登录态」提示时，对需要登录的页面与
  *    `/login` 都先 `await bootApp()` 恢复会话再往下判；否则这一屏会在恢复完成前被判定成
- *    匿名、甩到登录页，用户看到「短暂跳登录页」。`/` 的 redirect 是同步的，冷启动先落
- *    `/login`，所以入口也走这条；恢复到已登录而这一屏是 `/login` 时，直接回 `redirect` 里
- *    记的原地址（没有就回 `/home`）。提示不是身份依据（见 `services/session-hint.ts`）：
- *    没有它时行为与从前完全一致，照旧跳登录页；
+ *    匿名、甩到登录页，用户看到「短暂跳登录页」。入口 `/` 不参与这一步：它始终落 `/home`
+ *    （访客态），冷启动首帧就是首页，不会先把登录页画到屏幕上；直接停在 `/login` 整页
+ *    重载时仍走这条等待，恢复到已登录就回 `redirect` 里记的原地址（没有就回 `/home`）。
+ *    提示不是身份依据（见 `services/session-hint.ts`）：没有它时照旧按未登录处理；
  * 2. 登录：`requiresAuth` 且未登录 → 跳 `/login` 并带 `redirect=<原 fullPath>`；
  * 3. 角色：`roles` 不含当前角色 → 回 `/home`；
  * 4. 能力：`capability` 不被 `session.can()` 允许 → 也回 `/home`。
  * 先是登录再是角色 / 能力：未登录时权限表为空而 `can()` 默认放行，若先判能力就会把匿名用户
  * 直接放进需要权限的页面。
  *
- * **访客（guest）只能待首页**：访客不是登录态（`loggedIn === false`），所以除 `/login`、
- * `/register`、`/forgot-password`、`/home` 之外的每一屏都写了 `requiresAuth`。
+ * **访客（guest）默认落首页，也只能待在首页**：访客不是登录态（`loggedIn === false`），
+ * 所以除 `/login`、`/register`、`/forgot-password`、`/home` 之外的每一屏都写了 `requiresAuth`，
+ * 需要登录的页面由守卫跳 `/login?redirect=`；登录页的「以访客身份浏览」仍回首页。
  *
  * 坑：
  * - `roles` / `capability` 漏写不报错，但等于对所有登录用户开放，记得成对检查；
  * - 越权一律回 `/home`，没有 403 页；`/home` 自身不要求登录，所以不会出现互相弹跳的死循环；
- * - `/` 是同步 redirect，读 `session.loggedIn` 的**当前值**：冷启动首帧还是空的，于是先落
- *   `/login`；有登录态提示时守卫在 `/login` 上等恢复再送回原处，没有提示时 `main.ts` 仍会在
- *   bootstrap 落定后用 `replace` 纠正；
+ * - `/` 的 redirect 是同步的、与登录态无关：始终落 `/home`（访客态）。冷启动首帧就是首页，
+ *   不再先画登录页；登录态恢复后首页自己重取数据，`main.ts` 只负责把停在 `/login` 的一屏
+ *   纠正到 `redirect` 或 `/home`；
  * - 每次导航先 `navigation.begin()` 取消上一次未完成的导航，`afterEach` 再记方向给动效；
  * - 新增页面要同步 `app/shell.test.ts` 的 `ROUTES` 与 `docs/engineering.md` 的屏幕表。
  */
@@ -109,10 +110,10 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
   const router = createRouter({
     history,
     routes: [
-      // 入口是同步 redirect：按当前状态落首页或登录页。整页重载后的首帧（本机留着登录态
-      // 提示）会先落到 `/login`，守卫在那里等会话恢复，恢复到就直接送回原处，不闪登录页。
-      { path: '/', redirect: () => (useSessionStore().loggedIn ? '/home' : '/login') },
-      // 登录页是未登录时的落点，不显示返回键（没有可返回的上一页）
+      // 入口始终落首页：没有会话时就是访客态，先给月历与当天展会。需要登录的页面由守卫
+      // 跳登录页并带 redirect，不在冷启动时先画登录页（登录态恢复后首页自己重取数据）。
+      { path: '/', redirect: '/home' },
+      // 登录页只在需要登录时由守卫跳进来，不显示返回键（没有可返回的上一页）
       { path: '/login', component: LoginPage, meta: { title: 'auth.login.title', bodyGap: 'tight' } },
       {
         path: '/register',
@@ -317,8 +318,8 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
     const session = useSessionStore();
     // 整页重载后的首帧：令牌还在设备存储里、还没换进内存，本机又留着登录态提示时，
     // 先恢复会话再判登录。提示只用于这一步等待，不是身份依据（见 services/session-hint.ts）。
-    // `/` 的 redirect 是同步的，冷启动会先落到 `/login`，所以 `/login` 也要一起等：
-    // 恢复成已登录就从这里直接回原地址，不把登录页落到屏幕上。
+    // `/login` 也要一起等（用户可能就停在登录页整页重载）：恢复成已登录就从这里直接回
+    // 原地址，不把登录页落到屏幕上。入口 `/` 已固定落 `/home`，不需要这一步。
     const recovering = hasRememberedSession() && !session.loggedIn;
     if (recovering && (to.meta.requiresAuth || to.path === '/login')) {
       await bootApp().catch(() => undefined);
