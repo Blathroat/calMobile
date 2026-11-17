@@ -13,6 +13,8 @@ const PATHS: Record<string, string> = {
   share:
     '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6.5A1.5 1.5 0 0 1 6.5 5H15"/>',
+  // 二维码：三个定位角 + 右下角的数据方块，保持 24 视窗、1.5 描边、无填充。
+  qr: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="6" y="6" width="2" height="2" rx="0.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="16" y="6" width="2" height="2" rx="0.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.4"/><rect x="6" y="16" width="2" height="2" rx="0.5"/><rect x="13.5" y="13.5" width="3.5" height="3.5" rx="0.8"/><rect x="18.5" y="18.5" width="2" height="2" rx="0.5"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3.5v3M16 3.5v3M3.5 10h17"/>',
   check: '<path d="m5 12.5 4.5 4.5 9-10"/>',
   close: '<path d="m6 6 12 12M18 6 6 18"/>',
