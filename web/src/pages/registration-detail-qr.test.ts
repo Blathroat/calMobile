@@ -137,6 +137,16 @@ describe('报名二维码长按保存', () => {
     expect(document.body.textContent).toContain('已通过');
   });
 
+  it('当前状态卡片只保留大字状态，不再重复信号灯状态', async () => {
+    await mountPage();
+    const word = document.querySelector('.reg-status-word');
+    expect(word?.textContent?.trim()).toBe('已通过');
+    const card = word?.closest('.card');
+    expect(card?.querySelector('.status-tag')).toBeNull();
+    expect(card?.querySelector('.reg-status-tag')).toBeNull();
+    expect(card?.textContent).toContain('展商已完成审核');
+  });
+
   it('二维码下方给出长按提示', async () => {
     await mountPage();
     const hints = [...document.querySelectorAll<HTMLElement>('.field-hint')].map((node) => node.textContent ?? '');
