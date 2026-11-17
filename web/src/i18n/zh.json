@@ -159,7 +159,7 @@
       "empty": "暂无用户数据",
       "exhibitorExpired": "展商已到期 {date}",
       "exhibitorUntil": "展商到期 {date}",
-      "lastLogin": "{status} · 最近登录 {time}",
+      "lastLogin": "最近登录 {time}",
       "manage": "用户管理",
       "manageExhibitions": "管理展会",
       "manageMeetings": "管理会议",
@@ -291,7 +291,7 @@
       "setPassword": "设置登录密码",
       "sixDigits": "6 位数字",
       "title": "注册",
-      "usernameHint": "可用中英文、数字与下划线",
+      "usernameHint": "可用中文、字母、数字、下划线、点或横线",
       "usernamePlaceholder": "设置用户名",
       "verifyAndCreate": "验证并创建账号"
     }
@@ -401,7 +401,8 @@
       "trackInActivities": "提交后可在“我的活动”查看审核状态。",
       "viewExhibitorHome": "查看展商公开主页 →",
       "viewLargeImage": "查看大图",
-      "viewMyRegistration": "查看我的报名"
+      "viewMyRegistration": "查看我的报名",
+      "joinTrackHint": "提交后请保存查询链接，用它查看报名状态。"
     },
     "editor": {
       "append": "追加",
@@ -495,7 +496,7 @@
       "registrationEndDate": "报名截止日期",
       "registrationMode": "报名方式",
       "registrationOpens": "报名开始",
-      "registrationSettings": "报名与简介设置",
+      "registrationSettings": "报名设置",
       "registrationStartDate": "报名开始日期",
       "registrationStartTooLate": "报名开始日期不能晚于展会开展日期",
       "restrictedAccount": "账号已被限制，不能发布或修改展会、不能核销；仍可查看与审核已有报名。",
@@ -504,7 +505,16 @@
       "saved": "展会已保存",
       "thisExhibition": "该展会",
       "titlePlaceholder": "例如：智能制造与工业自动化展",
-      "venuePlaceholder": "例如：上海新国际博览中心 · N3 馆"
+      "venuePlaceholder": "例如：上海新国际博览中心 · N3 馆",
+      "coverAndDescription": "展会封面与简介",
+      "endDate": "闭展日期",
+      "endBeforeStart": "闭展日期不能早于开展日期",
+      "timeStart": "开始时间",
+      "timeEnd": "结束时间",
+      "openDateShort": "开展",
+      "endDateShort": "闭展",
+      "registrationStartShort": "开始",
+      "registrationEndShort": "截止"
     },
     "list": {
       "countLabel": "{count} 个 · {registrations} 条报名",
@@ -526,7 +536,9 @@
     "qrEnabled": "已启用报名二维码",
     "registrationLinkCopied": "已复制报名链接",
     "sections": "展商分区",
-    "title": "展商后台"
+    "title": "展商后台",
+    "shareQr": "分享展会二维码",
+    "copyLinkFailed": "复制失败，请稍后重试"
   },
   "fieldType": {
     "checkbox": "多选",
@@ -547,7 +559,7 @@
     "tooLong": "{label}最多 {max} 个字符",
     "tooShort": "{label}至少需要 {min} 个字符",
     "username": "用户名",
-    "usernameCharset": "只能使用中英文、数字与下划线",
+    "usernameCharset": "只能使用中文、字母、数字、下划线、点或横线",
     "video": "视频"
   },
   "home": {
@@ -755,7 +767,14 @@
       "status": "报名状态",
       "submittedInfo": "提交信息",
       "summary": "报名摘要",
-      "title": "报名详情"
+      "title": "报名详情",
+      "queryLink": "查询报名状态链接",
+      "copyQueryLink": "复制链接",
+      "queryLinkCopied": "查询链接已复制",
+      "queryLinkCopyFailed": "复制失败，请长按链接手动复制",
+      "queryLinkHint": "请保存好这条链接，之后必须用它查询报名详情；也可以登录或注册，把这条报名关联到账号。",
+      "loginToManageHint": "登录或注册后，这条报名会关联到你的账号，之后可以在「我的活动」里查看、修改或撤销。",
+      "claimFailed": "登录成功，但没能把这条报名关联到当前账号。"
     },
     "fields": {
       "addField": "新增收集项",
@@ -791,7 +810,11 @@
       "submittedAndApproved": "报名已提交并通过",
       "submittedApproved": "已提交 · 已通过",
       "submittedPending": "已提交 · 待审核",
-      "unsetOption": "未设置选项"
+      "unsetOption": "未设置选项",
+      "name": "姓名",
+      "guestApprovedHint": "该展会无需审核，已直接通过。请保存下方查询链接，之后凭它查看报名状态。",
+      "guestPendingHint": "需要审核的报名可用保存的查询链接查看状态。",
+      "queryTokenMissing": "报名已提交，但没能拿到查询链接，请联系展商。"
     },
     "list": {
       "answersLine": "报名信息：{summary}",
@@ -1108,7 +1131,9 @@
       "loginRequired": "请先登录后再操作",
       "notFound": "报名记录不存在或已撤销",
       "notStarted": "报名尚未开始",
-      "unavailable": "该展会当前不可报名"
+      "unavailable": "该展会当前不可报名",
+      "claimTaken": "该报名已关联到其他账号",
+      "queryLinkInvalid": "查询链接无效或已失效"
     },
     "review": {
       "duplicateStatusChange": "该用户在这场展会上已有未撤销的报名，不能把这条改成此状态",
@@ -1216,8 +1241,9 @@
       "timeFormat": "{label}格式应为 09:00-17:30",
       "tooLong": "{label}最多 {max} 个字符",
       "userStatusInvalid": "账号状态只能是 active / limited / banned",
-      "usernameCharset": "用户名只能包含字母、数字、下划线、点或横线",
-      "usernameLength": "用户名长度需在 {min}-{max} 个字符之间"
+      "usernameCharset": "用户名只能包含中文、字母、数字、下划线、点或横线",
+      "usernameLength": "用户名长度需在 {min}-{max} 个字符之间",
+      "endDateBeforeStart": "闭展日期不能早于开展日期"
     }
   },
   "settings": {
@@ -1338,5 +1364,25 @@
       "banned": "封禁",
       "limited": "受限"
     }
+  },
+  "share": {
+    "qrTitle": "分享展会",
+    "qrLabel": "展会报名二维码",
+    "save": "保存到本地",
+    "saving": "保存中…",
+    "saved": "展会二维码已保存",
+    "saveFailed": "保存失败，请稍后重试",
+    "hint": "扫码打开报名页，保存图片后可转发给他人",
+    "qrErrorHint": "{error}，请关闭后重试"
+  },
+  "picker": {
+    "selectDate": "选择日期",
+    "selectTime": "选择时间",
+    "clear": "清除",
+    "today": "今天",
+    "hour": "小时",
+    "hourUnit": "时",
+    "minute": "分钟",
+    "minuteUnit": "分"
   }
 }

@@ -11,6 +11,7 @@ export const EXHIBITION_COLUMNS = `
     e.id, e.title, e.venue, e.time, e.category, e.description, e.description_format,
     e.image_uri, e.exhibitor_note, e.qr_enabled, e.allow_cancel, e.exhibitor_id, e.status,
     to_char(e.exhibition_date, 'YYYY-MM-DD')                AS exhibition_date,
+    to_char(e.exhibition_end_date, 'YYYY-MM-DD')            AS exhibition_end_date,
     EXTRACT(YEAR FROM e.exhibition_date)::int               AS year,
     EXTRACT(MONTH FROM e.exhibition_date)::int              AS month,
     EXTRACT(DAY FROM e.exhibition_date)::int                AS day,
@@ -59,7 +60,9 @@ export const USER_COLUMNS = `
     u.avatar, u.social_media, u.show_registrations, u.seen_hints, u.accept_meetings,
     u.email_verified, u.two_factor_enabled, u.exhibitor_expires_at,
     to_char(u.registration_time, 'YYYY-MM-DD')  AS registration_time,
-    to_char(u.last_login_time, 'YYYY-MM-DD')    AS last_login_time
+    to_char(u.last_login_time, 'YYYY-MM-DD')    AS last_login_time,
+    -- 最近一次登录的地区（登录时离线解析）；IP 原文只留在库里，绝不下发。
+    u.last_login_region
 `;
 
 export const USER_FROM = ' FROM users u ';

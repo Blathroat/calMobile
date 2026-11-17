@@ -103,17 +103,98 @@ test('ISO 日期 schema 回查 Date 归一化，拒绝不存在的日期', () =>
   );
 });
 
-test('注册 schema 保留动态上限和用户名字符集规则', () => {
+test('注册 schema 保留动态上限，并允许中文等多语言用户名', () => {
   const schema = registerSchema(limits);
   const parsed = parseSchema(schema, { username: ' user_1 ', password: 'password', email: 'u@example.com' });
   assert.deepEqual(parsed, { username: 'user_1', password: 'password', email: 'u@example.com' });
+  // 用户名允许「正常的 UTF-8 字符」：各文字的字母、数字、组合符，外加 _ . -。
+  // 中文、日文、韩文、西里尔、阿拉伯、天城文（含组合符）与带重音的拉丁字母都通过。
+  const accepted = [
+    '中文用户',
+    '山田太郎',
+    '김민준',
+    'Иван',
+    'محمد',
+    'हिन्दी',
+    'François',
+    '用户_1.2-3',
+    'e\u0301le\u0301phant',
+  ];
+  for (const username of accepted) {
+    assert.equal(
+      parseSchema(schema, { username, password: 'password', email: 'u@example.com' }).username,
+      username,
+      `${username} 应当通过`,
+    );
+  }
+  // 用户名两侧的空白仍然被 trim 掉，长度按 trim 后的值算。
   assert.equal(
-    messageOf(() => parseSchema(schema, { username: '中文用户', password: 'password', email: 'u@example.com' })),
-    '用户名只能包含字母、数字、下划线、点或横线',
+    parseSchema(schema, { username: '  中文用户  ', password: 'password', email: 'u@example.com' }).username,
+    '中文用户',
+  );
+  assert.equal(
+    messageOf(() => parseSchema(schema, { username: '中文用户!', password: 'password', email: 'u@example.com' })),
+    '用户名只能包含中文、字母、数字、下划线、点或横线',
   );
   assert.equal(
     messageOf(() => parseSchema(schema, { username: 'user', password: 'x', email: 'u@example.com' })),
     `密码长度需在 ${limits.passwordMin}-${limits.passwordMax} 个字符之间`,
+  );
+});
+
+test('注册用户名的字符集边界：内部空白、控制字符、标点和 emoji 都拒绝', () => {
+  const schema = registerSchema(limits);
+  // 用户名先 trim 再去空白：只有**内部**空白 / 控制字符会留下来被拒。
+  const rejected = ['user name', 'user\nname', 'user\u0000name', '用户😀', 'user@name', 'user!', '张三，', 'user+1'];
+  for (const username of rejected) {
+    const error = errorOf(() => parseSchema(schema, { username, password: 'password', email: 'u@example.com' }));
+    assert.equal(error.errorCode, 'validation.usernameCharset', `${JSON.stringify(username)} 应当因字符集被拒`);
+    assert.equal(error.message, '用户名只能包含中文、字母、数字、下划线、点或横线');
+  }
+  // 纯 emoji 也是符号而不是字母 / 数字 / 组合符。
+  assert.equal(
+    errorOf(() => parseSchema(schema, { username: '🎉🎉🎉', password: 'password', email: 'u@example.com' })).errorCode,
+    'validation.usernameCharset',
+  );
+});
+
+test('注册用户名的长度边界按管理员的 usernameMin / usernameMax 判定', () => {
+  const schema = registerSchema(limits);
+  const min = limits.usernameMin;
+  const max = limits.usernameMax;
+  // 中文每个字算一个字符（JS 的 .length 与界面计数器同口径）。
+  assert.equal(
+    parseSchema(schema, { username: '中'.repeat(min), password: 'password', email: 'u@example.com' }).username,
+    '中'.repeat(min),
+  );
+  assert.equal(
+    parseSchema(schema, { username: '中'.repeat(max), password: 'password', email: 'u@example.com' }).username,
+    '中'.repeat(max),
+  );
+  assert.equal(
+    messageOf(() =>
+      parseSchema(schema, { username: '中'.repeat(min - 1), password: 'password', email: 'u@example.com' }),
+    ),
+    `用户名长度需在 ${min}-${max} 个字符之间`,
+  );
+  assert.equal(
+    messageOf(() =>
+      parseSchema(schema, { username: 'a'.repeat(max + 1), password: 'password', email: 'u@example.com' }),
+    ),
+    `用户名长度需在 ${min}-${max} 个字符之间`,
+  );
+  // 长度用 trim 后的值判断：两侧空白不会把短用户名「凑」到下限。
+  assert.equal(
+    messageOf(() => parseSchema(schema, { username: '  中  ', password: 'password', email: 'u@example.com' })),
+    `用户名长度需在 ${min}-${max} 个字符之间`,
+  );
+});
+
+test('登录不限制用户名字符集：用户名或邮箱都能带非 ASCII 字符', () => {
+  assert.equal(parseSchema(loginSchema, { username: '中文用户', password: 'password' }).username, '中文用户');
+  assert.equal(
+    parseSchema(loginSchema, { username: '用户@example.com', password: 'password' }).username,
+    '用户@example.com',
   );
 });
 
@@ -144,6 +225,31 @@ test('展会 schema 拒绝非法日期并保留报名日期顺序规则', () => 
       }),
     ),
     '报名截止日期不能早于开始日期',
+  );
+  // 闭展日期选填（空 = 单日），但填了就不能早于开展日期。
+  assert.equal(
+    messageOf(() =>
+      parseSchema(schema, {
+        title: '日期测试',
+        venue: '展馆',
+        category: '分类',
+        date: '2026-03-10',
+        time: '09:00',
+        endDate: '2026-03-01',
+      }),
+    ),
+    '闭展日期不能早于开展日期',
+  );
+  assert.equal(
+    parseSchema(schema, {
+      title: '日期测试',
+      venue: '展馆',
+      category: '分类',
+      date: '2026-03-10',
+      time: '09:00',
+      endDate: '2026-03-12',
+    }).endDate,
+    '2026-03-12',
   );
 });
 
@@ -211,6 +317,18 @@ test('更新展会时显式清空日期和时间仍会报错', () => {
     messageOf(() => parseSchema(exhibitionInputSchema(limits, existing), { title: '展会', time: '' })),
     '请输入展会时间',
   );
+});
+
+test('更新展会没带 endDate 时保留库里的闭展日期', () => {
+  const existing = {
+    title: '展会',
+    exhibition_date: '2026-03-01',
+    exhibition_end_date: '2026-03-05',
+    time: '09:00',
+  };
+  assert.equal(parseSchema(exhibitionInputSchema(limits, existing), { title: '展会' }).endDate, '2026-03-05');
+  // 显式传空串 = 改回单日展会。
+  assert.equal(parseSchema(exhibitionInputSchema(limits, existing), { title: '展会', endDate: '' }).endDate, '');
 });
 
 test('登录、重置密码和修改密码的中文错误保持一致', () => {

@@ -53,6 +53,8 @@ export interface User extends JsonObject {
   status?: string;
   /** 账号状态 code：active / limited / banned。 */
   statusCode?: string;
+  /** 管理员用户列表：最近一次登录的地区（如「江苏省苏州市」「内网」）；IP 原文不下发。 */
+  lastLoginRegion?: string;
   loggedIn?: boolean;
   guest?: boolean;
   can?: Record<string, boolean>;
@@ -69,11 +71,13 @@ export interface Bootstrap extends JsonObject {
   loggedIn?: boolean;
 }
 
-/** 列表里的展会。其余字段随管理员配置的自定义字段变化，这里只固定页面一定会用到的三个。 */
+/** 列表里的展会。其余字段随管理员配置的自定义字段变化，这里只固定页面一定会用到的。 */
 export interface Exhibition extends JsonObject {
   id: Id;
   title: string;
   date?: string;
+  /** 闭展日期（`YYYY-MM-DD`）；空串表示单日展会。 */
+  endDate?: string;
 }
 
 /**
@@ -97,6 +101,27 @@ export interface RegistrationDetail extends JsonObject {
   found: boolean;
   registration?: Registration;
   error?: string;
+  /** 失败原因的稳定错误码（与 `error` 一起下发），页面按码本地化。 */
+  errorCode?: string;
+}
+/**
+ * 提交报名的返回体。匿名报名（报名站分享链接、未登录）多返回一次性的 `queryToken`，
+ * 登录报名没有这个字段；`autoApproved` 与 `statusLabel` 两者都有。
+ */
+export interface RegistrationSubmitResult extends ApiResult {
+  autoApproved?: boolean;
+  statusLabel?: string;
+  /** 查询报名的凭据，只在创建响应里出现一次，之后拿不回来。 */
+  queryToken?: string;
+  registration?: Registration;
+}
+/**
+ * 用查询凭据把匿名报名关联到当前账号。
+ * `claimed` 为 false 表示报名本来就已经属于当前账号（重复认领幂等成功）。
+ */
+export interface RegistrationClaimResult extends ApiResult {
+  claimed?: boolean;
+  registration?: Registration;
 }
 /**
  * 写接口的统一返回体。

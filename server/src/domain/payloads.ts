@@ -29,6 +29,8 @@ export interface ExhibitionRow {
   month?: number | null;
   day?: number | null;
   exhibition_date?: string | null;
+  /** 闭展日期；NULL 表示单日展会。 */
+  exhibition_end_date?: string | null;
   exhibitor?: string | null;
   exhibitor_role?: string | null;
   exhibitor_note?: string | null;
@@ -94,6 +96,8 @@ export interface UserRow {
   exhibitor_expires_at?: string | Date | null;
   last_login_time?: string | null;
   registration_time?: string | null;
+  /** 最近一次登录的地区（格式化后）；个人用户态不下发，只有管理员列表用。 */
+  last_login_region?: string | null;
 }
 
 export interface AdminUserRow {
@@ -109,6 +113,8 @@ export interface AdminUserRow {
   exhibitor_expires_at?: string | Date | null;
   registration_time?: string | null;
   last_login_time?: string | null;
+  /** 最近一次登录的地区（格式化后）；IP 原文不在这里，也不下发。 */
+  last_login_region?: string | null;
 }
 
 /** 展会行 → 列表 / 详情的展会对象。 */
@@ -134,6 +140,7 @@ export function exhibitionPayload(row: ExhibitionRow) {
     day: row.day,
     date: row.exhibition_date || '',
     dateLabel: labels.dateLabel(row.exhibition_date),
+    endDate: row.exhibition_end_date || '',
     exhibitor: row.exhibitor || '',
     exhibitorId: row.exhibitor_id || '',
     exhibitorRole: row.exhibitor_role || '',
@@ -296,7 +303,11 @@ export function adminUserPayload(row: AdminUserRow, index: number) {
     exhibitorExpiresAt: isoTime(row.exhibitor_expires_at),
     exhibitorExpired: isPastExpiry(row.exhibitor_expires_at),
     registrationTime: row.registration_time || '',
-    lastLoginTime: row.last_login_time || '',
+    // 老账号（迁移 0024 之前建号、也还没登录过）没有 last_login_time，用注册时间兜底，
+    // 用户管理不再显示「未知」。
+    lastLoginTime: row.last_login_time || row.registration_time || '',
+    // 只下发地区（如「江苏省苏州市」「内网」），IP 原文留在库里，不进任何响应。
+    lastLoginRegion: row.last_login_region || '',
     order: index,
   };
 }

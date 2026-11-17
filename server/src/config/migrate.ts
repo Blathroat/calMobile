@@ -719,6 +719,39 @@ export const STEPS: MigrationStep[] = [
         `,
     params: (palette: readonly string[]) => [JSON.stringify(palette), palette[0] ?? ''],
   },
+  {
+    // 展会可以跨天办：闭展日期与开展日期分开存。NULL 表示单日展会（闭展日期 = 开展日期），
+    // 老数据不用回填，读取时按开展日期兜底。页面校验要求它不早于开展日期。
+    // `IF NOT EXISTS` 让这一步可以反复执行。
+    id: '0022-exhibition-end-date',
+    sql: `
+        ALTER TABLE exhibitions ADD COLUMN IF NOT EXISTS exhibition_end_date DATE;
+        `,
+  },
+  {
+    // 报名站允许未登录直接报名：这类报名没有账号可查，提交后给一条只含随机凭据的查询链接。
+    // 库里只存凭据的哈希（与刷新令牌、验证码一致），链接原文只在创建响应里返回一次；
+    // 登录后认领（claim）时把 visitor_id 补上，报名就并入账号的「我的活动」。
+    // 空串表示老记录与账号报名，不参与查询索引。
+    id: '0023-registration-query-token',
+    sql: `
+        ALTER TABLE registrations ADD COLUMN IF NOT EXISTS query_token_hash TEXT NOT NULL DEFAULT '';
+        CREATE UNIQUE INDEX IF NOT EXISTS registrations_query_token_idx
+            ON registrations (query_token_hash)
+            WHERE query_token_hash <> '';
+        `,
+  },
+  {
+    // 用户管理要显示「最近登录」的地区：登录时记下客户端 IP 与离线解析出的地区。
+    // 只往下发地区，IP 原文留在库里当审计信息。`IF NOT EXISTS` 让这一步可以反复执行。
+    id: '0024-user-last-login-region',
+    sql: `
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_ip TEXT NOT NULL DEFAULT '';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_region TEXT NOT NULL DEFAULT '';
+        -- 建号即登录：没有登录时间的老账号用注册时间兜底，用户管理不再显示「未知」。
+        UPDATE users SET last_login_time = registration_time WHERE last_login_time IS NULL;
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {

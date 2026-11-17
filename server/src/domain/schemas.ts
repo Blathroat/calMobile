@@ -17,7 +17,12 @@ import type { ServerSettings } from '../config/migrate.js';
 
 export type Limits = ServerSettings['limits'];
 
-const usernamePattern = /^[A-Za-z0-9_.-]+$/;
+/**
+ * 用户名允许「正常的 UTF-8 字符」：Unicode 字母、数字与组合符（中文、日文、韩文、拉丁及
+ * 其它文字），外加 `_` `.` `-`。空白、控制字符、标点与 emoji 不在允许集合内。
+ * 与前端 `web/src/services/validate.ts` 的 `PATTERNS.username` 必须完全一致。
+ */
+const usernamePattern = /^[\p{L}\p{N}\p{M}_.-]+$/u;
 
 export const loginSchema = z
   .object({
@@ -79,7 +84,7 @@ export function registerSchema(limits: Limits) {
         if (!usernamePattern.test(value)) {
           ctx.addIssue({
             code: 'custom',
-            message: '用户名只能包含字母、数字、下划线、点或横线',
+            message: '用户名只能包含中文、字母、数字、下划线、点或横线',
             params: issueParams('validation.usernameCharset'),
           });
         }
@@ -463,6 +468,8 @@ export function exhibitionInputSchema(
     venue?: string | null;
     category?: string | null;
     exhibition_date?: string | null;
+    /** 闭展日期；NULL 表示单日展会。 */
+    exhibition_end_date?: string | null;
     time?: string | null;
     status?: string | null;
     registration_start?: string | null;
@@ -482,6 +489,7 @@ export function exhibitionInputSchema(
       venue: textSchema({ label: '展会地点', max: limits.exhibitionVenue, required: false }),
       category: textSchema({ label: '展会分类', max: limits.category, required: false }),
       date: isoDateSchema({ label: '展会日期', required: true }),
+      endDate: isoDateSchema({ label: '闭展日期' }),
       time: timeRangeSchema({ label: '展会时间', required: true }),
       status: inputString,
       registrationStart: isoDateSchema({ label: '报名开始日期' }),
@@ -535,6 +543,16 @@ export function exhibitionInputSchema(
           params: issueParams('validation.registrationEndBeforeStart'),
         });
       }
+      // 闭展可以留空（单日展会）；只填了闭展时也至少不能早于开展。
+      const endDate = source.endDate ?? existing?.exhibition_end_date ?? '';
+      if (date && endDate && endDate < date) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['endDate'],
+          message: '闭展日期不能早于开展日期',
+          params: issueParams('validation.endDateBeforeStart'),
+        });
+      }
       const mappedStatus =
         source.status && source.status.trim() ? labels.toExhibitionStatus(source.status) : existing?.status || 'review';
       if (!mappedStatus)
@@ -551,6 +569,7 @@ export function exhibitionInputSchema(
       const time = source.time ?? existing?.time ?? '';
       const registrationStart = source.registrationStart ?? existing?.registration_start ?? '';
       const registrationEnd = source.registrationEnd ?? existing?.registration_end ?? '';
+      const endDate = source.endDate ?? existing?.exhibition_end_date ?? '';
       const description = source.description ?? existing?.description ?? '';
       const requestedFormat = source.descriptionFormat ?? existing?.description_format ?? 'md';
       const descriptionFormat =
@@ -568,6 +587,7 @@ export function exhibitionInputSchema(
         status: mappedStatus,
         registrationStart,
         registrationEnd,
+        endDate,
         description,
         descriptionFormat,
         imageUri: source.imageUri ?? existing?.image_uri ?? '',
@@ -589,6 +609,21 @@ export function registrationSchema() {
   });
 }
 export type RegistrationInput = z.infer<ReturnType<typeof registrationSchema>>;
+
+/**
+ * 匿名报名（报名站分享链接、未登录）：没有账号可填身份，只有姓名必填。
+ *
+ * 与登录报名的差别只有两处：`visitorName` 直接取用户输入的姓名（上限沿用昵称，
+ * 与个人资料同一把尺子），不再要求 `visitorType` —— 服务端把它记成 `guest`。
+ * 收集项、展会窗口、额度这些业务校验在路由里与登录报名走同一段代码。
+ */
+export function guestRegistrationSchema(limits: Limits) {
+  return z.object({
+    exhibitionId: textSchema({ label: '展会', required: false }),
+    visitorName: textSchema({ label: '姓名', max: limits.nickname }),
+    answers: inputString,
+  });
+}
 export const registrationTargetSchema = z.object({ exhibitionId: textSchema({ required: false }) });
 export const reviewStatusSchema = z.object({
   status: vocabularySchema(
