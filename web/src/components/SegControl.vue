@@ -5,8 +5,8 @@
  * 首次定位不加过渡，避免滑块从左侧滑过来；切换时交给 motion.css 的
  * `.seg-indicator[data-animate="true"]`。
  *
- * 空间不够时自动换行（`.seg` 是 flex-wrap），此时滑块的横向位置不够用，
- * 因此同时按 `offsetLeft / offsetTop / offsetWidth / offsetHeight` 定位到那一行；
+ * 分段控件始终排成一行：空间不够时按钮等分宽度收缩，不换行、也不横向滚动，
+ * 避免「滑动选择按钮」在窄屏被折成两行。滑块按按钮的 `offsetLeft / 宽度` 定位；
  * 容器尺寸变化（旋转、分屏、字体加载）用 ResizeObserver 重新量一次。
  */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -67,7 +67,7 @@ watch(
 // 挂载后才知道真实宽度，因此在下一帧再定位。
 onMounted(() => {
   requestAnimationFrame(() => position(false));
-  // 换行位置取决于容器宽度：尺寸一变就重新量，不让滑块停在上一行的坐标上。
+  // 按钮宽度随容器变化：尺寸一变就重新量，让滑块贴住当前按钮。
   if (typeof ResizeObserver !== 'undefined' && container.value) {
     resizeObserver = new ResizeObserver(() => position(false));
     resizeObserver.observe(container.value);

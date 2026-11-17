@@ -1834,8 +1834,8 @@ button.avatar {
 .seg {
   position: relative;
   display: flex;
-  /* 分类多、屏幕窄时换行，不靠左右滑动：选项要一眼全看见。 */
-  flex-wrap: wrap;
+  /* 始终单行：空间不够时按钮等分收缩，不换行也不横向滚动，滑动选择按钮保持一行。 */
+  flex-wrap: nowrap;
   gap: var(--s1);
   padding: var(--s1);
   border: var(--hairline) solid var(--stroke);
@@ -1846,11 +1846,13 @@ button.avatar {
 .seg button {
   position: relative;
   z-index: 1;
-  /* 同一行内等分剩余宽度；放不下就按内容宽度换到下一行。 */
-  flex: 1 1 auto;
-  min-width: 66px;
+  /* 单行内等分宽度；窄屏下允许收缩，文本超长用省略号，不把控件顶成两行。 */
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 44px;
-  padding: 0 var(--s2);
+  padding: 0 var(--s1);
+  overflow: hidden;
+  text-overflow: ellipsis;
   border: var(--hairline) solid transparent;
   border-radius: var(--r-chip);
   background: transparent;
