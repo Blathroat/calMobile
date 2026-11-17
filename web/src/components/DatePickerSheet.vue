@@ -421,6 +421,8 @@ onMounted(() => {
   height: 32px;
   border-radius: var(--r-pill);
   transform: translateX(-50%);
+  /* 单独成层：圆底画在自己的内容后面，数字才不会被盖住。 */
+  isolation: isolate;
   font-size: var(--fs-body);
   line-height: 1;
 }
@@ -429,6 +431,7 @@ onMounted(() => {
   content: '';
   position: absolute;
   inset: 0;
+  z-index: -1;
   border-radius: inherit;
   background: var(--accent);
   opacity: 0;

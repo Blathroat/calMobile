@@ -1811,26 +1811,23 @@ button.avatar {
 .seg {
   position: relative;
   display: flex;
+  /* 分类多、屏幕窄时换行，不靠左右滑动：选项要一眼全看见。 */
+  flex-wrap: wrap;
   gap: var(--s1);
   padding: var(--s1);
   border: var(--hairline) solid var(--stroke);
   border-radius: var(--r-input);
   background: var(--f3);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.seg::-webkit-scrollbar {
-  display: none;
 }
 
 .seg button {
   position: relative;
   z-index: 1;
+  /* 同一行内等分剩余宽度；放不下就按内容宽度换到下一行。 */
   flex: 1 1 auto;
   min-width: 66px;
   min-height: 44px;
-  padding: 0 var(--s3);
+  padding: 0 var(--s2);
   border: var(--hairline) solid transparent;
   border-radius: var(--r-chip);
   background: transparent;

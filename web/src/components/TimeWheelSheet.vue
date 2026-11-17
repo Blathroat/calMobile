@@ -120,7 +120,9 @@ onMounted(() => {
             }
           "
         >
-          {{ hour }}<span class="time-wheel-unit">{{ t('picker.hourUnit') }}</span>
+          <span class="time-wheel-value"
+            >{{ hour }}<span class="time-wheel-unit">{{ t('picker.hourUnit') }}</span></span
+          >
         </button>
       </div>
 
@@ -150,7 +152,10 @@ onMounted(() => {
             }
           "
         >
-          {{ String(minute).padStart(2, '0') }}<span class="time-wheel-unit">{{ t('picker.minuteUnit') }}</span>
+          <span class="time-wheel-value"
+            >{{ String(minute).padStart(2, '0')
+            }}<span class="time-wheel-unit">{{ t('picker.minuteUnit') }}</span></span
+          >
         </button>
       </div>
     </div>
@@ -258,7 +263,8 @@ onMounted(() => {
 
 .time-wheel-item {
   display: flex;
-  align-items: baseline;
+  /* 竖直居中：选中行要和中间的高亮带对齐，baseline 对齐会整体偏上。 */
+  align-items: center;
   justify-content: center;
   gap: 2px;
   width: 100%;
@@ -269,6 +275,7 @@ onMounted(() => {
   color: var(--ink-3);
   font: inherit;
   font-size: var(--fs-h3);
+  line-height: 1;
   scroll-snap-align: center;
   cursor: pointer;
   transition: transform var(--motion-quick) var(--ease-spring);
@@ -279,6 +286,13 @@ onMounted(() => {
   color: var(--accent-ink);
   font-weight: 700;
   transform: scale(1.08);
+}
+
+.time-wheel-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  line-height: 1;
 }
 
 .time-wheel-unit {

@@ -4,8 +4,12 @@
  *
  * 首次定位不加过渡，避免滑块从左侧滑过来；切换时交给 motion.css 的
  * `.seg-indicator[data-animate="true"]`。
+ *
+ * 空间不够时自动换行（`.seg` 是 flex-wrap），此时滑块的横向位置不够用，
+ * 因此同时按 `offsetLeft / offsetTop / offsetWidth / offsetHeight` 定位到那一行；
+ * 容器尺寸变化（旋转、分屏、字体加载）用 ResizeObserver 重新量一次。
  */
-import { onMounted, ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 export interface SegItem {
   value: string;
@@ -20,8 +24,10 @@ const props = withDefaults(
 const emit = defineEmits<{ 'update:modelValue': [string] }>();
 
 const indicator = ref<HTMLElement>();
+const container = ref<HTMLElement>();
 const buttons: HTMLElement[] = [];
 let mounted = false;
+let resizeObserver: ResizeObserver | undefined;
 
 function setButton(element: Element | null, index: number): void {
   if (element instanceof HTMLElement) buttons[index] = element;
@@ -39,7 +45,8 @@ function position(animate: boolean): void {
   node.dataset.hidden = 'false';
   node.dataset.animate = animate && mounted ? 'true' : 'false';
   node.style.width = `${active.offsetWidth}px`;
-  node.style.transform = `translate3d(${active.offsetLeft}px, 0, 0)`;
+  node.style.height = `${active.offsetHeight}px`;
+  node.style.transform = `translate3d(${active.offsetLeft}px, ${active.offsetTop}px, 0)`;
   mounted = true;
 }
 
@@ -58,11 +65,20 @@ watch(
 );
 
 // 挂载后才知道真实宽度，因此在下一帧再定位。
-onMounted(() => requestAnimationFrame(() => position(false)));
+onMounted(() => {
+  requestAnimationFrame(() => position(false));
+  // 换行位置取决于容器宽度：尺寸一变就重新量，不让滑块停在上一行的坐标上。
+  if (typeof ResizeObserver !== 'undefined' && container.value) {
+    resizeObserver = new ResizeObserver(() => position(false));
+    resizeObserver.observe(container.value);
+  }
+});
+
+onBeforeUnmount(() => resizeObserver?.disconnect());
 </script>
 
 <template>
-  <div class="seg" role="group" :aria-label="props.label || undefined">
+  <div ref="container" class="seg" role="group" :aria-label="props.label || undefined">
     <span ref="indicator" class="seg-indicator" aria-hidden="true" />
     <button
       v-for="(item, index) in props.items"
@@ -80,13 +96,13 @@ onMounted(() => requestAnimationFrame(() => position(false)));
 </template>
 
 <style>
-/* 选中滑块：由脚本定位到当前按钮，切换时平滑滑动过去 */
+/* 选中滑块：由脚本按按钮的 offsetLeft / offsetTop / 尺寸定位，换行后也能贴在正确那一行。 */
 .seg-indicator {
   position: absolute;
-  top: var(--s1);
+  top: 0;
   left: 0;
-  bottom: var(--s1);
   width: 0;
+  height: 0;
   z-index: 0;
   border-radius: var(--r-chip);
   background: var(--accent);
@@ -97,7 +113,8 @@ onMounted(() => requestAnimationFrame(() => position(false)));
 .seg-indicator[data-animate='true'] {
   transition:
     transform var(--motion-normal) var(--ease-out),
-    width var(--motion-normal) var(--ease-out);
+    width var(--motion-normal) var(--ease-out),
+    height var(--motion-normal) var(--ease-out);
 }
 
 .seg-indicator[data-hidden='true'] {

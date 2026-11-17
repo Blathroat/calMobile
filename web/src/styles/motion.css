@@ -376,6 +376,7 @@
   transition:
     transform var(--motion-normal) var(--ease-out),
     width var(--motion-normal) var(--ease-out),
+    height var(--motion-normal) var(--ease-out),
     opacity var(--motion-quick) var(--ease-standard);
 }
 
