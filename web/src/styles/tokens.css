@@ -1199,6 +1199,15 @@ button.avatar {
   text-align: start;
 }
 
+/* 用户协议勾选行只是「勾选 + 一条链接」，不套卡片外框：去掉 .check-label 的描边、
+   底色与内距，只保留 44px 命中区。 */
+.agreement-consent .check-label {
+  min-height: var(--touch);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 /* 用户协议蓝链：`--accent-ink` 在深色底上偏暗，链接统一用可读的蓝色（`--info-ink`）+ 下划线，
    登录/注册的勾选行与设置页入口共用。 */
 .agreement-link {
