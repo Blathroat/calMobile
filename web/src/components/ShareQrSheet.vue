@@ -16,6 +16,7 @@ import { computed, ref } from 'vue';
 import QrCanvas from './QrCanvas.vue';
 import { device } from '@/services/device-services';
 import { nativeBridge } from '@/services/native-bridge';
+import { closeSheet } from '@/services/sheet';
 import { toast } from '@/services/toast';
 import { t } from '@/i18n';
 
@@ -96,9 +97,14 @@ async function saveToLocal(): Promise<void> {
     <strong v-if="props.title" class="share-qr-title">{{ props.title }}</strong>
     <span class="share-qr-link row-meta truncate">{{ props.text }}</span>
     <p class="field-hint text-center">{{ t('share.hint') }}</p>
-    <button class="cta" type="button" :disabled="saving || !!qrError" @click="saveToLocal">
-      {{ saving ? t('share.saving') : t('share.save') }}
-    </button>
+    <!-- 两颗按钮并排：保存是主操作，关闭是退路；都放在内容里，不再交给 sheet 的 actions
+         叠成两行（面板只有一个内容组件时，动作栏会独占一行）。 -->
+    <div class="share-qr-actions">
+      <button class="cta ghost" type="button" @click="closeSheet()">{{ t('common.close') }}</button>
+      <button class="cta" type="button" :disabled="saving || !!qrError" @click="saveToLocal">
+        {{ saving ? t('share.saving') : t('share.save') }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -131,5 +137,18 @@ async function saveToLocal(): Promise<void> {
 
 .share-qr-link {
   text-align: center;
+}
+
+/* 保存与关闭并排、等宽；窄屏也放得下两枚短按钮。 */
+.share-qr-actions {
+  display: flex;
+  gap: var(--s2);
+  margin-top: var(--s1);
+}
+
+.share-qr-actions .cta {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
 }
 </style>

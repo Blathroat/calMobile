@@ -144,8 +144,7 @@ function openShareQr(item: Exhibition): void {
       title: String(item.title ?? ''),
       fileName: `exhibition-qr-${String(item.id)}.png`,
     },
-    layout: 'close-below',
-    actions: [{ label: t('common.close'), onClick: (close) => close() }],
+    // 保存与关闭并排画在内容组件里（见 ShareQrSheet），这里不再追加动作栏。
   });
 }
 
