@@ -1030,11 +1030,6 @@ button.avatar {
   overflow: hidden;
 }
 
-/* 没有封面时的占位槽位：保留设计稿的 9:16 竖版框。 */
-.hero-placeholder {
-  aspect-ratio: 1080 / 1920;
-}
-
 .hero-compact {
   width: min(100%, 148px);
 }
