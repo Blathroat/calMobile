@@ -355,9 +355,8 @@ function clearAgreementContent(): void {
       <p class="field-hint">{{ t('admin.settings.logsHint') }}</p>
     </div>
 
-    <!-- 入口放在日志卡下面：先看到上限与用量，再决定要不要翻最近日志。 -->
-    <button class="cta ghost logs-entry" data-size="small" type="button" @click="emit('open-logs')">
-      <AppIcon name="list" />
+    <!-- 入口放在日志卡下面：整行大按钮，版式与其它卡片里的主操作一致，但不属于日志卡片本身。 -->
+    <button class="cta" type="button" @click="emit('open-logs')">
       {{ t('logs.entry') }}
     </button>
 
@@ -908,13 +907,6 @@ function clearAgreementContent(): void {
 </template>
 
 <style scoped>
-/* 日志入口：按内容取宽的 ghost 小按钮，跟在日志卡下方。 */
-.logs-entry {
-  width: auto;
-  align-self: flex-start;
-  padding-inline: var(--s3);
-}
-
 /* 卡片内的节奏：组标题到第一行留 12px，组与组之间 20px（在 .list 层）。
    设置项本身「一行标题 + 一行说明」为一组，组与组之间 16px。 */
 .card {

@@ -102,6 +102,11 @@ async function mountAdmin(path: string): Promise<HTMLElement> {
   return container;
 }
 
+/** 卡片里的次操作常用 `.cta ghost` + `data-size="small"`；日志入口要的是默认大按钮。 */
+function miniGhost(button: HTMLButtonElement | undefined): boolean {
+  return button?.classList.contains('ghost') === true || button?.hasAttribute('data-size') === true;
+}
+
 function buttonByText(scope: ParentNode, label: string): HTMLButtonElement | undefined {
   return [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => button.textContent?.trim() === label,
@@ -123,9 +128,15 @@ describe('管理后台 · 最近日志入口', () => {
     await vi.waitFor(() => expect(container.querySelector('#settings-logs-mb')).not.toBeNull());
     const entry = buttonByText(container, '查看最近日志');
     expect(entry).not.toBeUndefined();
-    // 入口在日志卡下面：按钮必须是日志卡的相邻后继节点，不在页面顶部。
+    // 入口在日志卡下面：按钮必须是日志卡的相邻后继节点，不在页面顶部，也不在卡片内部。
     const logsCard = container.querySelector<HTMLElement>('#settings-logs-mb')!.closest('.card');
     expect(logsCard?.nextElementSibling).toBe(entry);
+    expect(logsCard?.contains(entry!)).toBe(false);
+    // 版式与其它卡片里的主操作一致：整行大按钮（默认 .cta），不是小的 ghost 按钮。
+    expect(entry?.classList.contains('cta')).toBe(true);
+    expect(entry?.classList.contains('ghost')).toBe(false);
+    expect(entry?.hasAttribute('data-size')).toBe(false);
+    expect(miniGhost(entry)).toBe(false);
     entry?.click();
     await vi.waitFor(() => expect(router?.currentRoute.value.path).toBe('/logs'));
   });
