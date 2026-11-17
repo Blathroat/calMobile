@@ -103,6 +103,8 @@ export interface ServerSettings {
    * 是否需要重新确认（只拨开关、不改正文不升版本）。`updatedAt` 是正文最后更新时间。
    */
   agreement: { enabled: boolean; content: string; version: number; updatedAt: string };
+  /** 操作日志的存储上限（MB）：超过后自动清理最早的日志。 */
+  logs: { storageMb: number };
 }
 
 /**
@@ -769,6 +771,32 @@ export const STEPS: MigrationStep[] = [
         ALTER TABLE users ADD COLUMN IF NOT EXISTS agreed_terms_at TIMESTAMPTZ;
         `,
   },
+  {
+    // 操作日志：管理后台「最近日志」页的数据源。只追加、满了由服务端按大小上限清理最早的。
+    // `size_bytes` 在写入时算好，清理时按累计大小找最早的那些行，不必每次重新序列化。
+    // `actor_id` 不建外键：账号删除后日志仍要保留（显示当时的名字）。
+    id: '0026-app-logs',
+    sql: `
+        CREATE TABLE IF NOT EXISTS app_logs (
+            id          BIGSERIAL PRIMARY KEY,
+            level       TEXT NOT NULL DEFAULT 'info',
+            category    TEXT NOT NULL DEFAULT '',
+            message     TEXT NOT NULL DEFAULT '',
+            actor_id    TEXT NOT NULL DEFAULT '',
+            actor_name  TEXT NOT NULL DEFAULT '',
+            method      TEXT NOT NULL DEFAULT '',
+            path        TEXT NOT NULL DEFAULT '',
+            status      INTEGER NOT NULL DEFAULT 0,
+            duration_ms INTEGER NOT NULL DEFAULT 0,
+            ip          TEXT NOT NULL DEFAULT '',
+            detail      JSONB NOT NULL DEFAULT '{}'::jsonb,
+            size_bytes  INTEGER NOT NULL DEFAULT 0,
+            created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS app_logs_created_idx ON app_logs (created_at DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS app_logs_level_idx ON app_logs (level, created_at DESC);
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
@@ -814,6 +842,8 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   download: { source: 'url', url: '', repo: '' },
   // 默认不开启：升级后的老库不会凭空出现用户协议入口。
   agreement: { enabled: false, content: '', version: 0, updatedAt: '' },
+  // 操作日志默认保留 64 MB，超出自动清理最早的记录。
+  logs: { storageMb: 64 },
 };
 
 function errorMessage(error: unknown): string {

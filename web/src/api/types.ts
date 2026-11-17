@@ -46,6 +46,36 @@ export interface AgreementSummary extends JsonObject {
   updatedAt: string;
 }
 
+/** 操作日志的一条记录（管理后台「最近日志」页）。 */
+export interface LogEntry extends JsonObject {
+  id: string;
+  level: 'info' | 'warn' | 'error';
+  category: string;
+  message: string;
+  actorName: string;
+  actorId: string;
+  method: string;
+  path: string;
+  status: number;
+  durationMs: number;
+  ip: string;
+  createdAt: string;
+}
+
+/** 日志存储用量与上限（MB / 字节）。 */
+export interface LogStats extends JsonObject {
+  storageMb: number;
+  limitBytes: number;
+  usedBytes: number;
+  entryCount: number;
+}
+
+/** 最近日志接口的返回体：列表 + 当前用量。 */
+export interface LogsResult extends JsonObject {
+  logs: LogEntry[];
+  stats: LogStats;
+}
+
 /**
  * 当前登录用户。`role` 与 `statusCode` 是英文代码，展示时用
  * `services/status.ts` 的 `roleLabel()` / `userStatusLabel()` 取文案；

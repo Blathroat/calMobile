@@ -285,6 +285,9 @@ export const serverSettingsPatchSchema = z
     downloadRepo: z.unknown(),
     // 用户协议：整段提交 { enabled, content }。
     agreement: z.unknown(),
+    // 操作日志存储上限：整段 { storageMb } 或扁平 logsStorageMb。
+    logs: z.unknown(),
+    logsStorageMb: z.unknown(),
     notify: notifySchema,
   })
   .partial()

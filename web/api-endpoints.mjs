@@ -28,6 +28,7 @@ export const ENDPOINTS = {
   'profile.redeemInvite': () => ({ method: 'POST', path: '/profile/invite' }),
   'profile.agree': (payload) => ({ method: 'POST', path: '/profile/agreement', body: payload }),
   'agreement.get': () => ({ method: 'GET', path: '/agreement' }),
+  'logs.list': () => ({ method: 'GET', path: '/logs' }),
   'security.get': () => ({ method: 'GET', path: '/profile/security' }),
   'security.identityEmailCode': () => ({ method: 'POST', path: '/profile/security/email-code' }),
   'security.verifyIdentity': () => ({ method: 'POST', path: '/profile/security/verify' }),

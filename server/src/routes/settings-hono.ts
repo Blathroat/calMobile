@@ -18,6 +18,7 @@ import { readJsonBody } from '../http/body-limit.js';
 import { parseSchema } from '../domain/validation.js';
 import { notifySchema, serverSettingsPatchSchema, uiModeSchema, uiThemeSchema } from '../domain/schemas.js';
 import { createInvite, deleteInvite, listInvites } from '../domain/invites.js';
+import { logsStats, pruneLogs } from '../services/logs.js';
 
 const app = new Hono<HonoEnv>();
 function bodyRecord(value: unknown): Record<string, unknown> {
@@ -46,6 +47,11 @@ async function settingsPayload(userId: string | null | undefined, role?: string 
     cover: settings.cover,
     exhibitor: settings.exhibitor,
     invite: settings.invite,
+    // 操作日志：存储上限所有人可读；当前用量只有管理员要用（设置页显示已用空间）。
+    logs: {
+      storageMb: settings.logs.storageMb,
+      ...(role === 'admin' ? await logsStats() : {}),
+    },
     // 用户协议：正文只在管理员这里下发（设置页要编辑/上传）；其他人只拿开关与版本。
     agreement: {
       enabled: settings.agreement.enabled,
@@ -78,6 +84,8 @@ app.put('/', authenticateHono, async (c) => {
       });
     }
     if (has(body, 'notify')) await saveNotificationPreferences(user.userId, parseSchema(notifySchema, body.notify));
+    // 上限调小后立刻清一次，不让「已用 > 上限」一直显示到下一次写日志。
+    if (JSON.stringify(current.logs) !== JSON.stringify(next.logs)) void pruneLogs();
     return { settings: await settingsPayload(user.userId, user.role) };
   });
 });

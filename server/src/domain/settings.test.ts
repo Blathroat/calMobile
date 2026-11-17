@@ -299,3 +299,17 @@ test('用户协议非法入参与超长正文按业务失败返回', () => {
   );
   assert.equal(applyServerPatch(defaults(), {}).agreement.enabled, false, '没提交就不动');
 });
+
+/**
+ * 操作日志存储上限：夹到 1～10240 MB，不静默写成 0 或超大值。
+ * 落库与清理行为由契约测试覆盖（`server/src/test/logs.test.ts`）。
+ */
+test('日志存储上限收敛到 1～10240 MB', () => {
+  assert.equal(applyServerPatch(defaults(), { logs: { storageMb: 128 } }).logs.storageMb, 128);
+  assert.equal(applyServerPatch(defaults(), { logs: { storageMb: 0 } }).logs.storageMb, 1);
+  assert.equal(applyServerPatch(defaults(), { logs: { storageMb: -5 } }).logs.storageMb, 1);
+  assert.equal(applyServerPatch(defaults(), { logs: { storageMb: 99999 } }).logs.storageMb, 10240);
+  assert.equal(applyServerPatch(defaults(), { logsStorageMb: 512 }).logs.storageMb, 512, '扁平写法也认');
+  assert.equal(applyServerPatch(defaults(), {}).logs.storageMb, 64, '默认保留 64 MB');
+  assert.throws(() => applyServerPatch(defaults(), { logs: 'x' }), /格式不正确/);
+});

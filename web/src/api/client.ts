@@ -34,6 +34,7 @@ import { SessionClient } from '@/services/session-client';
 import { nativeBridge } from '@/services/native-bridge';
 import type {
   AgreementInfo,
+  LogsResult,
   ApiResult,
   AuthResult,
   Bootstrap,
@@ -80,6 +81,14 @@ export interface ApiClient {
   agreement: {
     /** 当前协议开关、版本、更新时间和 Markdown 正文。 */
     get(): Promise<AgreementInfo>;
+  };
+  /** 操作日志（仅管理员）。要看到最新记录，不走查询缓存。 */
+  logs: {
+    /**
+     * 最近操作日志。
+     * @param params `limit` 默认 100（最大 500）；`level` 过滤 info / warn / error；`query` 子串匹配。
+     */
+    list(params?: { limit?: number; level?: string; query?: string }): Promise<LogsResult>;
   };
   /** 最新版本与下载地址（公开）。检查更新与报名站的下载条都用它，永远取实时值。 */
   release(): Promise<ReleaseInfo>;
@@ -393,6 +402,16 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
     agreement: {
       // 协议正文可能很大且会变，不进 bootstrap、也不进查询缓存：每次打开页面取最新的。
       get: () => http.request<AgreementInfo>('/agreement'),
+    },
+    logs: {
+      // 日志随时在增长，直连接口（不进查询缓存），打开页面/下拉刷新都拿最新。
+      list: (params = {}) => {
+        const query: Record<string, string | number> = {};
+        if (params.limit && params.limit > 0) query.limit = params.limit;
+        if (params.level) query.level = params.level;
+        if (params.query) query.query = params.query;
+        return http.request<LogsResult>('/logs', { query });
+      },
     },
     /** 最新版本与下载地址（公开）。检查更新与报名站下载条都用它。 */
     release: () => http.request<ReleaseInfo>('/app/release'),

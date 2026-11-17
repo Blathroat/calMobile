@@ -93,6 +93,9 @@ export interface ServerPatch {
   downloadRepo?: unknown;
   /** 用户协议整段提交：{ enabled?: boolean, content?: string }。 */
   agreement?: unknown;
+  /** 操作日志存储上限：整段 { storageMb } 或扁平 logsStorageMb。 */
+  logs?: unknown;
+  logsStorageMb?: unknown;
 }
 
 interface SettingRow {
@@ -230,6 +233,8 @@ export async function readServerSettings(): Promise<ServerSettings> {
   };
   // 老库没有 agreement 这一项；补上默认（不开启），并归一化手改过的值。
   settings.agreement = normalizeAgreement(settings.agreement);
+  // 老库没有 logs 这一项；补上默认（64 MB），并把手改过的值收敛到合法范围。
+  settings.logs = normalizeLogs(settings.logs);
   // 老库的 limits JSON 没有文本填写和选项上限。缺的键用默认值补上，避免读出来是 undefined。
   const storedLimits = settings.limits;
   settings.limits = {
@@ -398,6 +403,23 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     if (Object.prototype.hasOwnProperty.call(source, 'downloadRepo')) patch.repo = source.downloadRepo;
     next.download = normalizeDownload(next.download || DEFAULT_SETTINGS.download, patch);
   }
+  if (
+    Object.prototype.hasOwnProperty.call(source, 'logs') ||
+    Object.prototype.hasOwnProperty.call(source, 'logsStorageMb')
+  ) {
+    const section = source.logs;
+    if (section !== undefined && (!section || typeof section !== 'object' || Array.isArray(section))) {
+      throw badRequest('日志设置格式不正确', { code: 'settings.logsInvalid' });
+    }
+    const patch = section && typeof section === 'object' ? (section as Record<string, unknown>) : {};
+    const raw =
+      source.logsStorageMb !== undefined
+        ? source.logsStorageMb
+        : Object.prototype.hasOwnProperty.call(patch, 'storageMb')
+          ? patch.storageMb
+          : undefined;
+    if (raw !== undefined) next.logs = normalizeLogs({ storageMb: raw });
+  }
   if (Object.prototype.hasOwnProperty.call(source, 'agreement')) {
     const value = source.agreement;
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -444,6 +466,21 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   }
 
   return next;
+}
+
+/** 操作日志存储上限的取值范围（MB）。 */
+export const LOG_STORAGE_MIN_MB = 1;
+export const LOG_STORAGE_MAX_MB = 10_240;
+
+/**
+ * 归一化日志存储上限：老库缺字段、手改过的坏值都收敛到 1～10240 MB。
+ * 与媒体容量不同，日志只有「写满清最早」这一种策略，不需要 whenFull。
+ */
+export function normalizeLogs(value: unknown): ServerSettings['logs'] {
+  const record = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  return {
+    storageMb: clampInt(record.storageMb, DEFAULT_SETTINGS.logs.storageMb, [LOG_STORAGE_MIN_MB, LOG_STORAGE_MAX_MB]),
+  };
 }
 
 /** 用户协议正文长度上限：200k 字符，够放很长的条款；超过按业务失败拒绝。 */
