@@ -40,7 +40,8 @@
 - 固定操作区用 `<Teleport defer to="#app-foot">` 投递 `.page-foot`，落在网格第三行。`defer` 让目标元素与页面在同一次渲染里创建时也能找到。入口页是例外：注册和忘记密码两个文字入口跟在表单后面随内容滚动，不占页脚槽。
 - 页面不自建 `.page` / `.topbar` / `.app-body` / `.tabbar`，也不写颜色、字号、间距与圆角。
 - 内容区的左右内距由外壳给两道（`.app-body` 与路由容器 `.page-surface` 各 `var(--s4)`，合计 24px）。页面不再加左右内距。通栏页面用路由 `meta.bodyPad: 'none'`，两道一起去掉。
-- 底部面板走 `web/src/services/sheet.ts`。一句话加按钮用 `title` / `message` / `actions`。带输入框或列表的用 `component` + `props`。选项多于两个时 `layout: 'stack'`。会议详情用 `layout: 'close-below'`，关闭独占下一行。个人页与用户设置的「编辑资料」共用 `web/src/services/profile-editor.ts`。
+- 底部面板走 `web/src/services/sheet.ts`。一句话加按钮用 `title` / `message` / `actions`。带输入框或列表的用 `component` + `props`。选项多于两个时 `layout: 'stack'`。会议详情用 `layout: 'close-below'`，关闭独占下一行。`dismissible: false` 时点遮罩与 Escape 都不关闭，只用于用户协议更新确认这类必须做选择的提示。个人页与用户设置的「编辑资料」共用 `web/src/services/profile-editor.ts`。
+- 用户协议更新确认走 `web/src/services/agreement-prompt.ts`：外壳（`app/App.vue`）在「已登录 + 协议开启 + 当前版本高于 `user.agreedTermsVersion`」时打开 `dismissible: false` 的抽屉（点遮罩与 Escape 都关不掉，见 `sheet.ts`），按钮是「查看用户协议 / 不同意并退出（`device.exitApp()`）/ 同意（写 `POST /profile/agreement` 后重拉启动数据）」。协议浏览页本身不叠弹窗，从协议页回来仍未同意会重新弹。
 - 列表型页面的分区和筛选写进地址栏（`?tab=`），从二级页返回时才能回到同一分区。
 - 切换方向由 `web/src/app/navigation.ts` 算出。二级页按路径深度写 `.app[data-direction]`（前进 / 后退 / 原地替换）。底部导航之间按导航顺序写 `.app[data-tab-move]`。`motion.css` 据此选过渡。冷启动的第一次跳转按原地替换处理，首帧静态落地。
 - 入口 `/` 恒 redirect `/home`：未登录首帧就以访客态落在首页，不再先画登录页；需要登录的页面由守卫跳 `/login?redirect=<原地址>`，登录页只在需要登录时出现。整页重载时会话恢复的等待只发生在 `meta.requiresAuth` 的页面与直接停在 `/login` 的情况；`main.ts` 只负责把「已登录却停在 `/login`（或 `/` 还没落定）」的一屏替换到 `redirect` 或首页。
@@ -64,6 +65,7 @@
 - `/e/:id/register`：报名信息页，公开。未登录时按匿名报名，收集项上方多一项必填「姓名」（上限取 `limits.nickname`，兜底 20）；应用内与已登录的报名站用户仍按账号报名。
 - `/e/:id/status`：报名状态页，公开，凭据在 `?token=`。按公开接口取数，并展示查询链接、复制按钮与「必须保存」提示；未登录页脚是「登录 / 注册」（带 `redirect` 回本页），已登录打开时先 `claim` 再 `replace` 到 `/mine/:id`。
 - `/u/:nickname`：用户公开页，`requiresAuth`。`/`、`/mine`、`/mine/:id`、`/m/:id` 保持原来的登录要求。
+- `/agreement`：用户协议浏览页，公开（登录/注册页的协议蓝链与更新提示都会用到它）；应用与报名站两种构建共用同一页。
 
 守卫只在**已登录**时判 `roles` 与 `capability`：访客的用户态由后端下发 `can.register = false`，照着判会把免登录报名表单挡回登录页。访客能否报名由详情页按展会状态决定，服务端再兜一层。
 
@@ -79,6 +81,7 @@
 - 查询 composable 负责加载、缓存首屏、后台刷新和错误块。失败保持可见。有上次结果（包括已过期的）时先画出那份内容，再在后台刷新；刷新只标记忙碌，不清空旧内容。过期响应丢弃。列表里新出现的卡片滑入，不重放整表。下拉刷新忽略新鲜期，重新取当前页。加载圈随手指出，松手后才转动并发起请求；响应再快也先滑入、在展开位置停留，再滑出。缓存已画出而后台还在更新时只标记忙碌，不弹这枚指示：切页面、返回旧页面都不播加载动画，指示圈只属于用户的手动下拉刷新（`web/src/services/pull-refresh.ts`）。竖拉还要先越过 16px 死区、并且纵向明显占优（> 横向 1.5 倍）才跟手：点击页面里的链接/按钮时手指会漂几像素，不过死区就完全当没下拉。手势中途横向追平即放弃这次下拉；页面自己的横滑处理器（首页日历）判定要横滑时调 `suppressPull()`，外壳本次手势直接作废，斜划不会闪出指示圈。只有真正的 `pointerup` 会发请求，`pointercancel`（浏览器接管手势）只复位、绝不刷新。换页时外壳再调一次 `resetPullVisual()`，保证上一页的手势与动画不会把圈留在新页面上。
 - 查询缓存集中在 `web/src/services/query-cache.ts`。缓存键包含稳定序列化后的参数，并对相同请求去重。底部导航按下时预取该页。月视图一次取整月，点日期在本地完成。
 - 写接口的失效前缀与读接口的缓存键前缀同族（`registrations` ↔ `registrations.record`、`users` ↔ `users.record`）。
+- 用户协议正文走 `api.agreement.get()` 直连，不进查询缓存（正文会随管理员保存变化）；`bootstrap` 只带 `{ enabled, version, updatedAt }` 摘要，登录/注册页据此决定是否展示勾选框。
 - 展会详情页判断本人是否报过这场展会时复用 `registrations` 列表读缓存（与报名写入同族失效），只在已登录时请求；取不到就按未报名处理，不因为这条增强查询让整页失败。个人页的活动概览同样是一次增强查询：复用 `registrations` 列表缓存统计已参加与报名记录数，取不到就不显示这一行，不影响资料主状态。
 - 报名站的查询凭据（`/e/:id/status?token=`）走 `registrations.queryByToken` 直连，不进查询缓存（凭据不能进缓存键）；`claim` 成功后失效 `registrations` 与 `users.public` 前缀。
 - 核销结果按账号存在本机（`calmobile.checkin.outcomes.<用户 id>`，最多 20 条，最新的在前）；核销页顶栏的清理按钮清掉它，换号按新键重读。
@@ -86,7 +89,7 @@
 
 ## 原生桥接
 
-原生只处理设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出、网页里的文件选择（`WebShellActivity` 的 `onShowFileChooser`）、文本文件读取与另存为（`media.importText` / `export.text`）、图片写进系统相册（`media.saveImage`）、会话刷新令牌与可信设备凭据的设备存储（`session.save` / `session.load` / `session.clear` / `session.device`，见 `SessionStore.java`），以及通行密钥（`passkey.available` / `passkey.create` / `passkey.get`，见 `PasskeyActions.java`）。
+原生只处理设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出、网页里的文件选择（`WebShellActivity` 的 `onShowFileChooser`）、文本文件读取与另存为（`media.importText` / `export.text`）、图片写进系统相册（`media.saveImage`）、会话刷新令牌与可信设备凭据的设备存储（`session.save` / `session.load` / `session.clear` / `session.device`，见 `SessionStore.java`），以及通行密钥（`passkey.available` / `passkey.create` / `passkey.get`，见 `PasskeyActions.java`），以及退出应用（`app.exit`：用户不同意用户协议时结束当前 Activity）。
 
 **为什么通行密钥在原生**：WebView 里 `navigator.credentials` 不可靠（多数版本没有 WebAuthn），而系统凭据提供方（Android 14 的 Credential Manager，低版本由 Google Play 服务提供）能用指纹 / 面容 / 锁屏密码完成同一件事。桥接传的入参与回调都是**标准 WebAuthn JSON**（base64url 字符串），服务端校验逻辑不区分请求来自 App 还是浏览器。页面侧统一走 `web/src/services/webauthn.ts`：有原生桥就调用桥，没有就用浏览器原生接口；用户取消由原生回 `cancelled`，前端归一成「没做这件事」。App 的 `clientDataJSON` 里 origin 是 `android:apk-key-hash:<签名证书 SHA-256 的 base64url>`，所以服务端的 `WEBAUTHN_ORIGINS` 必须包含它（见 `operations.md`）。这一项不是 http(s) 地址，`config/env.ts` 单独认它的形状（43 位 base64url），不能只按 URL 解析——否则会被当成非法项丢掉，App 里的通行密钥全部因来源不符被拒。**取消按系统实际返回判定**：用户划掉面板时凭据提供方回的是 `CreatePublicKeyCredentialDomException`（DOM 类型 Abort / NotAllowed / Timeout），不是 CancellationException；这三类与 Cancellation / Interrupted 一起归成 `cancelled`，页面静默收场。其余失败在原生侧翻成中文说明，系统给的英文原文只进 logcat。网页关着文件与 `content://` 访问，因此从文件安装语言包时正文由原生读出来回传，底稿另存为与二维码保存也走原生。可信设备的随机凭据由原生 `session.device` 生成并保存在设备私有目录。浏览器预览使用本机存储。
 
@@ -103,6 +106,7 @@
 - **日期与时间用应用内抽屉**：范围日期（开展/闭展、报名开始/截止）走 `components/DatePickerSheet.vue` 的 `range` 模式，单日期（会议日期）走 `single` 模式；时间走 `components/TimeWheelSheet.vue` 的时 / 分滚轮。入口统一是 `services/pickers.ts` 的 `openDateRange` / `openSingleDate` / `openTime`，页面不要自己拼面板、也不要用系统原生控件。范围选择第一次点选就把起点回填给表单、第二次点选终点后自动收起（因此报名窗口可以只填开始）；已有一段完整区间时点任意一天从该天重新开始；终点早于起点禁用；「清除」清空两端。时间滚轮在值为空时按开始 `09:00` / 结束 `17:00` 摆位，只有点「确认」才写回，「清除」把时间留空（时间选填）。月历按月份分节、周日起排、今天带圆点，渲染从已选月份往前 12 个月到往后 24 个月。
 - **状态标签是「信号灯」**：`StatusTag` 只有色点 + 文字，没有边框与底色（ok 绿 / pending 琥珀 / danger 砖红 / info 灰蓝 / muted 灰），用在报名状态、展会报名方式与账号状态上。**身份标签不是状态**：展商 / 管理员走 `RoleTag`，保留原来的方框小签（浅底 + `--accent-edge` 描边 + 强调色文字），不要换成信号灯。
 - 需要从固定清单里选值的字段用**应用内抽屉**：`openSheet({ layout: 'list', actions: [{ label, checked }] })`，当前值带对勾；不要用系统 `<select>`。
+- **用户协议**：管理员在「管理-设置」用开关 + Markdown 文件上传正文（应用内 `device.importText('text/markdown,text/plain', 1MB)` 读正文，浏览器退回 `<input type=file>` + `File.text()`；正文上限 200000 字符，随保存一起 `PUT /settings` 的 `agreement: { enabled, content }` 提交）。开启后登录/注册页显示「我已阅读并同意《用户协议》」勾选框，链接是 `--accent-ink` 的蓝链、打开 `/agreement`；用户设置页最底部同一入口；关闭时这些入口与更新弹窗全部不渲染。协议浏览页用 `api.agreement.get()` 公开取数（不进查询缓存），正文走 `markdownToHtml()` 清洗后渲染到 `.rich-content`。登录/注册页的勾选在各提交点（密码登录、两步验证、通行密钥、注册发码与提交）拦截，会话建立后调 `POST /profile/agreement` 记录当前版本，失败静默交给全局更新弹窗兜底。
 - 分段控件（`components/SegControl.vue`）在空间不够时**自动换行**，不做横向滚动：`.seg` 是 `flex-wrap: wrap`，所有分类一眼看全；选中滑块按按钮的 `offsetLeft / offsetTop / 尺寸` 定位，换行后仍贴在正确那一行，容器尺寸变化由 `ResizeObserver` 重新量。
 - 上传卡（封面、缺省封面）统一版式：左侧 96×170（9:16）预览，右侧竖排「上传/更换 / 移除」按钮与格式说明，窄屏上下堆叠。
 - 图标是 24 视窗、1.5 描边、无填充的细线。顶栏图标没有圆底。底部导航是图标加文字。
