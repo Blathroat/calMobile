@@ -10,7 +10,7 @@
 
 | 改动 | 命令 |
 |---|---|
-| Vue 页面、组件、样式、界面文案 | `pnpm --dir web typecheck`、`pnpm --dir web lint`、`pnpm --dir web fmt:check`、`pnpm --dir web test`、`pnpm --dir web build`。打 APK 时 `preBuild` 把 `web/dist` 同步到 WebView 资源 |
+| Vue 页面、组件、样式、界面文案 | `pnpm --dir web typecheck`、`pnpm --dir web lint`、`pnpm --dir web fmt:check`、`pnpm --dir web test`、`pnpm --dir web build`（改了报名站页面再跑 `pnpm --dir web build:join`）。打 APK 时 `preBuild` 把 `web/dist` 同步到 WebView 资源 |
 | 路由与加载 | `pnpm --dir web test` |
 | 后端规则或响应 | `pnpm --dir server lint`、`pnpm --dir server fmt:check`、`pnpm --dir server test`，以及 `pnpm --dir server test:contract`（需要 PostgreSQL）。`pnpm --dir server test` 同时跑发布脚本的 Node 测试。改了已加载的 `server/src` 后重启不用 watch 起的进程 |
 | Java 或桥接 | `gradlew.bat :app:testDebugUnitTest`。出包或资源变更再跑 `gradlew.bat :app:assembleDebug` |
@@ -122,7 +122,7 @@ node /usr/local/lib/calmobile/calmobile-update.mjs --rollback
 node /usr/local/lib/calmobile/calmobile-update.mjs --unpin
 ```
 
-一次更新依次做：校验 npm 元数据和 tarball 完整性 → 解压到 `releases/.tmp-*` → `pnpm install --frozen-lockfile --prod` → 补齐 `/etc/calmobile.env` 缺失的键 → 用新版本代码跑迁移 → 原子切换 `current` → 重启 `calmobile.service` → 轮询 `/ping`。成功后删除超出 `keep`（默认 3）的旧版本和旧缓存。
+一次更新依次做：校验 npm 元数据和 tarball 完整性 → 解压到 `releases/.tmp-*` → `pnpm install --frozen-lockfile --prod` → 补齐 `/etc/calmobile.env` 缺失的键 → 用新版本代码跑迁移 → 原子切换 `current` → 重启 `calmobile.service` → 轮询 `/ping`。成功后删除超出 `keep`（默认 3）的旧版本和旧缓存。服务端的离线 IP 归属地库（`ip2region-ts`）随依赖一起装进版本目录，数据文件在包里，不需要额外环境变量或手工放文件；解析失败只让最近登录地区为空，不影响登录。
 
 失败时不会把线上搞挂：
 
