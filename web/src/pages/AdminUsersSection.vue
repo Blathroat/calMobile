@@ -41,6 +41,19 @@ function exhibitorMeta(user: User): string {
     ? t('admin.users.exhibitorExpired', { date })
     : t('admin.users.exhibitorUntil', { date });
 }
+
+/**
+ * 「最近登录」一行：日期后面跟最近登录 IP 所属地区（如「2026-11-17 江苏省苏州市」）。
+ *
+ * 卡片右侧的 StatusTag 是唯一的状态显示，这里不再重复状态文字。
+ * 时间缺失时退回注册时间（服务端已兜底一层，这里再兜一层，旧快照也不显示「未知」）；
+ * 地区为空时只显示日期。
+ */
+function lastLoginMeta(user: User): string {
+  const date = String(user.lastLoginTime || user.registrationTime || '') || t('admin.users.unknown');
+  const region = String(user.lastLoginRegion || '');
+  return t('admin.users.lastLogin', { time: region ? `${date} ${region}` : date });
+}
 </script>
 
 <template>
@@ -93,12 +106,7 @@ function exhibitorMeta(user: User): string {
               <strong class="row-title truncate">{{ user.nickname }}</strong>
               <RoleTag :role-code="String(user.roleCode || '')" />
             </span>
-            <span class="row-meta">{{
-              t('admin.users.lastLogin', {
-                status: userStatusLabel(String(user.statusCode ?? '')),
-                time: String(user.lastLoginTime || t('admin.users.unknown')),
-              })
-            }}</span>
+            <span class="row-meta">{{ lastLoginMeta(user) }}</span>
             <span v-if="exhibitorMeta(user)" class="row-meta">{{ exhibitorMeta(user) }}</span>
             <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>
             <span v-if="user.twoFactorEnabled === true" class="row-meta">{{ t('admin.users.twoFactorEnabled') }}</span>

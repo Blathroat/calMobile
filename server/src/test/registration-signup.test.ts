@@ -67,6 +67,14 @@ test('注册是两步的：第一步只发码不建号，验证码通过才建�
   assert.strictEqual(created.body.user.role, 'user', '自助注册固定为普通用户');
   assert.strictEqual(created.body.user.email, email);
   assert.ok(created.body.token, '验证通过后应当直接进入登录态');
+  // 建号即登录：注册成功就写最近登录时间、客户端 IP 与地区，用户管理不显示「未知」。
+  const loginRecord = await pool.query(
+    'SELECT last_login_time, last_login_ip, last_login_region FROM users WHERE lower(email) = $1',
+    [email],
+  );
+  assert.ok(loginRecord.rows[0].last_login_time, '注册成功应当写最近登录时间');
+  assert.strictEqual(loginRecord.rows[0].last_login_ip, '127.0.0.1', '注册时要记下客户端 IP');
+  assert.strictEqual(loginRecord.rows[0].last_login_region, '内网', '本机测试的来源是回环地址，地区记成内网');
   const remembered = await pool.query(
     `SELECT 1 FROM trusted_devices d JOIN users u ON u.id = d.user_id
       WHERE u.username = $1 AND d.name = $2`,
