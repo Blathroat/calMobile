@@ -96,6 +96,13 @@ export interface ServerSettings {
    * 空串表示没配，更新检查与报名站的下载条据此隐藏下载入口。
    */
   download: { source: 'url' | 'github'; url: string; repo: string };
+  /**
+   * 用户协议（管理端可选开启）。
+   *
+   * `content` 是 Markdown 正文；`version` 在正文变化时自增，用来判断已登录用户
+   * 是否需要重新确认（只拨开关、不改正文不升版本）。`updatedAt` 是正文最后更新时间。
+   */
+  agreement: { enabled: boolean; content: string; version: number; updatedAt: string };
 }
 
 /**
@@ -752,6 +759,16 @@ export const STEPS: MigrationStep[] = [
         UPDATE users SET last_login_time = registration_time WHERE last_login_time IS NULL;
         `,
   },
+  {
+    // 用户协议同意状态：0 表示从未同意过任何版本；`agreed_terms_at` 是最后一次同意的时间。
+    // 协议正文与版本在 `app_settings.agreement` 里，这里只记每个账号同意到哪一版。
+    // `IF NOT EXISTS` 让这一步可以反复执行。
+    id: '0025-user-agreement',
+    sql: `
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS agreed_terms_version INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS agreed_terms_at TIMESTAMPTZ;
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
@@ -795,6 +812,8 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   invite: { uses: 1, validHours: 168, durationDays: 0 },
   // 默认是直链且地址为空：升级后的老库不会凭空多出一个下载入口。
   download: { source: 'url', url: '', repo: '' },
+  // 默认不开启：升级后的老库不会凭空出现用户协议入口。
+  agreement: { enabled: false, content: '', version: 0, updatedAt: '' },
 };
 
 function errorMessage(error: unknown): string {

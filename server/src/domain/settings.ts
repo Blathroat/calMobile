@@ -91,6 +91,8 @@ export interface ServerPatch {
   downloadSource?: unknown;
   downloadUrl?: unknown;
   downloadRepo?: unknown;
+  /** 用户协议整段提交：{ enabled?: boolean, content?: string }。 */
+  agreement?: unknown;
 }
 
 interface SettingRow {
@@ -226,6 +228,8 @@ export async function readServerSettings(): Promise<ServerSettings> {
     ...DEFAULT_SETTINGS.download,
     ...(settings.download && typeof settings.download === 'object' ? settings.download : {}),
   };
+  // 老库没有 agreement 这一项；补上默认（不开启），并归一化手改过的值。
+  settings.agreement = normalizeAgreement(settings.agreement);
   // 老库的 limits JSON 没有文本填写和选项上限。缺的键用默认值补上，避免读出来是 undefined。
   const storedLimits = settings.limits;
   settings.limits = {
@@ -394,6 +398,38 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     if (Object.prototype.hasOwnProperty.call(source, 'downloadRepo')) patch.repo = source.downloadRepo;
     next.download = normalizeDownload(next.download || DEFAULT_SETTINGS.download, patch);
   }
+  if (Object.prototype.hasOwnProperty.call(source, 'agreement')) {
+    const value = source.agreement;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw badRequest('用户协议设置格式不正确', { code: 'settings.agreementInvalid' });
+    }
+    const patch = value as Record<string, unknown>;
+    const current = normalizeAgreement(next.agreement);
+    const content = Object.prototype.hasOwnProperty.call(patch, 'content')
+      ? String(patch.content ?? '')
+      : current.content;
+    if (content.length > AGREEMENT_CONTENT_MAX) {
+      throw badRequest(`用户协议正文过长（最多 ${AGREEMENT_CONTENT_MAX} 字符）`, {
+        code: 'settings.agreementTooLong',
+      });
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'enabled') && typeof patch.enabled !== 'boolean') {
+      throw badRequest('用户协议开关只能是 true 或 false', { code: 'settings.agreementInvalid' });
+    }
+    const enabled = Object.prototype.hasOwnProperty.call(patch, 'enabled') ? patch.enabled === true : current.enabled;
+    // 开启就必须有正文：否则登录/注册页会出现一个点开是空白的协议入口。
+    if (enabled && content.trim() === '') {
+      throw badRequest('开启用户协议前请先上传 Markdown 正文', { code: 'settings.agreementContentRequired' });
+    }
+    const contentChanged = content !== current.content;
+    next.agreement = {
+      enabled,
+      content,
+      // 正文变化才升版本：只拨开关不会让所有已登录用户重新确认。
+      version: contentChanged ? current.version + 1 : current.version,
+      updatedAt: contentChanged ? new Date().toISOString() : current.updatedAt,
+    };
+  }
   if (
     Object.prototype.hasOwnProperty.call(source, 'inviteUses') ||
     Object.prototype.hasOwnProperty.call(source, 'inviteValidHours') ||
@@ -408,6 +444,21 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   }
 
   return next;
+}
+
+/** 用户协议正文长度上限：200k 字符，够放很长的条款；超过按业务失败拒绝。 */
+export const AGREEMENT_CONTENT_MAX = 200_000;
+
+/**
+ * 归一化用户协议设置：老库缺字段、手改过的坏值都收敛成合法结构。
+ * `version` 为 0 表示从未设置过正文；页面据此不展示入口。
+ */
+export function normalizeAgreement(value: unknown): ServerSettings['agreement'] {
+  const record = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const content = typeof record.content === 'string' ? record.content : '';
+  const version = Math.max(0, Math.trunc(Number(record.version)) || 0);
+  const updatedAt = typeof record.updatedAt === 'string' ? record.updatedAt : '';
+  return { enabled: record.enabled === true, content, version, updatedAt };
 }
 
 /** 下载源只允许两种：直链，或追踪 GitHub 仓库的最新 Release。 */

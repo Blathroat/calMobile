@@ -29,6 +29,7 @@ import java.util.Map;
  * | `media.saveImage` | 图片写进系统相册（API 29+ 走 MediaStore，老系统回落「另存为」） |
  * | `session.save` / `session.load` / `session.clear` / `session.device` | 会话与可信设备凭据属于设备状态，存应用私有目录（{@link SessionStore}） |
  * | `passkey.available` / `passkey.create` / `passkey.get` | WebView 没有可靠的 WebAuthn，通行密钥交给系统凭据提供方（Credential Manager，{@link PasskeyActions}） |
+ * | `app.exit` | 用户不同意用户协议时关闭应用；只有原生能结束 Activity，网页里做不到 |
  *
  * 数据行由前端传进来（它已经从后端拿到数据），原生只负责落盘与格式。
  */
@@ -104,6 +105,11 @@ final class WebAppActions {
                 return;
             case "passkey.get":
                 PasskeyActions.get(bridge, payload, callback);
+                return;
+            case "app.exit":
+                // 先把结果回给页面，再结束 Activity：反过来的话回调可能随进程一起消失。
+                callback.success(java.util.Collections.singletonMap("closed", true));
+                activity.finish();
                 return;
             default:
                 callback.failure("未实现的动作：" + action);

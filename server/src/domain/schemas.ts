@@ -283,6 +283,8 @@ export const serverSettingsPatchSchema = z
     downloadSource: z.unknown(),
     downloadUrl: z.unknown(),
     downloadRepo: z.unknown(),
+    // 用户协议：整段提交 { enabled, content }。
+    agreement: z.unknown(),
     notify: notifySchema,
   })
   .partial()
@@ -633,3 +635,5 @@ export const reviewStatusSchema = z.object({
   ),
 });
 export const checkinSchema = z.object({ code: textSchema({ required: false }) });
+/** 同意用户协议：version 必须是服务端当前版本；页面从 /agreement 或 bootstrap 拿到后再回传。 */
+export const agreementAcceptSchema = z.object({ version: z.number().int().nonnegative() });

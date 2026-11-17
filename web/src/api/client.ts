@@ -33,6 +33,7 @@ import { QueryCache } from '@/services/query-cache';
 import { SessionClient } from '@/services/session-client';
 import { nativeBridge } from '@/services/native-bridge';
 import type {
+  AgreementInfo,
   ApiResult,
   AuthResult,
   Bootstrap,
@@ -75,6 +76,11 @@ export interface ApiClient {
   session: SessionClient;
   /** 启动数据（身份、权限、限制、主题）。刻意不走缓存：切账号后必须拿最新的一份。 */
   bootstrap(): Promise<Bootstrap>;
+  /** 用户协议（公开）：正文可能很大且会变，不进 bootstrap、也不走查询缓存。 */
+  agreement: {
+    /** 当前协议开关、版本、更新时间和 Markdown 正文。 */
+    get(): Promise<AgreementInfo>;
+  };
   /** 最新版本与下载地址（公开）。检查更新与报名站的下载条都用它，永远取实时值。 */
   release(): Promise<ReleaseInfo>;
   /** 登录、注册、找回密码。只有会下发令牌的方法内部才更新会话并清空缓存。 */
@@ -128,6 +134,11 @@ export interface ApiClient {
     markHint(hint: string): Promise<JsonObject>;
     /** 用邀请码把当前账号设为展商。已经是展商或管理员时不消耗邀请码。 */
     redeemInvite(code: string): Promise<ApiResult>;
+    /**
+     * 记录已同意当前版本的《用户协议》。
+     * 版本必须与服务端当前版本一致；管理员刚好更新了协议时按业务失败返回，页面应重新确认。
+     */
+    agree(version: number): Promise<ApiResult & { agreedTermsVersion: number; agreedTermsAt: string }>;
   };
   /** 展会封面和简介媒体。字节上传后返回可写入正文的地址。 */
   media: {
@@ -379,6 +390,10 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
     session,
     // 不走 read()：身份来源必须是最新的，不能命中缓存。
     bootstrap: () => http.request<Bootstrap>('/bootstrap'),
+    agreement: {
+      // 协议正文可能很大且会变，不进 bootstrap、也不进查询缓存：每次打开页面取最新的。
+      get: () => http.request<AgreementInfo>('/agreement'),
+    },
     /** 最新版本与下载地址（公开）。检查更新与报名站下载条都用它。 */
     release: () => http.request<ReleaseInfo>('/app/release'),
     auth: {
@@ -453,6 +468,12 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
       markHint: (hint) => http.request<JsonObject>('/profile/hints', { method: 'PUT', body: { hint } }),
       redeemInvite: (code) =>
         write<ApiResult>('/profile/invite', { method: 'POST', body: { code } }, ['profile', 'users']),
+      agree: (version) =>
+        write<ApiResult & { agreedTermsVersion: number; agreedTermsAt: string }>(
+          '/profile/agreement',
+          { method: 'POST', body: { version } },
+          ['profile', 'users'],
+        ),
     },
     media: {
       upload: (bytes, contentType, kind) =>

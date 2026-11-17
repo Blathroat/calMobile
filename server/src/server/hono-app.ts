@@ -29,6 +29,7 @@ import { createSearchRoutes } from '../routes/search-hono.js';
 import { createSettingsRoutes } from '../routes/settings-hono.js';
 import { createMediaRoutes } from '../routes/media-hono.js';
 import { createContentMediaRoutes } from '../routes/content-media-hono.js';
+import { createAgreementRoutes } from '../routes/agreement-hono.js';
 import type { TrustProxy } from '../config/runtime.js';
 import { lookupAppFile } from './app-shell.js';
 import { canonicalRedirect, isJoinPagePath, lookupJoinFile, requestHost } from './join-site.js';
@@ -133,6 +134,8 @@ export function createApp(options: AppOptions): Hono {
   app.route('/api/v1/auth', createAuthRoutes({ trustProxy: options.trustProxy }));
   app.route('/api/v1/profile', createProfileRoutes({ trustProxy: options.trustProxy }));
   app.route('/api/v1', createBootstrapRoutes());
+  // 公开的用户协议：登录/注册页与协议浏览页在未登录时也能读。
+  app.route('/api/v1', createAgreementRoutes());
   // 公开的「最新版本 / 下载地址」：网页端检查更新与报名站下载条共用。
   app.route('/api/v1', createAppRoutes());
   app.route('/api/v1/users', createUsersRoutes());

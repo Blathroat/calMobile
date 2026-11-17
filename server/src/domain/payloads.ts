@@ -98,6 +98,9 @@ export interface UserRow {
   registration_time?: string | null;
   /** 最近一次登录的地区（格式化后）；个人用户态不下发，只有管理员列表用。 */
   last_login_region?: string | null;
+  /** 已同意的用户协议版本（0 = 从未同意）与同意时间。 */
+  agreed_terms_version?: number | null;
+  agreed_terms_at?: string | Date | null;
 }
 
 export interface AdminUserRow {
@@ -115,6 +118,8 @@ export interface AdminUserRow {
   last_login_time?: string | null;
   /** 最近一次登录的地区（格式化后）；IP 原文不在这里，也不下发。 */
   last_login_region?: string | null;
+  agreed_terms_version?: number | null;
+  agreed_terms_at?: string | Date | null;
 }
 
 /** 展会行 → 列表 / 详情的展会对象。 */
@@ -252,6 +257,9 @@ export function userPayload(row: UserRow, can: Capabilities) {
     exhibitorExpired: isPastExpiry(row.exhibitor_expires_at),
     lastLoginTime: row.last_login_time || '',
     registrationTime: row.registration_time || '',
+    // 用户协议：前端把 agreedTermsVersion 与 bootstrap 下发的当前版本比较，判断要不要弹确认。
+    agreedTermsVersion: Number(row.agreed_terms_version) || 0,
+    agreedTermsAt: isoTime(row.agreed_terms_at),
     can,
   };
 }
@@ -276,6 +284,8 @@ export function guestPayload() {
     statusCode: '',
     lastLoginTime: '',
     registrationTime: '',
+    agreedTermsVersion: 0,
+    agreedTermsAt: '',
     exhibitorExpiresAt: '',
     exhibitorExpired: false,
     can: { register: false, profile: false, exhibitor: false, admin: false, limited: false },
@@ -308,6 +318,9 @@ export function adminUserPayload(row: AdminUserRow, index: number) {
     lastLoginTime: row.last_login_time || row.registration_time || '',
     // 只下发地区（如「江苏省苏州市」「内网」），IP 原文留在库里，不进任何响应。
     lastLoginRegion: row.last_login_region || '',
+    // 用户管理卡片据此标识「已同意 / 未同意当前用户协议」。
+    agreedTermsVersion: Number(row.agreed_terms_version) || 0,
+    agreedTermsAt: isoTime(row.agreed_terms_at),
     order: index,
   };
 }

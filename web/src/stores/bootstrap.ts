@@ -53,6 +53,8 @@ export interface BootstrapState {
   cover: JsonObject;
   /** 展商端策略：`maxFutureExhibitions` / `maxFutureMeetings` 为 0 时表示不限 */
   exhibitor: JsonObject;
+  /** 用户协议摘要：关闭时所有入口不渲染；版本与用户已同意版本比较决定是否弹确认。 */
+  agreement: JsonObject & { enabled?: boolean; version?: number; updatedAt?: string };
   /**
    * 管理员配置的软件包下载：`source` 是 `url`（直链）或 `github`（追踪最新 release），
    * `url` 已经由服务端解析好；空串表示还没配，报名站的下载条据此决定要不要出现。
@@ -86,6 +88,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
     theme: {},
     cover: {},
     exhibitor: {},
+    agreement: { enabled: false, version: 0, updatedAt: '' },
     download: {},
     publicBaseUrl: '',
     privacyPolicyUrl: '',
@@ -112,6 +115,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
       this.theme = { ...this.theme, ...asObject(data.theme) };
       this.cover = { ...this.cover, ...asObject(data.cover) };
       this.exhibitor = { ...this.exhibitor, ...asObject(data.exhibitor) };
+      this.agreement = { ...this.agreement, ...asObject(data.agreement) };
       this.download = { ...this.download, ...asObject(data.download) };
       if (typeof data.publicBaseUrl === 'string') this.publicBaseUrl = data.publicBaseUrl;
       if (typeof data.privacyPolicyUrl === 'string') this.privacyPolicyUrl = data.privacyPolicyUrl;

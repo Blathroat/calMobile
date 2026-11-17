@@ -46,6 +46,13 @@ async function settingsPayload(userId: string | null | undefined, role?: string 
     cover: settings.cover,
     exhibitor: settings.exhibitor,
     invite: settings.invite,
+    // 用户协议：正文只在管理员这里下发（设置页要编辑/上传）；其他人只拿开关与版本。
+    agreement: {
+      enabled: settings.agreement.enabled,
+      version: settings.agreement.version,
+      updatedAt: settings.agreement.updatedAt,
+      ...(role === 'admin' ? { content: settings.agreement.content } : {}),
+    },
     // 客户端安装包的下载源（直链 / GitHub 仓库）。最新版本由 GET /app/release 解析。
     download: settings.download,
     notify: await readNotificationPreferences(userId),

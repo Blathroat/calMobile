@@ -17,6 +17,17 @@ import { nativeBridge, type NativeActionResults } from './native-bridge';
 
 /** 设备动作集合。新增动作要先把动作名登记进 `native-bridge.ts` 的映射表，再在这里包一层。 */
 export const device = {
+  /**
+   * 退出应用（用户不同意用户协议时）。App 里由原生结束 Activity；
+   * 浏览器里尝试 `window.close()`，被拦截时返回 `closed:false`，页面自己提示用户关闭。
+   */
+  exitApp(): Promise<NativeActionResults['app.exit']> {
+    if (!nativeBridge.hasNative()) {
+      if (typeof window !== 'undefined') window.close();
+      return Promise.resolve({ closed: false });
+    }
+    return nativeBridge.call('app.exit', {});
+  },
   /** 把外观与上传限制镜像给原生（状态栏配色、图片压缩、格式上限）。失败只影响原生外观，页面继续用后端下发的值。 */
   sync(payload: Parameters<typeof nativeBridge.call<'ui.sync'>>[1]) {
     return nativeBridge.call('ui.sync', payload);

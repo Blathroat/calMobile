@@ -31,6 +31,21 @@ export interface AuthResult extends JsonObject {
   refreshToken?: string;
 }
 
+/** 用户协议（公开读取）：正文是 Markdown，交给渲染入口清洗。 */
+export interface AgreementInfo extends JsonObject {
+  enabled: boolean;
+  version: number;
+  content: string;
+  updatedAt: string;
+}
+
+/** 启动数据里的用户协议摘要：登录/注册页据此决定是否展示勾选，不下载正文。 */
+export interface AgreementSummary extends JsonObject {
+  enabled: boolean;
+  version: number;
+  updatedAt: string;
+}
+
 /**
  * 当前登录用户。`role` 与 `statusCode` 是英文代码，展示时用
  * `services/status.ts` 的 `roleLabel()` / `userStatusLabel()` 取文案；
@@ -60,6 +75,10 @@ export interface User extends JsonObject {
   can?: Record<string, boolean>;
   /** 已看过的一次性提示 key（与账号绑定，见 `composables/useHint.ts`）。 */
   seenHints?: string[];
+  /** 已同意的用户协议版本（0 = 从未同意）；与 bootstrap 下发的当前版本比较决定是否弹确认。 */
+  agreedTermsVersion?: number;
+  /** 最后一次同意用户协议的时间（ISO 字符串）。 */
+  agreedTermsAt?: string;
 }
 
 /**
@@ -69,6 +88,8 @@ export interface User extends JsonObject {
 export interface Bootstrap extends JsonObject {
   user?: User;
   loggedIn?: boolean;
+  /** 用户协议摘要（没有正文）；关闭时所有协议入口都不渲染。 */
+  agreement?: AgreementSummary;
 }
 
 /** 列表里的展会。其余字段随管理员配置的自定义字段变化，这里只固定页面一定会用到的。 */

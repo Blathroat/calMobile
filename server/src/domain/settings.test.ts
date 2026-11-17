@@ -253,3 +253,49 @@ test('个人配色的非法下标按规则失败，不静默夹取', async () =>
   }
   // 合法值（含字符串 '3'）会走到 UPDATE，unit 项目不连库，因此由契约测试覆盖。
 });
+
+/**
+ * 用户协议：开启必须有正文；正文变化才升版本（只拨开关不升），超出长度按业务失败拒绝。
+ * 落库与接口行为由契约测试覆盖（`server/src/test/agreement.test.ts`）。
+ */
+test('用户协议开启时正文必填，正文变化才升版本', () => {
+  assert.throws(
+    () => applyServerPatch(defaults(), { agreement: { enabled: true, content: '' } }),
+    /开启用户协议前请先上传/,
+  );
+  assert.throws(
+    () => applyServerPatch(defaults(), { agreement: { enabled: true } }),
+    /开启用户协议前请先上传/,
+    '只打开开关、库里又没有旧正文时也要拒绝',
+  );
+
+  const first = applyServerPatch(defaults(), { agreement: { enabled: true, content: '# 条款 第一条' } });
+  assert.equal(first.agreement.enabled, true);
+  assert.equal(first.agreement.version, 1);
+  assert.ok(first.agreement.updatedAt.length > 0, '首次设置正文要写更新时间');
+
+  const same = applyServerPatch(first, { agreement: { enabled: true, content: '# 条款 第一条' } });
+  assert.equal(same.agreement.version, 1);
+
+  const disabled = applyServerPatch(same, { agreement: { enabled: false } });
+  assert.equal(disabled.agreement.version, 1);
+  assert.equal(disabled.agreement.content, '# 条款 第一条');
+
+  const updated = applyServerPatch(disabled, { agreement: { content: '# 条款 v2' } });
+  assert.equal(updated.agreement.version, 2);
+  assert.equal(updated.agreement.content, '# 条款 v2');
+  assert.notEqual(updated.agreement.updatedAt, first.agreement.updatedAt);
+});
+
+test('用户协议非法入参与超长正文按业务失败返回', () => {
+  assert.throws(() => applyServerPatch(defaults(), { agreement: 'x' }), /格式不正确/);
+  assert.throws(
+    () => applyServerPatch(defaults(), { agreement: { enabled: 'yes', content: 'x' } }),
+    /只能是 true 或 false/,
+  );
+  assert.throws(
+    () => applyServerPatch(defaults(), { agreement: { enabled: true, content: 'x'.repeat(200_001) } }),
+    /正文过长/,
+  );
+  assert.equal(applyServerPatch(defaults(), {}).agreement.enabled, false, '没提交就不动');
+});

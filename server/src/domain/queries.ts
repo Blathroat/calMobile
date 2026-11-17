@@ -59,6 +59,7 @@ export const USER_COLUMNS = `
     u.id, u.username, u.email, u.nickname, u.role, u.status, u.bio, u.region,
     u.avatar, u.social_media, u.show_registrations, u.seen_hints, u.accept_meetings,
     u.email_verified, u.two_factor_enabled, u.exhibitor_expires_at,
+    u.agreed_terms_version, u.agreed_terms_at,
     to_char(u.registration_time, 'YYYY-MM-DD')  AS registration_time,
     to_char(u.last_login_time, 'YYYY-MM-DD')    AS last_login_time,
     -- 最近一次登录的地区（登录时离线解析）；IP 原文只留在库里，绝不下发。
