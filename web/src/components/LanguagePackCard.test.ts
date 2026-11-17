@@ -101,6 +101,19 @@ describe('语言设置', () => {
     expect(localStorage.getItem('calmobile.lang.packs')).toBe('[]');
   });
 
+  it('下载与从文件安装两个按钮在同一行', async () => {
+    resetLangForTests();
+    const host = document.createElement('div');
+    document.body.append(host);
+    mountCard(host);
+    const row = host.querySelector('form .grid-cols-2');
+    expect(row).not.toBeNull();
+    expect(row?.textContent).toContain('下载');
+    expect(row?.textContent).toContain('从文件安装');
+    // 链接输入框在按钮行上方，不占这一行。
+    expect(row?.querySelector('#settings-lang-url')).toBeNull();
+  });
+
   it('安装成功的提示排在重载之后，重载后只弹一次', async () => {
     resetLangForTests();
     const host = document.createElement('div');

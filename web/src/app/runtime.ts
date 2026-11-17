@@ -84,7 +84,7 @@ export function applyRuntimeBootstrap(data: Bootstrap): void {
   // 语言包在本机。这里只记下服务器给的名称和链接，缺的包在后台补，不挡住这次启动。
   const lang = offeredLang(data.lang);
   if (!lang) return;
-  if (applyOfferedLang(lang.defaultPack, lang.offers)) {
+  if (applyOfferedLang(lang.defaultPack)) {
     reloadForLanguage();
     return;
   }

@@ -17,7 +17,6 @@ import { useSessionStore } from '@/stores/session';
 import { registrationLink } from '@/services/registration-link';
 import { device } from '@/services/device-services';
 import { loadMarkdownParser, markdownToHtml, plainText, sanitizeHtml } from '@/services/markdown';
-import { coverOf } from '@/services/cover';
 import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
 import AppIcon from '@/components/AppIcon.vue';
@@ -54,8 +53,13 @@ const calendarState = ref<{ inCalendar: boolean; granted: boolean }>({ inCalenda
 const calendarBusy = ref(false);
 /** 大图查看：封面放大到全屏，支持双指缩放。 */
 const viewerOpen = ref(false);
-/** 封面：自己上传的优先，其次管理员设置的缺省封面，都没有就是空串（画占位图）。 */
-const cover = computed(() => coverOf(exhibition.value?.imageUri));
+/**
+ * 详情页海报：只展示展会**自己上传**的海报。
+ *
+ * 没有海报时整块不渲染，不回退管理员设置的缺省封面，也不画占位图；灯箱入口随海报一起消失。
+ * 列表、报名页等其它位置仍按 `coverOf` 回退缺省封面。
+ */
+const cover = computed(() => String(exhibition.value?.imageUri ?? '').trim());
 /** 日历状态只读一次：数据刷新会重画正文，但不该重复请求。 */
 let calendarRequested = false;
 
@@ -338,7 +342,7 @@ onMounted(() => {
 
   <template v-else>
     <!-- 展会封面：设计比例 1080×1920 的竖版海报；点开后可以看大图并双指缩放。
-         展会自己没有封面时用管理员设置的缺省封面，两处都为空才画占位图。 -->
+         只有展会自己上传了海报才渲染；没有时整块不显示（不回退缺省封面、不画占位图）。 -->
     <button
       v-if="cover"
       class="hero ph-img hero-button"
@@ -348,7 +352,6 @@ onMounted(() => {
     >
       <img :src="cover" :alt="t('exhibition.detail.coverAlt', { title: String(exhibition.title ?? '') })" />
     </button>
-    <div v-else class="hero ph-img hero-placeholder" aria-hidden="true" />
 
     <div class="stack" data-gap="sm">
       <h2 class="detail-title">{{ exhibition.title }}</h2>

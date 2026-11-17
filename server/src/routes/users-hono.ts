@@ -22,11 +22,12 @@ import { canHostMeetings, requireAdmin, type Actor } from '../domain/permissions
 import { effectiveRole, isPastExpiry, settleExpiredExhibitor, settleExpiredExhibitors } from '../domain/membership.js';
 import { badRequest, notFound } from '../domain/errors.js';
 import { revokeAllDevicesForUser } from '../domain/session.js';
+import { updateProfileRecord } from '../domain/profile-update.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { authenticateHono, optionalAuthHono, userOf, type HonoEnv } from './hono-utils.js';
 import { readJsonBody } from '../http/body-limit.js';
-import { parseSchema } from '../domain/validation.js';
-import { adminTwoFactorSchema, userRoleSchema, userStatusSchema } from '../domain/schemas.js';
+import { limits, parseSchema } from '../domain/validation.js';
+import { adminTwoFactorSchema, profilePatchSchema, userRoleSchema, userStatusSchema } from '../domain/schemas.js';
 
 const app = new Hono<HonoEnv>();
 const USER_ORDER = 'ORDER BY u.registration_time, u.id';
@@ -153,6 +154,29 @@ app.get('/:id', authenticateHono, async (c) => {
       ? { found: true, user: { id: row.id, nickname: row.nickname, role: labels.ROLE_LABEL[row.role] || row.role } }
       : { found: false, user: null },
   );
+});
+app.put('/:id/profile', authenticateHono, async (c) => {
+  requireAdmin({ user: userOf(c) });
+  const target = await findUserById(c.req.param('id'));
+  if (!target) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
+  const body = bodyRecord(await readJsonBody(c));
+  return mutate(c, async () => {
+    const bounds = await limits();
+    const parsed = parseSchema(profilePatchSchema(bounds), body);
+    await updateProfileRecord(target.id, parsed);
+    const fresh = await findUserById(target.id);
+    return {
+      profile: {
+        id: fresh!.id,
+        nickname: fresh!.nickname,
+        bio: fresh!.bio || '',
+        region: fresh!.region || '',
+        avatar: fresh!.avatar || '',
+        socialMedia: fresh!.social_media || '',
+        showRegistrations: fresh!.show_registrations === true,
+      },
+    };
+  });
 });
 app.put('/:id/status', authenticateHono, async (c) => {
   const actor = requireAdmin({ user: userOf(c) });

@@ -13,6 +13,7 @@ import DetailPage from './DetailPage.vue';
 import { api } from '@/app/runtime';
 import { navigation } from '@/app/navigation';
 import { useSessionStore } from '@/stores/session';
+import { useBootstrapStore } from '@/stores/bootstrap';
 import type { ExhibitionDetail } from '@/api/types';
 
 vi.mock('@/app/runtime', () => ({
@@ -79,10 +80,13 @@ function footerHint(): string {
 }
 
 async function mountDetail(
-  options: { loggedIn?: boolean; canRegister?: boolean; detail?: ExhibitionDetail } = {},
+  options: { loggedIn?: boolean; canRegister?: boolean; detail?: ExhibitionDetail; defaultCover?: string } = {},
 ): Promise<Router> {
   const pinia = createPinia();
   setActivePinia(pinia);
+  if (options.defaultCover !== undefined) {
+    useBootstrapStore().apply({ cover: { defaultCover: options.defaultCover } });
+  }
   // 不调用 applyUser 就是访客态（初始 session）。
   if (options.loggedIn) {
     useSessionStore().applyUser({
@@ -110,6 +114,47 @@ async function mountDetail(
   await vi.waitFor(() => expect(registerButton()).not.toBeUndefined());
   return router;
 }
+
+describe('展会详情海报', () => {
+  it('有自己上传的海报时显示海报与灯箱入口', async () => {
+    await mountDetail({
+      detail: {
+        found: true,
+        exhibition: {
+          id: 'exh-1',
+          title: '秋季展会',
+          date: '2026-09-20',
+          time: '09:00-17:00',
+          venue: '会展中心',
+          exhibitor: '示例展商',
+          openForRegistration: true,
+          imageUri: '/media/poster.jpg',
+        },
+      },
+    });
+    const hero = document.querySelector<HTMLButtonElement>('#detail-test .hero-button');
+    expect(hero).not.toBeNull();
+    expect(hero?.querySelector('img')?.getAttribute('src')).toBe('/media/poster.jpg');
+    hero?.click();
+    await flush();
+    expect(document.querySelector('.viewer')).not.toBeNull();
+  });
+
+  it('没有海报时不显示海报、占位图与灯箱入口', async () => {
+    await mountDetail();
+    expect(document.querySelector('#detail-test .hero')).toBeNull();
+    expect(document.querySelector('#detail-test .hero-button')).toBeNull();
+    expect(document.querySelector('#detail-test .hero-placeholder')).toBeNull();
+    expect(document.querySelector('.viewer')).toBeNull();
+  });
+
+  it('只有管理员缺省海报时详情页也不显示', async () => {
+    await mountDetail({ defaultCover: '/media/default.jpg' });
+    expect(document.querySelector('#detail-test .hero')).toBeNull();
+    expect(document.querySelector('#detail-test img[src="/media/default.jpg"]')).toBeNull();
+    expect(document.querySelector('#detail-test .hero-button')).toBeNull();
+  });
+});
 
 describe('展会详情底部报名按钮', () => {
   it('未报名时是「立即报名」，点击进入报名表单', async () => {

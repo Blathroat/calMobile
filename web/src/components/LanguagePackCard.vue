@@ -159,20 +159,22 @@ async function fromFile(event: Event): Promise<void> {
         />
         <p v-if="urlError" class="field-error" role="alert">{{ urlError }}</p>
       </div>
-      <button class="cta" type="submit" :disabled="busy" :data-loading="busy ? 'true' : 'false'">
-        {{ t('settings.lang.download') }}
-      </button>
+      <!-- 下载与从文件安装并排一行：两个都是安装入口，不要各占一整行。 -->
+      <div class="grid-cols-2">
+        <button class="cta" type="submit" :disabled="busy" :data-loading="busy ? 'true' : 'false'">
+          {{ t('settings.lang.download') }}
+        </button>
+        <!-- 有原生桥时由按钮直接调原生读文件（用户手势直接触发）；没有桥才用 input + File.text()。
+             input 两种构建都留着，`#settings-lang-file` 是浏览器路径的入口。 -->
+        <button v-if="hasNative" class="cta ghost" type="button" :disabled="busy" @click="installFromDevice">
+          {{ t('settings.lang.file') }}
+        </button>
+        <label v-else class="cta ghost" for="settings-lang-file">{{ t('settings.lang.file') }}</label>
+      </div>
+      <input id="settings-lang-file" class="sr-only" type="file" accept="application/json,.json" @change="fromFile" />
+      <!-- 文件安装的错误跟在它自己的入口下面，不占链接字段的位置、也不标红链接输入框。 -->
+      <p v-if="fileError" class="field-error" role="alert">{{ fileError }}</p>
     </form>
-
-    <!-- 有原生桥时由按钮直接调原生读文件（用户手势直接触发）；没有桥才用 input + File.text()。
-         input 两种构建都留着，`#settings-lang-file` 是浏览器路径的入口。 -->
-    <button v-if="hasNative" class="cta ghost" type="button" :disabled="busy" @click="installFromDevice">
-      {{ t('settings.lang.file') }}
-    </button>
-    <label v-else class="cta ghost" for="settings-lang-file">{{ t('settings.lang.file') }}</label>
-    <input id="settings-lang-file" class="sr-only" type="file" accept="application/json,.json" @change="fromFile" />
-    <!-- 文件安装的错误跟在它自己的入口下面，不占链接字段的位置、也不标红链接输入框。 -->
-    <p v-if="fileError" class="field-error" role="alert">{{ fileError }}</p>
 
     <p v-if="packs.length === 0" class="field-hint">{{ t('settings.lang.empty') }}</p>
     <!-- 已安装的语言包：卡片内的开关行用分隔线版式，不再各套一层边框 -->
