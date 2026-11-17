@@ -17,6 +17,7 @@ import { paths } from '@/app/surface';
 import { useAsync } from '@/composables/useAsync';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
+import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import MediaBox from '@/components/MediaBox.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -25,6 +26,7 @@ import StatusTag from '@/components/StatusTag.vue';
 import RoleTag from '@/components/RoleTag.vue';
 import { formatRecordDate } from '@/services/format';
 import { coverOf } from '@/services/cover';
+import { openProfileEditor } from '@/services/profile-editor';
 import type { JsonObject } from '@/api/types';
 import { exhibitionStatusLabel, registrationStatusLabel, statusTone } from '@/services/status';
 import { t } from '@/i18n';
@@ -133,6 +135,17 @@ function openMeetingAdmin(): void {
   void router.push(`/admin/meetings/${encodeURIComponent(id)}`);
 }
 
+/** 管理员在公开页直接改这个用户的资料；抽屉复用个人页那一块。 */
+function editAdminProfile(): void {
+  const item = profile.value;
+  const id = String(item?.id || '');
+  if (!item || !id) return;
+  openProfileEditor(item, {
+    targetUserId: id,
+    onSaved: () => void load(),
+  });
+}
+
 onMounted(load);
 
 usePullRefresh(
@@ -175,7 +188,20 @@ usePullRefresh(
     <!-- 扉页：头像居中、昵称、角色与已参加数、简介、一行公开范围。整段直接排在纸面上。 -->
     <header class="public-leaf">
       <AvatarBox :src="avatarSrc" :name="String(profile.nickname || '')" large class="public-avatar" />
-      <strong class="public-name">{{ profile.nickname }}</strong>
+      <div class="public-name-row">
+        <strong class="public-name">{{ profile.nickname }}</strong>
+        <!-- 管理员视图：昵称右侧的小铅笔打开同一块编辑资料抽屉。 -->
+        <button
+          v-if="adminView"
+          class="icon-button public-edit"
+          type="button"
+          :aria-label="t('settings.profile.editProfile')"
+          :title="t('settings.profile.editProfile')"
+          @click="editAdminProfile"
+        >
+          <AppIcon name="edit" />
+        </button>
+      </div>
       <p class="public-role">
         <RoleTag :role-code="String(profile.roleCode || '')" />
         <!-- 分隔用的「 · 」留在模板里而不放进文案资源：Android 的 string 资源会裁掉首尾空白。 -->
@@ -302,6 +328,19 @@ usePullRefresh(
 }
 
 /* 昵称：整页最大字号。 */
+/* 昵称行：管理员视角的铅笔贴在昵称右侧，昵称本身仍居中。 */
+.public-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.public-edit {
+  flex: none;
+}
+
 .public-name {
   font-size: var(--fs-h1);
   font-weight: 700;

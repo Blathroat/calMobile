@@ -263,6 +263,8 @@ export interface ApiClient {
     setRole(id: Id, role: string): Promise<ApiResult>;
     /** 管理员强制关闭某个用户的两步验证（账号找回用）。 */
     disableTwoFactor(id: Id): Promise<ApiResult>;
+    /** 管理员代改指定用户的公开资料（昵称 / 简介 / 地区 / 社交账号等）。 */
+    updateProfile(id: Id, payload: JsonObject): Promise<ApiResult>;
     /** 公开主页数据：按用户名/ID 查对外可见的信息。 */
     publicProfile(query: JsonObject): Promise<JsonObject>;
   };
@@ -633,6 +635,12 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
           { method: 'PUT', body: { id, enabled: false } },
           ['users'],
         ),
+      updateProfile: (id, payload) =>
+        write<ApiResult>(`/users/${encodeURIComponent(id)}/profile`, { method: 'PUT', body: payload }, [
+          'users',
+          'users.public',
+          'search',
+        ]),
       publicProfile: (query) => read<JsonObject>('users.public', '/users/public', { query }),
     },
     // 搜索一次返回展会与用户两组结果，返回体是对象而不是数组。

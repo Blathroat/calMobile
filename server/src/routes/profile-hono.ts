@@ -65,6 +65,7 @@ import {
   saveSeenHint,
 } from '../domain/settings.js';
 import { resolveUploadConfig } from '../config/upload.js';
+import { updateProfileRecord } from '../domain/profile-update.js';
 import {
   deleteStoredAvatar,
   formatAllowed,
@@ -183,46 +184,9 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     return mutate(c, async () => {
       const bounds = await limits();
       const parsed = parseSchema(profilePatchSchema(bounds), body);
-      const assignments: string[] = [];
-      const values: unknown[] = [];
-      const set = (column: string, value: unknown) => {
-        values.push(value);
-        assignments.push(`${column} = $${values.length}`);
-      };
-
-      if (has(parsed, 'nickname')) {
-        set('nickname', parsed.nickname);
-      }
       if (has(parsed, 'email'))
         throw badRequest('邮箱需要通过「验证新邮箱」修改', { code: 'validation.emailChangeViaFlow' });
-      if (has(parsed, 'bio')) {
-        set('bio', parsed.bio);
-      }
-      if (has(parsed, 'region')) {
-        set('region', parsed.region);
-      }
-      if (has(parsed, 'socialMedia')) set('social_media', parsed.socialMedia);
-      let removedAvatar = '';
-      if (has(parsed, 'avatar')) {
-        const nextAvatar = String(parsed.avatar ?? '');
-        const previous = await currentAvatar(user.userId);
-        if (nextAvatar !== previous) {
-          // 新头像只能走上传接口，避免再把设备私有路径写进库。清空仍然允许。
-          if (nextAvatar !== '') throw badRequest('头像请通过上传更新', { code: 'profile.avatarUploadOnly' });
-          set('avatar', '');
-          removedAvatar = previous;
-        }
-      }
-      if (has(parsed, 'showRegistrations')) set('show_registrations', parsed.showRegistrations);
-
-      if (assignments.length > 0) {
-        values.push(user.userId);
-        await query(
-          `UPDATE users SET ${assignments.join(', ')}, updated_at = now() WHERE id = $${values.length}`,
-          values,
-        );
-      }
-      if (removedAvatar) await deleteStoredAvatar(removedAvatar, resolveUploadConfig());
+      await updateProfileRecord(user.userId, parsed);
       return { user: await loadUser(user.userId) };
     });
   });

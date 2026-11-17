@@ -166,7 +166,7 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - 受限账号的判定在 `domain/permissions.ts` 的 `isLimited()` / `assertNotLimited()`，文案表是 `LIMITED_ACTIONS`。拦截挂在 `mutate()` 之外，并排在角色检查之前，因此受限的普通用户看到的是「账号已被限制」。管理员不受限。封禁在认证层拒绝。`capabilities` 同步把对应入口置灰。
 - `PUT /profile` 只写出现过的字段，不接受 `email`。
 - 管理员不能改自己的状态。管理员关闭他人两步验证是对方邮箱不可用时的出口。`enabled:true` 会被拒。
-- 管理员不能改自己的权限，也不能去掉最后一位管理员。把展商或管理员改成普通用户时，`accept_meetings` 置为 false。管理员手动把角色设成展商时视为永久（`exhibitor_expires_at = NULL`）；改成普通用户或管理员时一并清空到期时间。邀请码只会把身份设为展商，不能设成管理员。
+- 管理员可以通过 `PUT /users/:id/profile` 代改用户公开资料（昵称 / 简介 / 地区 / 社交账号 / 展示报名开关），字段校验与本人 `PUT /profile` 共用 `profilePatchSchema` 和 `domain/profile-update.ts`；邮箱仍走验证流程，头像只能清空或走上传接口。管理员不能改自己的权限，也不能去掉最后一位管理员。把展商或管理员改成普通用户时，`accept_meetings` 置为 false。管理员手动把角色设成展商时视为永久（`exhibitor_expires_at = NULL`）；改成普通用户或管理员时一并清空到期时间。邀请码只会把身份设为展商，不能设成管理员。
 - 邀请码有两套时间：`expires_at` 是码本身的有效期（按小时，0 表示不过期）；`duration_days` 是兑换后展商身份保留的天数（0 表示永久，上限 3650）。用户行上的 `exhibitor_expires_at` 是到期时间，NULL 表示永久。删除是直接删行，列表时清掉已过期和已作废的码，这两类不再展示。注册时邀请码可选，先记在验证码票上，建号时与插入同一事务里消耗并写入到期时间。已登录用户用 `POST /profile/invite` 兑换：普通用户开通；限时展商从 `max(now(), 原到期时间)` 顺延，0 天码转为永久；永久展商与管理员拒绝且不消耗。受限账号不能兑换。
 - 展商到期按访问惰性结算，没有定时任务：认证解析（`middleware/auth.ts`）读到已到期的展商时把 `role` 改回 `user`、`accept_meetings` 关掉，并保留到期时间作为「已到期」历史。公开页、搜索和会议宿主这些读别人角色的地方用 `domain/membership.ts` 的 `effectiveRole()` / `canHostMeetings()` 判断，不依赖对方先登录。管理员用户列表在读取前批量结算一次。已到期的展商调用展商接口返回 403，文案说明「展商身份已到期」。
 - 登录成功（密码登录、两步验证通过、可信设备跳过验证、通行密钥验证通过，以及注册建号即登录）刷新 `users.last_login_time`、`users.last_login_ip`、`users.last_login_region`。地区由服务端用离线库解析：只支持 IPv4（IPv4-mapped IPv6 归一），私网 / 回环 / 链路本地 / CGNAT / 组播 / 保留段显示「内网」，纯 IPv6、非法地址与查不到给空串；展示为中国境内「省 + 市」（省市重复时去重，如「北京市」）、非中国「国家 + 省 + 市」，不展示运营商。IP 原文只落库、不下发；管理员用户列表下发 `lastLoginRegion`，`lastLoginTime` 为空时用 `registrationTime` 兜底。

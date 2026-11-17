@@ -9,9 +9,10 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import UserPublicPage from './UserPublicPage.vue';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
+import { sheet, closeSheet } from '@/services/sheet';
 
 vi.mock('@/app/runtime', () => ({
-  api: { users: { publicProfile: vi.fn() } },
+  api: { users: { publicProfile: vi.fn(), updateProfile: vi.fn() } },
 }));
 
 const PROFILE = {
@@ -40,6 +41,7 @@ beforeEach(() => {
 afterEach(() => {
   app?.unmount();
   app = undefined;
+  closeSheet();
   document.body.innerHTML = '';
 });
 
@@ -64,6 +66,44 @@ describe('用户公开页身份卡', () => {
     expect(document.querySelector('.profile-stats')?.textContent).toContain('3');
     expect(document.body.textContent).toContain('已参加展会');
     expect(document.body.textContent).toContain('该用户选择不展示报名记录。');
+    // 普通视角没有管理员铅笔。
+    expect(document.querySelector('.public-edit')).toBeNull();
+  });
+
+  it('管理员视角昵称右侧出现铅笔，点击打开资料抽屉并预填目标用户', async () => {
+    vi.mocked(api.users.publicProfile).mockResolvedValue({ ...PROFILE, viewedAsAdmin: true });
+    await mountPublic();
+    await vi.waitFor(() => expect(document.querySelector('.public-edit')).not.toBeNull());
+
+    const pencil = document.querySelector<HTMLButtonElement>('.public-edit')!;
+    expect(pencil.getAttribute('aria-label')).toBe('编辑资料');
+    pencil.click();
+    expect(sheet.current?.title).toBe('编辑资料');
+    const form = sheet.current?.props.form as { nickname: string; bio: string } | undefined;
+    expect(form?.nickname).toBe('user');
+    expect(form?.bio).toBe('简介');
+  });
+
+  it('管理员保存资料走用户管理接口，不使用当前管理员会话', async () => {
+    vi.mocked(api.users.publicProfile).mockResolvedValue({ ...PROFILE, viewedAsAdmin: true });
+    vi.mocked(api.users.updateProfile).mockResolvedValue({
+      ok: true,
+      profile: { nickname: '新昵称', bio: '新简介', region: '上海', socialMedia: '@user', showRegistrations: false },
+    } as never);
+    await mountPublic();
+    await vi.waitFor(() => expect(document.querySelector('.public-edit')).not.toBeNull());
+    document.querySelector<HTMLButtonElement>('.public-edit')?.click();
+    for (let index = 0; index < 6; index += 1) await Promise.resolve();
+
+    const form = sheet.current?.props.form as { nickname: string };
+    form.nickname = '新昵称';
+    const save = sheet.current?.actions.find((action) => action.label === '保存');
+    expect(save).not.toBeUndefined();
+    await save!.onClick?.(() => undefined);
+    await vi.waitFor(() => expect(api.users.updateProfile).toHaveBeenCalledTimes(1));
+    const [targetId, payload] = vi.mocked(api.users.updateProfile).mock.calls[0]!;
+    expect(targetId).toBe('u1');
+    expect((payload as { nickname?: string }).nickname).toBe('新昵称');
   });
 
   it('打开展示报名后计数照常显示，列表出现记录', async () => {
