@@ -48,6 +48,8 @@ interface AdminSettingsForm {
   maxFutureMeetings: number;
   storageMb: number;
   whenFull: 'reject' | 'evict-oldest';
+  /** 操作日志的存储上限，单位 MB（超过后服务端自动清掉最早的日志） */
+  logs: { storageMb: number };
   inviteUses: number;
   inviteValidHours: number;
   /** 兑换后展商身份保留的天数；0 表示永久 */
@@ -80,6 +82,8 @@ const props = defineProps<{
   storageFull: boolean;
   storagePercent: number;
   storageCaption: string;
+  /** 日志当前用量：只有管理端设置接口会带；没有数据时卡片只显示「—」 */
+  logsUsage: { usedBytes: number; entryCount: number; hasUsage: boolean };
   storagePolicies: { value: string; label: string }[];
   limitGroups: Array<{ id: string; title: string; items: LimitItem[] }>;
   pairLimits: (items: LimitItem[]) => LimitItem[][];
@@ -137,6 +141,40 @@ function inviteDurationLabel(item: InviteItem): string {
     ? t('admin.invites.durationDays', { days: item.durationDays })
     : t('admin.invites.permanent');
 }
+
+// ── 日志上限与用量 ──────────────────────────────────────────────
+
+const BYTES_PER_MB = 1024 * 1024;
+
+/** 字节 → MB：与媒体容量卡一样保留一位小数。 */
+function formatLogMb(bytes: number): string {
+  return `${(bytes / BYTES_PER_MB).toFixed(1)} MB`;
+}
+
+/**
+ * 日志进度条：上限跟着表单里的输入走，管理员改小上限时比例立即变化。
+ * 没有用量时（`hasUsage` 为假）模板不画进度条，只显示「—」。
+ */
+const logsMeter = computed(() => {
+  const used = Math.max(0, Number(props.logsUsage.usedBytes) || 0);
+  const limitMb = Math.max(1, Number(props.form.logs.storageMb) || 0);
+  const limit = limitMb * BYTES_PER_MB;
+  return {
+    used,
+    limit,
+    percent: Math.min(100, Math.round((used / limit) * 100)),
+    full: used >= limit,
+  };
+});
+
+const logsUsageCaption = computed(() => {
+  if (!props.logsUsage.hasUsage) return t('admin.settings.logsUsageUnknown');
+  return t('admin.settings.logsUsage', {
+    count: Math.max(0, Number(props.logsUsage.entryCount) || 0),
+    used: formatLogMb(logsMeter.value.used),
+    limit: formatLogMb(logsMeter.value.limit),
+  });
+});
 
 // ── 用户协议：上传 Markdown 正文 ────────────────────────────────
 
@@ -285,6 +323,34 @@ function clearAgreementContent(): void {
           />
         </div>
       </div>
+    </div>
+
+    <!-- 日志：只设置上限；当前用量由管理端设置接口下发，没有数据时只显示「—」。
+         清理策略固定为「超过上限自动清理最早的日志」，不做成选项。 -->
+    <div class="card">
+      <span class="section-label">{{ t('admin.settings.logs') }}</span>
+      <div v-if="logsUsage.hasUsage" class="storage-meter" :data-full="logsMeter.full ? 'true' : 'false'">
+        <span :style="{ width: logsMeter.percent + '%' }" />
+      </div>
+      <p class="field-hint">{{ logsUsageCaption }}</p>
+      <div class="settings-rows">
+        <div class="setting-row">
+          <label for="settings-logs-mb">{{ t('admin.settings.logsCap') }}</label>
+          <span class="setting-control">
+            <input
+              id="settings-logs-mb"
+              v-model.number="form.logs.storageMb"
+              class="input input-line setting-num"
+              type="number"
+              min="1"
+              max="10240"
+              inputmode="numeric"
+            />
+            <span class="setting-unit">MB</span>
+          </span>
+        </div>
+      </div>
+      <p class="field-hint">{{ t('admin.settings.logsHint') }}</p>
     </div>
 
     <div class="card">

@@ -164,7 +164,12 @@
       "agreementTooLarge": "文件不能超过 {kb} KB",
       "agreementContentRequired": "开启用户协议时，正文不能为空",
       "agreementTooLong": "用户协议正文不能超过 {max} 字",
-      "agreementVersionOnly": "第 {version} 版"
+      "agreementVersionOnly": "第 {version} 版",
+      "logs": "日志",
+      "logsCap": "日志大小上限",
+      "logsHint": "单位为 MB，可填 1～10240；超过上限会自动清理最早的日志。",
+      "logsUsage": "已存 {count} 条 · 已用 {used} / 上限 {limit}",
+      "logsUsageUnknown": "—"
     },
     "title": "管理后台",
     "users": {
@@ -1223,7 +1228,8 @@
       "downloadRepoInvalid": "GitHub 仓库需要写成 owner/repo",
       "agreementContentRequired": "开启用户协议前请先上传 Markdown 正文",
       "agreementInvalid": "用户协议设置格式不正确",
-      "agreementTooLong": "用户协议正文过长（最多 {max} 字符）"
+      "agreementTooLong": "用户协议正文过长（最多 {max} 字符）",
+      "logsInvalid": "日志设置格式不正确"
     },
     "users": {
       "cannotChangeOwnRole": "不能修改自己的权限",
@@ -1438,5 +1444,36 @@
       "exitUnavailable": "无法自动关闭应用，请手动退出"
     },
     "versionOnly": "第 {version} 版"
+  },
+  "logs": {
+    "title": "最近日志",
+    "entry": "查看最近日志",
+    "filter": "日志级别",
+    "level": {
+      "all": "全部",
+      "info": "信息",
+      "warn": "警告",
+      "error": "错误"
+    },
+    "stats": {
+      "title": "日志概况",
+      "count": "已存 {count} 条",
+      "usage": "已用 {used} / 上限 {limit}",
+      "usageNoLimit": "已用 {used}"
+    },
+    "loadFailed": "日志加载失败",
+    "empty": "还没有日志",
+    "emptyFiltered": "这个级别还没有日志",
+    "recentHint": "只显示最近 100 条日志",
+    "meta": {
+      "category": "分类：{value}",
+      "actor": "操作人：{value}",
+      "ip": "IP：{value}",
+      "status": "HTTP {value}"
+    },
+    "actor": {
+      "system": "系统",
+      "guest": "访客"
+    }
   }
 }

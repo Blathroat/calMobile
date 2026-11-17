@@ -51,6 +51,7 @@ const ROUTES = [
   '/checkin',
   '/rich-editor',
   '/admin',
+  '/logs',
 ];
 
 const TAB_ROUTES = new Set(['/home', '/my-registrations', '/profile', '/exhibitor', '/admin']);

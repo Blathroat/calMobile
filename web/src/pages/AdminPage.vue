@@ -22,6 +22,7 @@ import type { SheetAction } from '@/services/sheet';
 import { check } from '@/services/validate';
 import { device } from '@/services/device-services';
 import { publishImportedMedia } from '@/services/publish-media';
+import AppIcon from '@/components/AppIcon.vue';
 import SegControl from '@/components/SegControl.vue';
 import AdminUsersSection from './AdminUsersSection.vue';
 import AdminExhibitionsSection from './AdminExhibitionsSection.vue';
@@ -226,6 +227,8 @@ const form = reactive({
   storageMb: 1024,
   /** 存满以后：拒绝新上传，或删掉最早的文件 */
   whenFull: 'reject' as 'reject' | 'evict-oldest',
+  /** 操作日志的存储上限，单位 MB；超过后服务端自动清掉最早的日志 */
+  logs: { storageMb: 64 },
   /** 生成邀请码时的默认次数与有效小时。0 小时表示不过期。 */
   inviteUses: 1,
   inviteValidHours: 168,
@@ -288,6 +291,11 @@ const settingsCopy = {
   storageWhenFull: COPY.storageWhenFull,
 };
 const storageUsage = ref({ usedBytes: 0, limitBytes: 1024 * 1024 * 1024, fileCount: 0 });
+/**
+ * 日志的当前用量：只有管理员会从设置接口拿到。
+ * `hasUsage` 为假时设置卡片只显示「—」，不画一条没有数据的进度条。
+ */
+const logsUsage = ref({ usedBytes: 0, entryCount: 0, hasUsage: false });
 const storagePolicies = [
   { value: 'reject', label: COPY.storageReject },
   { value: 'evict-oldest', label: COPY.storageEvict },
@@ -362,6 +370,11 @@ function changeTab(value: string): void {
   // 把分区写进地址栏（替换历史，不留下一条只换过 tab 的记录）：
   // 从二级页返回时才能回到同一个分区。
   void router.replace({ query: { ...route.query, tab: value } });
+}
+
+/** 管理页只放最近日志的入口：列表与统计在 /logs 二级页，不占管理分区。 */
+function openLogs(): void {
+  void router.push('/logs');
 }
 
 /** URL 里的分区 id；非法或缺省时回到第一个分区。 */
@@ -703,6 +716,23 @@ function fillForm(data: JsonObject): void {
     limitBytes: Number.isFinite(limitBytes) && limitBytes > 0 ? limitBytes : form.storageMb * 1024 * 1024,
     fileCount: Number(storage.fileCount) || 0,
   };
+  // 日志：上限（MB）与当前用量。用量只有管理员能拿到；返回里没有这一段时保留上一次的值，
+  // 不能因为一次局部刷新（例如生成邀请码）把卡片上的用量清空。
+  const logs = (data.logs ?? {}) as JsonObject;
+  form.logs.storageMb = clampLogsMb(logs.storageMb ?? form.logs.storageMb);
+  if (logs.usedBytes !== undefined || logs.entryCount !== undefined) {
+    logsUsage.value = {
+      usedBytes: Number(logs.usedBytes) || 0,
+      entryCount: Number(logs.entryCount) || 0,
+      hasUsage: true,
+    };
+  }
+}
+
+/** 日志上限：整数 MB，本地先收敛到 1～10240（服务端还会再收一次）。 */
+function clampLogsMb(value: unknown): number {
+  const number = Number(value) || 64;
+  return Math.max(1, Math.min(10240, Math.round(number)));
 }
 
 function formatStorage(bytes: number): string {
@@ -863,6 +893,8 @@ async function saveSettings(): Promise<void> {
       inviteDurationDays: Number(form.inviteDurationDays) || 0,
       storageMb: Number(form.storageMb) || 0,
       whenFull: form.whenFull,
+      // 日志上限：整数 MB，范围 1～10240（服务端会再收敛一次）。
+      logs: { storageMb: clampLogsMb(form.logs.storageMb) },
       download: {
         source: form.download.source,
         url: form.download.url.trim(),
@@ -989,6 +1021,15 @@ async function copyInvite(code: string): Promise<void> {
     <span class="pill">{{ t('admin.settings.loadingSecurity') }}</span>
   </div>
 
+  <!-- 最近日志入口：日志列表很长，放二级页；管理页顶部只留一颗 ghost 小按钮。 -->
+  <div class="row" data-between="true">
+    <span class="fill" />
+    <button class="cta ghost logs-entry" data-size="small" type="button" @click="openLogs">
+      <AppIcon name="list" />
+      {{ t('logs.entry') }}
+    </button>
+  </div>
+
   <SegControl :model-value="tab" :items="TABS" :label="t('admin.sections')" @update:model-value="changeTab" />
 
   <!-- ── 用户管理 ─────────────────────────────────────────────── -->
@@ -1033,6 +1074,7 @@ async function copyInvite(code: string): Promise<void> {
     :storage-full="storageFull"
     :storage-percent="storagePercent"
     :storage-caption="storageCaption"
+    :logs-usage="logsUsage"
     :storage-policies="storagePolicies"
     :limit-groups="LIMIT_GROUPS"
     :pair-limits="pairLimits"
@@ -1049,3 +1091,11 @@ async function copyInvite(code: string): Promise<void> {
     @copy="copyInvite"
   />
 </template>
+
+<style>
+/* 管理页顶部的日志入口：整行只有这一颗 ghost 小按钮，按内容宽度收住，不拉满一行。 */
+.cta.logs-entry {
+  width: auto;
+  padding-inline: var(--s3);
+}
+</style>

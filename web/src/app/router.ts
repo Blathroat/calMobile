@@ -67,6 +67,7 @@ import MeetingApplyPage from '@/pages/MeetingApplyPage.vue';
 import MeetingDetailPage from '@/pages/MeetingDetailPage.vue';
 import AdminMeetingsPage from '@/pages/AdminMeetingsPage.vue';
 import AdminExhibitionsPage from '@/pages/AdminExhibitionsPage.vue';
+import LogsPage from '@/pages/LogsPage.vue';
 import type { BodyGap } from '@/app/shell';
 import { navigation } from './navigation';
 import { useSessionStore } from '@/stores/session';
@@ -312,6 +313,18 @@ export function createAppRouter(history: RouterHistory = createWebHashHistory())
           requiresAuth: true,
           roles: ['admin'],
           queryInPlace: true,
+        },
+      },
+      // 最近日志：管理页顶部的入口进来，只读列表。库与用量都在设置里，这里不加管理分区。
+      {
+        path: '/logs',
+        component: LogsPage,
+        meta: {
+          title: 'logs.title',
+          back: true,
+          bodyGap: 'tight',
+          requiresAuth: true,
+          roles: ['admin'],
         },
       },
     ],
