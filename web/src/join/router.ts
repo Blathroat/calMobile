@@ -111,8 +111,13 @@ export function createJoinRouter(history: RouterHistory = createWebHistory()) {
     if (to.meta.requiresAuth && !session.loggedIn) {
       return { path: '/login', query: { redirect: to.fullPath } };
     }
-    if (to.meta.roles && !to.meta.roles.includes(session.role)) return '/mine';
-    if (to.meta.capability && !session.can(to.meta.capability)) return '/mine';
+    // 角色与能力只约束已登录的账号：访客的用户态是后端下发的 `guest`，权限表里
+    // `register` 明确是 false，照着判会把免登录报名表单挡回登录页。访客能不能报名
+    // 由页面自己按参展状态与展会报名窗口决定，服务端再兜一层。
+    if (session.loggedIn) {
+      if (to.meta.roles && !to.meta.roles.includes(session.role)) return '/mine';
+      if (to.meta.capability && !session.can(to.meta.capability)) return '/mine';
+    }
     return true;
   });
 

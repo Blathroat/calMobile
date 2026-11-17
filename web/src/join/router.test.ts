@@ -25,6 +25,17 @@ describe('join router', () => {
     expect(router.currentRoute.value.query.token).toBe('abc');
   });
 
+  it('keeps the anonymous registration form reachable with the guest capability table', async () => {
+    // 真实访客的用户态由 `/bootstrap` 下发：loggedIn=false、can.register=false。
+    // 权限表只对已登录账号生效，不能因为它把免登录报名挡回登录页。
+    const router = createJoinRouter(createMemoryHistory());
+    useSessionStore().applyUser({ loggedIn: false, guest: true, can: { register: false } });
+    await router.push('/e/exh-1/register');
+    expect(router.currentRoute.value.path).toBe('/e/exh-1/register');
+    await router.push('/e/exh-1/status?token=abc');
+    expect(router.currentRoute.value.path).toBe('/e/exh-1/status');
+  });
+
   it('keeps the exhibitor public page behind login', async () => {
     const router = createJoinRouter(createMemoryHistory());
     await router.push('/u/exhibitor');
