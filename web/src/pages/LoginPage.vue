@@ -91,6 +91,14 @@ function redirectTarget(): string {
   return typeof value === 'string' && value ? value : paths.home;
 }
 
+/** 去注册页时把回跳地址一起带过去：从查询链接（未登录报名状态页）跳来的，注册后要回到原地址。 */
+function goRegister(): void {
+  const value = route.query.redirect;
+  void router.push(
+    typeof value === 'string' && value ? { path: '/register', query: { redirect: value } } : '/register',
+  );
+}
+
 /** 进入登录态之后的收尾：提示 + 跳回原页面（替换历史，不新增返回栈）。 */
 async function enterAs(): Promise<void> {
   await refreshRuntimeBootstrap();
@@ -419,7 +427,7 @@ onBeforeUnmount(stopCountdown);
     <div v-if="step === 1" class="stack" data-gap="sm">
       <footer class="row auth-entry">
         <span class="dim">{{ t('auth.login.noAccountYet') }}</span>
-        <button class="text-action" type="button" @click="router.push('/register')">
+        <button class="text-action" type="button" @click="goRegister">
           {{ t('auth.login.signUp') }}
         </button>
       </footer>
