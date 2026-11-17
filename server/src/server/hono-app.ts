@@ -13,6 +13,7 @@ import { corsHeaders, headContentLength, requestLogger, requireHttps, securityHe
 import { errorResponse } from '../http/error-response.js';
 import { jsonResponse } from '../http/respond.js';
 import { jsonBodySizeGuard } from '../http/body-limit.js';
+import { apiRequestLog } from '../services/logs.js';
 import { readStatusReport } from '../routes/status.js';
 import { renderStatusPage, renderStatusFallbackPage } from '../status-page.js';
 import { createAuthRoutes } from '../routes/auth-hono.js';
@@ -27,8 +28,10 @@ import { createAppRoutes } from '../routes/app-hono.js';
 import { createUsersRoutes } from '../routes/users-hono.js';
 import { createSearchRoutes } from '../routes/search-hono.js';
 import { createSettingsRoutes } from '../routes/settings-hono.js';
+import { createLogsRoutes } from '../routes/logs-hono.js';
 import { createMediaRoutes } from '../routes/media-hono.js';
 import { createContentMediaRoutes } from '../routes/content-media-hono.js';
+import { createAgreementRoutes } from '../routes/agreement-hono.js';
 import type { TrustProxy } from '../config/runtime.js';
 import { lookupAppFile } from './app-shell.js';
 import { canonicalRedirect, isJoinPagePath, lookupJoinFile, requestHost } from './join-site.js';
@@ -91,6 +94,10 @@ export function createApp(options: AppOptions): Hono {
    */
   app.use('*', jsonBodySizeGuard());
 
+  // 操作日志埋点：在路由之前注册、在响应之后读取状态码与操作人（auth 中间件写进 Context）。
+  // 写库是旁路，失败只进控制台，不影响请求本身。
+  app.use('/api/v1/*', apiRequestLog({ trustProxy: options.trustProxy }));
+
   // ── 探针（不代表数据库可用；连库一起看的是 /api/v1/status） ────
   // 关掉时不注册路由，404 与未知路径同一句，不说明开关名字。
   if (options.pingEnabled) {
@@ -133,11 +140,14 @@ export function createApp(options: AppOptions): Hono {
   app.route('/api/v1/auth', createAuthRoutes({ trustProxy: options.trustProxy }));
   app.route('/api/v1/profile', createProfileRoutes({ trustProxy: options.trustProxy }));
   app.route('/api/v1', createBootstrapRoutes());
+  // 公开的用户协议：登录/注册页与协议浏览页在未登录时也能读。
+  app.route('/api/v1', createAgreementRoutes());
   // 公开的「最新版本 / 下载地址」：网页端检查更新与报名站下载条共用。
   app.route('/api/v1', createAppRoutes());
   app.route('/api/v1/users', createUsersRoutes());
   app.route('/api/v1/search', createSearchRoutes());
   app.route('/api/v1/settings', createSettingsRoutes());
+  app.route('/api/v1/logs', createLogsRoutes());
   app.route('/api/v1/media', createContentMediaRoutes());
 
   app.route('/api/v1/exhibitions', createExhibitionsRoutes());

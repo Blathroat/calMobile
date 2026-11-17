@@ -376,79 +376,15 @@
   transition:
     transform var(--motion-normal) var(--ease-out),
     width var(--motion-normal) var(--ease-out),
+    height var(--motion-normal) var(--ease-out),
     opacity var(--motion-quick) var(--ease-standard);
 }
 
-/* ── 首页日历：拖动跟手、松手回弹、切月滑入滑出 ─────────────────── */
+/* ── 首页日历：拖动跟手、松手回弹、切月带相邻月预览滑动 ─────────── */
 
 .calendar[data-drag='true'] {
   cursor: grabbing;
   box-shadow: var(--shadow-panel);
-}
-
-.calendar[data-leave='left'] {
-  animation: cal-out-left var(--motion-quick) var(--ease-in) both;
-}
-
-.calendar[data-leave='right'] {
-  animation: cal-out-right var(--motion-quick) var(--ease-in) both;
-}
-
-/* 整卡动画：星期表头与日期格子必须一起滑入，只动 `.calendar-grid` 会让两者在动画期间错位 */
-.calendar[data-enter='right'] {
-  animation: cal-in-right var(--motion-normal) var(--ease-out) both;
-}
-
-.calendar[data-enter='left'] {
-  animation: cal-in-left var(--motion-normal) var(--ease-out) both;
-}
-
-@keyframes cal-out-left {
-  from {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translate3d(-18%, 0, 0);
-  }
-}
-
-@keyframes cal-out-right {
-  from {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translate3d(18%, 0, 0);
-  }
-}
-
-@keyframes cal-in-right {
-  from {
-    opacity: 0;
-    transform: translate3d(16%, 0, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes cal-in-left {
-  from {
-    opacity: 0;
-    transform: translate3d(-16%, 0, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 /* 日历里的事件圆点随选中日期轻微弹入 */

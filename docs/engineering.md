@@ -18,6 +18,8 @@
 
 页面不直接 `fetch`，也不通过原生桥接取业务数据。读取接口直接返回数据。写接口按响应约定返回信封。
 
+操作日志由服务端 `server/src/services/logs.ts` 在响应之后异步写入 `app_logs`：变更请求（非 GET）、4xx / 5xx、以及登录 / 注册 / 找回密码这类认证接口无论成功失败都记一条；读接口成功不记，不记录请求体（只留方法、路径、状态码、耗时、操作人与 IP）。写日志是旁路，失败只进服务端控制台，不影响请求本身。超过 `app_settings.logs.storageMb` 时按累计大小清理最早的记录（写入后节流清理，管理员调小上限时立刻清一次）。管理页 `/logs` 是通过 `GET /api/v1/logs` 读取的最近日志，仅管理员可见；入口按钮放在「管理-设置 → 日志」卡片内部、设置项下方（整行浅色描边按钮，`cta ghost`）；`AdminSettingsSection` 发 `open-logs` 事件，`AdminPage` 负责跳转，不在管理页顶部。
+
 正式包的文档地址是 `APP_API_BASE` 所在源的 `/app/index.html`。WebView 拦截 `/app/`，从本机快照读文件；还没有快照，或快照不是当前 `versionCode` 时，用 APK 里的那份。页面切换不再请求网络。首屏出来之后才在后台拉取 `/app/release.json`，新文件留到下次冷启动再换上。调试包（接口是 http）不热更新。只有 `/app/index.html` 能调用 `CalMobileNative`，其它链接交给系统浏览器。设备上选中、尚未上传的媒体仍从 `https://appassets.androidplatform.net/media/` 读取。页面要先 fetch 这份地址再上传，所以这份响应带上 `Access-Control-Allow-Origin`，值是页面文档的源。
 
 新接口同时改 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由和 `server/src/test/` 下的契约测试（前端动作总数在 `routes-contract.test.ts` 里钉成常量，加接口要一起改）。
@@ -40,9 +42,11 @@
 - 固定操作区用 `<Teleport defer to="#app-foot">` 投递 `.page-foot`，落在网格第三行。`defer` 让目标元素与页面在同一次渲染里创建时也能找到。入口页是例外：注册和忘记密码两个文字入口跟在表单后面随内容滚动，不占页脚槽。
 - 页面不自建 `.page` / `.topbar` / `.app-body` / `.tabbar`，也不写颜色、字号、间距与圆角。
 - 内容区的左右内距由外壳给两道（`.app-body` 与路由容器 `.page-surface` 各 `var(--s4)`，合计 24px）。页面不再加左右内距。通栏页面用路由 `meta.bodyPad: 'none'`，两道一起去掉。
-- 底部面板走 `web/src/services/sheet.ts`。一句话加按钮用 `title` / `message` / `actions`。带输入框或列表的用 `component` + `props`。选项多于两个时 `layout: 'stack'`。会议详情用 `layout: 'close-below'`，关闭独占下一行。个人页与用户设置的「编辑资料」共用 `web/src/services/profile-editor.ts`。
+- 底部面板走 `web/src/services/sheet.ts`。一句话加按钮用 `title` / `message` / `actions`。带输入框或列表的用 `component` + `props`。选项多于两个时 `layout: 'stack'`。会议详情用 `layout: 'close-below'`，关闭独占下一行。`dismissible: false` 时点遮罩与 Escape 都不关闭，只用于用户协议更新确认这类必须做选择的提示。个人页与用户设置的「编辑资料」共用 `web/src/services/profile-editor.ts`。
+- 用户协议更新确认走 `web/src/services/agreement-prompt.ts`：外壳（`app/App.vue`）在「已登录 + 协议开启 + 当前版本高于 `user.agreedTermsVersion`」时打开 `dismissible: false` 的抽屉（点遮罩与 Escape 都关不掉，见 `sheet.ts`），按钮是「查看用户协议 / 不同意并退出（`device.exitApp()`）/ 同意（写 `POST /profile/agreement` 后重拉启动数据）」。协议浏览页本身不叠弹窗，从协议页回来仍未同意会重新弹。
 - 列表型页面的分区和筛选写进地址栏（`?tab=`），从二级页返回时才能回到同一分区。
 - 切换方向由 `web/src/app/navigation.ts` 算出。二级页按路径深度写 `.app[data-direction]`（前进 / 后退 / 原地替换）。底部导航之间按导航顺序写 `.app[data-tab-move]`。`motion.css` 据此选过渡。冷启动的第一次跳转按原地替换处理，首帧静态落地。
+- 入口 `/` 恒 redirect `/home`：未登录首帧就以访客态落在首页，不再先画登录页；需要登录的页面由守卫跳 `/login?redirect=<原地址>`，登录页只在需要登录时出现。整页重载时会话恢复的等待只发生在 `meta.requiresAuth` 的页面与直接停在 `/login` 的情况；`main.ts` 只负责把「已登录却停在 `/login`（或 `/` 还没落定）」的一屏替换到 `redirect` 或首页。
 - 标签页之间的过渡只位移、不淡入。淡入期间新页面还是透明的，露出来的是外壳背景，浅色模式下会闪一下白。同一屏只换 query 时方向信号保持不动，否则动画名会被换成淡入。
 - 页面自己 `watch` query 完成切换的，在 `meta` 里声明 `queryInPlace: true`。外壳改用 `path` 作键，分区切换不重建页面，并预热那几个分区的读接口。
 - 明暗模式与强调色在 `web/src/app/theme.ts` 落到 `<html data-mode>` 与 `--accent*`。首帧由 `index.html` 的内联脚本按本机缓存落一次。用户自己的明暗模式与强调色是账号偏好（`users.ui_mode` / `users.ui_theme`，经 `PUT /settings/ui-mode`、`PUT /settings/ui-theme` 保存）。本机只缓存一份供首帧使用。切换走 `web/src/app/preferences.ts`：本地先生效，落库失败回滚。`app_settings.theme` 只提供默认色板与全局默认下标。
@@ -57,18 +61,40 @@
 
 路径以报名站路由和 `web/src/app/surface.ts` 为准。声明顺序就是匹配顺序，更具体的路径写在前面。
 
+分享链接的分层：
+
+- `/e/:id`：展会详情，公开（未登录也能看）。底部只有「立即报名」，没有「加入日历」；点展商卡片要求登录（跳 `/login?redirect=/u/<昵称>`）。
+- `/e/:id/register`：报名信息页，公开。未登录时按匿名报名，收集项上方多一项必填「姓名」（上限取 `limits.nickname`，兜底 20）；应用内与已登录的报名站用户仍按账号报名。
+- `/e/:id/status`：报名状态页，公开，凭据在 `?token=`。按公开接口取数，并展示查询链接、复制按钮与「必须保存」提示；未登录页脚是「登录 / 注册」（带 `redirect` 回本页），已登录打开时先 `claim` 再 `replace` 到 `/mine/:id`。
+- `/u/:nickname`：用户公开页，`requiresAuth`。`/`、`/mine`、`/mine/:id`、`/m/:id` 保持原来的登录要求。
+- `/agreement`：用户协议浏览页，公开（登录/注册页的协议蓝链与更新提示都会用到它）；应用与报名站两种构建共用同一页。
+
+守卫只在**已登录**时判 `roles` 与 `capability`：访客的用户态由后端下发 `can.register = false`，照着判会把免登录报名表单挡回登录页。访客能否报名由详情页按展会状态决定，服务端再兜一层。
+
+匿名报名与认领（服务端约定见 [`server/README.md`](../server/README.md)）：
+
+- 编辑展会页在收集项卡下面新增「注意事项（选填）」卡片：`registrationNotice`（最多 2000 字），随展会保存；服务端 `exhibitionInputSchema` 再校验一次。`GET /registrations/:id` 的 payload 里 `exhibitionNotice` 只在报名状态为 `approved` / `attended` 时下发正文，其它状态是空串，页面据此渲染注意事项卡片。
+
+只有「报名站 + 未登录」才匿名：提交时不带 `Authorization`，服务端记 `visitor_id = NULL`、`visitor_type = 'guest'`、姓名必填。匿名提交响应里的 `queryToken`（32 字节 base64url）只出现这一次，库里只存 sha256（`registrations.query_token_hash`，唯一部分索引）；`GET /registrations/query/:token` 按哈希匹配，返回与本人报名详情同形（含报名码）。
+- 未登录时查询链接是唯一凭据（等同身份），所以状态页要提示保存、不要转发；`queryByToken` 刻意不进查询缓存，避免把凭据写进缓存键。
+- 已登录打开凭据链接时调 `POST /registrations/claim`：只补 `visitor_id`（保留匿名报名时填的姓名与 `visitor_type = 'guest'`），同账号幂等；被别的账号认领、或与账号已有同展会报名冲突（唯一部分索引）时返回 200 + `ok:false` 文案，页面留在状态页显示原因。
+- 带 `Authorization` 但令牌无效时匿名报名接口仍返回 401，不降级成匿名：否则应用内访问令牌过期后提交会悄悄写成无主记录。应用内报名流程与展示不变。
+
 ## 数据加载
 
 - 查询 composable 负责加载、缓存首屏、后台刷新和错误块。失败保持可见。有上次结果（包括已过期的）时先画出那份内容，再在后台刷新；刷新只标记忙碌，不清空旧内容。过期响应丢弃。列表里新出现的卡片滑入，不重放整表。下拉刷新忽略新鲜期，重新取当前页。加载圈随手指出，松手后才转动并发起请求；响应再快也先滑入、在展开位置停留，再滑出。缓存已画出而后台还在更新时只标记忙碌，不弹这枚指示：切页面、返回旧页面都不播加载动画，指示圈只属于用户的手动下拉刷新（`web/src/services/pull-refresh.ts`）。竖拉还要先越过 16px 死区、并且纵向明显占优（> 横向 1.5 倍）才跟手：点击页面里的链接/按钮时手指会漂几像素，不过死区就完全当没下拉。手势中途横向追平即放弃这次下拉；页面自己的横滑处理器（首页日历）判定要横滑时调 `suppressPull()`，外壳本次手势直接作废，斜划不会闪出指示圈。只有真正的 `pointerup` 会发请求，`pointercancel`（浏览器接管手势）只复位、绝不刷新。换页时外壳再调一次 `resetPullVisual()`，保证上一页的手势与动画不会把圈留在新页面上。
-- 查询缓存集中在 `web/src/services/query-cache.ts`。缓存键包含稳定序列化后的参数，并对相同请求去重。底部导航按下时预取该页。月视图一次取整月，点日期在本地完成。
+- 查询缓存集中在 `web/src/services/query-cache.ts`。缓存键包含稳定序列化后的参数，并对相同请求去重。底部导航按下时预取该页。月视图一次取整月，点日期在本地完成。`GET /exhibitions/month` 对跨天展会返回 `days`（本月内开展～闭展覆盖的所有天）并把它们并进 `eventDays`，首页按 `days` 判断选中日要展示哪些展会；没有 `days` 的旧快照退回 `day`。
 - 写接口的失效前缀与读接口的缓存键前缀同族（`registrations` ↔ `registrations.record`、`users` ↔ `users.record`）。
+- 用户协议正文走 `api.agreement.get()` 直连，不进查询缓存（正文会随管理员保存变化）；`bootstrap` 只带 `{ enabled, version, updatedAt }` 摘要，登录/注册页据此决定是否展示勾选框。
+- 最近日志页（`web/src/pages/LogsPage.vue`）用 `api.logs.list()` 直连，也不进查询缓存：日志随时在增长，打开页面、切级别、下拉刷新都取最新的一批；统计（条数、已用 / 上限）与列表来自同一次响应。
 - 展会详情页判断本人是否报过这场展会时复用 `registrations` 列表读缓存（与报名写入同族失效），只在已登录时请求；取不到就按未报名处理，不因为这条增强查询让整页失败。个人页的活动概览同样是一次增强查询：复用 `registrations` 列表缓存统计已参加与报名记录数，取不到就不显示这一行，不影响资料主状态。
+- 报名站的查询凭据（`/e/:id/status?token=`）走 `registrations.queryByToken` 直连，不进查询缓存（凭据不能进缓存键）；`claim` 成功后失效 `registrations` 与 `users.public` 前缀。
 - 核销结果按账号存在本机（`calmobile.checkin.outcomes.<用户 id>`，最多 20 条，最新的在前）；核销页顶栏的清理按钮清掉它，换号按新键重读。
 - 接口 JSON 带 `Cache-Control: no-store`。前端请求使用 `cache: no-store`，避免浏览器把带身份的旧资料（包括头像地址）当成可复用响应。管理端用户列表和搜索结果都带上头像地址，上传后这些页面跟着换图。
 
 ## 原生桥接
 
-原生只处理设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出、网页里的文件选择（`WebShellActivity` 的 `onShowFileChooser`）、文本文件读取与另存为（`media.importText` / `export.text`）、图片写进系统相册（`media.saveImage`）、会话刷新令牌与可信设备凭据的设备存储（`session.save` / `session.load` / `session.clear` / `session.device`，见 `SessionStore.java`），以及通行密钥（`passkey.available` / `passkey.create` / `passkey.get`，见 `PasskeyActions.java`）。
+原生只处理设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出、网页里的文件选择（`WebShellActivity` 的 `onShowFileChooser`）、文本文件读取与另存为（`media.importText` / `export.text`）、图片写进系统相册（`media.saveImage`）、会话刷新令牌与可信设备凭据的设备存储（`session.save` / `session.load` / `session.clear` / `session.device`，见 `SessionStore.java`），以及通行密钥（`passkey.available` / `passkey.create` / `passkey.get`，见 `PasskeyActions.java`），以及退出应用（`app.exit`：用户不同意用户协议时结束当前 Activity）。
 
 **为什么通行密钥在原生**：WebView 里 `navigator.credentials` 不可靠（多数版本没有 WebAuthn），而系统凭据提供方（Android 14 的 Credential Manager，低版本由 Google Play 服务提供）能用指纹 / 面容 / 锁屏密码完成同一件事。桥接传的入参与回调都是**标准 WebAuthn JSON**（base64url 字符串），服务端校验逻辑不区分请求来自 App 还是浏览器。页面侧统一走 `web/src/services/webauthn.ts`：有原生桥就调用桥，没有就用浏览器原生接口；用户取消由原生回 `cancelled`，前端归一成「没做这件事」。App 的 `clientDataJSON` 里 origin 是 `android:apk-key-hash:<签名证书 SHA-256 的 base64url>`，所以服务端的 `WEBAUTHN_ORIGINS` 必须包含它（见 `operations.md`）。这一项不是 http(s) 地址，`config/env.ts` 单独认它的形状（43 位 base64url），不能只按 URL 解析——否则会被当成非法项丢掉，App 里的通行密钥全部因来源不符被拒。**取消按系统实际返回判定**：用户划掉面板时凭据提供方回的是 `CreatePublicKeyCredentialDomException`（DOM 类型 Abort / NotAllowed / Timeout），不是 CancellationException；这三类与 Cancellation / Interrupted 一起归成 `cancelled`，页面静默收场。其余失败在原生侧翻成中文说明，系统给的英文原文只进 logcat。网页关着文件与 `content://` 访问，因此从文件安装语言包时正文由原生读出来回传，底稿另存为与二维码保存也走原生。可信设备的随机凭据由原生 `session.device` 生成并保存在设备私有目录。浏览器预览使用本机存储。
 
@@ -81,24 +107,30 @@
 ## 界面规则
 
 - 每个字段有可见标签。标签和内容左对齐。
-- **输入框默认是方框**（`--stroke` 描边 + `--f3` 浅底），只有明确需要下划线的地方加 `.input-line`：目前是管理设置页的全部一般输入、编辑展会页的名称/地点/开展日期/开展时间/报名起止/分类，以及收集项的「字段标题」。`.input-line` 由 `tokens.css` 统一给出：默认一条 `--stroke` 底边，聚焦时一条主题色下划线**从左侧长满**（320ms，失焦缩回），校验失败直接变砖红——所有下划线输入框共用这一套动画，页面不要自绘。原生 `date` / `time` 控件同样可加 `.input-line`（窄屏要给 `min-width: 0`，否则固有最小宽会撑破两列布局）。
+- **输入框默认是方框**（`--stroke` 描边 + `--f3` 浅底），只有明确需要下划线的地方加 `.input-line`：目前是管理设置页的全部一般输入、编辑展会页的名称/地点/日期与时间触发按钮/分类，以及收集项的「字段标题」。`.input-line` 由 `tokens.css` 统一给出：默认一条 `--stroke` 底边，聚焦时一条主题色下划线**从左侧长满**（320ms，失焦缩回），校验失败直接变砖红——所有下划线输入框共用这一套动画，页面不要自绘。日期与时间不再使用原生 `date` / `time` 控件（全仓已清零），它们的触发按钮借用 `.input.input-line` 的外观（窄屏同样要给 `min-width: 0`，否则固有最小宽会撑破两列布局）。
+- 编辑展会时，闭展日期在提交前按管理员设置的最大持续天数做本地校验（`bootstrap.exhibitor.maxExhibitionDays`）；服务端保存时再校验一次，超限返回 `exhibition.durationTooLong`。
+- **日期与时间用应用内抽屉**：范围日期（开展/闭展、报名开始/截止）走 `components/DatePickerSheet.vue` 的 `range` 模式，单日期（会议日期）走 `single` 模式；时间走 `components/TimeWheelSheet.vue` 的时 / 分滚轮。入口统一是 `services/pickers.ts` 的 `openDateRange` / `openSingleDate` / `openTime`，页面不要自己拼面板、也不要用系统原生控件。范围选择第一次点选就把起点回填给表单、第二次点选终点后自动收起（因此报名窗口可以只填开始）；已有一段完整区间时点任意一天从该天重新开始；终点早于起点禁用；「清除」清空两端。时间滚轮在值为空时按开始 `09:00` / 结束 `17:00` 摆位，只有点「确认」才写回，「清除」把时间留空（时间选填）。月历按月份分节、周日起排、今天带圆点，渲染从已选月份往前 12 个月到往后 24 个月。
 - **状态标签是「信号灯」**：`StatusTag` 只有色点 + 文字，没有边框与底色（ok 绿 / pending 琥珀 / danger 砖红 / info 灰蓝 / muted 灰），用在报名状态、展会报名方式与账号状态上。**身份标签不是状态**：展商 / 管理员走 `RoleTag`，保留原来的方框小签（浅底 + `--accent-edge` 描边 + 强调色文字），不要换成信号灯。
 - 需要从固定清单里选值的字段用**应用内抽屉**：`openSheet({ layout: 'list', actions: [{ label, checked }] })`，当前值带对勾；不要用系统 `<select>`。
+- **用户协议**：登录/注册页的勾选行只是「勾选 + 蓝链」，不套卡片外框（`.agreement-consent .check-label` 去掉描边、底色与内距，保留 44px 命中区）。管理员在「管理-设置」用开关 + Markdown 文件上传正文（应用内 `device.importText('text/markdown,text/plain', 1MB)` 读正文，浏览器退回 `<input type=file>` + `File.text()`；正文上限 200000 字符，随保存一起 `PUT /settings` 的 `agreement: { enabled, content }` 提交）。开启后登录/注册页显示「我已阅读并同意《用户协议》」勾选框，链接是 `--accent-ink` 的蓝链、打开 `/agreement`；用户设置页最底部同一入口；关闭时这些入口与更新弹窗全部不渲染。协议浏览页用 `api.agreement.get()` 公开取数（不进查询缓存），正文走 `markdownToHtml()` 清洗后渲染到 `.rich-content`。登录/注册页的勾选在各提交点（密码登录、两步验证、通行密钥、注册发码与提交）拦截，会话建立后调 `POST /profile/agreement` 记录当前版本，失败静默交给全局更新弹窗兜底。
+- 分段控件（`components/SegControl.vue`）在空间不够时**自动换行**，不做横向滚动：`.seg` 是 `flex-wrap: wrap`，所有分类一眼看全；选中滑块按按钮的 `offsetLeft / offsetTop / 尺寸` 定位，换行后仍贴在正确那一行，容器尺寸变化由 `ResizeObserver` 重新量。
 - 上传卡（封面、缺省封面）统一版式：左侧 96×170（9:16）预览，右侧竖排「上传/更换 / 移除」按钮与格式说明，窄屏上下堆叠。
 - 图标是 24 视窗、1.5 描边、无填充的细线。顶栏图标没有圆底。底部导航是图标加文字。
 - 触控命中区域至少 44px。生产界面以 1080×2400、xxhdpi（逻辑画布 360×800）为密度基准，字号、间距和圆角取 `web/src/styles/tokens.css` 的当前值。状态同时用文字和颜色或描边表达。空、加载、错误、成功和禁用状态在原位置给出下一步。
-- 顶栏使用 `--topbar-h`，再叠 `--safe-top`。有底部导航时内容区叠 `--safe-bottom`。Android WebView 里这两项 `env()` 经常是 0，因此 `WebShellActivity` 按系统栏 inset 缩小页面。展会图保持 9:16。并排字段等高。日期、时间和状态使用选择器、分段控件或面板。
-- 强调色使用 `--accent*`。二维码保持白底黑点。Markdown / HTML 先经 `web/src/services/markdown.ts` 清洗再渲染；Markdown 表格渲染成 1px 框线、列宽随内容、单元格可换行、放不下时表格自己横向滚动的样式（定义在 `.rich-content`）。管理-设置的保存按钮是右下角悬浮圆形按钮（`.round-action`，投递到 `body`，否则页面切换动画的 transform 祖先会改掉 `position: fixed` 的包含块）。
+- 顶栏使用 `--topbar-h`，再叠 `--safe-top`。有底部导航时内容区叠 `--safe-bottom`。Android WebView 里这两项 `env()` 经常是 0，因此 `WebShellActivity` 按系统栏 inset 缩小页面。并排字段等高。日期、时间和状态使用选择器、分段控件或面板。
+- **海报缩略图与详情大图**：列表缩略图高度固定（`MediaBox` 按图片真实比例写行内 `aspect-ratio`），宽度在 **9:16 ～ 3:4（纵向 4:3）** 之间自适应，所以同一列表的卡片高度一致；超出范围的海报按最接近的一端比例收进区间、`object-fit: cover` 裁切填满。详情页大图等比完整展示（`width: 100%; height: auto`，高度随海报比例，不裁切），特别长的海报用 `max-height` 兜住并 `object-fit: contain`；灯箱同样只做等比缩放，不裁切、不拉变形。
+- 强调色使用 `--accent*`。二维码展示时保持白底黑点（展商分享图的导出是唯一例外：透明底、黑色点，白底只来自展示容器）。Markdown / HTML 先经 `web/src/services/markdown.ts` 清洗再渲染；Markdown 表格渲染成 1px 框线、列宽随内容、单元格可换行、放不下时表格自己横向滚动的样式（定义在 `.rich-content`）。管理-设置的保存按钮是右下角悬浮圆形按钮（`.round-action`，投递到 `body`，否则页面切换动画的 transform 祖先会改掉 `position: fixed` 的包含块）。
 - 个人页与设置页按 `section-label` 分组：组标题放在卡片外，组内间距一档、组与组之间一档；卡片里的开关行用 `.switch-row[data-flush='true']` 的分隔线版式，不再套第二层边框；导航入口直接用 `.row-card`。个人页的身份区、活动概览、简介与公开资料**不使用卡片外观**（保留 `.card` 钩子是给页面测试用的，用页面级 `[data-plain]` 把边框、底色、阴影与内距去掉）。名字用 `.identity-name`。
-- 卡片里再套 `.row-card` 会形成双层边框：可点的整行不要包在第二层 `.card` 里；需要分区时用 `hr.divider`（发丝线）而不是第二层卡片。
-- 展商后台：顶部一颗「核销报名码」，列表每张卡上半可点、下半用 `hr.divider` 隔开后放原来的 ghost 小按钮（查看报名 / 编辑展会 / 复制链接）；「新建展会」是右下角悬浮圆形按钮（`Teleport` 到 `body`，否则路由容器的 `transform` 会成为 `fixed` 的包含块），空态时由 `.state` 的入口承担、不再显示悬浮按钮。
+- 卡片里再套 `.row-card` 会形成双层边框：可点的整行不要包在第二层 `.card` 里；需要分区时改用卡片 `gap`、局部间距类与 `section-label` 层级，**不再画发丝线**（`hr.divider` 已从设置类、详情类卡片里移除）；只有列表行之间的分隔才用线（例如相邻 `.switch-row[data-flush='true']` 的上边线）。
+- 展商后台：顶部一颗「核销报名码」，列表每张卡上半是整块可点的主体（右侧垂直居中一枚 44px 命中区的二维码分享按钮），下半放 ghost 小按钮（查看报名 / 编辑展会 / 复制链接），上下两段只用间距分开、不加分隔线；「复制链接」点击即复制（`services/clipboard.ts` 的 `copyText`，Clipboard API 失败时退回隐藏 textarea + `execCommand`），成功或失败都只 toast，不再弹手动复制面板；二维码按钮打开 `components/ShareQrSheet.vue`，二维码内容是报名站分享链接，导出透明底黑点 PNG（`qr-encoder.ts` 的 `background: 'transparent'` + `foreground: '#000000'`，保存走 `media.saveImage`，浏览器里退回下载）。「新建展会」是右下角悬浮圆形按钮（`Teleport` 到 `body`，否则路由容器的 `transform` 会成为 `fixed` 的包含块），空态时由 `.state` 的入口承担、不再显示悬浮按钮。
 - 设置类页面里，「设置项标题」用 `--fs-body` / 700 / `--ink`，说明文字用 `.field-hint`（`--fs-meta` / `--ink-3`）——两者不能同字号同颜色，否则读不出层级。间距也按这一层级排：**标题与它下面那句说明 2px**（读成一块），**设置项与设置项之间 16px**，卡片内组标题到内容 12px；说明最长 34em，不要拉到屏幕右边缘。
 - 用户公开页扉页上的「已参加展会」是单个统计，数字与标签**居中**排；个人页的活动概览是两列并列统计，保持左对齐，不要一起改成居中。
-- 「我的活动」的列表行：缩略图 44×78（竖版海报比例），标题单行截断，状态信号灯压在标题行右端，下面依次是「日期 · 时间」、地点与摘要（摘要两行截断，用 `.clamp-2`）。展商卡同理，但状态与报名数合成**一条**信号灯文字，避免出现「左边空着」的独立一行。
+- 「我的活动」的列表行：缩略图高 78（竖版海报比例，宽度随海报比例在 9:16～3:4 纵向之间自适应），标题单行截断，状态信号灯压在标题行右端，下面依次是「日期 · 时间」、地点与摘要（摘要两行截断，用 `.clamp-2`）。展商卡同理，但状态与报名数合成**一条**信号灯文字，避免出现「左边空着」的独立一行。
 - 报名收集项仍是「一张卡 + 横线分隔」的老结构，段内顺序不变（字段标题输入 → 类型分段 → 提示 → 选项行 → 必填与删除）。只把「字段标题」那一个输入框换成下划线：「标题」两个字作**占位符**显示在框内，不再浮在输入框上方；每一项上方留 12px、分隔线下方 16px，不靠浮动标签撑间距。
 - 展商后台的列表卡：上半是整块可点的主体，下半是配置动作按钮，两者之间**不加分隔线**（只靠卡片自身的间距分开）；「我的活动」等其它列表卡不受此影响。
 - 用户公开页的「已参加展会」用两列网格，每格图片 `aspect-ratio: 3 / 4`，图下两行小字（名称 + 日期）。
 - 动效只动画 `transform` 与 `opacity`，并遵守 `prefers-reduced-motion`。动效全失时先看设备动画 scale，步骤见 [`operations.md`](operations.md)。
+- 首页月历滑动用三块 `components/CalendarMonthPanel.vue`：当前月可交互，左右两份是相邻月预览（只按本地日期排，不带展会高亮，`aria-hidden` + `inert`，按钮全部禁用）。拖动时三块一起平移，露出的位置始终是相邻月份的日历而不是空白；松手过阈值后卡片与预览一起滑到位再换月，动画结束用新月份接口数据重画。相邻预览不额外发请求；切月动画只动 transform，减少动效时直接换月。
 - 第三方库由 `web/package.json` 与锁文件管理。重型功能动态导入，构建进页面包，运行时不引用 CDN。页面包随 APK 带一份；正式包再从本站 `/app/` 热更新到本机快照，切换页面只读这份快照。
 - 二维码在 Worker 里串行解码。暂停与换页后丢弃过期帧，离开时释放 Worker 和摄像头。WASM 通过构建资源定位到本地文件。
 

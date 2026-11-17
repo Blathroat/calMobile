@@ -438,8 +438,6 @@ async function exportCsv(): Promise<void> {
           </button>
         </div>
 
-        <hr class="divider" />
-
         <div v-if="record.statusCode === REGISTRATION_STATUS.PENDING" class="action-row">
           <button
             class="cta"
@@ -478,7 +476,11 @@ async function exportCsv(): Promise<void> {
 </template>
 
 <style scoped>
-/* 审核卡：上半是身份与状态，发丝线之后才是动作行。 */
+/* 审核卡：上半是身份与状态，下半是动作行；两者之间只留白，不再画分隔线。 */
+.review-card {
+  gap: var(--s3);
+}
+
 .review-main {
   display: flex;
   align-items: flex-start;

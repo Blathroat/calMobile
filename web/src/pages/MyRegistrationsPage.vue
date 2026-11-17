@@ -239,7 +239,7 @@ function openLogin(): void {
 <style scoped>
 /* 缩略图按设计稿的 44×78 竖版；全局 .thumb 是 36×64，只在本页放大一档。 */
 .reg-thumb {
-  width: 44px;
+  /* 高度固定，宽度随海报比例变化，行高不变。 */
   height: 78px;
 }
 

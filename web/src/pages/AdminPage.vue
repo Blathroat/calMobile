@@ -22,6 +22,7 @@ import type { SheetAction } from '@/services/sheet';
 import { check } from '@/services/validate';
 import { device } from '@/services/device-services';
 import { publishImportedMedia } from '@/services/publish-media';
+import AppIcon from '@/components/AppIcon.vue';
 import SegControl from '@/components/SegControl.vue';
 import AdminUsersSection from './AdminUsersSection.vue';
 import AdminExhibitionsSection from './AdminExhibitionsSection.vue';
@@ -222,10 +223,14 @@ const form = reactive({
   maxFutureExhibitions: 0,
   /** 展商可同时筹备的私人会议数；0 表示不限 */
   maxFutureMeetings: 0,
+  /** 单个展会最长持续天数（按开展～闭展算）；0 表示不限 */
+  maxExhibitionDays: 0,
   /** 服务器存储上限，单位 MB */
   storageMb: 1024,
   /** 存满以后：拒绝新上传，或删掉最早的文件 */
   whenFull: 'reject' as 'reject' | 'evict-oldest',
+  /** 操作日志的存储上限，单位 MB；超过后服务端自动清掉最早的日志 */
+  logs: { storageMb: 64 },
   /** 生成邀请码时的默认次数与有效小时。0 小时表示不过期。 */
   inviteUses: 1,
   inviteValidHours: 168,
@@ -233,6 +238,8 @@ const form = reactive({
   inviteDurationDays: 0,
   /** 软件包下载源：直链地址或 GitHub 仓库（owner/repo） */
   download: { source: 'url' as 'url' | 'github', url: '', repo: '' },
+  /** 用户协议：开关与 Markdown 正文，随其它设置一起保存（正文变化时服务端自增版本） */
+  agreement: { enabled: false, content: '' },
 });
 
 /** 管理页自己的文案：提示与开关说明放在这里，提取脚本会换成文案 key。 */
@@ -240,10 +247,13 @@ const COPY = {
   coverTitle: t('admin.media.defaultCover'),
   coverHint: t('admin.media.defaultCoverFallback'),
   limitIntro: t('admin.limits.charCapIntro'),
+  exhibitorSection: t('admin.settings.exhibitorSection'),
   exhibitorLimit: t('admin.limits.concurrentExhibitions'),
   exhibitorLimitHint: t('admin.limits.concurrentExhibitionsRule'),
   meetingLimit: t('admin.limits.concurrentMeetings'),
   meetingLimitHint: t('admin.limits.concurrentMeetingsRule'),
+  maxExhibitionDays: t('admin.settings.maxExhibitionDays'),
+  maxExhibitionDaysHint: t('admin.settings.maxExhibitionDaysHint'),
   manageExhibitions: t('admin.users.manageExhibitions'),
   manageMeetings: t('admin.users.manageMeetings'),
   adjustStatus: t('admin.users.adjustStatus'),
@@ -274,10 +284,13 @@ const settingsCopy = {
   coverTitle: COPY.coverTitle,
   coverHint: COPY.coverHint,
   limitIntro: COPY.limitIntro,
+  exhibitorSection: COPY.exhibitorSection,
   exhibitorLimit: COPY.exhibitorLimit,
   exhibitorLimitHint: COPY.exhibitorLimitHint,
   meetingLimit: COPY.meetingLimit,
   meetingLimitHint: COPY.meetingLimitHint,
+  maxExhibitionDays: COPY.maxExhibitionDays,
+  maxExhibitionDaysHint: COPY.maxExhibitionDaysHint,
   avatarSection: COPY.avatarSection,
   avatarFormats: COPY.avatarFormats,
   storageTitle: COPY.storageTitle,
@@ -286,6 +299,11 @@ const settingsCopy = {
   storageWhenFull: COPY.storageWhenFull,
 };
 const storageUsage = ref({ usedBytes: 0, limitBytes: 1024 * 1024 * 1024, fileCount: 0 });
+/**
+ * 日志的当前用量：只有管理员会从设置接口拿到。
+ * `hasUsage` 为假时设置卡片只显示「—」，不画一条没有数据的进度条。
+ */
+const logsUsage = ref({ usedBytes: 0, entryCount: 0, hasUsage: false });
 const storagePolicies = [
   { value: 'reject', label: COPY.storageReject },
   { value: 'evict-oldest', label: COPY.storageEvict },
@@ -305,6 +323,9 @@ const invites = ref<
 >([]);
 const settingsError = ref('');
 const settingsSaving = ref(false);
+/** 用户协议当前生效的版本与更新时间：只读展示，保存后按服务端返回的设置回填。 */
+const agreementVersion = ref(0);
+const agreementUpdatedAt = ref('');
 const loaded = ref(false);
 const panelBusy = computed(() =>
   tab.value === 'users'
@@ -357,6 +378,11 @@ function changeTab(value: string): void {
   // 把分区写进地址栏（替换历史，不留下一条只换过 tab 的记录）：
   // 从二级页返回时才能回到同一个分区。
   void router.replace({ query: { ...route.query, tab: value } });
+}
+
+/** 管理页只放最近日志的入口：列表与统计在 /logs 二级页，不占管理分区。 */
+function openLogs(): void {
+  void router.push('/logs');
 }
 
 /** URL 里的分区 id；非法或缺省时回到第一个分区。 */
@@ -600,6 +626,8 @@ async function exportCsv(): Promise<void> {
 
 const formatPattern = /^[A-Za-z0-9]+(\s*,\s*[A-Za-z0-9]+)*$/;
 const titleEnPattern = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
+/** 用户协议正文上限：与服务端一致（超出时服务端回 `settings.agreementTooLong`）。 */
+const AGREEMENT_MAX_CHARS = 200_000;
 
 async function loadSettings(): Promise<void> {
   const data = await settingsQuery.run(() => api.settings.get());
@@ -650,6 +678,7 @@ function fillForm(data: JsonObject): void {
   form.defaultCover = String(cover.defaultCover ?? bootstrap.cover.defaultCover ?? '');
   form.maxFutureExhibitions = Number(exhibitor.maxFutureExhibitions ?? bootstrap.exhibitor.maxFutureExhibitions ?? 0);
   form.maxFutureMeetings = Number(exhibitor.maxFutureMeetings ?? bootstrap.exhibitor.maxFutureMeetings ?? 0);
+  form.maxExhibitionDays = Number(exhibitor.maxExhibitionDays ?? bootstrap.exhibitor.maxExhibitionDays ?? 0);
   const invite = (data.invite ?? {}) as JsonObject;
   form.inviteUses = Number(invite.uses ?? form.inviteUses) || 1;
   const legacyDays = invite.validDays;
@@ -663,6 +692,16 @@ function fillForm(data: JsonObject): void {
   form.download.source = download.source === 'github' ? 'github' : 'url';
   form.download.url = String(download.url ?? '');
   form.download.repo = String(download.repo ?? '');
+  // 用户协议：管理端额外拿到正文。只在数据里真有这一段时才回填，生成邀请码这类局部刷新
+  // 不带 agreement 时不能把正在编辑的正文冲掉；版本与更新时间同样按服务端返回更新。
+  const agreement = data.agreement;
+  if (agreement && typeof agreement === 'object' && !Array.isArray(agreement)) {
+    const record = agreement as JsonObject;
+    form.agreement.enabled = record.enabled === true;
+    form.agreement.content = String(record.content ?? '');
+    agreementVersion.value = Number(record.version) || 0;
+    agreementUpdatedAt.value = String(record.updatedAt ?? '');
+  }
   if (Array.isArray(data.invites)) {
     invites.value = data.invites.map((item) => {
       const row = (item ?? {}) as JsonObject;
@@ -686,6 +725,23 @@ function fillForm(data: JsonObject): void {
     limitBytes: Number.isFinite(limitBytes) && limitBytes > 0 ? limitBytes : form.storageMb * 1024 * 1024,
     fileCount: Number(storage.fileCount) || 0,
   };
+  // 日志：上限（MB）与当前用量。用量只有管理员能拿到；返回里没有这一段时保留上一次的值，
+  // 不能因为一次局部刷新（例如生成邀请码）把卡片上的用量清空。
+  const logs = (data.logs ?? {}) as JsonObject;
+  form.logs.storageMb = clampLogsMb(logs.storageMb ?? form.logs.storageMb);
+  if (logs.usedBytes !== undefined || logs.entryCount !== undefined) {
+    logsUsage.value = {
+      usedBytes: Number(logs.usedBytes) || 0,
+      entryCount: Number(logs.entryCount) || 0,
+      hasUsage: true,
+    };
+  }
+}
+
+/** 日志上限：整数 MB，本地先收敛到 1～10240（服务端还会再收一次）。 */
+function clampLogsMb(value: unknown): number {
+  const number = Number(value) || 64;
+  return Math.max(1, Math.min(10240, Math.round(number)));
 }
 
 function formatStorage(bytes: number): string {
@@ -799,6 +855,15 @@ async function saveSettings(): Promise<void> {
         patternMessage: t('admin.settings.accentInvalid'),
       }),
     ],
+    // 用户协议：开启时正文不能为空（服务端也会拒）；超长同样在本地先拦，不用等一轮请求。
+    [
+      t('admin.settings.agreement'),
+      form.agreement.enabled && !form.agreement.content.trim()
+        ? t('admin.settings.agreementContentRequired')
+        : form.agreement.content.length > AGREEMENT_MAX_CHARS
+          ? t('admin.settings.agreementTooLong', { max: AGREEMENT_MAX_CHARS })
+          : '',
+    ],
   ];
   for (const [, message] of checks) {
     if (message) {
@@ -832,15 +897,23 @@ async function saveSettings(): Promise<void> {
       defaultCover: form.defaultCover.trim(),
       maxFutureExhibitions: Number(form.maxFutureExhibitions) || 0,
       maxFutureMeetings: Number(form.maxFutureMeetings) || 0,
+      maxExhibitionDays: Number(form.maxExhibitionDays) || 0,
       inviteUses: Number(form.inviteUses) || 1,
       inviteValidHours: Number(form.inviteValidHours) || 0,
       inviteDurationDays: Number(form.inviteDurationDays) || 0,
       storageMb: Number(form.storageMb) || 0,
       whenFull: form.whenFull,
+      // 日志上限：整数 MB，范围 1～10240（服务端会再收敛一次）。
+      logs: { storageMb: clampLogsMb(form.logs.storageMb) },
       download: {
         source: form.download.source,
         url: form.download.url.trim(),
         repo: form.download.repo.trim(),
+      },
+      // 用户协议：正文变化时服务端自增版本并写更新时间；只开关不升版本。
+      agreement: {
+        enabled: form.agreement.enabled === true,
+        content: form.agreement.content,
       },
     };
     for (const item of LIMIT_ITEMS) payload[item.key] = numberField(item.key);
@@ -1002,11 +1075,14 @@ async function copyInvite(code: string): Promise<void> {
     :storage-full="storageFull"
     :storage-percent="storagePercent"
     :storage-caption="storageCaption"
+    :logs-usage="logsUsage"
     :storage-policies="storagePolicies"
     :limit-groups="LIMIT_GROUPS"
     :pair-limits="pairLimits"
     :copy="settingsCopy"
     :invites="invites"
+    :agreement-version="agreementVersion"
+    :agreement-updated-at="agreementUpdatedAt"
     :invite-busy="inviteBusy"
     @retry="loadSettings"
     @save="saveSettings"
@@ -1014,5 +1090,8 @@ async function copyInvite(code: string): Promise<void> {
     @generate="generateInvite"
     @revoke="revokeInvite"
     @copy="copyInvite"
+    @open-logs="openLogs"
   />
 </template>
+
+<style></style>

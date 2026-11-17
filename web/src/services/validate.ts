@@ -15,7 +15,13 @@ import { t } from '@/i18n';
 
 export const PATTERNS = {
   email: /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/,
-  username: /^[A-Za-z0-9_\u4e00-\u9fa5]+$/,
+  /**
+   * 用户名允许「正常的 UTF-8 字符」：Unicode 字母、数字与组合符（`\p{L}` / `\p{N}` / `\p{M}`，
+   * 覆盖中文、日文、韩文、拉丁及其它文字的字母，以及印地语等文字里跟在前面的组合符），
+   * 外加 `_` `.` `-` 三个 ASCII 分隔符。空白（含内部空格）、控制字符、标点与 emoji
+   * 都不在允许集合内。与服务端 `server/src/domain/schemas.ts` 的 `usernamePattern` 必须一致。
+   */
+  username: /^[\p{L}\p{N}\p{M}_.-]+$/u,
   date: /^\d{4}-\d{2}-\d{2}$/,
   timeRange: /^\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}$/,
   /** 展会分类使用中文、英文、数字与常见分隔符。 */

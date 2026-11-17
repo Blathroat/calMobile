@@ -23,6 +23,9 @@ importers:
       hono:
         specifier: ^4.13.13
         version: 4.13.13
+      ip2region-ts:
+        specifier: 2.0.1
+        version: 2.0.1
       jose:
         specifier: ^6.2.12
         version: 6.2.12
@@ -853,6 +856,9 @@ packages:
   hono@4.13.13:
     resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
     engines: {node: '>=16.9.0'}
+
+  ip2region-ts@2.0.1:
+    resolution: {integrity: sha512-zZkNgAUVlneofpRu/cYhjrZ/fVLX5/9sYoW0Ha+OqAt4LGFsyuAiynRnmw0JY/CMfa1DamD/AmqJ5hfXRpjCTA==}
 
   jose@6.2.12:
     resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
@@ -1738,6 +1744,8 @@ snapshots:
     optional: true
 
   hono@4.13.13: {}
+
+  ip2region-ts@2.0.1: {}
 
   jose@6.2.12: {}
 

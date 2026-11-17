@@ -33,6 +33,8 @@ import { QueryCache } from '@/services/query-cache';
 import { SessionClient } from '@/services/session-client';
 import { nativeBridge } from '@/services/native-bridge';
 import type {
+  AgreementInfo,
+  LogsResult,
   ApiResult,
   AuthResult,
   Bootstrap,
@@ -41,7 +43,9 @@ import type {
   Id,
   JsonObject,
   Registration,
+  RegistrationClaimResult,
   RegistrationDetail,
+  RegistrationSubmitResult,
   ReleaseInfo,
   ReviewList,
   SearchResult,
@@ -73,6 +77,19 @@ export interface ApiClient {
   session: SessionClient;
   /** 启动数据（身份、权限、限制、主题）。刻意不走缓存：切账号后必须拿最新的一份。 */
   bootstrap(): Promise<Bootstrap>;
+  /** 用户协议（公开）：正文可能很大且会变，不进 bootstrap、也不走查询缓存。 */
+  agreement: {
+    /** 当前协议开关、版本、更新时间和 Markdown 正文。 */
+    get(): Promise<AgreementInfo>;
+  };
+  /** 操作日志（仅管理员）。要看到最新记录，不走查询缓存。 */
+  logs: {
+    /**
+     * 最近操作日志。
+     * @param params `limit` 默认 100（最大 500）；`level` 过滤 info / warn / error；`query` 子串匹配。
+     */
+    list(params?: { limit?: number; level?: string; query?: string }): Promise<LogsResult>;
+  };
   /** 最新版本与下载地址（公开）。检查更新与报名站的下载条都用它，永远取实时值。 */
   release(): Promise<ReleaseInfo>;
   /** 登录、注册、找回密码。只有会下发令牌的方法内部才更新会话并清空缓存。 */
@@ -126,6 +143,11 @@ export interface ApiClient {
     markHint(hint: string): Promise<JsonObject>;
     /** 用邀请码把当前账号设为展商。已经是展商或管理员时不消耗邀请码。 */
     redeemInvite(code: string): Promise<ApiResult>;
+    /**
+     * 记录已同意当前版本的《用户协议》。
+     * 版本必须与服务端当前版本一致；管理员刚好更新了协议时按业务失败返回，页面应重新确认。
+     */
+    agree(version: number): Promise<ApiResult & { agreedTermsVersion: number; agreedTermsAt: string }>;
   };
   /** 展会封面和简介媒体。字节上传后返回可写入正文的地址。 */
   media: {
@@ -205,8 +227,15 @@ export interface ApiClient {
     // `registrations`，键写成 `registration` 会匹配不上，撤销后再取详情会拿到旧状态。
     /** 报名详情。键是 `registrations.record`，必须落在 `registrations` 前缀下，否则撤销后读到旧值。 */
     get(id: Id): Promise<RegistrationDetail>;
-    /** 提交报名；成功后连带失效审核与展会（名额、统计会变）。 */
-    submit(payload: JsonObject): Promise<ApiResult>;
+    /**
+     * 用查询凭据读报名（报名站的分享链接，公开）。**刻意不进查询缓存**：
+     * 凭据在 URL 里，进缓存等于把它留在内存键里；这一屏也只看一次，没有复用价值。
+     */
+    queryByToken(token: string): Promise<RegistrationDetail>;
+    /** 提交报名；成功后连带失效审核与展会（名额、统计会变）。匿名报名会多返回 `queryToken`。 */
+    submit(payload: JsonObject): Promise<RegistrationSubmitResult>;
+    /** 把查询链接对应的匿名报名认领到当前账号（需要登录）；成功后会出现在「我的活动」。 */
+    claim(token: string): Promise<RegistrationClaimResult>;
     /** 撤销报名；同样连带失效审核与展会。 */
     cancel(id: Id): Promise<ApiResult>;
   };
@@ -370,6 +399,20 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
     session,
     // 不走 read()：身份来源必须是最新的，不能命中缓存。
     bootstrap: () => http.request<Bootstrap>('/bootstrap'),
+    agreement: {
+      // 协议正文可能很大且会变，不进 bootstrap、也不进查询缓存：每次打开页面取最新的。
+      get: () => http.request<AgreementInfo>('/agreement'),
+    },
+    logs: {
+      // 日志随时在增长，直连接口（不进查询缓存），打开页面/下拉刷新都拿最新。
+      list: (params = {}) => {
+        const query: Record<string, string | number> = {};
+        if (params.limit && params.limit > 0) query.limit = params.limit;
+        if (params.level) query.level = params.level;
+        if (params.query) query.query = params.query;
+        return http.request<LogsResult>('/logs', { query });
+      },
+    },
     /** 最新版本与下载地址（公开）。检查更新与报名站下载条都用它。 */
     release: () => http.request<ReleaseInfo>('/app/release'),
     auth: {
@@ -444,6 +487,12 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
       markHint: (hint) => http.request<JsonObject>('/profile/hints', { method: 'PUT', body: { hint } }),
       redeemInvite: (code) =>
         write<ApiResult>('/profile/invite', { method: 'POST', body: { code } }, ['profile', 'users']),
+      agree: (version) =>
+        write<ApiResult & { agreedTermsVersion: number; agreedTermsAt: string }>(
+          '/profile/agreement',
+          { method: 'POST', body: { version } },
+          ['profile', 'users'],
+        ),
     },
     media: {
       upload: (bytes, contentType, kind) =>
@@ -534,11 +583,19 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
       // 缓存键前缀必须与写接口的 invalidates 前缀同一族：撤销报名失效的是
       // `registrations`，键写成 `registration` 会匹配不上，撤销后再取详情会拿到旧状态。
       get: (id) => read<RegistrationDetail>('registrations.record', `/registrations/${encodeURIComponent(id)}`),
+      // 查询凭据在 URL 里，故意不走 read()：不进缓存（理由见 ApiClient 上的注释）。
+      queryByToken: (token) => http.request<RegistrationDetail>(`/registrations/query/${encodeURIComponent(token)}`),
       submit: (payload) =>
-        write<ApiResult>('/registrations', { method: 'POST', body: payload }, [
+        write<RegistrationSubmitResult>('/registrations', { method: 'POST', body: payload }, [
           'registrations',
           'review',
           'exhibitions',
+        ]),
+      // 认领把匿名报名并进账号：我的报名与用户公开页（已参加展会）都要失效重取。
+      claim: (token) =>
+        write<RegistrationClaimResult>('/registrations/claim', { method: 'POST', body: { token } }, [
+          'registrations',
+          'users.public',
         ]),
       cancel: (id) =>
         write<ApiResult>(`/registrations/${encodeURIComponent(id)}`, { method: 'DELETE' }, [

@@ -117,21 +117,46 @@ describe('router guards', () => {
     expect(router.currentRoute.value.path).toBe('/my-registrations');
   });
 
-  it('入口同样先等恢复：有提示落首页，没提示落登录页', async () => {
+  it('未登录冷启动 / 直接以访客态进入首页，不经过登录页', async () => {
+    const router = createAppRouter(createMemoryHistory());
+    const visited: string[] = [];
+    router.afterEach((to) => visited.push(to.path));
+
+    await router.push('/');
+
+    // 入口 redirect 与登录态无关：始终落 /home，首帧就是访客能看的月历。
+    expect(router.currentRoute.value.path).toBe('/home');
+    expect(visited).not.toContain('/login');
+    // 首页不要求登录，入口不需要等会话恢复。
+    expect(bootApp).not.toHaveBeenCalled();
+  });
+
+  it('有登录态提示时入口同样落首页，不在入口等待会话', async () => {
     rememberSession();
     bootAsLoggedIn();
-    const withHint = createAppRouter(createMemoryHistory());
-    await withHint.push('/');
-    expect(withHint.currentRoute.value.path).toBe('/home');
-    expect(bootApp).toHaveBeenCalledTimes(1);
+    const router = createAppRouter(createMemoryHistory());
+    const visited: string[] = [];
+    router.afterEach((to) => visited.push(to.path));
 
-    // 换一份没有提示的本机存储与 Pinia，入口行为回到从前。
-    vi.mocked(bootApp).mockClear();
-    setActivePinia(createPinia());
-    localStorage.clear();
-    const withoutHint = createAppRouter(createMemoryHistory());
-    await withoutHint.push('/');
-    expect(withoutHint.currentRoute.value.path).toBe('/login');
+    await router.push('/');
+
+    expect(router.currentRoute.value.path).toBe('/home');
+    expect(visited).not.toContain('/login');
+    // 会话恢复由首页自己的 bootApp() 触发；入口守卫不等，避免拖慢首帧。
     expect(bootApp).not.toHaveBeenCalled();
+  });
+
+  it('已登录时入口也落首页（应用内不再以登录页为落点）', async () => {
+    useSessionStore().applyUser({ id: 'u1', loggedIn: true, guest: false, role: 'user' });
+    const router = createAppRouter(createMemoryHistory());
+    await router.push('/');
+    expect(router.currentRoute.value.path).toBe('/home');
+  });
+
+  it('未登录访问 /my-registrations 时去登录页并带上原地址', async () => {
+    const router = createAppRouter(createMemoryHistory());
+    await router.push('/my-registrations');
+    expect(router.currentRoute.value.path).toBe('/login');
+    expect(router.currentRoute.value.query.redirect).toBe('/my-registrations');
   });
 });

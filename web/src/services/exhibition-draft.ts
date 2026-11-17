@@ -10,6 +10,8 @@ export interface ExhibitionDraft {
   title: string;
   venue: string;
   date: string;
+  /** 闭展日期；空串（或缺省）表示单日展会。 */
+  endDate?: string;
   time: string;
   status: string;
   category: string;
@@ -19,6 +21,8 @@ export interface ExhibitionDraft {
   registrationEnd: string;
   qrEnabled: boolean;
   allowCancel: boolean;
+  /** 报名注意事项（选填）；缺省视为空串，兼容旧草稿。 */
+  registrationNotice?: string;
   fields: CollectField[];
 }
 

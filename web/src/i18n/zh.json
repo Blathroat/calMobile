@@ -145,7 +145,35 @@
       "saveFailed": "保存失败，请稍后重试",
       "saved": "服务器设置已保存",
       "server": "服务器设置",
-      "serverScope": "这里的配置保存在服务端，保存后对所有用户与展商同时生效。"
+      "serverScope": "这里的配置保存在服务端，保存后对所有用户与展商同时生效。",
+      "agreement": "用户协议",
+      "agreementHint": "开启后，登录与注册页要求用户同意；协议内容更新后，已登录用户会看到确认提示。关闭后所有入口隐藏。",
+      "agreementEnabled": "开启用户协议",
+      "agreementVersion": "当前版本",
+      "agreementNotSet": "还没有上传内容",
+      "agreementVersionValue": "第 {version} 版 · 更新于 {date}",
+      "agreementUpload": "上传 Markdown 文件",
+      "agreementReplace": "重新上传",
+      "agreementClear": "清除内容",
+      "agreementEmptyHint": "还没有上传用户协议内容。开启用户协议前需要先上传 Markdown 文件。",
+      "agreementFileHint": "支持 .md / .txt，正文最多 {max} 字；保存后生效。",
+      "agreementFileMeta": "{name} · {count} 字",
+      "agreementFileMetaNoName": "{count} 字",
+      "agreementPreviewTitle": "内容预览",
+      "agreementReadFailed": "读取文件失败，请换一个 Markdown 文件",
+      "agreementTooLarge": "文件不能超过 {kb} KB",
+      "agreementContentRequired": "开启用户协议时，正文不能为空",
+      "agreementTooLong": "用户协议正文不能超过 {max} 字",
+      "agreementVersionOnly": "第 {version} 版",
+      "logs": "日志",
+      "logsCap": "日志大小上限",
+      "logsHint": "单位为 MB，可填 1～10240；超过上限会自动清理最早的日志。",
+      "logsUsage": "已存 {count} 条 · 已用 {used} / 上限 {limit}",
+      "logsUsageUnknown": "—",
+      "exhibitorSection": "展商相关",
+      "maxExhibitionDays": "单个展会最大持续天数",
+      "maxExhibitionDaysHint": "0 表示不限；按开展～闭展计算，超过上限时展商不能保存展会。",
+      "daysUnit": "天"
     },
     "title": "管理后台",
     "users": {
@@ -159,7 +187,7 @@
       "empty": "暂无用户数据",
       "exhibitorExpired": "展商已到期 {date}",
       "exhibitorUntil": "展商到期 {date}",
-      "lastLogin": "{status} · 最近登录 {time}",
+      "lastLogin": "最近登录 {time}",
       "manage": "用户管理",
       "manageExhibitions": "管理展会",
       "manageMeetings": "管理会议",
@@ -176,7 +204,11 @@
       "twoFactorEnabled": "已开启两步验证",
       "unknown": "未知",
       "updateFailed": "更新失败",
-      "viewPublicAria": "查看 {name} 的公开页"
+      "viewPublicAria": "查看 {name} 的公开页",
+      "agreementAccepted": "用户协议：已同意 v{version}（{date}）",
+      "agreementAcceptedNoDate": "用户协议：已同意 v{version}",
+      "agreementOutdated": "用户协议：未同意当前版本（此前同意 v{version}）",
+      "agreementNever": "用户协议：未同意"
     },
     "download": {
       "title": "软件包下载",
@@ -291,7 +323,7 @@
       "setPassword": "设置登录密码",
       "sixDigits": "6 位数字",
       "title": "注册",
-      "usernameHint": "可用中英文、数字与下划线",
+      "usernameHint": "可用中文、字母、数字、下划线、点或横线",
       "usernamePlaceholder": "设置用户名",
       "verifyAndCreate": "验证并创建账号"
     }
@@ -401,7 +433,8 @@
       "trackInActivities": "提交后可在“我的活动”查看审核状态。",
       "viewExhibitorHome": "查看展商公开主页 →",
       "viewLargeImage": "查看大图",
-      "viewMyRegistration": "查看我的报名"
+      "viewMyRegistration": "查看我的报名",
+      "joinTrackHint": "提交后请保存查询链接，用它查看报名状态。"
     },
     "editor": {
       "append": "追加",
@@ -495,7 +528,7 @@
       "registrationEndDate": "报名截止日期",
       "registrationMode": "报名方式",
       "registrationOpens": "报名开始",
-      "registrationSettings": "报名与简介设置",
+      "registrationSettings": "报名设置",
       "registrationStartDate": "报名开始日期",
       "registrationStartTooLate": "报名开始日期不能晚于展会开展日期",
       "restrictedAccount": "账号已被限制，不能发布或修改展会、不能核销；仍可查看与审核已有报名。",
@@ -504,7 +537,22 @@
       "saved": "展会已保存",
       "thisExhibition": "该展会",
       "titlePlaceholder": "例如：智能制造与工业自动化展",
-      "venuePlaceholder": "例如：上海新国际博览中心 · N3 馆"
+      "venuePlaceholder": "例如：上海新国际博览中心 · N3 馆",
+      "coverAndDescription": "展会封面与简介",
+      "endDate": "闭展日期",
+      "endBeforeStart": "闭展日期不能早于开展日期",
+      "timeStart": "开始时间",
+      "timeEnd": "结束时间",
+      "openDateShort": "开展",
+      "endDateShort": "闭展",
+      "registrationStartShort": "开始",
+      "registrationEndShort": "截止",
+      "durationHint": "单个展会最长 {max} 天",
+      "durationTooLong": "单个展会最长 {max} 天，请缩短展期",
+      "noticeTitle": "注意事项（选填）",
+      "noticeLabel": "注意事项",
+      "noticeHint": "审核通过或已参加的报名者，会在报名详情页看到这段内容；留空则不显示。",
+      "noticePlaceholder": "例如：入场需携带身份证、签到地点、现场联系人等"
     },
     "list": {
       "countLabel": "{count} 个 · {registrations} 条报名",
@@ -526,7 +574,9 @@
     "qrEnabled": "已启用报名二维码",
     "registrationLinkCopied": "已复制报名链接",
     "sections": "展商分区",
-    "title": "展商后台"
+    "title": "展商后台",
+    "shareQr": "分享展会二维码",
+    "copyLinkFailed": "复制失败，请稍后重试"
   },
   "fieldType": {
     "checkbox": "多选",
@@ -547,7 +597,7 @@
     "tooLong": "{label}最多 {max} 个字符",
     "tooShort": "{label}至少需要 {min} 个字符",
     "username": "用户名",
-    "usernameCharset": "只能使用中英文、数字与下划线",
+    "usernameCharset": "只能使用中文、字母、数字、下划线、点或横线",
     "video": "视频"
   },
   "home": {
@@ -594,8 +644,7 @@
     "missingVideo": "没有读到视频",
     "pinchZoom": "双指捏合缩放",
     "unreadableFile": "读不到刚选择的文件",
-    "usePhoto": "使用这张",
-    "viewerHint": "双指缩放 · 放大后拖动 · 双击复位"
+    "usePhoto": "使用这张"
   },
   "meeting": {
     "apply": {
@@ -755,7 +804,15 @@
       "status": "报名状态",
       "submittedInfo": "提交信息",
       "summary": "报名摘要",
-      "title": "报名详情"
+      "title": "报名详情",
+      "queryLink": "查询报名状态链接",
+      "copyQueryLink": "复制链接",
+      "queryLinkCopied": "查询链接已复制",
+      "queryLinkCopyFailed": "复制失败，请长按链接手动复制",
+      "queryLinkHint": "请保存好这条链接，之后必须用它查询报名详情；也可以登录或注册，把这条报名关联到账号。",
+      "loginToManageHint": "登录或注册后，这条报名会关联到你的账号，之后可以在「我的活动」里查看、修改或撤销。",
+      "claimFailed": "登录成功，但没能把这条报名关联到当前账号。",
+      "noticeTitle": "注意事项"
     },
     "fields": {
       "addField": "新增收集项",
@@ -791,7 +848,11 @@
       "submittedAndApproved": "报名已提交并通过",
       "submittedApproved": "已提交 · 已通过",
       "submittedPending": "已提交 · 待审核",
-      "unsetOption": "未设置选项"
+      "unsetOption": "未设置选项",
+      "name": "姓名",
+      "guestApprovedHint": "该展会无需审核，已直接通过。请保存下方查询链接，之后凭它查看报名状态。",
+      "guestPendingHint": "需要审核的报名可用保存的查询链接查看状态。",
+      "queryTokenMissing": "报名已提交，但没能拿到查询链接，请联系展商。"
     },
     "list": {
       "answersLine": "报名信息：{summary}",
@@ -1003,7 +1064,8 @@
       "recordMissing": "报名记录不存在，可能已被撤销"
     },
     "exhibition": {
-      "notFound": "展会不存在或已删除"
+      "notFound": "展会不存在或已删除",
+      "durationTooLong": "单个展会最长天数超过管理员限制"
     },
     "invite": {
       "exhausted": "邀请码已用完",
@@ -1089,7 +1151,10 @@
       "avatarUploadOnly": "头像请通过上传更新",
       "emailTaken": "该邮箱已被其他账号使用",
       "emailUnchanged": "新邮箱与当前邮箱相同",
-      "inviteRoleInvalid": "当前身份不能使用邀请码"
+      "inviteRoleInvalid": "当前身份不能使用邀请码",
+      "agreementDisabled": "用户协议当前未开启",
+      "agreementVersionChanged": "用户协议已更新，请重新阅读并确认",
+      "loginRequired": "请先登录后再操作"
     },
     "quota": {
       "exhibitionsExceeded": "同时筹备的展会最多 {max} 个，请调整展会日期或删除已有展会"
@@ -1108,7 +1173,9 @@
       "loginRequired": "请先登录后再操作",
       "notFound": "报名记录不存在或已撤销",
       "notStarted": "报名尚未开始",
-      "unavailable": "该展会当前不可报名"
+      "unavailable": "该展会当前不可报名",
+      "claimTaken": "该报名已关联到其他账号",
+      "queryLinkInvalid": "查询链接无效或已失效"
     },
     "review": {
       "duplicateStatusChange": "该用户在这场展会上已有未撤销的报名，不能把这条改成此状态",
@@ -1170,7 +1237,11 @@
       "userStatusInvalid": "账号状态只能是 正常 / 受限 / 封禁",
       "downloadSourceInvalid": "下载源只能是直链或 GitHub 仓库",
       "downloadUrlInvalid": "下载地址需要以 http:// 或 https:// 开头",
-      "downloadRepoInvalid": "GitHub 仓库需要写成 owner/repo"
+      "downloadRepoInvalid": "GitHub 仓库需要写成 owner/repo",
+      "agreementContentRequired": "开启用户协议前请先上传 Markdown 正文",
+      "agreementInvalid": "用户协议设置格式不正确",
+      "agreementTooLong": "用户协议正文过长（最多 {max} 字符）",
+      "logsInvalid": "日志设置格式不正确"
     },
     "users": {
       "cannotChangeOwnRole": "不能修改自己的权限",
@@ -1216,8 +1287,9 @@
       "timeFormat": "{label}格式应为 09:00-17:30",
       "tooLong": "{label}最多 {max} 个字符",
       "userStatusInvalid": "账号状态只能是 active / limited / banned",
-      "usernameCharset": "用户名只能包含字母、数字、下划线、点或横线",
-      "usernameLength": "用户名长度需在 {min}-{max} 个字符之间"
+      "usernameCharset": "用户名只能包含中文、字母、数字、下划线、点或横线",
+      "usernameLength": "用户名长度需在 {min}-{max} 个字符之间",
+      "endDateBeforeStart": "闭展日期不能早于开展日期"
     }
   },
   "settings": {
@@ -1337,6 +1409,83 @@
       "active": "正常",
       "banned": "封禁",
       "limited": "受限"
+    }
+  },
+  "share": {
+    "qrTitle": "分享展会",
+    "qrLabel": "展会报名二维码",
+    "save": "保存到本地",
+    "saving": "保存中…",
+    "saved": "展会二维码已保存",
+    "saveFailed": "保存失败，请稍后重试",
+    "hint": "扫码打开报名页，保存图片后可转发给他人",
+    "qrErrorHint": "{error}，请关闭后重试"
+  },
+  "picker": {
+    "selectDate": "选择日期",
+    "selectTime": "选择时间",
+    "clear": "清除",
+    "today": "今天",
+    "hour": "小时",
+    "hourUnit": "时",
+    "minute": "分钟",
+    "minuteUnit": "分"
+  },
+  "agreement": {
+    "title": "用户协议",
+    "loading": "正在加载用户协议…",
+    "loadFailed": "用户协议加载失败",
+    "disabledTitle": "用户协议暂未开启",
+    "disabledDescription": "管理员还没有开启用户协议，暂无内容可查看。",
+    "emptyTitle": "用户协议暂未设置",
+    "emptyDescription": "管理员还没有上传用户协议内容，请稍后再来。",
+    "versionDate": "第 {version} 版 · {date}",
+    "updatedOnly": "更新于 {date}",
+    "consentPrefix": "我已阅读并同意",
+    "consentLink": "《用户协议》",
+    "consentRequired": "请先阅读并同意《用户协议》",
+    "entry": "查看用户协议",
+    "prompt": {
+      "title": "用户协议更新",
+      "message": "用户协议已更新到第 {version} 版（{date}），请阅读并同意最新版本后继续使用。",
+      "messageNoDate": "用户协议已更新到第 {version} 版，请阅读并同意最新版本后继续使用。",
+      "view": "查看用户协议",
+      "disagree": "不同意并退出",
+      "agree": "同意",
+      "agreeFailed": "同意失败，请稍后重试",
+      "exitUnavailable": "无法自动关闭应用，请手动退出"
+    },
+    "versionOnly": "第 {version} 版"
+  },
+  "logs": {
+    "title": "最近日志",
+    "entry": "查看最近日志",
+    "filter": "日志级别",
+    "level": {
+      "all": "全部",
+      "info": "信息",
+      "warn": "警告",
+      "error": "错误"
+    },
+    "stats": {
+      "title": "日志概况",
+      "count": "已存 {count} 条",
+      "usage": "已用 {used} / 上限 {limit}",
+      "usageNoLimit": "已用 {used}"
+    },
+    "loadFailed": "日志加载失败",
+    "empty": "还没有日志",
+    "emptyFiltered": "这个级别还没有日志",
+    "recentHint": "只显示最近 100 条日志",
+    "meta": {
+      "category": "分类：{value}",
+      "actor": "操作人：{value}",
+      "ip": "IP：{value}",
+      "status": "HTTP {value}"
+    },
+    "actor": {
+      "system": "系统",
+      "guest": "访客"
     }
   }
 }

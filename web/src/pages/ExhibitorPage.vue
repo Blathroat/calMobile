@@ -4,7 +4,12 @@
  *
  * 卡片上「查看报名」「编辑展会」「复制链接」排在同一行。点卡片主体进入展会详情。
  * 都属于展会的配置，统一收进「编辑展会」的二级界面，卡片保持清爽。
- * 顶部提供「核销报名码」，展商在现场扫描用户报名详情里的二维码即可完成核销。
+ * 卡片主体右侧的二维码按钮打开「分享展会」抽屉：二维码内容就是报名站分享链接，
+ * 可保存成透明背景的 PNG 发给别人。顶部提供「核销报名码」，展商在现场扫描用户
+ * 报名详情里的二维码即可完成核销。
+ *
+ * 「复制链接」点击即复制，不再弹手动复制面板：优先 Clipboard API，失败时
+ * `services/clipboard.ts` 用隐藏 textarea 兜底，两条路都失败才提示重试。
  *
  * 受限账号（`can.limited`）不能发布 / 修改 / 删除展会、不能改报名设置、不能核销，
  * 后端对这些写操作一律 403。入口提前置灰并说明原因，而不是让展商填完表单才吃 403；
@@ -21,12 +26,14 @@ import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
+import { copyText } from '@/services/clipboard';
 import { registrationLink } from '@/services/registration-link';
 import { modeLabel, statusTone } from '@/services/status';
 import AppIcon from '@/components/AppIcon.vue';
 import HintNote from '@/components/HintNote.vue';
 import SegControl from '@/components/SegControl.vue';
 import MeetingInbox from '@/components/MeetingInbox.vue';
+import ShareQrSheet from '@/components/ShareQrSheet.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MediaBox from '@/components/MediaBox.vue';
@@ -104,24 +111,41 @@ function openExhibitionForm(id: unknown): void {
 /** 核销报名码：受限账号进得去页面也提交不了，入口就在这里挡住。 */
 const joinLinkMissing = t('exhibition.detail.registrationSiteMissing');
 const joinLinkCopied = t('exhibitor.registrationLinkCopied');
+const joinLinkCopyFailed = t('exhibitor.copyLinkFailed');
 const joinLinkCopy = t('exhibitor.copyLink');
 
+/** 复制报名链接：点击即复制，失败才提示，不再弹手动复制面板。 */
 async function copyJoinLink(id: unknown): Promise<void> {
   const link = registrationLink(bootstrap.publicBaseUrl, id);
   if (!link) {
     toast(joinLinkMissing, 'error');
     return;
   }
-  try {
-    await navigator.clipboard.writeText(link);
+  if (await copyText(link)) {
     toast(joinLinkCopied);
-  } catch {
-    openSheet({
-      title: joinLinkCopy,
-      message: link,
-      actions: [{ label: t('common.cancel'), onClick: (close) => close() }],
-    });
+    return;
   }
+  toast(joinLinkCopyFailed, 'error');
+}
+
+/** 分享展会：抽屉里展示报名二维码，可保存成透明背景 PNG。没配报名站地址时不打开空二维码。 */
+function openShareQr(item: Exhibition): void {
+  const link = registrationLink(bootstrap.publicBaseUrl, item.id);
+  if (!link) {
+    toast(joinLinkMissing, 'error');
+    return;
+  }
+  openSheet({
+    title: t('share.qrTitle'),
+    component: ShareQrSheet,
+    // 面板状态是全局响应式的：只传字符串快照，避免把会变的共享对象/ref 包成代理。
+    props: {
+      text: link,
+      title: String(item.title ?? ''),
+      fileName: `exhibition-qr-${String(item.id)}.png`,
+    },
+    // 保存与关闭并排画在内容组件里（见 ShareQrSheet），这里不再追加动作栏。
+  });
 }
 
 function openCheckin(): void {
@@ -211,37 +235,52 @@ usePullRefresh(
     <!-- 每张卡只有一层纸：上半整块可点进详情，一条分隔线下面放展会配置动作 -->
     <div class="list" data-gap="sm">
       <div v-for="item in items" :key="String(item.id)" class="card">
-        <button
-          class="exh-main"
-          type="button"
-          data-pressable="true"
-          :aria-label="t('exhibition.list.viewAria', { title: item.title })"
-          @pointerdown="warm(item.id)"
-          @click="router.push(`/detail/${item.id}`)"
-        >
-          <MediaBox
-            :src="coverOf(item.imageUri)"
-            class-name="thumb thumb-cover exh-thumb"
-            :alt="String(item.title || '')"
-          />
-          <span class="row-copy">
-            <strong class="row-title exh-title">{{ item.title }}</strong>
-            <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
-            <span class="row-meta truncate">{{ item.venue }}</span>
-            <!-- 状态与报名数合成一条信号灯：既没有「左边空着」的单独一行，
-                 也不会和标题抢宽度。 -->
-            <StatusTag
-              :text="
-                t('exhibition.list.statusWithRegistrations', {
-                  status: modeLabel(String(item.statusCode ?? '')),
-                  count: String(item.registrationCount ?? 0),
-                })
-              "
-              :tone="statusTone(String(item.statusCode || ''))"
+        <!-- 主体与二维码按钮叠在同一块可点区域上：按钮绝对定位在右侧垂直居中，
+             主体的右内距给它让出 44px 触控位，标题与状态不会被压住。
+             按钮不能放进 `.exh-main` 里——那本身是个 <button>，按钮不能嵌套。 -->
+        <div class="exh-head">
+          <button
+            class="exh-main"
+            type="button"
+            data-pressable="true"
+            :aria-label="t('exhibition.list.viewAria', { title: item.title })"
+            @pointerdown="warm(item.id)"
+            @click="router.push(`/detail/${item.id}`)"
+          >
+            <MediaBox
+              :src="coverOf(item.imageUri)"
+              class-name="thumb thumb-cover exh-thumb"
+              :alt="String(item.title || '')"
             />
-            <span v-if="item.qrEnabled === true" class="row-meta">{{ t('exhibitor.qrEnabled') }}</span>
-          </span>
-        </button>
+            <span class="row-copy">
+              <strong class="row-title exh-title">{{ item.title }}</strong>
+              <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
+              <span class="row-meta truncate">{{ item.venue }}</span>
+              <!-- 状态与报名数合成一条信号灯：既没有「左边空着」的单独一行，
+                   也不会和标题抢宽度。 -->
+              <StatusTag
+                :text="
+                  t('exhibition.list.statusWithRegistrations', {
+                    status: modeLabel(String(item.statusCode ?? '')),
+                    count: String(item.registrationCount ?? 0),
+                  })
+                "
+                :tone="statusTone(String(item.statusCode || ''))"
+              />
+              <span v-if="item.qrEnabled === true" class="row-meta">{{ t('exhibitor.qrEnabled') }}</span>
+            </span>
+          </button>
+
+          <button
+            class="icon-hit exh-qr"
+            type="button"
+            :aria-label="t('exhibitor.shareQr')"
+            :title="t('exhibitor.shareQr')"
+            @click="openShareQr(item)"
+          >
+            <AppIcon name="qr" />
+          </button>
+        </div>
 
         <div class="action-row">
           <button
@@ -290,19 +329,35 @@ usePullRefresh(
 <style scoped>
 /* 缩略图按设计稿的 44×78 竖版；全局 .thumb 是 36×64，只在本页放大一档。 */
 .exh-thumb {
-  width: 44px;
+  /* 高度固定，宽度由海报比例（9:16～3:4 纵向）算出来；卡片高度不变。 */
   height: 78px;
 }
 
-/* 卡片主体：整块可点，纸面的内距交给外层 .card，这里只排内容 */
+/* 卡片上半：主体 + 右侧二维码按钮。相对定位只给按钮当定位基准，不改卡片原有的网格排布。 */
+.exh-head {
+  position: relative;
+  min-width: 0;
+}
+
+/* 卡片主体：整块可点，纸面的内距交给外层 .card，这里只排内容。
+   右侧留出二维码按钮的 44px 触控位加一档间距，长标题不会钻到按钮底下。 */
 .exh-main {
   display: flex;
   align-items: flex-start;
   gap: var(--s3);
   width: 100%;
   min-width: 0;
-  padding: 0;
+  padding: 0 calc(var(--touch) + var(--s2)) 0 0;
   text-align: start;
+}
+
+/* 二维码分享按钮：贴右侧垂直居中，命中区 44px（.icon-hit 的尺寸），
+   视觉上仍是一枚细线图标，不遮挡标题、日期与状态。 */
+.exh-qr {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 /* 标题最多两行：320 宽下也不会被截成四五个字。 */

@@ -17,7 +17,12 @@ import type { ServerSettings } from '../config/migrate.js';
 
 export type Limits = ServerSettings['limits'];
 
-const usernamePattern = /^[A-Za-z0-9_.-]+$/;
+/**
+ * 用户名允许「正常的 UTF-8 字符」：Unicode 字母、数字与组合符（中文、日文、韩文、拉丁及
+ * 其它文字），外加 `_` `.` `-`。空白、控制字符、标点与 emoji 不在允许集合内。
+ * 与前端 `web/src/services/validate.ts` 的 `PATTERNS.username` 必须完全一致。
+ */
+const usernamePattern = /^[\p{L}\p{N}\p{M}_.-]+$/u;
 
 export const loginSchema = z
   .object({
@@ -79,7 +84,7 @@ export function registerSchema(limits: Limits) {
         if (!usernamePattern.test(value)) {
           ctx.addIssue({
             code: 'custom',
-            message: '用户名只能包含字母、数字、下划线、点或横线',
+            message: '用户名只能包含中文、字母、数字、下划线、点或横线',
             params: issueParams('validation.usernameCharset'),
           });
         }
@@ -266,10 +271,11 @@ export const serverSettingsPatchSchema = z
     bio: z.unknown(),
     region: z.unknown(),
     answer: z.unknown(),
-    // 缺省展会封面（媒体短 URL）与「展商可同时筹备的展会数」上限（0 = 不限）
+    // 缺省展会封面（媒体短 URL）与展商策略：可同时筹备的展会 / 私人会议数、单个展会最长天数
     defaultCover: z.unknown(),
     maxFutureExhibitions: z.unknown(),
     maxFutureMeetings: z.unknown(),
+    maxExhibitionDays: z.unknown(),
     inviteUses: z.unknown(),
     inviteValidHours: z.unknown(),
     inviteDurationDays: z.unknown(),
@@ -278,6 +284,11 @@ export const serverSettingsPatchSchema = z
     downloadSource: z.unknown(),
     downloadUrl: z.unknown(),
     downloadRepo: z.unknown(),
+    // 用户协议：整段提交 { enabled, content }。
+    agreement: z.unknown(),
+    // 操作日志存储上限：整段 { storageMb } 或扁平 logsStorageMb。
+    logs: z.unknown(),
+    logsStorageMb: z.unknown(),
     notify: notifySchema,
   })
   .partial()
@@ -463,6 +474,8 @@ export function exhibitionInputSchema(
     venue?: string | null;
     category?: string | null;
     exhibition_date?: string | null;
+    /** 闭展日期；NULL 表示单日展会。 */
+    exhibition_end_date?: string | null;
     time?: string | null;
     status?: string | null;
     registration_start?: string | null;
@@ -471,6 +484,8 @@ export function exhibitionInputSchema(
     description_format?: string | null;
     image_uri?: string | null;
     exhibitor_note?: string | null;
+    /** 报名注意事项（审核通过 / 已参加的报名者可见）。 */
+    registration_notice?: string | null;
     qr_enabled?: boolean | null;
     allow_cancel?: boolean | null;
   },
@@ -482,6 +497,7 @@ export function exhibitionInputSchema(
       venue: textSchema({ label: '展会地点', max: limits.exhibitionVenue, required: false }),
       category: textSchema({ label: '展会分类', max: limits.category, required: false }),
       date: isoDateSchema({ label: '展会日期', required: true }),
+      endDate: isoDateSchema({ label: '闭展日期' }),
       time: timeRangeSchema({ label: '展会时间', required: true }),
       status: inputString,
       registrationStart: isoDateSchema({ label: '报名开始日期' }),
@@ -490,6 +506,8 @@ export function exhibitionInputSchema(
       descriptionFormat: descriptionFormatSchema(),
       imageUri: inputString,
       exhibitorNote: inputString,
+      // 选填长文本；固定 2000 字上限，前端输入框同长度。
+      registrationNotice: textSchema({ label: '注意事项', max: 2000, required: false }),
       qrEnabled: boolSchema(false),
       allowCancel: z.preprocess((value) => {
         if (value === undefined || value === null || value === '') return undefined;
@@ -535,6 +553,16 @@ export function exhibitionInputSchema(
           params: issueParams('validation.registrationEndBeforeStart'),
         });
       }
+      // 闭展可以留空（单日展会）；只填了闭展时也至少不能早于开展。
+      const endDate = source.endDate ?? existing?.exhibition_end_date ?? '';
+      if (date && endDate && endDate < date) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['endDate'],
+          message: '闭展日期不能早于开展日期',
+          params: issueParams('validation.endDateBeforeStart'),
+        });
+      }
       const mappedStatus =
         source.status && source.status.trim() ? labels.toExhibitionStatus(source.status) : existing?.status || 'review';
       if (!mappedStatus)
@@ -551,6 +579,7 @@ export function exhibitionInputSchema(
       const time = source.time ?? existing?.time ?? '';
       const registrationStart = source.registrationStart ?? existing?.registration_start ?? '';
       const registrationEnd = source.registrationEnd ?? existing?.registration_end ?? '';
+      const endDate = source.endDate ?? existing?.exhibition_end_date ?? '';
       const description = source.description ?? existing?.description ?? '';
       const requestedFormat = source.descriptionFormat ?? existing?.description_format ?? 'md';
       const descriptionFormat =
@@ -568,10 +597,12 @@ export function exhibitionInputSchema(
         status: mappedStatus,
         registrationStart,
         registrationEnd,
+        endDate,
         description,
         descriptionFormat,
         imageUri: source.imageUri ?? existing?.image_uri ?? '',
         exhibitorNote: source.exhibitorNote ?? (creating ? '主办方公开信息' : (existing?.exhibitor_note ?? '')),
+        registrationNotice: source.registrationNotice ?? (creating ? '' : (existing?.registration_notice ?? '')),
         qrEnabled: source.qrEnabled ?? Boolean(existing?.qr_enabled),
         allowCancel: source.allowCancel ?? (existing ? existing.allow_cancel !== false : true),
         fields: Array.isArray(source.fields) && source.fields.length > 0 ? source.fields : null,
@@ -589,6 +620,21 @@ export function registrationSchema() {
   });
 }
 export type RegistrationInput = z.infer<ReturnType<typeof registrationSchema>>;
+
+/**
+ * 匿名报名（报名站分享链接、未登录）：没有账号可填身份，只有姓名必填。
+ *
+ * 与登录报名的差别只有两处：`visitorName` 直接取用户输入的姓名（上限沿用昵称，
+ * 与个人资料同一把尺子），不再要求 `visitorType` —— 服务端把它记成 `guest`。
+ * 收集项、展会窗口、额度这些业务校验在路由里与登录报名走同一段代码。
+ */
+export function guestRegistrationSchema(limits: Limits) {
+  return z.object({
+    exhibitionId: textSchema({ label: '展会', required: false }),
+    visitorName: textSchema({ label: '姓名', max: limits.nickname }),
+    answers: inputString,
+  });
+}
 export const registrationTargetSchema = z.object({ exhibitionId: textSchema({ required: false }) });
 export const reviewStatusSchema = z.object({
   status: vocabularySchema(
@@ -598,3 +644,5 @@ export const reviewStatusSchema = z.object({
   ),
 });
 export const checkinSchema = z.object({ code: textSchema({ required: false }) });
+/** 同意用户协议：version 必须是服务端当前版本；页面从 /agreement 或 bootstrap 拿到后再回传。 */
+export const agreementAcceptSchema = z.object({ version: z.number().int().nonnegative() });

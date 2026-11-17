@@ -14,7 +14,6 @@ import { t } from '@/i18n';
 
 const COPY = {
   close: t('media.closeImage'),
-  hint: t('media.viewerHint'),
 };
 
 const props = withDefaults(
@@ -227,7 +226,6 @@ onBeforeUnmount(() => {
       <button class="viewer-close" type="button" :aria-label="COPY.close" @click="emit('close')">
         <AppIcon name="close" />
       </button>
-      <p class="viewer-hint">{{ COPY.hint }}</p>
     </div>
   </Teleport>
 </template>
@@ -253,6 +251,9 @@ onBeforeUnmount(() => {
 }
 
 .viewer-image {
+  /* 灯箱只做等比缩放：整张海报放进屏幕，高度跟着图片比例走，不裁切、不拉变形。 */
+  width: auto;
+  height: auto;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -266,22 +267,15 @@ onBeforeUnmount(() => {
   position: absolute;
   top: calc(var(--s4) + var(--safe-top));
   right: var(--s4);
+  /* 只留一个叉：不要圆形底、不要描边；命中区仍是 44px。 */
   width: var(--touch);
   height: var(--touch);
   display: grid;
   place-items: center;
-  border: var(--hairline) solid rgb(255 255 255 / 28%);
-  border-radius: var(--r-pill);
-  background: rgb(0 0 0 / 42%);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--on-dark);
-}
-
-.viewer-hint {
-  position: absolute;
-  inset-inline: 0;
-  bottom: calc(var(--s4) + var(--safe-bottom));
-  color: rgb(255 255 255 / 72%);
-  font-size: var(--fs-meta);
-  text-align: center;
 }
 </style>

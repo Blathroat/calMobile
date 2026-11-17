@@ -253,3 +253,73 @@ test('个人配色的非法下标按规则失败，不静默夹取', async () =>
   }
   // 合法值（含字符串 '3'）会走到 UPDATE，unit 项目不连库，因此由契约测试覆盖。
 });
+
+/**
+ * 用户协议：开启必须有正文；正文变化才升版本（只拨开关不升），超出长度按业务失败拒绝。
+ * 落库与接口行为由契约测试覆盖（`server/src/test/agreement.test.ts`）。
+ */
+test('用户协议开启时正文必填，正文变化才升版本', () => {
+  assert.throws(
+    () => applyServerPatch(defaults(), { agreement: { enabled: true, content: '' } }),
+    /开启用户协议前请先上传/,
+  );
+  assert.throws(
+    () => applyServerPatch(defaults(), { agreement: { enabled: true } }),
+    /开启用户协议前请先上传/,
+    '只打开开关、库里又没有旧正文时也要拒绝',
+  );
+
+  const first = applyServerPatch(defaults(), { agreement: { enabled: true, content: '# 条款 第一条' } });
+  assert.equal(first.agreement.enabled, true);
+  assert.equal(first.agreement.version, 1);
+  assert.ok(first.agreement.updatedAt.length > 0, '首次设置正文要写更新时间');
+
+  const same = applyServerPatch(first, { agreement: { enabled: true, content: '# 条款 第一条' } });
+  assert.equal(same.agreement.version, 1);
+
+  const disabled = applyServerPatch(same, { agreement: { enabled: false } });
+  assert.equal(disabled.agreement.version, 1);
+  assert.equal(disabled.agreement.content, '# 条款 第一条');
+
+  const updated = applyServerPatch(disabled, { agreement: { content: '# 条款 v2' } });
+  assert.equal(updated.agreement.version, 2);
+  assert.equal(updated.agreement.content, '# 条款 v2');
+  // CI 上两次保存可能落在同一毫秒，不能要求时间戳严格不同；但更新后不能倒退。
+  assert.ok(updated.agreement.updatedAt >= first.agreement.updatedAt, '更新时间不能倒退');
+});
+
+test('用户协议非法入参与超长正文按业务失败返回', () => {
+  assert.throws(() => applyServerPatch(defaults(), { agreement: 'x' }), /格式不正确/);
+  assert.throws(
+    () => applyServerPatch(defaults(), { agreement: { enabled: 'yes', content: 'x' } }),
+    /只能是 true 或 false/,
+  );
+  assert.throws(
+    () => applyServerPatch(defaults(), { agreement: { enabled: true, content: 'x'.repeat(200_001) } }),
+    /正文过长/,
+  );
+  assert.equal(applyServerPatch(defaults(), {}).agreement.enabled, false, '没提交就不动');
+});
+
+/**
+ * 操作日志存储上限：夹到 1～10240 MB，不静默写成 0 或超大值。
+ * 落库与清理行为由契约测试覆盖（`server/src/test/logs.test.ts`）。
+ */
+test('日志存储上限收敛到 1～10240 MB', () => {
+  assert.equal(applyServerPatch(defaults(), { logs: { storageMb: 128 } }).logs.storageMb, 128);
+  assert.equal(applyServerPatch(defaults(), { logs: { storageMb: 0 } }).logs.storageMb, 1);
+  assert.equal(applyServerPatch(defaults(), { logs: { storageMb: -5 } }).logs.storageMb, 1);
+  assert.equal(applyServerPatch(defaults(), { logs: { storageMb: 99999 } }).logs.storageMb, 10240);
+  assert.equal(applyServerPatch(defaults(), { logsStorageMb: 512 }).logs.storageMb, 512, '扁平写法也认');
+  assert.equal(applyServerPatch(defaults(), {}).logs.storageMb, 64, '默认保留 64 MB');
+  assert.throws(() => applyServerPatch(defaults(), { logs: 'x' }), /格式不正确/);
+});
+
+/** 展商策略：单个展会最长持续天数 0～365，0 表示不限（与前端表单上限一致）。 */
+test('单个展会最大持续天数收敛到 0～365', () => {
+  assert.equal(applyServerPatch(defaults(), { maxExhibitionDays: 7 }).exhibitor.maxExhibitionDays, 7);
+  assert.equal(applyServerPatch(defaults(), { maxExhibitionDays: 0 }).exhibitor.maxExhibitionDays, 0);
+  assert.equal(applyServerPatch(defaults(), { maxExhibitionDays: -5 }).exhibitor.maxExhibitionDays, 0);
+  assert.equal(applyServerPatch(defaults(), { maxExhibitionDays: 999 }).exhibitor.maxExhibitionDays, 365);
+  assert.equal(applyServerPatch(defaults(), {}).exhibitor.maxExhibitionDays, 0, '默认不限');
+});

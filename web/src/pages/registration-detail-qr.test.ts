@@ -52,7 +52,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-async function mountPage(): Promise<HTMLElement> {
+async function mountDetail(): Promise<void> {
   const pinia = createPinia();
   setActivePinia(pinia);
   const router = createRouter({
@@ -65,6 +65,12 @@ async function mountPage(): Promise<HTMLElement> {
   await router.push('/registration-detail/reg-1');
   app = createApp(RegistrationDetailPage).use(pinia).use(router);
   app.mount('#qr-test');
+  // 等页面从「加载中」进入正文；有报名码时二维码会稍后再出现。
+  await vi.waitFor(() => expect(document.querySelector('.reg-status-word')).not.toBeNull());
+}
+
+async function mountPage(): Promise<HTMLElement> {
+  await mountDetail();
   await vi.waitFor(() => expect(document.querySelector('[data-action="check-in-qr"]')).not.toBeNull());
   return document.querySelector<HTMLElement>('[data-action="check-in-qr"]')!;
 }
@@ -81,10 +87,64 @@ async function hold(node: Element): Promise<void> {
   await nextTick();
 }
 
+describe('报名详情 · 注意事项与状态按钮', () => {
+  it('已参加的撤销按钮显示中文，并展示注意事项', async () => {
+    vi.mocked(api.registrations.get).mockResolvedValue({
+      found: true,
+      registration: {
+        id: 'reg-1',
+        exhibitionId: 'exh-1',
+        exhibitionTitle: '秋季展会',
+        visitorName: '张三',
+        statusCode: 'attended',
+        checkInCode: '',
+        exhibitionNotice: '请携带身份证\n签到地点：A 口服务台',
+      },
+    });
+    await mountDetail();
+
+    const danger = document.querySelector<HTMLButtonElement>('#app-foot .cta.danger');
+    expect(danger?.textContent?.trim()).toBe('已参加');
+    expect(document.body.textContent).not.toContain('attended');
+
+    const card = document.querySelector<HTMLElement>('[data-action="registration-notice"]');
+    expect(card).not.toBeNull();
+    expect(card?.textContent).toContain('注意事项');
+    expect(card?.textContent).toContain('请携带身份证');
+  });
+
+  it('未通过审核时即使接口带了注意事项也不展示卡片', async () => {
+    vi.mocked(api.registrations.get).mockResolvedValue({
+      found: true,
+      registration: {
+        id: 'reg-1',
+        exhibitionId: 'exh-1',
+        exhibitionTitle: '秋季展会',
+        visitorName: '张三',
+        statusCode: 'pending',
+        checkInCode: '',
+        exhibitionNotice: '未通过前不该显示',
+      },
+    });
+    await mountDetail();
+    expect(document.querySelector('[data-action="registration-notice"]')).toBeNull();
+  });
+});
+
 describe('报名二维码长按保存', () => {
   it('状态按 code 查表显示中文文案', async () => {
     await mountPage();
     expect(document.body.textContent).toContain('已通过');
+  });
+
+  it('当前状态卡片只保留大字状态，不再重复信号灯状态', async () => {
+    await mountPage();
+    const word = document.querySelector('.reg-status-word');
+    expect(word?.textContent?.trim()).toBe('已通过');
+    const card = word?.closest('.card');
+    expect(card?.querySelector('.status-tag')).toBeNull();
+    expect(card?.querySelector('.reg-status-tag')).toBeNull();
+    expect(card?.textContent).toContain('展商已完成审核');
   });
 
   it('二维码下方给出长按提示', async () => {

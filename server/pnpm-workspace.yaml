@@ -1,6 +1,10 @@
 # pnpm 10+ 用 allowBuilds 批准安装脚本；onlyBuiltDependencies 限制「允许跑脚本」的包。
+# pnpm 12 的 strictDepBuilds 会把「未批准的安装脚本」当成安装失败：
+# ip2region-ts 的 preinstall 只做 packageManager 校验（npx only-allow pnpm），
+# xdb 数据与 dist 随包发布，不需要执行脚本，这里显式忽略。
 allowBuilds:
   esbuild: true
+  ip2region-ts: false
 minimumReleaseAgeExclude:
   - dotenv@18.0.8
 onlyBuiltDependencies:

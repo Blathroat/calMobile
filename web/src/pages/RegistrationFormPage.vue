@@ -7,6 +7,10 @@
  *
  * 从报名详情带 `?registrationId=` 进来是「修改报名」：按收集项标题回填已有答案，
  * 提交仍是一次新的报名写入（与旧实现一致）。
+ *
+ * 报名站分享链接（`isJoinSurface`）且未登录时是**匿名报名**：应用内与已登录的报名站用户
+ * 仍走原来的流程。匿名模式在收集项上方多一项必填「姓名」，提交不需要登录；
+ * 成功后拿到的查询凭据只在响应里出现一次，页面直接把他送到带凭据的状态页，不冒充「我的活动」。
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -16,7 +20,7 @@ import { useAsync } from '@/composables/useAsync';
 import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { answerDocument } from '@domain/answer-document';
-import { limit } from '@/services/validate';
+import { check, limit } from '@/services/validate';
 import { EXHIBITION_STATUS, FIELD_TYPE, modeLabel, statusTone } from '@/services/status';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -68,6 +72,16 @@ const registrationId = computed(() => String(route.query.registrationId ?? ''));
  */
 const registerLimited = computed(() => session.loggedIn === true && session.user.can?.register === false);
 
+/**
+ * 匿名报名：报名站分享链接 + 未登录。应用内永远不是匿名（应用里进这一屏必须已登录），
+ * 报名站里已登录的用户也按账号报名，与原来的行为一致。
+ */
+const anonymous = computed(() => isJoinSurface && session.loggedIn === false);
+/** 匿名报名没有账号可读姓名，必须自己填；上限与个人资料的昵称同一把尺子。 */
+const guestName = ref('');
+const guestNameMax = computed(() => limit('nickname', 20));
+const nameError = ref('');
+
 /** 答案：文本与单选存字符串，多选存字符串数组。 */
 const answers = reactive<Record<string, string | string[]>>({});
 /** 行内校验错误，键是收集项标题。 */
@@ -88,6 +102,13 @@ const submitLabel = computed(() => {
   if (!success.value) return t('registration.form.submit');
   return approved.value ? t('registration.form.submittedApproved') : t('registration.form.submittedPending');
 });
+/** 提交成功后的说明：匿名报名没有「我的活动」，只能用保存的查询链接看状态。 */
+const successHint = computed(() => {
+  if (anonymous.value) {
+    return approved.value ? t('registration.form.guestApprovedHint') : t('registration.form.guestPendingHint');
+  }
+  return approved.value ? t('registration.form.autoApprovedHint') : t('registration.form.pendingHint');
+});
 
 onMounted(() => {
   if (!registerLimited.value) void load();
@@ -105,8 +126,9 @@ async function load(): Promise<void> {
   await query.run(async () => {
     const detail = await api.exhibitions.get(exhibitionId.value);
     // 展会不存在时不再去取报名，保持「找不到展会」这一条提示。
+    // 回填已有报名只在登录态下有意义：匿名报名没有「修改报名」这个入口。
     let existing: Registration | null = null;
-    if (detail?.found && registrationId.value) {
+    if (detail?.found && registrationId.value && session.loggedIn) {
       const record = await api.registrations.get(registrationId.value);
       existing = record?.found ? (record.registration ?? null) : null;
     }
@@ -178,6 +200,21 @@ function clearFieldError(title: string): void {
   if (fieldErrors[title] !== undefined) delete fieldErrors[title];
 }
 
+/** 匿名报名的姓名输入：清掉上一次的校验错误。 */
+function onGuestNameInput(event: Event): void {
+  guestName.value = (event.target as HTMLInputElement).value;
+  if (nameError.value) nameError.value = '';
+}
+
+/**
+ * 姓名校验失败时把焦点移回输入框。
+ * 单独一个函数是为了避开 `submit()` 里 `const document` 对全局 document 的遮蔽。
+ */
+async function focusGuestName(): Promise<void> {
+  await nextTick();
+  document.getElementById('registration-guest-name')?.focus();
+}
+
 function onTextInput(field: FieldDef, event: Event): void {
   answers[field.title] = (event.target as HTMLInputElement).value;
   clearFieldError(field.title);
@@ -207,7 +244,21 @@ async function submit(): Promise<void> {
   const item = exhibition.value;
   if (busy.value || success.value || !item) return;
   error.value = '';
+  nameError.value = '';
   for (const key of Object.keys(fieldErrors)) delete fieldErrors[key];
+
+  // 匿名报名先把姓名拦下来：别让用户填完一整页收集项才在提交时吃后端的必填错误。
+  if (anonymous.value) {
+    nameError.value = check(guestName.value, {
+      label: t('registration.form.name'),
+      required: true,
+      max: guestNameMax.value,
+    });
+    if (nameError.value) {
+      await focusGuestName();
+      return;
+    }
+  }
 
   const document = answerDocument({
     fields: fields.value,
@@ -234,8 +285,11 @@ async function submit(): Promise<void> {
   if (error.value) return;
 
   const profile = session.user;
-  const visitorName = String(profile.nickname || profile.username || t('registration.form.fallbackName'));
+  const visitorName = anonymous.value
+    ? guestName.value.trim()
+    : String(profile.nickname || profile.username || t('registration.form.fallbackName'));
   // 回传的是角色 code（协议值），不是展示文案：文案按 code 在展示处查表。
+  // 匿名报名没有账号可读身份，不传这一项，由服务端记成访客。
   const visitorType = String(profile.role || 'user');
 
   busy.value = true;
@@ -247,7 +301,7 @@ async function submit(): Promise<void> {
       time: item.time,
       day: item.day,
       visitorName,
-      visitorType,
+      ...(anonymous.value ? {} : { visitorType }),
       answers: document.text,
     });
     if (!result?.ok) {
@@ -257,10 +311,20 @@ async function submit(): Promise<void> {
     approved.value = result.autoApproved === true || item.statusCode === EXHIBITION_STATUS.REVIEW_OPTIONAL;
     success.value = true;
     toast(approved.value ? t('registration.form.submittedAndApproved') : t('registration.form.submitted'), 'success');
+    // 匿名报名：查询凭据只在这次的响应里出现一次，必须马上带进状态页链接里；
+    // 拿不到凭据时留在本页说明，不再冒充「已可以在我的活动里查看」。
+    const queryToken = anonymous.value ? String(result.queryToken || '') : '';
+    if (anonymous.value && !queryToken) {
+      error.value = t('registration.form.queryTokenMissing');
+      return;
+    }
+    const target = anonymous.value
+      ? `${paths.registrationStatus(item.id)}?token=${encodeURIComponent(queryToken)}`
+      : paths.registrations;
     // 提交成功后的短暂停留：定时器随页面一起取消，用户已经返回时不再被拉回列表。
     redirectTimer = window.setTimeout(() => {
       redirectTimer = undefined;
-      void router.replace(paths.registrations);
+      void router.replace(target);
     }, 900);
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason);
@@ -325,6 +389,23 @@ async function submit(): Promise<void> {
       <div v-if="joinDescription" class="rich-content" v-html="joinDescription" />
 
       <form id="registration-form" class="form" novalidate @submit.prevent="submit">
+        <!-- 匿名报名没有账号可读姓名，收集项上方补一项必填的「姓名」 -->
+        <div v-if="anonymous" class="field" :data-invalid="nameError ? 'true' : undefined">
+          <label class="reg-question" for="registration-guest-name">
+            {{ t('registration.form.name') }}<span class="required" aria-hidden="true"> *</span>
+          </label>
+          <input
+            id="registration-guest-name"
+            class="input"
+            type="text"
+            autocomplete="name"
+            :maxlength="guestNameMax"
+            :value="guestName"
+            @input="onGuestNameInput"
+          />
+          <p v-if="nameError" class="field-error" role="alert">{{ nameError }}</p>
+        </div>
+
         <template v-for="field in fields" :key="field.title">
           <!-- 单选：一组互斥选项 -->
           <fieldset
@@ -402,7 +483,7 @@ async function submit(): Promise<void> {
           v-if="success"
           tone="success"
           :title="approved ? t('registration.form.approved') : t('registration.form.submitted')"
-          :description="approved ? t('registration.form.autoApprovedHint') : t('registration.form.pendingHint')"
+          :description="successHint"
         />
         <p v-if="error" class="field-error" role="alert">{{ error }}</p>
         <button
@@ -428,7 +509,7 @@ async function submit(): Promise<void> {
 
 /* 缩略图按 44×78 展示（比列表里的 36×64 大一档）。 */
 .reg-thumb {
-  width: 44px;
+  /* 高度固定，宽度随海报比例变化，卡片高度不变。 */
   height: 78px;
 }
 

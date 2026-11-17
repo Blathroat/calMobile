@@ -85,6 +85,13 @@ app.get('/bootstrap', optionalAuthHono, async (c) => {
     // 报名站的规范来源。空串表示没配，客户端不得自行编造 127.0.0.1 链接。
     publicBaseUrl,
     privacyPolicyUrl,
+    // 用户协议：只下发开关与版本（登录/注册页据此决定是否展示勾选）；
+    // 正文走公开的 GET /agreement，避免每次启动都下载一遍全文。
+    agreement: {
+      enabled: settings.agreement.enabled,
+      version: settings.agreement.version,
+      updatedAt: settings.agreement.updatedAt,
+    },
     // 默认语言包名称和下载列表。正文在客户端本机，这里不下发。
     lang: langPacks,
   });

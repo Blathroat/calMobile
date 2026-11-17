@@ -11,6 +11,9 @@
  * `layout: 'list'` 把选项排成一列整行可点的行，`checked` 的那条右侧带对勾：
  * 用来表达「从一组互斥的值里选一个」（展会分类、调整权限），比一排胶囊更好扫。
  * `layout: 'close-below'` 把最后一颗按钮独占下一行并拉满宽度，用来放「关闭」。
+ *
+ * `dismissible: false` 关掉「点遮罩 / 按 Escape 关闭」：用户协议更新这类必须做出选择的
+ * 提示不能滑走，只能从按钮里选一条路。缺省为 true，已有面板行为不变。
  */
 import { markRaw, reactive, shallowReadonly, type Component } from 'vue';
 import { t } from '@/i18n';
@@ -33,6 +36,8 @@ export interface SheetState {
   props: Record<string, unknown>;
   layout: 'row' | 'stack' | 'list' | 'close-below';
   size: 'auto' | 'full';
+  /** 是否允许点遮罩 / 按 Escape 关闭；缺省 true。必须做出选择的提示传 false。 */
+  dismissible: boolean;
   closing: boolean;
   onClose?: () => void;
 }
@@ -58,6 +63,8 @@ export function openSheet(options: {
   props?: Record<string, unknown>;
   layout?: 'row' | 'stack' | 'list' | 'close-below';
   size?: 'auto' | 'full';
+  /** 是否允许点遮罩 / 按 Escape 关闭；缺省 true（只有必须做选择的提示才传 false）。 */
+  dismissible?: boolean;
   onClose?: () => void;
 }): void {
   state.current = {
@@ -68,6 +75,7 @@ export function openSheet(options: {
     props: options.props ?? {},
     layout: options.layout ?? 'row',
     size: options.size ?? 'auto',
+    dismissible: options.dismissible ?? true,
     closing: false,
     onClose: options.onClose,
   };

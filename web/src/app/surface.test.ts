@@ -7,8 +7,10 @@ describe('surface paths', () => {
     const app = surfacePaths(false);
     expect(app.home).toBe('/home');
     expect(app.registrations).toBe('/my-registrations');
+    expect(app.exhibitionDetail('exh-1')).toBe('/detail/exh-1');
     expect(app.registrationForm('exh-1')).toBe('/registration-form/exh-1');
     expect(app.registrationDetail('reg-1')).toBe('/registration-detail/reg-1');
+    expect(app.registrationStatus('reg-1')).toBe('/registration-detail/reg-1');
     expect(app.meetingDetail('meet-1')).toBe('/meeting-detail/meet-1');
     expect(app.meetingApply('usr-2')).toBe('/meeting-apply/usr-2');
   });
@@ -17,8 +19,10 @@ describe('surface paths', () => {
     const join = surfacePaths(true);
     expect(join.home).toBe('/mine');
     expect(join.registrations).toBe('/mine');
-    expect(join.registrationForm('exh-1')).toBe('/e/exh-1');
+    expect(join.exhibitionDetail('exh-1')).toBe('/e/exh-1');
+    expect(join.registrationForm('exh-1')).toBe('/e/exh-1/register');
     expect(join.registrationDetail('reg/1')).toBe('/mine/reg%2F1');
+    expect(join.registrationStatus('exh/1')).toBe('/e/exh%2F1/status');
     expect(join.meetingDetail('meet/1')).toBe('/mine/m/meet%2F1');
     expect(join.meetingApply('usr-2')).toBe('/m/usr-2');
   });

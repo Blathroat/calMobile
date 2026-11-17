@@ -5,11 +5,13 @@
  * 1. 先 `use(createPinia())` 再 `use(router)` —— 路由守卫、`/` 的 redirect、以及每个
  *    store 的首次访问都要读 Pinia 当前实例，Pinia 没先装就会在冷启动直接报错；
  * 2. 同步 `mount('#app')`，**不等** `bootApp()`：bootstrap 是一次远端请求，
- *    等它会把启动拖成白屏，所以先挂外壳——没有登录态提示时首帧按已知状态（空会话 → 登录页）落地；
- *    整页重载后本机留着登录态提示（见 `services/session-hint.ts`），路由守卫会先
- *    `await bootApp()` 恢复会话再落第一屏，这一条路本来就要等会话，不算额外拖慢；
+ *    等它会把启动拖成白屏，所以先挂外壳——没有会话时首帧以访客态落在 `/home`
+ *    （入口 redirect 固定，见 `app/router.ts`），不会先停在登录页；
+ *    整页重载后本机留着登录态提示（见 `services/session-hint.ts`），需要登录的页面
+ *    与 `/login` 的守卫会先 `await bootApp()` 恢复会话再落第一屏，这一条路本来就要等会话，
+ *    不算额外拖慢；
  * 3. mount 之后再异步 `bootApp()`（恢复会话 → 取 bootstrap → 落到各 store），
- *    成功后按下面的规则纠正入口；失败只记日志，登录页照常可用。
+ *    成功后按下面的规则纠正入口；失败只记日志，访客首页照常可用。
  *
  * 全局样式只在这里引一次（`tokens.css` 提供变量、`motion.css` 提供动效），
  * 页面与组件不再自己 import 全局样式；组件专用的样式写在各自 SFC 的 `<style>` 里。
@@ -31,16 +33,17 @@ createApp(App).use(createPinia()).use(router).mount('#app');
 
 /**
  * 首帧**不等** bootstrap：bootstrap 是一次远端请求，等它会把启动拖成白屏。
- * 没有登录态提示时，先按已知状态渲染入口页（未登录时是登录页），数据落定后再纠正一次入口
- * （有提示时守卫已经在 `/login` 上等过这次恢复，这里通常直接跳过）：
- * 服务端说已登录、而首帧停在登录页时，替换历史跳到首页（不新增返回栈）。
- * 失败时登录页照常可用，连接问题在提交表单时就地报错。
+ * 没有会话时首帧已经以访客态落在 `/home`，不需要纠正；数据落定后只处理一种情况：
+ * 服务端说已登录、而这一屏停在 `/login`（用户就停在登录页整页重载）或 `/`（redirect 还没
+ * 落定）时，替换历史跳到 redirect 记的原地址或首页（不新增返回栈）。
+ * 有登录态提示时，守卫已经在 `/login` 上等过这次恢复，这里通常直接跳过。
+ * 失败时访客首页照常可用，连接问题在提交表单时就地报错。
  */
 void bootApp()
   .then(() => {
     const session = useSessionStore();
     const current = router.currentRoute.value;
-    // 未登录：首帧停在登录页本来就是对的，不需要纠正
+    // 未登录：首帧落在首页就是访客态，不需要纠正
     if (!session.loggedIn) return;
     // 只纠正入口页：用户已经跳到别的页面时不要把他拽走
     if (current.path !== '/login' && current.path !== '/') return;

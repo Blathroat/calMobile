@@ -167,26 +167,27 @@ async function save(): Promise<void> {
       <span>{{ COPY.forcedHint }}</span>
     </div>
     <div class="card">
-      <div class="switch-row">
-        <span class="switch-copy">
-          <strong>{{ COPY.acceptLabel }}</strong>
-          <span class="row-meta">{{ locked ? COPY.forcedHint : COPY.acceptHint }}</span>
-        </span>
-        <label class="switch" for="meeting-accept">
-          <input id="meeting-accept" v-model="accept" type="checkbox" :disabled="locked" />
-          <span />
-        </label>
-      </div>
-      <hr class="divider" />
-      <div class="switch-row">
-        <span class="switch-copy">
-          <strong>{{ COPY.allowCancelLabel }}</strong>
-          <span class="row-meta">{{ COPY.allowCancelHint }}</span>
-        </span>
-        <label class="switch" for="meeting-allow-cancel">
-          <input id="meeting-allow-cancel" v-model="allowCancel" type="checkbox" :disabled="locked" />
-          <span />
-        </label>
+      <div class="meeting-settings-groups">
+        <div class="switch-row">
+          <span class="switch-copy">
+            <strong>{{ COPY.acceptLabel }}</strong>
+            <span class="row-meta">{{ locked ? COPY.forcedHint : COPY.acceptHint }}</span>
+          </span>
+          <label class="switch" for="meeting-accept">
+            <input id="meeting-accept" v-model="accept" type="checkbox" :disabled="locked" />
+            <span />
+          </label>
+        </div>
+        <div class="switch-row">
+          <span class="switch-copy">
+            <strong>{{ COPY.allowCancelLabel }}</strong>
+            <span class="row-meta">{{ COPY.allowCancelHint }}</span>
+          </span>
+          <label class="switch" for="meeting-allow-cancel">
+            <input id="meeting-allow-cancel" v-model="allowCancel" type="checkbox" :disabled="locked" />
+            <span />
+          </label>
+        </div>
       </div>
     </div>
     <div class="field">
@@ -219,3 +220,11 @@ async function save(): Promise<void> {
     </div>
   </Teleport>
 </template>
+
+<style>
+/* 卡片内分区只用留白：两个开关之间空一档，不再画分隔横线。 */
+.meeting-settings-groups {
+  display: grid;
+  gap: var(--s3);
+}
+</style>

@@ -14,7 +14,7 @@ import {
   exhibitionStatusSchema,
   type ExhibitionInput,
 } from '../domain/schemas.js';
-import { notFound } from '../domain/errors.js';
+import { badRequest, notFound } from '../domain/errors.js';
 import * as labels from '../domain/labels.js';
 import { releaseExhibitionMedia } from '../services/media-gc.js';
 import { jsonResponse, mutate } from '../http/respond.js';
@@ -92,10 +92,31 @@ async function monthMeetings(year: number, month: number, userId: string) {
   });
 }
 
-function monthSummary(item: ReturnType<typeof exhibitionPayload>) {
+/** 一个展会落在指定月份里的日期集合（跨月时只取本月覆盖到的天）。 */
+function exhibitionDaysInMonth(date: string, endDate: string, year: number, month: number): number[] {
+  const monthStart = Date.UTC(year, month - 1, 1);
+  const monthEnd = Date.UTC(year, month, 0);
+  const start = Date.parse(`${date}T00:00:00Z`);
+  const end = Date.parse(`${endDate || date}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
+  const from = Math.max(start, monthStart);
+  const to = Math.min(end, monthEnd);
+  if (from > to) return [];
+  const days: number[] = [];
+  for (let time = from; time <= to; time += 86_400_000) days.push(new Date(time).getUTCDate());
+  return days;
+}
+
+function monthSummary(item: ReturnType<typeof exhibitionPayload>, days: number[]) {
   return {
     id: item.id,
-    day: item.day,
+    // `day` 保留给还没更新快照的旧页面：取本月第一天有展会的日期（跨月展会因此落在 1 号）。
+    day: days[0] ?? item.day,
+    // 本月内这场展会覆盖的所有天：日历据此加粗日期、选中日据此展示展会卡片。
+    days,
+    date: item.date,
+    endDate: item.endDate,
+    dateLabel: item.dateLabel,
     title: item.title,
     time: item.time,
     venue: item.venue,
@@ -130,6 +151,21 @@ async function replaceFields(client: PoolClient, exhibitionId: string, fields: N
 async function exhibitionInput(body: Record<string, unknown> | null | undefined, existing?: ExhibitionRow | null) {
   const config = await limits();
   return parseSchema(exhibitionInputSchema(config, existing || undefined), body || {});
+}
+
+/**
+ * 单个展会最长持续天数：按开展日到闭展日（含两端）计算，只填开展日算 1 天。
+ * 上限由管理员在「管理-设置 → 展商相关」里配置，0 表示不限。
+ */
+async function assertExhibitionDuration(date: string, endDate: string): Promise<void> {
+  const config = await readSection('exhibitor');
+  const maxDays = Math.max(0, Math.trunc(Number(config.maxExhibitionDays) || 0));
+  if (maxDays <= 0 || !endDate) return;
+  const start = Date.parse(`${date}T00:00:00Z`);
+  const end = Date.parse(`${endDate}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return;
+  const days = Math.round((end - start) / 86_400_000) + 1;
+  if (days > maxDays) throw badRequest(`单个展会最长 ${maxDays} 天`, { code: 'exhibition.durationTooLong' });
 }
 function bodyRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -188,11 +224,17 @@ app.get('/month', optionalAuthHono, async (c) => {
   let day = month.day;
   const result = await query<ExhibitionRow>(
     `SELECT ${EXHIBITION_COLUMNS} ${EXHIBITION_FROM}
-    WHERE EXTRACT(YEAR FROM e.exhibition_date)::int = $1 AND EXTRACT(MONTH FROM e.exhibition_date)::int = $2 ORDER BY e.exhibition_date, e.id`,
+    WHERE e.exhibition_date < (make_date($1::int, $2::int, 1) + interval '1 month')::date
+      AND COALESCE(e.exhibition_end_date, e.exhibition_date) >= make_date($1::int, $2::int, 1)
+    ORDER BY e.exhibition_date, e.id`,
     [year, monthNumber],
   );
-  const items = result.rows.map(exhibitionPayload);
-  const eventDays = [...new Set(items.map((item) => item.day))].sort((a, b) => Number(a) - Number(b));
+  // 一场展会可能跨多天：按「开展～闭展」把它展开成本月覆盖的每一天。
+  const items = result.rows.map((row) => {
+    const item = exhibitionPayload(row);
+    return { item, days: exhibitionDaysInMonth(item.date, item.endDate, year, monthNumber) };
+  });
+  const eventDays = [...new Set(items.flatMap((entry) => entry.days))].sort((a, b) => a - b);
   if (day <= 0) day = eventDays[0] || 0;
   // 圆点只标「和当前用户有关」的日期；有展会的日期仍由 eventDays 表示（日历把日期加粗）。
   const viewer = userOf(c);
@@ -200,18 +242,27 @@ app.get('/month', optionalAuthHono, async (c) => {
   if (viewer?.userId) {
     const marked = await query<{ day: number }>(
       `SELECT DISTINCT day FROM (
-         SELECT EXTRACT(DAY FROM e.exhibition_date)::int AS day
+         -- 用户的报名 / 自己开办的展会：按开展～闭展覆盖的每一天打点，跨月时只取本月那几天。
+         SELECT EXTRACT(DAY FROM generate_series(
+                  GREATEST(e.exhibition_date, make_date($1::int, $2::int, 1)),
+                  LEAST(COALESCE(e.exhibition_end_date, e.exhibition_date),
+                        (make_date($1::int, $2::int, 1) + interval '1 month - 1 day')::date),
+                  interval '1 day'))::int AS day
            FROM registrations r
            JOIN exhibitions e ON e.id = r.exhibition_id
           WHERE r.visitor_id = $3 AND r.status IN ('approved', 'attended')
-            AND EXTRACT(YEAR FROM e.exhibition_date)::int = $1
-            AND EXTRACT(MONTH FROM e.exhibition_date)::int = $2
+            AND e.exhibition_date <= (make_date($1::int, $2::int, 1) + interval '1 month - 1 day')::date
+            AND COALESCE(e.exhibition_end_date, e.exhibition_date) >= make_date($1::int, $2::int, 1)
          UNION
-         SELECT EXTRACT(DAY FROM e.exhibition_date)::int
+         SELECT EXTRACT(DAY FROM generate_series(
+                  GREATEST(e.exhibition_date, make_date($1::int, $2::int, 1)),
+                  LEAST(COALESCE(e.exhibition_end_date, e.exhibition_date),
+                        (make_date($1::int, $2::int, 1) + interval '1 month - 1 day')::date),
+                  interval '1 day'))::int
            FROM exhibitions e
           WHERE e.exhibitor_id = $3
-            AND EXTRACT(YEAR FROM e.exhibition_date)::int = $1
-            AND EXTRACT(MONTH FROM e.exhibition_date)::int = $2
+            AND e.exhibition_date <= (make_date($1::int, $2::int, 1) + interval '1 month - 1 day')::date
+            AND COALESCE(e.exhibition_end_date, e.exhibition_date) >= make_date($1::int, $2::int, 1)
          UNION
          SELECT EXTRACT(DAY FROM m.meeting_date)::int
            FROM private_meetings m
@@ -225,6 +276,7 @@ app.get('/month', optionalAuthHono, async (c) => {
     markedDays = marked.rows.map((row) => row.day);
   }
   const meetings = viewer?.userId ? await monthMeetings(year, monthNumber, viewer.userId) : [];
+  const selected = items.filter((entry) => entry.days.includes(day));
   return jsonResponse(c, {
     year,
     month: monthNumber,
@@ -232,9 +284,9 @@ app.get('/month', optionalAuthHono, async (c) => {
     monthLabel: `${year} 年 ${monthNumber} 月`,
     eventDays,
     markedDays,
-    exhibitions: items.map(monthSummary),
+    exhibitions: items.map((entry) => monthSummary(entry.item, entry.days)),
     meetings,
-    selected: items.filter((item) => item.day === day).map(monthSummary),
+    selected: selected.map((entry) => monthSummary(entry.item, entry.days)),
   });
 });
 app.get('/categories', optionalAuthHono, async (c) => {
@@ -254,22 +306,25 @@ app.post('/', authenticateHono, async (c) => {
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
     const input = await exhibitionInput(body);
+    await assertExhibitionDuration(input.date, input.endDate);
     const id = newId('exh');
     await withExhibitionQuota(user, { exhibitorId: user.userId, date: input.date }, async (client) => {
       await client.query(
-        `INSERT INTO exhibitions (id, title, venue, time, exhibition_date, status, category, description, description_format, image_uri, exhibitor_note, registration_start, registration_end, qr_enabled, allow_cancel, exhibitor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        `INSERT INTO exhibitions (id, title, venue, time, exhibition_date, exhibition_end_date, status, category, description, description_format, image_uri, exhibitor_note, registration_notice, registration_start, registration_end, qr_enabled, allow_cancel, exhibitor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
         [
           id,
           input.title,
           input.venue,
           input.time,
           input.date,
+          input.endDate || null,
           input.status,
           input.category,
           input.description,
           input.descriptionFormat,
           input.imageUri,
           input.exhibitorNote,
+          input.registrationNotice,
           input.registrationStart || null,
           input.registrationEnd || null,
           input.qrEnabled,
@@ -290,24 +345,27 @@ app.put('/:id', authenticateHono, async (c) => {
   const body = bodyRecord(await readJsonBody(c));
   return mutate(c, async () => {
     const input = await exhibitionInput(body, existing);
+    await assertExhibitionDuration(input.date, input.endDate);
     await withExhibitionQuota(
       user,
       { id: existing.id, exhibitorId: existing.exhibitor_id, date: input.date },
       async (client) => {
         await client.query(
-          `UPDATE exhibitions SET title=$2, venue=$3, time=$4, exhibition_date=$5, status=$6, category=$7, description=$8, description_format=$9, image_uri=$10, exhibitor_note=$11, registration_start=$12, registration_end=$13, qr_enabled=$14, allow_cancel=$15, updated_at=now() WHERE id=$1`,
+          `UPDATE exhibitions SET title=$2, venue=$3, time=$4, exhibition_date=$5, exhibition_end_date=$6, status=$7, category=$8, description=$9, description_format=$10, image_uri=$11, exhibitor_note=$12, registration_notice=$13, registration_start=$14, registration_end=$15, qr_enabled=$16, allow_cancel=$17, updated_at=now() WHERE id=$1`,
           [
             existing.id,
             input.title,
             input.venue,
             input.time,
             input.date,
+            input.endDate || null,
             input.status,
             input.category,
             input.description,
             input.descriptionFormat,
             input.imageUri,
             input.exhibitorNote,
+            input.registrationNotice,
             input.registrationStart || null,
             input.registrationEnd || null,
             input.qrEnabled,

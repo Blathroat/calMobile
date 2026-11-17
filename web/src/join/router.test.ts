@@ -7,11 +7,40 @@ import { useSessionStore } from '@/stores/session';
 describe('join router', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it('sends anonymous visitors to login and keeps the exhibition link', async () => {
+  it('opens a shared exhibition link without login', async () => {
     const router = createJoinRouter(createMemoryHistory());
     await router.push('/e/exh-1');
+    expect(router.currentRoute.value.path).toBe('/e/exh-1');
+    expect(router.currentRoute.value.meta.title).toBe('exhibition.detail.title');
+    expect(router.currentRoute.value.meta.requiresAuth).toBeUndefined();
+  });
+
+  it('lets anonymous visitors open the registration form and the query link', async () => {
+    const router = createJoinRouter(createMemoryHistory());
+    await router.push('/e/exh-1/register');
+    expect(router.currentRoute.value.path).toBe('/e/exh-1/register');
+    expect(router.currentRoute.value.meta.requiresAuth).toBeUndefined();
+    await router.push('/e/exh-1/status?token=abc');
+    expect(router.currentRoute.value.path).toBe('/e/exh-1/status');
+    expect(router.currentRoute.value.query.token).toBe('abc');
+  });
+
+  it('keeps the anonymous registration form reachable with the guest capability table', async () => {
+    // 真实访客的用户态由 `/bootstrap` 下发：loggedIn=false、can.register=false。
+    // 权限表只对已登录账号生效，不能因为它把免登录报名挡回登录页。
+    const router = createJoinRouter(createMemoryHistory());
+    useSessionStore().applyUser({ loggedIn: false, guest: true, can: { register: false } });
+    await router.push('/e/exh-1/register');
+    expect(router.currentRoute.value.path).toBe('/e/exh-1/register');
+    await router.push('/e/exh-1/status?token=abc');
+    expect(router.currentRoute.value.path).toBe('/e/exh-1/status');
+  });
+
+  it('keeps the exhibitor public page behind login', async () => {
+    const router = createJoinRouter(createMemoryHistory());
+    await router.push('/u/exhibitor');
     expect(router.currentRoute.value.path).toBe('/login');
-    expect(router.currentRoute.value.query.redirect).toBe('/e/exh-1');
+    expect(router.currentRoute.value.query.redirect).toBe('/u/exhibitor');
   });
 
   it('lands logged-in users on my registrations', async () => {
@@ -45,10 +74,13 @@ describe('join router', () => {
     expect(router.currentRoute.value.query.redirect).toBe('/m/usr-2');
   });
 
-  it('sends a limited account away from the registration form', async () => {
+  it('sends a limited account away from the registration form but keeps the public detail', async () => {
     const router = createJoinRouter(createMemoryHistory());
     useSessionStore().applyUser({ id: 'u1', loggedIn: true, guest: false, role: 'user', can: { register: false } });
+    // 详情页是公开信息，受限账号也能看；不能报名时在页面上说明，不在这里踢走。
     await router.push('/e/exh-1');
+    expect(router.currentRoute.value.path).toBe('/e/exh-1');
+    await router.push('/e/exh-1/register');
     expect(router.currentRoute.value.path).toBe('/mine');
     await router.push('/m/usr-2');
     expect(router.currentRoute.value.path).toBe('/mine');

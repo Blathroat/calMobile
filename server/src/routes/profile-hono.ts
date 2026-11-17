@@ -23,6 +23,7 @@ import {
   emailVerifyLooseSchema,
   notifySchema,
   inviteRedeemSchema,
+  agreementAcceptSchema,
 } from '../domain/schemas.js';
 import { consumeInvite } from '../domain/invites.js';
 import { settleExpiredExhibitor } from '../domain/membership.js';
@@ -775,6 +776,38 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
     return mutate(c, async () => ({ seenHints: await saveSeenHint(user.userId, body.hint) }));
   });
 
+  /**
+   * 同意用户协议：记录当前账号同意到哪一版。
+   *
+   * 只接受服务端当前版本。页面拿到的版本可能已经过期（管理员刚好更新了正文），
+   * 这时按业务失败返回，让页面重新确认，而不是把旧版本记成已同意。
+   */
+  app.post('/agreement', authenticateHono, async (c) => {
+    const user = requireUser({ user: userOf(c) }, '请先登录后再操作', { code: 'profile.loginRequired' });
+    const body = parseSchema(agreementAcceptSchema, bodyRecord(await readJsonBody(c)));
+    return mutate(c, async () => {
+      const settings = await readServerSettings();
+      if (!settings.agreement.enabled || settings.agreement.version <= 0) {
+        throw badRequest('用户协议当前未开启', { code: 'profile.agreementDisabled' });
+      }
+      if (body.version !== settings.agreement.version) {
+        throw badRequest('用户协议已更新，请重新阅读并确认', { code: 'profile.agreementVersionChanged' });
+      }
+      const result = await query<{ agreed_terms_at: Date | string | null }>(
+        `UPDATE users
+            SET agreed_terms_version = $2, agreed_terms_at = now(), updated_at = now()
+          WHERE id = $1
+      RETURNING agreed_terms_at`,
+        [user.userId, body.version],
+      );
+      const at = result.rows[0]?.agreed_terms_at;
+      return {
+        agreedTermsVersion: body.version,
+        agreedTermsAt: at ? new Date(at).toISOString() : '',
+      };
+    });
+  });
+
   app.post('/invite', authenticateHono, async (c) => {
     const actor = requireUser({ user: userOf(c) });
     assertNotLimited(actor, 'invite');
@@ -841,6 +874,7 @@ export const PROFILE_ENDPOINTS: readonly [string, string][] = [
   ['POST', '/email'],
   ['POST', '/email/verify'],
   ['PUT', '/hints'],
+  ['POST', '/agreement'],
   ['POST', '/invite'],
   ['GET', '/notifications'],
   ['PUT', '/notifications'],

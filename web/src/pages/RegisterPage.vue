@@ -12,8 +12,8 @@
  * 校验规则来自「管理-设置」的服务器设置（bootstrap 下发的 `limits`），页面即时提示，
  * 后端保存前会再校验一次（server/src/routes/auth-hono.ts），绕过页面直接调接口同样被拦。
  */
-import { computed, nextTick, onBeforeUnmount, ref, type Ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { api, refreshRuntimeBootstrap } from '@/app/runtime';
 import { toast } from '@/services/toast';
 import {
@@ -35,13 +35,60 @@ const EMAIL_MAX = 60;
 
 type FieldName = 'username' | 'email' | 'password' | 'confirm';
 
+const route = useRoute();
 const router = useRouter();
 const bootstrap = useBootstrapStore();
+
+/**
+ * 注册前所在页面（例如未登录报名的查询链接），注册成功后原样带回。
+ * 与登录页同一套约定：只认非空字符串，没带就回默认落点。
+ */
+function redirectTarget(): string {
+  const value = route.query.redirect;
+  return typeof value === 'string' && value ? value : paths.home;
+}
+
+/** 已经有账号：去登录页，并把回跳地址一起带过去。 */
+function goLogin(): void {
+  const value = route.query.redirect;
+  void router.replace(typeof value === 'string' && value ? { path: '/login', query: { redirect: value } } : '/login');
+}
+
 /** 只接受 https，避免把后端误发的地址当成可点链接。 */
 const privacyPolicyUrl = computed(() => {
   const value = bootstrap.privacyPolicyUrl.trim();
   return value.startsWith('https://') ? value : '';
 });
+
+/**
+ * 用户协议：管理员开启后，注册页在发验证码之前就要先勾选同意；注册成功建立会话后
+ * 把同意的版本写回账号（失败静默，外壳的全局更新弹窗会兜底）。
+ */
+const agreementEnabled = computed(() => bootstrap.agreement?.enabled === true);
+const agreementVersion = computed(() => Number(bootstrap.agreement?.version ?? 0) || 0);
+const agreed = ref(false);
+const agreementError = ref('');
+
+watch(agreed, () => {
+  agreementError.value = '';
+});
+
+/** 协议开启但没勾选时拦下当前动作（发验证码 / 提交注册）。 */
+function agreementBlocked(): boolean {
+  if (!agreementEnabled.value || agreed.value) return false;
+  agreementError.value = t('agreement.consentRequired');
+  return true;
+}
+
+/** 建立会话后写回同意；失败静默，交给全局「用户协议更新」弹窗兜底。 */
+async function recordAgreementConsent(): Promise<void> {
+  if (!agreementEnabled.value || !agreed.value || agreementVersion.value <= 0) return;
+  try {
+    await api.profile.agree(agreementVersion.value);
+  } catch {
+    /* 静默失败：全局弹窗会再要求一次 */
+  }
+}
 
 const step = ref<1 | 2>(1);
 const username = ref('');
@@ -160,6 +207,7 @@ onBeforeUnmount(stopCountdown);
 async function submitAccount(): Promise<void> {
   error.value = '';
   if (!validateAccount()) return;
+  if (agreementBlocked()) return;
   accountBusy.value = true;
   try {
     const payload: JsonObject = {
@@ -214,10 +262,13 @@ async function verifyAccount(): Promise<void> {
       }
       verifiedSession = api.session.signal;
     }
+    await recordAgreementConsent();
     await refreshRuntimeBootstrap();
     stopCountdown();
     toast(t('auth.register.createdAndSignedIn'), 'success');
-    await router.replace(paths.home);
+    // 从查询链接（或其他受保护页面）跳来的，注册成功后回到原地址；
+    // 那里可能正好触发展商页跳转或报名认领，不再多走一次首页。
+    await router.replace(redirectTarget());
   } catch (reason) {
     verifyError.value = messageOf(reason);
   } finally {
@@ -362,6 +413,18 @@ function messageOf(reason: unknown): string {
       <p class="field-hint">{{ t('auth.register.inviteHint') }}</p>
     </div>
 
+    <!-- 用户协议：开启时先勾选才能发送验证码 / 注册；关闭时整块不渲染。 -->
+    <div v-if="agreementEnabled" class="check-row agreement-consent">
+      <label class="check-label" for="register-agreement">
+        <input id="register-agreement" v-model="agreed" type="checkbox" />
+        <span class="check-copy">
+          {{ t('agreement.consentPrefix')
+          }}<RouterLink class="agreement-link" to="/agreement">{{ t('agreement.consentLink') }}</RouterLink>
+        </span>
+      </label>
+      <p v-if="agreementError" class="field-error" role="alert">{{ agreementError }}</p>
+    </div>
+
     <div class="row" data-between="true">
       <span class="row-meta">{{ t('auth.register.passwordStrength') }}</span>
       <span class="password-meter" :data-level="strength.level">{{ strength.label }}</span>
@@ -422,7 +485,7 @@ function messageOf(reason: unknown): string {
     <button class="cta ghost" type="button" @click="showStep(1)">{{ t('auth.register.backToEdit') }}</button>
   </form>
 
-  <button class="cta ghost" type="button" @click="router.replace('/login')">
+  <button class="cta ghost" type="button" @click="goLogin">
     {{ t('auth.register.backToLogin') }}
   </button>
 </template>

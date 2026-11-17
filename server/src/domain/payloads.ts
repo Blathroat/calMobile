@@ -29,9 +29,13 @@ export interface ExhibitionRow {
   month?: number | null;
   day?: number | null;
   exhibition_date?: string | null;
+  /** 闭展日期；NULL 表示单日展会。 */
+  exhibition_end_date?: string | null;
   exhibitor?: string | null;
   exhibitor_role?: string | null;
   exhibitor_note?: string | null;
+  /** 报名注意事项：只在审核通过 / 已参加的报名详情里展示。 */
+  registration_notice?: string | null;
   image_uri?: string | null;
   registration_start?: string | null;
   registration_end?: string | null;
@@ -51,6 +55,8 @@ export interface FieldRow {
 }
 
 export interface RegistrationRow {
+  /** 展会报名注意事项：payload 按报名状态决定是否下发。 */
+  exhibition_notice?: string | null;
   id: string;
   exhibition_id: string;
   visitor_id?: string | null;
@@ -94,6 +100,11 @@ export interface UserRow {
   exhibitor_expires_at?: string | Date | null;
   last_login_time?: string | null;
   registration_time?: string | null;
+  /** 最近一次登录的地区（格式化后）；个人用户态不下发，只有管理员列表用。 */
+  last_login_region?: string | null;
+  /** 已同意的用户协议版本（0 = 从未同意）与同意时间。 */
+  agreed_terms_version?: number | null;
+  agreed_terms_at?: string | Date | null;
 }
 
 export interface AdminUserRow {
@@ -109,6 +120,10 @@ export interface AdminUserRow {
   exhibitor_expires_at?: string | Date | null;
   registration_time?: string | null;
   last_login_time?: string | null;
+  /** 最近一次登录的地区（格式化后）；IP 原文不在这里，也不下发。 */
+  last_login_region?: string | null;
+  agreed_terms_version?: number | null;
+  agreed_terms_at?: string | Date | null;
 }
 
 /** 展会行 → 列表 / 详情的展会对象。 */
@@ -134,10 +149,12 @@ export function exhibitionPayload(row: ExhibitionRow) {
     day: row.day,
     date: row.exhibition_date || '',
     dateLabel: labels.dateLabel(row.exhibition_date),
+    endDate: row.exhibition_end_date || '',
     exhibitor: row.exhibitor || '',
     exhibitorId: row.exhibitor_id || '',
     exhibitorRole: row.exhibitor_role || '',
     exhibitorNote: row.exhibitor_note || '',
+    registrationNotice: row.registration_notice || '',
     imageUri: row.image_uri || '',
     registrationStart: row.registration_start || '',
     registrationEnd: row.registration_end || '',
@@ -184,6 +201,8 @@ export function registrationPayload(row: RegistrationRow) {
     exhibitionDate: row.exhibition_date || '',
     exhibitionTime: row.exhibition_time || '',
     exhibitionVenue: row.exhibition_venue || '',
+    // 注意事项只给审核通过 / 已参加的人看：其它状态连字段都不下发，前端无从渲染。
+    exhibitionNotice: statusCode === 'approved' || statusCode === 'attended' ? row.exhibition_notice || '' : '',
     visitorName: row.visitor_name,
     visitorType: row.visitor_type,
     answers: row.answers || '',
@@ -245,6 +264,9 @@ export function userPayload(row: UserRow, can: Capabilities) {
     exhibitorExpired: isPastExpiry(row.exhibitor_expires_at),
     lastLoginTime: row.last_login_time || '',
     registrationTime: row.registration_time || '',
+    // 用户协议：前端把 agreedTermsVersion 与 bootstrap 下发的当前版本比较，判断要不要弹确认。
+    agreedTermsVersion: Number(row.agreed_terms_version) || 0,
+    agreedTermsAt: isoTime(row.agreed_terms_at),
     can,
   };
 }
@@ -269,6 +291,8 @@ export function guestPayload() {
     statusCode: '',
     lastLoginTime: '',
     registrationTime: '',
+    agreedTermsVersion: 0,
+    agreedTermsAt: '',
     exhibitorExpiresAt: '',
     exhibitorExpired: false,
     can: { register: false, profile: false, exhibitor: false, admin: false, limited: false },
@@ -296,7 +320,14 @@ export function adminUserPayload(row: AdminUserRow, index: number) {
     exhibitorExpiresAt: isoTime(row.exhibitor_expires_at),
     exhibitorExpired: isPastExpiry(row.exhibitor_expires_at),
     registrationTime: row.registration_time || '',
-    lastLoginTime: row.last_login_time || '',
+    // 老账号（迁移 0024 之前建号、也还没登录过）没有 last_login_time，用注册时间兜底，
+    // 用户管理不再显示「未知」。
+    lastLoginTime: row.last_login_time || row.registration_time || '',
+    // 只下发地区（如「江苏省苏州市」「内网」），IP 原文留在库里，不进任何响应。
+    lastLoginRegion: row.last_login_region || '',
+    // 用户管理卡片据此标识「已同意 / 未同意当前用户协议」。
+    agreedTermsVersion: Number(row.agreed_terms_version) || 0,
+    agreedTermsAt: isoTime(row.agreed_terms_at),
     order: index,
   };
 }

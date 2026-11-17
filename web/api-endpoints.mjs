@@ -26,6 +26,9 @@ export const ENDPOINTS = {
   'notify.savePreferences': () => ({ method: 'PUT', path: '/profile/notifications' }),
   'profile.markHint': () => ({ method: 'PUT', path: '/profile/hints' }),
   'profile.redeemInvite': () => ({ method: 'POST', path: '/profile/invite' }),
+  'profile.agree': (payload) => ({ method: 'POST', path: '/profile/agreement', body: payload }),
+  'agreement.get': () => ({ method: 'GET', path: '/agreement' }),
+  'logs.list': () => ({ method: 'GET', path: '/logs' }),
   'security.get': () => ({ method: 'GET', path: '/profile/security' }),
   'security.identityEmailCode': () => ({ method: 'POST', path: '/profile/security/email-code' }),
   'security.verifyIdentity': () => ({ method: 'POST', path: '/profile/security/verify' }),
@@ -69,7 +72,13 @@ export const ENDPOINTS = {
   }),
   'registrations.list': () => ({ method: 'GET', path: '/registrations' }),
   'registrations.get': (payload) => ({ method: 'GET', path: `/registrations/${encodeURIComponent(payload.id)}` }),
+  // 公开的查询链接：凭据在路径里。样例没有 token 时用一个固定占位值，只用于对路由。
+  'registrations.queryByToken': (payload) => ({
+    method: 'GET',
+    path: `/registrations/query/${encodeURIComponent(payload.token || 'sample-token')}`,
+  }),
   'registrations.submit': () => ({ method: 'POST', path: '/registrations' }),
+  'registrations.claim': () => ({ method: 'POST', path: '/registrations/claim' }),
   'registrations.cancel': (payload) => ({ method: 'DELETE', path: `/registrations/${encodeURIComponent(payload.id)}` }),
   'review.list': (payload) => ({ method: 'GET', path: '/review', query: payload }),
   'review.get': (payload) => ({ method: 'GET', path: `/review/${encodeURIComponent(payload.id)}` }),

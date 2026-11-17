@@ -58,6 +58,7 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 - 限流、TOTP 和迁移保持自研。登录限流在 `await next()` 之后用 `c.res.clone()` 看信封的 `ok === false`，只记失败。
 - 通行密钥（WebAuthn）用 `@simplewebauthn/server`。解析认证器数据、校验 COSE 公钥与签名、比对 challenge / origin / RP ID 都在库里；服务端不自己写 CBOR 解析器，也不自己实现签名校验——密码学路径自己写一遍就是新的攻击面。客户端只用浏览器原生 WebAuthn API（`navigator.credentials`），不引入第三方 JS。
 - 不引入 `hono/compress`。状态页在 `status-page/` 分开维护，构建后运行时仍是单文件 HTML，样式不复用应用的 `tokens.css`。
+- IP 归属地用 `ip2region-ts`：包内自带离线 xdb，不需要额外服务或联网；服务端只懒加载向量索引（约几百 KB），xdb 正文按偏移读，解析失败一律给空串或「内网」，不影响登录。地区只用于展示，IP 原文只落库、不下发。
 
 ## 开发模式与生产模式
 
@@ -168,7 +169,19 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - 管理员不能改自己的权限，也不能去掉最后一位管理员。把展商或管理员改成普通用户时，`accept_meetings` 置为 false。管理员手动把角色设成展商时视为永久（`exhibitor_expires_at = NULL`）；改成普通用户或管理员时一并清空到期时间。邀请码只会把身份设为展商，不能设成管理员。
 - 邀请码有两套时间：`expires_at` 是码本身的有效期（按小时，0 表示不过期）；`duration_days` 是兑换后展商身份保留的天数（0 表示永久，上限 3650）。用户行上的 `exhibitor_expires_at` 是到期时间，NULL 表示永久。删除是直接删行，列表时清掉已过期和已作废的码，这两类不再展示。注册时邀请码可选，先记在验证码票上，建号时与插入同一事务里消耗并写入到期时间。已登录用户用 `POST /profile/invite` 兑换：普通用户开通；限时展商从 `max(now(), 原到期时间)` 顺延，0 天码转为永久；永久展商与管理员拒绝且不消耗。受限账号不能兑换。
 - 展商到期按访问惰性结算，没有定时任务：认证解析（`middleware/auth.ts`）读到已到期的展商时把 `role` 改回 `user`、`accept_meetings` 关掉，并保留到期时间作为「已到期」历史。公开页、搜索和会议宿主这些读别人角色的地方用 `domain/membership.ts` 的 `effectiveRole()` / `canHostMeetings()` 判断，不依赖对方先登录。管理员用户列表在读取前批量结算一次。已到期的展商调用展商接口返回 403，文案说明「展商身份已到期」。
+- 登录成功（密码登录、两步验证通过、可信设备跳过验证、通行密钥验证通过，以及注册建号即登录）刷新 `users.last_login_time`、`users.last_login_ip`、`users.last_login_region`。地区由服务端用离线库解析：只支持 IPv4（IPv4-mapped IPv6 归一），私网 / 回环 / 链路本地 / CGNAT / 组播 / 保留段显示「内网」，纯 IPv6、非法地址与查不到给空串；展示为中国境内「省 + 市」（省市重复时去重，如「北京市」）、非中国「国家 + 省 + 市」，不展示运营商。IP 原文只落库、不下发；管理员用户列表下发 `lastLoginRegion`，`lastLoginTime` 为空时用 `registrationTime` 兜底。
+- 展会闭展日期选填（`exhibitions.exhibition_end_date`，NULL = 单日），不能早于开展日期；更新时没传 `endDate` 保留库里的值，传空串改回单日。展会另有「报名注意事项」`exhibitions.registration_notice`（TEXT，默认空串，最多 2000 字）：展商在编辑页填写，报名详情 payload 只在报名状态为 `approved` / `attended` 时下发 `exhibitionNotice` 正文，其它状态下发空串。单个展会最长持续天数由 `app_settings.exhibitor.maxExhibitionDays` 控制（默认 0 = 不限，管理端 `PUT /settings` 提交，范围 0～365）：按开展～闭展含两端计算天数，超过时新建 / 更新都返回 `exhibition.durationTooLong`。
+- 注册用户名允许 Unicode 字母、数字、组合符（`\p{L}\p{N}\p{M}`）以及 `_ . -`，与前端 `services/validate.ts` 的 `PATTERNS.username` 是同一套规则；长度取管理员配置的 `limits.usernameMin/Max`，两侧空白 trim，不做 Unicode 归一化。内部空白、控制字符、标点与 emoji 拒绝，错误码 `validation.usernameCharset`。
+- 报名站分享链接允许未登录报名：`POST /api/v1/registrations` 带有效 `Authorization` 时行为与原来完全一致；**完全不带** `Authorization` 时按匿名报名处理（`visitor_id` NULL、`visitor_type = 'guest'`、姓名必填，上限 `limits.nickname`），响应额外带一次性 `queryToken`（32 字节 base64url，库里只存 sha256 hex）。带 `Authorization` 但令牌无效 / 过期仍是 401，不降级成匿名，避免应用内过期令牌提交出无主记录。匿名报名没有账号身份，不受「同一用户同一展会一条未撤销报名」约束。
+- `GET /api/v1/registrations/query/:token`（公开，`Cache-Control: no-store`）：按 sha256 匹配，返回与 `GET /registrations/:id` 同形的 `{ found, registration }`（含 `checkInCode`——凭据就是匿名报名人的身份）；无效凭据返回 200 + `{ found:false, error:'查询链接无效或已失效', errorCode:'registration.queryLinkInvalid' }`。
+- `POST /api/v1/registrations/claim`（需登录，body `{ token }`）：把凭据对应的、`visitor_id IS NULL` 的报名关联到当前账号，只补 `visitor_id`，保留匿名报名时填的姓名与 `visitor_type = 'guest'`；同账号幂等，被别的账号认领或与账号已有同展会报名冲突（唯一部分索引）时 200 + `ok:false`，已撤销的匿名报名也可以认领。
+- 操作日志（`app_logs`）：服务端在响应后异步写入，记录变更类请求（非 GET）、4xx / 5xx 响应以及登录 / 注册 / 找回密码的结果；读接口成功不记，**不记录请求体**，只留方法、路径、状态码、耗时、操作人（未登录记「访客」）与 IP。写日志失败只打服务端日志，不影响请求本身。
+- `GET /api/v1/logs`（仅管理员）：查询参数 `limit`（默认 100，最大 500）、`level`（info / warn / error）、`query`（对消息、分类、操作人、路径做子串匹配）；返回 `{ logs, stats: { storageMb, limitBytes, usedBytes, entryCount } }`。普通账号调用是 403。
+- 日志存储上限是 `app_settings.logs.storageMb`（默认 64，范围 1～10240，管理端通过 `PUT /settings` 的 `logs: { storageMb }` 或扁平 `logsStorageMb` 提交，越界会被夹取而不是拒绝）。超过上限时按累计大小删除最早的日志；写入后节流到每 30 秒检查一次，管理员把上限调小时立即清一次。设置接口的 `logs` 段只有管理员会多拿到 `usedBytes` / `entryCount`。
 - `PUT /exhibitions/:id/status` 同时接受中文标签和英文代码。
+- 用户协议是可选功能，正文与管理端开关存在 `app_settings.agreement`（Markdown 原文；`version` 只在正文变化时 +1，只拨开关不升版本；`updatedAt` 是正文最后更新时间）。管理端通过 `PUT /settings` 的 `agreement: { enabled, content }` 提交：开启时正文不能为空（`settings.agreementContentRequired`），正文上限 200000 字符（超出 `settings.agreementTooLong`）；`GET /settings` 只给管理员下发正文，其他角色拿 `{ enabled, version, updatedAt }`。
+- `GET /api/v1/agreement`（公开，`Cache-Control: no-store`）下发 `{ enabled, version, updatedAt, content }`，登录/注册页与协议浏览页在未登录时也能读；`GET /bootstrap` 只带 `{ enabled, version, updatedAt }` 摘要，不带正文。
+- `POST /api/v1/profile/agreement`（需登录，body `{ version }`）把当前账号的同意版本记到 `users.agreed_terms_version` / `users.agreed_terms_at`。只接受服务端当前版本：协议未开启返回 `profile.agreementDisabled`，版本已过期返回 `profile.agreementVersionChanged`，两种情况都是 200 + `ok:false`。管理员用户列表下发每个账号的 `agreedTermsVersion` / `agreedTermsAt`，管理页据此标识同意状态。
 - 私人会议未开放时，申请表单不返回收集项。被限制的会议，主办人改状态得到 403。
 
 ## 媒体与配色
@@ -195,8 +208,11 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 ## 数据模型
 
 - 状态存英文代码。中文标签只在 `src/domain/labels.ts` 映射，与前端的状态词汇是同一批字符串。
-- 展会日期只存 `exhibition_date`。年、月、日由 SQL 派生，并用 `to_char` 取成字符串。
-- 报名记录不冗余展会标题、时间和地点。读取时 JOIN 展会表。
+- 展会日期只存 `exhibition_date`（开展）与 `exhibition_end_date`（闭展，NULL = 单日）。`exhibitions.registration_notice` 存报名注意事项（选填，最多 2000 字），不进入公开展会详情卡，只随报名详情按状态下发。年、月、日由 SQL 派生，并用 `to_char` 取成字符串。`GET /exhibitions/month` 按区间取“与本月有交集”的展会，并把每场展会展开成本月覆盖的 `days` 数组：`eventDays` 是并集，选中日按 `days` 命中，跨月展会拆到两个月分别返回。
+- 报名记录不冗余展会标题、时间和地点。读取时 JOIN 展会表。匿名报名的查询凭据只存 sha256（`registrations.query_token_hash`，空串表示账号报名与老数据），唯一部分索引 `WHERE query_token_hash <> ''`。
+- 登录审计在 `users.last_login_time` / `last_login_ip` / `last_login_region`；IP 原文只落库，接口只下发格式化后的地区。
+- 操作日志在 `app_logs`（迁移 0026）：`level` / `category` / `message` / `actor_id` / `actor_name` / `method` / `path` / `status` / `duration_ms` / `ip` / `detail` / `size_bytes` / `created_at`。`size_bytes` 在写入时算好，清理按它累计；`actor_id` 不建外键，账号删除后日志保留当时的名字。
+- 用户协议同意状态在 `users.agreed_terms_version` / `users.agreed_terms_at`（迁移 0025）：0 表示从未同意，时间戳是最后一次同意的时间。协议正文与版本不单独建表，存在 `app_settings.agreement` 这一段 JSON 里。
 - 迁移按编号记在 `schema_migrations`，只跑没跑过的步骤。新字段追加新步骤。
 - 邮箱大小写无关唯一，空串例外。验证码只存哈希。注册时的待建账号暂存在 `email_codes.payload`。两步验证的预认证票在 `preauth_tickets`。发信留痕在 `mail_log`。
 - `refresh_tokens.session_id` 对应 JWT 的 `sid`。远程撤销后，访问令牌也立即失效。服务端只保存设备凭据的哈希。

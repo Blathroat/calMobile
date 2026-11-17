@@ -46,6 +46,7 @@ import {
 } from '../domain/passkeys.js';
 import { loadProcessConfig } from '../config/env.js';
 import { issueTicket, findTicket, consumeTicket, countTicketFailure } from '../domain/preauth.js';
+import { lookupIpRegion } from '../services/ip-region.js';
 import { ApiError, badRequest, unauthorized } from '../domain/errors.js';
 import { failureResponse, jsonResponse, okResponse } from '../http/respond.js';
 import { clientIp } from '../http/client-ip.js';
@@ -135,6 +136,23 @@ function requestIp(c: Context, trustProxy: TrustProxy): string {
   );
 }
 
+/**
+ * 登录成功：记最近登录时间、客户端 IP 与离线解析出的地区。
+ *
+ * - 地区用 `services/ip-region.ts` 查（懒加载的离线 xdb），查不到给空串，不影响登录；
+ * - IP 原文只落库（排查用），响应里只下发格式化后的地区（`domain/payloads.ts`）；
+ * - 注册建号是「建号即登录」，在 INSERT 里一次写全，不经过这里（少一次 UPDATE）。
+ */
+async function recordLogin(c: Context, trustProxy: TrustProxy, userId: string): Promise<void> {
+  const ip = requestIp(c, trustProxy);
+  const region = await lookupIpRegion(ip);
+  await query('UPDATE users SET last_login_time = now(), last_login_ip = $2, last_login_region = $3 WHERE id = $1', [
+    userId,
+    ip,
+    region,
+  ]);
+}
+
 function sessionDevice(token: unknown, name: unknown): SessionDevice {
   return {
     deviceHash: hashDeviceToken(token),
@@ -221,7 +239,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
         return failureResponse(c, '两步验证邮箱不可用，请联系管理员关闭两步验证');
       }
       if (await useTrustedDevice(account.id, device.deviceHash)) {
-        await query('UPDATE users SET last_login_time = now() WHERE id = $1', [account.id]);
+        await recordLogin(c, options.trustProxy, account.id);
         const session = await issueSession(account as unknown as Parameters<typeof issueSession>[0], device);
         return jsonResponse(c, {
           ok: true,
@@ -260,7 +278,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
         },
       });
     }
-    await query('UPDATE users SET last_login_time = now() WHERE id = $1', [account.id]);
+    await recordLogin(c, options.trustProxy, account.id);
     const session = await issueSession(account as unknown as Parameters<typeof issueSession>[0], device);
     return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(account.id) });
   });
@@ -289,7 +307,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     }
     if (!(await consumeTicket(found.id))) return failureResponse(c, '验证已使用，请重新登录');
     if (trustDevice === true) await rememberTrustedDevice(row.id, device);
-    await query('UPDATE users SET last_login_time = now() WHERE id = $1', [row.id]);
+    await recordLogin(c, options.trustProxy, row.id);
     const session = await issueSession(row, device);
     return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(row.id) });
   });
@@ -410,7 +428,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     await touchCredential(stored.id, verified.counter);
     if (!(await consumeTicket(found.id))) return failureResponse(c, '验证已使用，请重新登录');
     if (body.trustDevice === true) await rememberTrustedDevice(row.id, device);
-    await query('UPDATE users SET last_login_time = now() WHERE id = $1', [row.id]);
+    await recordLogin(c, options.trustProxy, row.id);
     const session = await issueSession(row, device);
     return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(row.id) });
   });
@@ -479,15 +497,31 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     if (conflict) return failureResponse(c, conflict);
     const id = `usr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     const role = pending.inviteCode ? 'exhibitor' : 'user';
+    // 建号即登录：注册成功直接算一次登录（迁移 0024 也按同一口径回填老账号），
+    // 地区在事务外先解析好，避免加载 xdb 时占着事务里的连接。
+    const loginIp = requestIp(c, options.trustProxy);
+    const loginRegion = await lookupIpRegion(loginIp);
     try {
       await transaction(async (client) => {
         // 邀请码的展商时长在同一个事务里读出来，和消耗次数一起落库。
         const durationDays = pending.inviteCode ? (await consumeInvite(client, pending.inviteCode)).durationDays : 0;
         await client.query(
-          `INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at, exhibitor_expires_at)
+          `INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at,
+                              exhibitor_expires_at, last_login_time, last_login_ip, last_login_region)
           VALUES ($1, $2, $3, $4, $5, $6, true, now(),
-                  CASE WHEN $7::int = 0 THEN NULL ELSE now() + make_interval(days => $7::int) END)`,
-          [id, username, pending.passwordHash, consumed.email, pending.nickname || username, role, durationDays],
+                  CASE WHEN $7::int = 0 THEN NULL ELSE now() + make_interval(days => $7::int) END,
+                  now(), $8, $9)`,
+          [
+            id,
+            username,
+            pending.passwordHash,
+            consumed.email,
+            pending.nickname || username,
+            role,
+            durationDays,
+            loginIp,
+            loginRegion,
+          ],
         );
       });
     } catch (error: unknown) {

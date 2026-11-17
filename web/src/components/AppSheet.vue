@@ -18,9 +18,15 @@ function run(action: { onClick?: (close: () => void) => void | Promise<void> }):
   void action.onClick?.(closeSheet);
 }
 
+/** 点遮罩关闭：`dismissible: false` 的提示（用户协议更新）必须从按钮里选，点了也不关。 */
+function onOverlay(): void {
+  if (sheet.current?.dismissible === false) return;
+  closeSheet();
+}
+
 function onKey(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
-    closeSheet();
+    if (sheet.current?.dismissible !== false) closeSheet();
     return;
   }
   if (event.key !== 'Tab' || !sheet.current) return;
@@ -67,7 +73,7 @@ watch(
     class="sheet"
     role="presentation"
     :data-closing="sheet.current.closing ? 'true' : 'false'"
-    @click.self="closeSheet()"
+    @click.self="onOverlay()"
   >
     <div
       ref="panel"

@@ -25,10 +25,24 @@ test('用户列表与账号状态只有管理员能操作', async () => {
   const list = await get('/api/v1/users?query=demo', { token: tokens.admin.token });
   assert.ok(Array.isArray(list.body) && list.body.length > 0, '管理员应当能查到用户');
   const row = list.body[0];
-  for (const key of ['id', 'nickname', 'email', 'avatar', 'role', 'status', 'registrationTime', 'lastLoginTime']) {
+  for (const key of [
+    'id',
+    'nickname',
+    'email',
+    'avatar',
+    'role',
+    'status',
+    'registrationTime',
+    'lastLoginTime',
+    'lastLoginRegion',
+  ]) {
     assert.ok(row[key] !== undefined, `用户缺少字段 ${key}`);
   }
   assert.strictEqual(row.password_hash, undefined, '不能把密码哈希发出去');
+  // 最近登录时间缺失时用注册时间兜底，「未知」不再出现；地区只给格式化后的结果。
+  assert.ok(row.lastLoginTime, '最近登录时间不能是空串（老账号也应当有注册时间兜底）');
+  assert.strictEqual(row.lastLoginRegion, '内网', '本机测试的登录来源是回环地址，地区应当记录成内网');
+  assert.strictEqual(row.lastLoginIp, undefined, '登录 IP 原文不能下发');
 
   const limited = await put('/api/v1/users/usr-3/status', { status: '受限' }, { token: tokens.admin.token });
   assert.strictEqual(limited.body.ok, true, JSON.stringify(limited.body));

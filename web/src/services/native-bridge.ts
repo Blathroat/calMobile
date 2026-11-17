@@ -49,7 +49,8 @@ export type NativeAction =
   | 'session.device'
   | 'passkey.available'
   | 'passkey.create'
-  | 'passkey.get';
+  | 'passkey.get'
+  | 'app.exit';
 
 /**
  * 稳定错误码：只有这两类在原生侧被规范化，其余失败的 `code` 是 undefined。
@@ -113,6 +114,8 @@ export interface NativeActionPayloads {
   'passkey.create': { optionsJson: string };
   /** 通行密钥断言（登录）。 */
   'passkey.get': { optionsJson: string };
+  /** 不同意用户协议时退出应用：结束当前 Activity，无参数。 */
+  'app.exit': Record<string, never>;
 }
 
 /** 每个动作成功回调的返回体。只保证列出的字段存在，新增字段先在这里登记再使用。 */
@@ -154,6 +157,8 @@ export interface NativeActionResults {
   'passkey.create': { credentialJson: string };
   /** 系统返回的标准 AuthenticationResponseJSON。 */
   'passkey.get': { credentialJson: string };
+  /** closed=false 表示浏览器里关不掉窗口（没有原生桥），由页面提示用户自行关闭。 */
+  'app.exit': { closed: boolean };
 }
 
 /**

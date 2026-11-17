@@ -31,6 +31,51 @@ export interface AuthResult extends JsonObject {
   refreshToken?: string;
 }
 
+/** 用户协议（公开读取）：正文是 Markdown，交给渲染入口清洗。 */
+export interface AgreementInfo extends JsonObject {
+  enabled: boolean;
+  version: number;
+  content: string;
+  updatedAt: string;
+}
+
+/** 启动数据里的用户协议摘要：登录/注册页据此决定是否展示勾选，不下载正文。 */
+export interface AgreementSummary extends JsonObject {
+  enabled: boolean;
+  version: number;
+  updatedAt: string;
+}
+
+/** 操作日志的一条记录（管理后台「最近日志」页）。 */
+export interface LogEntry extends JsonObject {
+  id: string;
+  level: 'info' | 'warn' | 'error';
+  category: string;
+  message: string;
+  actorName: string;
+  actorId: string;
+  method: string;
+  path: string;
+  status: number;
+  durationMs: number;
+  ip: string;
+  createdAt: string;
+}
+
+/** 日志存储用量与上限（MB / 字节）。 */
+export interface LogStats extends JsonObject {
+  storageMb: number;
+  limitBytes: number;
+  usedBytes: number;
+  entryCount: number;
+}
+
+/** 最近日志接口的返回体：列表 + 当前用量。 */
+export interface LogsResult extends JsonObject {
+  logs: LogEntry[];
+  stats: LogStats;
+}
+
 /**
  * 当前登录用户。`role` 与 `statusCode` 是英文代码，展示时用
  * `services/status.ts` 的 `roleLabel()` / `userStatusLabel()` 取文案；
@@ -53,11 +98,17 @@ export interface User extends JsonObject {
   status?: string;
   /** 账号状态 code：active / limited / banned。 */
   statusCode?: string;
+  /** 管理员用户列表：最近一次登录的地区（如「江苏省苏州市」「内网」）；IP 原文不下发。 */
+  lastLoginRegion?: string;
   loggedIn?: boolean;
   guest?: boolean;
   can?: Record<string, boolean>;
   /** 已看过的一次性提示 key（与账号绑定，见 `composables/useHint.ts`）。 */
   seenHints?: string[];
+  /** 已同意的用户协议版本（0 = 从未同意）；与 bootstrap 下发的当前版本比较决定是否弹确认。 */
+  agreedTermsVersion?: number;
+  /** 最后一次同意用户协议的时间（ISO 字符串）。 */
+  agreedTermsAt?: string;
 }
 
 /**
@@ -67,13 +118,17 @@ export interface User extends JsonObject {
 export interface Bootstrap extends JsonObject {
   user?: User;
   loggedIn?: boolean;
+  /** 用户协议摘要（没有正文）；关闭时所有协议入口都不渲染。 */
+  agreement?: AgreementSummary;
 }
 
-/** 列表里的展会。其余字段随管理员配置的自定义字段变化，这里只固定页面一定会用到的三个。 */
+/** 列表里的展会。其余字段随管理员配置的自定义字段变化，这里只固定页面一定会用到的。 */
 export interface Exhibition extends JsonObject {
   id: Id;
   title: string;
   date?: string;
+  /** 闭展日期（`YYYY-MM-DD`）；空串表示单日展会。 */
+  endDate?: string;
 }
 
 /**
@@ -97,6 +152,27 @@ export interface RegistrationDetail extends JsonObject {
   found: boolean;
   registration?: Registration;
   error?: string;
+  /** 失败原因的稳定错误码（与 `error` 一起下发），页面按码本地化。 */
+  errorCode?: string;
+}
+/**
+ * 提交报名的返回体。匿名报名（报名站分享链接、未登录）多返回一次性的 `queryToken`，
+ * 登录报名没有这个字段；`autoApproved` 与 `statusLabel` 两者都有。
+ */
+export interface RegistrationSubmitResult extends ApiResult {
+  autoApproved?: boolean;
+  statusLabel?: string;
+  /** 查询报名的凭据，只在创建响应里出现一次，之后拿不回来。 */
+  queryToken?: string;
+  registration?: Registration;
+}
+/**
+ * 用查询凭据把匿名报名关联到当前账号。
+ * `claimed` 为 false 表示报名本来就已经属于当前账号（重复认领幂等成功）。
+ */
+export interface RegistrationClaimResult extends ApiResult {
+  claimed?: boolean;
+  registration?: Registration;
 }
 /**
  * 写接口的统一返回体。

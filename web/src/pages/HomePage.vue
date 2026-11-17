@@ -24,6 +24,7 @@ import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MediaBox from '@/components/MediaBox.vue';
 import HintNote from '@/components/HintNote.vue';
+import CalendarMonthPanel from '@/components/CalendarMonthPanel.vue';
 import { useHint } from '@/composables/useHint';
 import { useAsync } from '@/composables/useAsync';
 import { useRevealReady } from '@/composables/useReveal';
@@ -33,14 +34,7 @@ import type { CachedRead } from '@/services/query-cache';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
 import RoleTag from '@/components/RoleTag.vue';
-import {
-  addMonths,
-  calendarRowCount,
-  daysInMonth,
-  firstWeekdayOffset,
-  formatChineseTime,
-  monthLabel,
-} from '@/services/format';
+import { addMonths, formatChineseTime, monthLabel } from '@/services/format';
 import type { JsonObject } from '@/api/types';
 import { modeLabel, registrationStatusLabel, statusTone } from '@/services/status';
 import { t } from '@/i18n';
@@ -78,67 +72,14 @@ const revealReady = useRevealReady();
 
 const calendarHost = ref<HTMLElement>();
 const swipeHost = ref<HTMLElement>();
-/** 切月时的进出场方向，交给 motion.css 的 `data-leave` / `data-enter`。 */
-const leave = ref('');
-const enter = ref('');
+/** 左右相邻月份的预览：拖动时从两侧露出，不让空白占着半个屏幕。 */
+const previousPreview = ref<HTMLElement>();
+const nextPreview = ref<HTMLElement>();
+/** 拖动中（只用于视觉状态，不参与业务判断）。 */
+const dragging = ref(false);
 
-interface Cell {
-  day: number;
-  /** 这一格属于哪个月：补位格子是相邻月份的日期，读屏不能报成当月。 */
-  month: number;
-  muted: boolean;
-  /** 这一天有展会：数字加粗。和圆点不是一回事。 */
-  bold: boolean;
-  /** 这一天有当前用户的活动：数字下方画圆点。 */
-  hasEvent: boolean;
-  disabled: boolean;
-}
-
-/**
- * 行数按月份实际需要取 5 或 6 行：放得下就只排 5 行，放不下才加第 6 行。
- *
- * 行高只有一档（`tokens.css` 的 `.cal-day`），所以同一行内的日期不会上下跳；
- * 不足整行时用相邻月份的日期补位（灰显不可点），与设计稿一致。
- */
-const rows = computed(() => calendarRowCount(view.value.year, view.value.month));
-
-/** 日历格子：上下月的补位灰显且不可点，只有本月的日期能选中。 */
-const cells = computed<Cell[]>(() => {
-  const { year, month } = view.value;
-  const total = daysInMonth(year, month);
-  const offset = firstWeekdayOffset(year, month);
-  const previous = addMonths(year, month, -1);
-  const previousTotal = daysInMonth(previous.year, previous.month);
-  const boldDays = new Set(eventDays());
-  const marked = new Set(markedDays());
-  const list: Cell[] = [];
-  for (let index = 0; index < offset; index += 1) {
-    list.push({
-      day: previousTotal - offset + index + 1,
-      month: previous.month,
-      muted: true,
-      bold: false,
-      hasEvent: false,
-      disabled: true,
-    });
-  }
-  for (let day = 1; day <= total; day += 1) {
-    list.push({
-      day,
-      month,
-      muted: false,
-      bold: boldDays.has(day),
-      hasEvent: marked.has(day),
-      disabled: false,
-    });
-  }
-  const trailing = rows.value * 7 - offset - total;
-  const next = addMonths(year, month, 1);
-  for (let day = 1; day <= trailing; day += 1) {
-    list.push({ day, month: next.month, muted: true, bold: false, hasEvent: false, disabled: true });
-  }
-  return list;
-});
+const previousMonth = computed(() => addMonths(view.value.year, view.value.month, -1));
+const nextMonth = computed(() => addMonths(view.value.year, view.value.month, 1));
 
 const items = computed<JsonObject[]>(() => dayRows('exhibitions'));
 const meetings = computed<JsonObject[]>(() => dayRows('meetings'));
@@ -147,7 +88,11 @@ function dayRows(key: 'exhibitions' | 'meetings'): JsonObject[] {
   const day = view.value.day;
   if (day <= 0) return [];
   const all = Array.isArray(monthData.value?.[key]) ? (monthData.value?.[key] as JsonObject[]) : [];
-  return all.filter((item) => Number(item.day) === day);
+  return all.filter((item) => {
+    // 展会按「开展～闭展」覆盖的每一天出现在当天列表里；旧接口没有 days 时退回开展当天。
+    if (key === 'exhibitions' && Array.isArray(item.days)) return (item.days as unknown[]).includes(day);
+    return Number(item.day) === day;
+  });
 }
 
 function meetingLine(meeting: JsonObject): string {
@@ -155,11 +100,6 @@ function meetingLine(meeting: JsonObject): string {
   return time ? t('registration.list.privateMeetingAt', { time }) : t('registration.list.privateMeeting');
 }
 
-const eventDays = (): number[] =>
-  Array.isArray(monthData.value?.eventDays) ? (monthData.value?.eventDays as number[]) : [];
-const markedDays = (): number[] =>
-  Array.isArray(monthData.value?.markedDays) ? (monthData.value?.markedDays as number[]) : [];
-const myActivityMark = t('home.hasMyActivity');
 /** 会议行的头像取名称首字，没有名称时用这里的兜底字。 */
 const meetingInitial = t('home.meetingInitial');
 
@@ -170,13 +110,6 @@ const selectedMeta = computed(() => {
 
 /** 启动公告：只在开关打开且本机未读过时显示一次。 */
 const announcement = ref('');
-
-function dayLabel(cell: Cell): string {
-  const suffix = `${cell.bold ? t('home.hasExhibition') : ''}${cell.hasEvent ? myActivityMark : ''}`;
-  const selected = cell.day === view.value.day && !cell.muted ? t('home.daySelected') : '';
-  // 用格子自己的月份：补位格子是上/下月的日期，报成当月会让读屏听到错的日期。
-  return t('home.dayAria', { month: cell.month, day: cell.day, marks: suffix, selected });
-}
 
 /** 加载当前 `view` 对应的月份；已有内容时保留旧内容，只标记忙碌。 */
 async function load(): Promise<boolean> {
@@ -227,115 +160,125 @@ function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-let monthTimer: number | undefined;
-let enterFrame: number | undefined;
-let pendingMonth: { year: number; month: number } | undefined;
-
-/** 切换月份：先让当前卡片滑出，再载入新月份并滑入，让「月份变了」在视觉上连续。 */
-function shiftMonth(delta: number): void {
-  if (monthSliding) return;
-  const current = pendingMonth ?? view.value;
-  const next = addMonths(current.year, current.month, delta);
-  pendingMonth = next;
-  window.clearTimeout(monthTimer);
-  monthQuery.cancel();
-  // 用户已经指定月份时，晚到的启动落点不再接管视图。
-  landingApplied.value = true;
-  const apply = (): void => {
-    pendingMonth = undefined;
-    view.value.year = next.year;
-    view.value.month = next.month;
-    // 交给新月份自己挑第一个有展会的日期。
-    view.value.day = 0;
-    enter.value = delta > 0 ? 'right' : 'left';
-    void load().then((applied) => {
-      if (!applied) return;
-      enterFrame = requestAnimationFrame(() => {
-        enter.value = '';
-      });
-    });
-  };
-  if (prefersReducedMotion()) {
-    apply();
-    return;
-  }
-  leave.value = delta > 0 ? 'left' : 'right';
-  monthTimer = window.setTimeout(() => {
-    leave.value = '';
-    apply();
-  }, 140);
-}
-
+let slideTimer: number | undefined;
+/** 回弹动画的兜底计时器：新一次拖动开始时要取消，免得它把正在拖的卡片复位。 */
+let snapTimer: number | undefined;
 let monthSliding = false;
 
+/** 当前日历卡片的宽度；布局没算出来时退回常见窄屏宽度。 */
+function cardWidth(): number {
+  const card = calendarHost.value;
+  return card?.getBoundingClientRect().width || card?.clientWidth || swipeHost.value?.clientWidth || 320;
+}
+
 /**
- * 松手后切月：卡片从手指停下的位置直接滑出，换完月份再从反方向滑入。
+ * 把「当前月卡片 + 左右相邻月预览」一起平移 `offset`（px）。
  *
- * 旧实现先把卡片弹回 0，再播 leave/enter 两段 CSS 动画，手指位置和动画起点之间
- * 会有一跳；这里把两段接成一条连续的位移。
+ * 卡片在 `offset`；上/下月预览分别在 `offset - width` / `offset + width`。
+ * 拖到一半松手前，下一月的日期网格已经跟着露出来了，不会看到空白。
+ */
+function paintOffset(offset: number, transition: string): void {
+  const width = cardWidth();
+  const card = calendarHost.value;
+  if (card) {
+    card.style.transition = transition;
+    card.style.transform = `translate3d(${offset}px, 0, 0)`;
+  }
+  const previous = previousPreview.value;
+  if (previous) {
+    previous.style.transition = transition;
+    previous.style.transform = `translate3d(${offset - width}px, 0, 0)`;
+  }
+  const next = nextPreview.value;
+  if (next) {
+    next.style.transition = transition;
+    next.style.transform = `translate3d(${offset + width}px, 0, 0)`;
+  }
+}
+
+/** 清掉内联的 transition / transform：回到 CSS 静态位置（预览在两侧、当前月在中间）。 */
+function resetSlideStyles(): void {
+  for (const node of [calendarHost.value, previousPreview.value, nextPreview.value]) {
+    if (!node) continue;
+    node.style.transition = 'none';
+    node.style.transform = '';
+  }
+  dragging.value = false;
+  if (calendarHost.value) calendarHost.value.dataset.drag = 'false';
+}
+
+/** 松手但没到切月阈值：三块一起回原位。 */
+function snapBackSlide(): void {
+  paintOffset(0, 'transform var(--motion-normal) var(--ease-out)');
+  if (snapTimer !== undefined) window.clearTimeout(snapTimer);
+  snapTimer = window.setTimeout(
+    () => {
+      snapTimer = undefined;
+      resetSlideStyles();
+    },
+    prefersReducedMotion() ? 0 : 260,
+  );
+}
+
+/** 直接落月：减少动效、或动画兜底时用，不播预览层。 */
+function applyMonth(delta: number): void {
+  const next = addMonths(view.value.year, view.value.month, delta);
+  monthQuery.cancel();
+  landingApplied.value = true;
+  view.value.year = next.year;
+  view.value.month = next.month;
+  view.value.day = 0;
+  resetSlideStyles();
+  void load();
+}
+
+/**
+ * 切月滑动：卡片和两侧预览一起滑一格。
+ *
+ * 下一月：卡片到 -width、下一月预览到 0；上一月：卡片到 +width、上一月预览到 0。
+ * 动画结束才换 `view` 并用真实数据重画；预览层不带展会高亮，落月后立刻补齐。
  */
 function slideMonth(direction: number): void {
-  const card = calendarHost.value;
-  if (!card || monthSliding) return;
+  if (monthSliding) return;
   if (prefersReducedMotion()) {
-    shiftMonth(direction);
+    applyMonth(direction);
     return;
   }
   monthSliding = true;
-  window.clearTimeout(monthTimer);
   monthQuery.cancel();
   landingApplied.value = true;
-  leave.value = '';
-  enter.value = '';
-  const width = card.getBoundingClientRect().width || card.clientWidth || 320;
-  const out = direction > 0 ? -width : width;
-  const comeFrom = direction > 0 ? width : -width;
-  let swapped = false;
-  let settled = false;
-
-  const settle = (event?: TransitionEvent): void => {
+  if (snapTimer !== undefined) {
+    window.clearTimeout(snapTimer);
+    snapTimer = undefined;
+  }
+  const offset = direction > 0 ? -cardWidth() : cardWidth();
+  paintOffset(offset, 'transform var(--motion-normal) var(--ease-out)');
+  const card = calendarHost.value;
+  let finished = false;
+  const finish = (event?: TransitionEvent): void => {
     if (event && (event.target !== card || event.propertyName !== 'transform')) return;
-    if (settled) return;
-    settled = true;
-    card.style.transition = 'none';
-    card.style.transform = '';
+    if (finished) return;
+    finished = true;
+    if (slideTimer !== undefined) window.clearTimeout(slideTimer);
     monthSliding = false;
+    applyMonth(direction);
   };
+  if (card) card.addEventListener('transitionend', finish, { once: true });
+  // transition 不触发（页面在后台等）时的兜底，避免卡片停在屏外。
+  slideTimer = window.setTimeout(() => finish(), 420);
+}
 
-  const swap = (event?: TransitionEvent): void => {
-    if (event && (event.target !== card || event.propertyName !== 'transform')) return;
-    if (swapped) return;
-    swapped = true;
-    const current = pendingMonth ?? view.value;
-    const next = addMonths(current.year, current.month, direction);
-    pendingMonth = undefined;
-    view.value.year = next.year;
-    view.value.month = next.month;
-    // 新月份自己挑第一个有展会的日期。
-    view.value.day = 0;
-    card.style.transition = 'none';
-    card.style.transform = `translate3d(${comeFrom}px, 0, 0)`;
-    void load();
-    requestAnimationFrame(() => {
-      card.style.transition = 'transform var(--motion-normal) var(--ease-out)';
-      card.style.transform = 'translate3d(0, 0, 0)';
-    });
-    card.addEventListener('transitionend', settle, { once: true });
-    // transition 不触发（例如页面在后台）时的兜底，避免卡片停在屏外。
-    window.setTimeout(() => settle(), 600);
-  };
-
-  card.style.transition = 'transform var(--motion-quick) var(--ease-out)';
-  card.style.transform = `translate3d(${out}px, 0, 0)`;
-  card.addEventListener('transitionend', (event) => swap(event), { once: true });
-  window.setTimeout(() => swap(), 260);
+/** 箭头按钮切月：与滑动共用同一段预览动画。 */
+function shiftMonth(delta: number): void {
+  if (monthSliding) return;
+  slideMonth(delta);
 }
 
 /**
  * 左右滑动切换月份。
  *
- * 拖动 1:1 跟手；松手时按「超过卡片宽度 1/4」或「快速甩动」判定切月。
- * 切月直接接续手指位置滑出，再从另一侧滑入（见 `slideMonth`），不再先弹回中间。
+ * 拖动 1:1 跟手，当前月与左右相邻月预览一起平移；松手时按「超过卡片宽度 1/4」
+ * 或「快速甩动」判定切月，切月直接接续手指位置滑到位，再换月。
  */
 function enableSwipe(): void {
   const host = swipeHost.value;
@@ -360,17 +303,19 @@ function enableSwipe(): void {
 
   const snapBack = (): void => {
     card.dataset.drag = 'false';
-    card.style.transition = 'transform var(--motion-normal) var(--ease-out)';
-    card.style.transform = '';
+    dragging.value = false;
+    snapBackSlide();
     clear();
-    window.setTimeout(() => {
-      card.style.transition = '';
-    }, 260);
   };
 
   host.addEventListener('pointerdown', (event) => {
     if (pointerId !== null || event.pointerType === 'mouse') return;
     if (monthSliding) return;
+    // 回弹动画还没结束时再次按下：取消兜底复位，交给这次拖动继续跟手。
+    if (snapTimer !== undefined) {
+      window.clearTimeout(snapTimer);
+      snapTimer = undefined;
+    }
     pointerId = event.pointerId;
     startX = event.clientX;
     startY = event.clientY;
@@ -394,7 +339,7 @@ function enableSwipe(): void {
         // 纵向手势不会走到这里，仍照旧能下拉刷新。
         suppressPull();
         card.dataset.drag = 'true';
-        card.style.transition = 'none';
+        dragging.value = true;
       }
     }
     if (axis !== 'x') return;
@@ -405,16 +350,17 @@ function enableSwipe(): void {
     lastTime = now;
     deltaX = dx;
     // 1:1 跟手，最多跟到卡片宽度；超出后停住，不把整张卡拖出屏幕。
-    const width = card.getBoundingClientRect().width || card.clientWidth || 320;
+    const width = cardWidth();
     const bounded = Math.max(-width, Math.min(width, dx));
-    card.style.transform = `translate3d(${bounded}px, 0, 0)`;
+    // 卡片和两侧预览一起走：露出来的位置始终是相邻月份的日历，而不是空白。
+    paintOffset(bounded, 'none');
     event.preventDefault();
   });
 
   const finish = (event: PointerEvent): void => {
     if (event.pointerId !== pointerId) return;
     card.dataset.drag = 'false';
-    const width = card.getBoundingClientRect().width || card.clientWidth || 320;
+    const width = cardWidth();
     const outcome = resolveCalendarSwipe({ deltaX, velocityX, width });
     if (outcome.commit) {
       clear();
@@ -466,8 +412,8 @@ onMounted(() => {
   void load();
 });
 onBeforeUnmount(() => {
-  window.clearTimeout(monthTimer);
-  if (enterFrame !== undefined) cancelAnimationFrame(enterFrame);
+  if (slideTimer !== undefined) window.clearTimeout(slideTimer);
+  if (snapTimer !== undefined) window.clearTimeout(snapTimer);
 });
 </script>
 
@@ -510,14 +456,14 @@ onBeforeUnmount(() => {
     </div>
   </div>
 
-  <div ref="swipeHost" class="calendar-swipe">
-    <div
-      ref="calendarHost"
-      class="calendar"
-      :data-leave="leave || undefined"
-      :data-enter="enter || undefined"
-      :data-busy="loading && hasContent ? 'true' : undefined"
-    >
+  <div ref="swipeHost" class="calendar-swipe" :data-dragging="dragging ? 'true' : undefined">
+    <!-- 相邻月份预览：拖动时与当前月一起平移。预览只排日期（不带展会高亮），
+         落月后由真实数据重画；aria-hidden + inert 保证不会抢焦点或读屏。 -->
+    <div ref="previousPreview" class="calendar calendar-preview" data-side="prev" aria-hidden="true" inert>
+      <CalendarMonthPanel :year="previousMonth.year" :month="previousMonth.month" />
+    </div>
+
+    <div ref="calendarHost" class="calendar" :data-busy="loading && hasContent ? 'true' : undefined">
       <SkeletonBlock v-if="loading && !hasContent" :rows="1" />
       <StateBlock
         v-else-if="error && !hasContent"
@@ -527,29 +473,19 @@ onBeforeUnmount(() => {
         :action-label="t('common.retry')"
         @action="load"
       />
-      <template v-else>
-        <div class="week-row" aria-hidden="true">
-          <span v-for="label in WEEK_LABELS" :key="label">{{ label }}</span>
-        </div>
-        <div class="calendar-grid" :data-rows="rows">
-          <button
-            v-for="(cell, index) in cells"
-            :key="`${cell.muted ? 'p' : 'c'}-${cell.day}-${index}`"
-            class="cal-day"
-            type="button"
-            :data-day="cell.day"
-            :data-muted="cell.muted ? 'true' : 'false'"
-            :data-bold="cell.bold ? 'true' : 'false'"
-            :data-has-event="cell.hasEvent ? 'true' : 'false'"
-            :aria-pressed="!cell.muted && cell.day === view.day ? 'true' : 'false'"
-            :aria-label="dayLabel(cell)"
-            :disabled="cell.disabled"
-            @click="selectDay(cell.day)"
-          >
-            <span class="cal-day-num">{{ cell.day }}</span>
-          </button>
-        </div>
-      </template>
+      <CalendarMonthPanel
+        v-else
+        :year="view.year"
+        :month="view.month"
+        :data="monthData"
+        :selected-day="view.day"
+        interactive
+        @select="selectDay"
+      />
+    </div>
+
+    <div ref="nextPreview" class="calendar calendar-preview" data-side="next" aria-hidden="true" inert>
+      <CalendarMonthPanel :year="nextMonth.year" :month="nextMonth.month" />
     </div>
   </div>
 
@@ -634,6 +570,8 @@ onBeforeUnmount(() => {
 
 <style>
 .calendar {
+  position: relative;
+  z-index: 1;
   padding: var(--s2);
   border: var(--hairline) solid var(--stroke);
   border-radius: var(--r-panel);
@@ -642,105 +580,24 @@ onBeforeUnmount(() => {
   will-change: transform;
 }
 
-.week-row,
-.calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: var(--s1);
+/* 相邻月份预览：绝对定位铺满滑动区，随时和当前月一起平移。
+   默认停在左右两侧（拖动开始前不可见），当前月留在正常文档流里决定卡片高度。 */
+.calendar-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  will-change: transform;
 }
 
-.week-row {
-  margin-bottom: var(--s1);
-  color: var(--ink-3);
-  font-size: var(--fs-tag);
-  font-weight: 600;
-  text-align: center;
+.calendar-preview[data-side='prev'] {
+  transform: translate3d(-100%, 0, 0);
 }
 
-.cal-day {
-  position: relative;
-  min-width: 0;
-  /* 行高只有一档：日历按月份排 5 或 6 行（放得下就 5 行），行距与字号因此完全一致。
-       44px 保证触控命中区不小于这个下限。 */
-  min-height: 44px;
-  /* 数字与“有展会”圆点共用同一条居中轴：flex 纵向排列 + align-items: center，
-       圆点因此始终落在数字正下方，不再因为绝对定位与列宽换算而偏右。 */
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: var(--s1) 0;
-  /* 选中态只改文字与圆点，不再给整格加背景框或描边 */
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--ink-2);
-  font-size: var(--fs-label);
-  transition: color var(--motion-fast) var(--ease);
-}
-
-.cal-day[data-muted='true'] {
-  color: var(--ink-3);
-}
-
-/* 日期数字：选中时在数字正下方画一小段下划线，不使用方框 */
-.cal-day-num {
-  display: inline-block;
-  padding-bottom: 2px;
-  border-bottom: 2px solid transparent;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-  transition: border-color var(--motion-fast) var(--ease);
-}
-
-/* 有展会的日期：更粗、略大，并用主题色。圆点另由 data-has-event 表示「我的活动」。 */
-.cal-day[data-bold='true'] .cal-day-num {
-  font-weight: 800;
-  font-size: 1.12em;
-  color: var(--accent);
-}
-
-/* 圆点是 flex 子项，宽度固定为 6px，不参与绝对定位，因此与数字严格对齐。 */
-.cal-day[data-has-event='true']::after {
-  content: '';
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--r-pill);
-  background: var(--accent);
-}
-
-/* 没有展会时仍占住圆点的位置，避免同一行日期上下跳动。 */
-.cal-day[data-has-event='false']::after {
-  content: '';
-  flex: none;
-  width: 6px;
-  height: 6px;
-  background: transparent;
-}
-
-.cal-day[aria-pressed='true'] {
-  background: transparent;
-  color: var(--accent-ink);
-  font-weight: 700;
-}
-
-.cal-day[aria-pressed='true'] .cal-day-num {
-  border-bottom-color: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 800;
-}
-
-/* 选中日期若同时有展会，圆点用深一档的强调色，与文字一起构成选中线索 */
-.cal-day[aria-pressed='true'][data-has-event='true']::after {
-  background: var(--accent-ink);
-}
-
-/* 键盘导航时保留焦点环，鼠标/触摸点击不会出现方框 */
-.cal-day:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-  border-radius: var(--r-chip);
+.calendar-preview[data-side='next'] {
+  transform: translate3d(100%, 0, 0);
 }
 </style>

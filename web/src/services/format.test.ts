@@ -14,8 +14,10 @@ import {
   daysInMonth,
   daysUntil,
   firstWeekdayOffset,
+  formatDateRange,
   formatDateWithWeekday,
   formatLocalChineseDate,
+  formatMonthHeading,
   parseDate,
 } from './format';
 
@@ -79,6 +81,26 @@ describe('日期格式化', () => {
     expect(parseDate('2026-9-1')).toBeNull();
     expect(formatDateWithWeekday('')).toBe('');
     expect(formatDateWithWeekday('not-a-date')).toBe('');
+  });
+});
+
+describe('展会日期区间', () => {
+  it('有闭展且与开展不同才显示成区间', () => {
+    expect(formatDateRange('2026-11-17', '2026-11-22')).toBe('11月17日（周二） - 11月22日（周日）');
+  });
+
+  it('单日展会（闭展为空 / 非法 / 与开展同一天）只显示开展日期', () => {
+    expect(formatDateRange('2026-11-17', '')).toBe('11月17日（周二）');
+    expect(formatDateRange('2026-11-17', 'not-a-date')).toBe('11月17日（周二）');
+    expect(formatDateRange('2026-11-17', '2026-11-17')).toBe('11月17日（周二）');
+    expect(formatDateRange('', '2026-11-22')).toBe('');
+  });
+});
+
+describe('选择器的月份标题', () => {
+  it('按日历分节的写法给年月，不加空格', () => {
+    expect(formatMonthHeading(2026, 11)).toBe('2026年11月');
+    expect(formatMonthHeading(2026, 1)).toBe('2026年1月');
   });
 });
 

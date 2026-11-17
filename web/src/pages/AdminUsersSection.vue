@@ -12,7 +12,8 @@ import StateBlock from '@/components/StateBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { formatLocalChineseDate, truncate } from '@/services/format';
 import { statusTone, userStatusLabel } from '@/services/status';
-import type { Ref } from 'vue';
+import { useBootstrapStore } from '@/stores/bootstrap';
+import { computed, type Ref } from 'vue';
 import type { User } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -40,6 +41,43 @@ function exhibitorMeta(user: User): string {
   return user.exhibitorExpired === true
     ? t('admin.users.exhibitorExpired', { date })
     : t('admin.users.exhibitorUntil', { date });
+}
+
+/**
+ * 「最近登录」一行：日期后面跟最近登录 IP 所属地区（如「2026-11-17 江苏省苏州市」）。
+ *
+ * 卡片右侧的 StatusTag 是唯一的状态显示，这里不再重复状态文字。
+ * 时间缺失时退回注册时间（服务端已兜底一层，这里再兜一层，旧快照也不显示「未知」）；
+ * 地区为空时只显示日期。
+ */
+function lastLoginMeta(user: User): string {
+  const date = String(user.lastLoginTime || user.registrationTime || '') || t('admin.users.unknown');
+  const region = String(user.lastLoginRegion || '');
+  return t('admin.users.lastLogin', { time: region ? `${date} ${region}` : date });
+}
+
+/** 当前生效的用户协议版本；0 表示管理员没开启协议，卡片上不显示同意状态。 */
+const agreementVersion = computed(() => {
+  const agreement = useBootstrapStore().agreement;
+  return agreement?.enabled === true ? Number(agreement.version) || 0 : 0;
+});
+
+/**
+ * 用户协议同意状态：管理端要能一眼看出每个账号同意到哪一版。
+ * 只有协议开启（当前版本 > 0）时才显示；关闭时这些信息对管理员没有意义。
+ */
+function agreementMeta(user: User): string {
+  const current = agreementVersion.value;
+  if (current <= 0) return '';
+  const accepted = Number(user.agreedTermsVersion) || 0;
+  if (accepted >= current) {
+    const date = formatLocalChineseDate(user.agreedTermsAt);
+    return date
+      ? t('admin.users.agreementAccepted', { version: accepted, date })
+      : t('admin.users.agreementAcceptedNoDate', { version: accepted });
+  }
+  if (accepted > 0) return t('admin.users.agreementOutdated', { version: accepted });
+  return t('admin.users.agreementNever');
 }
 </script>
 
@@ -93,11 +131,10 @@ function exhibitorMeta(user: User): string {
               <strong class="row-title truncate">{{ user.nickname }}</strong>
               <RoleTag :role-code="String(user.roleCode || '')" />
             </span>
-            <span class="row-meta">{{
-              t('admin.users.lastLogin', {
-                status: userStatusLabel(String(user.statusCode ?? '')),
-                time: String(user.lastLoginTime || t('admin.users.unknown')),
-              })
+            <span class="row-meta">{{ lastLoginMeta(user) }}</span>
+            <!-- 用户协议开启时，每个账号同意到哪一版也要能看见（关闭时整行不渲染）。 -->
+            <span v-if="agreementMeta(user)" class="row-meta" data-agreement-status="true">{{
+              agreementMeta(user)
             }}</span>
             <span v-if="exhibitorMeta(user)" class="row-meta">{{ exhibitorMeta(user) }}</span>
             <span class="row-meta truncate">{{ truncate(user.email, 40) }}</span>

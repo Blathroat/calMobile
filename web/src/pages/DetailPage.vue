@@ -8,6 +8,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
+import { isJoinSurface, paths } from '@/app/surface';
 import { useAsync } from '@/composables/useAsync';
 import { usePullRefresh } from '@/services/pull-refresh';
 import { tagRead, type CachedRead } from '@/services/query-cache';
@@ -25,7 +26,7 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import ImageViewer from '@/components/ImageViewer.vue';
-import { formatDateWithWeekday } from '@/services/format';
+import { formatDateRange } from '@/services/format';
 import { REGISTRATION_STATUS, modeLabel, roleLabel, statusTone } from '@/services/status';
 import type { ExhibitionDetail, JsonObject, Registration } from '@/api/types';
 import { t } from '@/i18n';
@@ -105,6 +106,8 @@ const registerLabel = computed(() => {
   // 已报名时主按钮是「去哪看报名」，与报名是否关闭、账号是否受限无关。
   if (myRegistration.value) return t('exhibition.detail.viewMyRegistration');
   if (exhibition.value?.openForRegistration === false) return t('exhibition.detail.registrationClosed');
+  // 报名站：未登录也可以直接报名，按钮文案保持「立即报名」，不再写「登录后报名」。
+  if (isJoinSurface && session.loggedIn !== true) return t('exhibition.detail.registerNow');
   return registerLimited.value || canRegister.value
     ? t('exhibition.detail.registerNow')
     : t('exhibition.detail.registerAfterLogin');
@@ -126,7 +129,9 @@ function footerHint(): string {
     return t('exhibition.detail.closedWithMode', { mode: modeLabel(String(item.statusCode || '')) });
   }
   if (registerLimited.value) return t('exhibition.detail.registerRestricted');
-  // 访客进不来这一页（守守卫按「访客只可访问首页」处理），所以这里不再区分「先登录」的引导。
+  // 报名站的访客提交后没有账号，只能靠状态页的查询链接回来看，提示要说清楚。
+  if (isJoinSurface && session.loggedIn !== true) return t('exhibition.detail.joinTrackHint');
+  // 应用里访客进不来这一页，所以这里不再区分「先登录」的引导。
   return t('exhibition.detail.trackInActivities');
 }
 
@@ -165,7 +170,8 @@ async function load(): Promise<void> {
     calendarState.value = { inCalendar: false, granted: false };
     return;
   }
-  if (!calendarRequested) {
+  // 报名站没有原生日历：不请求日历状态，底部也不摆「加入日历」。
+  if (!calendarRequested && !isJoinSurface) {
     calendarRequested = true;
     void loadCalendarState();
   }
@@ -209,7 +215,12 @@ function startRegistration(): void {
   if (!item) return;
   // 已报名：主按钮变成「查看我的报名」，跳自己的报名详情，不受报名关闭 / 受限影响。
   if (myRegistration.value) {
-    void router.push(`/registration-detail/${myRegistration.value.id}`);
+    void router.push(paths.registrationDetail(String(myRegistration.value.id)));
+    return;
+  }
+  // 报名站：未登录访客直接进免登录报名的表单，不弹「请先登录」。
+  if (isJoinSurface && session.loggedIn !== true) {
+    void router.push(paths.registrationForm(item.id));
     return;
   }
   if (registerLimited.value) {
@@ -220,7 +231,25 @@ function startRegistration(): void {
     toast(t('exhibition.detail.loginBeforeRegister'));
     return;
   }
-  void router.push(`/registration-form/${item.id}`);
+  void router.push(paths.registrationForm(item.id));
+}
+
+/**
+ * 点展商卡片：应用里进公开页（`/user-public/...`）。
+ *
+ * 报名站的 `/u/:nickname` 是登录后才能看的公开页：未登录先带去登录页并带上回跳地址，
+ * 登录后回到同一个公开页，而不是让访客在公开页上被守卫弹回来。
+ */
+function openExhibitorHome(): void {
+  const nickname = String(exhibition.value?.exhibitor ?? '');
+  if (!nickname) return;
+  if (!isJoinSurface) {
+    void router.push(`/user-public/${encodeURIComponent(nickname)}`);
+    return;
+  }
+  const target = `/u/${encodeURIComponent(nickname)}`;
+  if (session.loggedIn === true) void router.push(target);
+  else void router.push({ path: '/login', query: { redirect: target } });
 }
 
 function share(): void {
@@ -229,7 +258,7 @@ function share(): void {
   const link = registrationLink(bootstrap.publicBaseUrl, item.id);
   const text = [
     String(item.title ?? ''),
-    `${formatDateWithWeekday(item.date)} ${String(item.time ?? '')}`.trim(),
+    `${formatDateRange(item.date, item.endDate)} ${String(item.time ?? '')}`.trim(),
     String(item.venue ?? ''),
     link ? t('exhibition.detail.registrationLinkPrefix', { link }) : '',
   ]
@@ -319,7 +348,7 @@ onMounted(() => {
     >
       <img :src="cover" :alt="t('exhibition.detail.coverAlt', { title: String(exhibition.title ?? '') })" />
     </button>
-    <div v-else class="hero ph-img" aria-hidden="true" />
+    <div v-else class="hero ph-img hero-placeholder" aria-hidden="true" />
 
     <div class="stack" data-gap="sm">
       <h2 class="detail-title">{{ exhibition.title }}</h2>
@@ -331,7 +360,7 @@ onMounted(() => {
     <div class="card" data-tone="fill">
       <div class="row" data-gap="md">
         <span class="dim" aria-hidden="true"><AppIcon name="calendar" size="icon icon-sm" /></span>
-        <span class="row-meta">{{ formatDateWithWeekday(exhibition.date) }} {{ exhibition.time }}</span>
+        <span class="row-meta">{{ formatDateRange(exhibition.date, exhibition.endDate) }} {{ exhibition.time }}</span>
       </div>
       <div class="row" data-gap="md">
         <span class="dim" aria-hidden="true"><AppIcon name="home" size="icon icon-sm" /></span>
@@ -355,7 +384,7 @@ onMounted(() => {
       type="button"
       data-pressable="true"
       :aria-label="t('exhibition.detail.exhibitorHomeAria', { exhibitor: String(exhibition.exhibitor ?? '') })"
-      @click="router.push(`/user-public/${encodeURIComponent(String(exhibition.exhibitor))}`)"
+      @click="openExhibitorHome"
     >
       <AvatarBox :name="String(exhibition.exhibitor || '')" />
       <span class="row-copy">
@@ -393,12 +422,15 @@ onMounted(() => {
     </div>
   </template>
 
-  <!-- 底部固定操作区：加入日历 + 报名 -->
+  <!-- 底部固定操作区：应用里是「加入日历 + 报名」；
+       报名站没有原生日历，只留一颗占满宽度的「立即报名」。 -->
   <Teleport v-if="exhibition && found" defer to="#app-foot">
     <div class="page-foot">
       <div class="stack" data-gap="sm">
-        <div class="grid-cols-2">
+        <!-- 应用里两颗按钮并排；报名站只剩报名一颗，占满整行。 -->
+        <div :class="isJoinSurface ? undefined : 'grid-cols-2'">
           <button
+            v-if="!isJoinSurface"
             class="cta ghost"
             type="button"
             :disabled="calendarBusy"
