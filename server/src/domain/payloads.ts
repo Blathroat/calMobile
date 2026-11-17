@@ -34,6 +34,8 @@ export interface ExhibitionRow {
   exhibitor?: string | null;
   exhibitor_role?: string | null;
   exhibitor_note?: string | null;
+  /** 报名注意事项：只在审核通过 / 已参加的报名详情里展示。 */
+  registration_notice?: string | null;
   image_uri?: string | null;
   registration_start?: string | null;
   registration_end?: string | null;
@@ -53,6 +55,8 @@ export interface FieldRow {
 }
 
 export interface RegistrationRow {
+  /** 展会报名注意事项：payload 按报名状态决定是否下发。 */
+  exhibition_notice?: string | null;
   id: string;
   exhibition_id: string;
   visitor_id?: string | null;
@@ -150,6 +154,7 @@ export function exhibitionPayload(row: ExhibitionRow) {
     exhibitorId: row.exhibitor_id || '',
     exhibitorRole: row.exhibitor_role || '',
     exhibitorNote: row.exhibitor_note || '',
+    registrationNotice: row.registration_notice || '',
     imageUri: row.image_uri || '',
     registrationStart: row.registration_start || '',
     registrationEnd: row.registration_end || '',
@@ -196,6 +201,8 @@ export function registrationPayload(row: RegistrationRow) {
     exhibitionDate: row.exhibition_date || '',
     exhibitionTime: row.exhibition_time || '',
     exhibitionVenue: row.exhibition_venue || '',
+    // 注意事项只给审核通过 / 已参加的人看：其它状态连字段都不下发，前端无从渲染。
+    exhibitionNotice: statusCode === 'approved' || statusCode === 'attended' ? row.exhibition_notice || '' : '',
     visitorName: row.visitor_name,
     visitorType: row.visitor_type,
     answers: row.answers || '',

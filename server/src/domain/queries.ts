@@ -9,7 +9,7 @@
 /** 展会：字段 + 展商昵称 + 报名数 + 收集项数。 */
 export const EXHIBITION_COLUMNS = `
     e.id, e.title, e.venue, e.time, e.category, e.description, e.description_format,
-    e.image_uri, e.exhibitor_note, e.qr_enabled, e.allow_cancel, e.exhibitor_id, e.status,
+    e.image_uri, e.exhibitor_note, e.registration_notice, e.qr_enabled, e.allow_cancel, e.exhibitor_id, e.status,
     to_char(e.exhibition_date, 'YYYY-MM-DD')                AS exhibition_date,
     to_char(e.exhibition_end_date, 'YYYY-MM-DD')            AS exhibition_end_date,
     EXTRACT(YEAR FROM e.exhibition_date)::int               AS year,
@@ -42,6 +42,7 @@ export const REGISTRATION_COLUMNS = `
     e.time                  AS exhibition_time,
     e.qr_enabled            AS exhibition_qr_enabled,
     e.allow_cancel          AS exhibition_allow_cancel,
+    e.registration_notice   AS exhibition_notice,
     e.exhibitor_id          AS exhibition_exhibitor_id,
     EXTRACT(DAY FROM e.exhibition_date)::int    AS exhibition_day,
     EXTRACT(MONTH FROM e.exhibition_date)::int  AS exhibition_month,

@@ -484,6 +484,8 @@ export function exhibitionInputSchema(
     description_format?: string | null;
     image_uri?: string | null;
     exhibitor_note?: string | null;
+    /** 报名注意事项（审核通过 / 已参加的报名者可见）。 */
+    registration_notice?: string | null;
     qr_enabled?: boolean | null;
     allow_cancel?: boolean | null;
   },
@@ -504,6 +506,8 @@ export function exhibitionInputSchema(
       descriptionFormat: descriptionFormatSchema(),
       imageUri: inputString,
       exhibitorNote: inputString,
+      // 选填长文本；固定 2000 字上限，前端输入框同长度。
+      registrationNotice: textSchema({ label: '注意事项', max: 2000, required: false }),
       qrEnabled: boolSchema(false),
       allowCancel: z.preprocess((value) => {
         if (value === undefined || value === null || value === '') return undefined;
@@ -598,6 +602,7 @@ export function exhibitionInputSchema(
         descriptionFormat,
         imageUri: source.imageUri ?? existing?.image_uri ?? '',
         exhibitorNote: source.exhibitorNote ?? (creating ? '主办方公开信息' : (existing?.exhibitor_note ?? '')),
+        registrationNotice: source.registrationNotice ?? (creating ? '' : (existing?.registration_notice ?? '')),
         qrEnabled: source.qrEnabled ?? Boolean(existing?.qr_enabled),
         allowCancel: source.allowCancel ?? (existing ? existing.allow_cancel !== false : true),
         fields: Array.isArray(source.fields) && source.fields.length > 0 ? source.fields : null,

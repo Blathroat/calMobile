@@ -548,7 +548,11 @@
       "registrationStartShort": "开始",
       "registrationEndShort": "截止",
       "durationHint": "单个展会最长 {max} 天",
-      "durationTooLong": "单个展会最长 {max} 天，请缩短展期"
+      "durationTooLong": "单个展会最长 {max} 天，请缩短展期",
+      "noticeTitle": "注意事项（选填）",
+      "noticeLabel": "注意事项",
+      "noticeHint": "审核通过或已参加的报名者，会在报名详情页看到这段内容；留空则不显示。",
+      "noticePlaceholder": "例如：入场需携带身份证、签到地点、现场联系人等"
     },
     "list": {
       "countLabel": "{count} 个 · {registrations} 条报名",
@@ -807,7 +811,8 @@
       "queryLinkCopyFailed": "复制失败，请长按链接手动复制",
       "queryLinkHint": "请保存好这条链接，之后必须用它查询报名详情；也可以登录或注册，把这条报名关联到账号。",
       "loginToManageHint": "登录或注册后，这条报名会关联到你的账号，之后可以在「我的活动」里查看、修改或撤销。",
-      "claimFailed": "登录成功，但没能把这条报名关联到当前账号。"
+      "claimFailed": "登录成功，但没能把这条报名关联到当前账号。",
+      "noticeTitle": "注意事项"
     },
     "fields": {
       "addField": "新增收集项",

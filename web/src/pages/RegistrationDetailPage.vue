@@ -67,6 +67,11 @@ const queryLink = computed(() => {
 const cancelled = computed(() => record.value?.statusCode === REGISTRATION_STATUS.CANCELLED);
 /** 已参加是终态：后端不允许再撤销，按钮就不要画成可点的。 */
 const attended = computed(() => record.value?.statusCode === REGISTRATION_STATUS.ATTENDED);
+/** 注意事项只对审核通过 / 已参加展示；服务端也只在两种状态下下发正文，这里再兜一层。 */
+const canSeeNotice = computed(() => {
+  const status = String(record.value?.statusCode || '');
+  return status === REGISTRATION_STATUS.APPROVED || status === REGISTRATION_STATUS.ATTENDED;
+});
 const approved = computed(() => record.value?.statusCode === REGISTRATION_STATUS.APPROVED);
 /** 已通过的报名还要看展商是否允许撤销。待审核不受这个开关影响。 */
 const hostBlocksCancel = computed(() => approved.value && record.value?.allowCancel === false);
@@ -332,6 +337,12 @@ onBeforeUnmount(cancelQrHold);
       <span class="row-meta">{{ record.exhibitionVenue }}</span>
     </div>
 
+    <!-- 注意事项：展商在编辑展会时填的「注意事项」，只给审核通过 / 已参加的报名者看。 -->
+    <div v-if="canSeeNotice && record.exhibitionNotice" class="card" data-action="registration-notice">
+      <span class="section-label">{{ t('registration.detail.noticeTitle') }}</span>
+      <p class="reg-notice-copy">{{ record.exhibitionNotice }}</p>
+    </div>
+
     <div class="card">
       <span class="section-label">{{ t('exhibition.detail.registrationInfo') }}</span>
       <div class="stack info-rows" data-gap="sm">
@@ -448,9 +459,9 @@ onBeforeUnmount(cancelQrHold);
             <button class="cta danger" type="button" :disabled="!canCancel || cancelling" @click="askCancel">
               {{
                 cancelled
-                  ? REGISTRATION_STATUS.CANCELLED
+                  ? t('status.registration.cancelled')
                   : attended
-                    ? REGISTRATION_STATUS.ATTENDED
+                    ? t('status.registration.attended')
                     : t('registration.detail.cancelRegistration')
               }}
             </button>
@@ -554,5 +565,12 @@ onBeforeUnmount(cancelQrHold);
   max-width: 66%;
   text-align: end;
   overflow-wrap: anywhere;
+}
+
+/* 注意事项正文：展商可能按条换行，保留换行比压成一段更易读。 */
+.reg-notice-copy {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  color: var(--ink-2);
 }
 </style>

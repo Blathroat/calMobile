@@ -310,7 +310,7 @@ app.post('/', authenticateHono, async (c) => {
     const id = newId('exh');
     await withExhibitionQuota(user, { exhibitorId: user.userId, date: input.date }, async (client) => {
       await client.query(
-        `INSERT INTO exhibitions (id, title, venue, time, exhibition_date, exhibition_end_date, status, category, description, description_format, image_uri, exhibitor_note, registration_start, registration_end, qr_enabled, allow_cancel, exhibitor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+        `INSERT INTO exhibitions (id, title, venue, time, exhibition_date, exhibition_end_date, status, category, description, description_format, image_uri, exhibitor_note, registration_notice, registration_start, registration_end, qr_enabled, allow_cancel, exhibitor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
         [
           id,
           input.title,
@@ -324,6 +324,7 @@ app.post('/', authenticateHono, async (c) => {
           input.descriptionFormat,
           input.imageUri,
           input.exhibitorNote,
+          input.registrationNotice,
           input.registrationStart || null,
           input.registrationEnd || null,
           input.qrEnabled,
@@ -350,7 +351,7 @@ app.put('/:id', authenticateHono, async (c) => {
       { id: existing.id, exhibitorId: existing.exhibitor_id, date: input.date },
       async (client) => {
         await client.query(
-          `UPDATE exhibitions SET title=$2, venue=$3, time=$4, exhibition_date=$5, exhibition_end_date=$6, status=$7, category=$8, description=$9, description_format=$10, image_uri=$11, exhibitor_note=$12, registration_start=$13, registration_end=$14, qr_enabled=$15, allow_cancel=$16, updated_at=now() WHERE id=$1`,
+          `UPDATE exhibitions SET title=$2, venue=$3, time=$4, exhibition_date=$5, exhibition_end_date=$6, status=$7, category=$8, description=$9, description_format=$10, image_uri=$11, exhibitor_note=$12, registration_notice=$13, registration_start=$14, registration_end=$15, qr_enabled=$16, allow_cancel=$17, updated_at=now() WHERE id=$1`,
           [
             existing.id,
             input.title,
@@ -364,6 +365,7 @@ app.put('/:id', authenticateHono, async (c) => {
             input.descriptionFormat,
             input.imageUri,
             input.exhibitorNote,
+            input.registrationNotice,
             input.registrationStart || null,
             input.registrationEnd || null,
             input.qrEnabled,

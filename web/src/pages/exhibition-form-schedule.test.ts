@@ -191,6 +191,37 @@ describe('编辑展会：卡片分区与文案', () => {
     expect(document.querySelectorAll('#form-test hr.divider')).toHaveLength(0);
   });
 
+  it('收集项下面是「注意事项（选填）」卡片，保存时带上 registrationNotice', async () => {
+    await mountForm();
+    const notice = document.querySelector<HTMLTextAreaElement>('#form-registration-notice');
+    expect(notice).not.toBeNull();
+    expect(notice?.closest('.card')?.textContent).toContain('注意事项（选填）');
+    expect(notice?.closest('.card')?.textContent).toContain('审核通过或已参加的报名者');
+
+    vi.mocked(api.exhibitions.save).mockResolvedValue({ ok: true, exhibition: { id: 'exh-new' } });
+    const fill = (id: string, value: string) => {
+      const input = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`);
+      if (!input) throw new Error(`缺少输入框 #${id}`);
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    fill('form-title', '注意事项测试展');
+    fill('form-venue', '测试展馆');
+    const start = iso(3);
+    trigger('form-date').click();
+    await flush();
+    dayButton(start).click();
+    await flush();
+    sheetAction('取消').click();
+    await flush();
+    fill('form-registration-notice', '请携带身份证\n签到地点：A 口服务台');
+
+    document.querySelector<HTMLButtonElement>('#app-foot button')?.click();
+    await vi.waitFor(() => expect(vi.mocked(api.exhibitions.save)).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(api.exhibitions.save).mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.registrationNotice).toBe('请携带身份证\n签到地点：A 口服务台');
+  });
+
   it('保存时 payload 带上闭展日期；只选开展就是空串（单日展会）', async () => {
     await mountForm();
     vi.mocked(api.exhibitions.save).mockResolvedValue({ ok: true, exhibition: { id: 'exh-new' } });

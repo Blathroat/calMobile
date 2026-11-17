@@ -91,6 +91,8 @@ const form = reactive({
   registrationEnd: '',
   qrEnabled: false,
   allowCancel: true,
+  /** 注意事项（选填，最多 2000 字）：审核通过 / 已参加的报名者在报名详情里看到。 */
+  registrationNotice: '',
 });
 const fields = ref<CollectField[]>([]);
 
@@ -338,6 +340,14 @@ function fieldChecks(): Array<[string, () => string]> {
         }),
     ],
     [
+      'registrationNotice',
+      () =>
+        check(form.registrationNotice, {
+          label: t('exhibition.form.noticeLabel'),
+          max: 2000,
+        }),
+    ],
+    [
       'category',
       () =>
         check(form.category, {
@@ -409,6 +419,7 @@ function fillFrom(item: JsonObject, data: ExhibitionDetail): void {
   form.registrationEnd = String(item.registrationEnd ?? '');
   form.qrEnabled = item.qrEnabled === true;
   form.allowCancel = item.allowCancel !== false;
+  form.registrationNotice = String(item.registrationNotice ?? '');
   fields.value = (data.fields ?? []).map((field) => ({
     title: String(field.title ?? ''),
     type: String(field.type ?? FIELD_TYPE.TEXT),
@@ -432,6 +443,7 @@ function applyDraft(draft: ExhibitionDraft): void {
   form.registrationEnd = draft.registrationEnd;
   form.qrEnabled = draft.qrEnabled;
   form.allowCancel = draft.allowCancel;
+  form.registrationNotice = draft.registrationNotice ?? '';
   fields.value = draft.fields.map((field) => ({
     title: field.title,
     type: field.type,
@@ -455,6 +467,7 @@ function currentDraft(): ExhibitionDraft {
     registrationEnd: form.registrationEnd,
     qrEnabled: form.qrEnabled,
     allowCancel: form.allowCancel,
+    registrationNotice: form.registrationNotice,
     fields: fields.value,
   };
 }
@@ -600,6 +613,7 @@ function buildPayload(): JsonObject {
     registrationEnd: form.registrationEnd,
     qrEnabled: form.qrEnabled,
     allowCancel: form.allowCancel,
+    registrationNotice: form.registrationNotice.trim(),
     // 空选项不下发，避免保存出无意义的选项条目。
     fields: fields.value
       .filter((item) => item.title.trim() !== '')
@@ -928,6 +942,22 @@ function normalizeOptions(options: unknown): string[] {
       :radio-max="limit('radioOption', 60)"
       :check-max="limit('checkOption', 60)"
     />
+
+    <!-- 报名注意事项：审核通过 / 已参加的报名者在报名详情页看到这段正文。选填。 -->
+    <div class="card">
+      <span class="section-label">{{ t('exhibition.form.noticeTitle') }}</span>
+      <textarea
+        id="form-registration-notice"
+        v-model="form.registrationNotice"
+        class="textarea"
+        rows="6"
+        maxlength="2000"
+        :placeholder="t('exhibition.form.noticePlaceholder')"
+        :aria-describedby="'form-registration-notice-hint'"
+      />
+      <p id="form-registration-notice-hint" class="field-hint">{{ t('exhibition.form.noticeHint') }}</p>
+      <p v-if="isInvalid('registrationNotice')" class="field-error" role="alert">{{ formError }}</p>
+    </div>
 
     <!-- 删除放在内容最下，保存仍固定在页脚。新建还没有展会，按钮不可点。 -->
     <div class="card danger-zone">

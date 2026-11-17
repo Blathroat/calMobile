@@ -801,6 +801,14 @@ export const STEPS: MigrationStep[] = [
         CREATE INDEX IF NOT EXISTS app_logs_level_idx ON app_logs (level, created_at DESC);
         `,
   },
+  {
+    // 报名注意事项：审核通过 / 已参加的报名者在报名详情页看到这段正文。
+    // 与展商公开信息（exhibitor_note）分开：后者是公开简介，这份只给通过审核的报名者。
+    id: '0027-exhibition-registration-notice',
+    sql: `
+        ALTER TABLE exhibitions ADD COLUMN IF NOT EXISTS registration_notice TEXT NOT NULL DEFAULT '';
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {

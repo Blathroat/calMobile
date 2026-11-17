@@ -21,6 +21,8 @@ export interface ExhibitionDraft {
   registrationEnd: string;
   qrEnabled: boolean;
   allowCancel: boolean;
+  /** 报名注意事项（选填）；缺省视为空串，兼容旧草稿。 */
+  registrationNotice?: string;
   fields: CollectField[];
 }
 

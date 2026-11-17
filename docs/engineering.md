@@ -73,7 +73,9 @@
 
 匿名报名与认领（服务端约定见 [`server/README.md`](../server/README.md)）：
 
-- 只有「报名站 + 未登录」才匿名：提交时不带 `Authorization`，服务端记 `visitor_id = NULL`、`visitor_type = 'guest'`、姓名必填。匿名提交响应里的 `queryToken`（32 字节 base64url）只出现这一次，库里只存 sha256（`registrations.query_token_hash`，唯一部分索引）；`GET /registrations/query/:token` 按哈希匹配，返回与本人报名详情同形（含报名码）。
+- 编辑展会页在收集项卡下面新增「注意事项（选填）」卡片：`registrationNotice`（最多 2000 字），随展会保存；服务端 `exhibitionInputSchema` 再校验一次。`GET /registrations/:id` 的 payload 里 `exhibitionNotice` 只在报名状态为 `approved` / `attended` 时下发正文，其它状态是空串，页面据此渲染注意事项卡片。
+
+只有「报名站 + 未登录」才匿名：提交时不带 `Authorization`，服务端记 `visitor_id = NULL`、`visitor_type = 'guest'`、姓名必填。匿名提交响应里的 `queryToken`（32 字节 base64url）只出现这一次，库里只存 sha256（`registrations.query_token_hash`，唯一部分索引）；`GET /registrations/query/:token` 按哈希匹配，返回与本人报名详情同形（含报名码）。
 - 未登录时查询链接是唯一凭据（等同身份），所以状态页要提示保存、不要转发；`queryByToken` 刻意不进查询缓存，避免把凭据写进缓存键。
 - 已登录打开凭据链接时调 `POST /registrations/claim`：只补 `visitor_id`（保留匿名报名时填的姓名与 `visitor_type = 'guest'`），同账号幂等；被别的账号认领、或与账号已有同展会报名冲突（唯一部分索引）时返回 200 + `ok:false` 文案，页面留在状态页显示原因。
 - 带 `Authorization` 但令牌无效时匿名报名接口仍返回 401，不降级成匿名：否则应用内访问令牌过期后提交会悄悄写成无主记录。应用内报名流程与展示不变。
