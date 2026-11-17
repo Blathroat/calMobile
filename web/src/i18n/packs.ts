@@ -7,8 +7,8 @@
  * 不变量：
  * - 包 id 是小写字母、数字和连字符，1–32 位。
  * - 缺键回中文由调用方做；这里只判断「当前用哪一个包」。
- * - 报名站只认 `joinDefault`。这个值只有在服务器默认名称写进下载列表时才会被记下。
- * - 应用先认用户的选择，没选过才认服务器默认名称。
+ * - 应用与报名站都按服务器默认名称选语言；应用里用户的选择优先，报名站不看个人选择。
+ * - 服务器默认名称对应的包没装时，两边都回退中文。
  * - 包文件（和 `zh.json`）里的 `strings` 是**嵌套 JSON**：`{ "auth": { "login": { "title": "登录" } } }`，
  *   叶子必须是字符串，每段键是 `[A-Za-z0-9]+`（点分拼起来仍满足原来的
  *   `[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*`）。校验通过后在这里压成扁平表存进 `pack.strings`，
@@ -47,13 +47,11 @@ export interface LangState {
   packs: LangPack[];
   /** 应用里用户选过的 id。空串表示还没选。`zh` 是明确选择中文。 */
   choice: string;
-  /** 最近一次 bootstrap 的默认名称。应用在没选过语言时用它。 */
+  /** 最近一次 bootstrap 的默认名称；应用没选过语言、报名站始终按它选。 */
   serverDefault: string;
-  /** 报名站可用的默认名称。不在下载列表里时是空串。 */
-  joinDefault: string;
 }
 
-export const EMPTY_LANG_STATE: LangState = { packs: [], choice: '', serverDefault: '', joinDefault: '' };
+export const EMPTY_LANG_STATE: LangState = { packs: [], choice: '', serverDefault: '' };
 
 export function isPackId(value: string): boolean {
   return PACK_ID.test(value);
@@ -103,7 +101,8 @@ export function packBytes(pack: LangPack): number {
 export function resolveActiveId(state: LangState, surface: 'app' | 'join'): string {
   const installed = (id: string) => state.packs.some((pack) => pack.id === id);
   if (surface === 'join') {
-    return state.joinDefault && installed(state.joinDefault) ? state.joinDefault : 'zh';
+    // 报名站不看个人语言选择，但和 App 一样按服务器默认名称选；没装默认包时回退中文。
+    return state.serverDefault && installed(state.serverDefault) ? state.serverDefault : 'zh';
   }
   if (state.choice === 'zh') return 'zh';
   if (state.choice && installed(state.choice)) return state.choice;
@@ -115,16 +114,11 @@ export function overlayFor(state: LangState, id: string): Record<string, string>
   return state.packs.find((pack) => pack.id === id)?.strings ?? null;
 }
 
-/**
- * 记下服务器下发的默认名称。
- * 报名站的 `joinDefault` 只在该名称确实出现在下载列表里时保留。
- */
-export function rememberServerLang(state: LangState, defaultPack: string, offeredIds: readonly string[]): LangState {
-  const nextDefault = isPackId(defaultPack) ? defaultPack : '';
+/** 记下服务器下发的默认名称；应用与报名站都用它。 */
+export function rememberServerLang(state: LangState, defaultPack: string): LangState {
   return {
     ...state,
-    serverDefault: nextDefault,
-    joinDefault: nextDefault && offeredIds.includes(nextDefault) ? nextDefault : '',
+    serverDefault: isPackId(defaultPack) ? defaultPack : '',
   };
 }
 
@@ -155,7 +149,6 @@ export function chooseLanguage(state: LangState, choice: string): LangState {
 const PACKS_KEY = 'calmobile.lang.packs';
 const CHOICE_KEY = 'calmobile.lang.choice';
 const SERVER_KEY = 'calmobile.lang.server';
-const JOIN_KEY = 'calmobile.lang.join';
 
 export function readLangState(storage: Pick<Storage, 'getItem'> | null): LangState {
   if (!storage) return { ...EMPTY_LANG_STATE };
@@ -163,16 +156,25 @@ export function readLangState(storage: Pick<Storage, 'getItem'> | null): LangSta
     packs: readPacks(storage.getItem(PACKS_KEY)),
     choice: readChoice(storage.getItem(CHOICE_KEY)),
     serverDefault: readId(storage.getItem(SERVER_KEY)),
-    joinDefault: readId(storage.getItem(JOIN_KEY)),
   };
 }
 
-export function writeLangState(storage: Pick<Storage, 'setItem'> | null, state: LangState): void {
+/** 旧版本把报名站默认名单独存在这里；现在两边共用 serverDefault，顺手清掉本地残留。 */
+const LEGACY_JOIN_KEY = 'calmobile.lang.join';
+
+export function writeLangState(
+  storage: (Pick<Storage, 'setItem'> & Partial<Pick<Storage, 'removeItem'>>) | null,
+  state: LangState,
+): void {
   if (!storage) return;
   storage.setItem(PACKS_KEY, JSON.stringify(state.packs.map(storedPack)));
   storage.setItem(CHOICE_KEY, state.choice);
   storage.setItem(SERVER_KEY, state.serverDefault);
-  storage.setItem(JOIN_KEY, state.joinDefault);
+  try {
+    storage.removeItem?.(LEGACY_JOIN_KEY);
+  } catch {
+    // 隐私模式等禁用存储的环境：清不掉旧键不影响这次启动。
+  }
 }
 
 /** 嵌套的 `strings`：与包文件 / `zh.json` 同形。 */

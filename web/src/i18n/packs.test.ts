@@ -13,7 +13,7 @@ import {
   type LangState,
 } from './packs';
 
-const empty = (): LangState => ({ packs: [], choice: '', serverDefault: '', joinDefault: '' });
+const empty = (): LangState => ({ packs: [], choice: '', serverDefault: '' });
 
 /** 包文件 / 网络 / 落盘里的 strings：嵌套 JSON。 */
 function nested(paths: Record<string, string>): Record<string, unknown> {
@@ -68,15 +68,13 @@ describe('语言包', () => {
     );
   });
 
-  it('报名站只在默认名称已安装时使用它', () => {
-    const state = { ...empty(), packs: [pack('en')], joinDefault: 'en', serverDefault: 'en', choice: 'ja' };
-    expect(resolveActiveId(state, 'join')).toBe('en');
-    expect(resolveActiveId({ ...state, joinDefault: '' }, 'join')).toBe('zh');
-    expect(resolveActiveId({ ...state, packs: [] }, 'join')).toBe('zh');
-  });
-
-  it('应用里用户的选择优先于服务器默认', () => {
+  it('应用与报名站都按服务器默认名称选语言，报名站不看个人选择', () => {
     const state = { ...empty(), packs: [pack('en'), pack('ja')], serverDefault: 'en', choice: 'ja' };
+    expect(resolveActiveId(state, 'join')).toBe('en');
+    expect(resolveActiveId({ ...state, choice: 'zh' }, 'join')).toBe('en');
+    expect(resolveActiveId({ ...state, serverDefault: '' }, 'join')).toBe('zh');
+    expect(resolveActiveId({ ...state, packs: [] }, 'join')).toBe('zh');
+
     expect(resolveActiveId(state, 'app')).toBe('ja');
     expect(resolveActiveId({ ...state, choice: 'zh' }, 'app')).toBe('zh');
     expect(resolveActiveId({ ...state, choice: '' }, 'app')).toBe('en');
@@ -84,11 +82,21 @@ describe('语言包', () => {
     expect(resolveActiveId({ ...state, choice: 'missing' }, 'app')).toBe('zh');
   });
 
-  it('默认名称不在下载列表里时，报名站不记下它', () => {
-    expect(rememberServerLang(empty(), 'en', ['ja']).joinDefault).toBe('');
-    expect(rememberServerLang(empty(), 'en', ['en']).joinDefault).toBe('en');
-    expect(rememberServerLang(empty(), '', ['en'])).toMatchObject({ serverDefault: '', joinDefault: '' });
-    expect(rememberServerLang(empty(), 'Bad', ['Bad']).serverDefault).toBe('');
+  it('只记服务器默认名称，不再单独记报名站默认', () => {
+    expect(rememberServerLang(empty(), 'en')).toMatchObject({ serverDefault: 'en' });
+    expect(rememberServerLang(empty(), '')).toMatchObject({ serverDefault: '' });
+    expect(rememberServerLang(empty(), 'Bad').serverDefault).toBe('');
+  });
+
+  it('写本机状态时清掉旧的报名站默认键', () => {
+    const memory = new Map<string, string>([['calmobile.lang.join', 'en']]);
+    const storage = {
+      getItem: (key: string) => memory.get(key) ?? null,
+      setItem: (key: string, value: string) => void memory.set(key, value),
+      removeItem: (key: string) => void memory.delete(key),
+    };
+    writeLangState(storage, empty());
+    expect(memory.has('calmobile.lang.join')).toBe(false);
   });
 
   it('自动安装不覆盖已有的包，手动安装会换掉', () => {

@@ -176,7 +176,7 @@ location = /.well-known/assetlinks.json {
 
 `content-type` 必须是 `application/json`，系统凭据提供方只认根路径这一个地址；改完记得 `nginx -t` 再 reload。这份文件不随 npm 包发布，换证书或换包名要手动覆盖。
 
-通行密钥与更新检查还会读三个可选变量：`WEBAUTHN_RP_ID`（默认取 `PUBLIC_BASE_URL` 的主机名，**必须与用户实际打开页面的域名一致**，否则浏览器拒绝调用）、`WEBAUTHN_RP_NAME`、`WEBAUTHN_ORIGINS`（逗号分隔的完整来源，默认含 `PUBLIC_BASE_URL` 与本地 `http://localhost:<PORT>`；**App 内使用通行密钥时还必须加上 `android:apk-key-hash:<签名证书 SHA-256 的 base64url>`**，否则系统凭据提供方发回的断言会因来源不符被拒）；下载源选 GitHub 仓库时可以配 `GITHUB_TOKEN` 提高 GitHub API 额度（不配也能用，只是每小时次数少）。语言包不随页面发布：它放在用户机器的本机存储里，由 `LANG_PACK_URLS` 指向的任意 https 地址下载（或用户在设置里选 JSON 文件安装）。报名站只有在默认名称非空、且这个名称写在 `LANG_PACK_URLS` 里时才用该语言，否则用中文。这些值直接写在服务器 `/etc/calmobile.env`，更新器只补缺失键，不改已有值；改已有值要直接改文件并重启。
+通行密钥与更新检查还会读三个可选变量：`WEBAUTHN_RP_ID`（默认取 `PUBLIC_BASE_URL` 的主机名，**必须与用户实际打开页面的域名一致**，否则浏览器拒绝调用）、`WEBAUTHN_RP_NAME`、`WEBAUTHN_ORIGINS`（逗号分隔的完整来源，默认含 `PUBLIC_BASE_URL` 与本地 `http://localhost:<PORT>`；**App 内使用通行密钥时还必须加上 `android:apk-key-hash:<签名证书 SHA-256 的 base64url>`**，否则系统凭据提供方发回的断言会因来源不符被拒）；下载源选 GitHub 仓库时可以配 `GITHUB_TOKEN` 提高 GitHub API 额度（不配也能用，只是每小时次数少）。语言包不随页面发布：它放在用户机器的本机存储里，由 `LANG_PACK_URLS` 指向的任意 https 地址下载（或用户在设置里选 JSON 文件安装）。应用与报名站都按 `LANG_PACK_DEFAULT` 选默认语言；对应包需要能从 `LANG_PACK_URLS` 下载或已装在客户端本机，否则回退中文。这些值直接写在服务器 `/etc/calmobile.env`，更新器只补缺失键，不改已有值；改已有值要直接改文件并重启。
 
 ### GitHub Variables 与 Secrets
 

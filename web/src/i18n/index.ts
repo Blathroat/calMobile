@@ -213,16 +213,12 @@ export interface LangOffer {
 }
 
 /**
- * 收下 bootstrap 的语言段。报名站在默认名称不在列表里时不会改用本机已有的同名包。
+ * 收下 bootstrap 的语言段并记下服务器默认名称；应用与报名站共用它。
  * 返回是否需要重新加载。调用方负责下载列表里还没有的包。
  */
-export function applyOfferedLang(defaultPack: string, offers: readonly LangOffer[]): boolean {
+export function applyOfferedLang(defaultPack: string): boolean {
   const before = activeId();
-  state = rememberServerLang(
-    state,
-    defaultPack,
-    offers.map((offer) => offer.id),
-  );
+  state = rememberServerLang(state, defaultPack);
   persist();
   return activeId() !== before;
 }

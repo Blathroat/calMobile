@@ -142,7 +142,7 @@ describe('t', () => {
     resetLangForTests();
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
-    applyOfferedLang('en', [{ id: 'en', url: 'https://example.com/en.json' }]);
+    applyOfferedLang('en');
     await downloadMissingPacks([{ id: 'en', url: 'https://example.com/en.json' }]);
     expect(fetcher).not.toHaveBeenCalled();
     expect(t('auth.login.title')).toBe('旧');
