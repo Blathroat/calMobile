@@ -102,9 +102,9 @@ async function mountAdmin(path: string): Promise<HTMLElement> {
   return container;
 }
 
-/** 卡片里的次操作常用 `.cta ghost` + `data-size="small"`；日志入口要的是默认大按钮。 */
+/** 卡片里的小按钮会带 `data-size="small"`；日志入口要的是整行大按钮（浅色描边）。 */
 function miniGhost(button: HTMLButtonElement | undefined): boolean {
-  return button?.classList.contains('ghost') === true || button?.hasAttribute('data-size') === true;
+  return button?.hasAttribute('data-size') === true;
 }
 
 function buttonByText(scope: ParentNode, label: string): HTMLButtonElement | undefined {
@@ -131,9 +131,9 @@ describe('管理后台 · 最近日志入口', () => {
     // 入口在日志卡片内部：和其它卡片里的整行主操作一样，不是贴在卡片外面的小按钮。
     const logsCard = container.querySelector<HTMLElement>('#settings-logs-mb')!.closest('.card');
     expect(logsCard?.contains(entry!)).toBe(true);
-    // 版式与其它卡片里的主操作一致：整行大按钮（默认 .cta），不是小的 ghost 按钮。
+    // 版式与其它卡片里的次操作一致：整行浅色描边按钮（.cta.ghost），不是小尺寸按钮。
     expect(entry?.classList.contains('cta')).toBe(true);
-    expect(entry?.classList.contains('ghost')).toBe(false);
+    expect(entry?.classList.contains('ghost')).toBe(true);
     expect(entry?.hasAttribute('data-size')).toBe(false);
     expect(miniGhost(entry)).toBe(false);
     entry?.click();

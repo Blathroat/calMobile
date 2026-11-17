@@ -358,8 +358,8 @@ function clearAgreementContent(): void {
         </div>
       </div>
       <p class="field-hint">{{ t('admin.settings.logsHint') }}</p>
-      <!-- 入口放在日志卡片内部、设置项下面：与其它卡片里的整行主操作按钮同一套版式。 -->
-      <button class="cta" type="button" @click="emit('open-logs')">
+      <!-- 入口放在日志卡片内部、设置项下面：整行按钮，用浅色描边样式，和上传封面等次操作一致。 -->
+      <button class="cta ghost" type="button" @click="emit('open-logs')">
         {{ t('logs.entry') }}
       </button>
     </div>
