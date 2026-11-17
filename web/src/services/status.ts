@@ -173,6 +173,14 @@ export function modeHint(status: string): string {
  */
 export function statusTone(status: unknown): StatusTone {
   switch (status) {
+    // 账号状态也是「信号灯」：正常绿、受限琥珀、封禁砖红。
+    // 以前这里只认报名 / 展会状态，管理用户卡片上的账号状态因此全是灰色。
+    case USER_STATUS.NORMAL:
+      return 'ok';
+    case USER_STATUS.RESTRICTED:
+      return 'warn';
+    case USER_STATUS.BANNED:
+      return 'danger';
     case REGISTRATION_STATUS.APPROVED:
     case REGISTRATION_STATUS.ATTENDED:
     case EXHIBITION_STATUS.REVIEW_OPTIONAL:

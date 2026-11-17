@@ -71,6 +71,16 @@ describe('用户卡片最近登录', () => {
     expect(text).not.toContain('未知');
   });
 
+  it('卡片右侧的状态信号灯按账号状态上色，不是灰色', () => {
+    mountCard([
+      user({ id: 'u-active', statusCode: 'active' }),
+      user({ id: 'u-limited', statusCode: 'limited' }),
+      user({ id: 'u-banned', statusCode: 'banned' }),
+    ]);
+    const tones = [...document.querySelectorAll('.status-tag')].map((node) => node.getAttribute('data-tone'));
+    expect(tones).toEqual(['ok', 'warn', 'danger']);
+  });
+
   it('时间和注册时间都没有时才显示「未知」', () => {
     const text = mountCard([user({ lastLoginTime: '', registrationTime: '', lastLoginRegion: '' })]);
     expect(text).toContain('最近登录 未知');
