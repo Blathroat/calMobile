@@ -9,6 +9,8 @@
  * - 缺键回中文由调用方做；这里只判断「当前用哪一个包」。
  * - 应用与报名站都按服务器默认名称选语言；应用里用户的选择优先，报名站不看个人选择。
  * - 服务器默认名称对应的包没装时，两边都回退中文。
+ * - 跟随服务器默认语言时，服务器上那份默认包的 `version` 比本机新就覆盖本机那份；
+ *   用户自己选的包、自己改过的包不被覆盖。
  * - 包文件（和 `zh.json`）里的 `strings` 是**嵌套 JSON**：`{ "auth": { "login": { "title": "登录" } } }`，
  *   叶子必须是字符串，每段键是 `[A-Za-z0-9]+`（点分拼起来仍满足原来的
  *   `[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*`）。校验通过后在这里压成扁平表存进 `pack.strings`，
@@ -38,6 +40,13 @@ export class PackError extends Error {
 export interface LangPack {
   id: string;
   name: string;
+  /**
+   * 包内版本号：只增不减的整数，缺省 0。
+   *
+   * 跟随服务器默认语言时，启动后拿服务器上那份的版本和本机装的比一比，比本机新就覆盖；
+   * 用户自己选的包、自己改过的包不看这个数。
+   */
+  version: number;
   /** 点分路径的扁平表。包文件与落盘用嵌套形状，进出都由本模块转换。 */
   strings: Record<string, string>;
   url?: string;
@@ -81,6 +90,13 @@ function flattenPack(value: unknown, prefix: string): Record<string, string> {
   return flat;
 }
 
+/** 包内版本号：缺省 0；写了就必须是非负整数，写错整包不收（发新包时忘了改会停在旧包上，一眼能看见）。 */
+function readVersion(value: unknown): number {
+  if (value === undefined || value === null) return 0;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new PackError('badPack');
+  return value;
+}
+
 /** 把任意 JSON 收成语言包。不符合就抛 `PackError`，不返回半份。 */
 export function parsePack(value: unknown, expectedId?: string): LangPack {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new PackError('badPack');
@@ -90,7 +106,7 @@ export function parsePack(value: unknown, expectedId?: string): LangPack {
   if (!isPackId(id) || !name || [...name].length > 40) throw new PackError('badPack');
   if (expectedId && id !== expectedId) throw new PackError('idMismatch');
   // 扁平键（带点的键）在这里被 SEGMENT_KEY 拒掉：老版本的扁平包不兼容。
-  return { id, name, strings: flattenPack(record.strings, '') };
+  return { id, name, version: readVersion(record.version), strings: flattenPack(record.strings, '') };
 }
 
 export function packBytes(pack: LangPack): number {
@@ -204,8 +220,8 @@ function nestStrings(flat: Record<string, string>): NestedStrings {
 function storedPack(pack: LangPack): unknown {
   const strings = nestStrings(pack.strings);
   return pack.url
-    ? { id: pack.id, name: pack.name, strings, url: pack.url }
-    : { id: pack.id, name: pack.name, strings };
+    ? { id: pack.id, name: pack.name, version: pack.version, strings, url: pack.url }
+    : { id: pack.id, name: pack.name, version: pack.version, strings };
 }
 
 function readPacks(raw: string | null): LangPack[] {

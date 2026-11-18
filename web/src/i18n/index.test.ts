@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyOfferedLang,
   chineseTemplate,
+  currentPackVersion,
   downloadMissingPacks,
   installPackFromText,
   resetLangForTests,
@@ -134,25 +135,129 @@ describe('t', () => {
     expect(t('auth.login.title')).toBe(builtin['auth.login.title']);
   });
 
-  it('自动下载跳过已经安装的 id', async () => {
+  it('跟随服务器默认语言时，按包内版本号覆盖已安装的默认包', async () => {
     localStorage.setItem(
       'calmobile.lang.packs',
-      JSON.stringify([{ id: 'en', name: 'English', strings: nested({ 'auth.login.title': '旧' }) }]),
+      JSON.stringify([{ id: 'en', name: 'English', version: 1, strings: nested({ 'auth.login.title': '旧' }) }]),
     );
+    resetLangForTests();
+    applyOfferedLang('en');
+    expect(t('auth.login.title')).toBe('旧');
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: 'en',
+            name: 'English',
+            version: 2,
+            strings: nested({ 'auth.login.title': '新' }),
+          }),
+        ),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    applyOfferedLang('en');
+    await downloadMissingPacks([{ id: 'en', url: 'https://example.com/en.json' }]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(t('auth.login.title')).toBe('新');
+    expect(currentPackVersion()).toBe(2);
+    // 覆盖后要落盘：下次启动比较的是新版本号，不会重复下载。
+    const stored = JSON.parse(localStorage.getItem('calmobile.lang.packs') ?? '[]') as { version?: number }[];
+    expect(stored[0]?.version).toBe(2);
+    vi.unstubAllGlobals();
+  });
+
+  it('服务器上的版本不比本机新时，保留本机那份', async () => {
+    localStorage.setItem(
+      'calmobile.lang.packs',
+      JSON.stringify([{ id: 'en', name: 'English', version: 3, strings: nested({ 'auth.login.title': '本机' }) }]),
+    );
+    resetLangForTests();
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: 'en',
+            name: 'English',
+            version: 3,
+            strings: nested({ 'auth.login.title': '服务器' }),
+          }),
+        ),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    applyOfferedLang('en');
+    await downloadMissingPacks([{ id: 'en', url: 'https://example.com/en.json' }]);
+    expect(t('auth.login.title')).toBe('本机');
+    expect(currentPackVersion()).toBe(3);
+    vi.unstubAllGlobals();
+  });
+
+  it('用户明确选了别的语言时，不检查服务器默认包的新版本', async () => {
+    localStorage.setItem(
+      'calmobile.lang.packs',
+      JSON.stringify([{ id: 'en', name: 'English', version: 1, strings: nested({ 'auth.login.title': '旧' }) }]),
+    );
+    localStorage.setItem('calmobile.lang.choice', 'zh');
     resetLangForTests();
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
     applyOfferedLang('en');
     await downloadMissingPacks([{ id: 'en', url: 'https://example.com/en.json' }]);
     expect(fetcher).not.toHaveBeenCalled();
+    expect(t('auth.login.title')).toBe(builtin['auth.login.title']);
+    vi.unstubAllGlobals();
+  });
+
+  it('检查新版本失败时不提示，本机那份继续用', async () => {
+    localStorage.setItem(
+      'calmobile.lang.packs',
+      JSON.stringify([{ id: 'en', name: 'English', version: 1, strings: nested({ 'auth.login.title': '旧' }) }]),
+    );
+    resetLangForTests();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('no', { status: 500 })),
+    );
+    applyOfferedLang('en');
+    const errors = await downloadMissingPacks([{ id: 'en', url: 'https://example.com/en.json' }]);
+    expect(errors).toEqual([]);
     expect(t('auth.login.title')).toBe('旧');
     vi.unstubAllGlobals();
   });
 
+  it('没装过的默认包照旧安装', async () => {
+    resetLangForTests();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              id: 'en',
+              name: 'English',
+              version: 4,
+              strings: nested({ 'auth.login.title': 'Log in' }),
+            }),
+          ),
+      ),
+    );
+    applyOfferedLang('en');
+    await downloadMissingPacks([{ id: 'en', url: 'https://example.com/en.json' }]);
+    expect(t('auth.login.title')).toBe('Log in');
+    expect(currentPackVersion()).toBe(4);
+    vi.unstubAllGlobals();
+  });
+
   it('中文底稿是一份可直接安装的嵌套语言包', () => {
-    const pack = JSON.parse(chineseTemplate()) as { id?: unknown; name?: unknown; strings?: Record<string, unknown> };
+    const pack = JSON.parse(chineseTemplate()) as {
+      id?: unknown;
+      name?: unknown;
+      version?: unknown;
+      strings?: Record<string, unknown>;
+    };
     expect(pack.id).toBe('en');
     expect(pack.name).toBe('English');
+    // 发布新一版时把版本号改大，跟随服务器默认语言的客户端才会换成新包。
+    expect(pack.version).toBe(1);
     // 与 zh.json 同形：嵌套，而不是点分扁平键。
     expect(pack.strings).toMatchObject({ auth: { login: { title: builtin['auth.login.title'] } } });
     expect(flatten(pack.strings ?? {})['auth.login.title']).toBe(builtin['auth.login.title']);

@@ -17,6 +17,8 @@
  *   同一个道理，缺哪条一眼能看见。值只接受字符串与数字。
  *   带变量的整句写进 `zh.json`，调用处不要再把取到的文案拼给别人看。
  * - 下载语言包不走 `api/client.ts`：链接是用户或服务器给的任意地址，不能带上接口令牌。
+ * - 「跟随服务器默认语言」时按包内 `version` 判断服务器上的默认包要不要覆盖本机那份；
+ *   用户自己选的包不会被自动覆盖。
  * - 这里只提供纯函数 `chineseTemplate()`：落到文件、系统「另存为」和提示都属于页面层，
  *   而且不能在这里 import `services/device-services.ts`——`native-bridge` 反过来 import 本模块，会成环。
  * - 安装 / 切换语言会整页重载，所以提示先用 `services/toast.ts` 的 `toastAfterReload()` 排队。
@@ -130,6 +132,11 @@ export function currentLanguageId(): string {
   return activeId();
 }
 
+/** 当前生效语言包的版本号：内置中文没有版本，算 0。 */
+export function currentPackVersion(): number {
+  return state.packs.find((pack) => pack.id === activeId())?.version ?? 0;
+}
+
 /** 语言变了才重新加载。加载后本机记录已经对上，不会再加载一次。 */
 export function reloadForLanguage(): void {
   const reload = window.location?.reload;
@@ -160,7 +167,8 @@ export function deleteLanguage(id: string): void {
 
 /** 下载给用户改的中文底稿：与 `zh.json` 一样是嵌套结构，装上就能用。 */
 export function chineseTemplate(): string {
-  return `${JSON.stringify({ id: 'en', name: 'English', strings: builtinJson }, null, 2)}\n`;
+  // version 是包内版本号：发布新一版时改大，跟随服务器默认语言的客户端才会换成新包。
+  return `${JSON.stringify({ id: 'en', name: 'English', version: 1, strings: builtinJson }, null, 2)}\n`;
 }
 
 export function langErrorText(error: unknown): string {
@@ -223,15 +231,42 @@ export function applyOfferedLang(defaultPack: string): boolean {
   return activeId() !== before;
 }
 
-/** 只补还没有的 id，不覆盖用户已经安装或改过的包。 */
+/** 跟随服务器默认语言：应用里没选过语言；报名站始终按服务器默认语言。 */
+function followsServer(): boolean {
+  return surface === 'join' || state.choice === '';
+}
+
+/**
+ * 补齐服务器下发的语言包；跟随服务器默认语言时顺便检查默认包有没有新版本。
+ *
+ * - 没装过的包直接装（不覆盖任何东西）；
+ * - 已经装过的包默认不动：用户可能自己改过、也可能装的是另一份；
+ * - **只有跟随服务器默认语言时**才把服务器上那份默认包当权威来源：下载后比包内
+ *   `version`，比本机新就覆盖。这就是「服务器默认语言按语言包内部版本号判断要不要更新」。
+ *
+ * 安装失败返回要提示的文案；检查新版本失败静默跳过（本机那份还能用，下次启动再试）。
+ */
 export async function downloadMissingPacks(offers: readonly LangOffer[]): Promise<string[]> {
   const errors: string[] = [];
   for (const offer of offers) {
-    if (state.packs.some((pack) => pack.id === offer.id)) continue;
+    const installed = state.packs.find((pack) => pack.id === offer.id);
+    if (!installed) {
+      try {
+        await installFromUrl(offer.url, offer.id, false);
+      } catch (error) {
+        errors.push(langErrorText(error));
+      }
+      continue;
+    }
+    if (!followsServer() || offer.id !== state.serverDefault) continue;
     try {
-      await installFromUrl(offer.url, offer.id, false);
-    } catch (error) {
-      errors.push(langErrorText(error));
+      const remote = await fetchPack(offer.url, offer.id, fetch, allowHttp());
+      if (remote.version > installed.version) {
+        state = installPack(state, remote, true);
+        persist();
+      }
+    } catch {
+      // 检查更新失败不打扰用户：已装的那份继续用。
     }
   }
   return errors;

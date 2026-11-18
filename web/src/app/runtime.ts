@@ -5,6 +5,7 @@ import { isJoinSurface } from '@/app/surface';
 import {
   applyOfferedLang,
   currentLanguageId,
+  currentPackVersion,
   downloadMissingPacks,
   reloadForLanguage,
   t,
@@ -158,9 +159,11 @@ export function applyRuntimeBootstrap(data: Bootstrap): void {
     return;
   }
   const before = currentLanguageId();
+  const beforeVersion = currentPackVersion();
   void downloadMissingPacks(lang.offers).then((errors) => {
     if (errors.length > 0) toast(errors.join('；'), 'error');
-    if (currentLanguageId() !== before) reloadForLanguage();
+    // 换成另一门语言、或跟随的服务器默认包按版本更新了：重载一次让整页都用新文案。
+    if (currentLanguageId() !== before || currentPackVersion() !== beforeVersion) reloadForLanguage();
   });
 }
 
