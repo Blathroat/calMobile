@@ -28,13 +28,13 @@ function nested(paths: Record<string, string>): Record<string, unknown> {
 }
 
 /** 内存里的语言包（LangPack）：strings 是点分路径的扁平表。 */
-function pack(id: string, strings: Record<string, string> = { 'auth.login.title': id }) {
-  return { id, name: id.toUpperCase(), strings };
+function pack(id: string, strings: Record<string, string> = { 'auth.login.title': id }, version = 1) {
+  return { id, name: id.toUpperCase(), version, strings };
 }
 
 /** 落盘 / 网络上的语言包：strings 嵌套，和包文件同形。 */
-function packFile(id: string, strings: Record<string, string> = { 'auth.login.title': id }) {
-  return { id, name: id.toUpperCase(), strings: nested(strings) };
+function packFile(id: string, strings: Record<string, string> = { 'auth.login.title': id }, version = 1) {
+  return { id, name: id.toUpperCase(), version, strings: nested(strings) };
 }
 
 describe('语言包', () => {
@@ -66,6 +66,15 @@ describe('语言包', () => {
     expect(parsePack({ id: 'en', name: 'English', strings: nested({ 'auth.login.title': '' }) }, 'en').strings).toEqual(
       { 'auth.login.title': '' },
     );
+  });
+
+  it('包内版本号缺省 0，写了就必须是非负整数', () => {
+    expect(parsePack(packFile('en', undefined, 3)).version).toBe(3);
+    // 老包没有 version：按 0 收下，服务器上一有新版本就会覆盖它。
+    expect(parsePack({ id: 'en', name: 'English', strings: nested({ 'auth.login.title': 'x' }) }).version).toBe(0);
+    expect(() => parsePack({ ...packFile('en'), version: -1 })).toThrow(PackError);
+    expect(() => parsePack({ ...packFile('en'), version: 1.5 })).toThrow(PackError);
+    expect(() => parsePack({ ...packFile('en'), version: '2' })).toThrow(PackError);
   });
 
   it('应用与报名站都按服务器默认名称选语言，报名站不看个人选择', () => {
@@ -118,9 +127,14 @@ describe('语言包', () => {
       getItem: (key: string) => memory.get(key) ?? null,
       setItem: (key: string, value: string) => void memory.set(key, value),
     };
-    writeLangState(storage, installPack(empty(), pack('en'), false));
-    const written = JSON.parse(memory.get('calmobile.lang.packs') ?? '[]') as { strings?: unknown }[];
+    writeLangState(storage, installPack(empty(), pack('en', undefined, 7), false));
+    const written = JSON.parse(memory.get('calmobile.lang.packs') ?? '[]') as {
+      strings?: unknown;
+      version?: unknown;
+    }[];
     expect(written[0]?.strings).toEqual(nested({ 'auth.login.title': 'en' }));
+    // 版本号跟着包一起落盘：下次启动才比得出服务器上那份是不是新的。
+    expect(written[0]?.version).toBe(7);
 
     memory.set(
       'calmobile.lang.packs',

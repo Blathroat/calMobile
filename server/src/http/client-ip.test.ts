@@ -100,3 +100,63 @@ test('来源声明写错了要炸，而不是静默地信任一切', () => {
   // 空串等价于「不信任」，不会抛
   assert.equal(clientIp({ remoteAddress: '10.0.0.1', forwardedFor: '1.1.1.1' }, ''), '10.0.0.1');
 });
+
+test('Cloudflare 转发：用 CF-Connecting-IP 代替 X-Forwarded-For 里被追加的边缘地址', () => {
+  // CF → nginx → 服务：X-Forwarded-For 是「客户端, Cloudflare 边缘」，
+  // 只信任一跳时按跳数解析会停在边缘地址上。
+  const request = {
+    remoteAddress: '127.0.0.1',
+    forwardedFor: '203.0.113.7, 198.51.100.9',
+    cloudflareAddress: '203.0.113.7',
+  };
+  assert.equal(clientIp(request, 1), '198.51.100.9', '不打开时会记成 Cloudflare 边缘');
+  assert.equal(clientIp(request, 1, { trustCloudflare: true }), '203.0.113.7', '打开后记真实客户端');
+
+  // CF → cloudflared → 服务：X-Forwarded-For 里被追加的是本机隧道地址，同样只认这个头。
+  assert.equal(
+    clientIp(
+      { remoteAddress: '127.0.0.1', forwardedFor: '203.0.113.7, 127.0.0.1', cloudflareAddress: '203.0.113.7' },
+      1,
+      { trustCloudflare: true },
+    ),
+    '203.0.113.7',
+  );
+});
+
+test('Cloudflare 头只在有可信反代时才采用，直连请求伪造它无效', () => {
+  // 直连：socket 是客户端自己，地址链里没有可信跳数。
+  const direct = { remoteAddress: '203.0.113.7', forwardedFor: undefined, cloudflareAddress: '8.8.8.8' };
+  assert.equal(clientIp(direct, false, { trustCloudflare: true }), '203.0.113.7');
+  assert.equal(clientIp(direct, 0, { trustCloudflare: true }), '203.0.113.7');
+  // 反代不信任时也不认这个头。
+  assert.equal(
+    clientIp({ remoteAddress: '10.0.0.9', forwardedFor: '203.0.113.7', cloudflareAddress: '8.8.8.8' }, false, {
+      trustCloudflare: true,
+    }),
+    '10.0.0.9',
+  );
+});
+
+test('Cloudflare 头的非法值与 IPv4-mapped 地址', () => {
+  assert.equal(
+    clientIp({ remoteAddress: '127.0.0.1', forwardedFor: '203.0.113.7', cloudflareAddress: '不是地址' }, 1, {
+      trustCloudflare: true,
+    }),
+    '203.0.113.7',
+    '头非法时退回按 X-Forwarded-For 解析',
+  );
+  assert.equal(
+    clientIp({ remoteAddress: '127.0.0.1', forwardedFor: '203.0.113.7', cloudflareAddress: '::ffff:203.0.113.7' }, 1, {
+      trustCloudflare: true,
+    }),
+    '203.0.113.7',
+    'IPv4-mapped 的 IPv6 还原成点分 IPv4',
+  );
+  assert.equal(
+    clientIp({ remoteAddress: '127.0.0.1', forwardedFor: '203.0.113.7', cloudflareAddress: '2001:db8::1' }, 1, {
+      trustCloudflare: true,
+    }),
+    '2001:db8::1',
+    '原生 IPv6 原样保留，地区查不到也不影响登录',
+  );
+});

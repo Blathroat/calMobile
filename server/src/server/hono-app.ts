@@ -47,6 +47,8 @@ export interface AppOptions {
   readonly logLevel: string;
   /** `TRUST_PROXY`：决定 `clientIp()` 怎么解析客户端地址。 */
   readonly trustProxy: TrustProxy;
+  /** `TRUST_CLOUDFLARE`：经 Cloudflare 转发时按 `CF-Connecting-IP` 记客户端地址。 */
+  readonly trustCloudflare?: boolean;
   /** `/status` 与 `/api/v1/status` 是否开放（生产默认关）。 */
   readonly statusPageEnabled: boolean;
   /** `/ping` 与 `/api/v1/ping` 是否开放。 */
@@ -85,7 +87,13 @@ export function createApp(options: AppOptions): Hono {
   // 反代终止 TLS 时先把明文请求跳走：安全头与 CORS 都在它之后，跳转响应本身不需要它们。
   if (options.forceHttps === true) app.use(requireHttps());
   app.use(corsHeaders(options.corsOrigin));
-  app.use(requestLogger({ logLevel: options.logLevel, trustProxy: options.trustProxy }));
+  app.use(
+    requestLogger({
+      logLevel: options.logLevel,
+      trustProxy: options.trustProxy,
+      trustCloudflare: options.trustCloudflare,
+    }),
+  );
 
   /**
    * JSON 体积守卫：声明体积超过 2MB 直接 413。
@@ -99,7 +107,7 @@ export function createApp(options: AppOptions): Hono {
 
   // 操作日志埋点：在路由之前注册、在响应之后读取状态码与操作人（auth 中间件写进 Context）。
   // 写库是旁路，失败只进控制台，不影响请求本身。
-  app.use('/api/v1/*', apiRequestLog({ trustProxy: options.trustProxy }));
+  app.use('/api/v1/*', apiRequestLog({ trustProxy: options.trustProxy, trustCloudflare: options.trustCloudflare }));
 
   // ── 探针（不代表数据库可用；连库一起看的是 /api/v1/status） ────
   // 关掉时不注册路由，404 与未知路径同一句，不说明开关名字。
@@ -140,8 +148,8 @@ export function createApp(options: AppOptions): Hono {
   }
 
   // 认证、资料、展会、报名、审核、核销、用户、搜索、设置和启动数据都由 Hono 处理。
-  app.route('/api/v1/auth', createAuthRoutes({ trustProxy: options.trustProxy }));
-  app.route('/api/v1/profile', createProfileRoutes({ trustProxy: options.trustProxy }));
+  app.route('/api/v1/auth', createAuthRoutes(options));
+  app.route('/api/v1/profile', createProfileRoutes(options));
   app.route('/api/v1', createBootstrapRoutes({ branding: options.branding }));
   // 公开的用户协议：登录/注册页与协议浏览页在未登录时也能读。
   app.route('/api/v1', createAgreementRoutes());

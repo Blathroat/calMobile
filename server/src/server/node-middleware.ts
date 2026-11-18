@@ -169,7 +169,11 @@ export function corsHeaders(origin: string): MiddlewareHandler {
  * 行首是 `clientIp()` 解析出来的客户端地址：不信任代理时记 socket 对端，
  * 不会把伪造的 X-Forwarded-For 写进日志。
  */
-export function requestLogger(options: { logLevel: string; trustProxy: TrustProxy }): MiddlewareHandler {
+export function requestLogger(options: {
+  logLevel: string;
+  trustProxy: TrustProxy;
+  trustCloudflare?: boolean;
+}): MiddlewareHandler {
   const enabled = options.logLevel !== 'quiet';
   // 先把信任配置编译一遍：写错的 TRUST_PROXY（不是 IP、不是掩码、前缀越界）会让进程
   // 在这里就退出，而不是等到第一个请求算不出 IP 时全部 500。
@@ -184,8 +188,13 @@ export function requestLogger(options: { logLevel: string; trustProxy: TrustProx
     const startedAt = Date.now();
     const url = new URL(c.req.url);
     const line = `${clientIp(
-      { remoteAddress: incoming?.socket?.remoteAddress, forwardedFor: c.req.header('x-forwarded-for') },
+      {
+        remoteAddress: incoming?.socket?.remoteAddress,
+        forwardedFor: c.req.header('x-forwarded-for'),
+        cloudflareAddress: c.req.header('cf-connecting-ip'),
+      },
       trustProxy,
+      { trustCloudflare: options.trustCloudflare },
     )} ${c.req.method} ${url.pathname}${url.search}`;
     outgoing.on('finish', () => {
       console.log(`${line} ${outgoing.statusCode} ${Date.now() - startedAt}ms`);

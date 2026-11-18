@@ -22,6 +22,8 @@
 
 操作日志由服务端 `server/src/services/logs.ts` 在响应之后异步写入 `app_logs`：变更请求（非 GET）、4xx / 5xx、以及登录 / 注册 / 找回密码这类认证接口无论成功失败都记一条；读接口成功不记，不记录请求体（只留方法、路径、状态码、耗时、操作人与 IP）。写日志是旁路，失败只进服务端控制台，不影响请求本身。超过 `app_settings.logs.storageMb` 时按累计大小清理最早的记录（写入后节流清理，管理员调小上限时立刻清一次）。管理页 `/logs` 是通过 `GET /api/v1/logs` 读取的最近日志，仅管理员可见；入口按钮放在「管理-设置 → 日志」卡片内部、设置项下方（整行浅色描边按钮，`cta ghost`）；`AdminSettingsSection` 发 `open-logs` 事件，`AdminPage` 负责跳转，不在管理页顶部。
 
+客户端地址由 `server/src/http/client-ip.ts` 统一解析：`TRUST_PROXY` 决定怎么读 `X-Forwarded-For`（跳数或可信来源），`TRUST_CLOUDFLARE` 打开时，只要地址链里经过可信反代就改用 Cloudflare 写入的 `CF-Connecting-IP`。登录 / 注册、验证码限流、请求日志与操作日志都走这一个函数；登录成功时 `recordLogin()` 每次刷新 `last_login_time` / `last_login_ip` / `last_login_region`，地区由 `services/ip-region.ts` 用离线 xdb 解析，IP 原文只落库、不下发。
+
 正式包的文档地址是 `APP_API_BASE` 所在源的 `/app/index.html`。WebView 拦截 `/app/`，从本机快照读文件；还没有快照，或快照不是当前 `versionCode` 时，用 APK 里的那份。页面切换不再请求网络。首屏出来之后才在后台拉取 `/app/release.json`，新文件留到下次冷启动再换上。调试包（接口是 http）不热更新。只有 `/app/index.html` 能调用 `CalMobileNative`，其它链接交给系统浏览器。设备上选中、尚未上传的媒体仍从 `https://appassets.androidplatform.net/media/` 读取。页面要先 fetch 这份地址再上传，所以这份响应带上 `Access-Control-Allow-Origin`，值是页面文档的源。
 
 `/app/` 同时是 iPhone 主屏幕应用的入口：Safari 打开的也是这份产物，Web App Manifest、Service Worker 与安装图标在构建时生成，缓存边界见「iPhone / PWA」。`release.json` 只服务 Android 热更新，不进 Service Worker 缓存。
@@ -169,7 +171,7 @@ iOS 与主屏幕模式的适配在 `web/src/styles/tokens.css` 末尾：
 - **状态标签是「信号灯」**：`StatusTag` 只有色点 + 文字，没有边框与底色（ok 绿 / pending 琥珀 / danger 砖红 / info 灰蓝 / muted 灰），用在报名状态、展会报名方式与账号状态上。**身份标签不是状态**：展商 / 管理员走 `RoleTag`，保留原来的方框小签（浅底 + `--accent-edge` 描边 + 强调色文字），不要换成信号灯。
 - 需要从固定清单里选值的字段用**应用内抽屉**：`openSheet({ layout: 'list', actions: [{ label, checked }] })`，当前值带对勾；不要用系统 `<select>`。
 - **用户协议**：登录/注册页的勾选行只是「勾选 + 蓝链」，不套卡片外框（`.agreement-consent .check-label` 去掉描边、底色与内距，保留 44px 命中区）。管理员在「管理-设置」用开关 + Markdown 文件上传正文（应用内 `device.importText('text/markdown,text/plain', 1MB)` 读正文，浏览器退回 `<input type=file>` + `File.text()`；正文上限 200000 字符，随保存一起 `PUT /settings` 的 `agreement: { enabled, content }` 提交）。开启后登录/注册页显示「我已阅读并同意《用户协议》」勾选框，链接是 `--accent-ink` 的蓝链、打开 `/agreement`；用户设置页最底部同一入口；关闭时这些入口与更新弹窗全部不渲染。协议浏览页用 `api.agreement.get()` 公开取数（不进查询缓存），正文走 `markdownToHtml()` 清洗后渲染到 `.rich-content`。登录/注册页的勾选在各提交点（密码登录、两步验证、通行密钥、注册发码与提交）拦截，会话建立后调 `POST /profile/agreement` 记录当前版本，失败静默交给全局更新弹窗兜底。
-- 分段控件（`components/SegControl.vue`）**始终排成一行**：`.seg` 是 `flex-wrap: nowrap`，不做横向滚动，窄屏下按钮等分宽度收缩、超长标签用省略号；选中滑块按按钮的 `offsetLeft / 宽度` 定位，容器尺寸变化由 `ResizeObserver` 重新量。
+- 分段控件（`components/SegControl.vue`）**优先排成一行**：`.seg` 允许换行、按钮等分剩余宽度收缩；每个按钮缩到最小可用宽度（`min-width: 56px`，`.seg button`）之后还放不下才换行，标签过长用省略号，不横向滚动、也不撑宽页面。选中滑块按按钮的 `offsetLeft / offsetTop / 宽度 / 高度` 定位，换行后贴在选中按钮所在那一行；容器尺寸变化由 `ResizeObserver` 重新量。
 - 上传卡（封面、缺省封面）统一版式：左侧 96×170（9:16）预览，右侧竖排「上传/更换 / 移除」按钮与格式说明，窄屏上下堆叠。
 - 图标是 24 视窗、1.5 描边、无填充的细线。顶栏图标没有圆底。底部导航是图标加文字。
 - 触控命中区域至少 44px。生产界面以 1080×2400、xxhdpi（逻辑画布 360×800）为密度基准，字号、间距和圆角取 `web/src/styles/tokens.css` 的当前值。状态同时用文字和颜色或描边表达。空、加载、错误、成功和禁用状态在原位置给出下一步。
@@ -198,4 +200,4 @@ iOS 与主屏幕模式的适配在 `web/src/styles/tokens.css` 末尾：
 
 PWA 安装元信息同样来自这张表：`app.documentTitle`、`pwa.manifest.shortName`、`pwa.manifest.description`，安装引导用 `pwa.install.*`，报名站的 iOS 引导用 `join.ios*`。`web/pwa-build.mjs` 在构建时读这些键生成 manifest 与 HTML 占位符；缺键（manifest 的 `name` / `short_name` / `description`、`join.documentTitle`）或占位符没替换完，构建直接失败，不会把空值或 `%…%` 发上线。新增可见文案先进 `zh.json`，不要散落在构建脚本、HTML 或页面组件里。
 
-用户自己的语言包记在本机 `localStorage`，不在 `web/dist` 或客户端快照里。语言包与内置中文表同一套嵌套格式（`strings` 里对象套对象、叶子是字符串），带变量的文案同样写 `{名字}`、名字要和中文表对得上（对不上就原样留在屏幕上），包里那条要是没有 `{名字}` 的旧片段文案，参数不会补进去、屏幕上会少一段，改过占位或把片段合成整句之后语言包要跟着一起更新，落盘时也写嵌套，否则升级后已装包会被当成坏包丢掉；旧的扁平包按约定不再兼容，服务器 `LANG_PACK_URLS` 指向的包也要换成嵌套版（「下载中文底稿」的输出可直接当模板）。个人设置可以切换语言，也可以粘贴链接或选择 JSON 文件安装（应用里由原生读文件正文，见「原生桥接」）。应用与报名站都按服务器默认语言（`LANG_PACK_DEFAULT`）选语言：应用里用户显式选择过则优先，报名站不看个人选择；默认名称对应的包没装时都回退中文。自动下载不会覆盖已经安装的同名包。切换语言后整页重新加载；安装成功的提示排到重载之后（`services/toast.ts` 的 `toastAfterReload`），重载后的首帧靠 `services/session-hint.ts` 那条本机提示先等会话恢复，不闪登录页。下载中文底稿在应用里走系统「另存为」，浏览器里退回浏览器下载。
+用户自己的语言包记在本机 `localStorage`，不在 `web/dist` 或客户端快照里。语言包与内置中文表同一套嵌套格式（`strings` 里对象套对象、叶子是字符串），顶层是 `id` / `name` / `version`（包内版本号，非负整数，缺省 0）；带变量的文案同样写 `{名字}`、名字要和中文表对得上（对不上就原样留在屏幕上），包里那条要是没有 `{名字}` 的旧片段文案，参数不会补进去、屏幕上会少一段，改过占位或把片段合成整句之后语言包要跟着一起更新，落盘时也写嵌套，否则升级后已装包会被当成坏包丢掉；旧的扁平包按约定不再兼容，服务器 `LANG_PACK_URLS` 指向的包也要换成嵌套版（「下载中文底稿」的输出可直接当模板）。个人设置可以切换语言，也可以粘贴链接或选择 JSON 文件安装（应用里由原生读文件正文，见「原生桥接」）。应用与报名站都按服务器默认语言（`LANG_PACK_DEFAULT`）选语言：应用里用户显式选择过则优先，报名站不看个人选择；默认名称对应的包没装时都回退中文。自动下载不会覆盖已经安装的同名包；唯一例外是**跟随服务器默认语言**（应用里没选过语言，报名站始终如此）：启动后拉一份服务器上的默认包，按包内 `version` 比本机那份新就覆盖（用户显式选过语言的包不动，检查失败静默跳过）。切换语言后整页重新加载；默认包按版本更新后也重载一次，让整页都用新文案。安装成功的提示排到重载之后（`services/toast.ts` 的 `toastAfterReload`），重载后的首帧靠 `services/session-hint.ts` 那条本机提示先等会话恢复，不闪登录页。下载中文底稿在应用里走系统「另存为」，浏览器里退回浏览器下载。

@@ -116,11 +116,22 @@ function has(body: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(body, key);
 }
 
-function requestIp(c: HonoContext, trustProxy: TrustProxy): string {
+/** 资料路由需要的取址配置：反代信任与 Cloudflare 头。 */
+interface RequestIpOptions {
+  trustProxy: TrustProxy;
+  trustCloudflare?: boolean;
+}
+
+function requestIp(c: HonoContext, options: RequestIpOptions): string {
   const env = c.env as NodeEnv | undefined;
   return clientIp(
-    { remoteAddress: env?.incoming?.socket?.remoteAddress, forwardedFor: c.req.header('x-forwarded-for') },
-    trustProxy,
+    {
+      remoteAddress: env?.incoming?.socket?.remoteAddress,
+      forwardedFor: c.req.header('x-forwarded-for'),
+      cloudflareAddress: c.req.header('cf-connecting-ip'),
+    },
+    options.trustProxy,
+    { trustCloudflare: options.trustCloudflare },
   );
 }
 
@@ -169,7 +180,7 @@ function stepUpSessionId(c: HonoContext, user: { userId: string; sessionId?: str
 }
 
 /** 创建个人资料路由；IP 信任策略从服务骨架传入，和认证路由使用同一配置。 */
-export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
+export function createProfileRoutes(options: RequestIpOptions) {
   const app = new Hono<HonoEnv>();
 
   app.get('/', authenticateHono, async (c) => {
@@ -293,7 +304,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       purpose: 'security',
       email: factors.email,
       userId: user.userId,
-      ip: requestIp(c, options.trustProxy),
+      ip: requestIp(c, options),
     });
     return jsonResponse(c, { ok: true, error: '', ...sent, maskedEmail: maskEmail(factors.email) });
   });
@@ -360,7 +371,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       purpose: 'enable2fa',
       email: row.email,
       userId: user.userId,
-      ip: requestIp(c, options.trustProxy),
+      ip: requestIp(c, options),
     });
     return jsonResponse(c, { ok: true, error: '', ...sent, maskedEmail: maskEmail(row.email) });
   });
@@ -683,7 +694,7 @@ export function createProfileRoutes(options: { trustProxy: TrustProxy }) {
       purpose: 'email',
       email,
       userId: user.userId,
-      ip: requestIp(c, options.trustProxy),
+      ip: requestIp(c, options),
     });
     return jsonResponse(c, { ok: true, error: '', ...sent });
   });

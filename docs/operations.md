@@ -59,6 +59,8 @@ server {
 
 应用包里的接口地址来自 `APP_API_BASE`（`server/.env`，进程里已有的同名变量优先）。没配时是 `http://127.0.0.1:<PORT>/api/v1`。它只决定 APK 外壳加载哪个源的 `/app/index.html`、开发代理目标、明文/混合内容和 APK 页面源；页面包本身一律用相对 `/api/v1`，同一份 `web/dist` 可部署到任意 `PUBLIC_BASE_URL`。报名站不读它，接口仍是相对的 `/api/v1`。改 APK 指向的实例仍要重新构建 APK。
 
+**经 Cloudflare 转发时**（橙色云或 Cloudflare Tunnel）：边缘把真实客户端地址写进 `CF-Connecting-IP`，同时让 `X-Forwarded-For` 再追加一跳，只按跳数解析会把 Cloudflare 边缘地址当成客户端——最近登录地区会一直是机房所在地，按 IP 的验证码限流还会误伤同一边缘下的所有用户。服务器 `/etc/calmobile.env` 保持 `TRUST_PROXY=1` 并打开 `TRUST_CLOUDFLARE=1`（`deploy/production.env` 已带这一项，更新时会补进还没有它的服务器）：地址链里至少有一跳可信反代时，服务端改用 `CF-Connecting-IP`（见 `server/src/http/client-ip.ts`）。这个头只有经过 Cloudflare 时才是真的，**源站要只接受 Cloudflare 与反代的流量**；不走 Cloudflare 的部署把它改成 0。反代不需要额外配置，nginx 默认会把请求头一起转给上游。
+
 包名默认 `com.blathroat.calmobile`。Java 源码仍在 `com.example.calmobile`。调试包和正式包都用这个包名。手机上已经装过 `com.example.calmobile` 的，是另一个应用，要先卸掉。
 
 `./gradlew :app:assembleDebug` 使用当前这份配置，不要求公网地址或签名。`./gradlew :app:assembleRelease` 会拒绝：地址不是公网 https、包名是 `com.example`、签名四项缺一或密钥文件不存在。
@@ -389,7 +391,7 @@ GitHub Secrets：`NPM_TOKEN`（能发布 `calmobile-server` 的 npm automation t
 发布前下面每一项都成立：
 
 1. `pnpm start` 的自检通过。生产不跑 `pnpm db:seed`。自检会拒绝启动的项和只警告的项，见 [`server/README.md`](../server/README.md) 的模式表。
-2. 反代只暴露 443，并送出 `X-Forwarded-Proto` 与 `X-Forwarded-For`。服务端设 `TRUST_PROXY=1`。
+2. 反代只暴露 443，并送出 `X-Forwarded-Proto` 与 `X-Forwarded-For`。服务端设 `TRUST_PROXY=1`。经 Cloudflare 转发时再设 `TRUST_CLOUDFLARE=1`，并且源站只接受 Cloudflare 与反代的流量。
 3. 确认 https 全站可用之后，再开 `FORCE_HTTPS` 和长 `HSTS_MAX_AGE`。
 4. `CORS_ORIGIN` 写成真实来源。
 5. 状态页保持关闭，或在反代上加 Basic Auth 并只允许内网访问。公网探活只用 `/ping`。

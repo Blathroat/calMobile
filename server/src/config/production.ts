@@ -11,7 +11,7 @@
  */
 
 import { resolveBranding } from './branding.js';
-import { resolveLangPacks } from './runtime.js';
+import { bool, resolveLangPacks } from './runtime.js';
 
 type EnvLike = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
@@ -159,6 +159,12 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
   if (!String(env.TRUST_PROXY || '').trim()) {
     warnings.push(
       'TRUST_PROXY 没有配置：如果前面有反向代理，请设为 1（否则 req.ip 是代理地址，按 IP 的验证码限流会退化成全局额度）',
+    );
+  }
+  // Cloudflare 的真实地址头只在经过可信反代时才采用；没有反代时开了也不生效。
+  if (bool(env.TRUST_CLOUDFLARE) && !String(env.TRUST_PROXY || '').trim()) {
+    warnings.push(
+      'TRUST_CLOUDFLARE 已打开，但 TRUST_PROXY 没有配置：请求必须先经过可信反代，CF-Connecting-IP 才会被采用',
     );
   }
 
