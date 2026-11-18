@@ -310,44 +310,86 @@ async function toggleScan(): Promise<void> {
   }
 }
 
+/**
+ * 浏览器给出的 `getUserMedia` 错误名映射成给人看的文案。
+ *
+ * 不同内核的错误名不统一（旧 WebView 还有 `PermissionDeniedError` 这类前缀），
+ * 这里统一归到四类；认不出的按「环境不支持取景」处理，绝不把英文原文塞进提示。
+ */
+function cameraErrorNotice(reason: unknown): string {
+  const name = String((reason as { name?: unknown } | null)?.name ?? '');
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+    return t('checkin.scan.cameraDenied');
+  }
+  if (
+    name === 'NotFoundError' ||
+    name === 'DevicesNotFoundError' ||
+    name === 'OverconstrainedError' ||
+    name === 'ConstraintNotSatisfiedError'
+  ) {
+    return t('checkin.scan.cameraNotFound');
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') return t('checkin.scan.cameraBusy');
+  return t('checkin.scan.cameraUnsupported');
+}
+
 async function startScan(): Promise<void> {
   const epoch = ++scanEpoch;
-  try {
-    // 先让原生确认摄像头权限，用户同意后 WebView 的 getUserMedia 才会放行。
-    const granted = await device.ensureCameraPermission();
-    if (!alive || epoch !== scanEpoch || decoderFailed.value) return;
-    if (granted !== true) {
-      showNotice(t('checkin.scan.permissionDenied'), 'error');
+  // 应用里先让原生申请一次系统权限，用户同意后 WebView 的 getUserMedia 才会放行。
+  // 浏览器里没有原生权限通道，而且 getUserMedia 必须紧贴用户点击同步发起：
+  // 中间只要有一次 await 就可能丢失用户手势，iOS Safari 会直接拒绝。
+  if (nativeBridge.hasNative()) {
+    try {
+      const granted = await device.ensureCameraPermission();
+      if (!alive || epoch !== scanEpoch || decoderFailed.value) return;
+      if (granted !== true) {
+        showNotice(t('checkin.scan.permissionDenied'), 'error');
+        return;
+      }
+    } catch (reason) {
+      if (alive && epoch === scanEpoch) showNotice(reason instanceof Error ? reason.message : String(reason), 'error');
       return;
     }
-  } catch (reason) {
-    if (alive && epoch === scanEpoch) showNotice(reason instanceof Error ? reason.message : String(reason), 'error');
-    return;
+    if (!alive) return;
   }
-  if (!alive) return;
 
   setStage('live', '', '');
   showNotice(t('checkin.scan.opening'));
-  await nextTick();
-  if (!alive || epoch !== scanEpoch) return;
 
-  let media: MediaStream;
+  // 先同步发起请求，再等 DOM 把 <video> 画出来：请求留在点击的同步栈里，await 只等结果。
+  // 成功 / 失败都落到同一个结果对象，避免详细错误在 await 之前变成未处理的 rejection。
+  let request: Promise<{ stream: MediaStream } | { error: unknown }>;
   try {
-    media = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
-      audio: false,
-    });
+    request = navigator.mediaDevices
+      .getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        audio: false,
+      })
+      .then(
+        (stream) => ({ stream }) as const,
+        (error: unknown) => ({ error }) as const,
+      );
   } catch (reason) {
-    const message = reason instanceof Error ? reason.message : '';
-    if (!alive || epoch !== scanEpoch) return;
-    setStage(
-      'error',
-      t('checkin.scan.openFailed'),
-      t('checkin.scan.openFailedHint', { reason: message || t('checkin.scan.previewFailed') }),
-    );
+    // 极少数内核在这里同步抛错（mediaDevices 被策略禁用等），按不支持取景提示。
+    setStage('error', t('checkin.scan.openFailed'), cameraErrorNotice(reason));
     clearStatus();
     return;
   }
+  await nextTick();
+
+  const settled = await request;
+  if (!alive || epoch !== scanEpoch) {
+    // 页面已离开或重新开始：媒体回来也立刻释放，不留下后台摄像头。
+    if ('stream' in settled) settled.stream.getTracks().forEach((track) => track.stop());
+    return;
+  }
+  if ('error' in settled) {
+    setStage('error', t('checkin.scan.openFailed'), cameraErrorNotice(settled.error));
+    clearStatus();
+    return;
+  }
+
+  const media = settled.stream;
   if (!alive || epoch !== scanEpoch || decoderFailed.value) {
     media.getTracks().forEach((track) => track.stop());
     return;

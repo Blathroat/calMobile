@@ -76,6 +76,14 @@ function classify(file) {
   const hit = { ...none };
   if (isApk(file)) hit.apk = true;
   if (isServer(file)) hit.server = true;
+  // 图标构建同时服务 APK（启动图标）、应用页面（favicon / PWA 图标）与 Android 资源生成；
+  // 报名站构建也会 import 这份纯 Node 模块，虽然不生成图标。
+  if (file === 'scripts/build-icons.mjs') {
+    hit.apk = true;
+    hit.app = true;
+    hit.join = true;
+  }
+  if (file.startsWith('web/public/icons/')) hit.apk = true;
   if (file === 'server/src/domain/answer-document.ts') {
     hit.app = true;
     hit.join = true;
@@ -144,12 +152,15 @@ function isAppOnly(file) {
     file === 'web/vite.config.ts' ||
     file === 'web/src/main.ts' ||
     file === 'web/release-manifest.mjs' ||
+    file === 'scripts/build-icons.mjs' ||
     APP_ONLY_PAGES.has(file)
   );
 }
 
 /** 报名站和 App 都会打进去的源。页面文件不在「只进 App」清单里时也走这里。 */
 function isSharedWeb(file) {
+  // 两份页面构建都 import 它，产物分别进 dist 和 dist-join。
+  if (file === 'web/pwa-build.mjs') return true;
   if (file === 'web/package.json' || file === 'web/pnpm-lock.yaml' || file.startsWith('web/public/')) return true;
   if (!file.startsWith('web/src/') || file.startsWith('web/src/join/')) return false;
   if (file === 'web/src/main.ts' || file === 'web/src/env.d.ts' || APP_ONLY_PAGES.has(file)) return false;

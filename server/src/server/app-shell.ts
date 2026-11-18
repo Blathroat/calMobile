@@ -14,6 +14,7 @@ const CONTENT_TYPES: Record<string, string> = {
   '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -86,7 +87,10 @@ export function appRelativePath(pathname: string): string | null {
   return rest;
 }
 
-/** 入口和清单每次都要能看到新版本；带哈希的文件可以长期缓存。 */
+/**
+ * 入口、热更新清单、Service Worker、PWA 清单和图标都用固定文件名，每次都要能看到新版本；
+ * 只有带哈希的 `assets/` 可以长期缓存。
+ */
 export function appCacheControl(relative: string): string {
   if (relative === APP_SHELL || relative === 'release.json') return 'no-cache';
   if (relative.startsWith('assets/')) return 'public, max-age=31536000, immutable';

@@ -43,7 +43,8 @@ export function resetBootForTests(): void {
 /**
  * 页面标题（浏览器页签、分享预览）。HTML 里只留通用名，品牌名由启动数据补齐：
  * 应用页用「品牌 · 展会排期助手」，报名站用「报名」；品牌读不到时只留通用名。
- * 切语言会整页重载，所以不用监听。
+ * 应用名可以用构建期的 `PWA_APP_NAME` 覆盖（见 `web/pwa-build.mjs`），覆盖后
+ * 与 manifest 和首屏静态标题保持一致。切语言会整页重载，所以不用监听。
  */
 function applyDocumentTitle(): void {
   if (typeof document === 'undefined') return;
@@ -52,8 +53,14 @@ function applyDocumentTitle(): void {
     return;
   }
   const brand = String(useBootstrapStore().brand.zh || '').trim();
-  const title = t('app.documentTitle');
+  const title = pwaAppName();
   document.title = brand ? `${brand} · ${title}` : title;
+}
+
+/** 应用名默认读文案表；构建期用 `PWA_APP_NAME` 覆盖时优先用它。 */
+function pwaAppName(): string {
+  const override = typeof __PWA_APP_NAME_OVERRIDE__ === 'string' ? __PWA_APP_NAME_OVERRIDE__.trim() : '';
+  return override || t('app.documentTitle');
 }
 
 /** 每次身份切换后重读整份启动数据，偏好与权限落定后才允许进入下一屏。 */

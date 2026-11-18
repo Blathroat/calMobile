@@ -60,6 +60,27 @@ test('报名站和 App 共用的源两份一起同步', () => {
   });
 });
 
+test('PWA 构建脚本与图标源：图标源触发 APK，构建脚本两份页面同步', () => {
+  assert.deepEqual(flags(['web/pwa-build.mjs']), {
+    apk: false,
+    server: false,
+    app: true,
+    join: true,
+  });
+  assert.deepEqual(flags(['web/public/icons/icon-192.png', 'web/public/icons/apple-touch-icon-180.png']), {
+    apk: true,
+    server: false,
+    app: true,
+    join: true,
+  });
+  assert.deepEqual(flags(['scripts/build-icons.mjs']), {
+    apk: true,
+    server: false,
+    app: true,
+    join: true,
+  });
+});
+
 test('报名站专有文件只同步报名站', () => {
   assert.deepEqual(flags(['web/src/join/router.ts', 'web/join.html']), {
     apk: false,
@@ -106,10 +127,7 @@ test('文档、测试和开发脚本不触发 CD', () => {
 });
 
 test('提交对象里有两个 parent 才是合并提交', () => {
-  assert.equal(
-    isMergeCommit('tree abc\nparent 111\nparent 222\n\nMerge pull request\nparent 在正文里不算'),
-    true,
-  );
+  assert.equal(isMergeCommit('tree abc\nparent 111\nparent 222\n\nMerge pull request\nparent 在正文里不算'), true);
   assert.equal(isMergeCommit('tree abc\nparent 111\n\n普通提交'), false);
   assert.equal(isMergeCommit('tree abc\n\n没有父提交'), false);
 });
@@ -136,8 +154,14 @@ test('强制发布按开关来，发 APK 带上应用页面，重启带上报名
 });
 
 test('强制发布没有选择或开关写错时拒绝', () => {
-  assert.throws(() => forceReleaseScope({ apk: 'false', server: 'false', app: 'false', join: 'false' }), /至少要选一项/);
-  assert.throws(() => forceReleaseScope({ apk: 'yes', server: 'false', app: 'false', join: 'false' }), /必须是 true 或 false/);
+  assert.throws(
+    () => forceReleaseScope({ apk: 'false', server: 'false', app: 'false', join: 'false' }),
+    /至少要选一项/,
+  );
+  assert.throws(
+    () => forceReleaseScope({ apk: 'yes', server: 'false', app: 'false', join: 'false' }),
+    /必须是 true 或 false/,
+  );
   assert.throws(() => forceReleaseScope({ server: 'true' }), /缺少 apk/);
 });
 

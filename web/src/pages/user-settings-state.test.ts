@@ -7,6 +7,8 @@ import AppSheet from '@/components/AppSheet.vue';
 import { api } from '@/app/runtime';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
+import { nativeBridge } from '@/services/native-bridge';
+import { isIosInstallOffer } from '@/services/pwa';
 import { closeSheet, sheet } from '@/services/sheet';
 
 vi.mock('@/app/runtime', () => ({
@@ -22,6 +24,12 @@ vi.mock('@/app/runtime', () => ({
   },
 }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
+// 安装引导是否出现由平台判断；这里只控制「iOS 未安装」这一种状态。
+vi.mock('@/services/pwa', () => ({
+  isIosInstallOffer: vi.fn(),
+  iosInstallHintDismissed: vi.fn(),
+  dismissIosInstallHint: vi.fn(),
+}));
 
 const PROFILE = {
   id: 'u1',
@@ -53,14 +61,19 @@ afterEach(() => {
   app?.unmount();
   app = undefined;
   document.body.innerHTML = '';
+  // hasNative 是真实单例上的 spy，测试之间必须还原，避免后面的用例误进原生模式。
+  vi.restoreAllMocks();
 });
 
-async function mountSettings(options: { theme?: { colors: string[]; index: number } } = {}): Promise<void> {
+async function mountSettings(
+  options: { theme?: { colors: string[]; index: number }; native?: boolean } = {},
+): Promise<void> {
   const pinia = createPinia();
   setActivePinia(pinia);
   // 启动身份摘要中有头像，但完整资料必须成功加载后才可覆盖写入。
   useSessionStore().applyUser({ id: PROFILE.id, username: PROFILE.username, avatar: PROFILE.avatar });
   if (options.theme) useBootstrapStore().apply({ theme: options.theme });
+  if (options.native) vi.spyOn(nativeBridge, 'hasNative').mockReturnValue(true);
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/settings', component: UserSettingsPage }],
@@ -144,12 +157,44 @@ describe('设置页独立取数状态', () => {
   });
 
   it('按账号、通知与隐私、外观、语言、邀请码、应用更新分组', async () => {
-    await mountSettings();
+    // 应用更新只属于 Android 原生壳：这里 mock 成有原生桥。
+    await mountSettings({ native: true });
     await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
     const labels = [...document.querySelectorAll('.settings-section .section-label')].map((node) =>
       node.textContent?.trim(),
     );
     expect(labels).toEqual(['账号', '通知与隐私', '外观', '语言', '邀请码', '应用更新']);
+  });
+
+  it('浏览器模式下不出现应用更新分组', async () => {
+    await mountSettings();
+    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    const labels = [...document.querySelectorAll('.settings-section .section-label')].map((node) =>
+      node.textContent?.trim(),
+    );
+    expect(labels).not.toContain('应用更新');
+  });
+
+  it('iOS 未安装时提供安装到主屏幕入口，点击打开安装说明', async () => {
+    vi.mocked(isIosInstallOffer).mockReturnValue(true);
+    await mountSettings();
+    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    // 独立分组：既不在协议卡片里，也不跟应用更新（浏览器模式下本来就不出现）混在一起。
+    const labels = [...document.querySelectorAll('.settings-section .section-label')].map((node) =>
+      node.textContent?.trim(),
+    );
+    expect(labels).toEqual(['账号', '通知与隐私', '外观', '语言', '邀请码', '安装到主屏幕']);
+
+    button('安装到主屏幕')!.click();
+    await nextTick();
+    expect(sheet.current?.title).toBe('安装到主屏幕');
+    const panel = document.querySelector('.sheet-panel');
+    expect(panel?.textContent).toContain('用 Safari 打开后添加到主屏幕');
+    // app 模式不出现「打开完整应用」，那是报名站才有的入口。
+    expect(button('打开完整应用')).toBeUndefined();
+    button('关闭')!.click();
+    await nextTick();
+    expect(sheet.current?.closing).toBe(true);
   });
 
   it('配色色板按服务端色板渲染，选中项用对勾标出', async () => {
@@ -180,7 +225,8 @@ describe('设置页独立取数状态', () => {
   });
 
   it('邀请码卡片在应用更新之前：普通用户与限时展商可兑换，永久展商和管理员只看说明', async () => {
-    await mountSettings();
+    // 原生壳里才有「应用更新」组；这里保留原断言，同时让分组顺序可比较。
+    await mountSettings({ native: true });
     await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
     // 「应用更新」组排在最后，邀请码卡片是它前面的一组。
     const sections = [...document.querySelectorAll<HTMLElement>('.settings-groups > *')];

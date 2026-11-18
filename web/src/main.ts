@@ -26,10 +26,15 @@ import '@/styles/tokens.css';
 import App from '@/app/App.vue';
 import { router } from '@/app/router';
 import { bootApp } from '@/app/runtime';
+import { registerPwaServiceWorker } from '@/services/pwa';
 import { useSessionStore } from '@/stores/session';
 import '@/styles/motion.css';
 
 createApp(App).use(createPinia()).use(router).mount('#app');
+
+// 应用页面包注册 Service Worker，装到主屏幕后可以离线打开；原生 WebView、
+// 报名站与开发环境由 `registerPwaServiceWorker()` 自己判断，不在这里分支。
+void registerPwaServiceWorker();
 
 /**
  * 首帧**不等** bootstrap：bootstrap 是一次远端请求，等它会把启动拖成白屏。

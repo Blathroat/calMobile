@@ -1,6 +1,6 @@
 # 构建、测试与上线
 
-本文件是跨模块的验证和上线步骤。后端启动、模式差异和响应约定见 [`server/README.md`](../server/README.md)。环境变量以 `server/.env.example` 的注释为准。Node 版本以 `server/package.json` 和 `web/package.json` 的 `engines` 为准。
+本文件是跨模块的验证和上线步骤。后端启动、模式差异和响应约定见 [`server/README.md`](../server/README.md)。环境变量以 `server/.env.example` 的注释为准；构建期 PWA 安装元信息见 `web/.env.example`。Node 版本以 `server/package.json` 和 `web/package.json` 的 `engines` 为准。
 
 前端 `vue-tsc` 停在 TypeScript 6（`web/package.json` 的 `typescript`）。当前 Vue 类型检查器用不上 TypeScript 7 的原生编译入口。后端使用 TypeScript 7。升级时保留 `.vue` 类型检查。
 
@@ -11,6 +11,7 @@
 | 改动 | 命令 |
 |---|---|
 | Vue 页面、组件、样式、界面文案 | `pnpm --dir web typecheck`、`pnpm --dir web lint`、`pnpm --dir web fmt:check`、`pnpm --dir web test`、`pnpm --dir web build`（改了报名站页面再跑 `pnpm --dir web build:join`）。打 APK 时 `preBuild` 把 `web/dist` 同步到 WebView 资源 |
+| iPhone / PWA 与图标（`web/pwa-build.mjs`、安装引导、`web/public/` 图标、`scripts/build-icons.mjs`） | 上面的前端命令，另跑 `node scripts/build-icons.test.mjs`；`pnpm --dir web build` 之后确认 `web/dist/manifest.webmanifest`、`web/dist/sw.js`、`web/dist/favicon.ico`、`web/dist/icons/` 都已生成，`web/dist/sw.js` 的预缓存列表不含 `release.json` 与 `sw.js`。改 APK 图标或 `app/build.gradle` 再跑 `gradlew.bat :app:assembleDebug` |
 | 路由与加载 | `pnpm --dir web test` |
 | 后端规则或响应 | `pnpm --dir server lint`、`pnpm --dir server fmt:check`、`pnpm --dir server test`，以及 `pnpm --dir server test:contract`（需要 PostgreSQL）。`pnpm --dir server test` 同时跑发布脚本的 Node 测试。改了已加载的 `server/src` 后重启不用 watch 起的进程 |
 | Java 或桥接 | `gradlew.bat :app:testDebugUnitTest`。出包或资源变更再跑 `gradlew.bat :app:assembleDebug` |
@@ -62,6 +63,175 @@ server {
 
 `./gradlew :app:assembleDebug` 使用当前这份配置，不要求公网地址或签名。`./gradlew :app:assembleRelease` 会拒绝：地址不是公网 https、包名是 `com.example`、签名四项缺一或密钥文件不存在。
 
+### PWA 与 iPhone 主屏幕
+
+iPhone 没有 APK，安装文件是 `web/dist` 里随页面一起发布的静态文件，由服务端的 `/app/` 托管。固定文件名一律 `Cache-Control: no-cache`：
+
+| 路径 | Content-Type | 缓存 |
+|---|---|---|
+| `/app/manifest.webmanifest` | `application/manifest+json; charset=utf-8` | `no-cache` |
+| `/app/sw.js` | `text/javascript; charset=utf-8` | `no-cache` |
+| `/app/favicon.ico` | `image/x-icon` | `no-cache` |
+| `/app/icons/*` | 按扩展名（PNG 为 `image/png`） | `no-cache` |
+| `/app/assets/*` | 按扩展名 | `public, max-age=31536000, immutable` |
+
+根路径 `/favicon.ico` 也从 `web/dist/favicon.ico` 转发，供浏览器默认的站点图标请求使用；它和应用内的 `/app/favicon.ico` 是同一份构建产物。
+
+安装元信息在构建期由 `web/pwa-build.mjs` 从 `web/src/i18n/zh.json` 生成。`PWA_APP_NAME`、`PWA_APP_SHORT_NAME`、`PWA_APP_DESCRIPTION` 三项非空时覆盖默认值；它们是构建期变量，写在构建机的 `web/.env` / `web/.env.local`（模板见 `web/.env.example`）或构建进程环境里，不是服务器运行配置，不要写进 `/etc/calmobile.env`。不配时用 `zh.json` 的默认文案，CI 发布不需要额外配置。
+
+图标生成和 `APP_ICON` 配置见下面的「应用图标」。
+
+主屏幕名称与图标在安装时写进系统。改 `PWA_*`、`zh.json` 的安装文案、`APP_ICON` 源图或 `web/public/icons/` 后要重新构建发布，并让用户在主屏幕上删除旧图标、重新用 Safari 打开 `/app/` 再「添加到主屏幕」才会变。
+
+发布后确认（把 `<域名>` 换成实际域名）：
+
+```bash
+curl -s -D - -o /dev/null https://<域名>/app/manifest.webmanifest   # 200、application/manifest+json、no-cache
+curl -s -D - -o /dev/null https://<域名>/app/sw.js                  # 200、text/javascript、no-cache
+curl -s -D - -o /dev/null https://<域名>/app/favicon.ico            # 200、image/x-icon、no-cache
+curl -s -D - -o /dev/null https://<域名>/favicon.ico                # 200、image/x-icon、no-cache
+curl -s -D - -o /dev/null https://<域名>/app/icons/icon-192.png     # 200、image/png、no-cache
+curl -s https://<域名>/app/manifest.webmanifest | jq '{name,short_name,start_url,scope,display}'
+# 预缓存列表里应只有页面壳：没有 release.json 与 sw.js
+curl -s https://<域名>/app/sw.js | sed -n 's/^const PRECACHE = //p'
+```
+
+iPhone 真机验收（Safari，或从主屏幕打开）：
+
+1. Safari 打开 `/app/`：首页出现一次「安装到主屏幕」引导，关掉后刷新不再自动出现；设置页仍有「安装到主屏幕」入口，能重新打开同一份说明；用微信等非 Safari 浏览器打开时，说明提示先换到 Safari。
+2. 分享 →「添加到主屏幕」：名称与图标正确；从主屏幕打开是独立窗口（没有 Safari 地址栏），首页月历与展会能正常加载。第一次打开可能需要重新登录，登录后数据正常。
+3. 报名站（`/e/…`）在 iPhone 上：顶部显示安装引导而不是下载条，按钮打开同一份说明，「打开完整应用」能跳到 `/app/`。
+4. 详情页「加入日历」生成 `.ics` 并通过分享面板存到「文件」，点开后能加入系统日历；页面上没有「移出日历」。
+5. 头像、封面、简介图片能选图并上传；语言包与协议 Markdown 能选文件；CSV、语言包底稿、二维码图片落成下载文件；分享走系统面板，退回复制时提示成功。
+6. 核销页能用摄像头扫码；拒绝相机权限或没有摄像头时提示改用选图或手动输入。
+7. 开飞行模式后从主屏幕重新打开：页面壳仍能打开，数据请求失败有可见提示（没有离线数据）；恢复网络后重新打开能加载新页面。
+8. 设置页没有「应用更新」组；换语言包后主屏幕名称与图标不变。
+
+### 应用图标
+
+网站 favicon、PWA 主屏幕图标、Apple 主屏幕图标和 APK 启动图标共用一张源图，避免四处各放一份后改漏。配置是**构建期可选变量**，不是服务器运行配置，不要写进 `/etc/calmobile.env`：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `APP_ICON` | `web/public/icons/icon-1024.png` | 方形 PNG，相对仓库根或绝对路径 |
+| `APP_ICON_BACKGROUND` | `#41707e` | 十六进制底色；maskable、Apple 主屏幕、Android 自适应图标留白用 |
+
+写在构建机的 `server/.env` 或构建进程环境里。`server/.env` 和进程环境都会被 `scripts/build-icons.mjs` 读取；`web/.env` 不作为图标配置来源，避免网页和 APK 拿到不同源图。
+
+生成范围：
+
+| 目标 | 产物 |
+|---|---|
+| 网站 / PWA | `web/dist/favicon.ico`（16/32/48 三个 PNG 条目）、`web/dist/icons/icon-192.png`、`icon-512.png`、`maskable-512.png`、`favicon-32.png`、`apple-touch-icon-180.png` |
+| Android 启动图标 | `app/build/generated/icons/res/mipmap-*/ic_launcher.png`、`ic_launcher_round.png`（mdpi 48 到 xxxhdpi 192） |
+| Android 自适应 | `mipmap-anydpi-v26/ic_launcher.xml`、`ic_launcher_round.xml`、`mipmap-*/ic_launcher_foreground.png`（108～432）、`values/ic_launcher_background.xml` |
+
+网页图标在 `pnpm --dir web build` 时由 `web/pwa-build.mjs` 调 `scripts/build-icons.mjs` 生成；Android 图标由 Gradle 的 `buildIcons` 任务在 `preBuild` 时生成。两者都走同一个纯 Node 脚本，没有额外图片工具依赖。
+
+源图要求：
+
+- 只支持 **8 位 RGB / RGBA、非隔行 PNG**；非方形会居中裁切。
+- `web/public/icons/icon.svg` 只是设计源，不参与生成；改 SVG 后要先导出 1024 PNG，再替换默认源图或设置 `APP_ICON`。
+- Android 自适应前景是透明底；源图自带不透明底色时，建议把 `APP_ICON_BACKGROUND` 设成同色，否则会看到一块方形底色。
+
+改图标的完整流程：
+
+```bash
+# 不配就用默认源图；也可以写进构建机的 server/.env
+export APP_ICON=/path/to/icon.png
+export APP_ICON_BACKGROUND=#123456
+pnpm --dir web build
+./gradlew :app:assembleDebug        # 或 assembleRelease
+```
+
+只重新生成图片、不跑完整构建：
+
+```bash
+node scripts/build-icons.mjs
+# 或只生成 Android 资源
+APP_ICON=/path/to/icon.png node scripts/build-icons.mjs --target android
+```
+
+发布链路：
+
+- 只改 `web/pwa-build.mjs`：发运行时包，不发 APK（页面热更新即可）。
+- 改 `web/public/icons/`（源图）或 `scripts/build-icons.mjs`：按 [`scripts/release-scope.mjs`](../scripts/release-scope.mjs) 归类会发 APK，同时发运行时包，避免新装 APK 还是旧图标。
+- 只改 `APP_ICON` / `APP_ICON_BACKGROUND` 环境变量而文件不变时，release-scope 不会命中；需要重新构建并手动触发一次 Release，或改动配套文件让路径命中。
+- 主屏幕 / 桌面图标是安装时写进系统的快照：重新构建发布后，用户要删掉旧图标重新「添加到主屏幕」，或重装 APK，才会看到新图。
+
+发布后检查：
+
+```bash
+curl -s -D - -o /dev/null https://<域名>/favicon.ico
+curl -s -D - -o /dev/null https://<域名>/app/favicon.ico
+curl -s -D - -o /dev/null https://<域名>/app/icons/icon-192.png
+```
+
+### 本机与 iPhone 本地验收
+
+PWA 的安装、Service Worker 和摄像头都要求安全上下文：桌面 `127.0.0.1` 算安全上下文；iPhone 必须用 HTTPS（`http://<局域网 IP>` 不行）。按下面两条路测试，第一条快，第二条才能测到 iOS 专有行为。
+
+**A. 桌面 Chrome 快速验收**
+
+```bash
+docker compose up -d
+cd server
+cp .env.example .env          # 首次
+pnpm install --frozen-lockfile
+pnpm db:migrate
+pnpm db:seed
+pnpm dev                      # 终端 A，http://127.0.0.1:3000
+```
+
+```bash
+pnpm --dir web build          # 终端 B，从仓库根目录执行
+```
+
+Chrome 打开 `http://127.0.0.1:3000/app/`，用 `demo` / `exhibitor` / `user`（密码都是 `password`）验证三种角色。DevTools → Application 里可以看 Manifest、Service Workers、Cache Storage；Network 勾 Offline 后刷新可以验证页面壳离线。地址栏的安装按钮可以装到桌面。这里能验证 manifest、SW、API、选图/下载/CSV/ICS、通知权限、响应式布局；iOS 的独立窗口、安全区、HEIC/MOV、系统分享面板和主屏幕安装仍要 iPhone。
+
+**B. iPhone 真机（cloudflared 临时 HTTPS，推荐）**
+
+1. 先按 A 启动 Docker 和 `pnpm --dir server dev`，确认 `http://127.0.0.1:3000/ping` 正常。
+2. 另开终端启动临时隧道：
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:3000
+```
+
+记下输出的 `https://xxxx.trycloudflare.com`，下面用 `BASE` 表示它。
+
+3. 用隧道地址重启后端，并重新构建页面（页面里的接口地址是构建期写死的）：
+
+```bash
+BASE=https://xxxx.trycloudflare.com
+APP_API_BASE="$BASE/api/v1" PUBLIC_BASE_URL="$BASE" TRUST_PROXY=1 pnpm --dir server dev
+```
+
+```bash
+APP_API_BASE="$BASE/api/v1" pnpm --dir web build
+```
+
+PowerShell 写法：
+
+```powershell
+$BASE = "https://xxxx.trycloudflare.com"
+$env:APP_API_BASE = "$BASE/api/v1"
+$env:PUBLIC_BASE_URL = "$BASE"
+$env:TRUST_PROXY = "1"
+pnpm --dir server dev
+# 另开窗口：$env:APP_API_BASE = "$BASE/api/v1"; pnpm --dir web build
+```
+
+4. iPhone Safari 打开 `$BASE/app/`：首页应出现安装引导；分享 →「添加到主屏幕」后从主屏幕启动。按上面的真机验收清单勾一遍。
+
+注意：
+
+- `APP_API_BASE` 是**页面构建期**变量，隧道地址变了要重新 `pnpm --dir web build`；`PUBLIC_BASE_URL` 是**服务端运行期**变量，改了要重启后端。两个都必须是同一个隧道源，否则页面会去请求 iPhone 自己的 `127.0.0.1`，或分享链接拼错。
+- 临时隧道域名每次启动都变；只做一次验收够用。要反复测试通行密钥（WebAuthn 的 RP ID 绑定域名）或让 iPhone 长期访问，用 cloudflared 命名隧道、ngrok 固定域名，或局域网 + mkcert/Caddy 的可信证书；换域名后已安装的主屏幕图标要删掉重加。
+- 快速隧道被网络环境拦截时，可换 ngrok，或在局域网用 Caddy `tls internal` / mkcert 生成证书并让 iPhone 信任根证书；`http://` 下 Service Worker 不会注册，安装也会退化成普通书签。
+- 验证离线：首次在线打开、等 SW 装好并刷新一次后，开飞行模式从主屏幕启动；页面壳应出现，数据请求失败要有可见提示；恢复网络后重新打开。
+- 验证安装名/描述：`PWA_APP_NAME=... PWA_APP_SHORT_NAME=... pnpm --dir web build` 后重新添加到主屏幕。已安装的名称为系统快照，不会因改 `zh.json` 自动更新。
+
 ### 发布链路
 
 推送到 `master` 的合并提交在 CI 成功之后，`.github/workflows/release.yml` 按这次推送的路径发布。普通提交只跑 CI，不发布；功能分支和拉取请求不发布。会触发发布或更新的改动走 PR，用合并提交合入，不要直接推到 `master`。合入前要等该拉取请求自己的 CI 成功。检查还在跑或失败时不要合并。合并之后 `master` 上还会再跑一次推送 CI，那一次才决定自动 Release。
@@ -78,6 +248,7 @@ server {
 - 原生外壳（`app/src/main`、`app/build.gradle`、Gradle、`scripts/client-target.mjs`）发布 APK。
 - 服务端运行时代码、依赖锁、`deploy/`、`scripts/runtime-bundle.mjs`、`scripts/sync-production-env.mjs` 发布运行时包。
 - 只进应用页面包的源（例如 `web/src/pages/HomePage.vue`、`web/src/main.ts`、`web/vite.config.ts`、`web/release-manifest.mjs`）、报名站专有源（`web/src/join/`、`web/join.html`、`web/vite.join.config.ts`、`server/scripts/build-join.ts`）、两边共用的 `web/src` 都发布运行时包。
+- PWA 构建脚本与安装图标（`web/pwa-build.mjs`、`scripts/build-icons.mjs`、`web/public/`）两份页面构建都要用，发布运行时包；图标源图还会生成 APK 启动图标，所以 `scripts/build-icons.mjs` 与 `web/public/icons/` 的改动也发 APK。
 - `server/src/domain/answer-document.ts` 发布运行时包。
 - 文档、测试、`server/src/dev/` 不触发。
 
@@ -199,3 +370,4 @@ GitHub Secrets：`NPM_TOKEN`（能发布 `calmobile-server` 的 npm automation t
 9. `client_max_body_size` 盖住视频单文件上限。视频默认 50MB 时至少写 `64m`。头像那一道传输硬顶盖不住视频。上传目录和开关见 `server/.env.example`。存满之后的产品行为见 [`product.md`](product.md)。
 10. 注册页有收集说明。`PRIVACY_POLICY_URL` 是 https 政策地址。当前邮件只有验证码，没有营销信。
 11. 外壳有改动时，正式包用 `./gradlew :app:assembleRelease`，或由上面的 Release 工作流在 `master` 的合并提交通过 CI 后构建。`APP_API_BASE` 是与 `PUBLIC_BASE_URL` 同一个源的 `https://域名/api/v1`。包名是 `com.blathroat.calmobile`。签名四项指向正式密钥。`ENABLE_WEB=true`，运行时包里的 `web/dist-join` 已由更新器放到当前版本目录。
+12. 改了 PWA 清单、Service Worker、安装引导或 `web/public/icons/` 时，按上面的 iPhone 真机验收清单过一遍，并确认 `/app/manifest.webmanifest`、`/app/sw.js`、`/app/icons/` 在线且 MIME 与缓存正确。

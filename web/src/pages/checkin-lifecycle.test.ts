@@ -112,6 +112,9 @@ describe('核销页面的异步识别与相机生命周期', () => {
   });
 
   it.each(['unmount', 'manual'] as const)('相机尚未返回时保持忙碌；%s 后新返回的媒体立即释放', async (action) => {
+    // 应用里（有原生桥）先申请原生相机权限，再开 WebView 的取景；
+    // 没取到流之前点第二次扫描应被忽略，权限只申请一次。
+    stubNativeBridge();
     let finish!: (value: MediaStream) => void;
     getUserMedia.mockReturnValue(
       new Promise((resolve) => {
@@ -129,8 +132,8 @@ describe('核销页面的异步识别与相机生命周期', () => {
       app = undefined;
     } else actionButton('manual').click();
     finish(media);
-    await nextTick();
-    expect(stopTrack).toHaveBeenCalledOnce();
+    // 媒体在页面离开 / 重新开始之后才回来：必须立刻释放，不留下后台摄像头。
+    await vi.waitFor(() => expect(stopTrack).toHaveBeenCalledOnce());
     expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
     if (action === 'unmount') expect(decoder.dispose).toHaveBeenCalledOnce();
   });

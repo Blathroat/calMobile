@@ -51,8 +51,9 @@ describe('NativeBridge', () => {
     const fakeWindow = {} as Window;
     const bridge = new NativeBridge({ windowLike: fakeWindow, timeoutMs: 10 });
     bridges.push(bridge);
-    await expect(bridge.call('calendar.status', { title: '秋季展会', date: '2026-09-20' })).rejects.toThrow(
-      '没有原生桥接',
+    // 文案会随界面调整，这里只锁「没有桥就以 NativeBridgeError 失败」这个契约。
+    await expect(bridge.call('calendar.status', { title: '秋季展会', date: '2026-09-20' })).rejects.toBeInstanceOf(
+      NativeBridgeError,
     );
     fakeWindow.CalMobileBridge?.onResult('unknown', true, {}, null, null);
   });

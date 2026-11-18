@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+// 与 App 构建共用一份占位符替换：报名站只要标题，不生成 manifest 与 Service Worker。
+import { pwaHtmlCopyPlugin, readCopy } from './pwa-build.mjs';
 
 // 必须在 Vite 读取环境之前写上：报名站构建据此切路径、导航和接口基址。
 // App 的 `vite.config.ts` 不设置它，两份产物互不影响。
@@ -16,7 +18,9 @@ const clientTarget = JSON.parse(
 export default defineConfig({
   root,
   base: '/',
-  plugins: [vue()],
+  // 报名站不是可安装应用：不拷 public 里的安装图标，也不生成 manifest 与 Service Worker。
+  publicDir: false,
+  plugins: [vue(), pwaHtmlCopyPlugin({ copy: readCopy(), env: {}, includePwa: false })],
   define: {
     __APP_VERSION__: JSON.stringify(clientTarget.versionName),
     __APP_VERSION_CODE__: JSON.stringify(clientTarget.versionCode),

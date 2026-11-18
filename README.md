@@ -4,7 +4,7 @@
 
 给参会者和展商用的展会报名与排期应用：浏览月历、查看展会、在线报名、展商审核、现场核销，附带一个不用装应用也能报名的浏览器报名站。
 
-界面跑在 Android 的 WebView 里，业务数据在 Hono + PostgreSQL 后端；原生只负责设备能力（系统日历、摄像头、通知、文件、分享、通行密钥等）。
+界面跑在 Android 的 WebView 里，也可以用 Safari 把完整应用以 PWA 方式加到 iPhone 主屏幕；业务数据在 Hono + PostgreSQL 后端；原生只负责设备能力（系统日历、摄像头、通知、文件、分享、通行密钥等），浏览器里同样的操作改用网页接口。
 
 ## 功能一览
 
@@ -13,6 +13,7 @@
 - **展商后台**：发布 / 编辑展会、配置报名设置与收集项、审核报名、核销报名码、分享报名二维码。
 - **私人会议**：展商开放预约，访客提交申请，展商通过或拒绝。
 - **浏览器报名站**：分享链接打开展会详情，未登录即可填表报名，提交后拿到查询链接；登录 / 注册可把报名关联到账号。
+- **iPhone / PWA**：用 Safari 打开 `/app/` 并添加到主屏幕就是完整应用，月历、报名、展商后台、核销与设置都能用；设备能力改走浏览器接口。页面壳可离线打开，数据仍需联网，没有 APK 更新与推送。网站 favicon、PWA 图标与 APK 启动图标共用一份可选 `APP_ICON` 源图。
 - **账号与安全**：邀请码、限时展商、两步验证（通行密钥 / TOTP / 邮箱验证码）、备用码、可信设备、远程下线会话。
 - **管理与设置**：用户 / 展会 / 会议管理，服务器设置、配色与品牌、上传与存储上限、邀请码、软件包下载源、用户协议、操作日志。
 - **多语言**：内置中文，支持安装语言包（本机存储，不随页面发布）。
@@ -27,17 +28,21 @@ flowchart LR
   C --> E[SMTP<br/>验证码邮件]
   J[浏览器报名站<br/>web/dist-join] -->|REST /api/v1| C
   C -->|/app/ 页面热更新| A
+  I[iPhone 主屏幕 PWA<br/>Safari 添加到主屏幕] -->|加载 /app/ 页面壳| C
+  I -->|REST /api/v1| C
 ```
 
-- **应用页面**打进 APK 一份；正式包打开接口源的 `/app/index.html`，WebView 拦截到本机快照，支持整页热更新。
+- **应用页面**打进 APK 一份；正式包打开接口源的 `/app/index.html`，WebView 拦截到本机快照，支持整页热更新。同一份 `/app/` 产物也供 iPhone 主屏幕应用加载。
 - **浏览器报名站**是第二份构建（`web/dist-join`），由后端直接托管，不进 APK。
-- 业务数据只走后端，前端不直接访问数据库；原生桥只做设备能力。
+- **iPhone / PWA**：Safari 打开 `/app/` 并添加到主屏幕就是完整应用，不需要 APK；名称与描述取自中文文案，Web App Manifest、Service Worker 与主屏幕图标在构建时生成（可用 `PWA_*` 构建变量覆盖名称与描述）。Service Worker 只缓存页面壳，接口与数据仍走网络。
+- 业务数据只走后端，前端不直接访问数据库；原生桥只做设备能力，浏览器里同样的操作改用网页接口。
 
 ## 技术栈
 
 | 层 | 技术 |
 | --- | --- |
 | Android 外壳 | Java + WebView，`minSdk 24` / `targetSdk 36`，Gradle |
+| iPhone / PWA | Safari「添加到主屏幕」，Web App Manifest + Service Worker（只缓存页面壳） |
 | 前端 | Vue 3、Vite、vue-router、Pinia、TypeScript（`vue-tsc`） |
 | 后端 | Node.js、Hono、Zod、`pg` 手写 SQL、JWT、bcrypt、`@simplewebauthn/server` |
 | 数据库 | PostgreSQL |
@@ -51,6 +56,7 @@ flowchart LR
 app/            Android 外壳（WebView、原生动作桥、系统日历 / 摄像头 / 相册 / 分享等）
 web/src/        应用页面与报名站共用的 Vue 页面、组件、服务
 web/join.html   报名站入口（历史路由，构建到 web/dist-join）
+web/public/     PWA 安装图标（manifest 与 Service Worker 由构建生成；也可用 APP_ICON 覆盖源图）
 server/         Hono 后端：认证、展会、报名、审核、核销、设置、通知、日志
 deploy/         服务器更新器与 systemd 单元样例
 scripts/        构建目标、发布范围、运行时包等脚本
@@ -142,8 +148,10 @@ pnpm build:join # 报名站构建（server 的 pnpm dev 也会自动构建）
 
 ## 说明
 
-- 应用必须连接后端，没有离线数据层。
+- 应用必须连接后端，没有离线数据层。iPhone 主屏幕应用的页面壳可以离线打开，月历、展会与报名数据仍需联网。
+- 网站、PWA 与 APK 的图标默认用 `web/public/icons/icon-1024.png`；构建机可用 `APP_ICON` / `APP_ICON_BACKGROUND` 覆盖同一张源图，详见 [`docs/operations.md`](docs/operations.md) 的「应用图标」。
+- iPhone 不提供 APK：用 Safari 打开 `/app/` 并添加到主屏幕即可，页面包在下次打开时更新；没有检查更新与自动更新。
 - 上传的头像、封面与简介媒体保存在服务器；视频只校验大小与后缀，不转码。
 - 通知只有数据库记录与系统权限申请，没有推送通道。
-- 语言包安装在用户本机，不随应用页面发布更新。
+- 语言包安装在用户本机，不随应用页面发布更新；主屏幕名称与图标来自构建时的清单，安装后不随语言包变化，改名称或图标要重新添加。
 - 本地 `lang-packs/`、`.env`、签名文件与构建产物不进仓库；发布包由 CI 按路径自动生成。

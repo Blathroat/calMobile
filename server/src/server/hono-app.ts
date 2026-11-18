@@ -159,6 +159,24 @@ export function createApp(options: AppOptions): Hono {
 
   if (options.appRoot) {
     const appRoot = options.appRoot;
+    /**
+     * 浏览器默认会请求根路径的 `/favicon.ico`，而应用页面在 `/app/`。这里把根路径
+     * 的请求直接指向构建产物里同一份图标，避免站点标签页显示 404 图标。
+     */
+    const serveFavicon = (): Response => {
+      const found = lookupAppFile(appRoot, '/app/favicon.ico');
+      if (found.kind === 'missing') {
+        return new Response('资源不存在', {
+          status: 404,
+          headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+        });
+      }
+      return new Response(new Uint8Array(found.file.body), {
+        status: 200,
+        headers: { 'content-type': found.file.type, 'cache-control': found.file.cache },
+      });
+    };
+    app.get('/favicon.ico', serveFavicon);
     const serveAppShell = (c: Context): Response => {
       const url = new URL(c.req.url);
       const location = canonicalRedirect({

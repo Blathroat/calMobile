@@ -347,6 +347,10 @@
       "checkInTime": "核销时间"
     },
     "scan": {
+      "cameraBusy": "摄像头被其他应用占用，请关闭后重试，或使用“选择图像扫码”。",
+      "cameraDenied": "没有获得摄像头权限，请在系统设置里允许后重试，或使用“选择图像扫码”。",
+      "cameraNotFound": "没有找到可用的摄像头，请使用“选择图像扫码”或“手动输入报名码”。",
+      "cameraUnsupported": "当前环境不支持摄像头取景，请使用“选择图像扫码”或“手动输入报名码”。",
       "checkIn": "扫码核销",
       "continue": "继续扫码",
       "decoderUnavailable": "二维码识别组件不可用，请使用“手动输入报名码”。",
@@ -377,6 +381,7 @@
     "back": "返回",
     "cancel": "取消",
     "close": "关闭",
+    "copied": "已复制",
     "delete": "删除",
     "failed": "操作失败",
     "loadFailed": "加载失败",
@@ -388,7 +393,9 @@
   "device": {
     "actionIncomplete": "操作未完成",
     "bridgeReleased": "原生桥接已释放",
-    "noBridge": "当前环境没有原生桥接，请在 Android 应用中打开"
+    "featureUnavailable": "当前环境不支持这个操作，请改用页面上的其它入口",
+    "noBridge": "当前环境不支持这个操作，请改用页面上的其它入口",
+    "shareUnavailable": "当前环境不支持分享，请手动复制内容"
   },
   "exhibition": {
     "card": {
@@ -402,6 +409,9 @@
       "additionalInfo": "补充信息",
       "backHome": "返回首页",
       "brandMark": "展",
+      "calendarDownloaded": "已生成日历文件，请用“文件”打开并加入日历",
+      "calendarShareFailed": "生成日历文件失败，请稍后重试",
+      "calendarShared": "已打开分享，请选择“日历”",
       "calendarUpdated": "已更新系统日历",
       "cancelFailed": "撤销失败",
       "closedWithMode": "{mode}：该展会当前不接受报名。",
@@ -627,10 +637,13 @@
   },
   "join": {
     "documentTitle": "报名",
-    "needSharedLink": "这个地址不能浏览展会。请打开展商发给你的报名链接。",
-    "title": "请使用展商分享的链接",
+    "downloadApp": "下载应用",
     "downloadBar": "在应用里用更顺手",
-    "downloadApp": "下载应用"
+    "iosAction": "查看安装方法",
+    "iosBarTitle": "在 iPhone 上使用完整应用",
+    "iosHint": "添加到主屏幕，随时查看展会与报名",
+    "needSharedLink": "这个地址不能浏览展会。请打开展商发给你的报名链接。",
+    "title": "请使用展商分享的链接"
   },
   "media": {
     "avatarSaveFailed": "头像保存失败",
@@ -645,6 +658,27 @@
     "pinchZoom": "双指捏合缩放",
     "unreadableFile": "读不到刚选择的文件",
     "usePhoto": "使用这张"
+  },
+  "pwa": {
+    "install": {
+      "close": "关闭",
+      "copied": "链接已复制",
+      "copyFailed": "复制失败，请手动选择地址",
+      "copyLink": "复制链接",
+      "intro": "用 Safari 打开后添加到主屏幕，就能像应用一样使用。",
+      "loginHint": "安装后第一次打开可能需要重新登录，账号和报名数据仍在服务器。",
+      "notSafari": "当前浏览器不能直接安装。请点右上角「…」→「在 Safari 中打开」，再添加到主屏幕。",
+      "openApp": "打开完整应用",
+      "settingsEntry": "安装到主屏幕",
+      "stepAdd": "选择「添加到主屏幕」",
+      "stepOpen": "用 Safari 打开这个地址",
+      "stepShare": "点 Safari 底部的分享按钮",
+      "title": "安装到主屏幕"
+    },
+    "manifest": {
+      "description": "展会日历、报名与展商管理",
+      "shortName": "展会排期"
+    }
   },
   "meeting": {
     "apply": {
