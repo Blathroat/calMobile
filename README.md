@@ -34,7 +34,8 @@ flowchart LR
 
 - **应用页面**打进 APK 一份；正式包打开接口源的 `/app/index.html`，WebView 拦截到本机快照，支持整页热更新。同一份 `/app/` 产物也供 iPhone 主屏幕应用加载。
 - **浏览器报名站**是第二份构建（`web/dist-join`），由后端直接托管，不进 APK。
-- **iPhone / PWA**：Safari 打开 `/app/` 并添加到主屏幕就是完整应用，不需要 APK；名称与描述取自中文文案，Web App Manifest、Service Worker 与主屏幕图标在构建时生成（可用 `PWA_*` 构建变量覆盖名称与描述）。Service Worker 只缓存页面壳，接口与数据仍走网络。
+- **iPhone / PWA**：Safari 打开 `/app/` 并添加到主屏幕就是完整应用，不需要 APK；名称与描述默认取自中文文案，Web App Manifest、Service Worker 与主屏幕图标在构建时生成，服务器也可以在启动时按 `/etc/calmobile.env` 的 `PWA_*` / `APP_TITLE` / `APP_ICON` 生成实例专属版本。Service Worker 只缓存页面壳，接口与数据仍走网络。
+- **多实例**：运行时包里的页面、PWA 和报名站都不写死域名，接口与媒体使用同源相对路径；PWA 名称、页面标题和图标可以由服务器的运行时品牌变量覆盖。同一份 `calmobile-server` 可以部署到不同 `PUBLIC_BASE_URL`，APK 外壳仍按实例的 `APP_API_BASE` 构建。
 - 业务数据只走后端，前端不直接访问数据库；原生桥只做设备能力，浏览器里同样的操作改用网页接口。
 
 ## 技术栈
@@ -56,7 +57,7 @@ flowchart LR
 app/            Android 外壳（WebView、原生动作桥、系统日历 / 摄像头 / 相册 / 分享等）
 web/src/        应用页面与报名站共用的 Vue 页面、组件、服务
 web/join.html   报名站入口（历史路由，构建到 web/dist-join）
-web/public/     PWA 安装图标（manifest 与 Service Worker 由构建生成；也可用 APP_ICON 覆盖源图）
+web/public/     PWA 安装图标（manifest 与 Service Worker 由构建生成；也可用 APP_ICON 覆盖源图；服务器运行时可再覆盖）
 server/         Hono 后端：认证、展会、报名、审核、核销、设置、通知、日志
 deploy/         服务器更新器与 systemd 单元样例
 scripts/        构建目标、发布范围、运行时包等脚本
@@ -149,7 +150,7 @@ pnpm build:join # 报名站构建（server 的 pnpm dev 也会自动构建）
 ## 说明
 
 - 应用必须连接后端，没有离线数据层。iPhone 主屏幕应用的页面壳可以离线打开，月历、展会与报名数据仍需联网。
-- 网站、PWA 与 APK 的图标默认用 `web/public/icons/icon-1024.png`；构建机可用 `APP_ICON` / `APP_ICON_BACKGROUND` 覆盖同一张源图，详见 [`docs/operations.md`](docs/operations.md) 的「应用图标」。
+- 网站、PWA 与 APK 的图标默认用 `web/public/icons/icon-1024.png`；构建机可用 `APP_ICON` / `APP_ICON_BACKGROUND` 覆盖同一张源图，服务器运行时也可以读 `/etc/calmobile.env` 的同一组变量按实例生成，详见 [`docs/operations.md`](docs/operations.md) 的「应用图标」。
 - iPhone 不提供 APK：用 Safari 打开 `/app/` 并添加到主屏幕即可，页面包在下次打开时更新；没有检查更新与自动更新。
 - 上传的头像、封面与简介媒体保存在服务器；视频只校验大小与后缀，不转码。
 - 通知只有数据库记录与系统权限申请，没有推送通道。

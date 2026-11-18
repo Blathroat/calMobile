@@ -23,6 +23,7 @@ import { openDateRange, openTime } from '@/services/pickers';
 import { formatDateWithWeekday } from '@/services/format';
 import { PATTERNS, allowedFormats, check, limit, validateAll } from '@/services/validate';
 import { EXHIBITION_STATUS, FIELD_TYPE, REGISTRATION_MODES, exhibitionStatusLabel } from '@/services/status';
+import { canManageExhibition } from '@/services/exhibition-scope';
 import { device } from '@/services/device-services';
 import { publishImportedMedia } from '@/services/publish-media';
 import { loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
@@ -484,6 +485,11 @@ async function load(): Promise<void> {
     return result;
   });
   if (!data || data.found === false) return;
+  if (!canManageExhibition(session.user, data.exhibition)) {
+    toast(t('server.permission.exhibitionNotYours'), 'error');
+    await router.replace('/exhibitor');
+    return;
+  }
   if (built.value) return;
   built.value = true;
   fillFrom(data.exhibition ?? {}, data);

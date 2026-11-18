@@ -6,6 +6,9 @@
  * `releases/<版本>/server/dist/server/...` 与 `releases/<版本>/web/dist/...`。
  *
  * 只复制运行时要用的文件。源码、测试、开发脚本和 `.env` 不进包。
+ * `server/dist` 里另外带 `app-shell/`、`app-shell-join/` 两份页面壳副本，`web/dist`
+ * 或 `web/dist-join` 被 systemd 误删时服务端可以回退；`scripts/build-icons.mjs`
+ * 供服务器启动时按 `APP_ICON` 生成运行时图标。
  */
 
 import { copyFile, cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
@@ -29,6 +32,8 @@ export const RUNTIME_ENTRIES = [
   ['deploy/calmobile-update.mjs', 'deploy/calmobile-update.mjs'],
   ['scripts/sync-production-env.mjs', 'scripts/sync-production-env.mjs'],
   ['scripts/client-target.mjs', 'scripts/client-target.mjs'],
+  // 运行时品牌层在服务启动时按 APP_ICON 生成图标，生成器和它依赖的构建目标脚本一起进包。
+  ['scripts/build-icons.mjs', 'scripts/build-icons.mjs'],
 ];
 
 /** 服务器更新器解压后必须能找到的文件。 */
@@ -43,11 +48,14 @@ export const REQUIRED_ENTRIES = [
   'server/dist/server/join-site.js',
   'web/dist/index.html',
   'web/dist/release.json',
+  'server/dist/app-shell/index.html',
   'web/dist-join/join.html',
+  'server/dist/app-shell-join/join.html',
   'deploy/production.env',
   'deploy/calmobile-update.mjs',
   'scripts/sync-production-env.mjs',
   'scripts/client-target.mjs',
+  'scripts/build-icons.mjs',
 ];
 
 /** 这些路径出现在包里说明复制范围写错了。 */
@@ -207,6 +215,16 @@ export async function stageRuntimePackage(input) {
       await copyFile(source, target);
     }
   }
+
+  // 运行时包里保留 web/dist 给常规读取，同时把它复制到 server/dist/app-shell：
+  // 生产 systemd 可能清掉 current/web/dist，服务端会退到这份副本继续提供 /app/。
+  await cp(path.join(repoRoot, 'web/dist'), path.join(outDir, 'server/dist/app-shell'), {
+    recursive: true,
+  });
+  // 报名站同样留一份副本，避免 systemd 一并清掉 web/dist-join 后报名站 502。
+  await cp(path.join(repoRoot, 'web/dist-join'), path.join(outDir, 'server/dist/app-shell-join'), {
+    recursive: true,
+  });
 
   await writeFile(
     path.join(outDir, 'package.json'),

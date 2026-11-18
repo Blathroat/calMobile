@@ -23,6 +23,7 @@ let bootPromise: Promise<void> | undefined;
 export function bootApp(): Promise<void> {
   if (bootPromise) return bootPromise;
   applyDocumentTitle();
+  applyBrandingMeta();
   bootPromise = api.session
     // 先从设备存储恢复会话（有刷新令牌就换一张访问令牌），再取启动数据：
     // 顺序反了的话 bootstrap 会以匿名身份回答，页面首帧会停在登录页。
@@ -41,20 +42,80 @@ export function resetBootForTests(): void {
 }
 
 /**
- * 页面标题（浏览器页签、分享预览）。HTML 里只留通用名，品牌名由启动数据补齐：
- * 应用页用「品牌 · 展会排期助手」，报名站用「报名」；品牌读不到时只留通用名。
- * 应用名可以用构建期的 `PWA_APP_NAME` 覆盖（见 `web/pwa-build.mjs`），覆盖后
- * 与 manifest 和首屏静态标题保持一致。切语言会整页重载，所以不用监听。
+ * 页面标题（浏览器页签、分享预览）。HTML 里由服务端写入实例标题，品牌名由启动数据补齐：
+ * 应用页用「品牌 · 应用名」，报名站用 `JOIN_TITLE`；服务端注入的
+ * `window.__CALMOBILE_BRANDING__` 负责首帧，`bootstrap.branding` 负责启动后确认。
+ *
+ * `APP_TITLE` 是完整标题覆盖，设置后不再拼品牌前缀；`PWA_APP_NAME` 是应用名。
+ * 切语言会整页重载，所以不用监听。
  */
-function applyDocumentTitle(): void {
+export function applyDocumentTitle(): void {
   if (typeof document === 'undefined') return;
   if (isJoinSurface) {
-    document.title = t('join.documentTitle');
+    document.title = brandingText('joinTitle') || t('join.documentTitle');
     return;
   }
   const brand = String(useBootstrapStore().brand.zh || '').trim();
-  const title = pwaAppName();
-  document.title = brand ? `${brand} · ${title}` : title;
+  const title = brandingText('appTitle');
+  if (title) {
+    document.title = title;
+    return;
+  }
+  const appName = brandingText('appName') || pwaAppName();
+  document.title = brand ? `${brand} · ${appName}` : appName;
+}
+
+/** 用运行时品牌补齐 `meta description`、Apple 主屏幕标题与明暗主题色。 */
+export function applyBrandingMeta(): void {
+  if (typeof document === 'undefined') return;
+  const description = brandingText('description');
+  if (description) setMetaContent('description', description);
+  const shortName = brandingText('shortName');
+  if (shortName) setMetaContent('apple-mobile-web-app-title', shortName);
+  const themeColor = brandingText('themeColor');
+  if (themeColor) setThemeColorMeta('light', themeColor);
+  const themeColorDark = brandingText('themeColorDark');
+  if (themeColorDark) setThemeColorMeta('dark', themeColorDark);
+}
+
+function setMetaContent(name: string, value: string): void {
+  const meta = document.querySelector(`meta[name="${name}"]`);
+  if (meta) meta.setAttribute('content', value);
+}
+
+function setThemeColorMeta(scheme: 'light' | 'dark', value: string): void {
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+    const media = meta.getAttribute('media') || '';
+    const dark = media.includes('dark');
+    if ((scheme === 'dark') === dark) meta.setAttribute('content', value);
+  }
+}
+
+type BrandingKey =
+  | 'appName'
+  | 'shortName'
+  | 'description'
+  | 'appTitle'
+  | 'joinTitle'
+  | 'lang'
+  | 'themeColor'
+  | 'themeColorDark'
+  | 'backgroundColor';
+
+/**
+ * 品牌字段优先级：`bootstrap`（服务端运行配置）→ 首帧注入的全局 → 空串。
+ * 空串表示让构建期静态标题/manifest 继续生效。
+ */
+function brandingText(key: BrandingKey): string {
+  const store = useBootstrapStore();
+  const stored = store.branding as Record<string, unknown>;
+  const value = stored[key];
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  // bootstrap 一旦落定，就以服务端这次下发的结果为准；不要再回退到首帧注入的旧值。
+  if (store.booted) return '';
+  const runtime = typeof window === 'undefined' ? undefined : window.__CALMOBILE_BRANDING__;
+  const injected = runtime ? (runtime as Record<string, unknown>)[key] : undefined;
+  return typeof injected === 'string' ? injected.trim() : '';
 }
 
 /** 应用名默认读文案表；构建期用 `PWA_APP_NAME` 覆盖时优先用它。 */
@@ -80,8 +141,9 @@ export async function refreshRuntimeBootstrap(): Promise<void> {
 export function applyRuntimeBootstrap(data: Bootstrap): void {
   useSessionStore().applyUser(data.user);
   useBootstrapStore().apply(data);
-  // 品牌到了之后补一次标题：首帧只有通用名，拿不到品牌就保持通用名。
+  // 品牌到了之后补一次标题与安装信息：首帧只有服务端注入的通用名/默认值。
   applyDocumentTitle();
+  applyBrandingMeta();
   useCapabilitiesStore().apply(asObject(data.capabilities));
   // 色板与全局默认下标留在 bootstrap store；这里只落明暗模式那一段。
   useSettingsStore().apply({ ui: data.ui });

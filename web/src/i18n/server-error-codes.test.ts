@@ -42,8 +42,8 @@ const ALLOWED = new Set([
 /** 第三方库（express/body-parser）抛出的错误 type，不是我们的码。 */
 const FOREIGN = /^(entity|encoding|request)\.[a-z]/;
 
-/** 文件名（`package.json`、`join.html`…）也不是码。 */
-const FILENAME = /\.(json|html|js|ts|md|css|exe|png|jpe?g|webp|mp4|mov)$/;
+/** 文件名（`package.json`、`join.html`、`favicon.ico`、`manifest.webmanifest`…）也不是码。 */
+const FILENAME = /\.(json|html|js|ts|md|css|exe|png|jpe?g|webp|mp4|mov|ico|webmanifest)$/;
 
 function flat(node: Record<string, unknown>, prefix = ''): Record<string, string> {
   const out: Record<string, string> = {};

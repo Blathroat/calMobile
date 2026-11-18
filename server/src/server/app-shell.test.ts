@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { appCacheControl, appRelativePath, lookupAppFile } from './app-shell.js';
+import { appCacheControl, appRelativePath, defaultPackagedAppRoot, lookupAppFile, pickAppRoot } from './app-shell.js';
 
 test('应用页面路径停在 /app 内', () => {
   assert.equal(appRelativePath('/app'), 'index.html');
@@ -83,4 +83,22 @@ test('缺的脚本不回退成页面，穿越读不到目录外', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('web/dist 缺失时选择运行时包里的 app-shell 副本', () => {
+  const web = mkdtempSync(path.join(tmpdir(), 'calmobile-app-web-'));
+  const packaged = mkdtempSync(path.join(tmpdir(), 'calmobile-app-packaged-'));
+  try {
+    writeFileSync(path.join(packaged, 'index.html'), '<!doctype html><title>包内页面</title>');
+    assert.equal(pickAppRoot(web, packaged), packaged);
+    writeFileSync(path.join(web, 'index.html'), '<!doctype html><title>构建页面</title>');
+    assert.equal(pickAppRoot(web, packaged), web);
+  } finally {
+    rmSync(web, { recursive: true, force: true });
+    rmSync(packaged, { recursive: true, force: true });
+  }
+});
+
+test('运行时包 app-shell 路径在 server/dist 下', () => {
+  assert.match(defaultPackagedAppRoot(), /server[\\/]dist[\\/]app-shell$/);
 });

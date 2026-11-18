@@ -33,6 +33,7 @@ import { createMediaRoutes } from '../routes/media-hono.js';
 import { createContentMediaRoutes } from '../routes/content-media-hono.js';
 import { createAgreementRoutes } from '../routes/agreement-hono.js';
 import type { TrustProxy } from '../config/runtime.js';
+import type { BrandingConfig } from '../config/branding.js';
 import { lookupAppFile } from './app-shell.js';
 import { canonicalRedirect, isJoinPagePath, lookupJoinFile, requestHost } from './join-site.js';
 
@@ -62,6 +63,8 @@ export interface AppOptions {
   readonly joinRoot?: string;
   /** 应用页面构建目录（`web/dist`）。有入口才托管 `/app/`。 */
   readonly appRoot?: string;
+  /** 运行时品牌：由 `bootstrap` 下发给页面，页面标题与安装信息按实例显示。 */
+  readonly branding?: BrandingConfig;
   /** `PUBLIC_BASE_URL`。配了之后，报名站和应用页面的 Host 必须和它对齐。 */
   readonly publicBaseUrl?: string;
 }
@@ -139,7 +142,7 @@ export function createApp(options: AppOptions): Hono {
   // 认证、资料、展会、报名、审核、核销、用户、搜索、设置和启动数据都由 Hono 处理。
   app.route('/api/v1/auth', createAuthRoutes({ trustProxy: options.trustProxy }));
   app.route('/api/v1/profile', createProfileRoutes({ trustProxy: options.trustProxy }));
-  app.route('/api/v1', createBootstrapRoutes());
+  app.route('/api/v1', createBootstrapRoutes({ branding: options.branding }));
   // 公开的用户协议：登录/注册页与协议浏览页在未登录时也能读。
   app.route('/api/v1', createAgreementRoutes());
   // 公开的「最新版本 / 下载地址」：网页端检查更新与报名站下载条共用。

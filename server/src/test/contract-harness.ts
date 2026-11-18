@@ -291,18 +291,20 @@ export async function createVerifiedAccount(
   username: string,
   email: string,
   password = 'password',
+  role = 'user',
 ): Promise<void> {
   await pool.query(
     `
         INSERT INTO users (id, username, password_hash, email, nickname, role, email_verified, email_verified_at)
-        VALUES ($1, $2, $3, $4, $5, 'user', true, now())
+        VALUES ($1, $2, $3, $4, $5, $6, true, now())
         ON CONFLICT (id) DO UPDATE
             SET password_hash = EXCLUDED.password_hash,
                 email = EXCLUDED.email,
+                role = EXCLUDED.role,
                 email_verified = true,
                 two_factor_enabled = false
     `,
-    [id, username, await bcrypt.hash(password, 4), email, username],
+    [id, username, await bcrypt.hash(password, 4), email, username, role],
   );
 }
 

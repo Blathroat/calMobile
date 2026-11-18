@@ -67,6 +67,12 @@ test('PWA 构建脚本与图标源：图标源触发 APK，构建脚本两份页
     app: true,
     join: true,
   });
+  assert.deepEqual(flags(['web/check-page-bundle.mjs']), {
+    apk: false,
+    server: false,
+    app: true,
+    join: true,
+  });
   assert.deepEqual(flags(['web/public/icons/icon-192.png', 'web/public/icons/apple-touch-icon-180.png']), {
     apk: true,
     server: false,

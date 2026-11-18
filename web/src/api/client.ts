@@ -27,7 +27,7 @@
  * **身份变化必须清空缓存**：`afterAuth` 与 `logout` 都调用 `cache.clear()`；换账号后上一个用户的
  * 数据不能再被任何键命中。
  */
-import { resolveApiBase } from '@/services/api-base';
+import { API_BASE } from '@/services/api-base';
 import { HttpClient } from '@/services/http-client';
 import { QueryCache } from '@/services/query-cache';
 import { SessionClient } from '@/services/session-client';
@@ -322,10 +322,12 @@ export interface ApiClient {
  *   （见 `app/runtime.ts`），多处创建会让缓存与失效各管一半。
  */
 /**
- * App 的基址来自构建时的 `APP_API_BASE`（WebView 不能用相对路径）。
- * 报名站与页面同源，固定用 `/api/v1`。
+ * 页面与 API 同源，基址固定为相对 `/api/v1`，页面包不写死域名。
+ * 这样同一份 `web/dist` 可以在任意 `PUBLIC_BASE_URL` 下部署；本地 dev 由 Vite
+ * 代理 `/api`、`/media` 到后端（见 `web/vite.config.ts`），Android WebView 的文档
+ * 地址本身就是接口源的 `/app/index.html`，相对路径同样落在那个源。
  */
-const DEFAULT_API_BASE = resolveApiBase(import.meta.env.VITE_SURFACE, import.meta.env.VITE_API_BASE);
+const DEFAULT_API_BASE = API_BASE;
 
 export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => void): ApiClient {
   // 先声明后用：HttpClient 的取令牌与刷新回调都引用 session，构造顺序上只能这样解环。

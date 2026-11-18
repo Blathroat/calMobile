@@ -29,6 +29,7 @@ import { openSheet } from '@/services/sheet';
 import { copyText } from '@/services/clipboard';
 import { registrationLink } from '@/services/registration-link';
 import { modeLabel, statusTone } from '@/services/status';
+import { exhibitionOwnerQuery } from '@/services/exhibition-scope';
 import AppIcon from '@/components/AppIcon.vue';
 import HintNote from '@/components/HintNote.vue';
 import SegControl from '@/components/SegControl.vue';
@@ -87,7 +88,8 @@ const registrationTotal = computed(() =>
 );
 
 function load(): Promise<unknown> {
-  return query.run(() => api.exhibitions.list());
+  // 展会列表接口是公开的；展商后台必须自己限定到当前账号，不能把所有人的展会都当「我的」。
+  return query.run(() => api.exhibitions.list(exhibitionOwnerQuery(session.user)));
 }
 
 /** 新建展会：受限时用同一句提示兜住残留入口。 */

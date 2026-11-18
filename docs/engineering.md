@@ -61,7 +61,7 @@
 
 报名站是第二份构建：`web/join.html` 经 `web/vite.join.config.ts` 输出到 `web/dist-join`，由后端托管，不进 APK。`VITE_SURFACE=join` 只由这份配置注入，不写进 `web/.env`。是否托管见 [`server/README.md`](../server/README.md) 的模式表。
 
-应用用 hash 路由。接口基址是构建时的 `APP_API_BASE`，没配则是 `http://127.0.0.1:<PORT>/api/v1`，媒体相对路径补到同一源。报名站用 history 路由，接口走相对的 `/api/v1`，媒体走相对的 `/media`。报名站不预取月历、展会列表、资料和管理数据。界面文案在 `web/src/i18n/zh.json`，两份构建各自打包。用户安装的语言包在本机，不在这两份包里。
+应用用 hash 路由。应用页面、PWA、报名站都与 API 同源，接口和媒体一律用相对路径 `/api/v1`、`/media/...`；页面包不写域名，因此同一份 `web/dist` 可以放到任意 `PUBLIC_BASE_URL` 下部署。`web/check-page-bundle.mjs` 是 Vite 构建插件（`vite.config.ts` / `vite.join.config.ts` 的 `writeBundle` 与 `closeBundle`，`--watch` 每次重建也跑），扫描产物出现 `APP_API_BASE`、`VITE_API_BASE` 或绝对 `/api/v1` 地址就让构建失败。本地 `vite dev` 由 `web/vite.config.ts` 把 `/api`、`/media` 代理到 `APP_API_BASE` 所在的源；Android WebView 的文档地址是接口所在源的 `/app/index.html`，相对路径同样落在那个源。`APP_API_BASE` 只用于 APK 外壳和开发代理，不再注入页面，也不影响运行时包里的页面产物。报名站用 history 路由；它不预取月历、展会列表、资料和管理数据。界面文案在 `web/src/i18n/zh.json`，两份构建各自打包。用户安装的语言包在本机，不在这两份包里。
 
 路径以报名站路由和 `web/src/app/surface.ts` 为准。声明顺序就是匹配顺序，更具体的路径写在前面。
 
@@ -90,12 +90,13 @@ iPhone 没有 APK，完整应用以 PWA 方式安装：Safari 打开 `{站点}/a
 
 ### 安装元信息与构建
 
-- 安装元信息在构建期生成，不写成静态文件：`web/pwa-build.mjs` 读 `web/src/i18n/zh.json`，在 `web/vite.config.ts` 的构建钩子里写出 `web/dist/manifest.webmanifest` 与 `web/dist/sw.js`；`web/public/icons/` 由 Vite 拷到 `web/dist/icons/`，manifest 里的 `src` 是相对 manifest 的 `icons/…`。
-- 站点 favicon、PWA 图标和 Android 启动图标共用一份源图：`web/pwa-build.mjs` 调 `scripts/build-icons.mjs`，把 `APP_ICON`（默认 `web/public/icons/icon-1024.png`）生成到 `web/dist/favicon.ico`、`web/dist/icons/`；Gradle 的 `buildIcons` 任务用同一份脚本生成 `app/build/generated/icons/res/`，再作为额外资源目录参与打包，所以各密度启动图标不入库。`APP_ICON_BACKGROUND`（默认 `#41707e`）是 maskable、Apple 主屏幕和 Android 自适应图标的留白底色；两项都在 `server/.env` / 构建进程环境里可选配置，源图只接受 8 位 RGB/RGBA、非隔行 PNG，非方形会居中裁切。`favicon.ico` 含 16/32/48 三个 PNG 条目；Android 生成 legacy / round / adaptive foreground 三套资源。开发服务器用 `web/public/favicon.ico` 的默认图，生产构建会把生成图写进 `dist`；服务端根路径 `/favicon.ico` 转发同一份产物。
-- `manifest.webmanifest` 的 `name` 取 `app.documentTitle`，`short_name` 取 `pwa.manifest.shortName`，`description` 取 `pwa.manifest.description`；`id` / `start_url` / `scope` 都是 `/app/`，`display: standalone`，`lang: zh-CN`，主题色与背景色取浅色板面。三项都能用构建期环境变量 `PWA_APP_NAME` / `PWA_APP_SHORT_NAME` / `PWA_APP_DESCRIPTION` 覆盖（非空才覆盖，来自 Vite 读的 `web/.env*` 或构建进程环境，不是服务器运行配置；样例见 `web/.env.example`）。解析后 `name` / `short_name` / `description` 任一为空（`zh.json` 缺键、也没给对应 `PWA_*`）就直接构建失败；`short_name` 为空时先回落 `pwa.manifest.shortName`，再回落 `name`。
-- `web/index.html` 里的 `%APP_TITLE%` / `%PWA_SHORT_NAME%` / `%PWA_DESCRIPTION%` 由同一个脚本替换，Apple 主屏幕标题（`apple-mobile-web-app-title`）用同一份 `short_name`；`join.html` 只替换标题，`join.documentTitle` 缺失同样让构建失败。替换后还有未处理的占位符也直接报错，不会把 `%…%` 发上线。应用名被 `PWA_APP_NAME` 覆盖后，运行时页面标题也用同一个值（`app/runtime.ts` 的 `__PWA_APP_NAME_OVERRIDE__`）。
+- 安装元信息在构建期生成默认值：`web/pwa-build.mjs` 读 `web/src/i18n/zh.json`，在 `web/vite.config.ts` 的构建钩子里写出 `web/dist/manifest.webmanifest` 与 `web/dist/sw.js`；`web/public/icons/` 由 Vite 拷到 `web/dist/icons/`，manifest 里的 `src` 是相对 manifest 的 `icons/…`。部署后服务器会按 `/etc/calmobile.env` 的运行时品牌再生成一份实例页面层（见 `server/src/server/runtime-web.ts`）：它在临时目录复制页面、改标题/manifest/图标、重写 SW 缓存名并重算 `release.json`，不改 `web/dist`。没有品牌变量时不生成，直接托管构建产物。
+- 站点 favicon、PWA 图标和 Android 启动图标共用一份源图：`web/pwa-build.mjs` 调 `scripts/build-icons.mjs`，把 `APP_ICON`（默认 `web/public/icons/icon-1024.png`）生成到 `web/dist/favicon.ico`、`web/dist/icons/`；Gradle 的 `buildIcons` 任务用同一份脚本生成 `app/build/generated/icons/res/`，再作为额外资源目录参与打包，所以各密度启动图标不入库。`APP_ICON_BACKGROUND`（默认 `#41707e`）是 maskable、Apple 主屏幕和 Android 自适应图标的留白底色；`APP_ICON_TRANSPARENT=1` 时站点/PWA 与 Android legacy/round 图标不铺底，Android 也不再生成 adaptive 图标。源图只接受 8 位 RGB/RGBA、非隔行 PNG，非方形会居中裁切。`favicon.ico` 含 16/32/48 三个 PNG 条目；Android 生成 legacy / round / adaptive foreground 三套资源。开发服务器用 `web/public/favicon.ico` 的默认图，生产构建会把生成图写进 `dist`；服务端根路径 `/favicon.ico` 转发同一份产物。服务器运行时可改用 `PWA_ICON_DIR` 指向预生成的一套图标。
+- `/app/` 的页面根目录优先取 `web/dist`；运行时包还会把同一份产物复制到 `server/dist/app-shell`，`server/src/server/app-shell.ts` 的 `defaultPackagedAppRoot()` 是副本位置；报名站对应 `server/dist/app-shell-join`（`defaultPackagedJoinRoot()`）。生产 systemd 可能在启动前清掉 `current/web/dist` 或 `web/dist-join`（旧单元把它们当缓存），服务端在构建产物缺失时自动退到副本；部署单元仍不应主动删除它们，见 [`operations.md`](operations.md)。
+- `manifest.webmanifest` 的 `name` 取 `app.documentTitle`，`short_name` 取 `pwa.manifest.shortName`，`description` 取 `pwa.manifest.description`；`id` / `start_url` / `scope` 都是 `/app/`，`display: standalone`，`lang: zh-CN`，主题色与背景色取浅色板面。构建期环境变量 `PWA_APP_NAME` / `PWA_APP_SHORT_NAME` / `PWA_APP_DESCRIPTION` 可覆盖默认值（来自 Vite 读的 `web/.env*` 或构建进程环境）；服务器运行期读 `/etc/calmobile.env` 的同名变量，优先级更高，还支持 `APP_TITLE` / `JOIN_TITLE` / `PWA_LANG` / `PWA_THEME_COLOR` / `PWA_BACKGROUND_COLOR`。解析后 `name` / `short_name` / `description` 任一为空（`zh.json` 缺键、也没给对应 `PWA_*`）就直接构建失败；`short_name` 为空时先回落 `pwa.manifest.shortName`，再回落 `name`。
+- `web/index.html` 里的 `%APP_TITLE%` / `%PWA_SHORT_NAME%` / `%PWA_DESCRIPTION%` 由同一个脚本替换，Apple 主屏幕标题（`apple-mobile-web-app-title`）用同一份 `short_name`；`join.html` 只替换标题，`join.documentTitle` 缺失同样让构建失败。替换后还有未处理的占位符也直接报错，不会把 `%…%` 发上线。服务器运行时品牌会覆盖构建期标题并在 HTML 里注入 `window.__CALMOBILE_BRANDING__`，页面 `app/runtime.ts` 首帧读它；`bootstrap.branding` 再确认一次，旧快照没有注入时也有兜底。
 - 报名站不是可安装应用：`web/vite.join.config.ts` 关掉 `publicDir`，不生成 manifest 与 Service Worker，也不拷安装图标。
-- 主屏幕名称与图标是安装时写进系统的，之后换语言包不会改；改名称或图标要重新构建并重新「添加到主屏幕」。
+- 主屏幕名称与图标是安装时写进系统的，之后换语言包不会改；改运行时品牌或重新构建后要重启服务并重新「添加到主屏幕」。
 
 ### Service Worker 缓存边界
 
@@ -104,7 +105,7 @@ iPhone 没有 APK，完整应用以 PWA 方式安装：Safari 打开 `{站点}/a
 - 预缓存整个页面壳（`/app/index.html`、`/app/assets/*`、`/app/manifest.webmanifest` 与图标）；`release.json` 与 `sw.js` 自己不预缓存。
 - 导航请求网络优先，断网时回退到安装时缓存的 `/app/index.html`；`/app/assets/` 按缓存优先。
 - `/api/`、`/media/`、跨域请求与 `/app/` 之外的路径一律放行，不写缓存，所以没有离线业务数据。
-- 缓存名是写 `sw.js` 时按当时产物清单（排除 `release.json`、`sw.js`）算出的 id，形如 `calmobile-app-<id>`；它和 `release.json.id` 不是同一个值（后者包含刚写出的 `sw.js` 自身），也不需要相等。每次构建变化；`activate` 清掉旧前缀的缓存。新版本不调用 `skipWaiting` / `clients.claim`：旧页面关掉后新 SW 才接管，避免旧页面在更新中途去取已经被新缓存清掉的旧资源；新页面在下次打开时生效，不在使用中重载。
+- 缓存名是写 `sw.js` 时按当时产物清单（排除 `release.json`、`sw.js`）算出的 id，形如 `calmobile-app-<id>`；它和 `release.json.id` 不是同一个值（后者包含刚写出的 `sw.js` 自身），也不需要相等。每次构建变化；`activate` 清掉旧前缀的缓存。新版本不调用 `skipWaiting` / `clients.claim`：旧页面关掉后新 SW 才接管，避免旧页面在更新中途去取已经被新缓存清掉的旧资源；新页面在下次打开时生效，不在使用中重载。服务器生成运行时品牌层时也会按改过的页面文件重写 `CACHE_NAME`，否则已安装 PWA 的离线回退会停在旧标题/旧图标。
 
 ### 安装引导
 

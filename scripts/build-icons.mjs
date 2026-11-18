@@ -4,17 +4,18 @@
  * 源图是可选项：`APP_ICON` 指向仓库内或绝对路径的 PNG；不配时用
  * `web/public/icons/icon-1024.png`。`APP_ICON_BACKGROUND` 是可选的十六进制底色，
  * 用于 PWA maskable、Apple 主屏幕、Android 自适应图标和圆角图标留白；不配时用
- * 默认强调色 `#41707e`。
+ * 默认强调色 `#41707e`。`APP_ICON_TRANSPARENT=1` 时不铺底色，并且 Android
+ * 不生成 adaptive 图标（启动器可能把透明背景渲染成黑底）。
  *
  * 之所以自己解码 / 缩放进 PNG：CI 不保证有 ImageMagick、Pillow 或 sharp，
  * 而这些图标的尺寸都很小，用 Node 内置的 zlib 足够。源图只支持 8 位 RGB/RGBA、
  * 非隔行的 PNG；这也是当前设计源图（Pillow 导出的 PNG）的格式。
  *
  * 产物分两处：
- * - 站点 / PWA：`web/dist/icons/*.png` 与 `web/dist/favicon.ico`，构建后由服务端托管；
+ * - 站点 / PWA：`web/dist/icons/*.png`（含 1024）与 `web/dist/favicon.ico`，构建后由服务端托管；
  *   `web/public/icons/` 里保留默认图标，开发服务器仍能直接打开。
  * - Android：`app/build/generated/icons/res/`，由 Gradle 的 `buildIcons` 任务生成，
- *   再作为额外的资源目录参与打包，因此不需要把不同密度的启动图标提交进仓库。
+ *   再作为额外的资源目录参与打包。透明模式不生成 `mipmap-anydpi-v26`。
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -415,19 +416,19 @@ export function loadIconConfig(env = loadBuildEnv()) {
  */
 export function buildWebIcons(distDir, env = loadBuildEnv()) {
   const config = loadIconConfig(env);
+  const transparent = String(env.APP_ICON_TRANSPARENT ?? '') === '1';
+  const background = transparent ? null : config.background;
   const iconsDir = path.join(distDir, 'icons');
   mkdirSync(iconsDir, { recursive: true });
-  const png = (size, options) => encodePng(renderIcon(config.image, size, options));
-  writeFileSync(path.join(iconsDir, 'icon-192.png'), png(192, { background: config.background }));
-  writeFileSync(path.join(iconsDir, 'icon-512.png'), png(512, { background: config.background }));
-  writeFileSync(path.join(iconsDir, 'maskable-512.png'), png(512, { background: config.background, scale: 0.8 }));
-  writeFileSync(path.join(iconsDir, 'apple-touch-icon-180.png'), png(180, { background: config.background }));
-  writeFileSync(path.join(iconsDir, 'favicon-32.png'), png(32, { background: config.background }));
-  writeFileSync(
-    path.join(distDir, 'favicon.ico'),
-    encodeIco([16, 32, 48].map((size) => ({ size, png: png(size, { background: config.background }) }))),
-  );
-  return { source: config.source, background: hexColor(config.background) };
+  const png = (size, options = {}) => encodePng(renderIcon(config.image, size, { ...options, background }));
+  writeFileSync(path.join(iconsDir, 'icon-192.png'), png(192));
+  writeFileSync(path.join(iconsDir, 'icon-512.png'), png(512));
+  writeFileSync(path.join(iconsDir, 'icon-1024.png'), png(1024));
+  writeFileSync(path.join(iconsDir, 'maskable-512.png'), png(512, { scale: 0.8 }));
+  writeFileSync(path.join(iconsDir, 'apple-touch-icon-180.png'), png(180));
+  writeFileSync(path.join(iconsDir, 'favicon-32.png'), png(32));
+  writeFileSync(path.join(distDir, 'favicon.ico'), encodeIco([16, 32, 48].map((size) => ({ size, png: png(size) }))));
+  return { source: config.source, background: transparent ? 'transparent' : hexColor(config.background) };
 }
 
 /**
@@ -438,33 +439,34 @@ export function buildWebIcons(distDir, env = loadBuildEnv()) {
  */
 export function buildAndroidIcons(outDir, env = loadBuildEnv()) {
   const config = loadIconConfig(env);
+  const transparent = String(env.APP_ICON_TRANSPARENT ?? '') === '1';
+  const background = transparent ? null : config.background;
   rmSync(outDir, { recursive: true, force: true });
-  const png = (size, options) => encodePng(renderIcon(config.image, size, options));
+  const png = (size, options = {}) => encodePng(renderIcon(config.image, size, { ...options, background }));
   for (const density of ANDROID_DENSITIES) {
     const dir = path.join(outDir, `mipmap-${density.name}`);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, 'ic_launcher.png'), png(density.legacy, { background: config.background }));
-    writeFileSync(
-      path.join(dir, 'ic_launcher_round.png'),
-      png(density.legacy, { background: config.background, circle: true }),
-    );
+    writeFileSync(path.join(dir, 'ic_launcher.png'), png(density.legacy));
+    writeFileSync(path.join(dir, 'ic_launcher_round.png'), png(density.legacy, { circle: true }));
     writeFileSync(
       path.join(dir, 'ic_launcher_foreground.png'),
-      png(density.foreground, { background: null, scale: 0.6 }),
+      encodePng(renderIcon(config.image, density.foreground, { scale: 0.6 })),
     );
   }
-  const adaptiveDir = path.join(outDir, 'mipmap-anydpi-v26');
-  mkdirSync(adaptiveDir, { recursive: true });
-  const adaptive = `<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n    <background android:drawable="@color/ic_launcher_background" />\n    <foreground android:drawable="@mipmap/ic_launcher_foreground" />\n</adaptive-icon>\n`;
-  writeFileSync(path.join(adaptiveDir, 'ic_launcher.xml'), adaptive);
-  writeFileSync(path.join(adaptiveDir, 'ic_launcher_round.xml'), adaptive);
-  const valuesDir = path.join(outDir, 'values');
-  mkdirSync(valuesDir, { recursive: true });
-  writeFileSync(
-    path.join(valuesDir, 'ic_launcher_background.xml'),
-    `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">${hexColor(config.background)}</color>\n</resources>\n`,
-  );
-  return { source: config.source, background: hexColor(config.background) };
+  if (!transparent) {
+    const adaptiveDir = path.join(outDir, 'mipmap-anydpi-v26');
+    mkdirSync(adaptiveDir, { recursive: true });
+    const adaptive = `<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n    <background android:drawable="@color/ic_launcher_background" />\n    <foreground android:drawable="@mipmap/ic_launcher_foreground" />\n</adaptive-icon>\n`;
+    writeFileSync(path.join(adaptiveDir, 'ic_launcher.xml'), adaptive);
+    writeFileSync(path.join(adaptiveDir, 'ic_launcher_round.xml'), adaptive);
+    const valuesDir = path.join(outDir, 'values');
+    mkdirSync(valuesDir, { recursive: true });
+    writeFileSync(
+      path.join(valuesDir, 'ic_launcher_background.xml'),
+      `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">${hexColor(config.background)}</color>\n</resources>\n`,
+    );
+  }
+  return { source: config.source, background: transparent ? 'transparent' : hexColor(config.background) };
 }
 
 /**

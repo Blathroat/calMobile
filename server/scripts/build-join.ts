@@ -27,7 +27,7 @@ function spawnVite(extra: string[] = []): ChildProcess {
   });
 }
 
-/** 构建一次。Vite 非零退出时拒绝。 */
+/** 构建一次。Vite 非零退出（含页面包检查失败）时拒绝。 */
 export function buildJoinSite(): Promise<void> {
   return new Promise((resolve, reject) => {
     let child: ChildProcess;

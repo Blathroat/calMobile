@@ -1,0 +1,26 @@
+[Unit]
+Description=calMobile 运行时（API、报名站与应用页面包）
+Documentation=https://github.com/Blathroat/calMobile/blob/master/docs/operations.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=blathroat
+Group=blathroat
+WorkingDirectory=/opt/calmobile/current/server
+EnvironmentFile=/etc/calmobile.env
+
+# `web/dist` 是运行时包的一部分，不是可删的缓存：/app/ 的 PWA 页面、Android
+# 热更新清单和站点图标都由它提供。这里只检查至少有一份页面壳存在，绝不在这里
+# 删除目录；如果旧单元里有 `rm -rf .../current/web/dist` 之类的 ExecStartPre，请去掉。
+# 运行时包还会带 server/dist/app-shell 副本，web/dist 被清掉时服务端会退到它；
+# 报名站对应 server/dist/app-shell-join。
+ExecStartPre=/bin/sh -c 'test -f /opt/calmobile/current/web/dist/index.html || test -f /opt/calmobile/current/server/dist/app-shell/index.html'
+ExecStartPre=/bin/sh -c 'case "${ENABLE_WEB:-false}" in true|TRUE|1|yes|YES|on|ON) test -f /opt/calmobile/current/web/dist-join/join.html || test -f /opt/calmobile/current/server/dist/app-shell-join/join.html;; *) exit 0;; esac'
+ExecStart=/usr/bin/node dist/index.js --production
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

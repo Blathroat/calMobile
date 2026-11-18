@@ -127,6 +127,11 @@ async function openShareSheet(): Promise<void> {
 }
 
 describe('展商卡分享二维码', () => {
+  it('只向服务端请求当前展商的展会，不把别人的展会当自己的', async () => {
+    await mountPage();
+    expect(api.exhibitions.list).toHaveBeenCalledWith({ exhibitorId: 'exhibitor-1' });
+  });
+
   it('卡片右侧是 44px 命中区的二维码图标按钮', async () => {
     await mountPage();
     const button = qrButton();

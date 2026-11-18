@@ -32,6 +32,7 @@ test('bootstrap 下发前端启动所需的全部配置块', async () => {
     'media',
     'announcement',
     'brand',
+    'branding',
     'limits',
     'server',
     'calendar',

@@ -30,6 +30,7 @@ import {
 } from '@/services/status';
 import { answerDocument } from '@domain/answer-document';
 import { truncate } from '@/services/format';
+import { exhibitionOwnerQuery } from '@/services/exhibition-scope';
 import SegControl from '@/components/SegControl.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import RegistrationDetailSheet from '@/components/RegistrationDetailSheet.vue';
@@ -93,7 +94,8 @@ function countOf(status: string): number {
 // ── 取数 ─────────────────────────────────────────────────────────
 
 function loadExhibitions(): Promise<unknown> {
-  return list.run(() => api.exhibitions.list());
+  // 与展商后台同一规则：公开列表只取当前账号的展会；管理员看全部。
+  return list.run(() => api.exhibitions.list(exhibitionOwnerQuery(session.user)));
 }
 
 function load(): Promise<unknown> {

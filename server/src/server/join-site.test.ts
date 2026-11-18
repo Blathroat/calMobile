@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   canonicalRedirect,
+  defaultPackagedJoinRoot,
   isJoinPagePath,
   joinSiteMissingMessage,
   joinSiteReady,
   lookupJoinFile,
+  pickJoinRoot,
   requestHost,
 } from './join-site.js';
 
@@ -83,4 +85,22 @@ test('报名站文件落在目录内，缺的脚本不回退成页面', () => {
 test('产物缺失时的说明指向构建命令', () => {
   assert.match(joinSiteMissingMessage('/tmp/missing'), /pnpm --dir server build/);
   assert.equal(joinSiteReady(path.join(tmpdir(), 'calmobile-join-absent')), false);
+});
+
+test('web/dist-join 缺失时选择运行时包里的 app-shell-join 副本', () => {
+  const web = mkdtempSync(path.join(tmpdir(), 'calmobile-join-web-'));
+  const packaged = mkdtempSync(path.join(tmpdir(), 'calmobile-join-packaged-'));
+  try {
+    writeFileSync(path.join(packaged, 'join.html'), '<!doctype html><title>包内报名站</title>');
+    assert.equal(pickJoinRoot(web, packaged), packaged);
+    writeFileSync(path.join(web, 'join.html'), '<!doctype html><title>构建报名站</title>');
+    assert.equal(pickJoinRoot(web, packaged), web);
+  } finally {
+    rmSync(web, { recursive: true, force: true });
+    rmSync(packaged, { recursive: true, force: true });
+  }
+});
+
+test('运行时包 app-shell-join 路径在 server/dist 下', () => {
+  assert.match(defaultPackagedJoinRoot(), /server[\\/]dist[\\/]app-shell-join$/);
 });

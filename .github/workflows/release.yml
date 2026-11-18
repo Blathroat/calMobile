@@ -260,23 +260,8 @@ jobs:
       - run: pnpm --dir web install --frozen-lockfile
       - run: pnpm --dir server install --frozen-lockfile
 
-      - name: 校验 APP_API_BASE
-        env:
-          APP_API_BASE: ${{ vars.APP_API_BASE }}
-        run: |
-          node --input-type=module <<'EOF'
-          import { resolveClientTarget } from './scripts/client-target.mjs';
-
-          const target = resolveClientTarget({ APP_API_BASE: process.env.APP_API_BASE });
-          if (target.allowCleartext || target.loopbackPort != null) {
-            process.stderr.write(`运行时包里的页面必须指向公网 https，当前是 ${target.apiBase}\n`);
-            process.exit(1);
-          }
-          EOF
-
       - name: 构建服务端与两份页面
         env:
-          APP_API_BASE: ${{ vars.APP_API_BASE }}
           ANDROID_VERSION_CODE: ${{ github.run_number }}
           ANDROID_VERSION_NAME: 0.1.${{ github.run_number }}
         run: |
