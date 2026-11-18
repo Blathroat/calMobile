@@ -136,19 +136,22 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="field">
+  <div class="field search-field">
     <label for="search-input">{{ t('search.keyword') }}</label>
-    <input
-      id="search-input"
-      v-model="keyword"
-      class="input"
-      type="search"
-      autocomplete="off"
-      :placeholder="t('search.placeholder')"
-      :aria-label="t('search.inputLabel')"
-      @input="onInput"
-      @keydown.enter.prevent="submitNow"
-    />
+    <div class="search-box">
+      <span class="search-box-icon" aria-hidden="true"><AppIcon name="search" size="icon icon-sm" /></span>
+      <input
+        id="search-input"
+        v-model="keyword"
+        class="input search-box-input"
+        type="search"
+        autocomplete="off"
+        :placeholder="t('search.placeholder')"
+        :aria-label="t('search.inputLabel')"
+        @input="onInput"
+        @keydown.enter.prevent="submitNow"
+      />
+    </div>
   </div>
 
   <div class="row" data-between="true">
@@ -238,7 +241,7 @@ onBeforeUnmount(() => {
                 <strong class="row-title truncate">{{
                   user.roleCode === 'exhibitor' || user.roleCode === 'admin'
                     ? user.nickname
-                    : `${user.nickname} · ${roleLabel(String(user.roleCode || ''))}`
+                    : `${user.nickname}（${roleLabel(String(user.roleCode || ''))}）`
                 }}</strong>
                 <StatusTag
                   :text="userStatusLabel(String(user.statusCode || ''))"
@@ -259,6 +262,24 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-box-icon {
+  position: absolute;
+  inset-inline-start: 12px;
+  display: inline-flex;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.search-box-input {
+  padding-inline-start: 36px;
+}
+
 /* 标题行：名字吃掉剩余宽度，信号灯固定在右端。 */
 .search-title-line {
   display: flex;

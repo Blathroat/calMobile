@@ -1,13 +1,6 @@
 <script setup lang="ts">
 /**
- * 分段控件：选中滑块由一个元素滑到目标按钮。
- *
- * 首次定位不加过渡，避免滑块从左侧滑过来；切换时交给 motion.css 的
- * `.seg-indicator[data-animate="true"]`。
- *
- * 分段控件始终排成一行：空间不够时按钮等分宽度收缩，不换行、也不横向滚动，
- * 避免「滑动选择按钮」在窄屏被折成两行。滑块按按钮的 `offsetLeft / 宽度` 定位；
- * 容器尺寸变化（旋转、分屏、字体加载）用 ResizeObserver 重新量一次。
+ * 分段控件：滑块在轨道内平滑移动，外框 8px 与内项 6px 严格保持 2px 间距同心圆关系。
  */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -33,7 +26,6 @@ function setButton(element: Element | null, index: number): void {
   if (element instanceof HTMLElement) buttons[index] = element;
 }
 
-/** 滑块跟随选中按钮；按钮还没布局（隐藏、宽度为 0）时先藏起来。 */
 function position(animate: boolean): void {
   const node = indicator.value;
   if (!node) return;
@@ -64,10 +56,8 @@ watch(
   () => requestAnimationFrame(() => position(false)),
 );
 
-// 挂载后才知道真实宽度，因此在下一帧再定位。
 onMounted(() => {
   requestAnimationFrame(() => position(false));
-  // 按钮宽度随容器变化：尺寸一变就重新量，让滑块贴住当前按钮。
   if (typeof ResizeObserver !== 'undefined' && container.value) {
     resizeObserver = new ResizeObserver(() => position(false));
     resizeObserver.observe(container.value);
@@ -96,7 +86,6 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 </template>
 
 <style>
-/* 选中滑块：由脚本按按钮的 offsetLeft / offsetTop / 尺寸定位，换行后也能贴在正确那一行。 */
 .seg-indicator {
   position: absolute;
   top: 0;
@@ -104,17 +93,17 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
   width: 0;
   height: 0;
   z-index: 0;
-  border-radius: var(--r-chip);
-  background: var(--accent);
-  box-shadow: var(--shadow-panel);
+  border: var(--hairline) solid var(--stroke-strong);
+  border-radius: var(--r-input);
+  background-color: var(--seg-active-bg);
   pointer-events: none;
 }
 
 .seg-indicator[data-animate='true'] {
   transition:
-    transform var(--motion-normal) var(--ease-out),
-    width var(--motion-normal) var(--ease-out),
-    height var(--motion-normal) var(--ease-out);
+    transform var(--motion-base) var(--ease),
+    width var(--motion-base) var(--ease),
+    height var(--motion-base) var(--ease);
 }
 
 .seg-indicator[data-hidden='true'] {

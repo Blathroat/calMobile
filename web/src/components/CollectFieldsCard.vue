@@ -124,7 +124,6 @@ function itemLabel(index: number): string {
             @update:model-value="(value) => changeFieldType(item, value)"
           />
         </div>
-        <p class="collect-note">{{ typeHint(item) }}</p>
         <div
           v-if="isChoice(item)"
           class="collect-options"
@@ -280,14 +279,12 @@ function itemLabel(index: number): string {
   cursor: not-allowed;
 }
 
-/* 字段标题只保留下划线（本页唯一改动的输入框）：去掉方框与浅底，
-   聚焦时由 .notch-input 自己把主题色下划线画出来。 */
 .notch {
   position: relative;
   display: block;
   min-width: 0;
   border: 0;
-  border-bottom: var(--hairline) solid var(--stroke);
+  border-bottom: var(--hairline) solid var(--stroke-strong);
   border-radius: 0;
   background: transparent;
 }
@@ -300,16 +297,10 @@ function itemLabel(index: number): string {
   border: 0;
   border-radius: 0;
   background-color: transparent;
-  /* 下划线是一层渐变：0% 宽时露出底边，聚焦时长满（与其它下划线输入框同一套动画）。 */
-  background-image: linear-gradient(var(--accent), var(--accent));
-  background-repeat: no-repeat;
-  background-position: left bottom;
-  background-size: 0% 2px;
   color: var(--ink);
-  font-size: var(--fs-body);
+  font-size: var(--fs-sm);
   line-height: var(--ctrl);
   text-align: start;
-  transition: background-size 320ms var(--ease);
 }
 
 .notch-input::placeholder {
@@ -321,12 +312,7 @@ function itemLabel(index: number): string {
 }
 
 .notch:focus-within {
-  border-bottom-color: transparent;
-}
-
-.notch-input:focus,
-.notch-input:focus-visible {
-  background-size: 100% 2px;
+  border-bottom-color: var(--accent-solid);
 }
 
 .notch:has(:disabled) {
@@ -346,7 +332,7 @@ function itemLabel(index: number): string {
   min-width: 0;
   overflow: hidden;
   color: var(--ink-3);
-  font-size: var(--fs-tag);
+  font-size: var(--fs-xs);
   line-height: 1.35;
   text-align: center;
   white-space: nowrap;
@@ -359,18 +345,18 @@ function itemLabel(index: number): string {
 
 .collect-remove {
   color: var(--danger-ink);
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .tick {
-  min-height: var(--touch);
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   gap: var(--s2);
   flex: none;
   color: var(--ink-2);
-  font-size: var(--fs-label);
-  font-weight: 700;
+  font-size: var(--fs-xs);
+  font-weight: 500;
 }
 
 .tick[data-on='true'] {
@@ -379,33 +365,33 @@ function itemLabel(index: number): string {
 
 .tick input {
   appearance: none;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   margin: 0;
   flex: none;
-  border: var(--hairline) solid var(--stroke);
+  border: var(--hairline) solid var(--stroke-strong);
   border-radius: var(--r-chip);
-  background: var(--screen);
+  background: var(--surface-card);
   display: grid;
   place-items: center;
 }
 
 .tick input:checked {
-  border-color: var(--accent);
-  background: var(--accent);
+  border-color: var(--accent-solid);
+  background: var(--accent-solid);
 }
 
 .tick input:checked::after {
   content: '';
-  width: 5px;
-  height: 9px;
+  width: 4px;
+  height: 8px;
   border: solid var(--on-dark);
-  border-width: 0 2px 2px 0;
-  transform: translateY(-1px) rotate(45deg);
+  border-width: 0 1.5px 1.5px 0;
+  transform: translateY(-0.5px) rotate(45deg);
 }
 
 .tick input:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--accent-ring);
   outline-offset: 2px;
 }
 

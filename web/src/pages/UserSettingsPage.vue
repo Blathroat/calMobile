@@ -23,6 +23,7 @@ import { usePullRefresh } from '@/services/pull-refresh';
 import { useRouter } from 'vue-router';
 import { api, bootApp, refreshRuntimeBootstrap } from '@/app/runtime';
 import { saveAccentIndex, saveUiMode } from '@/app/preferences';
+import { radixSwatchColor } from '@/app/theme';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useCapabilitiesStore } from '@/stores/capabilities';
 import { useSessionStore } from '@/stores/session';
@@ -537,7 +538,7 @@ async function checkUpdate(auto = false): Promise<void> {
           @action="loadProfile"
         />
         <!-- 身份卡：当前头像、昵称与邮箱；编辑资料、更换头像、移除头像同一行。资料失败时卡片仍在，按钮置灰。 -->
-        <div class="card" data-tone="fill" :data-busy="profileLoading ? 'true' : undefined">
+        <div class="card" :data-busy="profileLoading ? 'true' : undefined">
           <div class="row" data-gap="md">
             <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || user.username || '')" large />
             <span class="row-copy">
@@ -643,7 +644,6 @@ async function checkUpdate(auto = false): Promise<void> {
           <div class="switch-row" data-flush="true">
             <span class="switch-copy">
               <strong>{{ t('settings.showRegistrations') }}</strong>
-              <span class="row-meta">{{ t('settings.showRegistrationsHint') }}</span>
             </span>
             <label class="switch" for="settings-privacy-registrations">
               <input
@@ -676,12 +676,11 @@ async function checkUpdate(auto = false): Promise<void> {
               :disabled="accentBusy"
               @click="changeAccent(index)"
             >
-              <span class="swatch-dot" :style="{ background: color }">
+              <span class="swatch-dot" :style="{ background: radixSwatchColor(color, index) }">
                 <AppIcon v-if="index === accentIndex" name="check" size="icon icon-sm" />
               </span>
             </button>
           </div>
-          <p class="field-hint">{{ COPY.accentHint }}</p>
           <span class="row-title">{{ t('settings.theme.darkMode') }}</span>
           <SegControl
             :model-value="mode"
@@ -748,7 +747,6 @@ async function checkUpdate(auto = false): Promise<void> {
           <div class="switch-row" data-flush="true">
             <span class="switch-copy">
               <strong>{{ t('settings.update.auto') }}</strong>
-              <span class="row-meta">{{ t('settings.update.autoHint') }}</span>
             </span>
             <label class="switch" for="settings-auto-update">
               <input
@@ -813,40 +811,35 @@ async function checkUpdate(auto = false): Promise<void> {
    选中用描边 + 对勾双重线索，不再用一颗大圆占满格子。 */
 .swatch-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: var(--s1);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s2);
 }
 
 .swatch {
   width: 100%;
-  min-height: var(--touch);
+  min-height: 42px;
   display: grid;
   place-items: center;
-  background: transparent;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--f3);
 }
 
 .swatch-dot {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
   border-radius: var(--r-pill);
   color: var(--swatch-mark);
-  transition: transform var(--motion-fast) var(--ease);
 }
 
-.swatch[aria-pressed='true'] .swatch-dot {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
+.swatch[aria-pressed='true'] {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
 }
 
 .swatch[disabled] {
   opacity: 0.6;
-}
-
-@media (hover: hover) {
-  .swatch:hover .swatch-dot {
-    transform: scale(1.08);
-  }
 }
 </style>

@@ -1,11 +1,14 @@
 /**
- * 外观：深色模式与管理员配色。
+ * 外观：明暗模式与官方 Radix UI Colors v3 12 级色阶映射。
  *
- * 页面与组件只写 `--accent*` 令牌，因此配色与明暗都在这里落一次 CSS 变量：
- * - 明暗模式写到 `<html data-mode>`，由 tokens.css 的一组令牌接管颜色；
- *   偏好同时缓存在本机，`index.html` 的内联脚本让首帧就落到正确模式（不闪白）。
- * - 强调色由后端下发（`theme.colors` + `theme.index`），浅底与描边用强调色与
- *   「当前页面底色」混出，深色模式下自动变成深底；运行时不写死颜色。
+ * 所有组件统一读取语义令牌（遵循 Radix UI Colors 规范）：
+ * - Step 1–2：背景底面（--accent-tint = Step 2）
+ * - Step 3–5：控件背景（normal = 3, hover = 4, active = 5）
+ * - Step 6：非交互细分隔边框（--accent-edge = Step 6）
+ * - Step 7–8：交互控件边框与焦点环（--accent-border = 7, --accent-ring = 8）
+ * - Step 9–10：实心主色填充与悬停（--accent-solid = 9, --accent-solid-hover = 10）
+ * - Step 11：低对比度强调文字与图标（--accent-ink = 11）
+ * - Step 12：高对比度强调文字（--accent-ink-hi = 12）
  */
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useCapabilitiesStore } from '@/stores/capabilities';
@@ -17,18 +20,409 @@ const ACCENT_KEY = 'calmobile.accent';
 
 export type UiMode = 'auto' | 'light' | 'dark';
 
-/** 上次选择的明暗模式，供 `index.html` 首帧使用。 */
+interface RadixScale {
+  anchor: string;
+  light: readonly [string, string, string, string, string, string, string, string, string, string, string];
+  dark: readonly [string, string, string, string, string, string, string, string, string, string, string];
+}
+
+/**
+ * 官方 Radix UI Colors v3 色阶（Steps 2..12），按服务端 12 色色板槽位一一对应：
+ * 0 Cyan, 1 Orange, 2 Slate, 3 Grass, 4 Blue, 5 Indigo,
+ * 6 Teal, 7 Violet, 8 Crimson, 9 Jade, 10 Ruby, 11 Plum
+ */
+const RADIX_SCALES: readonly RadixScale[] = [
+  {
+    anchor: '#41707E', // Cyan
+    light: [
+      '#f2fafb',
+      '#def7f9',
+      '#caf1f6',
+      '#b5e9f0',
+      '#9ddde7',
+      '#7dcedc',
+      '#3db9cf',
+      '#00a2c7',
+      '#0797b9',
+      '#107d98',
+      '#0d3c48',
+    ],
+    dark: [
+      '#101b20',
+      '#082c36',
+      '#003848',
+      '#004558',
+      '#045468',
+      '#12677e',
+      '#11809c',
+      '#00a2c7',
+      '#23afcf',
+      '#4ccce6',
+      '#b6ecf7',
+    ],
+  },
+  {
+    anchor: '#C05621', // Orange
+    light: [
+      '#fef8f4',
+      '#ffedd5',
+      '#ffdfb5',
+      '#ffd19a',
+      '#ffc182',
+      '#f5ae73',
+      '#ec9455',
+      '#f76b15',
+      '#ef5f00',
+      '#cc4e00',
+      '#582d1d',
+    ],
+    dark: [
+      '#201511',
+      '#331e0b',
+      '#462100',
+      '#562800',
+      '#66350c',
+      '#7e451d',
+      '#a35829',
+      '#f76b15',
+      '#ff801f',
+      '#ffa057',
+      '#ffe0c2',
+    ],
+  },
+  {
+    anchor: '#48515D', // Slate (high-contrast neutral solid at 9/10 for legible white button text)
+    light: [
+      '#f9f9fb',
+      '#f0f0f3',
+      '#e8e8ec',
+      '#e0e1e6',
+      '#d9d9e0',
+      '#cdced6',
+      '#b9bbc6',
+      '#60646c',
+      '#52565e',
+      '#60646c',
+      '#1c2024',
+    ],
+    dark: [
+      '#18191b',
+      '#212225',
+      '#272a2d',
+      '#2e3135',
+      '#363a3f',
+      '#43484e',
+      '#5a6169',
+      '#696e77',
+      '#777b84',
+      '#b0b4ba',
+      '#edeef0',
+    ],
+  },
+  {
+    anchor: '#245D3C', // Grass
+    light: [
+      '#f5fbf5',
+      '#e9f6e9',
+      '#daf1db',
+      '#c9e8ca',
+      '#b2ddb5',
+      '#94ce9a',
+      '#65ba74',
+      '#46a758',
+      '#3e9b4f',
+      '#2a7e3b',
+      '#203c25',
+    ],
+    dark: [
+      '#141a15',
+      '#1b2a1e',
+      '#1d3a24',
+      '#25482d',
+      '#2d5736',
+      '#366740',
+      '#3e7949',
+      '#46a758',
+      '#53b365',
+      '#71d083',
+      '#c2f0c2',
+    ],
+  },
+  {
+    anchor: '#2F6F8F', // Blue
+    light: [
+      '#f4faff',
+      '#e6f4fe',
+      '#d5efff',
+      '#c2e5ff',
+      '#acd8fc',
+      '#8ec8f6',
+      '#5eb1ef',
+      '#0090ff',
+      '#0588f0',
+      '#0d74ce',
+      '#113264',
+    ],
+    dark: [
+      '#111927',
+      '#0d2847',
+      '#003362',
+      '#004074',
+      '#104d87',
+      '#205d9e',
+      '#2870bd',
+      '#0090ff',
+      '#3b9eff',
+      '#70b8ff',
+      '#c2e6ff',
+    ],
+  },
+  {
+    anchor: '#334E7D', // Indigo
+    light: [
+      '#f7f9ff',
+      '#edf2fe',
+      '#e1e9ff',
+      '#d2deff',
+      '#c1d0ff',
+      '#abbdf9',
+      '#8da4ef',
+      '#3e63dd',
+      '#3358d4',
+      '#3a5bc7',
+      '#1f2d5c',
+    ],
+    dark: [
+      '#141726',
+      '#182449',
+      '#1d2e62',
+      '#253974',
+      '#304384',
+      '#3a4f97',
+      '#435db1',
+      '#3e63dd',
+      '#5472e4',
+      '#9eb1ff',
+      '#d6e1ff',
+    ],
+  },
+  {
+    anchor: '#0E6E62', // Teal
+    light: [
+      '#f3fbf9',
+      '#e0f8f3',
+      '#ccf3ea',
+      '#b8eae0',
+      '#a1ded2',
+      '#83cdc1',
+      '#53b9ab',
+      '#12a594',
+      '#0d9b8a',
+      '#008573',
+      '#0d3d38',
+    ],
+    dark: [
+      '#111c1b',
+      '#0d2d2a',
+      '#023b37',
+      '#084843',
+      '#145750',
+      '#1c6961',
+      '#207e73',
+      '#12a594',
+      '#0eb39e',
+      '#0bd8b6',
+      '#adf0dd',
+    ],
+  },
+  {
+    anchor: '#6B3FA0', // Violet
+    light: [
+      '#faf8ff',
+      '#f4f0fe',
+      '#ebe4ff',
+      '#e1d9ff',
+      '#d4cafe',
+      '#c2b5f5',
+      '#aa99ec',
+      '#6e56cf',
+      '#654dc4',
+      '#6550b9',
+      '#2f265f',
+    ],
+    dark: [
+      '#191523',
+      '#251e40',
+      '#2c2250',
+      '#362c63',
+      '#413576',
+      '#4f418d',
+      '#6452b4',
+      '#6e56cf',
+      '#7d66d9',
+      '#baa7ff',
+      '#e2ddfe',
+    ],
+  },
+  {
+    anchor: '#A32C5E', // Crimson
+    light: [
+      '#fef7f9',
+      '#fdecef',
+      '#fce0e6',
+      '#f9d2dc',
+      '#f3c2cf',
+      '#eaacc0',
+      '#e093b2',
+      '#e93d82',
+      '#df3478',
+      '#cb1d63',
+      '#621639',
+    ],
+    dark: [
+      '#201318',
+      '#381525',
+      '#4d122f',
+      '#5c1839',
+      '#6d2545',
+      '#873356',
+      '#b0436e',
+      '#e93d82',
+      '#ee518a',
+      '#ff92ad',
+      '#fdd3e8',
+    ],
+  },
+  {
+    anchor: '#5F6B2A', // Jade
+    light: [
+      '#f4fbf7',
+      '#e6f7ed',
+      '#d6f1e3',
+      '#c3e9d7',
+      '#acdec8',
+      '#8bceb6',
+      '#56ba9f',
+      '#29a383',
+      '#26997b',
+      '#208368',
+      '#1d3b31',
+    ],
+    dark: [
+      '#121c18',
+      '#0f2e22',
+      '#0b3b2c',
+      '#114837',
+      '#1b5745',
+      '#246854',
+      '#2a7e68',
+      '#29a383',
+      '#27b08b',
+      '#1fd8a4',
+      '#adf0d4',
+    ],
+  },
+  {
+    anchor: '#A33B3B', // Ruby
+    light: [
+      '#fff7f8',
+      '#feeaed',
+      '#ffdce1',
+      '#ffced6',
+      '#f8bfc8',
+      '#efacb8',
+      '#e592a3',
+      '#e54666',
+      '#dc3b5d',
+      '#ca244d',
+      '#64172b',
+    ],
+    dark: [
+      '#1e1517',
+      '#3a141e',
+      '#4e1325',
+      '#5e1a2e',
+      '#6f2539',
+      '#883447',
+      '#b3445a',
+      '#e54666',
+      '#ec5a72',
+      '#ff949d',
+      '#fed2e1',
+    ],
+  },
+  {
+    anchor: '#8E4A76', // Plum
+    light: [
+      '#fef7fe',
+      '#fbebfb',
+      '#f7def8',
+      '#f2d1f3',
+      '#e9c2ec',
+      '#deade3',
+      '#cf91d8',
+      '#ab4aba',
+      '#a144af',
+      '#953ea3',
+      '#53195d',
+    ],
+    dark: [
+      '#1d1520',
+      '#351a35',
+      '#451d47',
+      '#512454',
+      '#5e3061',
+      '#734079',
+      '#92549c',
+      '#ab4aba',
+      '#b658c4',
+      '#e796f3',
+      '#f4d4f4',
+    ],
+  },
+];
+
+function resolveRadixScale(color: string, slotIndex: number): RadixScale {
+  const upper = String(color || '')
+    .trim()
+    .toUpperCase();
+  const byAnchor = RADIX_SCALES.find((scale) => scale.anchor === upper);
+  if (byAnchor) return byAnchor;
+  if (slotIndex > 0 && slotIndex < RADIX_SCALES.length) {
+    const slotted = RADIX_SCALES[slotIndex];
+    if (slotted && upper === slotted.anchor) return slotted;
+  }
+  // 自定义管理端首色调：在官方 12 套 Radix 色阶中找色相/感知距离最近的一套
+  const [r, g, b] = hex(color);
+  let best = RADIX_SCALES[0]!;
+  let minDist = Number.POSITIVE_INFINITY;
+  for (const scale of RADIX_SCALES) {
+    const [sr, sg, sb] = hex(scale.light[7]); // Step 9 solid
+    const dist = (r - sr) * (r - sr) * 0.3 + (g - sg) * (g - sg) * 0.59 + (b - sb) * (b - sb) * 0.11;
+    if (dist < minDist) {
+      minDist = dist;
+      best = scale;
+    }
+  }
+  return best;
+}
+
+/** 供设置页色块展示对应的官方 Radix Step 9 实心色。 */
+export function radixSwatchColor(color: string, index: number): string {
+  const scale = resolveRadixScale(color, index);
+  const mode = effectiveMode();
+  return mode === 'dark' ? scale.dark[7] : scale.light[7];
+}
+
 export function readStoredMode(): UiMode | '' {
   try {
     const value = window.localStorage?.getItem(MODE_KEY);
     return value === 'light' || value === 'dark' ? value : '';
   } catch {
-    // 隐私模式下读不到就跟随系统
     return '';
   }
 }
 
-/** 上次选择的强调色，供 `index.html` 首帧使用（避免首帧橙色再跳到用户选择）。 */
 export function readStoredAccent(): string {
   try {
     return window.localStorage?.getItem(ACCENT_KEY) || '';
@@ -37,16 +431,11 @@ export function readStoredAccent(): string {
   }
 }
 
-/** 应用配色色板（后端补齐后的 8 色）。 */
 export function palette(): string[] {
   const colors = useBootstrapStore().theme.colors;
   return Array.isArray(colors) ? colors.map((item) => String(item)) : [];
 }
 
-/**
- * 切换强调色：只改本地（令牌 + 本机缓存），落库由 `app/preferences.ts` 负责。
- * 这样 `applyTheme` 既能被「换色」调用，也能被「跟随系统明暗变化」调用而不触发请求。
- */
 export function applyAccentIndex(index: number): number {
   const colors = palette();
   const max = Math.max(0, colors.length - 1);
@@ -56,13 +445,12 @@ export function applyAccentIndex(index: number): number {
   try {
     window.localStorage?.setItem(ACCENT_KEY, colors[next] || '');
   } catch {
-    // 隐私模式下忽略缓存失败，本次会话内仍然生效
+    // 隐私模式下忽略缓存失败
   }
   applyTheme();
   return next;
 }
 
-/** 当前实际生效的明暗模式（`auto` 看系统偏好）。 */
 export function effectiveMode(): 'light' | 'dark' {
   const mode = useSettingsStore().mode;
   if (mode === 'light' || mode === 'dark') return mode;
@@ -72,7 +460,6 @@ export function effectiveMode(): 'light' | 'dark' {
   return 'light';
 }
 
-/** 切换明暗模式：写令牌、缓存到本机，并把外观镜像给原生。 */
 export function applyMode(mode: string): UiMode {
   const next: UiMode = mode === 'light' || mode === 'dark' ? mode : 'auto';
   useSettingsStore().setMode(next);
@@ -84,43 +471,48 @@ export function applyMode(mode: string): UiMode {
   try {
     window.localStorage?.setItem(MODE_KEY, next);
   } catch {
-    // 隐私模式下忽略缓存失败，本次会话内仍然生效
+    // 隐私模式下忽略缓存失败
   }
-  // 浅底与描边要与页面底色混色，底色变了必须重算。
   applyTheme();
   void syncDevice();
   return next;
 }
 
-/** 当前实际生效的强调色：色板当前下标，缺色时退回首色。 */
 export function currentAccentColor(): string {
   const colors = palette();
   const index = Number(useBootstrapStore().theme.index) || 0;
   return colors[index] || colors[0] || '#41707E';
 }
 
-/** 管理员配色写入 CSS 变量。 */
+/** 将官方 Radix UI Colors 12 级色阶写入全局 CSS 变量。 */
 export function applyTheme(): void {
   const bootstrap = useBootstrapStore();
   const index = Number(bootstrap.theme.index) || 0;
   const accent = currentAccentColor();
   const root = document.documentElement;
   const mode = effectiveMode();
-  const screen = cssColor('--screen', mode === 'dark' ? '#171a1f' : '#ffffff');
+  const scale = resolveRadixScale(accent, index);
+  const steps = mode === 'dark' ? scale.dark : scale.light;
+
+  // 保留原始 --accent 以兼容偏好缓存与测试契约，视觉令牌全部取自 Radix Steps 2..12
   root.style.setProperty('--accent', accent);
-  root.style.setProperty('--accent-ink', mode === 'dark' ? mix(accent, screen, 0.28) : mix(accent, '#000000', 0.28));
-  // 次按钮底色与页面底色一致，只让边框和文字跟随强调色。
-  root.style.setProperty('--accent-tint', screen);
-  root.style.setProperty('--accent-edge', mix(accent, screen, mode === 'dark' ? 0.62 : 0.6));
-  root.style.setProperty('--accent-glow', rgba(accent, mode === 'dark' ? 0.26 : 0.14));
-  root.style.setProperty('--accent-shadow', rgba(accent, mode === 'dark' ? 0.34 : 0.2));
+  for (let i = 0; i < steps.length; i += 1) {
+    root.style.setProperty(`--accent-${i + 2}`, steps[i]!);
+  }
+  root.style.setProperty('--accent-tint', steps[0]); // Step 2: Subtle background
+  root.style.setProperty('--accent-soft', steps[1]); // Step 3: UI element background
+  root.style.setProperty('--accent-soft-hover', steps[2]); // Step 4: Hovered UI background
+  root.style.setProperty('--accent-soft-active', steps[3]); // Step 5: Active UI background
+  root.style.setProperty('--accent-edge', steps[4]); // Step 6: Subtle border
+  root.style.setProperty('--accent-border', steps[5]); // Step 7: Interactive border
+  root.style.setProperty('--accent-ring', steps[6]); // Step 8: Focus ring / hover border
+  root.style.setProperty('--accent-solid', steps[7]); // Step 9: Solid fill
+  root.style.setProperty('--accent-solid-hover', steps[8]); // Step 10: Hovered solid fill
+  root.style.setProperty('--accent-ink', steps[9]); // Step 11: Low-contrast accent text
+  root.style.setProperty('--accent-ink-hi', steps[10]); // Step 12: High-contrast accent text
   root.dataset.accent = String(index);
 }
 
-/**
- * 把只有设备侧才用得上的一部分状态镜像给原生：状态栏配色、图片压缩与格式上限。
- * 返回值带回系统通知权限，那是设备事实，后端无从得知。
- */
 export async function syncDevice(): Promise<void> {
   const settings = useSettingsStore();
   const bootstrap = useBootstrapStore();
@@ -128,7 +520,6 @@ export async function syncDevice(): Promise<void> {
     const result = (await device.sync({
       mode: settings.mode,
       themeIndex: Number(bootstrap.theme.index) || 0,
-      // 管理端下发的首色可能覆盖色板 0；系统栏要用页面当前实际生效的这一色。
       accentColor: currentAccentColor(),
       media: bootstrap.media,
       upload: bootstrap.server,
@@ -137,36 +528,16 @@ export async function syncDevice(): Promise<void> {
       useCapabilitiesStore().apply({ notifications: result.notificationsGranted });
     }
   } catch {
-    // 镜像同步失败只影响原生外观，页面继续用后端下发的值。
+    // 忽略原生状态栏同步失败
   }
 }
 
-/** 跟随系统时，系统切换深浅色要重新混一遍强调色的衍生值。 */
 export function watchSystemMode(): void {
   if (typeof window.matchMedia !== 'function') return;
   const query = window.matchMedia('(prefers-color-scheme: dark)');
   query.addEventListener('change', () => {
     if (useSettingsStore().mode === 'auto') applyTheme();
   });
-}
-
-function cssColor(name: string, fallback: string): string {
-  if (typeof getComputedStyle !== 'function') return fallback;
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return /^#[0-9a-fA-F]{3,8}$/.test(value) ? value : fallback;
-}
-
-/** 与另一种颜色按比例混合，`ratio` 是后者的占比。 */
-function mix(color: string, other: string, ratio: number): string {
-  const a = hex(color);
-  const b = hex(other);
-  const channel = (index: number) => Math.round((a[index] ?? 0) * (1 - ratio) + (b[index] ?? 0) * ratio);
-  return `#${[0, 1, 2].map((index) => channel(index).toString(16).padStart(2, '0')).join('')}`;
-}
-
-function rgba(color: string, alpha: number): string {
-  const [r = 192, g = 86, b = 33] = hex(color);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function hex(color: string): [number, number, number] {
@@ -178,6 +549,6 @@ function hex(color: string): [number, number, number] {
           .map((character) => character + character)
           .join('')
       : text;
-  const value = Number.parseInt(full.slice(0, 6) || 'c05621', 16);
+  const value = Number.parseInt(full.slice(0, 6) || '00a2c7', 16);
   return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }

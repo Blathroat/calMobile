@@ -302,13 +302,8 @@ function messageOf(reason: unknown): string {
 </script>
 
 <template>
-  <div class="stack" data-gap="sm">
-    <h2>{{ t('auth.register.createProfile') }}</h2>
-    <p class="muted">{{ t('auth.register.intro') }}</p>
-  </div>
-
   <!-- 第一步：账号信息 -->
-  <form v-if="step === 1" class="form" novalidate @submit.prevent="submitAccount">
+  <form v-if="step === 1" class="form auth-card" novalidate @submit.prevent="submitAccount">
     <div class="field" :data-invalid="fieldErrors.username ? 'true' : undefined">
       <label for="register-username">{{
         t('auth.fieldRange', {
@@ -373,7 +368,6 @@ function messageOf(reason: unknown): string {
         @input="onFieldInput('password')"
         @blur="validateField('password')"
       />
-      <p class="field-hint">{{ t('auth.register.minChars', { min: secret.min ?? '' }) }}</p>
       <p v-if="fieldErrors.password" class="field-error" role="alert">{{ fieldErrors.password }}</p>
       <span class="field-counter" :data-over="password.length > (secret.max ?? 0) ? 'true' : 'false'"
         >{{ password.length }}/{{ secret.max }}</span
@@ -410,7 +404,6 @@ function messageOf(reason: unknown): string {
         maxlength="32"
         :placeholder="t('auth.register.invitePlaceholder')"
       />
-      <p class="field-hint">{{ t('auth.register.inviteHint') }}</p>
     </div>
 
     <!-- 用户协议：开启时先勾选才能发送验证码 / 注册；关闭时整块不渲染。 -->
@@ -443,7 +436,7 @@ function messageOf(reason: unknown): string {
   </form>
 
   <!-- 第二步：邮箱验证码 -->
-  <form v-else class="form" novalidate @submit.prevent="verifyAccount">
+  <form v-else class="form auth-card" novalidate @submit.prevent="verifyAccount">
     <div class="stack" data-gap="sm">
       <!-- 冒号放在文案资源里而不是尾随空格：Android 的 string 资源会裁掉首尾空白。 -->
       <p class="muted">

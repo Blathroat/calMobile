@@ -147,8 +147,6 @@ function revokeAll(): void {
   />
   <template v-else>
     <div class="devices-page">
-      <!-- 首行说明：下线会立刻结束该设备上的登录 -->
-      <p class="notice">{{ copy.deviceRevocationHint }}</p>
       <p v-if="notice" class="notice" data-tone="error" role="alert">{{ notice }}</p>
 
       <StateBlock v-if="devices.length === 0" :title="copy.emptyTitle" :description="copy.emptyDescription" />

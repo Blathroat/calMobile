@@ -1,17 +1,25 @@
 /** Markdown 渲染入口，所有富文本先经过清洗再交给页面展示。 */
+import { ref } from 'vue';
 import type TurndownService from 'turndown';
 
 const URL_PATTERN = /^(https?:|mailto:)/i;
 let parser: typeof import('marked').marked | undefined;
 let purifier: ReturnType<typeof import('dompurify').default> | undefined;
 let converter: TurndownService | undefined;
+const parserReady = ref(false);
 
 /** 页面在加载简介时准备解析器和清洗器，Vite 将依赖打成 APK 内的按需资源。 */
 export async function loadMarkdownParser(): Promise<void> {
-  if (parser && purifier) return;
+  if (parser && purifier) {
+    parserReady.value = true;
+    return;
+  }
   const [marked, dompurify] = await Promise.all([import('marked'), import('dompurify')]);
   parser = marked.marked;
-  if (purifier) return;
+  if (purifier) {
+    parserReady.value = true;
+    return;
+  }
   purifier = dompurify.default(window);
   purifier.addHook('uponSanitizeAttribute', (node, attribute) => {
     const name = attribute.attrName;
@@ -25,6 +33,7 @@ export async function loadMarkdownParser(): Promise<void> {
     node.setAttribute('rel', 'noopener noreferrer');
     node.setAttribute('target', '_blank');
   });
+  parserReady.value = true;
 }
 
 /** 仅历史 HTML 简介进入编辑页时加载转换器。 */
@@ -61,7 +70,11 @@ export function sanitizeUrl(value: string): string {
 
 export function markdownToHtml(source: string): string {
   if (!source) return '';
-  return sanitizeHtml(parser!.parse(source, { async: false, gfm: true, breaks: true }));
+  if (!parserReady.value || !parser || !purifier) {
+    void loadMarkdownParser();
+    return '';
+  }
+  return sanitizeHtml(parser.parse(source, { async: false, gfm: true, breaks: true }));
 }
 
 // ── HTML 清洗 ─────────────────────────────────────────────────────
@@ -122,7 +135,11 @@ const SAFE_URL = /^(https?:|data:image\/|content:|file:)/i;
 export function sanitizeHtml(html: unknown): string {
   const source = String(html ?? '').trim();
   if (!source || typeof document === 'undefined') return '';
-  return purifier!.sanitize(source, {
+  if (!parserReady.value || !purifier) {
+    void loadMarkdownParser();
+    return '';
+  }
+  return purifier.sanitize(source, {
     ALLOWED_TAGS: [...ALLOWED_TAGS],
     ALLOWED_ATTR: [...ALLOWED_ATTRS, ...VIDEO_ATTRS],
     ALLOW_DATA_ATTR: false,

@@ -27,7 +27,7 @@ const props = withDefaults(
     quiet: 4,
     label: '',
     background: 'white',
-    foreground: '#20252b',
+    foreground: '#1c2024',
   },
 );
 
@@ -89,7 +89,12 @@ defineExpose({ toPngDataUrl });
   aspect-ratio: 1;
   padding: var(--s2);
   border: var(--hairline) solid var(--stroke);
-  border-radius: var(--r-input);
+  border-radius: var(--r-chip);
   background: #ffffff;
+}
+
+.qr-wrap > .qr-canvas {
+  padding: 0;
+  border: 0;
 }
 </style>

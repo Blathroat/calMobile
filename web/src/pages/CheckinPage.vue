@@ -790,7 +790,6 @@ async function submitManual(close: () => void): Promise<void> {
     />
 
     <div class="stack" data-gap="sm">
-      <!-- 三条识别入口竖排整宽：摄像头是主操作（实心），另两条是降级链路 -->
       <button
         ref="startButton"
         class="cta"
@@ -802,19 +801,20 @@ async function submitManual(close: () => void): Promise<void> {
       >
         {{ t('checkin.scan.start') }}
       </button>
-      <button
-        class="cta ghost"
-        type="button"
-        data-action="pick-image"
-        :disabled="starting || picking"
-        @click="pickImage"
-      >
-        {{ t('checkin.scan.pickImage') }}
-      </button>
-      <button class="cta ghost" type="button" data-action="manual" @click="openManual">
-        {{ t('checkin.manual.enterCode') }}
-      </button>
-      <!-- 隐藏的文件输入：只在没有原生桥（浏览器预览 / 报名站）时使用，应用里走 device.pickImage -->
+      <div class="grid-cols-2">
+        <button
+          class="cta ghost"
+          type="button"
+          data-action="pick-image"
+          :disabled="starting || picking"
+          @click="pickImage"
+        >
+          {{ t('checkin.scan.pickImage') }}
+        </button>
+        <button class="cta ghost" type="button" data-action="manual" @click="openManual">
+          {{ t('checkin.manual.enterCode') }}
+        </button>
+      </div>
       <input
         ref="fileInput"
         class="sr-only"
@@ -829,7 +829,13 @@ async function submitManual(close: () => void): Promise<void> {
 
     <!-- 核销结果：常驻列表，最新一条排最前，刷新 / 重开页面后仍在 -->
     <div v-if="outcomes.length > 0" class="list" data-gap="sm" data-testid="checkin-outcomes">
-      <article v-for="row in outcomeRows" :key="row.item.id" class="card checkin-outcome" data-testid="checkin-outcome">
+      <article
+        v-for="row in outcomeRows"
+        :key="row.item.id"
+        class="card checkin-outcome"
+        :data-ok="row.item.ok ? 'true' : 'false'"
+        data-testid="checkin-outcome"
+      >
         <!-- 信号灯 + 大号结论：结论比状态词更响，两者同一行 -->
         <header class="checkin-verdict">
           <StatusTag
@@ -928,7 +934,6 @@ async function submitManual(close: () => void): Promise<void> {
   overflow-wrap: anywhere;
 }
 
-/* 核销结论卡：信号灯与大号结论同一行，明细用留白隔开，不画分隔线。 */
 .checkin-outcome {
   gap: var(--s3);
 }
@@ -937,19 +942,21 @@ async function submitManual(close: () => void): Promise<void> {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: var(--s2);
 }
 
 .checkin-verdict-title {
-  font-size: var(--fs-h2);
-  font-weight: 700;
+  font-size: var(--fs-sm);
+  font-weight: 600;
   line-height: var(--lh-tight);
 }
 
-/* 逐行明细：标签在左、值在右，长值允许换行。 */
 .checkin-detail {
   display: grid;
-  gap: var(--s1);
+  gap: 8px;
+  padding-top: var(--s3);
+  border-top: var(--hairline) solid var(--stroke);
 }
 
 .checkin-detail > .row > .strong {
@@ -963,17 +970,16 @@ async function submitManual(close: () => void): Promise<void> {
   flex: none;
 }
 
-/* 取景提示框：细线方框加四角强调色，不影响识别区域 */
 .scan-frame {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 62%;
+  width: 64%;
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
-  border: 2px solid var(--accent);
-  border-radius: var(--r-input);
-  box-shadow: 0 0 0 100vmax var(--scrim);
+  border: var(--hairline) solid rgba(255, 255, 255, 0.72);
+  border-radius: var(--r-card);
+  box-shadow: 0 0 0 100vmax rgba(17, 17, 19, 0.52);
   pointer-events: none;
 }
 </style>

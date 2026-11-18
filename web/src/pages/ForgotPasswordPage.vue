@@ -208,13 +208,8 @@ function messageOf(reason: unknown): string {
 </script>
 
 <template>
-  <div class="stack" data-gap="sm">
-    <h2>{{ t('auth.forgot.resetLoginPassword') }}</h2>
-    <p class="muted">{{ t('auth.forgot.intro') }}</p>
-  </div>
-
   <!-- 第一步：邮箱 -->
-  <form v-if="step === 1" class="form" novalidate @submit.prevent="submitRequest">
+  <form v-if="step === 1" class="form auth-card" novalidate @submit.prevent="submitRequest">
     <div class="field" :data-invalid="emailError ? 'true' : undefined">
       <label for="forgot-email">{{ t('auth.forgot.registeredEmail') }}</label>
       <input
@@ -239,7 +234,7 @@ function messageOf(reason: unknown): string {
   </form>
 
   <!-- 第二步：验证码 + 新密码 -->
-  <form v-else class="form" novalidate @submit.prevent="submitReset">
+  <form v-else class="form auth-card" novalidate @submit.prevent="submitReset">
     <div class="stack" data-gap="sm">
       <!-- 冒号放在文案资源里而不是尾随空格：Android 的 string 资源会裁掉首尾空白。 -->
       <p class="muted">

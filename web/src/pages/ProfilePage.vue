@@ -1,18 +1,7 @@
 <script setup lang="ts">
 /**
  * 屏幕 09 · 个人主页（身份卡 + 活动概览 + 简介 + 公开资料 + 入口）
- * 旧实现：app/src/main/assets/web/js/pages/profile.js（`git show 5e3d9ab^`）
- *
- * 这一屏回答三件事：我是谁（身份卡）、我给别人的印象（简介与公开资料）、
- * 我参加过什么（身份卡底部的活动概览）。最后才是用户设置、安全设置与退出登录。
- *
- * 身份卡右侧的铅笔打开与用户设置相同的编辑资料抽屉（`services/profile-editor.ts`）。
- * 没有简介时显示可点的空态，不把操作指引当正文。
- *
- * 活动概览复用 `registrations` 列表的查询缓存：它是增强信息，取不到就不显示，
- * 不让资料主状态跟着失败（与展会详情页判断「我的报名」同一类处理）。
- *
- * 退出登录仍走 `POST /auth/logout`，一次调用清掉服务端与本地会话。
+ * 严格保留三枚 .card 索引钩子与三枚 button.row-card 契约。
  */
 import { computed, onMounted, reactive, ref } from 'vue';
 import { usePullRefresh } from '@/services/pull-refresh';
@@ -34,7 +23,6 @@ import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
 const COPY = {
-  /** 设置入口的说明：把设置页里能改的东西列出来，省得点进去才发现。 */
   settingsMeta: t('profile.settingsSummary'),
 };
 
@@ -43,11 +31,8 @@ const session = useSessionStore();
 
 const user = computed(() => session.user);
 const loggedIn = computed(() => session.loggedIn);
-/** 受限账号不能改资料：只有后端明确下发 `false` 才算。 */
 const limited = computed(() => user.value.can?.profile === false);
 const limitHint = computed(() => t('profile.restricted'));
-
-// ── 取数：资料是主状态，活动概览是增强信息 ──────────────────────
 
 const profile = reactive<JsonObject>({});
 const loading = ref(true);
@@ -55,12 +40,10 @@ const loadFailed = ref(false);
 const loadError = ref('');
 const activity = ref<{ attended: number; total: number } | null>(null);
 
-/** 取数失败优先用后端/传输层自带的原因，没有就回落到通用文案。 */
 function errorText(reason: unknown): string {
   return reason instanceof Error && reason.message ? reason.message : t('exhibition.form.saveFailed');
 }
 
-/** 会话里已经有的资料先铺上，公开页和设置页改过头像后这里不用等 GET。 */
 function paintFromSession(): void {
   const current = session.user;
   if (!current.id) return;
@@ -73,10 +56,6 @@ function paintFromSession(): void {
   });
 }
 
-/**
- * 资料是主状态：失败在原位给出错误块与重试，而不是画出空资料。
- * 会话里已经有 id 时，错误只作为附加提示，已经画出的身份卡不清空。
- */
 async function load(): Promise<void> {
   await bootApp().catch(() => undefined);
   paintFromSession();
@@ -100,12 +79,6 @@ async function load(): Promise<void> {
   }
 }
 
-/**
- * 活动概览：报名列表条数与已参加场数。
- *
- * 只用于身份卡底部的一行摘要，属于增强信息：取不到就不显示，不弹错误、
- * 也不影响资料主状态。列表本身走查询缓存，和其它页面共用同一条 `registrations` 键。
- */
 async function loadActivity(): Promise<void> {
   if (session.loggedIn !== true) return;
   try {
@@ -116,7 +89,7 @@ async function loadActivity(): Promise<void> {
       total: records.length,
     };
   } catch {
-    // 增强信息失败保持隐藏；下拉刷新时会再试一次。
+    // 增强信息失败保持隐藏
   }
 }
 
@@ -135,11 +108,7 @@ usePullRefresh(
   loggedIn,
 );
 
-// ── 展示用取值 ────────────────────────────────────────────────────
-
-/** 身份说明行：正常状态不占一行，只在受限/封禁时说明账号状态。 */
 const identityLine = computed(() => {
-  // 角色与状态都按 code 取文案：接口下发的 roleLabel / status 是中文标签，装语言包后不能直接用。
   const code = String(user.value.role || '');
   const role = roleLabel(code);
   const statusCode = String(user.value.statusCode || '');
@@ -148,19 +117,15 @@ const identityLine = computed(() => {
   const tagged = code === 'exhibitor' || code === 'admin';
   if (tagged) return status;
   if (!status) return role;
-  return role ? role + ' · ' + status : status;
+  return role ? `${role}  ${status}` : status;
 });
 
-// ── 展商时长：限时展商看到到期日，到期后说明原因与续期入口 ──
-
-/** 限时展商身份卡里的一行：有效期至某日。 */
 const membershipLine = computed(() => {
   if (String(user.value.role || '') !== 'exhibitor') return '';
   const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
   return date ? t('profile.membership.until', { date }) : '';
 });
 
-/** 7 天内到期的提醒：说明还能用多久、可以续期。 */
 const membershipSoon = computed(() => {
   if (String(user.value.role || '') !== 'exhibitor') return '';
   const days = daysUntil(user.value.exhibitorExpiresAt);
@@ -168,7 +133,6 @@ const membershipSoon = computed(() => {
   return t('profile.membership.soon', { days });
 });
 
-/** 已经自动到期的账号：说明原因与续期方式（管理员手动降级会清掉到期时间，不会走到这里）。 */
 const membershipExpired = computed(() => {
   if (user.value.exhibitorExpired !== true) return '';
   const date = formatLocalChineseDate(user.value.exhibitorExpiresAt);
@@ -180,14 +144,12 @@ function hasProfileValue(key: string): boolean {
   return typeof value === 'string' && value !== '';
 }
 
-/** 资料字段的展示值：缺失时沿用旧页面给出的空态文案。 */
 function profileValue(key: string, emptyKey: string): string {
   return hasProfileValue(key) ? String(profile[key]) : t(emptyKey);
 }
 
 const hasBio = computed(() => hasProfileValue('bio'));
 
-/** 自己的公开主页：优先按昵称定位；带上 userId，昵称重名时也能落到本账号。 */
 const publicPath = computed(() => {
   const nickname = String(user.value.nickname || user.value.username || '');
   if (!nickname) return '';
@@ -196,12 +158,10 @@ const publicPath = computed(() => {
   return '/user-public/' + encodeURIComponent(nickname) + query;
 });
 
-/** 公开主页入口右侧说明的是「别人能看到什么」，不是本页的开关状态。 */
 const publicMeta = computed(() =>
   profile.showRegistrations === true ? t('profile.publicRegistrationsShown') : t('profile.publicRegistrationsHidden'),
 );
 
-/** 编辑资料：与设置页「编辑资料」打开同一抽屉。受限账号先说明原因。 */
 function openEditor(): void {
   openProfileEditor(profile, {
     blocked: () => {
@@ -211,8 +171,6 @@ function openEditor(): void {
     },
   });
 }
-
-// ── 退出登录 ──────────────────────────────────────────────────────
 
 const logoutBusy = ref(false);
 
@@ -240,7 +198,6 @@ function logout(): void {
 </script>
 
 <template>
-  <!-- 访客：与旧页面一致，原位说明并给出登录入口 -->
   <StateBlock
     v-if="!loggedIn"
     icon="user"
@@ -263,14 +220,12 @@ function logout(): void {
     />
 
     <template v-else>
-      <!-- 已有资料时刷新失败：旧内容留在屏幕上，错误只作为附加说明 -->
       <div v-if="loadFailed" class="notice" data-tone="error">
         <span>{{ loadError }}</span>
       </div>
 
       <div class="profile-page" :data-busy="loading ? 'true' : undefined">
-        <!-- 身份区：不是卡片（.card 只是 profile-page.test.ts 的索引钩子，
-             本页 [data-plain] 把边框、底色、阴影、内距都去掉）。 -->
+        <!-- 身份区（cards()[0]） -->
         <div class="card profile-leaf" data-plain="true">
           <div class="leaf-top">
             <AvatarBox
@@ -289,6 +244,7 @@ function logout(): void {
             </div>
             <button
               class="icon-button leaf-edit"
+              data-variant="outlined"
               type="button"
               :aria-label="t('settings.profile.editProfile')"
               :disabled="limited"
@@ -298,9 +254,8 @@ function logout(): void {
               <AppIcon name="edit" />
             </button>
           </div>
-          <!-- 活动概览：留白之下是两格数字，整行可点进我的活动；取不到数据时整块不渲染 -->
           <template v-if="activity">
-            <button class="profile-stats" type="button" @click="router.push(paths.registrations)">
+            <button class="profile-stats profile-stats-bar" type="button" @click="router.push(paths.registrations)">
               <span class="profile-stat">
                 <strong>{{ activity.attended }}</strong>
                 <span class="profile-stat-label">{{ t('profile.stats.attended') }}</span>
@@ -314,12 +269,10 @@ function logout(): void {
           </template>
         </div>
 
-        <!-- 受限：说明为什么编辑入口不可用 -->
         <div v-if="limited" class="notice" data-tone="warn">
           <strong>{{ limitHint }}</strong>
         </div>
 
-        <!-- 限时展商：快到期与已到期都说明原因和续期方式，避免身份标签悄悄消失 -->
         <div v-if="membershipSoon" class="notice" data-tone="warn">
           <span>{{ membershipSoon }}</span>
         </div>
@@ -327,7 +280,7 @@ function logout(): void {
           <span>{{ membershipExpired }}</span>
         </div>
 
-        <!-- 个人简介：组标题在上，正文按 1.68 行高排，保留用户输入的换行 -->
+        <!-- 个人简介（cards()[1]） -->
         <div class="card profile-block" data-plain="true">
           <span class="section-label">{{ t('profile.bio') }}</span>
           <p v-if="hasBio" class="bio-text">{{ String(profile.bio) }}</p>
@@ -345,7 +298,7 @@ function logout(): void {
           </div>
         </div>
 
-        <!-- 公开资料：两列 label / value，空值用 --ink-3 -->
+        <!-- 公开资料（cards()[2]） -->
         <div class="card profile-block" data-plain="true">
           <span class="section-label">{{ t('profile.public.details') }}</span>
           <dl class="profile-facts">
@@ -360,7 +313,7 @@ function logout(): void {
           </dl>
         </div>
 
-        <!-- 入口：公开主页、用户设置、安全设置各自一行，行间距 --s2 -->
+        <!-- 入口行 -->
         <div class="list" data-gap="sm">
           <button
             v-if="publicPath"
@@ -394,7 +347,6 @@ function logout(): void {
           </button>
         </div>
 
-        <!-- 退出登录：整页唯一的破坏性动作，居中文字按钮，上方留 --s7 -->
         <div class="profile-logout">
           <button class="text-action logout-action" type="button" :disabled="logoutBusy" @click="logout">
             {{ t('profile.logout') }}
@@ -406,7 +358,6 @@ function logout(): void {
 </template>
 
 <style>
-/* 页面纵向节奏：区块之间 --s5。 */
 .profile-page {
   display: flex;
   flex-direction: column;
@@ -417,7 +368,6 @@ function logout(): void {
   flex: none;
 }
 
-/* 身份 / 简介 / 公开资料三块保留 .card 类（测试索引），视觉上去掉卡片外观。 */
 .profile-page .card[data-plain='true'] {
   padding: 0;
   border: 0;
@@ -426,9 +376,8 @@ function logout(): void {
   box-shadow: none;
 }
 
-/* 身份区：底边一条发丝线收口。 */
 .profile-page .card.profile-leaf[data-plain='true'] {
-  gap: var(--s3);
+  gap: var(--s4);
   padding-bottom: var(--s5);
   border-bottom: var(--hairline) solid var(--stroke);
 }
@@ -436,16 +385,15 @@ function logout(): void {
 .leaf-top {
   position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: var(--s3);
+  align-items: center;
+  gap: var(--s4);
   min-width: 0;
 }
 
-/* 96px 圆头像：圆环由 .avatar 自带的 1px --stroke 描边提供。 */
 .profile-page .leaf-avatar {
-  width: 96px;
-  height: 96px;
-  font-size: var(--fs-h1);
+  width: 64px;
+  height: 64px;
+  font-size: var(--fs-lg);
 }
 
 .leaf-copy {
@@ -453,16 +401,13 @@ function logout(): void {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--s2);
-  padding-top: var(--s1);
-  /* 给右上角的铅笔让位，长昵称不会钻到按钮下面。 */
-  padding-inline-end: var(--touch);
+  gap: 4px;
+  padding-inline-end: 40px;
 }
 
-/* 昵称：整页最大字号，只有字重和字号，不换字体。 */
 .profile-page .leaf-name {
-  font-size: var(--fs-h1);
-  font-weight: 700;
+  font-size: var(--fs-lg);
+  font-weight: 600;
 }
 
 .leaf-meta {
@@ -473,43 +418,42 @@ function logout(): void {
   min-width: 0;
 }
 
-/* 角色与账号状态：一行小字距标签，不抢昵称。 */
 .leaf-eyebrow {
-  color: var(--ink-3);
-  font-size: var(--fs-label);
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 500;
 }
 
-/* 展商有效期：一行弱化说明。 */
 .leaf-expiry {
   color: var(--ink-3);
-  font-size: var(--fs-label);
+  font-size: var(--fs-xs);
 }
 
 .leaf-edit {
   position: absolute;
-  top: 0;
+  top: 2px;
   inset-inline-end: 0;
   color: var(--ink-2);
 }
 
-/* 活动概览：两个数字（--fs-h2、700）配下面小标签，右端静默箭头由令牌给。 */
-.profile-page .profile-stats {
+.profile-page .profile-stats-bar {
   gap: var(--s7);
+  padding: var(--s3) var(--s4);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-card);
+  background: var(--surface-card);
 }
 
 .profile-page .profile-stat > strong {
-  font-size: var(--fs-h2);
-  font-weight: 700;
+  font-size: var(--fs-lg);
+  font-weight: 600;
 }
 
 .profile-stat-label {
-  color: var(--ink-3);
-  font-size: var(--fs-label);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
 }
 
-/* 简介与公开资料：组标题 + 内容。 */
 .profile-page .profile-block {
   gap: var(--s3);
 }
@@ -522,7 +466,6 @@ function logout(): void {
   white-space: pre-wrap;
 }
 
-/* 简介空态：一句说明 + 一个可点的入口，不占正文的位置。 */
 .bio-empty {
   display: grid;
   gap: var(--s1);
@@ -539,12 +482,11 @@ function logout(): void {
   cursor: not-allowed;
 }
 
-/* 公开资料：两列 label / value。 */
 .profile-facts {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: baseline;
-  column-gap: var(--s4);
+  column-gap: var(--s5);
   row-gap: var(--s3);
   margin: 0;
 }
@@ -552,7 +494,7 @@ function logout(): void {
 .profile-facts dt {
   color: var(--ink-3);
   font-size: var(--fs-label);
-  font-weight: 700;
+  font-weight: 680;
 }
 
 .profile-facts dd {
@@ -561,23 +503,34 @@ function logout(): void {
   overflow: hidden;
   color: var(--ink);
   font-size: var(--fs-body);
+  font-weight: 560;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .profile-facts dd.dim {
   color: var(--ink-3);
+  font-weight: 400;
 }
 
-/* 入口行左侧的静默图标与右侧箭头。 */
-.row-icon,
+.row-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--f3);
+  color: var(--ink-2);
+}
+
 .row-chev {
   flex: none;
   display: inline-flex;
   color: var(--ink-3);
 }
 
-/* 退出登录：居中 danger 文字按钮；父级 gap 之外再补到 --s7。 */
 .profile-logout {
   display: flex;
   justify-content: center;

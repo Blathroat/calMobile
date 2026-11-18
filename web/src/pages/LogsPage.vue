@@ -144,7 +144,7 @@ function metaLine(entry: LogEntry): string {
   if (ip) parts.push(t('logs.meta.ip', { value: ip }));
   const status = Number(entry.status);
   if (Number.isFinite(status) && status > 0) parts.push(t('logs.meta.status', { value: status }));
-  return parts.join(' · ');
+  return parts.join('  ');
 }
 </script>
 
@@ -219,7 +219,7 @@ function metaLine(entry: LogEntry): string {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent);
+  background: var(--accent-solid);
   transition: width var(--motion-base) var(--ease);
 }
 

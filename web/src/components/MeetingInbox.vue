@@ -300,7 +300,7 @@ async function copyLink(): Promise<void> {
             class="row-card"
             type="button"
             data-pressable="true"
-            style="flex: 1 1 auto; min-width: 0; border: 0; padding: 0; background: transparent"
+            style="flex: 1 1 auto; min-width: 0"
             :aria-label="t('meeting.inbox.viewDetail', { name: String(record.visitorName || COPY.visitorFallback) })"
             @click="openDetail(record)"
           >

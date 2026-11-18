@@ -53,7 +53,7 @@ function applyDocumentTitle(): void {
   }
   const brand = String(useBootstrapStore().brand.zh || '').trim();
   const title = t('app.documentTitle');
-  document.title = brand ? `${brand} · ${title}` : title;
+  document.title = brand ? `${title} - ${brand}` : title;
 }
 
 /** 每次身份切换后重读整份启动数据，偏好与权限落定后才允许进入下一屏。 */

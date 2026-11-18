@@ -3,7 +3,7 @@
  * 报名里的单选按钮。
  *
  * 所有选项都能在一行里单行显示时横排均分；有一项放不下就改成每项独占一行。
- * 独占一行仍放不下时，按钮本身换行增高（样式在 tokens.css）。
+ * 附带精密机械圆环指示器，让单选状态具备明确物理确认感。
  */
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { choiceNeedsStack } from '@/services/choice-layout';
@@ -28,11 +28,10 @@ function contentWidth(label: HTMLElement): number {
   const context = canvas.getContext('2d');
   if (!context) return 0;
   const style = getComputedStyle(label);
-  // 选中后字重变成 700，按更宽的那一档量，避免选中后才挤出格子。
   context.font = `700 ${style.fontSize} ${style.fontFamily}`;
   const copy = label.querySelector('.choice-copy');
   const text = (copy ?? label).textContent ?? '';
-  const pad = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+  const pad = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0) + 24;
   const border = (Number.parseFloat(style.borderLeftWidth) || 0) + (Number.parseFloat(style.borderRightWidth) || 0);
   return context.measureText(text).width + pad + border;
 }
@@ -93,7 +92,6 @@ watch(
   min-width: 0;
 }
 
-/* 有选项在一行里放不下时，每项独占一行。 */
 .choice-row[data-stack='true'] {
   flex-direction: column;
 }
@@ -122,19 +120,26 @@ watch(
   justify-content: flex-start;
   gap: var(--s2);
   padding: var(--s2) var(--s3);
-  border: var(--hairline) solid var(--stroke);
+  border: var(--hairline) solid var(--stroke-strong);
   border-radius: var(--r-input);
-  background: var(--screen);
-  color: var(--ink-2);
-  font-size: var(--fs-label);
-  line-height: 1.35;
+  background: var(--surface-card);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
   text-align: start;
   white-space: normal;
   overflow-wrap: anywhere;
-  transition:
-    border-color var(--motion-fast) var(--ease),
-    background var(--motion-fast) var(--ease),
-    color var(--motion-fast) var(--ease);
+  cursor: pointer;
+}
+
+.choice label::before {
+  content: '';
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border: var(--hairline) solid var(--stroke-strong);
+  border-radius: var(--r-pill);
+  background: var(--f3);
 }
 
 .choice-copy {
@@ -145,14 +150,19 @@ watch(
 }
 
 .choice input:checked + label {
-  border-color: var(--accent);
-  background: var(--accent-glow, rgba(192, 86, 33, 0.14));
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
   color: var(--accent-ink);
-  font-weight: 700;
+  font-weight: 500;
+}
+
+.choice input:checked + label::before {
+  border: 4.5px solid var(--accent-solid);
+  background: #ffffff;
 }
 
 .choice input:focus-visible + label {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--accent-ring);
   outline-offset: 2px;
 }
 </style>

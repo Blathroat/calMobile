@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** 轻提示容器：固定在外壳底部之上，`role="status"` 让读屏软件播报。 */
+/** 轻提示容器：固定在视口下方，`role="status"` 供读屏播报。 */
 import { toasts } from '@/services/toast';
 </script>
 
@@ -30,21 +30,26 @@ import { toasts } from '@/services/toast';
 }
 
 .toast {
-  max-width: min(88vw, 460px);
-  padding: var(--s3) var(--s4);
-  border-radius: var(--r-pill);
+  max-width: min(88vw, 420px);
+  padding: 8px 14px;
+  border: var(--hairline) solid var(--stroke-strong);
+  border-radius: var(--r-card);
   background: var(--toast-bg);
-  color: var(--on-dark);
-  font-size: var(--fs-label);
-  box-shadow: var(--shadow-float);
-  animation: toast-in var(--motion-base) var(--ease) both;
+  color: #ffffff;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  box-shadow: var(--shadow-overlay);
 }
 
 .toast[data-tone='error'] {
   background: var(--toast-error);
+  border-color: var(--danger-border);
+  color: #ffffff;
 }
 
 .toast[data-tone='success'] {
   background: var(--toast-ok);
+  border-color: var(--ok-border);
+  color: #ffffff;
 }
 </style>

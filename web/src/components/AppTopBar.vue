@@ -41,7 +41,7 @@ function goBack(): void {
       <AppIcon name="chevronLeft" />
     </button>
     <span v-else class="topbar-side" aria-hidden="true" />
-    <h1 class="topbar-title">{{ props.title }}</h1>
+    <h1 class="topbar-title truncate">{{ props.title }}</h1>
     <div class="topbar-side">
       <slot name="actions" />
     </div>
@@ -52,15 +52,27 @@ function goBack(): void {
 .topbar-title {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--fs-body);
-  font-weight: 700;
+  font-size: var(--fs-sm);
+  font-weight: 600;
   text-align: center;
 }
 
 .topbar-side {
   flex: none;
-  min-width: var(--touch);
+  min-width: 36px;
   display: inline-flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 2px;
+}
+
+#app-top-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+#app-top-actions:empty {
+  display: none;
 }
 </style>

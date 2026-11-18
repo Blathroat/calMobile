@@ -701,7 +701,8 @@ function normalizeOptions(options: unknown): string[] {
   />
 
   <template v-else-if="built">
-    <div class="form">
+    <div class="card form">
+      <span class="section-label">{{ t('admin.limits.exhibitionInfo') }}</span>
       <div class="field" :data-invalid="isInvalid('title') ? 'true' : 'false'">
         <label for="form-title"
           >{{ t('admin.limits.exhibitionName') }}<span class="required" aria-hidden="true"> *</span></label

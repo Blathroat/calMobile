@@ -1,9 +1,6 @@
 <script setup lang="ts">
 /**
- * 反馈状态块：空、加载失败、成功、找不到目标都用它。
- *
- * 规则来自 docs/engineering.md：状态必须同时给出文字与视觉差异，并在原位给出下一步。
- * `description` 说明原因，`action` 是唯一的下一步入口。
+ * 反馈状态块：空状态、异常与完成态统一承载，平直无阴影。
  */
 import AppIcon from './AppIcon.vue';
 
@@ -28,10 +25,10 @@ function iconName(): string {
 
 <template>
   <div class="state" :data-tone="props.tone">
-    <span class="state-icon"><AppIcon :name="iconName()" size="icon icon-sm" /></span>
+    <span class="state-icon"><AppIcon :name="iconName()" /></span>
     <strong v-if="props.title">{{ props.title }}</strong>
     <p v-if="props.description" class="muted">{{ props.description }}</p>
-    <button v-if="props.actionLabel" class="cta ghost" type="button" @click="emit('action')">
+    <button v-if="props.actionLabel" class="cta ghost state-cta" type="button" @click="emit('action')">
       {{ props.actionLabel }}
     </button>
     <slot />
@@ -43,32 +40,53 @@ function iconName(): string {
   display: grid;
   gap: var(--s2);
   justify-items: center;
-  padding: var(--s5) var(--s4);
-  border: var(--hairline) dashed var(--stroke);
+  padding: var(--s6) var(--s4);
+  border: var(--hairline) solid var(--stroke);
   border-radius: var(--r-card);
-  background: var(--f3);
+  background: var(--surface-card);
   color: var(--ink-2);
   text-align: center;
 }
 
 .state strong {
   color: var(--ink);
-  font-size: var(--fs-body);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.state > p {
+  max-width: 26em;
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  text-wrap: balance;
 }
 
 .state .state-icon {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
-  border: 1.5px solid var(--ink-3);
-  border-radius: var(--r-pill);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-card);
+  background: var(--f3);
   color: var(--ink-2);
 }
 
+.state .state-cta {
+  width: auto;
+  min-width: 120px;
+  max-width: 100%;
+  padding-inline: var(--s4);
+  margin-top: var(--s1);
+}
+
 .state[data-tone='success'] {
-  border-color: var(--ok-ink);
-  border-style: solid;
+  border-color: var(--ok-border);
+  background: var(--surface-card);
+}
+
+.state[data-tone='success'] .state-icon {
+  border-color: var(--ok-border);
   background: var(--ok);
   color: var(--ok-ink);
 }
@@ -78,8 +96,12 @@ function iconName(): string {
 }
 
 .state[data-tone='error'] {
-  border-color: var(--danger-ink);
-  border-style: solid;
+  border-color: var(--danger-border);
+  background: var(--surface-card);
+}
+
+.state[data-tone='error'] .state-icon {
+  border-color: var(--danger-border);
   background: var(--danger-tint);
   color: var(--danger-ink);
 }

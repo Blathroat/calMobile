@@ -319,10 +319,7 @@ async function exportCsv(): Promise<void> {
   <!-- 未指定展会：先让展商选择要审核的展会 -->
   <template v-if="!exhibitionId">
     <header class="row" data-between="true">
-      <div class="stack" data-gap="sm">
-        <span class="eyebrow">{{ bootstrap.brand.en }}</span>
-        <h2>{{ t('registration.review.title') }}</h2>
-      </div>
+      <h2>{{ t('registration.review.title') }}</h2>
       <span class="pill">{{ t('review.page.exhibitionCount', { count: exhibitions.length }) }}</span>
     </header>
 
@@ -366,10 +363,7 @@ async function exportCsv(): Promise<void> {
 
   <template v-else>
     <div class="row" data-between="true">
-      <div class="stack" data-gap="sm">
-        <span class="eyebrow">{{ bootstrap.brand.en }}</span>
-        <h2>{{ t('registration.review.title') }}</h2>
-      </div>
+      <h2>{{ t('registration.review.title') }}</h2>
       <span class="pill">{{ t('review.page.pendingCount', { count: pendingCount }) }}</span>
     </div>
 

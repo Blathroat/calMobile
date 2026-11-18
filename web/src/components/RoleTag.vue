@@ -1,9 +1,6 @@
 <script setup lang="ts">
 /**
- * 名字后面的身份小签（展商 / 管理员）。普通用户与访客不显示。
- *
- * 身份不是状态，所以这里**不用** `StatusTag` 的信号灯，而是保留项目原来的方框小签：
- * 浅底 + 细描边 + 强调色文字，跟状态标签在视觉上区分得开。
+ * 身份标签（展商 / 管理员）：采用 Radix Accent Step 3 底色 + Step 6 0.5px 边线 + Step 11 文字。
  */
 import { t } from '@/i18n';
 
@@ -30,14 +27,14 @@ function label(): string {
   flex: none;
   display: inline-flex;
   align-items: center;
-  padding: 4px 8px;
+  padding: 2px 6px;
   border: var(--hairline) solid var(--accent-edge);
   border-radius: var(--r-chip);
-  background: var(--screen);
+  background: var(--accent-soft);
   color: var(--accent-ink);
-  font-size: var(--fs-tag);
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: 1.3;
   white-space: nowrap;
 }
 </style>

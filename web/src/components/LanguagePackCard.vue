@@ -143,7 +143,7 @@ async function fromFile(event: Event): Promise<void> {
       :label="t('settings.lang.title')"
       @update:model-value="selectLanguage"
     />
-    <p class="field-hint">{{ t('settings.lang.followServer') }} · {{ serverName }}</p>
+    <p v-if="choice === ''" class="field-hint">{{ t('settings.lang.followServer') }}（{{ serverName }}）</p>
 
     <form class="form" @submit.prevent="download">
       <div class="field" :data-invalid="urlError ? 'true' : 'false'">

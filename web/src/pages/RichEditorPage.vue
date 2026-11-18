@@ -682,7 +682,7 @@ function escapeRegExp(value: string): string {
   border-radius: var(--r-pill);
   background: var(--media-scrim);
   color: var(--on-dark);
-  font-size: 16px;
+  font-size: var(--fs-sm);
   line-height: 1;
 }
 

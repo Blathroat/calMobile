@@ -2,15 +2,8 @@
 /**
  * 屏幕 02 · 首页（月视图 + 当天展会列表）
  *
- * 日历卡片支持左右滑动切换月份：拖动时卡片跟手位移，松手超过阈值则滑出并载入相邻月份。
- * 行数按月份实际需要取 5 或 6 行（放得下就 5 行），行高只有一档，所以同一行里的日期不会跳。
- *
- * 点日期**不发请求**：`exhibitions.month` 一次返回整月展会和本人的私人会议，选中哪一天纯属本地状态，
- * 因此既不重新取数，也不重建日历 DOM（重建会让卡片闪一下、圆点动画重放）。
- *
- * 有展会的日期把数字加粗。圆点标和当前用户有关的日期：已通过或已参加的报名、
- * 待审核或已通过的私人会议（申请人与主办人都算）、自己开办的展会。
- * 已拒绝和已撤销的会议不打点，也不出现在当天列表。访客只有加粗，没有圆点。
+ * 日历卡片支持左右跟手滑动切换月份，两侧常备相邻月份预览面板。
+ * 点选日期纯属本地状态切换，零请求、零重建闪烁。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -23,9 +16,7 @@ import AppIcon from '@/components/AppIcon.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MediaBox from '@/components/MediaBox.vue';
-import HintNote from '@/components/HintNote.vue';
 import CalendarMonthPanel from '@/components/CalendarMonthPanel.vue';
-import { useHint } from '@/composables/useHint';
 import { useAsync } from '@/composables/useAsync';
 import { useRevealReady } from '@/composables/useReveal';
 import { suppressPull, usePullRefresh } from '@/services/pull-refresh';
@@ -39,28 +30,14 @@ import type { JsonObject } from '@/api/types';
 import { modeLabel, registrationStatusLabel, statusTone } from '@/services/status';
 import { t } from '@/i18n';
 
-const WEEK_LABELS = [
-  t('home.weekdayMon'),
-  t('home.weekdayTue'),
-  t('home.weekdayWed'),
-  t('home.weekdayThu'),
-  t('home.weekdayFri'),
-  t('home.weekdaySat'),
-  t('home.weekdaySun'),
-];
-
 const router = useRouter();
 const bootstrap = useBootstrapStore();
-/** 日历滑动提示：与账号绑定的一次性提示，真滑过一次就不再显示。 */
-const { visible: hintVisible, dismiss: dismissHint } = useHint('home-calendar-swipe');
 
 const view = ref({
   year: new Date().getFullYear(),
   month: new Date().getMonth() + 1,
-  // 0 表示「未指定」：落到当月第一个有展会的日期。
   day: 0,
 });
-/** 落点月份只采用一次：之后切月份、点日期都以用户为准。 */
 const landingApplied = ref(false);
 
 const monthQuery = useAsync<{ data: JsonObject; year: number; month: number }>();
@@ -72,10 +49,8 @@ const revealReady = useRevealReady();
 
 const calendarHost = ref<HTMLElement>();
 const swipeHost = ref<HTMLElement>();
-/** 左右相邻月份的预览：拖动时从两侧露出，不让空白占着半个屏幕。 */
 const previousPreview = ref<HTMLElement>();
 const nextPreview = ref<HTMLElement>();
-/** 拖动中（只用于视觉状态，不参与业务判断）。 */
 const dragging = ref(false);
 
 const previousMonth = computed(() => addMonths(view.value.year, view.value.month, -1));
@@ -89,7 +64,6 @@ function dayRows(key: 'exhibitions' | 'meetings'): JsonObject[] {
   if (day <= 0) return [];
   const all = Array.isArray(monthData.value?.[key]) ? (monthData.value?.[key] as JsonObject[]) : [];
   return all.filter((item) => {
-    // 展会按「开展～闭展」覆盖的每一天出现在当天列表里；旧接口没有 days 时退回开展当天。
     if (key === 'exhibitions' && Array.isArray(item.days)) return (item.days as unknown[]).includes(day);
     return Number(item.day) === day;
   });
@@ -100,7 +74,6 @@ function meetingLine(meeting: JsonObject): string {
   return time ? t('registration.list.privateMeetingAt', { time }) : t('registration.list.privateMeeting');
 }
 
-/** 会议行的头像取名称首字，没有名称时用这里的兜底字。 */
 const meetingInitial = t('home.meetingInitial');
 
 const selectedMeta = computed(() => {
@@ -108,15 +81,12 @@ const selectedMeta = computed(() => {
   return count > 0 ? t('home.selectedCount', { count }) : t('home.noSchedule');
 });
 
-/** 启动公告：只在开关打开且本机未读过时显示一次。 */
 const announcement = ref('');
 
-/** 加载当前 `view` 对应的月份；已有内容时保留旧内容，只标记忙碌。 */
 async function load(): Promise<boolean> {
   const requested = { ...view.value };
   const applyLanding = !landingApplied.value;
   const result = await monthQuery.run(async (signal) => {
-    // 落点月份由后端下发（示例数据集中在 2026 年 6–8 月），首屏必须等它落定。
     await bootApp();
     signal.throwIfAborted();
     if (applyLanding) {
@@ -133,7 +103,6 @@ async function load(): Promise<boolean> {
       month: requested.month,
       day: requested.day || undefined,
     }) as CachedRead<JsonObject>;
-    // 启动未完成就离开首页时，上面的 throwIfAborted 已经返回，不会发这次请求。
     if (monthPromise.cached !== undefined) {
       monthQuery.seed({ data: monthPromise.cached, year: requested.year, month: requested.month });
     }
@@ -144,7 +113,6 @@ async function load(): Promise<boolean> {
   landingApplied.value = true;
   view.value.year = result.year;
   view.value.month = result.month;
-  // 只有还没选中日期时才采用后端给的落点，避免刷新覆盖用户的选择。
   if (!view.value.day) view.value.day = Number(result.data.day) || 0;
   preloadAdjacentMonths(result.year, result.month);
   for (const item of items.value.slice(0, 2)) warm(item.id);
@@ -161,22 +129,14 @@ function prefersReducedMotion(): boolean {
 }
 
 let slideTimer: number | undefined;
-/** 回弹动画的兜底计时器：新一次拖动开始时要取消，免得它把正在拖的卡片复位。 */
 let snapTimer: number | undefined;
 let monthSliding = false;
 
-/** 当前日历卡片的宽度；布局没算出来时退回常见窄屏宽度。 */
 function cardWidth(): number {
   const card = calendarHost.value;
   return card?.getBoundingClientRect().width || card?.clientWidth || swipeHost.value?.clientWidth || 320;
 }
 
-/**
- * 把「当前月卡片 + 左右相邻月预览」一起平移 `offset`（px）。
- *
- * 卡片在 `offset`；上/下月预览分别在 `offset - width` / `offset + width`。
- * 拖到一半松手前，下一月的日期网格已经跟着露出来了，不会看到空白。
- */
 function paintOffset(offset: number, transition: string): void {
   const width = cardWidth();
   const card = calendarHost.value;
@@ -196,7 +156,6 @@ function paintOffset(offset: number, transition: string): void {
   }
 }
 
-/** 清掉内联的 transition / transform：回到 CSS 静态位置（预览在两侧、当前月在中间）。 */
 function resetSlideStyles(): void {
   for (const node of [calendarHost.value, previousPreview.value, nextPreview.value]) {
     if (!node) continue;
@@ -207,7 +166,6 @@ function resetSlideStyles(): void {
   if (calendarHost.value) calendarHost.value.dataset.drag = 'false';
 }
 
-/** 松手但没到切月阈值：三块一起回原位。 */
 function snapBackSlide(): void {
   paintOffset(0, 'transform var(--motion-normal) var(--ease-out)');
   if (snapTimer !== undefined) window.clearTimeout(snapTimer);
@@ -220,7 +178,6 @@ function snapBackSlide(): void {
   );
 }
 
-/** 直接落月：减少动效、或动画兜底时用，不播预览层。 */
 function applyMonth(delta: number): void {
   const next = addMonths(view.value.year, view.value.month, delta);
   monthQuery.cancel();
@@ -232,12 +189,6 @@ function applyMonth(delta: number): void {
   void load();
 }
 
-/**
- * 切月滑动：卡片和两侧预览一起滑一格。
- *
- * 下一月：卡片到 -width、下一月预览到 0；上一月：卡片到 +width、上一月预览到 0。
- * 动画结束才换 `view` 并用真实数据重画；预览层不带展会高亮，落月后立刻补齐。
- */
 function slideMonth(direction: number): void {
   if (monthSliding) return;
   if (prefersReducedMotion()) {
@@ -264,22 +215,14 @@ function slideMonth(direction: number): void {
     applyMonth(direction);
   };
   if (card) card.addEventListener('transitionend', finish, { once: true });
-  // transition 不触发（页面在后台等）时的兜底，避免卡片停在屏外。
   slideTimer = window.setTimeout(() => finish(), 420);
 }
 
-/** 箭头按钮切月：与滑动共用同一段预览动画。 */
 function shiftMonth(delta: number): void {
   if (monthSliding) return;
   slideMonth(delta);
 }
 
-/**
- * 左右滑动切换月份。
- *
- * 拖动 1:1 跟手，当前月与左右相邻月预览一起平移；松手时按「超过卡片宽度 1/4」
- * 或「快速甩动」判定切月，切月直接接续手指位置滑到位，再换月。
- */
 function enableSwipe(): void {
   const host = swipeHost.value;
   const card = calendarHost.value;
@@ -311,7 +254,6 @@ function enableSwipe(): void {
   host.addEventListener('pointerdown', (event) => {
     if (pointerId !== null || event.pointerType === 'mouse') return;
     if (monthSliding) return;
-    // 回弹动画还没结束时再次按下：取消兜底复位，交给这次拖动继续跟手。
     if (snapTimer !== undefined) {
       window.clearTimeout(snapTimer);
       snapTimer = undefined;
@@ -332,11 +274,8 @@ function enableSwipe(): void {
     const dy = event.clientY - startY;
     if (axis === '') {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-      // 纵向手势交给页面滚动，横向才由日历接管。
       axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
       if (axis === 'x') {
-        // 日历接管横滑：把外壳的下拉手势本次作废，斜划时不会再闪出下拉指示圈。
-        // 纵向手势不会走到这里，仍照旧能下拉刷新。
         suppressPull();
         card.dataset.drag = 'true';
         dragging.value = true;
@@ -349,10 +288,8 @@ function enableSwipe(): void {
     lastX = event.clientX;
     lastTime = now;
     deltaX = dx;
-    // 1:1 跟手，最多跟到卡片宽度；超出后停住，不把整张卡拖出屏幕。
     const width = cardWidth();
     const bounded = Math.max(-width, Math.min(width, dx));
-    // 卡片和两侧预览一起走：露出来的位置始终是相邻月份的日历，而不是空白。
     paintOffset(bounded, 'none');
     event.preventDefault();
   });
@@ -364,7 +301,6 @@ function enableSwipe(): void {
     const outcome = resolveCalendarSwipe({ deltaX, velocityX, width });
     if (outcome.commit) {
       clear();
-      void dismissHint();
       slideMonth(outcome.direction);
       return;
     }
@@ -380,13 +316,11 @@ function enableSwipe(): void {
   });
 }
 
-/** 手指按下就预取详情，点进去时不再等首屏。 */
 function warm(id: unknown): void {
   if (id === undefined || id === null) return;
   void api.exhibitions.get(String(id)).catch(() => undefined);
 }
 
-/** 启动公告：仅在开关打开且未读时提示一次。 */
 function announce(): void {
   const info = bootstrap.announcement;
   if (info.enabled !== true || !info.text) return;
@@ -418,21 +352,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header class="row" data-between="true">
-    <div class="stack" data-gap="sm">
-      <span class="eyebrow">{{ bootstrap.brand.en }}</span>
-      <h2>{{ bootstrap.brand.zh }}</h2>
-    </div>
-  </header>
-
   <div v-if="announcement" class="notice" data-tone="accent" role="status">
     <strong>{{ t('auth.login.announcement') }}</strong>
     <span>{{ announcement }}</span>
   </div>
 
-  <div class="row" data-between="true">
-    <strong>{{ monthLabel(view.year, view.month) }}</strong>
-    <div class="row">
+  <div class="calendar-toolbar">
+    <strong class="calendar-month-heading">{{ monthLabel(view.year, view.month) }}</strong>
+    <div class="calendar-nav">
       <button
         class="icon-button"
         data-variant="outlined"
@@ -453,12 +380,20 @@ onBeforeUnmount(() => {
       >
         <AppIcon name="chevronRight" />
       </button>
+      <button
+        class="icon-button"
+        data-variant="outlined"
+        type="button"
+        :aria-label="t('search.title')"
+        :title="t('search.title')"
+        @click="router.push('/search')"
+      >
+        <AppIcon name="search" />
+      </button>
     </div>
   </div>
 
   <div ref="swipeHost" class="calendar-swipe" :data-dragging="dragging ? 'true' : undefined">
-    <!-- 相邻月份预览：拖动时与当前月一起平移。预览只排日期（不带展会高亮），
-         落月后由真实数据重画；aria-hidden + inert 保证不会抢焦点或读屏。 -->
     <div ref="previousPreview" class="calendar calendar-preview" data-side="prev" aria-hidden="true" inert>
       <CalendarMonthPanel :year="previousMonth.year" :month="previousMonth.month" />
     </div>
@@ -489,14 +424,11 @@ onBeforeUnmount(() => {
     </div>
   </div>
 
-  <!-- 一次性提示：真滑动切过一次月份（或点「知道了」）就不再显示 -->
-  <HintNote v-if="hintVisible" :text="t('home.swipeMonthHint')" @dismiss="dismissHint" />
-
-  <div class="row" data-between="true">
-    <strong>{{
+  <div class="day-agenda-head">
+    <span class="section-label">{{
       view.day > 0 ? t('home.dayEventsOn', { month: view.month, day: view.day }) : t('home.dayEvents')
-    }}</strong>
-    <span class="dim">{{ selectedMeta }}</span>
+    }}</span>
+    <span class="pill">{{ selectedMeta }}</span>
   </div>
 
   <div v-if="error && hasContent" class="notice" data-tone="accent">
@@ -506,6 +438,7 @@ onBeforeUnmount(() => {
   <SkeletonBlock v-if="loading && !hasContent" :rows="2" />
   <StateBlock
     v-else-if="!loading && !error && items.length === 0 && meetings.length === 0"
+    icon="calendar"
     :title="t('home.emptyDay')"
     :description="t('home.emptyDayHint')"
     :action-label="t('admin.exhibitions.search')"
@@ -523,7 +456,7 @@ onBeforeUnmount(() => {
     <button
       v-for="item in items"
       :key="String(item.id)"
-      class="row-card"
+      class="row-card home-event-card"
       type="button"
       data-pressable="true"
       :aria-label="t('exhibition.list.viewAria', { title: String(item.title ?? '') })"
@@ -532,15 +465,20 @@ onBeforeUnmount(() => {
     >
       <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
       <span class="row-copy">
-        <span class="row" data-gap="md">
+        <span class="home-card-head">
           <strong class="row-title truncate">{{ item.title }}</strong>
           <StatusTag
             :text="modeLabel(String(item.statusCode || ''))"
             :tone="statusTone(String(item.statusCode || ''))"
           />
         </span>
-        <span class="row-meta">{{ item.time }} · {{ item.venue }}</span>
-        <span class="row-meta truncate">{{ item.category || '' }}</span>
+        <span class="meta-inline row-meta">
+          <span v-if="item.time">{{ item.time }}</span>
+          <span v-if="item.venue" class="truncate">{{ item.venue }}</span>
+        </span>
+        <span v-if="item.category" class="home-category-line">
+          <span class="home-category-chip">{{ item.category }}</span>
+        </span>
       </span>
     </button>
     <button
@@ -569,19 +507,36 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
+.calendar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.calendar-month-heading {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .calendar {
   position: relative;
   z-index: 1;
-  padding: var(--s2);
+  padding: 10px 8px 8px;
   border: var(--hairline) solid var(--stroke);
-  border-radius: var(--r-panel);
-  /* 纸面底色：日期数字压在浅灰填充上对比度只有 4.4:1，换白卡后灰显日期也够读。 */
-  background: var(--screen);
+  border-radius: var(--r-card);
+  background: var(--surface-card);
   will-change: transform;
 }
 
-/* 相邻月份预览：绝对定位铺满滑动区，随时和当前月一起平移。
-   默认停在左右两侧（拖动开始前不可见），当前月留在正常文档流里决定卡片高度。 */
 .calendar-preview {
   position: absolute;
   inset: 0;
@@ -599,5 +554,43 @@ onBeforeUnmount(() => {
 
 .calendar-preview[data-side='next'] {
   transform: translate3d(100%, 0, 0);
+}
+
+.day-agenda-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.home-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.home-card-head > .row-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.home-category-line {
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.home-category-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-chip);
+  background: var(--f3);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 500;
 }
 </style>

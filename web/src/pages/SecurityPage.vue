@@ -42,7 +42,7 @@ interface PasskeyRow {
 // 通行密钥排第一并带「推荐」；TOTP 把原来的「推荐」让出来。
 const modeOptions: Array<{ value: FactorMode; label: string }> = [
   { value: 'off', label: t('common.close') },
-  { value: 'passkey', label: `${t('security.passkey.title')} · ${t('security.passkey.recommended')}` },
+  { value: 'passkey', label: t('security.passkey.title') },
   { value: 'totp', label: 'TOTP' },
   { value: 'email', label: t('auth.login.emailCode') },
 ];
@@ -699,10 +699,9 @@ async function rebindTotp(): Promise<void> {
             <li v-for="item in passkeyRows" :key="item.id" class="passkey-item">
               <span class="passkey-copy">
                 <strong class="passkey-name">{{ item.name }}</strong>
-                <span class="row-meta">
-                  <template v-if="item.createdLabel">{{ item.createdLabel }}</template>
-                  <template v-if="item.createdLabel && item.lastUsedLabel"> · </template>
-                  <template v-if="item.lastUsedLabel">{{ item.lastUsedLabel }}</template>
+                <span class="meta-inline row-meta">
+                  <span v-if="item.createdLabel">{{ item.createdLabel }}</span>
+                  <span v-if="item.lastUsedLabel">{{ item.lastUsedLabel }}</span>
                 </span>
               </span>
               <button
@@ -752,22 +751,30 @@ async function rebindTotp(): Promise<void> {
 .security-page {
   display: flex;
   flex-direction: column;
-  gap: var(--s2);
+  gap: 10px;
 }
 
 .security-icon {
   flex: none;
-  display: inline-flex;
-  color: var(--ink-3);
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--f3);
+  color: var(--ink-2);
 }
 
-/* 右端动作：小字距标签，点整行都会打开对应抽屉。 */
 .security-action {
   flex: none;
-  color: var(--ink-3);
-  font-size: var(--fs-label);
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-chip);
+  background: var(--f3);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 500;
   white-space: nowrap;
 }
 

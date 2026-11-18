@@ -2,9 +2,7 @@
 /**
  * 屏幕 01 · 入口（登录 / 访客 / 两步验证）
  *
- * 账号开了两步验证时，`POST /auth/login` **不回令牌**，只回一张 5 分钟有效的预认证票
- * 并把验证码发到邮箱；这一步拿票 + 码换真正的会话。也就是说：密码对了但码没过，
- * 客户端手里没有任何可用凭据 —— 否则「密码泄露」就等于「账号到手」。
+ * 账号开启两步验证时，第一步只下发 5 分钟预认证票，第二步凭验证码或通行密钥换取正式会话。
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -23,37 +21,27 @@ const router = useRouter();
 const session = useSessionStore();
 const bootstrap = useBootstrapStore();
 
-/**
- * 用户协议：管理员开启后，登录的每一步（密码登录 / 两步验证 / 通行密钥）都要先勾选同意。
- * 摘要来自启动数据（`bootstrap.agreement`），未登录也能读到；关闭时整块不渲染。
- */
 const agreementEnabled = computed(() => bootstrap.agreement?.enabled === true);
 const agreementVersion = computed(() => Number(bootstrap.agreement?.version ?? 0) || 0);
 const agreed = ref(false);
-/** 勾选缺失的原因：显示在勾选框下面，不占表单顶部的请求错误行。 */
 const agreementError = ref('');
 
 watch(agreed, () => {
   agreementError.value = '';
 });
 
-/** 协议开启但没勾选时拦下当前动作；访客入口不经过这里。 */
 function agreementBlocked(): boolean {
   if (!agreementEnabled.value || agreed.value) return false;
   agreementError.value = t('agreement.consentRequired');
   return true;
 }
 
-/**
- * 建立会话后记下同意：服务端按版本校验，失败静默 —— 外壳的全局弹窗还会再兜一次，
- * 在登录页再弹一个红条只会让用户以为登录失败了。
- */
 async function recordAgreementConsent(): Promise<void> {
   if (!agreementEnabled.value || !agreed.value || agreementVersion.value <= 0) return;
   try {
     await api.profile.agree(agreementVersion.value);
   } catch {
-    /* 静默失败：全局「用户协议更新」弹窗会兜底 */
+    /* 静默失败：全局弹窗兜底 */
   }
 }
 
@@ -70,31 +58,22 @@ const resendBusy = ref(false);
 const expiredSession = computed(() => route.query.expired === '1');
 const expiredSessionMessage = t('auth.login.sessionExpired');
 
-/** 账号框的上限：这个框也能填邮箱，卡在用户名的 20 会把长邮箱直接挡在外面。 */
 const ACCOUNT_MAX = 120;
-/** 验证码框上限：6 位验证码或 `XXXXX-XXXXX` 备用码都装得下。 */
 const CODE_MAX = 12;
-/** 密码上限由后端配置下发；取不到时与注册页用同一个兜底值。 */
 const passwordMax = computed(() => Number(limit('passwordMax', 32)) || 32);
 
 const trustDeviceLabel = t('auth.login.trustDevice');
 
-/** 预认证票：第二步与重发都要用它；它本身不是登录凭据。 */
 const ticket = ref('');
-/** 验证码已消费时只重试启动数据；换会话后不能沿用这个完成标记。 */
 let verifiedSession: AbortSignal | undefined;
 const maskedEmail = ref('');
-/** 这个账号能用哪些第二因子（由第一步下发）：验证器 / 邮箱验证码 / 备用码 / 通行密钥。 */
 const methods = ref({ totp: false, email: true, backup: false, passkey: false });
-/** 当前环境能不能唤起系统通行密钥；不能时只摆验证码，不摆点不动的按钮。 */
 const passkeySupported = ref(isPasskeySupported());
 const passkeyBusy = ref(false);
-/** 第一步有没有真的发出邮件验证码（绑了验证器时不会发）。 */
 const emailSent = ref(false);
 const remaining = ref(0);
 let timer: number | undefined;
 
-/** 第一步说这个账号可以走通行密钥，且当前环境真的支持，才显示那个主按钮。 */
 const passkeyAvailable = computed(() => methods.value.passkey === true && passkeySupported.value);
 
 const methodHint = computed(() => {
@@ -104,10 +83,6 @@ const methodHint = computed(() => {
   return lines.join(' ');
 });
 
-/**
- * 第二步还能用哪种「手输码」：邮箱验证码、备用码，或者都没有。
- * 第二因子选了通行密钥时服务端会关掉邮箱验证码通道，界面不能再摆一个点了会失败的输入框。
- */
 const codeChannel = computed<'email' | 'backup' | 'none'>(() => {
   if (methods.value.email) return 'email';
   if (methods.value.backup) return 'backup';
@@ -119,13 +94,11 @@ const resendLabel = computed(() => {
   return emailSent.value ? t('auth.login.resendCode') : t('auth.login.sendEmailCode');
 });
 
-/** 登录前所在页面携带的参数（例如展会 id），登录后原样带回。 */
 function redirectTarget(): string {
   const value = route.query.redirect;
   return typeof value === 'string' && value ? value : paths.home;
 }
 
-/** 去注册页时把回跳地址一起带过去：从查询链接（未登录报名状态页）跳来的，注册后要回到原地址。 */
 function goRegister(): void {
   const value = route.query.redirect;
   void router.push(
@@ -133,7 +106,6 @@ function goRegister(): void {
   );
 }
 
-/** 进入登录态之后的收尾：记下协议同意 + 提示 + 跳回原页面（替换历史，不新增返回栈）。 */
 async function enterAs(): Promise<void> {
   await recordAgreementConsent();
   await refreshRuntimeBootstrap();
@@ -142,7 +114,6 @@ async function enterAs(): Promise<void> {
   await router.replace(redirectTarget());
 }
 
-/** 后端只回 `ok:false` 而没带原因时兜一句通用文案，否则错误行会是空白。 */
 function message(reason: unknown): string {
   const text = reason instanceof Error ? reason.message : String(reason);
   return text || t('auth.login.failed');
@@ -162,7 +133,6 @@ async function submit(): Promise<void> {
   try {
     const result = (await api.auth.login(account.value.trim(), password.value)) as AuthResult;
     if (result.twoFactorRequired) {
-      // 这一步没有令牌：只有一张票，外加（邮箱是主方式时）一封刚发出的验证码邮件
       ticket.value = String(result.ticket ?? '');
       methods.value = (result.methods as typeof methods.value) ?? methods.value;
       emailSent.value = result.emailSent === true;
@@ -193,7 +163,6 @@ async function verify(): Promise<void> {
       label: t('auth.login.emailCode'),
       required: true,
       max: CODE_MAX,
-      // 第二因子三选一：6 位验证码（验证器或邮箱），或 XXXXX-XXXXX 形式的备用码
       custom: (value) =>
         /^\d{6}$/.test(value) || /^[0-9A-Z]{5}-[0-9A-Z]{5}$/i.test(value) ? '' : t('auth.login.codeOrBackupInvalid'),
     });
@@ -220,7 +189,6 @@ async function verify(): Promise<void> {
   }
 }
 
-/** 用系统通行密钥完成第二步：用户取消不算失败；失败仍可继续输验证码。 */
 async function loginWithPasskey(): Promise<void> {
   if (!ticket.value || passkeyBusy.value) return;
   if (agreementBlocked()) return;
@@ -230,7 +198,6 @@ async function loginWithPasskey(): Promise<void> {
   try {
     const options = await api.auth.passkeyOptions(ticket.value);
     const credential = await getCredential(options.options);
-    // 用户在系统面板里取消：不弹错误，仍可用下面的验证码登录
     if (!credential) return;
     await api.auth.passkeyVerify({
       ticket: ticket.value,
@@ -238,7 +205,6 @@ async function loginWithPasskey(): Promise<void> {
       credential,
       trustDevice: trustThisDevice.value,
     });
-    // 断言通过等同于验证码通过：票已经换成会话，剩下只是等启动数据
     verified = true;
     verifiedSession = api.session.signal;
     await enterAs();
@@ -260,7 +226,6 @@ async function resend(): Promise<void> {
   try {
     const sent = await api.auth.loginCode(ticket.value);
     toast(t('auth.login.codeSent'), 'success');
-    // 从这一刻起才算「已经发过邮件」：按钮文案与「验证码已发送到…」都跟着变
     emailSent.value = true;
     startCountdown(Number((sent as { resendAfterSec?: number }).resendAfterSec));
   } catch (reason) {
@@ -270,7 +235,6 @@ async function resend(): Promise<void> {
   }
 }
 
-/** 访客身份也由后端签发：后端没起或端口没转发时必须说清楚，否则按钮像坏的。 */
 async function guest(): Promise<void> {
   error.value = '';
   guestBusy.value = true;
@@ -313,13 +277,10 @@ onBeforeUnmount(stopCountdown);
 </script>
 
 <template>
-  <!-- 入口页版式与旧版（master）一致：内容区的两道内距由外壳给（左右各 24px），
-       品牌方块靠左、标题与说明居中，注册 / 忘记密码跟在表单后面随内容滚动。 -->
-  <div class="stack">
-    <div class="stack" data-align="text">
+  <div class="stack auth-shell">
+    <div class="auth-hero">
       <span class="brand-mark" aria-hidden="true">{{ t('exhibition.detail.brandMark') }}</span>
       <h2>{{ bootstrap.brand.zh }}</h2>
-      <p class="muted">{{ t('auth.login.tagline') }}</p>
     </div>
 
     <div
@@ -333,7 +294,7 @@ onBeforeUnmount(stopCountdown);
     <p v-if="expiredSession" class="notice" data-tone="accent" role="status">{{ expiredSessionMessage }}</p>
 
     <!-- 第一步：账号与密码 -->
-    <form v-if="step === 1" class="form" novalidate @submit.prevent="submit">
+    <form v-if="step === 1" class="form auth-card" novalidate @submit.prevent="submit">
       <div class="field">
         <label for="login-account">{{ t('auth.login.account') }}</label>
         <input
@@ -364,7 +325,6 @@ onBeforeUnmount(stopCountdown);
           {{ password.length }}/{{ passwordMax }}
         </span>
       </div>
-      <!-- 用户协议：开启时登录的每一步都要先勾选同意；关闭时整块不渲染。 -->
       <div v-if="agreementEnabled" class="check-row agreement-consent">
         <label class="check-label" for="login-agreement">
           <input id="login-agreement" v-model="agreed" type="checkbox" />
@@ -392,24 +352,20 @@ onBeforeUnmount(stopCountdown);
     </form>
 
     <!-- 第二步：两步验证 -->
-    <form v-else class="form" novalidate @submit.prevent="verify">
+    <form v-else class="form auth-card" novalidate @submit.prevent="verify">
       <div class="stack" data-gap="sm">
         <h2>{{ t('auth.login.twoFactor') }}</h2>
-        <!-- 冒号而不是尾随空格：Android 会裁掉 string 资源的首尾空白 -->
         <p v-if="emailSent" class="muted">
           {{ t('auth.login.codeSentTo') }}<strong>{{ maskedEmail }}</strong>
         </p>
-        <!-- 邮箱验证码通道关着时（第二因子是通行密钥），说清楚还能用什么 -->
         <p v-else-if="codeChannel === 'none'" class="muted">
           {{ passkeySupported ? t('auth.login.passkeyOnlyHint') : t('auth.login.passkeyUnsupportedHint') }}
         </p>
         <p v-else-if="codeChannel === 'backup'" class="muted">{{ t('auth.login.backupOnlyHint') }}</p>
-        <!-- 绑了验证器时第一步不会自动发邮件（省一封多半用不上的信，也避开 60 秒冷却） -->
         <p v-else class="muted">{{ t('auth.login.totpOrEmailHint') }}</p>
         <p v-if="codeChannel !== 'none'" class="field-hint">{{ t('auth.login.codeHint') }}</p>
         <p v-if="methodHint" class="field-hint">{{ methodHint }}</p>
       </div>
-      <!-- 通行密钥优先：账号支持且环境可用时先给主按钮，验证码作为退路留在下面 -->
       <div v-if="passkeyAvailable" class="stack" data-gap="sm">
         <p class="field-hint">{{ t('auth.login.passkeyHint') }}</p>
         <button
@@ -447,7 +403,6 @@ onBeforeUnmount(stopCountdown);
           <span>{{ trustDeviceLabel }}</span>
         </label>
       </div>
-      <!-- 两步验证是建立会话前的最后一步，协议同意在这一步也要能勾选与拦截。 -->
       <div v-if="agreementEnabled" class="check-row agreement-consent">
         <label class="check-label" for="login-agreement">
           <input id="login-agreement" v-model="agreed" type="checkbox" />
@@ -469,7 +424,6 @@ onBeforeUnmount(stopCountdown);
       >
         {{ t('auth.login.verifyAndLogin') }}
       </button>
-      <!-- 邮箱验证码不可用（邮箱没验证）时，别摆一个点了会报错的按钮 -->
       <button
         v-if="methods.email"
         class="cta ghost"
@@ -483,7 +437,6 @@ onBeforeUnmount(stopCountdown);
       <button class="cta ghost" type="button" @click="backToStepOne">{{ t('auth.login.previousStep') }}</button>
     </form>
 
-    <!-- 第一步才有「注册 / 忘记密码」。 -->
     <div v-if="step === 1" class="stack" data-gap="sm">
       <footer class="row auth-entry">
         <span class="dim">{{ t('auth.login.noAccountYet') }}</span>
@@ -501,37 +454,51 @@ onBeforeUnmount(stopCountdown);
 </template>
 
 <style>
-/* 入口页的文字入口行（注册 / 忘记密码）：居中，并保持旧版的上下留白。
-   `data-flush` 是第二行，只留左右内距，避免两行之间被撑开。 */
+.auth-shell {
+  padding-top: var(--s3);
+}
+
+.auth-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+  padding-bottom: var(--s2);
+  text-align: center;
+}
+
+.auth-card {
+  padding: var(--s4);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-card);
+  background: var(--surface-card);
+}
+
 .auth-entry {
   justify-content: center;
-  padding: var(--s3);
+  padding: var(--s1) var(--s3);
 }
 
 .auth-entry[data-flush='true'] {
   padding: 0 var(--s3);
 }
 
-/* 通行密钥与验证码之间的分隔小标题：小字加粗，弱化但不抢主按钮。 */
 .or-code-title {
   margin-top: var(--s1);
-  color: var(--ink-3);
-  font-size: var(--fs-label);
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
 }
 
-/* 入口页的品牌标记：线框的 .brand-mark（圆角方底 + 品牌首字）。
-   旧版的入口 hero 用的是 `.ph-img`（无描边、只填底色），这里保持一致。 */
 .brand-mark {
-  width: 72px;
-  height: 72px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
-  border-radius: var(--r-panel);
-  background: var(--f2);
-  color: var(--frame);
-  font-size: 30px;
-  font-weight: 800;
+  border-radius: var(--r-card);
+  background: var(--accent-solid);
+  color: var(--on-dark);
+  font-size: var(--fs-lg);
+  font-weight: 600;
 }
 </style>

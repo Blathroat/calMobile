@@ -10,7 +10,6 @@ import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
 import { useRevealReady } from '@/composables/useReveal';
-import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { tagRead, type CachedRead } from '@/services/query-cache';
 import { usePullRefresh } from '@/services/pull-refresh';
@@ -27,7 +26,6 @@ import { t } from '@/i18n';
 
 const router = useRouter();
 const session = useSessionStore();
-const bootstrap = useBootstrapStore();
 
 interface Activities {
   registrations: Registration[];
@@ -113,10 +111,7 @@ function openLogin(): void {
 
 <template>
   <div class="row" data-between="true">
-    <div class="stack" data-gap="sm">
-      <span class="eyebrow">{{ bootstrap.brand.en }}</span>
-      <h2>{{ t('registration.list.title') }}</h2>
-    </div>
+    <h2>{{ t('registration.list.title') }}</h2>
     <span class="pill">{{ countLabel }}</span>
   </div>
 
@@ -180,8 +175,8 @@ function openLogin(): void {
                 </span>
                 <span class="row-meta reg-when">
                   {{ formatRecordDate(record) }}
-                  <span v-if="record.exhibitionTime" class="reg-when-time"
-                    >· <span class="reg-time">{{ record.exhibitionTime }}</span></span
+                  <span v-if="record.exhibitionTime" class="reg-when-time">
+                    <span class="reg-time">{{ record.exhibitionTime }}</span></span
                   >
                 </span>
                 <span class="row-meta truncate">{{ record.exhibitionVenue }}</span>

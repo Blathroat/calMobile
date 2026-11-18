@@ -54,25 +54,26 @@ function toggleLock(): void {
       class="row-card"
       type="button"
       data-pressable="true"
-      style="border: 0; padding: 0; background: transparent"
       :aria-label="t('exhibition.list.viewAria', { title: item.title })"
       @click="router.push(`/detail/${item.id}`)"
     >
       <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
       <span class="row-copy">
-        <strong class="row-title truncate">{{ item.title }}</strong>
+        <span class="name-line" style="justify-content: space-between">
+          <strong class="row-title truncate">{{ item.title }}</strong>
+          <StatusTag
+            :text="modeLabel(String(item.statusCode || ''))"
+            :tone="statusTone(String(item.statusCode || ''))"
+          />
+        </span>
         <span class="row-meta">{{ `${formatDateWithWeekday(item.date)} ${String(item.time ?? '')}`.trim() }}</span>
         <span class="row-meta truncate">{{ item.venue }}</span>
         <span class="row-meta">{{
-          t('exhibition.list.statusWithRegistrations', {
-            status: modeLabel(String(item.statusCode ?? '')),
-            count: String(item.registrationCount ?? 0),
-          })
+          t('profile.public.registrationCount', { count: String(item.registrationCount ?? 0) })
         }}</span>
       </span>
-      <StatusTag :text="modeLabel(String(item.statusCode || ''))" :tone="statusTone(String(item.statusCode || ''))" />
     </button>
-    <div class="grid-cols-2">
+    <div class="action-row">
       <button
         class="cta ghost"
         data-size="small"

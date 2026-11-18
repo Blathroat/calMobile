@@ -25,8 +25,8 @@ const initial = (): string => (props.name || t('profile.avatarInitial')).slice(0
 
 <style>
 .avatar-lg {
-  width: 56px;
-  height: 56px;
-  font-size: 21px;
+  width: 52px;
+  height: 52px;
+  font-size: var(--fs-lg);
 }
 </style>

@@ -121,7 +121,6 @@ function agreementMeta(user: User): string {
           class="row-card"
           type="button"
           data-pressable="true"
-          style="border: 0; padding: 0; background: transparent; width: 100%"
           :aria-label="t('admin.users.viewPublicAria', { name: String(user.nickname ?? '') })"
           @click="emit('open-public', user)"
         >
@@ -132,7 +131,6 @@ function agreementMeta(user: User): string {
               <RoleTag :role-code="String(user.roleCode || '')" />
             </span>
             <span class="row-meta">{{ lastLoginMeta(user) }}</span>
-            <!-- 用户协议开启时，每个账号同意到哪一版也要能看见（关闭时整行不渲染）。 -->
             <span v-if="agreementMeta(user)" class="row-meta" data-agreement-status="true">{{
               agreementMeta(user)
             }}</span>
@@ -145,8 +143,7 @@ function agreementMeta(user: User): string {
             :tone="statusTone(String(user.statusCode || ''))"
           />
         </button>
-        <div class="action-row">
-          <!-- 到期的展商已降为普通用户，但他们的展会/会议还在，管理员仍要能从卡片接管 -->
+        <div class="action-row" style="flex-wrap: wrap">
           <template v-if="user.roleCode === 'exhibitor' || user.roleCode === 'admin' || user.exhibitorExpired === true">
             <button class="cta ghost" data-size="small" type="button" @click="emit('open-exhibitions', user)">
               {{ copy.manageExhibitions }}
@@ -164,17 +161,16 @@ function agreementMeta(user: User): string {
           <button class="cta ghost" data-size="small" type="button" @click="emit('adjust-role', user)">
             {{ copy.adjustRole }}
           </button>
+          <button
+            v-if="user.twoFactorEnabled === true"
+            class="cta ghost"
+            data-size="small"
+            type="button"
+            @click="emit('disable-two-factor', user)"
+          >
+            {{ t('admin.users.disableTwoFactor') }}
+          </button>
         </div>
-        <!-- 兜底出口：用户邮箱用不了（离职、邮箱被回收）时，只有管理员能帮他关掉两步验证 -->
-        <button
-          v-if="user.twoFactorEnabled === true"
-          class="cta ghost"
-          data-size="small"
-          type="button"
-          @click="emit('disable-two-factor', user)"
-        >
-          {{ t('admin.users.disableTwoFactor') }}
-        </button>
       </div>
     </div>
   </template>

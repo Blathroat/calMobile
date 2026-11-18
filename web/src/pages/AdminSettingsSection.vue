@@ -292,18 +292,12 @@ function clearAgreementContent(): void {
     @action="emit('retry')"
   />
   <template v-else>
-    <div class="notice" data-tone="accent">
-      <strong>{{ t('admin.settings.server') }}</strong>
-      <span>{{ t('admin.settings.serverScope') }}</span>
-    </div>
-
     <div class="card">
       <span class="section-label">{{ copy.storageTitle }}</span>
       <div class="storage-meter" :data-full="storageFull ? 'true' : 'false'">
         <span :style="{ width: storagePercent + '%' }" />
       </div>
       <p class="field-hint">{{ storageCaption }}</p>
-      <p class="field-hint">{{ copy.storageHint }}</p>
       <div class="settings-rows">
         <div class="setting-row">
           <label for="settings-storage-mb">{{ copy.storageLimit }}</label>
@@ -417,7 +411,6 @@ function clearAgreementContent(): void {
           </span>
         </div>
       </div>
-      <p class="field-hint">{{ t('admin.settings.accentHint') }}</p>
     </div>
 
     <!-- 缺省展会封面：展会自己没有封面时用它替掉占位图；留空即回到占位图。
@@ -611,7 +604,6 @@ function clearAgreementContent(): void {
 
     <div class="card">
       <span class="section-label">{{ t('admin.invites.title') }}</span>
-      <p class="field-hint">{{ t('admin.invites.hint') }}</p>
       <!-- 三个数字字段并排：次数、码有效期、兑换后的展商时长 -->
       <div class="grid-cols-3">
         <div class="field">
@@ -838,7 +830,6 @@ function clearAgreementContent(): void {
 
     <div class="card">
       <span class="section-label">{{ t('admin.limits.formChars') }}</span>
-      <p class="field-hint">{{ copy.limitIntro }}</p>
       <div v-for="group in limitGroups" :key="group.id" class="limit-group">
         <span class="limit-group-title">{{ group.title }}</span>
         <div v-for="(row, rowIndex) in pairLimits(group.items)" :key="group.id + '-' + rowIndex" class="limit-pair">
@@ -857,14 +848,11 @@ function clearAgreementContent(): void {
                 <span class="setting-unit">{{ item.unit }}</span>
               </span>
             </div>
-            <p class="field-hint">{{ item.hint }}</p>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 软件包下载：检查更新和报名站下载条都读这一份配置。
-         直链只填 APK 地址；GitHub 仓库交给服务器追踪最新 Release。 -->
     <div class="card">
       <span class="section-label">{{ t('admin.download.title') }}</span>
       <div class="field">
@@ -875,7 +863,6 @@ function clearAgreementContent(): void {
           :label="t('admin.download.source')"
           @update:model-value="form.download.source = $event === 'github' ? 'github' : 'url'"
         />
-        <p class="field-hint">{{ t('admin.download.hint') }}</p>
       </div>
       <div v-if="form.download.source === 'url'" class="field">
         <label for="settings-download-url">{{ t('admin.download.url') }}</label>
@@ -1020,7 +1007,7 @@ function clearAgreementContent(): void {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent);
+  background: var(--accent-solid);
   transition: width var(--motion-base) var(--ease);
 }
 
