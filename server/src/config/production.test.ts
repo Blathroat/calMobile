@@ -100,6 +100,18 @@ test('可疑但可能有意为之的只给警告，不拦启动', () => {
   assert.match(text, /报名站/);
 });
 
+test('Cloudflare 真实地址头与反代信任不一致时只警告', () => {
+  const { fatal, warnings } = productionProblems(readyEnv({ TRUST_CLOUDFLARE: '1', TRUST_PROXY: '' }));
+  assert.deepEqual(fatal, []);
+  assert.match(warnings.join('；'), /TRUST_CLOUDFLARE/);
+  // 反代信任配好时不再提示
+  const ready = productionProblems(readyEnv({ TRUST_CLOUDFLARE: '1' }));
+  assert.equal(
+    ready.warnings.some((item) => /TRUST_CLOUDFLARE/.test(item)),
+    false,
+  );
+});
+
 test('默认语言包名称不在下载列表里时只警告，不拒绝启动', () => {
   const { fatal, warnings } = productionProblems(
     readyEnv({

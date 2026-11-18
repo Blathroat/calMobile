@@ -128,23 +128,35 @@ async function bodyOf(c: Context): Promise<Record<string, any>> {
   }
 }
 
-function requestIp(c: Context, trustProxy: TrustProxy): string {
+/** 认证路由需要的取址配置：反代信任与 Cloudflare 头。 */
+interface RequestIpOptions {
+  trustProxy: TrustProxy;
+  trustCloudflare?: boolean;
+}
+
+function requestIp(c: Context, options: RequestIpOptions): string {
   const env = c.env as NodeEnv | undefined;
   return clientIp(
-    { remoteAddress: env?.incoming?.socket?.remoteAddress, forwardedFor: c.req.header('x-forwarded-for') },
-    trustProxy,
+    {
+      remoteAddress: env?.incoming?.socket?.remoteAddress,
+      forwardedFor: c.req.header('x-forwarded-for'),
+      cloudflareAddress: c.req.header('cf-connecting-ip'),
+    },
+    options.trustProxy,
+    { trustCloudflare: options.trustCloudflare },
   );
 }
 
 /**
  * 登录成功：记最近登录时间、客户端 IP 与离线解析出的地区。
  *
+ * - 每次登录都刷新（密码登录、可信设备跳过两步验证、两步验证通过、通行密钥登录都走这一条）；
  * - 地区用 `services/ip-region.ts` 查（懒加载的离线 xdb），查不到给空串，不影响登录；
  * - IP 原文只落库（排查用），响应里只下发格式化后的地区（`domain/payloads.ts`）；
  * - 注册建号是「建号即登录」，在 INSERT 里一次写全，不经过这里（少一次 UPDATE）。
  */
-async function recordLogin(c: Context, trustProxy: TrustProxy, userId: string): Promise<void> {
-  const ip = requestIp(c, trustProxy);
+async function recordLogin(c: Context, options: RequestIpOptions, userId: string): Promise<void> {
+  const ip = requestIp(c, options);
   const region = await lookupIpRegion(ip);
   await query('UPDATE users SET last_login_time = now(), last_login_ip = $2, last_login_region = $3 WHERE id = $1', [
     userId,
@@ -168,12 +180,12 @@ function passkeyRelyingParty() {
   return { rpId: config.rpId, origins: config.origins };
 }
 
-function authLimiter(trustProxy: TrustProxy) {
+function authLimiter(options: RequestIpOptions) {
   return honoRateLimit({
     windowMs: 5 * 60 * 1000,
     max: 10,
     message: '尝试过于频繁，请稍后再试',
-    ip: (c) => requestIp(c, trustProxy),
+    ip: (c) => requestIp(c, options),
     identity: async (c) => {
       try {
         const body = await bodyOf(c);
@@ -215,9 +227,9 @@ async function requireUser(c: Context) {
   return user;
 }
 
-export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
+export function createAuthRoutes(options: RequestIpOptions): Hono {
   const app = new Hono();
-  const limited = authLimiter(options.trustProxy);
+  const limited = authLimiter(options);
 
   app.post('/login', limited, async (c) => {
     const parsed = safeParseSchema(loginSchema, await bodyOf(c));
@@ -239,7 +251,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
         return failureResponse(c, '两步验证邮箱不可用，请联系管理员关闭两步验证');
       }
       if (await useTrustedDevice(account.id, device.deviceHash)) {
-        await recordLogin(c, options.trustProxy, account.id);
+        await recordLogin(c, options, account.id);
         const session = await issueSession(account as unknown as Parameters<typeof issueSession>[0], device);
         return jsonResponse(c, {
           ok: true,
@@ -257,7 +269,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
             purpose: 'login',
             email: account.email,
             userId: account.id,
-            ip: requestIp(c, options.trustProxy),
+            ip: requestIp(c, options),
           })
         : null;
       return jsonResponse(c, {
@@ -278,7 +290,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
         },
       });
     }
-    await recordLogin(c, options.trustProxy, account.id);
+    await recordLogin(c, options, account.id);
     const session = await issueSession(account as unknown as Parameters<typeof issueSession>[0], device);
     return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(account.id) });
   });
@@ -307,7 +319,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     }
     if (!(await consumeTicket(found.id))) return failureResponse(c, '验证已使用，请重新登录');
     if (trustDevice === true) await rememberTrustedDevice(row.id, device);
-    await recordLogin(c, options.trustProxy, row.id);
+    await recordLogin(c, options, row.id);
     const session = await issueSession(row, device);
     return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(row.id) });
   });
@@ -335,7 +347,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
       purpose: 'login',
       email: row.email,
       userId: row.id,
-      ip: requestIp(c, options.trustProxy),
+      ip: requestIp(c, options),
     });
     return jsonResponse(c, { ok: true, error: '', ...sent, maskedEmail: maskEmail(row.email) });
   });
@@ -428,7 +440,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     await touchCredential(stored.id, verified.counter);
     if (!(await consumeTicket(found.id))) return failureResponse(c, '验证已使用，请重新登录');
     if (body.trustDevice === true) await rememberTrustedDevice(row.id, device);
-    await recordLogin(c, options.trustProxy, row.id);
+    await recordLogin(c, options, row.id);
     const session = await issueSession(row, device);
     return jsonResponse(c, { ok: true, error: '', ...session, user: await loadUser(row.id) });
   });
@@ -460,7 +472,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
       purpose: 'register',
       email,
       payload: pending,
-      ip: requestIp(c, options.trustProxy),
+      ip: requestIp(c, options),
     });
     return jsonResponse(c, { ok: true, error: '', ...ticket });
   });
@@ -499,7 +511,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
     const role = pending.inviteCode ? 'exhibitor' : 'user';
     // 建号即登录：注册成功直接算一次登录（迁移 0024 也按同一口径回填老账号），
     // 地区在事务外先解析好，避免加载 xdb 时占着事务里的连接。
-    const loginIp = requestIp(c, options.trustProxy);
+    const loginIp = requestIp(c, options);
     const loginRegion = await lookupIpRegion(loginIp);
     try {
       await transaction(async (client) => {
@@ -551,7 +563,7 @@ export function createAuthRoutes(options: { trustProxy: TrustProxy }): Hono {
       email,
       userId: account ? account.id : null,
       silent: !account,
-      ip: requestIp(c, options.trustProxy),
+      ip: requestIp(c, options),
     });
     return jsonResponse(c, { ok: true, error: '', ...ticket });
   });

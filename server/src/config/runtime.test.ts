@@ -75,6 +75,12 @@ test('trust proxy 默认关闭，只有显式声明才打开', () => {
   assert.equal(resolveRuntime(argv(), { TRUST_PROXY: 'loopback' }).trustProxy, 'loopback', '也接受常见的来源写法');
 });
 
+test('Cloudflare 的真实地址头默认不认，显式打开才用', () => {
+  assert.equal(resolveRuntime(argv(), {}).trustCloudflare, false);
+  assert.equal(resolveRuntime(argv(), { TRUST_CLOUDFLARE: '0' }).trustCloudflare, false);
+  assert.equal(resolveRuntime(argv(), { TRUST_CLOUDFLARE: '1' }).trustCloudflare, true);
+});
+
 test('语言包列表按名称收录，默认名称不在列表里时报名站用中文', () => {
   const matched = resolveRuntime(argv('--production'), {
     LANG_PACK_DEFAULT: 'en',

@@ -74,6 +74,7 @@ const app = createApp({
   corsOrigin: config.corsOrigin,
   logLevel: config.logLevel,
   trustProxy: runtime.trustProxy,
+  trustCloudflare: runtime.trustCloudflare,
   statusPageEnabled: runtime.statusPageEnabled,
   pingEnabled: runtime.pingEnabled,
   healthEnabled: runtime.healthEnabled,

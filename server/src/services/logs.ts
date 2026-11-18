@@ -243,7 +243,10 @@ function skipsLogging(path: string): boolean {
  * - 4xx → `warn`，5xx → `error`（GET 也记，因为这意味着页面在报错）；
  * - 登录/注册这类认证接口无论成功失败都记（成功记结果，失败记 `ok:false` 的原因）。
  */
-export function apiRequestLog(options: { trustProxy: TrustProxy }): MiddlewareHandler<HonoEnv> {
+export function apiRequestLog(options: {
+  trustProxy: TrustProxy;
+  trustCloudflare?: boolean;
+}): MiddlewareHandler<HonoEnv> {
   const trustProxy = ensureTrustProxy(options.trustProxy);
   return async (c: Context<HonoEnv>, next) => {
     const startedAt = Date.now();
@@ -260,8 +263,13 @@ export function apiRequestLog(options: { trustProxy: TrustProxy }): MiddlewareHa
     const user = c.get('user') as AuthedUser | undefined;
     const incoming = (c.env as NodeEnv | undefined)?.incoming;
     const ip = clientIp(
-      { remoteAddress: incoming?.socket?.remoteAddress, forwardedFor: c.req.header('x-forwarded-for') },
+      {
+        remoteAddress: incoming?.socket?.remoteAddress,
+        forwardedFor: c.req.header('x-forwarded-for'),
+        cloudflareAddress: c.req.header('cf-connecting-ip'),
+      },
       trustProxy,
+      { trustCloudflare: options.trustCloudflare },
     );
     const category = path.split('/')[3] || 'api';
     let level: LogLevel = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';

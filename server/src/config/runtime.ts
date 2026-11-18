@@ -20,6 +20,8 @@
  * - `langPacks`：`LANG_PACK_DEFAULT` 与 `LANG_PACK_URLS`。只下发名称和链接，不带正文；
  * - `trustProxy`：反代后面必须显式打开，否则 `req.ip` 会是代理地址，
  *   按 IP 的验证码限流会退化成「全体用户共用一个 1 小时 20 条」的额度；
+ * - `trustCloudflare`：经 Cloudflare 转发时，用 `CF-Connecting-IP` 记客户端地址，
+ *   否则记下的是 Cloudflare 边缘节点，最近登录地区会一直是机房所在地；
  * - `startedBy`：给启动日志用，一眼看出这次是 `pnpm start` 还是 `pnpm dev` 起的。
  */
 
@@ -45,6 +47,8 @@ export interface Runtime {
   /** 是否托管浏览器报名站。 */
   webEnabled: boolean;
   trustProxy: TrustProxy;
+  /** `TRUST_CLOUDFLARE`：经 Cloudflare 转发时按 `CF-Connecting-IP` 记客户端地址。 */
+  trustCloudflare: boolean;
   startedBy: string;
   /** 对外访问地址（`PUBLIC_BASE_URL`，已去掉尾斜杠）：域名/端口对外暴露的那一个。 */
   publicBaseUrl: string;
@@ -122,6 +126,10 @@ export function resolveRuntime(argv: string[] = [], env: EnvLike = {}): Runtime 
     trustProxy = /^\d+$/.test(trustSetting) ? Number(trustSetting) : trustSetting;
   }
 
+  // Cloudflare 会把真实客户端地址写进 CF-Connecting-IP。它只在经过 Cloudflare 时可信，
+  // 所以由部署的人显式打开；解析时还要求地址链里有可信反代（见 http/client-ip.ts）。
+  const trustCloudflare = bool(env.TRUST_CLOUDFLARE);
+
   return {
     nodeEnv,
     isProduction,
@@ -130,6 +138,7 @@ export function resolveRuntime(argv: string[] = [], env: EnvLike = {}): Runtime 
     healthEnabled,
     webEnabled,
     trustProxy,
+    trustCloudflare,
     // pnpm / npm 都会设置这个变量：`start` / `dev` / `test` 之一，用于启动日志与排查。
     startedBy: String(env.npm_lifecycle_event || '').trim(),
     // 对外地址：给状态页与 /ping 显示，也是以后邮件里绝对链接的基址。
@@ -240,6 +249,7 @@ export const pingEnabled = resolved.pingEnabled;
 export const healthEnabled = resolved.healthEnabled;
 export const webEnabled = resolved.webEnabled;
 export const trustProxy = resolved.trustProxy;
+export const trustCloudflare = resolved.trustCloudflare;
 export const startedBy = resolved.startedBy;
 export const publicBaseUrl = resolved.publicBaseUrl;
 export const privacyPolicyUrl = resolved.privacyPolicyUrl;

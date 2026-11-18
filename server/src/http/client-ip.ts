@@ -12,14 +12,28 @@
  * 地址表的顺序与 proxy-addr 一致：`[socket 地址, ...X-Forwarded-For 从右到左]`。
  * 全部信任时返回最左边的 X-Forwarded-For（客户端自己声明的那个值）——这就是
  * 「信任所有人」的代价，与迁移前的行为完全相同。
+ *
+ * **Cloudflare**：经过 Cloudflare 时，它把真实客户端地址写进 `CF-Connecting-IP`，
+ * 而 `X-Forwarded-For` 会被后面的反代再追加一跳（Cloudflare 的边缘地址），
+ * 按跳数解析只能拿到边缘节点。`TRUST_CLOUDFLARE` 打开后改用这个头，但仍然要求
+ * 地址链里**至少有一跳是可信反代**：没有反代时客户端能自己伪造这个头，
+ * 不能让直连请求凭它绕过按 IP 的限流。
  */
 
 import type { TrustProxy } from '../config/runtime.js';
 
-/** 解析一次请求需要的输入：socket 对端地址 + X-Forwarded-For 原值。 */
+/** 解析一次请求需要的输入：socket 对端地址 + X-Forwarded-For 原值 + Cloudflare 的真实地址。 */
 export interface ClientIpRequest {
   remoteAddress?: string;
   forwardedFor?: string;
+  /** `CF-Connecting-IP`：Cloudflare 写入的客户端地址，只在其边缘转发时才有。 */
+  cloudflareAddress?: string;
+}
+
+/** 取址策略：`trust` 之外的部署声明。 */
+export interface ClientIpOptions {
+  /** `TRUST_CLOUDFLARE`：经 Cloudflare 转发时优先用 `CF-Connecting-IP`。 */
+  trustCloudflare?: boolean;
 }
 
 type IpKind = 'ipv4' | 'ipv6';
@@ -286,18 +300,61 @@ export function parseForwardedFor(header: string | undefined): string[] {
 /**
  * 取这次请求的客户端 IP。
  *
- * @param request socket 对端地址与 X-Forwarded-For 原值
+ * @param request socket 对端地址、X-Forwarded-For 原值与 CF-Connecting-IP
  * @param trust    `TRUST_PROXY` 的取值（Runtime.trustProxy）
+ * @param options  `TRUST_CLOUDFLARE`：有可信反代时用 Cloudflare 给的地址覆盖解析结果
  */
-export function clientIp(request: ClientIpRequest, trust: TrustProxy | TrustFunction): string {
+export function clientIp(
+  request: ClientIpRequest,
+  trust: TrustProxy | TrustFunction,
+  options: ClientIpOptions = {},
+): string {
   const addresses = [request.remoteAddress ?? '', ...parseForwardedFor(request.forwardedFor)];
   const trustFn = typeof trust === 'function' ? trust : compileTrustProxy(trust);
-  for (let index = 0; index < addresses.length - 1; index += 1) {
+  let trustedHops = 0;
+  let index = 0;
+  for (; index < addresses.length - 1; index += 1) {
     if (trustFn(addresses[index]!, index)) {
+      trustedHops += 1;
       continue;
     }
-    addresses.length = index + 1;
     break;
   }
-  return addresses[addresses.length - 1] ?? '';
+  const resolved = addresses[Math.min(index, addresses.length - 1)] ?? '';
+  // 只有「请求确实经过了可信反代」才认 Cloudflare 的头：直连请求里的这个头是客户端自己写的。
+  if (options.trustCloudflare === true && trustedHops > 0) {
+    const cloudflare = cloudflareAddressOf(request.cloudflareAddress);
+    if (cloudflare) {
+      return cloudflare;
+    }
+  }
+  return resolved;
+}
+
+/** IPv4 的 32 位整数 → 点分十进制。 */
+function ipv4Text(value: bigint): string {
+  return [24n, 16n, 8n, 0n].map((shift) => String((value >> shift) & 0xffn)).join('.');
+}
+
+/**
+ * `CF-Connecting-IP` 的取值整理：只接受合法 IP，IPv4-mapped 的 IPv6 还原成点分 IPv4。
+ *
+ * 非法值给空串，调用方退回按 X-Forwarded-For / socket 解析出来的地址；
+ * 这个头坏了不能让登录失败。
+ */
+function cloudflareAddressOf(value: string | undefined): string {
+  const text = String(value ?? '')
+    .trim()
+    .replace(/^\[|\]$/g, '')
+    .split('%')[0]!
+    .trim();
+  if (!text) {
+    return '';
+  }
+  const parsed = parseAddress(text);
+  if (!parsed) {
+    return '';
+  }
+  const canonical = canonicalize(parsed);
+  return canonical.kind === 'ipv4' ? ipv4Text(canonical.value) : text;
 }
