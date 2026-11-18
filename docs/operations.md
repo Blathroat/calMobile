@@ -100,6 +100,71 @@ iPhone 真机验收（Safari，或从主屏幕打开）：
 7. 开飞行模式后从主屏幕重新打开：页面壳仍能打开，数据请求失败有可见提示（没有离线数据）；恢复网络后重新打开能加载新页面。
 8. 设置页没有「应用更新」组；换语言包后主屏幕名称与图标不变。
 
+### 本机与 iPhone 本地验收
+
+PWA 的安装、Service Worker 和摄像头都要求安全上下文：桌面 `127.0.0.1` 算安全上下文；iPhone 必须用 HTTPS（`http://<局域网 IP>` 不行）。按下面两条路测试，第一条快，第二条才能测到 iOS 专有行为。
+
+**A. 桌面 Chrome 快速验收**
+
+```bash
+docker compose up -d
+cd server
+cp .env.example .env          # 首次
+pnpm install --frozen-lockfile
+pnpm db:migrate
+pnpm db:seed
+pnpm dev                      # 终端 A，http://127.0.0.1:3000
+```
+
+```bash
+pnpm --dir web build          # 终端 B，从仓库根目录执行
+```
+
+Chrome 打开 `http://127.0.0.1:3000/app/`，用 `demo` / `exhibitor` / `user`（密码都是 `password`）验证三种角色。DevTools → Application 里可以看 Manifest、Service Workers、Cache Storage；Network 勾 Offline 后刷新可以验证页面壳离线。地址栏的安装按钮可以装到桌面。这里能验证 manifest、SW、API、选图/下载/CSV/ICS、通知权限、响应式布局；iOS 的独立窗口、安全区、HEIC/MOV、系统分享面板和主屏幕安装仍要 iPhone。
+
+**B. iPhone 真机（cloudflared 临时 HTTPS，推荐）**
+
+1. 先按 A 启动 Docker 和 `pnpm --dir server dev`，确认 `http://127.0.0.1:3000/ping` 正常。
+2. 另开终端启动临时隧道：
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:3000
+```
+
+记下输出的 `https://xxxx.trycloudflare.com`，下面用 `BASE` 表示它。
+
+3. 用隧道地址重启后端，并重新构建页面（页面里的接口地址是构建期写死的）：
+
+```bash
+BASE=https://xxxx.trycloudflare.com
+APP_API_BASE="$BASE/api/v1" PUBLIC_BASE_URL="$BASE" TRUST_PROXY=1 pnpm --dir server dev
+```
+
+```bash
+APP_API_BASE="$BASE/api/v1" pnpm --dir web build
+```
+
+PowerShell 写法：
+
+```powershell
+$BASE = "https://xxxx.trycloudflare.com"
+$env:APP_API_BASE = "$BASE/api/v1"
+$env:PUBLIC_BASE_URL = "$BASE"
+$env:TRUST_PROXY = "1"
+pnpm --dir server dev
+# 另开窗口：$env:APP_API_BASE = "$BASE/api/v1"; pnpm --dir web build
+```
+
+4. iPhone Safari 打开 `$BASE/app/`：首页应出现安装引导；分享 →「添加到主屏幕」后从主屏幕启动。按上面的真机验收清单勾一遍。
+
+注意：
+
+- `APP_API_BASE` 是**页面构建期**变量，隧道地址变了要重新 `pnpm --dir web build`；`PUBLIC_BASE_URL` 是**服务端运行期**变量，改了要重启后端。两个都必须是同一个隧道源，否则页面会去请求 iPhone 自己的 `127.0.0.1`，或分享链接拼错。
+- 临时隧道域名每次启动都变；只做一次验收够用。要反复测试通行密钥（WebAuthn 的 RP ID 绑定域名）或让 iPhone 长期访问，用 cloudflared 命名隧道、ngrok 固定域名，或局域网 + mkcert/Caddy 的可信证书；换域名后已安装的主屏幕图标要删掉重加。
+- 快速隧道被网络环境拦截时，可换 ngrok，或在局域网用 Caddy `tls internal` / mkcert 生成证书并让 iPhone 信任根证书；`http://` 下 Service Worker 不会注册，安装也会退化成普通书签。
+- 验证离线：首次在线打开、等 SW 装好并刷新一次后，开飞行模式从主屏幕启动；页面壳应出现，数据请求失败要有可见提示；恢复网络后重新打开。
+- 验证安装名/描述：`PWA_APP_NAME=... PWA_APP_SHORT_NAME=... pnpm --dir web build` 后重新添加到主屏幕。已安装的名称为系统快照，不会因改 `zh.json` 自动更新。
+
 ### 发布链路
 
 推送到 `master` 的合并提交在 CI 成功之后，`.github/workflows/release.yml` 按这次推送的路径发布。普通提交只跑 CI，不发布；功能分支和拉取请求不发布。会触发发布或更新的改动走 PR，用合并提交合入，不要直接推到 `master`。合入前要等该拉取请求自己的 CI 成功。检查还在跑或失败时不要合并。合并之后 `master` 上还会再跑一次推送 CI，那一次才决定自动 Release。
