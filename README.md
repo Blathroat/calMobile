@@ -149,6 +149,7 @@ pnpm build:join # 报名站构建（server 的 pnpm dev 也会自动构建）
 ## 说明
 
 - 应用必须连接后端，没有离线数据层。iPhone 主屏幕应用的页面壳可以离线打开，月历、展会与报名数据仍需联网。
+- 网站、PWA 与 APK 的图标默认用 `web/public/icons/icon-1024.png`；构建机可用 `APP_ICON` / `APP_ICON_BACKGROUND` 覆盖同一张源图，详见 [`docs/operations.md`](docs/operations.md) 的「应用图标」。
 - iPhone 不提供 APK：用 Safari 打开 `/app/` 并添加到主屏幕即可，页面包在下次打开时更新；没有检查更新与自动更新。
 - 上传的头像、封面与简介媒体保存在服务器；视频只校验大小与后缀，不转码。
 - 通知只有数据库记录与系统权限申请，没有推送通道。

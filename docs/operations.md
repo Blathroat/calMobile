@@ -11,7 +11,7 @@
 | 改动 | 命令 |
 |---|---|
 | Vue 页面、组件、样式、界面文案 | `pnpm --dir web typecheck`、`pnpm --dir web lint`、`pnpm --dir web fmt:check`、`pnpm --dir web test`、`pnpm --dir web build`（改了报名站页面再跑 `pnpm --dir web build:join`）。打 APK 时 `preBuild` 把 `web/dist` 同步到 WebView 资源 |
-| iPhone / PWA（`web/pwa-build.mjs`、安装引导、`web/public/` 图标） | 上面的前端命令；`pnpm --dir web build` 之后确认 `web/dist/manifest.webmanifest`、`web/dist/sw.js`、`web/dist/icons/` 都已生成，`web/dist/sw.js` 的预缓存列表不含 `release.json` 与 `sw.js` |
+| iPhone / PWA 与图标（`web/pwa-build.mjs`、安装引导、`web/public/` 图标、`scripts/build-icons.mjs`） | 上面的前端命令，另跑 `node scripts/build-icons.test.mjs`；`pnpm --dir web build` 之后确认 `web/dist/manifest.webmanifest`、`web/dist/sw.js`、`web/dist/favicon.ico`、`web/dist/icons/` 都已生成，`web/dist/sw.js` 的预缓存列表不含 `release.json` 与 `sw.js`。改 APK 图标或 `app/build.gradle` 再跑 `gradlew.bat :app:assembleDebug` |
 | 路由与加载 | `pnpm --dir web test` |
 | 后端规则或响应 | `pnpm --dir server lint`、`pnpm --dir server fmt:check`、`pnpm --dir server test`，以及 `pnpm --dir server test:contract`（需要 PostgreSQL）。`pnpm --dir server test` 同时跑发布脚本的 Node 测试。改了已加载的 `server/src` 后重启不用 watch 起的进程 |
 | Java 或桥接 | `gradlew.bat :app:testDebugUnitTest`。出包或资源变更再跑 `gradlew.bat :app:assembleDebug` |
@@ -79,9 +79,9 @@ iPhone 没有 APK，安装文件是 `web/dist` 里随页面一起发布的静态
 
 安装元信息在构建期由 `web/pwa-build.mjs` 从 `web/src/i18n/zh.json` 生成。`PWA_APP_NAME`、`PWA_APP_SHORT_NAME`、`PWA_APP_DESCRIPTION` 三项非空时覆盖默认值；它们是构建期变量，写在构建机的 `web/.env` / `web/.env.local`（模板见 `web/.env.example`）或构建进程环境里，不是服务器运行配置，不要写进 `/etc/calmobile.env`。不配时用 `zh.json` 的默认文案，CI 发布不需要额外配置。
 
-安装图标也走一份可选配置：`APP_ICON` 指向一个方形 PNG（相对仓库根或绝对路径，默认 `web/public/icons/icon-1024.png`），`APP_ICON_BACKGROUND` 是可选底色（默认 `#41707e`）。两者由 `server/.env` 或构建进程环境提供，`web/pwa-build.mjs` 与 Gradle 的 `buildIcons` 任务共享，因而网站 favicon、PWA 图标和 APK 启动图标始终来自同一张源图。只支持 8 位 RGB/RGBA、非隔行 PNG；非方形会居中裁切。Android 自适应前景用透明底，源图若自带底色建议把 `APP_ICON_BACKGROUND` 调成同色。改图标后重新构建页面和 APK；已安装的主屏幕图标仍要删掉重加。手动只生成图标：`node scripts/build-icons.mjs`（默认源），或 `APP_ICON=/path/icon.png node scripts/build-icons.mjs`。
+图标生成和 `APP_ICON` 配置见下面的「应用图标」。
 
-主屏幕名称与图标在安装时写进系统。改 `PWA_*`、`zh.json` 的安装文案或 `web/public/icons/` 后要重新构建发布，并让用户在主屏幕上删除旧图标、重新用 Safari 打开 `/app/` 再「添加到主屏幕」才会变。
+主屏幕名称与图标在安装时写进系统。改 `PWA_*`、`zh.json` 的安装文案、`APP_ICON` 源图或 `web/public/icons/` 后要重新构建发布，并让用户在主屏幕上删除旧图标、重新用 Safari 打开 `/app/` 再「添加到主屏幕」才会变。
 
 发布后确认（把 `<域名>` 换成实际域名）：
 
@@ -106,6 +106,66 @@ iPhone 真机验收（Safari，或从主屏幕打开）：
 6. 核销页能用摄像头扫码；拒绝相机权限或没有摄像头时提示改用选图或手动输入。
 7. 开飞行模式后从主屏幕重新打开：页面壳仍能打开，数据请求失败有可见提示（没有离线数据）；恢复网络后重新打开能加载新页面。
 8. 设置页没有「应用更新」组；换语言包后主屏幕名称与图标不变。
+
+### 应用图标
+
+网站 favicon、PWA 主屏幕图标、Apple 主屏幕图标和 APK 启动图标共用一张源图，避免四处各放一份后改漏。配置是**构建期可选变量**，不是服务器运行配置，不要写进 `/etc/calmobile.env`：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `APP_ICON` | `web/public/icons/icon-1024.png` | 方形 PNG，相对仓库根或绝对路径 |
+| `APP_ICON_BACKGROUND` | `#41707e` | 十六进制底色；maskable、Apple 主屏幕、Android 自适应图标留白用 |
+
+写在构建机的 `server/.env` 或构建进程环境里。`server/.env` 和进程环境都会被 `scripts/build-icons.mjs` 读取；`web/.env` 不作为图标配置来源，避免网页和 APK 拿到不同源图。
+
+生成范围：
+
+| 目标 | 产物 |
+|---|---|
+| 网站 / PWA | `web/dist/favicon.ico`（16/32/48 三个 PNG 条目）、`web/dist/icons/icon-192.png`、`icon-512.png`、`maskable-512.png`、`favicon-32.png`、`apple-touch-icon-180.png` |
+| Android 启动图标 | `app/build/generated/icons/res/mipmap-*/ic_launcher.png`、`ic_launcher_round.png`（mdpi 48 到 xxxhdpi 192） |
+| Android 自适应 | `mipmap-anydpi-v26/ic_launcher.xml`、`ic_launcher_round.xml`、`mipmap-*/ic_launcher_foreground.png`（108～432）、`values/ic_launcher_background.xml` |
+
+网页图标在 `pnpm --dir web build` 时由 `web/pwa-build.mjs` 调 `scripts/build-icons.mjs` 生成；Android 图标由 Gradle 的 `buildIcons` 任务在 `preBuild` 时生成。两者都走同一个纯 Node 脚本，没有额外图片工具依赖。
+
+源图要求：
+
+- 只支持 **8 位 RGB / RGBA、非隔行 PNG**；非方形会居中裁切。
+- `web/public/icons/icon.svg` 只是设计源，不参与生成；改 SVG 后要先导出 1024 PNG，再替换默认源图或设置 `APP_ICON`。
+- Android 自适应前景是透明底；源图自带不透明底色时，建议把 `APP_ICON_BACKGROUND` 设成同色，否则会看到一块方形底色。
+
+改图标的完整流程：
+
+```bash
+# 不配就用默认源图；也可以写进构建机的 server/.env
+export APP_ICON=/path/to/icon.png
+export APP_ICON_BACKGROUND=#123456
+pnpm --dir web build
+./gradlew :app:assembleDebug        # 或 assembleRelease
+```
+
+只重新生成图片、不跑完整构建：
+
+```bash
+node scripts/build-icons.mjs
+# 或只生成 Android 资源
+APP_ICON=/path/to/icon.png node scripts/build-icons.mjs --target android
+```
+
+发布链路：
+
+- 只改 `web/pwa-build.mjs`：发运行时包，不发 APK（页面热更新即可）。
+- 改 `web/public/icons/`（源图）或 `scripts/build-icons.mjs`：按 [`scripts/release-scope.mjs`](../scripts/release-scope.mjs) 归类会发 APK，同时发运行时包，避免新装 APK 还是旧图标。
+- 只改 `APP_ICON` / `APP_ICON_BACKGROUND` 环境变量而文件不变时，release-scope 不会命中；需要重新构建并手动触发一次 Release，或改动配套文件让路径命中。
+- 主屏幕 / 桌面图标是安装时写进系统的快照：重新构建发布后，用户要删掉旧图标重新「添加到主屏幕」，或重装 APK，才会看到新图。
+
+发布后检查：
+
+```bash
+curl -s -D - -o /dev/null https://<域名>/favicon.ico
+curl -s -D - -o /dev/null https://<域名>/app/favicon.ico
+curl -s -D - -o /dev/null https://<域名>/app/icons/icon-192.png
+```
 
 ### 本机与 iPhone 本地验收
 
