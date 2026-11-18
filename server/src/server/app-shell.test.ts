@@ -31,6 +31,7 @@ test('PWA 清单、Service Worker 和图标按固定类型托管，不长期缓�
     writeFileSync(path.join(root, 'index.html'), '<!doctype html><title>应用</title>');
     writeFileSync(path.join(root, 'manifest.webmanifest'), '{"name":"展会排期助手","start_url":"/app/"}');
     writeFileSync(path.join(root, 'sw.js'), 'self.addEventListener("fetch", () => {});');
+    writeFileSync(path.join(root, 'favicon.ico'), 'ico');
     mkdirSync(path.join(root, 'icons'));
     writeFileSync(path.join(root, 'icons', 'icon-192.png'), 'png');
     const manifest = lookupAppFile(root, '/app/manifest.webmanifest');
@@ -51,6 +52,12 @@ test('PWA 清单、Service Worker 和图标按固定类型托管，不长期缓�
     if (icon.kind === 'file') {
       assert.equal(icon.file.type, 'image/png');
       assert.equal(icon.file.cache, 'no-cache');
+    }
+    const favicon = lookupAppFile(root, '/app/favicon.ico');
+    assert.equal(favicon.kind, 'file');
+    if (favicon.kind === 'file') {
+      assert.equal(favicon.file.type, 'image/x-icon');
+      assert.equal(favicon.file.cache, 'no-cache');
     }
     assert.equal(lookupAppFile(root, '/app/manifest.missing.webmanifest').kind, 'missing');
     assert.equal(lookupAppFile(root, '/app/sw-missing.js').kind, 'missing');

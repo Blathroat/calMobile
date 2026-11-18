@@ -161,6 +161,7 @@ test('应用页面在 /app，报名站不会把它吞掉', async () => {
   writeFileSync(nodePath.join(root, 'assets', 'app.js'), 'console.log(1)', 'utf8');
   writeFileSync(nodePath.join(root, 'release.json'), '{"id":"abc"}', 'utf8');
   writeFileSync(nodePath.join(root, 'manifest.webmanifest'), '{"name":"展会排期助手","start_url":"/app/"}', 'utf8');
+  writeFileSync(nodePath.join(root, 'favicon.ico'), 'ico', 'utf8');
   writeFileSync(nodePath.join(join, 'join.html'), '<!doctype html><title>报名</title>', 'utf8');
   try {
     const redirected = await serve({ appRoot: root, publicBaseUrl: 'https://app.example.com' });
@@ -186,6 +187,11 @@ test('应用页面在 /app，报名站不会把它吞掉', async () => {
     assert.equal(webmanifest.status, 200);
     assert.equal(webmanifest.headers['content-type'], 'application/manifest+json; charset=utf-8');
     assert.equal(webmanifest.headers['cache-control'], 'no-cache');
+
+    const favicon = await hit(local.port, 'GET', '/favicon.ico');
+    assert.equal(favicon.status, 200);
+    assert.equal(favicon.headers['content-type'], 'image/x-icon');
+    assert.equal(favicon.headers['cache-control'], 'no-cache');
 
     const missing = await hit(local.port, 'GET', '/app/assets/missing.js');
     assert.equal(missing.status, 404);

@@ -62,6 +62,19 @@ android {
 
 android.sourceSets.main.assets.srcDir("${buildDir}/generated/vue-web")
 
+// 启动图标从同一份 APP_ICON 源图生成到 build 目录，不把各密度 PNG 提交进仓库；
+// 源码目录仍由 scripts/build-icons.mjs 生成，资源合并时再读这里。
+def iconResDir = file("${buildDir}/generated/icons/res")
+android.sourceSets.main.res.srcDir(iconResDir)
+def buildIcons = tasks.register("buildIcons", Exec) {
+    workingDir rootProject.projectDir
+    commandLine 'node', 'scripts/build-icons.mjs', '--target', 'android', '--out', iconResDir.absolutePath
+    outputs.dir(iconResDir)
+    // APP_ICON / APP_ICON_BACKGROUND 从 server/.env 或进程环境读取；源图改了也要重跑。
+    outputs.upToDateWhen { false }
+}
+tasks.named("preBuild").configure { dependsOn(buildIcons) }
+
 // Vue 前端构建到 generated assets，不修改源码目录。
 def webDir = file("../web")
 def pnpmCommand = System.getProperty("os.name").toLowerCase().contains("windows") ? "pnpm.cmd" : "pnpm"

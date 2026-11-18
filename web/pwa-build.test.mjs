@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -137,6 +137,7 @@ test('index.html 换成安装元信息，join.html 只换标题', () => {
   assert.ok(index.includes(`<meta name="description" content="${meta.description}" />`));
   assert.ok(index.includes(`<meta name="apple-mobile-web-app-title" content="${meta.shortName}" />`));
   assert.ok(index.includes('href="%BASE_URL%manifest.webmanifest"'));
+  assert.ok(index.includes('href="%BASE_URL%favicon.ico"'));
   assert.ok(index.includes('name="mobile-web-app-capable" content="yes"'));
   assert.ok(index.includes('name="apple-mobile-web-app-capable" content="yes"'));
   assert.ok(index.includes('name="apple-mobile-web-app-status-bar-style" content="default"'));
@@ -192,6 +193,10 @@ test('pwaAssetsPlugin 写 manifest 与 sw，预缓存排除版本清单', async 
     const manifest = JSON.parse(readFileSync(path.join(dist, 'manifest.webmanifest'), 'utf8'));
     assert.equal(manifest.name, '测试应用');
     assert.equal(manifest.short_name, copy['pwa.manifest.shortName']);
+    for (const name of ['icon-192.png', 'icon-512.png', 'maskable-512.png', 'apple-touch-icon-180.png']) {
+      assert.ok(existsSync(path.join(dist, 'icons', name)), `应生成 ${name}`);
+    }
+    assert.ok(existsSync(path.join(dist, 'favicon.ico')), '应生成 favicon.ico');
 
     const source = readFileSync(path.join(dist, 'sw.js'), 'utf8');
     assert.match(source, /const CACHE_NAME = "calmobile-app-[0-9a-f]{64}";/);

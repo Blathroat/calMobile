@@ -44,7 +44,7 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 
 报名站打开时，页面回退到 `web/dist-join` 的 `join.html`。`/api`、`/media` 和探针仍是 JSON。配了 `PUBLIC_BASE_URL` 时，报名站和应用页面的 Host 必须和它对齐，否则 308。
 
-已安装客户端与 iPhone 主屏幕应用的页面都在 `/app/`，文件来自 `web/dist`（`index.html` 是入口，`release.json` 是热更新清单，`manifest.webmanifest`、`sw.js` 与 `icons/` 是 PWA 静态文件）。有这份产物就托管，不看 `ENABLE_WEB`。缺的 `/app/assets/` 不回退成页面。固定文件名（`index.html`、`release.json`、`manifest.webmanifest`、`sw.js`、`icons/`）一律 `no-cache`，`/app/assets/` 下带哈希的文件长期缓存。`.webmanifest` 按 `application/manifest+json` 下发，`sw.js` 是 `text/javascript`，图标按图片类型下发。部署只放构建产物，不放 `web/src`。界面文案已经打进这些脚本。
+已安装客户端与 iPhone 主屏幕应用的页面都在 `/app/`，文件来自 `web/dist`（`index.html` 是入口，`release.json` 是热更新清单，`manifest.webmanifest`、`sw.js`、`favicon.ico` 与 `icons/` 是 PWA 静态文件）。有这份产物就托管，不看 `ENABLE_WEB`。缺的 `/app/assets/` 不回退成页面。固定文件名（`index.html`、`release.json`、`manifest.webmanifest`、`sw.js`、`favicon.ico`、`icons/`）一律 `no-cache`，`/app/assets/` 下带哈希的文件长期缓存。根路径 `/favicon.ico` 转发同一份图标，供浏览器默认请求使用。`.webmanifest` 按 `application/manifest+json` 下发，`sw.js` 是 `text/javascript`，`.ico` 是 `image/x-icon`，图标按图片类型下发。部署只放构建产物，不放 `web/src`。界面文案已经打进这些脚本。
 
 `src/` 的模块图无环。`config/auth.ts` 只导出纯函数。进程级配置由 `config/env.ts` 的 `loadProcessConfig()` 解析，要用密钥的模块自己去取。
 

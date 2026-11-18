@@ -71,10 +71,15 @@ iPhone 没有 APK，安装文件是 `web/dist` 里随页面一起发布的静态
 |---|---|---|
 | `/app/manifest.webmanifest` | `application/manifest+json; charset=utf-8` | `no-cache` |
 | `/app/sw.js` | `text/javascript; charset=utf-8` | `no-cache` |
+| `/app/favicon.ico` | `image/x-icon` | `no-cache` |
 | `/app/icons/*` | 按扩展名（PNG 为 `image/png`） | `no-cache` |
 | `/app/assets/*` | 按扩展名 | `public, max-age=31536000, immutable` |
 
+根路径 `/favicon.ico` 也从 `web/dist/favicon.ico` 转发，供浏览器默认的站点图标请求使用；它和应用内的 `/app/favicon.ico` 是同一份构建产物。
+
 安装元信息在构建期由 `web/pwa-build.mjs` 从 `web/src/i18n/zh.json` 生成。`PWA_APP_NAME`、`PWA_APP_SHORT_NAME`、`PWA_APP_DESCRIPTION` 三项非空时覆盖默认值；它们是构建期变量，写在构建机的 `web/.env` / `web/.env.local`（模板见 `web/.env.example`）或构建进程环境里，不是服务器运行配置，不要写进 `/etc/calmobile.env`。不配时用 `zh.json` 的默认文案，CI 发布不需要额外配置。
+
+安装图标也走一份可选配置：`APP_ICON` 指向一个方形 PNG（相对仓库根或绝对路径，默认 `web/public/icons/icon-1024.png`），`APP_ICON_BACKGROUND` 是可选底色（默认 `#41707e`）。两者由 `server/.env` 或构建进程环境提供，`web/pwa-build.mjs` 与 Gradle 的 `buildIcons` 任务共享，因而网站 favicon、PWA 图标和 APK 启动图标始终来自同一张源图。只支持 8 位 RGB/RGBA、非隔行 PNG；非方形会居中裁切。Android 自适应前景用透明底，源图若自带底色建议把 `APP_ICON_BACKGROUND` 调成同色。改图标后重新构建页面和 APK；已安装的主屏幕图标仍要删掉重加。手动只生成图标：`node scripts/build-icons.mjs`（默认源），或 `APP_ICON=/path/icon.png node scripts/build-icons.mjs`。
 
 主屏幕名称与图标在安装时写进系统。改 `PWA_*`、`zh.json` 的安装文案或 `web/public/icons/` 后要重新构建发布，并让用户在主屏幕上删除旧图标、重新用 Safari 打开 `/app/` 再「添加到主屏幕」才会变。
 
@@ -83,6 +88,8 @@ iPhone 没有 APK，安装文件是 `web/dist` 里随页面一起发布的静态
 ```bash
 curl -s -D - -o /dev/null https://<域名>/app/manifest.webmanifest   # 200、application/manifest+json、no-cache
 curl -s -D - -o /dev/null https://<域名>/app/sw.js                  # 200、text/javascript、no-cache
+curl -s -D - -o /dev/null https://<域名>/app/favicon.ico            # 200、image/x-icon、no-cache
+curl -s -D - -o /dev/null https://<域名>/favicon.ico                # 200、image/x-icon、no-cache
 curl -s -D - -o /dev/null https://<域名>/app/icons/icon-192.png     # 200、image/png、no-cache
 curl -s https://<域名>/app/manifest.webmanifest | jq '{name,short_name,start_url,scope,display}'
 # 预缓存列表里应只有页面壳：没有 release.json 与 sw.js
@@ -181,7 +188,7 @@ pnpm --dir server dev
 - 原生外壳（`app/src/main`、`app/build.gradle`、Gradle、`scripts/client-target.mjs`）发布 APK。
 - 服务端运行时代码、依赖锁、`deploy/`、`scripts/runtime-bundle.mjs`、`scripts/sync-production-env.mjs` 发布运行时包。
 - 只进应用页面包的源（例如 `web/src/pages/HomePage.vue`、`web/src/main.ts`、`web/vite.config.ts`、`web/release-manifest.mjs`）、报名站专有源（`web/src/join/`、`web/join.html`、`web/vite.join.config.ts`、`server/scripts/build-join.ts`）、两边共用的 `web/src` 都发布运行时包。
-- PWA 构建脚本与安装图标（`web/pwa-build.mjs`、`web/public/`）两份页面构建都要用，发布运行时包，不发 APK。
+- PWA 构建脚本与安装图标（`web/pwa-build.mjs`、`scripts/build-icons.mjs`、`web/public/`）两份页面构建都要用，发布运行时包；图标源图还会生成 APK 启动图标，所以 `scripts/build-icons.mjs` 与 `web/public/icons/` 的改动也发 APK。
 - `server/src/domain/answer-document.ts` 发布运行时包。
 - 文档、测试、`server/src/dev/` 不触发。
 

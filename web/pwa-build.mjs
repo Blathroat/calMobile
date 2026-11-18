@@ -11,6 +11,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildWebIcons } from '../scripts/build-icons.mjs';
 import { buildReleaseManifest } from './release-manifest.mjs';
 
 /** 应用页面包在站点上的固定前缀，与 `vite.config.ts` 的 base 一致。 */
@@ -24,7 +25,6 @@ const APP_BASE = '/app/';
 const MANIFEST_ICONS = [
   { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
   { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-  { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
   { src: 'icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
 ];
 
@@ -249,6 +249,10 @@ export function pwaAssetsPlugin({ distDir, env = {}, copy = readCopy() }) {
     closeBundle() {
       const root = path.resolve(distDir);
       mkdirSync(root, { recursive: true });
+      // 站点 favicon、PWA 图标都从同一个 APP_ICON 源图生成；源图与底色和 Android
+      // 共用 server/.env / 进程环境，这里不再读 web/.env。先落图标，再让产物清单
+      // 和 Service Worker 预缓存把它们算进去。
+      buildWebIcons(root);
       writeFileSync(
         path.join(root, 'manifest.webmanifest'),
         `${JSON.stringify(buildManifest(resolvePwaMeta(env, copy)), null, 2)}\n`,
