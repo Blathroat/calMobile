@@ -142,11 +142,14 @@ test('解压后的运行时包必须文件齐全且版本一致', async () => {
       'server/dist/server/join-site.js': 'export {};\n',
       'web/dist/index.html': '<!doctype html>\n',
       'web/dist/release.json': '{}\n',
+      'server/dist/app-shell/index.html': '<!doctype html>\n',
       'web/dist-join/join.html': '<!doctype html>\n',
+      'server/dist/app-shell-join/join.html': '<!doctype html>\n',
       'deploy/production.env': 'NODE_ENV=production\n',
       'deploy/calmobile-update.mjs': '// updater\n',
       'scripts/sync-production-env.mjs': 'export {};\n',
       'scripts/client-target.mjs': 'export {};\n',
+      'scripts/build-icons.mjs': 'export {};\n',
     };
     for (const [relative, text] of Object.entries(entries)) {
       await writeFixture(directory, relative, text);

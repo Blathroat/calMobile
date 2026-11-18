@@ -37,8 +37,23 @@ export function defaultJoinRoot(): string {
   return path.resolve(fileURLToPath(new URL('../../../web/dist-join', import.meta.url)));
 }
 
+/**
+ * 运行时包里额外带的一份报名站副本，路径是 `server/dist/app-shell-join`。
+ *
+ * 与 `defaultPackagedAppRoot()` 同理：生产 systemd 误删 `current/web/dist-join`
+ * 时，服务端仍能提供报名站。
+ */
+export function defaultPackagedJoinRoot(): string {
+  return path.resolve(fileURLToPath(new URL('../../../server/dist/app-shell-join', import.meta.url)));
+}
+
 export function joinSiteReady(root: string): boolean {
   return existsSync(path.join(root, JOIN_SHELL));
+}
+
+/** 选择要托管的报名站根：优先构建产物，缺失时退到运行时包副本。 */
+export function pickJoinRoot(webRoot: string, packagedRoot: string): string {
+  return joinSiteReady(webRoot) ? webRoot : packagedRoot;
 }
 
 export function joinSiteMissingMessage(root: string): string {

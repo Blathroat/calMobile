@@ -42,6 +42,7 @@ before(async () => {
   await write(fixtureRoot, 'deploy/calmobile-update.mjs', '// updater\n');
   await write(fixtureRoot, 'scripts/sync-production-env.mjs', 'export {};\n');
   await write(fixtureRoot, 'scripts/client-target.mjs', 'export {};\n');
+  await write(fixtureRoot, 'scripts/build-icons.mjs', 'export {};\n');
 });
 
 after(async () => {
@@ -70,10 +71,7 @@ test('缺少构建产物时拒绝暂存', async () => {
   const brokenRoot = await mkdtemp(path.join(tmpdir(), 'calmobile-runtime-broken-'));
   try {
     const outDir = path.join(brokenRoot, '.out');
-    await assert.rejects(
-      stageRuntimePackage({ repoRoot: brokenRoot, outDir, version: '0.1.1' }),
-      /缺少构建产物/,
-    );
+    await assert.rejects(stageRuntimePackage({ repoRoot: brokenRoot, outDir, version: '0.1.1' }), /缺少构建产物/);
   } finally {
     await rm(brokenRoot, { recursive: true, force: true });
   }

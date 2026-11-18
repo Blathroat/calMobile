@@ -10,6 +10,7 @@
  * 纯函数：用例直接把环境对象喂进来，不需要真的改 `process.env` 再重新 require。
  */
 
+import { resolveBranding } from './branding.js';
 import { resolveLangPacks } from './runtime.js';
 
 type EnvLike = NodeJS.ProcessEnv | Record<string, string | undefined>;
@@ -175,12 +176,12 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
   const appApiProblem = appApiBaseProblem(String(env.APP_API_BASE || ''));
   if (appApiProblem) {
     warnings.push(appApiProblem);
-  } else if (publicBaseUrl && /^https:\/\//i.test(publicBaseUrl)) {
+  } else if (String(env.APP_API_BASE || '').trim() && publicBaseUrl && /^https:\/\//i.test(publicBaseUrl)) {
     try {
       const appOrigin = new URL(String(env.APP_API_BASE || '')).origin;
       const siteOrigin = new URL(publicBaseUrl).origin;
       if (appOrigin !== siteOrigin) {
-        warnings.push('APP_API_BASE 与 PUBLIC_BASE_URL 不是同一个源：客户端和分享链接会指向两台主机');
+        warnings.push('APP_API_BASE 与 PUBLIC_BASE_URL 不是同一个源：APK 外壳和分享链接会指向两台主机');
       }
     } catch {
       warnings.push('APP_API_BASE 与 PUBLIC_BASE_URL 无法比较来源');
@@ -194,6 +195,8 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
   }
   // 语言包配错只影响报名站的默认语言，不该让服务起不来。
   warnings.push(...resolveLangPacks(env, false).warnings);
+  // 运行时品牌配错只影响标题/图标，不该阻止 API 启动；这里只打 warning。
+  warnings.push(...resolveBranding(env).warnings);
   // HSTS 显式关掉多半是「域名还没定」，但也可能是漏配，提示一句。
   const hsts = String(env.HSTS_MAX_AGE || '')
     .trim()
@@ -236,14 +239,15 @@ export function productionProblems(env: EnvLike = {}): ProductionProblems {
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
 
 /**
- * 正式包要连上的接口地址。规则与 `scripts/client-target.mjs` 一致，这里只警告、不拒绝启动：
+ * APK 外壳要连上的接口地址。规则与 `scripts/client-target.mjs` 一致，这里只警告、不拒绝启动：
  * 服务器可以先于安装包上线，真正拦住明文包的是 `assembleRelease`。
+ *
+ * 页面包已经用相对 `/api/v1`，这个变量不再影响服务器端的页面产物；没配是正常情况，
+ * 只有配了但写错时才提示。
  */
 function appApiBaseProblem(value: string): string | null {
   const text = value.trim();
-  if (!text) {
-    return 'APP_API_BASE 没有配置：正式包会退回本机 http 地址，用户手机连不上这台服务器';
-  }
+  if (!text) return null;
   let url: URL;
   try {
     url = new URL(text);
@@ -251,13 +255,13 @@ function appApiBaseProblem(value: string): string | null {
     return `APP_API_BASE 不是合法地址（${text}）`;
   }
   if (url.protocol !== 'https:') {
-    return `APP_API_BASE=${text} 不是 https：正式包只接受 https`;
+    return `APP_API_BASE=${text} 不是 https：APK 正式包只接受 https`;
   }
   if (url.username || url.password || url.search || url.hash) {
     return `APP_API_BASE=${text} 不能带用户信息、查询或片段`;
   }
   if (LOOPBACK_HOSTS.has(url.hostname)) {
-    return `APP_API_BASE=${text} 指向本机：正式包要写成公网 https 地址`;
+    return `APP_API_BASE=${text} 指向本机：APK 正式包要写成公网 https 地址`;
   }
   const path = url.pathname.replace(/\/+$/, '') || '/';
   if (path !== '/api/v1') {

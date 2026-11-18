@@ -34,8 +34,28 @@ export function defaultAppRoot(): string {
   return path.resolve(fileURLToPath(new URL('../../../web/dist', import.meta.url)));
 }
 
+/**
+ * 运行时包里额外带的一份页面壳，路径是 `server/dist/app-shell`。
+ *
+ * 生产环境可能由 systemd 在启动前清掉 `current/web/dist`（旧部署把它当缓存）。
+ * 这份副本不叫 `web/dist`，不会被那条清理规则命中，服务端在 `web/dist` 缺失时
+ * 用它继续提供 `/app/`、PWA 和 Android 热更新清单。报名站另有
+ * `server/dist/app-shell-join` 副本，见 `join-site.ts`。
+ */
+export function defaultPackagedAppRoot(): string {
+  return path.resolve(fileURLToPath(new URL('../../../server/dist/app-shell', import.meta.url)));
+}
+
 export function appShellReady(root: string): boolean {
   return existsSync(path.join(root, APP_SHELL));
+}
+
+/**
+ * 选择要托管的页面根：优先构建产物 `web/dist`，缺失时退到运行时包副本。
+ * 纯函数，测试可以直接给两个临时目录。
+ */
+export function pickAppRoot(webRoot: string, packagedRoot: string): string {
+  return appShellReady(webRoot) ? webRoot : packagedRoot;
 }
 
 export interface AppFile {

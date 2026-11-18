@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+// 报名站和 App 共用同一份页面包检查。
+import { pageBundleCheckPlugin } from './check-page-bundle.mjs';
 // 与 App 构建共用一份占位符替换：报名站只要标题，不生成 manifest 与 Service Worker。
 import { pwaHtmlCopyPlugin, readCopy } from './pwa-build.mjs';
 
@@ -20,7 +22,11 @@ export default defineConfig({
   base: '/',
   // 报名站不是可安装应用：不拷 public 里的安装图标，也不生成 manifest 与 Service Worker。
   publicDir: false,
-  plugins: [vue(), pwaHtmlCopyPlugin({ copy: readCopy(), env: {}, includePwa: false })],
+  plugins: [
+    vue(),
+    pwaHtmlCopyPlugin({ copy: readCopy(), env: {}, includePwa: false }),
+    pageBundleCheckPlugin({ distDir: fileURLToPath(new URL('./dist-join', import.meta.url)) }),
+  ],
   define: {
     __APP_VERSION__: JSON.stringify(clientTarget.versionName),
     __APP_VERSION_CODE__: JSON.stringify(clientTarget.versionCode),

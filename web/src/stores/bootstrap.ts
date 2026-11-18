@@ -22,7 +22,7 @@
  *   不代表后端一定下发过；读取时一律当作可能缺字段，用完自己兜底。
  */
 import { defineStore } from 'pinia';
-import type { Bootstrap, JsonObject } from '@/api/types';
+import type { Bootstrap, BrandingInfo, JsonObject } from '@/api/types';
 
 export interface BootstrapState {
   /** 是否已拿到后端启动数据；false 时页面只能用兜底值渲染 */
@@ -33,6 +33,8 @@ export interface BootstrapState {
   limits: JsonObject;
   /** 站点品牌名（`zh` / `en`）；首帧留空，等后端下发 */
   brand: JsonObject;
+  /** 运行时品牌（PWA 名称、标题、描述、主题色）；空对象表示全用构建期默认值 */
+  branding: BrandingInfo;
   /** 公告（`text` / `enabled`），只有 `enabled === true` 时登录页与首页才展示 */
   announcement: JsonObject;
   /** 日历配置，`landing` 是首页落点的 `{ year, month }`（见 `app/preload.ts`） */
@@ -80,6 +82,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
     limits: {},
     // 品牌名首帧留空：站点名由后端设置决定，写死任何一个名字都会在启动瞬间闪错品牌
     brand: { zh: '', en: '' },
+    branding: {},
     announcement: {},
     calendar: {},
     media: {},
@@ -107,6 +110,8 @@ export const useBootstrapStore = defineStore('bootstrap', {
       // 下面各段浅合并：某个键缺失（或发来 null / 数组）时保留旧值
       this.limits = { ...this.limits, ...asObject(data.limits) };
       this.brand = { ...this.brand, ...asObject(data.brand) };
+      // 品牌是服务端配置，不走逐键浅合并：服务端删掉某个键后，页面不能继续沿用旧值。
+      if (data.branding !== undefined) this.branding = asObject(data.branding) as BrandingInfo;
       this.announcement = { ...this.announcement, ...asObject(data.announcement) };
       this.calendar = { ...this.calendar, ...asObject(data.calendar) };
       this.media = { ...this.media, ...asObject(data.media) };

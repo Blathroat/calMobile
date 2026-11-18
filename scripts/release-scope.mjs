@@ -161,6 +161,8 @@ function isAppOnly(file) {
 function isSharedWeb(file) {
   // 两份页面构建都 import 它，产物分别进 dist 和 dist-join。
   if (file === 'web/pwa-build.mjs') return true;
+  // 两份页面构建的 build 脚本都会跑页面包检查。
+  if (file === 'web/check-page-bundle.mjs') return true;
   if (file === 'web/package.json' || file === 'web/pnpm-lock.yaml' || file.startsWith('web/public/')) return true;
   if (!file.startsWith('web/src/') || file.startsWith('web/src/join/')) return false;
   if (file === 'web/src/main.ts' || file === 'web/src/env.d.ts' || APP_ONLY_PAGES.has(file)) return false;

@@ -113,7 +113,7 @@ test('默认语言包名称不在下载列表里时只警告，不拒绝启动',
 
 test('正式包地址、报名站开关和隐私政策链接只警告', () => {
   const missing = productionProblems(readyEnv()).warnings.join('；');
-  assert.match(missing, /APP_API_BASE 没有配置/);
+  assert.doesNotMatch(missing, /APP_API_BASE 没有配置/);
   assert.match(missing, /PRIVACY_POLICY_URL 没有配置/);
 
   const wrong = productionProblems(
@@ -151,6 +151,21 @@ test('正式包地址、报名站开关和隐私政策链接只警告', () => {
     ready.warnings.some((item) => /APP_API_BASE|PRIVACY_POLICY_URL|ENABLE_WEB/.test(item)),
     false,
   );
+});
+
+test('运行时品牌只给 warning，不阻止启动', () => {
+  const { fatal, warnings } = productionProblems(
+    readyEnv({
+      PWA_APP_NAME: '活动排期助手',
+      PWA_THEME_COLOR: 'warm',
+      PWA_ICON_DIR: '/srv/icons',
+      APP_ICON: '/srv/icon.png',
+    }),
+  );
+  assert.deepEqual(fatal, []);
+  const text = warnings.join('；');
+  assert.match(text, /PWA_THEME_COLOR/);
+  assert.match(text, /PWA_ICON_DIR/);
 });
 
 test('远端数据库没开 SSL 会提醒（同机 Docker 不提醒）', () => {

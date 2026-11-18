@@ -112,6 +112,22 @@ export interface User extends JsonObject {
 }
 
 /**
+ * 服务器运行时品牌：PWA 名称、页面标题、描述与主题色。空字段表示沿用构建期默认值。
+ * 只在 `bootstrap` 里下发，页面标题/安装信息用它补齐实例身份。
+ */
+export interface BrandingInfo extends JsonObject {
+  appName?: string;
+  shortName?: string;
+  description?: string;
+  appTitle?: string;
+  joinTitle?: string;
+  lang?: string;
+  themeColor?: string;
+  themeColorDark?: string;
+  backgroundColor?: string;
+}
+
+/**
  * 启动数据：身份、权限、限制、主题、日历落点一次性下发。
  * 它是「当前是谁」的来源，所以 `api.bootstrap()` 刻意不走查询缓存，否则切账号后会读到上一个人。
  */
@@ -120,6 +136,8 @@ export interface Bootstrap extends JsonObject {
   loggedIn?: boolean;
   /** 用户协议摘要（没有正文）；关闭时所有协议入口都不渲染。 */
   agreement?: AgreementSummary;
+  /** 运行时品牌；旧服务器不发这个字段时页面沿用构建期默认值。 */
+  branding?: BrandingInfo;
 }
 
 /** 列表里的展会。其余字段随管理员配置的自定义字段变化，这里只固定页面一定会用到的。 */

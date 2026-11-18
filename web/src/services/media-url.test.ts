@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { resolveMediaUrl } from './media-url';
 
 describe('resolveMediaUrl', () => {
+  it('默认保持页面同源相对路径', () => {
+    expect(resolveMediaUrl('/media/avatars/abc.jpg')).toBe('/media/avatars/abc.jpg');
+  });
+
   it('把站内路径补到给定的源，绝对地址和报名站的相对路径保持原样', () => {
     expect(resolveMediaUrl('/media/avatars/abc.jpg', 'http://127.0.0.1:3000')).toBe(
       'http://127.0.0.1:3000/media/avatars/abc.jpg',

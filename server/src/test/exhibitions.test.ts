@@ -7,7 +7,17 @@
  */
 import assert from 'node:assert/strict';
 import { DEFAULT_SETTINGS } from '../config/migrate.js';
-import { del, get, post, put, startContract, stopContract, tokens } from './contract-harness.js';
+import {
+  createVerifiedAccount,
+  del,
+  get,
+  login,
+  post,
+  put,
+  startContract,
+  stopContract,
+  tokens,
+} from './contract-harness.js';
 
 beforeAll(startContract);
 afterAll(stopContract);
@@ -223,6 +233,31 @@ test('展会的增删改受角色与归属限制', async () => {
   assert.strictEqual(removed.body.ok, true, `删除失败：${JSON.stringify(removed.body)}`);
   const gone = await get(`/api/v1/exhibitions/${id}`);
   assert.strictEqual(gone.body.found, false);
+});
+
+test('另一个展商不能修改、改状态、改收集项或删除别人的展会', async () => {
+  await createVerifiedAccount('usr-4', 'exhibitor2', 'exhibitor2@example.com', 'password', 'exhibitor');
+  const other = await login('exhibitor2');
+
+  const own = await get('/api/v1/exhibitions?exhibitorId=usr-4');
+  assert.deepStrictEqual(own.body, [], '新展商没有展会');
+
+  const before = await get('/api/v1/exhibitions/exh-1');
+  const beforeStatus = before.body.exhibition.statusCode;
+  const denied = [
+    await put('/api/v1/exhibitions/exh-1', {}, { token: other.token }),
+    await put('/api/v1/exhibitions/exh-1/status', { status: 'optional' }, { token: other.token }),
+    await put('/api/v1/exhibitions/exh-1/fields', { fields: [] }, { token: other.token }),
+    await del('/api/v1/exhibitions/exh-1', { token: other.token }),
+  ];
+  for (const response of denied) {
+    assert.strictEqual(response.status, 403, JSON.stringify(response.body));
+    assert.strictEqual(response.body.errorCode, 'permission.exhibitionNotYours');
+  }
+
+  const unchanged = await get('/api/v1/exhibitions/exh-1');
+  assert.strictEqual(unchanged.body.exhibition.exhibitorId, 'usr-2');
+  assert.strictEqual(unchanged.body.exhibition.statusCode, beforeStatus);
 });
 
 test('展会收集项可以整体覆盖并读回', async () => {

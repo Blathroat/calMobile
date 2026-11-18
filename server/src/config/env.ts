@@ -9,6 +9,7 @@
 
 import { resolveRuntime, type Runtime } from './runtime.js';
 import { resolveAuthConfig } from './auth.js';
+import { resolveBranding, type BrandingConfig } from './branding.js';
 import { resolveDatabaseConfig, type DatabaseConfig } from './database.js';
 import { resolveMailConfig, type MailConfig } from './mail.js';
 
@@ -69,6 +70,8 @@ export interface ProcessConfig {
   logLevel: string;
   corsOrigin: string;
   webauthn: WebAuthnConfig;
+  /** 运行时品牌：PWA 名称、页面标题、图标等实例身份。 */
+  branding: BrandingConfig;
   /** 报名码前缀：不同站点可以有自己的前缀，扫码与展示都跟着它走。 */
   checkin: CheckinCodeConfig;
 }
@@ -103,6 +106,7 @@ export function parseEnv(env: EnvLike = {}, argv: string[] = []): ProcessConfig 
     logLevel: settings.logLevel,
     corsOrigin: settings.corsOrigin,
     webauthn: resolveWebAuthnConfig(env, { publicBaseUrl: runtime.publicBaseUrl, port: settings.port }),
+    branding: resolveBranding(env),
     checkin: { codePrefix: resolveCheckinCodePrefix(env) },
   };
 }

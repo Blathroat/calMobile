@@ -1,6 +1,6 @@
 # 构建、测试与上线
 
-本文件是跨模块的验证和上线步骤。后端启动、模式差异和响应约定见 [`server/README.md`](../server/README.md)。环境变量以 `server/.env.example` 的注释为准；构建期 PWA 安装元信息见 `web/.env.example`。Node 版本以 `server/package.json` 和 `web/package.json` 的 `engines` 为准。
+本文件是跨模块的验证和上线步骤。后端启动、模式差异和响应约定见 [`server/README.md`](../server/README.md)。环境变量以 `server/.env.example` 的注释为准；运行期 PWA/标题/图标品牌见 `server/.env.example` 的「运行时品牌」，构建期默认值见 `web/.env.example`。Node 版本以 `server/package.json` 和 `web/package.json` 的 `engines` 为准。
 
 前端 `vue-tsc` 停在 TypeScript 6（`web/package.json` 的 `typescript`）。当前 Vue 类型检查器用不上 TypeScript 7 的原生编译入口。后端使用 TypeScript 7。升级时保留 `.vue` 类型检查。
 
@@ -11,7 +11,7 @@
 | 改动 | 命令 |
 |---|---|
 | Vue 页面、组件、样式、界面文案 | `pnpm --dir web typecheck`、`pnpm --dir web lint`、`pnpm --dir web fmt:check`、`pnpm --dir web test`、`pnpm --dir web build`（改了报名站页面再跑 `pnpm --dir web build:join`）。打 APK 时 `preBuild` 把 `web/dist` 同步到 WebView 资源 |
-| iPhone / PWA 与图标（`web/pwa-build.mjs`、安装引导、`web/public/` 图标、`scripts/build-icons.mjs`） | 上面的前端命令，另跑 `node scripts/build-icons.test.mjs`；`pnpm --dir web build` 之后确认 `web/dist/manifest.webmanifest`、`web/dist/sw.js`、`web/dist/favicon.ico`、`web/dist/icons/` 都已生成，`web/dist/sw.js` 的预缓存列表不含 `release.json` 与 `sw.js`。改 APK 图标或 `app/build.gradle` 再跑 `gradlew.bat :app:assembleDebug` |
+| iPhone / PWA 与图标（`web/pwa-build.mjs`、安装引导、`web/public/` 图标、`scripts/build-icons.mjs`） | 上面的前端命令，另跑 `node scripts/build-icons.test.mjs`；`pnpm --dir web build` 之后确认 `web/dist/manifest.webmanifest`、`web/dist/sw.js`、`web/dist/favicon.ico`、`web/dist/icons/` 都已生成，`web/dist/sw.js` 的预缓存列表不含 `release.json` 与 `sw.js`。Vite 的 `check-page-bundle` 插件在每次产物写完后扫描，页面包写死实例域名时构建失败。改 APK 图标或 `app/build.gradle` 再跑 `gradlew.bat :app:assembleDebug` |
 | 路由与加载 | `pnpm --dir web test` |
 | 后端规则或响应 | `pnpm --dir server lint`、`pnpm --dir server fmt:check`、`pnpm --dir server test`，以及 `pnpm --dir server test:contract`（需要 PostgreSQL）。`pnpm --dir server test` 同时跑发布脚本的 Node 测试。改了已加载的 `server/src` 后重启不用 watch 起的进程 |
 | Java 或桥接 | `gradlew.bat :app:testDebugUnitTest`。出包或资源变更再跑 `gradlew.bat :app:assembleDebug` |
@@ -57,7 +57,7 @@ server {
 }
 ```
 
-应用包里的接口地址来自 `APP_API_BASE`（`server/.env`，进程里已有的同名变量优先）。没配时是 `http://127.0.0.1:<PORT>/api/v1`。报名站不读它，接口仍是相对的 `/api/v1`。明文流量和混合内容只在这个地址是 `http` 时打开。改地址后要重新构建 APK。
+应用包里的接口地址来自 `APP_API_BASE`（`server/.env`，进程里已有的同名变量优先）。没配时是 `http://127.0.0.1:<PORT>/api/v1`。它只决定 APK 外壳加载哪个源的 `/app/index.html`、开发代理目标、明文/混合内容和 APK 页面源；页面包本身一律用相对 `/api/v1`，同一份 `web/dist` 可部署到任意 `PUBLIC_BASE_URL`。报名站不读它，接口仍是相对的 `/api/v1`。改 APK 指向的实例仍要重新构建 APK。
 
 包名默认 `com.blathroat.calmobile`。Java 源码仍在 `com.example.calmobile`。调试包和正式包都用这个包名。手机上已经装过 `com.example.calmobile` 的，是另一个应用，要先卸掉。
 
@@ -77,11 +77,24 @@ iPhone 没有 APK，安装文件是 `web/dist` 里随页面一起发布的静态
 
 根路径 `/favicon.ico` 也从 `web/dist/favicon.ico` 转发，供浏览器默认的站点图标请求使用；它和应用内的 `/app/favicon.ico` 是同一份构建产物。
 
-安装元信息在构建期由 `web/pwa-build.mjs` 从 `web/src/i18n/zh.json` 生成。`PWA_APP_NAME`、`PWA_APP_SHORT_NAME`、`PWA_APP_DESCRIPTION` 三项非空时覆盖默认值；它们是构建期变量，写在构建机的 `web/.env` / `web/.env.local`（模板见 `web/.env.example`）或构建进程环境里，不是服务器运行配置，不要写进 `/etc/calmobile.env`。不配时用 `zh.json` 的默认文案，CI 发布不需要额外配置。
+构建产物里带一套默认安装信息：`web/pwa-build.mjs` 在构建时从 `web/src/i18n/zh.json` 生成 `manifest.webmanifest`、页面标题与 meta，`PWA_*` 构建变量可覆盖默认值。部署后，服务器启动时还会读 `/etc/calmobile.env` 的同名变量并生成实例专属页面层：改 `manifest`、`index.html` 标题/meta、`join.html` 标题与 PWA 图标，并重算 `release.json`。所以同一份 `calmobile-server` 可以用在不同 `PUBLIC_BASE_URL` 下，不需要按实例重新构建 `web/dist`。
 
-图标生成和 `APP_ICON` 配置见下面的「应用图标」。
+运行时品牌变量（不配就沿用构建期默认值）：
 
-主屏幕名称与图标在安装时写进系统。改 `PWA_*`、`zh.json` 的安装文案、`APP_ICON` 源图或 `web/public/icons/` 后要重新构建发布，并让用户在主屏幕上删除旧图标、重新用 Safari 打开 `/app/` 再「添加到主屏幕」才会变。
+| 变量 | 作用 |
+|---|---|
+| `PWA_APP_NAME` | `manifest.name` 与应用页标题后缀（页面标题是「品牌 · 应用名」） |
+| `PWA_APP_SHORT_NAME` | `manifest.short_name`、`apple-mobile-web-app-title` |
+| `PWA_APP_DESCRIPTION` | `manifest.description`、`meta name="description"` |
+| `APP_TITLE` | 应用页完整标题覆盖；设置后不再拼品牌前缀 |
+| `JOIN_TITLE` | 报名站页签标题 |
+| `PWA_LANG` / `PWA_THEME_COLOR` / `PWA_THEME_COLOR_DARK` / `PWA_BACKGROUND_COLOR` | manifest 语言、主题色与背景色 |
+| `APP_ICON` / `APP_ICON_BACKGROUND` / `APP_ICON_TRANSPARENT` | 运行时生成 PWA/favicon 图标；透明模式同时影响 Android 构建 |
+| `PWA_ICON_DIR` | 直接使用一套预生成的 `favicon.ico` + `icons/*`，与 `APP_ICON` 二选一 |
+
+没有品牌变量时服务器直接托管构建产物，零额外开销；有品牌变量时启动会复制一份临时页面层、改完并重算 `release.json`，进程退出时清理。单个品牌项（标题、manifest、图标、SW 缓存名）失败只回退该项并打 warning，`release.json` 生成失败才整体回退静态页面。`web/dist` 本身不被修改。改这些变量要重启服务；Android 热更新会按新的 `release.json` 校验并拉取新页面。构建期 `PWA_*` 仍给 APK 和默认页面兜底，写在构建机的 `web/.env` / `.env.local` 或构建进程环境里。
+
+图标生成和 `APP_ICON` 配置见下面的「应用图标」。主屏幕名称与图标在安装时写进系统；改 `PWA_*`、`APP_ICON` 或 `JOIN_TITLE` 后要重启服务，并让用户删除旧主屏幕图标后重新「添加到主屏幕」才会看到新名称/图标。
 
 发布后确认（把 `<域名>` 换成实际域名）：
 
@@ -109,22 +122,24 @@ iPhone 真机验收（Safari，或从主屏幕打开）：
 
 ### 应用图标
 
-网站 favicon、PWA 主屏幕图标、Apple 主屏幕图标和 APK 启动图标共用一张源图，避免四处各放一份后改漏。配置是**构建期可选变量**，不是服务器运行配置，不要写进 `/etc/calmobile.env`：
+网站 favicon、PWA 主屏幕图标、Apple 主屏幕图标和 APK 启动图标共用一张源图，避免四处各放一份后改漏。构建期和服务器运行期读同一组变量：构建时生成页面/APK 的默认图标，服务器启动时可以按实例再生成一套 PWA/favicon 图标（见上面的「PWA 与 iPhone 主屏幕」）。
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `APP_ICON` | `web/public/icons/icon-1024.png` | 方形 PNG，相对仓库根或绝对路径 |
-| `APP_ICON_BACKGROUND` | `#41707e` | 十六进制底色；maskable、Apple 主屏幕、Android 自适应图标留白用 |
+| `APP_ICON` | `web/public/icons/icon-1024.png` | 方形 PNG；构建时相对仓库根，运行时相对包根或绝对路径 |
+| `APP_ICON_BACKGROUND` | `#41707e` | 十六进制底色；maskable、Apple 主屏幕、Android 自适应图标留白用；需与 `APP_ICON` 或 `PWA_ICON_DIR` 一起配 |
+| `APP_ICON_TRANSPARENT` | 空 | `1` 时生成透明图标；Android 侧不再生成 adaptive 图标；需与图标源一起配 |
+| `PWA_ICON_DIR` | 空 | 服务器运行时直接使用预生成的 `favicon.ico` + `icons/*`（需含 192/512/1024/maskable/favicon-32/apple-180），与 `APP_ICON` 二选一 |
 
-写在构建机的 `server/.env` 或构建进程环境里。`server/.env` 和进程环境都会被 `scripts/build-icons.mjs` 读取；`web/.env` 不作为图标配置来源，避免网页和 APK 拿到不同源图。
+构建期写在构建机的 `server/.env` 或构建进程环境里（`web/.env` 不作为图标配置来源，避免网页和 APK 拿到不同源图）。运行时写在服务器 `/etc/calmobile.env`；两者同名时运行时优先。
 
 生成范围：
 
 | 目标 | 产物 |
 |---|---|
-| 网站 / PWA | `web/dist/favicon.ico`（16/32/48 三个 PNG 条目）、`web/dist/icons/icon-192.png`、`icon-512.png`、`maskable-512.png`、`favicon-32.png`、`apple-touch-icon-180.png` |
+| 网站 / PWA | `web/dist/favicon.ico`（16/32/48 三个 PNG 条目）、`web/dist/icons/icon-192.png`、`icon-512.png`、`icon-1024.png`、`maskable-512.png`、`favicon-32.png`、`apple-touch-icon-180.png` |
 | Android 启动图标 | `app/build/generated/icons/res/mipmap-*/ic_launcher.png`、`ic_launcher_round.png`（mdpi 48 到 xxxhdpi 192） |
-| Android 自适应 | `mipmap-anydpi-v26/ic_launcher.xml`、`ic_launcher_round.xml`、`mipmap-*/ic_launcher_foreground.png`（108～432）、`values/ic_launcher_background.xml` |
+| Android 自适应 | `mipmap-anydpi-v26/ic_launcher.xml`、`ic_launcher_round.xml`、`mipmap-*/ic_launcher_foreground.png`（108～432）、`values/ic_launcher_background.xml`；`APP_ICON_TRANSPARENT=1` 时不生成 |
 
 网页图标在 `pnpm --dir web build` 时由 `web/pwa-build.mjs` 调 `scripts/build-icons.mjs` 生成；Android 图标由 Gradle 的 `buildIcons` 任务在 `preBuild` 时生成。两者都走同一个纯 Node 脚本，没有额外图片工具依赖。
 
@@ -152,12 +167,14 @@ node scripts/build-icons.mjs
 APP_ICON=/path/to/icon.png node scripts/build-icons.mjs --target android
 ```
 
+服务器运行时换图标不需要重建页面包：把 PNG 放到服务器（例如 `/etc/calmobile/icon.png`），在 `/etc/calmobile.env` 配 `APP_ICON=/etc/calmobile/icon.png`（透明图再加 `APP_ICON_TRANSPARENT=1`），重启服务即可；服务启动时生成 `/app/icons/*`、`/app/favicon.ico` 并重算 `release.json`。也可以改用 `PWA_ICON_DIR` 指向预生成的 `favicon.ico` + `icons/*`。
+
 发布链路：
 
 - 只改 `web/pwa-build.mjs`：发运行时包，不发 APK（页面热更新即可）。
 - 改 `web/public/icons/`（源图）或 `scripts/build-icons.mjs`：按 [`scripts/release-scope.mjs`](../scripts/release-scope.mjs) 归类会发 APK，同时发运行时包，避免新装 APK 还是旧图标。
-- 只改 `APP_ICON` / `APP_ICON_BACKGROUND` 环境变量而文件不变时，release-scope 不会命中；需要重新构建并手动触发一次 Release，或改动配套文件让路径命中。
-- 主屏幕 / 桌面图标是安装时写进系统的快照：重新构建发布后，用户要删掉旧图标重新「添加到主屏幕」，或重装 APK，才会看到新图。
+- 只改 `APP_ICON` / `APP_ICON_BACKGROUND` / `PWA_ICON_DIR` 环境变量或服务器上的图片文件时，release-scope 不会命中，也不需要发版；改服务器 `/etc/calmobile.env` 后重启服务即可。
+- 主屏幕 / 桌面图标是安装时写进系统的快照：重新生成后，用户要删掉旧图标重新「添加到主屏幕」，或重装 APK，才会看到新图。
 
 发布后检查：
 
@@ -200,37 +217,31 @@ cloudflared tunnel --url http://127.0.0.1:3000
 
 记下输出的 `https://xxxx.trycloudflare.com`，下面用 `BASE` 表示它。
 
-3. 用隧道地址重启后端，并重新构建页面（页面里的接口地址是构建期写死的）：
+3. 用隧道地址重启后端；页面包用相对 `/api/v1`，不需要为隧道地址重新构建：
 
 ```bash
 BASE=https://xxxx.trycloudflare.com
-APP_API_BASE="$BASE/api/v1" PUBLIC_BASE_URL="$BASE" TRUST_PROXY=1 pnpm --dir server dev
+PUBLIC_BASE_URL="$BASE" TRUST_PROXY=1 pnpm --dir server dev
 ```
 
-```bash
-APP_API_BASE="$BASE/api/v1" pnpm --dir web build
-```
-
-PowerShell 写法：
+页面按方案 A 构建好的 `web/dist` 直接复用即可（本地 `vite dev` 才需要 `APP_API_BASE` 作为代理目标）。PowerShell 写法：
 
 ```powershell
 $BASE = "https://xxxx.trycloudflare.com"
-$env:APP_API_BASE = "$BASE/api/v1"
 $env:PUBLIC_BASE_URL = "$BASE"
 $env:TRUST_PROXY = "1"
 pnpm --dir server dev
-# 另开窗口：$env:APP_API_BASE = "$BASE/api/v1"; pnpm --dir web build
 ```
 
 4. iPhone Safari 打开 `$BASE/app/`：首页应出现安装引导；分享 →「添加到主屏幕」后从主屏幕启动。按上面的真机验收清单勾一遍。
 
 注意：
 
-- `APP_API_BASE` 是**页面构建期**变量，隧道地址变了要重新 `pnpm --dir web build`；`PUBLIC_BASE_URL` 是**服务端运行期**变量，改了要重启后端。两个都必须是同一个隧道源，否则页面会去请求 iPhone 自己的 `127.0.0.1`，或分享链接拼错。
+- 页面包不带域名；`PUBLIC_BASE_URL` 是**服务端运行期**变量，改了要重启后端。隧道地址变了不需要重新 `pnpm --dir web build`；如果另外构建 APK，APK 的 `APP_API_BASE` 才需要指向隧道源。
 - 临时隧道域名每次启动都变；只做一次验收够用。要反复测试通行密钥（WebAuthn 的 RP ID 绑定域名）或让 iPhone 长期访问，用 cloudflared 命名隧道、ngrok 固定域名，或局域网 + mkcert/Caddy 的可信证书；换域名后已安装的主屏幕图标要删掉重加。
 - 快速隧道被网络环境拦截时，可换 ngrok，或在局域网用 Caddy `tls internal` / mkcert 生成证书并让 iPhone 信任根证书；`http://` 下 Service Worker 不会注册，安装也会退化成普通书签。
 - 验证离线：首次在线打开、等 SW 装好并刷新一次后，开飞行模式从主屏幕启动；页面壳应出现，数据请求失败要有可见提示；恢复网络后重新打开。
-- 验证安装名/描述：`PWA_APP_NAME=... PWA_APP_SHORT_NAME=... pnpm --dir web build` 后重新添加到主屏幕。已安装的名称为系统快照，不会因改 `zh.json` 自动更新。
+- 验证安装名/描述：服务器 `/etc/calmobile.env` 配 `PWA_APP_NAME` / `PWA_APP_SHORT_NAME` / `PWA_APP_DESCRIPTION` / `APP_TITLE` / `JOIN_TITLE` 后重启服务，重新添加到主屏幕；构建期 `PWA_*` 只是默认值。已安装的名称为系统快照，不会自动更新。
 
 ### 发布链路
 
@@ -241,12 +252,12 @@ pnpm --dir server dev
 - GitHub Releases 上的 APK，标签 `v0.1.<运行编号>`；
 - 公开 npm 上的运行时包 `calmobile-server@0.1.<运行编号>`。
 
-运行时包里有 `server/dist`、`web/dist`、`web/dist-join`、服务端依赖清单和更新器脚本。服务器解压后 `server/` 与 `web/` 同级，服务端据此找到页面产物。`web/src` 和 `server/src` 不进包；界面文案在构建时已经打进两份页面产物的脚本里。
+运行时包里有 `server/dist`（含页面壳副本 `server/dist/app-shell`、报名站副本 `server/dist/app-shell-join`）、`web/dist`、`web/dist-join`、`scripts/build-icons.mjs`、服务端依赖清单和更新器脚本。服务器解压后 `server/` 与 `web/` 同级；服务端优先读 `web/dist`、`web/dist-join`，缺失时分别读 `server/dist/app-shell`、`server/dist/app-shell-join`。配置了运行时品牌时，服务启动后会在临时目录生成实例页面层，`web/dist` 本身不改。`web/src` 和 `server/src` 不进包；界面文案在构建时已经打进两份页面产物的脚本里。
 
 路径归类在 [`scripts/release-scope.mjs`](../scripts/release-scope.mjs)。CI 在 push 时记下 `before..after` 的文件清单，Release 读取它：
 
 - 原生外壳（`app/src/main`、`app/build.gradle`、Gradle、`scripts/client-target.mjs`）发布 APK。
-- 服务端运行时代码、依赖锁、`deploy/`、`scripts/runtime-bundle.mjs`、`scripts/sync-production-env.mjs` 发布运行时包。
+- 服务端运行时代码、依赖锁、`deploy/`、`scripts/runtime-bundle.mjs`、`scripts/sync-production-env.mjs`、`scripts/build-icons.mjs` 发布运行时包。
 - 只进应用页面包的源（例如 `web/src/pages/HomePage.vue`、`web/src/main.ts`、`web/vite.config.ts`、`web/release-manifest.mjs`）、报名站专有源（`web/src/join/`、`web/join.html`、`web/vite.join.config.ts`、`server/scripts/build-join.ts`）、两边共用的 `web/src` 都发布运行时包。
 - PWA 构建脚本与安装图标（`web/pwa-build.mjs`、`scripts/build-icons.mjs`、`web/public/`）两份页面构建都要用，发布运行时包；图标源图还会生成 APK 启动图标，所以 `scripts/build-icons.mjs` 与 `web/public/icons/` 的改动也发 APK。
 - `server/src/domain/answer-document.ts` 发布运行时包。
@@ -295,6 +306,8 @@ node /usr/local/lib/calmobile/calmobile-update.mjs --unpin
 
 一次更新依次做：校验 npm 元数据和 tarball 完整性 → 解压到 `releases/.tmp-*` → `pnpm install --frozen-lockfile --prod` → 补齐 `/etc/calmobile.env` 缺失的键 → 用新版本代码跑迁移 → 原子切换 `current` → 重启 `calmobile.service` → 轮询 `/ping`。成功后删除超出 `keep`（默认 3）的旧版本和旧缓存。服务端的离线 IP 归属地库（`ip2region-ts`）随依赖一起装进版本目录，数据文件在包里，不需要额外环境变量或手工放文件；解析失败只让最近登录地区为空，不影响登录。
 
+**`current/web/dist` 不是缓存**：它是运行时包里 PWA 的 `/app/`、Android 热更新清单和 favicon 的来源。更新器只删除超出 `keep` 的旧版本目录，不碰当前版本的 `web/dist`；生产服务单元也不要在启动前删除它（样例见 [`deploy/calmobile.service`](../deploy/calmobile.service)）。如果旧单元里有 `ExecStartPre=rm -rf .../current/web/dist`，去掉。运行时包另带 `server/dist/app-shell` 与 `server/dist/app-shell-join` 副本，旧单元仍清掉 `web/dist` 或 `web/dist-join` 时服务端会自动退到对应副本，`/app/`、PWA、报名站和 Android 热更新不会消失；但清理构建产物仍是错误配置，先修单元再回滚临时方案。
+
 失败时不会把线上搞挂：
 
 - 下载、校验、依赖安装、环境文件合并或迁移失败：不切换，旧版本继续服务，timer 下次重试。
@@ -309,7 +322,7 @@ node /usr/local/lib/calmobile/calmobile-update.mjs --unpin
 1. 等一次 Release 成功，确认 npm 上已经有 `calmobile-server@0.1.<编号>`。
 2. 把 `deploy/calmobile-update.mjs` 放到 `/usr/local/lib/calmobile/calmobile-update.mjs`，把 `deploy/calmobile-update.json.example` 复制成 `/etc/calmobile-update.json`。
 3. 运行 `node /usr/local/lib/calmobile/calmobile-update.mjs --update`：建立 `releases/0.1.<编号>`、`current`，完成依赖安装和迁移。此时 `calmobile.service` 还指向旧目录，这一步只是重启旧服务，不影响访问。
-4. 把 `calmobile.service` 的 `WorkingDirectory` 改成 `/opt/calmobile/current/server`，`systemctl daemon-reload` 后重启。
+4. 把 `calmobile.service` 的 `WorkingDirectory` 改成 `/opt/calmobile/current/server`，`systemctl daemon-reload` 后重启。生产单元样例见 [`deploy/calmobile.service`](../deploy/calmobile.service)（`User` / `Group` 按机器调整）：`/opt/calmobile/current/web/dist` 和 `web/dist-join` 是运行时包的一部分，PWA 的 `/app/`、Android 热更新清单、站点图标和报名站都从这里读，**不要在 `ExecStartPre` 里删除或清空它们**；旧单元里有这类清理命令时删掉，只保留入口存在性检查。运行时包同时带 `server/dist/app-shell`、`server/dist/app-shell-join` 副本，服务端在构建产物被清理时会退到它们，但应把单元修好而不是依赖副本。
 5. 安装 `deploy/calmobile-update.service` 与 `deploy/calmobile-update.timer`，`systemctl enable --now calmobile-update.timer`。
 6. 确认 `/ping`、`/`、`/app/index.html`、`/app/release.json`、`/join` 都正常后，删除旧的 `/opt/calmobile/server`、`/opt/calmobile/web` 和 `dist.prev`。
 7. 在 GitHub 删除不再使用的 `DEPLOY_*` Secrets / Variables。
@@ -322,7 +335,23 @@ node /usr/local/lib/calmobile/calmobile-update.mjs --unpin
 
 新增一个键时：非密钥的固定项写进 `deploy/production.env`，下一次更新自动补进还没有它的服务器；密钥或必须按机器填的值直接写进服务器 `/etc/calmobile.env`。缺了它会让生产自检拒绝启动的必填密钥，还要加进 `scripts/sync-production-env.mjs` 的 `REQUIRED_SERVER_SECRETS`，更新器会在切换版本前拦住。
 
-应用页面打进 APK 一份。正式包打开接口所在源的 `/app/index.html`，WebView 把这个路径拦截到本机快照，页面切换不访问网络。快照没有，或不是当前 `versionCode`，就用包内那份。首屏出来之后才后台拉取 `/app/release.json`；有新版本才下到待用目录，下次冷启动再换上，使用中不重载。调试包（接口是 http）不热更新。改 `APP_API_BASE` 仍要重新构建 APK：文档源写在外壳里。运行时包里的页面用同一个 `APP_API_BASE` 构建。
+应用页面打进 APK 一份。正式包打开接口所在源的 `/app/index.html`，WebView 把这个路径拦截到本机快照，页面切换不访问网络。快照没有，或不是当前 `versionCode`，就用包内那份。首屏出来之后才后台拉取 `/app/release.json`；有新版本才下到待用目录，下次冷启动再换上，使用中不重载。调试包（接口是 http）不热更新。页面包本身用相对 `/api/v1`，不含 `APP_API_BASE` 域名；`APP_API_BASE` 只决定 APK 外壳加载哪个源，因此 APK 仍按实例构建，但同一份运行时包里的 `web/dist` 不必按域名重建。
+
+### 多实例部署
+
+同一个 `calmobile-server@0.1.<编号>` 运行时包可以同时服务多个实例，不需要按域名重新构建 `web/dist` 或 `web/dist-join`：
+
+- 页面包不含 API 域名。应用、PWA、报名站的接口和媒体都走相对 `/api/v1`、`/media/...`，由当前页面 origin 决定实际实例。反代必须把 `/app/`、`/api/`、`/media/` 放在同一个源下。
+- 每个实例只改自己的 `/etc/calmobile.env`：`PUBLIC_BASE_URL`（分享链接、安装说明地址、canonical redirect、WebAuthn 默认 RP/origin）、数据库、邮件、`LANG_PACK_URLS`、隐私政策，以及运行时品牌（`PWA_APP_NAME` / `PWA_APP_SHORT_NAME` / `PWA_APP_DESCRIPTION` / `APP_TITLE` / `JOIN_TITLE` / `APP_ICON` 等，见「PWA 与 iPhone 主屏幕」）。`PUBLIC_BASE_URL` 必须和用户实际访问的域名一致。
+- `APP_API_BASE` 只用于 APK 外壳加载 `/app/index.html` 和开发代理；它不再进入页面包，也不参与运行时包构建。**APK 仍按实例构建**（同一个 APK 不能指向多个域名）；运行时包里的页面产物是共享的。
+- 构建后可用下面的检查确认页面包没有写死实例域名；`web/check-page-bundle.mjs` 已经接成 Vite 构建插件，`pnpm --dir web build`、`build:join` 与 `--watch` 每次写完后都会检查，出现域名就让构建失败：
+
+```bash
+node web/check-page-bundle.mjs web/dist web/dist-join
+```
+
+- PWA 的 `manifest.start_url` / `scope` 是 `/app/`，图标和 Service Worker 也都是相对路径；同一份页面放到不同 `PUBLIC_BASE_URL` 下即可安装。安装后的主屏幕名称/图标是各实例安装时的快照，改运行时品牌后要重新添加。
+- 如果某个实例把 API 放到另一个源，请在反代上把 `/api`、`/media` 同域转发到 API；不要把域名写进页面包，否则会重新引入“换域名要重建”的问题，并额外破坏 WebAuthn 的 RP ID/origin 校验。
 
 ### 反向代理、证书与通行密钥
 
@@ -351,7 +380,7 @@ location = /.well-known/assetlinks.json {
 
 ### GitHub Variables 与 Secrets
 
-GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`）、`PUBLIC_BASE_URL`（`https://域名`）、`PRIVACY_POLICY_URL`、`LANG_PACK_DEFAULT`（默认语言包名称）、`LANG_PACK_URLS`（`名称=链接`，逗号或空白分开）。这些值会出现在 Actions 日志里，服务器地址、口令和私钥不要写进来。
+GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`，只给 APK 外壳和开发代理用，不进入页面包，服务器不需要配置）、`PUBLIC_BASE_URL`（`https://域名`）、`PRIVACY_POLICY_URL`、`LANG_PACK_DEFAULT`（默认语言包名称）、`LANG_PACK_URLS`（`名称=链接`，逗号或空白分开）。这些值会出现在 Actions 日志里，服务器地址、口令和私钥不要写进来。
 
 GitHub Secrets：`NPM_TOKEN`（能发布 `calmobile-server` 的 npm automation token，允许绕过 2FA）、`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。
 
@@ -369,5 +398,5 @@ GitHub Secrets：`NPM_TOKEN`（能发布 `calmobile-server` 的 npm automation t
 8. 数据库时区是 `Asia/Shanghai`。原因写在仓库根 `docker-compose.yml`。备份和恢复演练已经做过。
 9. `client_max_body_size` 盖住视频单文件上限。视频默认 50MB 时至少写 `64m`。头像那一道传输硬顶盖不住视频。上传目录和开关见 `server/.env.example`。存满之后的产品行为见 [`product.md`](product.md)。
 10. 注册页有收集说明。`PRIVACY_POLICY_URL` 是 https 政策地址。当前邮件只有验证码，没有营销信。
-11. 外壳有改动时，正式包用 `./gradlew :app:assembleRelease`，或由上面的 Release 工作流在 `master` 的合并提交通过 CI 后构建。`APP_API_BASE` 是与 `PUBLIC_BASE_URL` 同一个源的 `https://域名/api/v1`。包名是 `com.blathroat.calmobile`。签名四项指向正式密钥。`ENABLE_WEB=true`，运行时包里的 `web/dist-join` 已由更新器放到当前版本目录。
+11. 外壳有改动时，正式包用 `./gradlew :app:assembleRelease`，或由上面的 Release 工作流在 `master` 的合并提交通过 CI 后构建。`APP_API_BASE` 是与 `PUBLIC_BASE_URL` 同一个源的 `https://域名/api/v1`，只决定 APK 外壳加载哪个源；页面包用相对接口，不写域名。包名是 `com.blathroat.calmobile`。签名四项指向正式密钥。`ENABLE_WEB=true`，运行时包里的 `web/dist-join` 已由更新器放到当前版本目录。
 12. 改了 PWA 清单、Service Worker、安装引导或 `web/public/icons/` 时，按上面的 iPhone 真机验收清单过一遍，并确认 `/app/manifest.webmanifest`、`/app/sw.js`、`/app/icons/` 在线且 MIME 与缓存正确。

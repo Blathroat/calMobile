@@ -12,3 +12,21 @@ declare const __APP_VERSION_CODE__: number;
  * 空串表示没有覆盖，页面标题回落到 `zh.json` 的 `app.documentTitle`。
  */
 declare const __PWA_APP_NAME_OVERRIDE__: string;
+
+/**
+ * 服务端在 `index.html` / `join.html` 里注入的运行时品牌。
+ * 没有这份脚本时（旧快照或纯静态页面）页面沿用构建期默认值。
+ */
+interface Window {
+  __CALMOBILE_BRANDING__?: {
+    appName?: string;
+    shortName?: string;
+    description?: string;
+    appTitle?: string;
+    joinTitle?: string;
+    lang?: string;
+    themeColor?: string;
+    themeColorDark?: string;
+    backgroundColor?: string;
+  };
+}

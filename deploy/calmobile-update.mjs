@@ -57,11 +57,14 @@ const REQUIRED_RELEASE_ENTRIES = [
   'server/dist/server/join-site.js',
   'web/dist/index.html',
   'web/dist/release.json',
+  'server/dist/app-shell/index.html',
   'web/dist-join/join.html',
+  'server/dist/app-shell-join/join.html',
   'deploy/production.env',
   'deploy/calmobile-update.mjs',
   'scripts/sync-production-env.mjs',
   'scripts/client-target.mjs',
+  'scripts/build-icons.mjs',
 ];
 
 const ENV_OVERRIDES = {

@@ -20,8 +20,15 @@ import { isEntry } from './entry.js';
 
 import { createAdaptorServer } from '@hono/node-server';
 import { createApp } from './server/hono-app.js';
-import { appShellReady, defaultAppRoot } from './server/app-shell.js';
-import { defaultJoinRoot, joinSiteMissingMessage, joinSiteReady } from './server/join-site.js';
+import { appShellReady, defaultAppRoot, defaultPackagedAppRoot, pickAppRoot } from './server/app-shell.js';
+import {
+  defaultJoinRoot,
+  defaultPackagedJoinRoot,
+  joinSiteMissingMessage,
+  joinSiteReady,
+  pickJoinRoot,
+} from './server/join-site.js';
+import { prepareRuntimeJoin, prepareRuntimeWeb } from './server/runtime-web.js';
 import { adminIdentity, productionProblems } from './config/production.js';
 import { demoAccountsUsingExamplePassword, ensureProductionAdmin } from './config/bootstrap-admin.js';
 import { isDatabaseUnavailable } from './domain/errors.js';
@@ -39,13 +46,28 @@ const PORT = config.port;
 configureCheckinCodePrefix(config.checkin.codePrefix);
 
 /**
- * 报名站产物在加载时定下来：有 `join.html` 才托管。
+ * 页面产物在加载时定下来：有入口才托管。
  * 测试直接 `listen()` / `createApp()` 时目录可以不存在，不会在 import 时退出。
+ *
+ * 优先用 `web/dist`；被外部清理时退到运行时包里的 app-shell 副本。品牌配置存在时，
+ * 再在这份静态产物上生成实例专属的临时页面层（改标题/manifest/图标并重算 release.json）。
  */
-const joinRoot = defaultJoinRoot();
+const webJoinRoot = defaultJoinRoot();
+const packagedJoinRoot = defaultPackagedJoinRoot();
+const joinBaseRoot = pickJoinRoot(webJoinRoot, packagedJoinRoot);
+const joinRuntime = runtime.webEnabled
+  ? prepareRuntimeJoin({ baseRoot: joinBaseRoot, branding: config.branding })
+  : undefined;
+const joinRoot = joinRuntime?.root ?? joinBaseRoot;
 const joinReady = joinSiteReady(joinRoot);
-const appRoot = defaultAppRoot();
+
+const webAppRoot = defaultAppRoot();
+const packagedAppRoot = defaultPackagedAppRoot();
+const appBaseRoot = pickAppRoot(webAppRoot, packagedAppRoot);
+const appRuntime = prepareRuntimeWeb({ baseRoot: appBaseRoot, branding: config.branding });
+const appRoot = appRuntime.root;
 const appReady = appShellReady(appRoot);
+const brandingWarnings = [...new Set([...appRuntime.warnings, ...(joinRuntime?.warnings ?? [])])];
 
 /** 骨架：公共层、探针、状态页、业务路由、报名站和统一错误处理。 */
 const app = createApp({
@@ -60,6 +82,7 @@ const app = createApp({
   forceHttps: runtime.forceHttps,
   joinRoot: runtime.webEnabled && joinReady ? joinRoot : undefined,
   appRoot: appReady ? appRoot : undefined,
+  branding: config.branding,
   publicBaseUrl: runtime.publicBaseUrl,
 });
 
@@ -93,6 +116,12 @@ function listen(port: number, hostname?: string, listeningListener?: () => void)
  * 业务接口在数据库恢复后自动可用（连接池会重建连接）。
  */
 async function start() {
+  const configWarnings = new Set(config.branding.warnings);
+  for (const warning of brandingWarnings) {
+    // 生产自检会把配置解析 warning 再打一次；这里只补运行时生成阶段的回退提示。
+    if (runtime.isProduction && configWarnings.has(warning)) continue;
+    console.warn(`[品牌配置] ${warning}`);
+  }
   if (runtime.webEnabled && !joinReady) {
     console.error(joinSiteMissingMessage(joinRoot));
     process.exit(1);
@@ -101,6 +130,17 @@ async function start() {
     console.warn(
       `应用页面产物缺失：没有找到 ${appRoot} 里的 index.html。已安装的客户端继续用包内页面，热更新暂时不可用。`,
     );
+  } else if (runtime.isProduction && appReady && appBaseRoot !== webAppRoot) {
+    console.warn(`web/dist 不可用，使用运行时包内的页面壳：${appBaseRoot}`);
+  }
+  if (appRuntime.applied) {
+    console.log(`应用页面品牌：已按服务器环境生成（${appRoot}）`);
+  }
+  if (runtime.webEnabled && joinRuntime?.applied) {
+    console.log(`报名站标题：已按服务器环境生成（${joinRoot}）`);
+  }
+  if (runtime.webEnabled && joinReady && joinBaseRoot !== webJoinRoot) {
+    console.warn(`web/dist-join 不可用，使用运行时包内的报名站：${joinBaseRoot}`);
   }
 
   const startedBy = runtime.startedBy ? `（pnpm ${runtime.startedBy}）` : '';
