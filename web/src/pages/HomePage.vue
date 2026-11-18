@@ -12,7 +12,7 @@
  * 待审核或已通过的私人会议（申请人与主办人都算）、自己开办的展会。
  * 已拒绝和已撤销的会议不打点，也不出现在当天列表。访客只有加粗，没有圆点。
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, bootApp } from '@/app/runtime';
 import { paths } from '@/app/surface';
@@ -25,16 +25,20 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import MediaBox from '@/components/MediaBox.vue';
 import HintNote from '@/components/HintNote.vue';
 import CalendarMonthPanel from '@/components/CalendarMonthPanel.vue';
+import PwaInstallSheet from '@/components/PwaInstallSheet.vue';
 import { useHint } from '@/composables/useHint';
 import { useAsync } from '@/composables/useAsync';
 import { useRevealReady } from '@/composables/useReveal';
 import { suppressPull, usePullRefresh } from '@/services/pull-refresh';
 import { resolveCalendarSwipe } from '@/services/calendar-swipe';
+import { dismissIosInstallHint, iosInstallHintDismissed, isIosInstallOffer } from '@/services/pwa';
+import { openSheet, sheet } from '@/services/sheet';
 import type { CachedRead } from '@/services/query-cache';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
 import RoleTag from '@/components/RoleTag.vue';
 import { addMonths, formatChineseTime, monthLabel } from '@/services/format';
+import { agreementConsentPending } from '@/services/agreement-prompt';
 import type { JsonObject } from '@/api/types';
 import { modeLabel, registrationStatusLabel, statusTone } from '@/services/status';
 import { t } from '@/i18n';
@@ -163,6 +167,10 @@ function prefersReducedMotion(): boolean {
 let slideTimer: number | undefined;
 /** 回弹动画的兜底计时器：新一次拖动开始时要取消，免得它把正在拖的卡片复位。 */
 let snapTimer: number | undefined;
+/** iOS 安装引导的延迟计时器：离开首页时必须清掉，否则会在别的页面上弹。 */
+let installHintTimer: number | undefined;
+/** 只约一次安装提示：`bootstrap.booted` 可能在挂载前就已经是 true。 */
+let installHintScheduled = false;
 let monthSliding = false;
 
 /** 当前日历卡片的宽度；布局没算出来时退回常见窄屏宽度。 */
@@ -401,6 +409,42 @@ function announce(): void {
   toast(announcement.value);
 }
 
+/**
+ * iOS 安装引导：只在 Safari 且没有原生壳、用户还没关过时提示一次。
+ *
+ * 延到首屏之后（600ms）再弹，别跟启动公告、首屏取数在同一帧抢注意力；
+ * 页面在这段时间里被换掉时由 `onBeforeUnmount` 清掉定时器，不会在别的页面上弹出来。
+ * 关掉就算看过（`dismissIosInstallHint`），设置页里的入口仍然可以再打开说明。
+ */
+function scheduleInstallHint(): void {
+  // 等启动数据到齐再约：协议更新确认要在同一批数据落定后弹，先弹安装引导会把它挡掉。
+  // 只约一次；`bootstrap.booted` 从 false 变 true 时触发。
+  if (installHintScheduled) return;
+  installHintScheduled = true;
+  installHintTimer = window.setTimeout(() => {
+    installHintTimer = undefined;
+    if (!isIosInstallOffer() || iosInstallHintDismissed()) return;
+    // 用户协议更新必须由用户做出选择，安装提示不能抢在它前面。
+    if (agreementConsentPending()) return;
+    // 别的面板已经开着（例如协议更新确认）时让用户先处理，不在它上面再盖一层。
+    if (sheet.current) return;
+    openSheet({
+      title: t('pwa.install.title'),
+      component: PwaInstallSheet,
+      props: { mode: 'app' },
+      onClose: dismissIosInstallHint,
+    });
+  }, 600);
+}
+
+watch(
+  () => bootstrap.booted,
+  (booted) => {
+    if (booted) scheduleInstallHint();
+  },
+  { immediate: true },
+);
+
 usePullRefresh(
   () => load().then(() => undefined),
   computed(() => loading.value && hasContent.value),
@@ -414,6 +458,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (slideTimer !== undefined) window.clearTimeout(slideTimer);
   if (snapTimer !== undefined) window.clearTimeout(snapTimer);
+  if (installHintTimer !== undefined) window.clearTimeout(installHintTimer);
 });
 </script>
 

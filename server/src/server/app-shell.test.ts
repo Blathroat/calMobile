@@ -19,7 +19,44 @@ test('应用页面路径停在 /app 内', () => {
 test('入口不长期缓存，哈希资源可以', () => {
   assert.equal(appCacheControl('index.html'), 'no-cache');
   assert.equal(appCacheControl('release.json'), 'no-cache');
+  assert.equal(appCacheControl('sw.js'), 'no-cache');
+  assert.equal(appCacheControl('manifest.webmanifest'), 'no-cache');
+  assert.equal(appCacheControl('icons/apple-touch-icon.png'), 'no-cache');
   assert.match(appCacheControl('assets/index-abc.js'), /immutable/);
+});
+
+test('PWA 清单、Service Worker 和图标按固定类型托管，不长期缓存', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'calmobile-pwa-'));
+  try {
+    writeFileSync(path.join(root, 'index.html'), '<!doctype html><title>应用</title>');
+    writeFileSync(path.join(root, 'manifest.webmanifest'), '{"name":"展会排期助手","start_url":"/app/"}');
+    writeFileSync(path.join(root, 'sw.js'), 'self.addEventListener("fetch", () => {});');
+    mkdirSync(path.join(root, 'icons'));
+    writeFileSync(path.join(root, 'icons', 'icon-192.png'), 'png');
+    const manifest = lookupAppFile(root, '/app/manifest.webmanifest');
+    assert.equal(manifest.kind, 'file');
+    if (manifest.kind === 'file') {
+      assert.equal(manifest.file.type, 'application/manifest+json; charset=utf-8');
+      assert.equal(manifest.file.cache, 'no-cache');
+      assert.match(manifest.file.body.toString(), /展会排期助手/);
+    }
+    const worker = lookupAppFile(root, '/app/sw.js');
+    assert.equal(worker.kind, 'file');
+    if (worker.kind === 'file') {
+      assert.equal(worker.file.type, 'text/javascript; charset=utf-8');
+      assert.equal(worker.file.cache, 'no-cache');
+    }
+    const icon = lookupAppFile(root, '/app/icons/icon-192.png');
+    assert.equal(icon.kind, 'file');
+    if (icon.kind === 'file') {
+      assert.equal(icon.file.type, 'image/png');
+      assert.equal(icon.file.cache, 'no-cache');
+    }
+    assert.equal(lookupAppFile(root, '/app/manifest.missing.webmanifest').kind, 'missing');
+    assert.equal(lookupAppFile(root, '/app/sw-missing.js').kind, 'missing');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('缺的脚本不回退成页面，穿越读不到目录外', () => {

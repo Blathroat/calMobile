@@ -1,6 +1,6 @@
 # 构建、测试与上线
 
-本文件是跨模块的验证和上线步骤。后端启动、模式差异和响应约定见 [`server/README.md`](../server/README.md)。环境变量以 `server/.env.example` 的注释为准。Node 版本以 `server/package.json` 和 `web/package.json` 的 `engines` 为准。
+本文件是跨模块的验证和上线步骤。后端启动、模式差异和响应约定见 [`server/README.md`](../server/README.md)。环境变量以 `server/.env.example` 的注释为准；构建期 PWA 安装元信息见 `web/.env.example`。Node 版本以 `server/package.json` 和 `web/package.json` 的 `engines` 为准。
 
 前端 `vue-tsc` 停在 TypeScript 6（`web/package.json` 的 `typescript`）。当前 Vue 类型检查器用不上 TypeScript 7 的原生编译入口。后端使用 TypeScript 7。升级时保留 `.vue` 类型检查。
 
@@ -11,6 +11,7 @@
 | 改动 | 命令 |
 |---|---|
 | Vue 页面、组件、样式、界面文案 | `pnpm --dir web typecheck`、`pnpm --dir web lint`、`pnpm --dir web fmt:check`、`pnpm --dir web test`、`pnpm --dir web build`（改了报名站页面再跑 `pnpm --dir web build:join`）。打 APK 时 `preBuild` 把 `web/dist` 同步到 WebView 资源 |
+| iPhone / PWA（`web/pwa-build.mjs`、安装引导、`web/public/` 图标） | 上面的前端命令；`pnpm --dir web build` 之后确认 `web/dist/manifest.webmanifest`、`web/dist/sw.js`、`web/dist/icons/` 都已生成，`web/dist/sw.js` 的预缓存列表不含 `release.json` 与 `sw.js` |
 | 路由与加载 | `pnpm --dir web test` |
 | 后端规则或响应 | `pnpm --dir server lint`、`pnpm --dir server fmt:check`、`pnpm --dir server test`，以及 `pnpm --dir server test:contract`（需要 PostgreSQL）。`pnpm --dir server test` 同时跑发布脚本的 Node 测试。改了已加载的 `server/src` 后重启不用 watch 起的进程 |
 | Java 或桥接 | `gradlew.bat :app:testDebugUnitTest`。出包或资源变更再跑 `gradlew.bat :app:assembleDebug` |
@@ -62,6 +63,43 @@ server {
 
 `./gradlew :app:assembleDebug` 使用当前这份配置，不要求公网地址或签名。`./gradlew :app:assembleRelease` 会拒绝：地址不是公网 https、包名是 `com.example`、签名四项缺一或密钥文件不存在。
 
+### PWA 与 iPhone 主屏幕
+
+iPhone 没有 APK，安装文件是 `web/dist` 里随页面一起发布的静态文件，由服务端的 `/app/` 托管。固定文件名一律 `Cache-Control: no-cache`：
+
+| 路径 | Content-Type | 缓存 |
+|---|---|---|
+| `/app/manifest.webmanifest` | `application/manifest+json; charset=utf-8` | `no-cache` |
+| `/app/sw.js` | `text/javascript; charset=utf-8` | `no-cache` |
+| `/app/icons/*` | 按扩展名（PNG 为 `image/png`） | `no-cache` |
+| `/app/assets/*` | 按扩展名 | `public, max-age=31536000, immutable` |
+
+安装元信息在构建期由 `web/pwa-build.mjs` 从 `web/src/i18n/zh.json` 生成。`PWA_APP_NAME`、`PWA_APP_SHORT_NAME`、`PWA_APP_DESCRIPTION` 三项非空时覆盖默认值；它们是构建期变量，写在构建机的 `web/.env` / `web/.env.local`（模板见 `web/.env.example`）或构建进程环境里，不是服务器运行配置，不要写进 `/etc/calmobile.env`。不配时用 `zh.json` 的默认文案，CI 发布不需要额外配置。
+
+主屏幕名称与图标在安装时写进系统。改 `PWA_*`、`zh.json` 的安装文案或 `web/public/icons/` 后要重新构建发布，并让用户在主屏幕上删除旧图标、重新用 Safari 打开 `/app/` 再「添加到主屏幕」才会变。
+
+发布后确认（把 `<域名>` 换成实际域名）：
+
+```bash
+curl -s -D - -o /dev/null https://<域名>/app/manifest.webmanifest   # 200、application/manifest+json、no-cache
+curl -s -D - -o /dev/null https://<域名>/app/sw.js                  # 200、text/javascript、no-cache
+curl -s -D - -o /dev/null https://<域名>/app/icons/icon-192.png     # 200、image/png、no-cache
+curl -s https://<域名>/app/manifest.webmanifest | jq '{name,short_name,start_url,scope,display}'
+# 预缓存列表里应只有页面壳：没有 release.json 与 sw.js
+curl -s https://<域名>/app/sw.js | sed -n 's/^const PRECACHE = //p'
+```
+
+iPhone 真机验收（Safari，或从主屏幕打开）：
+
+1. Safari 打开 `/app/`：首页出现一次「安装到主屏幕」引导，关掉后刷新不再自动出现；设置页仍有「安装到主屏幕」入口，能重新打开同一份说明；用微信等非 Safari 浏览器打开时，说明提示先换到 Safari。
+2. 分享 →「添加到主屏幕」：名称与图标正确；从主屏幕打开是独立窗口（没有 Safari 地址栏），首页月历与展会能正常加载。第一次打开可能需要重新登录，登录后数据正常。
+3. 报名站（`/e/…`）在 iPhone 上：顶部显示安装引导而不是下载条，按钮打开同一份说明，「打开完整应用」能跳到 `/app/`。
+4. 详情页「加入日历」生成 `.ics` 并通过分享面板存到「文件」，点开后能加入系统日历；页面上没有「移出日历」。
+5. 头像、封面、简介图片能选图并上传；语言包与协议 Markdown 能选文件；CSV、语言包底稿、二维码图片落成下载文件；分享走系统面板，退回复制时提示成功。
+6. 核销页能用摄像头扫码；拒绝相机权限或没有摄像头时提示改用选图或手动输入。
+7. 开飞行模式后从主屏幕重新打开：页面壳仍能打开，数据请求失败有可见提示（没有离线数据）；恢复网络后重新打开能加载新页面。
+8. 设置页没有「应用更新」组；换语言包后主屏幕名称与图标不变。
+
 ### 发布链路
 
 推送到 `master` 的合并提交在 CI 成功之后，`.github/workflows/release.yml` 按这次推送的路径发布。普通提交只跑 CI，不发布；功能分支和拉取请求不发布。会触发发布或更新的改动走 PR，用合并提交合入，不要直接推到 `master`。合入前要等该拉取请求自己的 CI 成功。检查还在跑或失败时不要合并。合并之后 `master` 上还会再跑一次推送 CI，那一次才决定自动 Release。
@@ -78,6 +116,7 @@ server {
 - 原生外壳（`app/src/main`、`app/build.gradle`、Gradle、`scripts/client-target.mjs`）发布 APK。
 - 服务端运行时代码、依赖锁、`deploy/`、`scripts/runtime-bundle.mjs`、`scripts/sync-production-env.mjs` 发布运行时包。
 - 只进应用页面包的源（例如 `web/src/pages/HomePage.vue`、`web/src/main.ts`、`web/vite.config.ts`、`web/release-manifest.mjs`）、报名站专有源（`web/src/join/`、`web/join.html`、`web/vite.join.config.ts`、`server/scripts/build-join.ts`）、两边共用的 `web/src` 都发布运行时包。
+- PWA 构建脚本与安装图标（`web/pwa-build.mjs`、`web/public/`）两份页面构建都要用，发布运行时包，不发 APK。
 - `server/src/domain/answer-document.ts` 发布运行时包。
 - 文档、测试、`server/src/dev/` 不触发。
 
@@ -199,3 +238,4 @@ GitHub Secrets：`NPM_TOKEN`（能发布 `calmobile-server` 的 npm automation t
 9. `client_max_body_size` 盖住视频单文件上限。视频默认 50MB 时至少写 `64m`。头像那一道传输硬顶盖不住视频。上传目录和开关见 `server/.env.example`。存满之后的产品行为见 [`product.md`](product.md)。
 10. 注册页有收集说明。`PRIVACY_POLICY_URL` 是 https 政策地址。当前邮件只有验证码，没有营销信。
 11. 外壳有改动时，正式包用 `./gradlew :app:assembleRelease`，或由上面的 Release 工作流在 `master` 的合并提交通过 CI 后构建。`APP_API_BASE` 是与 `PUBLIC_BASE_URL` 同一个源的 `https://域名/api/v1`。包名是 `com.blathroat.calmobile`。签名四项指向正式密钥。`ENABLE_WEB=true`，运行时包里的 `web/dist-join` 已由更新器放到当前版本目录。
+12. 改了 PWA 清单、Service Worker、安装引导或 `web/public/icons/` 时，按上面的 iPhone 真机验收清单过一遍，并确认 `/app/manifest.webmanifest`、`/app/sw.js`、`/app/icons/` 在线且 MIME 与缓存正确。

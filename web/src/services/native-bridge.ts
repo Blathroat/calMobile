@@ -139,8 +139,9 @@ export interface NativeActionResults {
   'media.importText': { text: string; fileName?: string; bytes?: number };
   'media.store': { url: string };
   'media.discard': { ok: boolean };
-  // shared 为 false 等价于用户放弃分享，不是错误。
-  'share.text': { shared: boolean };
+  // shared 为 false 等价于用户放弃分享，不是错误。浏览器里没有系统分享时退回剪贴板，
+  // 用 copied 告诉页面内容已经复制好（提示「已复制」而不是「分享失败」）。
+  'share.text': { shared: boolean; copied?: boolean };
   // exported 为 false 表示没写成（权限或存储），不是异常。
   'export.csv': { exported: boolean };
   // 同上：系统面板里点了取消会以 cancelled 失败，不是故障。

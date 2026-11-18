@@ -8,12 +8,14 @@
 
 业务数据只存在 `server/` 的 PostgreSQL。前端经 `web/src/api/client.ts` 访问。原生只做设备能力。后端不可用时页面报错。
 
+同一份 `web/dist` 同时服务 Android WebView 与 iPhone 主屏幕应用（PWA）：站点上都在 `/app/`，原生壳拦截到本机快照，Safari 与主屏幕应用直接加载线上这份产物。没有原生桥时，设备能力改用浏览器实现，见「iPhone / PWA」的「设备能力」。
+
 | 层           | 责任                                              | 权威入口                                                  |
 |--------------|---------------------------------------------------|-----------------------------------------------------------|
-| WebView 页面 | 路由、渲染、表单和用户交互                        | `web/src/`（构建到 `web/dist`，包内一份，正式包再用本机快照） |
+| WebView 页面 | 路由、渲染、表单和用户交互                        | `web/src/`（构建到 `web/dist`，包内一份，正式包再用本机快照；iPhone 主屏幕应用加载同一份产物） |
 | 前端数据     | 类型化 REST client、令牌续期、缓存                | `web/src/api/client.ts`；契约表为 `web/api-endpoints.mjs` |
 | 前端加载     | 缓存首屏、后台刷新、错误呈现                      | Vue composable 与 `web/src/services/query-cache.ts`       |
-| 原生桥接     | 日历、通知权限、摄像头、媒体、分享、CSV、设备镜像 | `WebAppActions.handle()` 的固定动作表                     |
+| 设备能力     | 原生：系统日历、通知权限、摄像头、媒体、分享、CSV、设备镜像；浏览器：文件选择、下载、Web Share、通知权限 | `web/src/services/device-services.ts`（原生动作表 `WebAppActions.handle()` / 浏览器实现 `browser-device.ts`） |
 | 后端         | 认证、业务规则、持久化、邮件和接口                | `server/src/`                                             |
 
 页面不直接 `fetch`，也不通过原生桥接取业务数据。读取接口直接返回数据。写接口按响应约定返回信封。
@@ -21,6 +23,8 @@
 操作日志由服务端 `server/src/services/logs.ts` 在响应之后异步写入 `app_logs`：变更请求（非 GET）、4xx / 5xx、以及登录 / 注册 / 找回密码这类认证接口无论成功失败都记一条；读接口成功不记，不记录请求体（只留方法、路径、状态码、耗时、操作人与 IP）。写日志是旁路，失败只进服务端控制台，不影响请求本身。超过 `app_settings.logs.storageMb` 时按累计大小清理最早的记录（写入后节流清理，管理员调小上限时立刻清一次）。管理页 `/logs` 是通过 `GET /api/v1/logs` 读取的最近日志，仅管理员可见；入口按钮放在「管理-设置 → 日志」卡片内部、设置项下方（整行浅色描边按钮，`cta ghost`）；`AdminSettingsSection` 发 `open-logs` 事件，`AdminPage` 负责跳转，不在管理页顶部。
 
 正式包的文档地址是 `APP_API_BASE` 所在源的 `/app/index.html`。WebView 拦截 `/app/`，从本机快照读文件；还没有快照，或快照不是当前 `versionCode` 时，用 APK 里的那份。页面切换不再请求网络。首屏出来之后才在后台拉取 `/app/release.json`，新文件留到下次冷启动再换上。调试包（接口是 http）不热更新。只有 `/app/index.html` 能调用 `CalMobileNative`，其它链接交给系统浏览器。设备上选中、尚未上传的媒体仍从 `https://appassets.androidplatform.net/media/` 读取。页面要先 fetch 这份地址再上传，所以这份响应带上 `Access-Control-Allow-Origin`，值是页面文档的源。
+
+`/app/` 同时是 iPhone 主屏幕应用的入口：Safari 打开的也是这份产物，Web App Manifest、Service Worker 与安装图标在构建时生成，缓存边界见「iPhone / PWA」。`release.json` 只服务 Android 热更新，不进 Service Worker 缓存。
 
 新接口同时改 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由和 `server/src/test/` 下的契约测试（前端动作总数在 `routes-contract.test.ts` 里钉成常量，加接口要一起改）。
 
@@ -80,6 +84,54 @@
 - 已登录打开凭据链接时调 `POST /registrations/claim`：只补 `visitor_id`（保留匿名报名时填的姓名与 `visitor_type = 'guest'`），同账号幂等；被别的账号认领、或与账号已有同展会报名冲突（唯一部分索引）时返回 200 + `ok:false` 文案，页面留在状态页显示原因。
 - 带 `Authorization` 但令牌无效时匿名报名接口仍返回 401，不降级成匿名：否则应用内访问令牌过期后提交会悄悄写成无主记录。应用内报名流程与展示不变。
 
+## iPhone / PWA
+
+iPhone 没有 APK，完整应用以 PWA 方式安装：Safari 打开 `{站点}/app/`，分享 →「添加到主屏幕」。页面代码不按平台分叉业务逻辑：是否使用原生桥由 `nativeBridge.hasNative()` 判断，安装引导用 `web/src/services/platform.ts` 的 iOS / 主屏幕判断（见下），两边共用同一套路由、页面与数据层。
+
+### 安装元信息与构建
+
+- 安装元信息在构建期生成，不写成静态文件：`web/pwa-build.mjs` 读 `web/src/i18n/zh.json`，在 `web/vite.config.ts` 的构建钩子里写出 `web/dist/manifest.webmanifest` 与 `web/dist/sw.js`；`web/public/icons/` 由 Vite 拷到 `web/dist/icons/`，manifest 里的 `src` 是相对 manifest 的 `icons/…`。
+- `manifest.webmanifest` 的 `name` 取 `app.documentTitle`，`short_name` 取 `pwa.manifest.shortName`，`description` 取 `pwa.manifest.description`；`id` / `start_url` / `scope` 都是 `/app/`，`display: standalone`，`lang: zh-CN`，主题色与背景色取浅色板面。三项都能用构建期环境变量 `PWA_APP_NAME` / `PWA_APP_SHORT_NAME` / `PWA_APP_DESCRIPTION` 覆盖（非空才覆盖，来自 Vite 读的 `web/.env*` 或构建进程环境，不是服务器运行配置；样例见 `web/.env.example`）。解析后 `name` / `short_name` / `description` 任一为空（`zh.json` 缺键、也没给对应 `PWA_*`）就直接构建失败；`short_name` 为空时先回落 `pwa.manifest.shortName`，再回落 `name`。
+- `web/index.html` 里的 `%APP_TITLE%` / `%PWA_SHORT_NAME%` / `%PWA_DESCRIPTION%` 由同一个脚本替换，Apple 主屏幕标题（`apple-mobile-web-app-title`）用同一份 `short_name`；`join.html` 只替换标题，`join.documentTitle` 缺失同样让构建失败。替换后还有未处理的占位符也直接报错，不会把 `%…%` 发上线。应用名被 `PWA_APP_NAME` 覆盖后，运行时页面标题也用同一个值（`app/runtime.ts` 的 `__PWA_APP_NAME_OVERRIDE__`）。
+- 报名站不是可安装应用：`web/vite.join.config.ts` 关掉 `publicDir`，不生成 manifest 与 Service Worker，也不拷安装图标。
+- 主屏幕名称与图标是安装时写进系统的，之后换语言包不会改；改名称或图标要重新构建并重新「添加到主屏幕」。
+
+### Service Worker 缓存边界
+
+`web/src/services/pwa.ts` 只在生产构建、非报名站、没有原生桥、安全上下文里注册 `{base}sw.js`，作用域 `{base}`（即 `/app/`），并顺手申请持久存储。`sw.js` 由 `pwa-build.mjs` 按构建产物清单生成：
+
+- 预缓存整个页面壳（`/app/index.html`、`/app/assets/*`、`/app/manifest.webmanifest` 与图标）；`release.json` 与 `sw.js` 自己不预缓存。
+- 导航请求网络优先，断网时回退到安装时缓存的 `/app/index.html`；`/app/assets/` 按缓存优先。
+- `/api/`、`/media/`、跨域请求与 `/app/` 之外的路径一律放行，不写缓存，所以没有离线业务数据。
+- 缓存名是写 `sw.js` 时按当时产物清单（排除 `release.json`、`sw.js`）算出的 id，形如 `calmobile-app-<id>`；它和 `release.json.id` 不是同一个值（后者包含刚写出的 `sw.js` 自身），也不需要相等。每次构建变化；`activate` 清掉旧前缀的缓存。新版本不调用 `skipWaiting` / `clients.claim`：旧页面关掉后新 SW 才接管，避免旧页面在更新中途去取已经被新缓存清掉的旧资源；新页面在下次打开时生效，不在使用中重载。
+
+### 安装引导
+
+- iOS 没有 `beforeinstallprompt`，安装只能走「分享 → 添加到主屏幕」，页面自己给引导。`services/pwa.ts` 的 `isIosInstallOffer()` 判断「是 iOS 且不是从主屏幕启动」；关过提示记在本机 `calmobile.iosInstallHint`（localStorage，按设备，清缓存后会重新出现一次）。
+- 首页在首屏之后延迟弹一次 `components/PwaInstallSheet.vue`（`mode: 'app'`）；别的面板开着时不盖上去，关掉即记下、不再自动弹。
+- 设置页在同一个条件下常驻「安装到主屏幕」入口，打开同一个抽屉；`mode: 'join'` 时多一颗「打开完整应用」。抽屉里给出完整应用地址（`PUBLIC_BASE_URL` + `/app/`，没配时退回当前 origin）、复制按钮与三步说明；非 Safari 的 iOS 浏览器先提示换到 Safari。
+- 报名站的悬浮条在 iOS 上改成安装引导（不要求管理员配下载地址），其它平台仍是下载条。
+
+### 设备能力（浏览器实现）
+
+`web/src/services/device-services.ts` 是页面唯一的设备能力入口：有原生桥走 `nativeBridge.call`，没有时走 `web/src/services/browser-device.ts`，两边返回同一种结果形状，页面不按环境写两套。
+
+- 选文件：`media.pickImage` / `media.import` / `media.importText` 用临时 `<input type="file">`（图像按 EXIF 摆正、缩到最长边 1080 并转 JPEG；`accept`、大小上限沿用原生侧的约定）。
+- 下载：`export.csv`、`export.text`、`media.saveImage` 用 Blob + `<a download>`；二维码图片因此存到「文件」而不是相册。
+- 分享：`share.text` 用 `navigator.share`，不支持或失败时退回剪贴板并在结果里带 `copied`；调用点按 `shared` / `copied` 给反馈——系统分享成功或用户取消不额外提示，退回复制成功时提示「已复制」。`shareFile()` 供日历 ICS 这类文件分享，不支持时由调用方改走下载。
+- 通知：`notify.requestPermission` 用 `Notification.requestPermission()`；仍然没有推送通道，只影响权限状态。
+- 只有原生才有的动作（`ui.sync` 外观镜像、`media.store` 落盘）在浏览器里以 `device.featureUnavailable` 失败，页面不要把它们当浏览器可用能力。`media.discard` 在浏览器里是空操作；`media.import` 返回的 object URL 由 `services/publish-media.ts` 在上传结束或失败后 `URL.revokeObjectURL`。
+- 日历：浏览器没有系统日历读写，详情页改走 `web/src/services/calendar-ics.ts` 生成 `.ics`（按 `Asia/Shanghai`；多天展会的 `DTEND` 是闭展次日；有分享面板就分享，没有就下载），因此不显示「移出日历」。
+- 核销扫码：浏览器没有原生权限通道，`getUserMedia` 必须在点击的同一轮里发起；`NotAllowedError` / `NotFoundError` / `NotReadableError` 等归成相机不可用，提示改用选图扫码或手动输入报名码。
+
+### iOS 样式
+
+iOS 与主屏幕模式的适配在 `web/src/styles/tokens.css` 末尾：
+
+- 旧版 iOS 不认 `dvh`：`body` 与 `.app` 先给 `100vh`，再用 `100dvh` 覆盖；构建压缩会把同一规则里的重复声明合并掉，所以另用 `@supports not (height: 100dvh)` 给不认 `dvh` 的内核补回 `100vh`。
+- `@supports (-webkit-touch-callout: none)` 里把 `.input` / `.textarea` / `.select` 的字号抬到 `16px`，避免 iOS 聚焦输入框时自动放大整页；只改字号，边框与下划线不变。
+- `@media (display-mode: standalone)` 下 `html, body` 设 `overscroll-behavior: none`，避免系统下拉回弹与页面内下拉刷新叠加。
+
 ## 数据加载
 
 - 查询 composable 负责加载、缓存首屏、后台刷新和错误块。失败保持可见。有上次结果（包括已过期的）时先画出那份内容，再在后台刷新；刷新只标记忙碌，不清空旧内容。过期响应丢弃。列表里新出现的卡片滑入，不重放整表。下拉刷新忽略新鲜期，重新取当前页。加载圈随手指出，松手后才转动并发起请求；响应再快也先滑入、在展开位置停留，再滑出。缓存已画出而后台还在更新时只标记忙碌，不弹这枚指示：切页面、返回旧页面都不播加载动画，指示圈只属于用户的手动下拉刷新（`web/src/services/pull-refresh.ts`）。竖拉还要先越过 16px 死区、并且纵向明显占优（> 横向 1.5 倍）才跟手：点击页面里的链接/按钮时手指会漂几像素，不过死区就完全当没下拉。手势中途横向追平即放弃这次下拉；页面自己的横滑处理器（首页日历）判定要横滑时调 `suppressPull()`，外壳本次手势直接作废，斜划不会闪出指示圈。只有真正的 `pointerup` 会发请求，`pointercancel`（浏览器接管手势）只复位、绝不刷新。换页时外壳再调一次 `resetPullVisual()`，保证上一页的手势与动画不会把圈留在新页面上。
@@ -95,6 +147,8 @@
 ## 原生桥接
 
 原生只处理设备能力：`ui.sync`、摄像头权限、系统日历、通知权限、图片选择与媒体落盘、文本分享、CSV 导出、网页里的文件选择（`WebShellActivity` 的 `onShowFileChooser`）、文本文件读取与另存为（`media.importText` / `export.text`）、图片写进系统相册（`media.saveImage`）、会话刷新令牌与可信设备凭据的设备存储（`session.save` / `session.load` / `session.clear` / `session.device`，见 `SessionStore.java`），以及通行密钥（`passkey.available` / `passkey.create` / `passkey.get`，见 `PasskeyActions.java`），以及退出应用（`app.exit`：用户不同意用户协议时结束当前 Activity）。
+
+页面侧统一从 `web/src/services/device-services.ts` 进：有原生桥时调 `nativeBridge.call`，没有时同一组方法落到浏览器实现（`browser-device.ts`，见「iPhone / PWA」的「设备能力」）。因此浏览器里能用的是选文件、下载、分享、通知权限与摄像头；`ui.sync`、`media.store` 这类只在原生壳里存在的动作在浏览器里以 `device.featureUnavailable` 失败。
 
 **为什么通行密钥在原生**：WebView 里 `navigator.credentials` 不可靠（多数版本没有 WebAuthn），而系统凭据提供方（Android 14 的 Credential Manager，低版本由 Google Play 服务提供）能用指纹 / 面容 / 锁屏密码完成同一件事。桥接传的入参与回调都是**标准 WebAuthn JSON**（base64url 字符串），服务端校验逻辑不区分请求来自 App 还是浏览器。页面侧统一走 `web/src/services/webauthn.ts`：有原生桥就调用桥，没有就用浏览器原生接口；用户取消由原生回 `cancelled`，前端归一成「没做这件事」。App 的 `clientDataJSON` 里 origin 是 `android:apk-key-hash:<签名证书 SHA-256 的 base64url>`，所以服务端的 `WEBAUTHN_ORIGINS` 必须包含它（见 `operations.md`）。这一项不是 http(s) 地址，`config/env.ts` 单独认它的形状（43 位 base64url），不能只按 URL 解析——否则会被当成非法项丢掉，App 里的通行密钥全部因来源不符被拒。**取消按系统实际返回判定**：用户划掉面板时凭据提供方回的是 `CreatePublicKeyCredentialDomException`（DOM 类型 Abort / NotAllowed / Timeout），不是 CancellationException；这三类与 Cancellation / Interrupted 一起归成 `cancelled`，页面静默收场。其余失败在原生侧翻成中文说明，系统给的英文原文只进 logcat。网页关着文件与 `content://` 访问，因此从文件安装语言包时正文由原生读出来回传，底稿另存为与二维码保存也走原生。可信设备的随机凭据由原生 `session.device` 生成并保存在设备私有目录。浏览器预览使用本机存储。
 
@@ -139,5 +193,7 @@
 状态、报名方式、收集项类型、角色这些**协议值一律用英文 code**（`pending` / `review` / `text` / `exhibitor` …）：服务端 `server/src/domain/labels.ts` 与前端 `web/src/services/status.ts` 是同一套 code 的定义处，改一边必须同步另一边，接口只下发 code（`statusCode` / `role`），界面按 code 查 `status.*` / `role.*` / `fieldType.*` 取文案。中文标签字段（`status` / `statusLabel` / `modeLabel` / `roleLabel`）是给还没更新快照的旧页面留的兼容层，新代码不要读（`web/src/api/compat-fields.test.ts` 盯着 `statusLabel` / `modeLabel` / `roleLabel` 三个读取；`status` 太容易和 HTTP 状态、表单模型撞名，靠扫描与评审），更不要拿它当比较或回传的值——装了语言包会比不中、还会把译文写进库里。下线条件：客户端快照不再存在旧版本后，服务端删掉这几个字段，同时删掉那条守卫测试。收集项类型在 `0018-field-type-codes` 里从中文迁到 code（`exhibition_fields` 与 `meeting_fields` 两张表）。
 
 界面文案在 `web/src/i18n/zh.json`，**嵌套 JSON**（`{"auth": {"login": {"title": "登录"}}}`）；前端仍用点分路径 `t('auth.login.title')` 读取，加载时压成扁平表，热路径不逐层查找。带变量的整句写成一条，变量在文案里写 `{名字}`，取值时用第二个参数给：`t('auth.login.secondsUntilResend', { seconds: 30 })`，值可以是字符串或数字；参数里缺哪个名字，屏幕上就原样留着 `{名字}`（跟整条缺失时显示路径同理），所以调用处不要把取到的文案再拼给别人看。模板里的中文写成 `:placeholder="t('exhibition.form.venuePlaceholder')"` 这种绑定，带参数是 `:aria-label="t('profile.avatarLabel', { name: props.name })"`。别的语言缺哪条，就用中文那条。周几、年月留在 `web/src/services/format.ts`，不进这张表。邮件正文在后端，不进这张表。构建时中文表打进应用页面包和报名站包，不单独发布源文件。
+
+PWA 安装元信息同样来自这张表：`app.documentTitle`、`pwa.manifest.shortName`、`pwa.manifest.description`，安装引导用 `pwa.install.*`，报名站的 iOS 引导用 `join.ios*`。`web/pwa-build.mjs` 在构建时读这些键生成 manifest 与 HTML 占位符；缺键（manifest 的 `name` / `short_name` / `description`、`join.documentTitle`）或占位符没替换完，构建直接失败，不会把空值或 `%…%` 发上线。新增可见文案先进 `zh.json`，不要散落在构建脚本、HTML 或页面组件里。
 
 用户自己的语言包记在本机 `localStorage`，不在 `web/dist` 或客户端快照里。语言包与内置中文表同一套嵌套格式（`strings` 里对象套对象、叶子是字符串），带变量的文案同样写 `{名字}`、名字要和中文表对得上（对不上就原样留在屏幕上），包里那条要是没有 `{名字}` 的旧片段文案，参数不会补进去、屏幕上会少一段，改过占位或把片段合成整句之后语言包要跟着一起更新，落盘时也写嵌套，否则升级后已装包会被当成坏包丢掉；旧的扁平包按约定不再兼容，服务器 `LANG_PACK_URLS` 指向的包也要换成嵌套版（「下载中文底稿」的输出可直接当模板）。个人设置可以切换语言，也可以粘贴链接或选择 JSON 文件安装（应用里由原生读文件正文，见「原生桥接」）。应用与报名站都按服务器默认语言（`LANG_PACK_DEFAULT`）选语言：应用里用户显式选择过则优先，报名站不看个人选择；默认名称对应的包没装时都回退中文。自动下载不会覆盖已经安装的同名包。切换语言后整页重新加载；安装成功的提示排到重载之后（`services/toast.ts` 的 `toastAfterReload`），重载后的首帧靠 `services/session-hint.ts` 那条本机提示先等会话恢复，不闪登录页。下载中文底稿在应用里走系统「另存为」，浏览器里退回浏览器下载。

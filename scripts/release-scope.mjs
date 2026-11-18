@@ -150,6 +150,8 @@ function isAppOnly(file) {
 
 /** 报名站和 App 都会打进去的源。页面文件不在「只进 App」清单里时也走这里。 */
 function isSharedWeb(file) {
+  // 两份页面构建都 import 它，产物分别进 dist 和 dist-join。
+  if (file === 'web/pwa-build.mjs') return true;
   if (file === 'web/package.json' || file === 'web/pnpm-lock.yaml' || file.startsWith('web/public/')) return true;
   if (!file.startsWith('web/src/') || file.startsWith('web/src/join/')) return false;
   if (file === 'web/src/main.ts' || file === 'web/src/env.d.ts' || APP_ONLY_PAGES.has(file)) return false;

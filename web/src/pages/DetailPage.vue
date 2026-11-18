@@ -16,6 +16,8 @@ import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { registrationLink } from '@/services/registration-link';
 import { device } from '@/services/device-services';
+import { addExhibitionToCalendar } from '@/services/calendar-ics';
+import { nativeBridge } from '@/services/native-bridge';
 import { loadMarkdownParser, markdownToHtml, plainText, sanitizeHtml } from '@/services/markdown';
 import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
@@ -51,6 +53,8 @@ const exhibitionId = computed(() => String(route.params.id ?? ''));
 const registrations = ref<Registration[]>([]);
 const calendarState = ref<{ inCalendar: boolean; granted: boolean }>({ inCalendar: false, granted: false });
 const calendarBusy = ref(false);
+/** 有没有原生桥：没有时（浏览器 / iOS PWA）日历改走生成 .ics 文件的浏览器通道。 */
+const hasNativeBridge = nativeBridge.hasNative();
 /** 大图查看：封面放大到全屏，支持双指缩放。 */
 const viewerOpen = ref(false);
 /**
@@ -62,6 +66,16 @@ const viewerOpen = ref(false);
 const cover = computed(() => String(exhibition.value?.imageUri ?? '').trim());
 /** 日历状态只读一次：数据刷新会重画正文，但不该重复请求。 */
 let calendarRequested = false;
+
+/**
+ * 日历按钮文案：浏览器 / iOS PWA 里没有系统日历查询，永远显示「加入日历」，
+ * 不会出现「移出日历」（那需要能读写系统日历的原生通道）。
+ */
+const calendarLabel = computed(() =>
+  hasNativeBridge && calendarState.value.inCalendar
+    ? t('exhibition.detail.removeFromCalendar')
+    : t('exhibition.detail.addToCalendar'),
+);
 
 /** 简介：HTML 走清洗，Markdown 走渲染入口，空简介给出说明而不是空白。 */
 const description = computed(() => {
@@ -174,8 +188,8 @@ async function load(): Promise<void> {
     calendarState.value = { inCalendar: false, granted: false };
     return;
   }
-  // 报名站没有原生日历：不请求日历状态，底部也不摆「加入日历」。
-  if (!calendarRequested && !isJoinSurface) {
+  // 报名站没有原生日历；浏览器里也没有系统日历查询，这两种情况都不请求状态。
+  if (!calendarRequested && !isJoinSurface && hasNativeBridge) {
     calendarRequested = true;
     void loadCalendarState();
   }
@@ -183,7 +197,7 @@ async function load(): Promise<void> {
 
 async function loadCalendarState(): Promise<void> {
   const item = exhibition.value;
-  if (!item) return;
+  if (!item || !hasNativeBridge) return;
   try {
     const result = await device.calendarStatus({ title: String(item.title ?? ''), date: String(item.date ?? '') });
     calendarState.value = { inCalendar: result.inCalendar === true, granted: result.granted === true };
@@ -197,6 +211,22 @@ async function toggleCalendar(): Promise<void> {
   if (!item) return;
   calendarBusy.value = true;
   try {
+    // 浏览器 / iOS PWA 没有系统日历写入能力：生成 .ics 文件，交给系统分享或下载。
+    if (!hasNativeBridge) {
+      const outcome = await addExhibitionToCalendar({
+        title: String(item.title ?? ''),
+        date: String(item.date ?? ''),
+        endDate: String(item.endDate ?? ''),
+        time: String(item.time ?? ''),
+        venue: String(item.venue ?? ''),
+        description: plainText(item.description, 200),
+        id: String(item.id ?? ''),
+      });
+      // 用户在分享面板里取消是约定好的非故障结果，保持静默。
+      if (outcome === 'shared') toast(t('exhibition.detail.calendarShared'), 'success');
+      else if (outcome === 'downloaded') toast(t('exhibition.detail.calendarDownloaded'), 'success');
+      return;
+    }
     const result = await device.toggleCalendar({
       title: String(item.title ?? ''),
       venue: String(item.venue ?? ''),
@@ -208,7 +238,15 @@ async function toggleCalendar(): Promise<void> {
     calendarState.value = { inCalendar: result.inCalendar === true, granted: result.granted === true };
     toast(result.message || t('exhibition.detail.calendarUpdated'), 'success');
   } catch (reason) {
-    toast(reason instanceof Error ? reason.message : String(reason), 'error');
+    // 浏览器通道只给统一文案：日历文件生成 / 分享失败的细节对用户没有意义。
+    toast(
+      hasNativeBridge
+        ? reason instanceof Error
+          ? reason.message
+          : String(reason)
+        : t('exhibition.detail.calendarShareFailed'),
+      'error',
+    );
   } finally {
     calendarBusy.value = false;
   }
@@ -279,7 +317,10 @@ function share(): void {
         onClick: async (close) => {
           close();
           try {
-            await device.shareText(String(item.title ?? ''), text);
+            const result = await device.shareText(String(item.title ?? ''), text);
+            // 浏览器里没有系统分享面板时内容已复制到剪贴板：明确告诉用户「已复制」，
+            // 否则面板一关什么反馈都没有。原生 / 系统分享成功不需要额外提示。
+            if (result.copied === true) toast(t('common.copied'), 'success');
           } catch (reason) {
             toast(reason instanceof Error ? reason.message : String(reason), 'error');
           }
@@ -425,12 +466,12 @@ onMounted(() => {
     </div>
   </template>
 
-  <!-- 底部固定操作区：应用里是「加入日历 + 报名」；
-       报名站没有原生日历，只留一颗占满宽度的「立即报名」。 -->
+  <!-- 底部固定操作区：应用 / 浏览器里是「加入日历 + 报名」（浏览器点击后生成 .ics 文件）；
+       报名站没有日历入口，只留一颗占满宽度的「立即报名」。 -->
   <Teleport v-if="exhibition && found" defer to="#app-foot">
     <div class="page-foot">
       <div class="stack" data-gap="sm">
-        <!-- 应用里两颗按钮并排；报名站只剩报名一颗，占满整行。 -->
+        <!-- 应用与浏览器两颗按钮并排；报名站只剩报名一颗，占满整行。 -->
         <div :class="isJoinSurface ? undefined : 'grid-cols-2'">
           <button
             v-if="!isJoinSurface"
@@ -440,11 +481,7 @@ onMounted(() => {
             :data-loading="calendarBusy ? 'true' : 'false'"
             @click="toggleCalendar"
           >
-            {{
-              calendarState.inCalendar
-                ? t('exhibition.detail.removeFromCalendar')
-                : t('exhibition.detail.addToCalendar')
-            }}
+            {{ calendarLabel }}
           </button>
           <button
             class="cta"

@@ -4,7 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <title>展会排期助手</title>
+    <!-- 安装元信息在构建期由 pwa-build.mjs 从 zh.json 生成，这里只留占位符。 -->
+    <meta name="description" content="%PWA_DESCRIPTION%" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="%PWA_SHORT_NAME%" />
+    <!-- 明暗两枚主题色与应用背景一致：iOS 独立窗口顶部安全区与安卓状态栏都用它。 -->
+    <meta name="theme-color" content="#f7f6f3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#101215" media="(prefers-color-scheme: dark)" />
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
+    <title>%APP_TITLE%</title>
     <script>
       // 在样式表生效前先落到上次选择的明暗模式与强调色，避免首帧闪一下默认外观。
       // 两者都是账号偏好，bootstrap 落定后会用服务端的值再覆盖一次。

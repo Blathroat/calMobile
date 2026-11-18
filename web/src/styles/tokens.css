@@ -192,6 +192,8 @@ html {
 
 body {
   margin: 0;
+  /* 旧版 iOS 不认 dvh：先给 vh 兜底，认得 dvh 的浏览器再覆盖一次。 */
+  min-height: 100vh;
   min-height: 100dvh;
   background: var(--bg);
   color: var(--ink);
@@ -314,6 +316,8 @@ label {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
+  /* 同 body：旧版 iOS 用 vh 兜底。 */
+  height: 100vh;
   height: 100dvh;
   max-width: var(--app-max);
   margin: 0 auto;
@@ -2402,5 +2406,42 @@ button.avatar {
     box-shadow:
       0 0 0 1px rgba(31, 35, 40, 0.02),
       0 18px 40px rgba(31, 35, 40, 0.06);
+  }
+}
+
+/* ============================================================================
+ * iOS 与已安装到主屏幕的 PWA
+ * ==========================================================================*/
+
+/* 构建目标默认支持 dvh，CSS 压缩会把上面同一条规则里的 100vh 兜底当重复声明删掉，
+   所以给不认 dvh 的旧内核再补一次 vh（认 dvh 的浏览器不会命中这段）。 */
+@supports not (height: 100dvh) {
+  body {
+    min-height: 100vh;
+  }
+
+  .app {
+    height: 100vh;
+  }
+}
+
+/* iOS Safari 在输入框字号小于 16px 时，聚焦会顺手把整页放大，且不会自动缩回。
+   `-webkit-touch-callout` 只有 iOS 的 WebKit 认，所以用它把表单字号抬到 16px，
+   其它浏览器不受影响。这里只改字号：边框、底色、下划线仍由前面各段决定，
+   .input-line 只覆盖外观属性，字号照样跟着这条走。 */
+@supports (-webkit-touch-callout: none) {
+  .input,
+  .textarea,
+  .select {
+    font-size: 16px;
+  }
+}
+
+/* 已安装到主屏幕时页面本身就是独立窗口，系统的下拉回弹 / 下拉刷新会跟页面内的
+   下拉刷新叠在一起：两边都关掉，下拉手势只交给页面自己的刷新逻辑。 */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior: none;
   }
 }

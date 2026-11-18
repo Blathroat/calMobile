@@ -2,9 +2,11 @@
 /**
  * 用户设置：头像、通知与隐私、外观（配色与明暗）、语言。
  *
- * 版式按「账号 / 通知与隐私 / 外观 / 语言 / 邀请码」分组：组标题在卡片外，卡片里的
- * 开关行用 `.switch-row[data-flush='true']` 的分隔线版式，不再套第二层边框。邀请码
- * 固定在页面最底部：普通用户显示输入框，展商与管理员只说明身份已升级。
+ * 版式按「账号 / 通知与隐私 / 外观 / 语言 / 邀请码 / 安装到主屏幕 / 应用更新」分组：组标题
+ * 在卡片外，卡片里的开关行用 `.switch-row[data-flush='true']` 的分隔线版式，不再套第二层
+ * 边框。邀请码固定在页面底部：普通用户显示输入框，展商与管理员只说明身份已升级。
+ * 「安装到主屏幕」只在 iOS 浏览器且尚未安装时出现，「应用更新」只在 Android 原生壳里出现，
+ * 两者互斥，都不和协议入口混在一起。
  *
  * 编辑资料与个人页身份卡右侧的铅笔共用 `services/profile-editor.ts` 的同一抽屉。
  * 头像、通知、配色、明暗、语言、隐私留在这里，因为它们各自写不同的接口。
@@ -28,6 +30,8 @@ import { useCapabilitiesStore } from '@/stores/capabilities';
 import { useSessionStore } from '@/stores/session';
 import { useSettingsStore } from '@/stores/settings';
 import { device } from '@/services/device-services';
+import { nativeBridge } from '@/services/native-bridge';
+import { isIosInstallOffer } from '@/services/pwa';
 import { toast } from '@/services/toast';
 import { avatarExportMime } from '@/services/validate';
 import { formatLocalChineseDate } from '@/services/format';
@@ -49,6 +53,7 @@ import AvatarBox from '@/components/AvatarBox.vue';
 import RoleTag from '@/components/RoleTag.vue';
 import AvatarCropper from '@/components/AvatarCropper.vue';
 import UpdateSheet from '@/components/UpdateSheet.vue';
+import PwaInstallSheet from '@/components/PwaInstallSheet.vue';
 import SegControl from '@/components/SegControl.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
@@ -63,6 +68,13 @@ const capabilities = useCapabilitiesStore();
 
 const user = computed(() => session.user);
 const loggedIn = computed(() => session.loggedIn);
+/**
+ * 应用更新只属于 Android 原生壳：浏览器与 iOS PWA 里没有 APK 可装，
+ * 整组入口与自动检查都跟着这个开关走，避免让用户点到一个永远装不上的按钮。
+ */
+const showNativeUpdate = nativeBridge.hasNative();
+/** iOS 尚未安装到主屏幕时给一个入口，说明抽屉与首页的一次性提示共用。 */
+const showInstallEntry = isIosInstallOffer();
 /** 受限账号：只有后端明确下发 `false` 才算，老后端不下发 `profile` 时行为不变。 */
 const limited = computed(() => user.value.can?.profile === false);
 /** 受限时统一用同一句说明原因，避免每个入口各写一套说法。 */
@@ -170,9 +182,9 @@ async function loadNotifications(): Promise<void> {
 }
 
 onMounted(load);
-// 自动检查更新：开关打开且距上次检查超过六小时，静默跑一次（失败不提示）。
+// 自动检查更新：只有原生壳需要；开关打开且距上次检查超过六小时，静默跑一次（失败不提示）。
 onMounted(() => {
-  void checkUpdate(true);
+  if (showNativeUpdate) void checkUpdate(true);
 });
 
 usePullRefresh(
@@ -467,6 +479,15 @@ function showRelease(release: ReleaseInfo): void {
   });
 }
 
+/** 设置页的安装入口：与首页一次性提示同一个抽屉，mode 为 app（已经在完整应用里）。 */
+function openInstallSheet(): void {
+  openSheet({
+    title: t('pwa.install.title'),
+    component: PwaInstallSheet,
+    props: { mode: 'app' },
+  });
+}
+
 /**
  * 检查更新。
  *
@@ -732,8 +753,19 @@ async function checkUpdate(auto = false): Promise<void> {
         </div>
       </section>
 
-      <!-- 应用更新：固定在页面最底部；检查读取服务器解析出的版本与地址 -->
-      <section class="settings-section">
+      <!-- 安装到主屏幕：只有 iOS 浏览器且还没安装时出现；入口不依赖原生桥 -->
+      <section v-if="showInstallEntry" class="settings-section">
+        <span class="section-label">{{ t('pwa.install.title') }}</span>
+        <div class="card user-settings-card">
+          <p class="field-hint">{{ t('pwa.install.intro') }}</p>
+          <button class="cta ghost" type="button" @click="openInstallSheet">
+            {{ t('pwa.install.settingsEntry') }}
+          </button>
+        </div>
+      </section>
+
+      <!-- 应用更新：只在 Android 原生壳里出现；检查读取服务器解析出的版本与地址 -->
+      <section v-if="showNativeUpdate" class="settings-section">
         <span class="section-label">{{ t('settings.update.title') }}</span>
         <div class="card user-settings-card">
           <button

@@ -60,6 +60,21 @@ test('报名站和 App 共用的源两份一起同步', () => {
   });
 });
 
+test('PWA 构建脚本与公开图标两份一起同步，不触发 APK、不重启服务', () => {
+  assert.deepEqual(flags(['web/pwa-build.mjs']), {
+    apk: false,
+    server: false,
+    app: true,
+    join: true,
+  });
+  assert.deepEqual(flags(['web/public/icons/icon-192.png', 'web/public/icons/apple-touch-icon-180.png']), {
+    apk: false,
+    server: false,
+    app: true,
+    join: true,
+  });
+});
+
 test('报名站专有文件只同步报名站', () => {
   assert.deepEqual(flags(['web/src/join/router.ts', 'web/join.html']), {
     apk: false,

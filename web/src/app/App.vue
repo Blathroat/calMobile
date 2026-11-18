@@ -15,9 +15,11 @@ import AppIcon from '@/components/AppIcon.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
 import AppToasts from '@/components/AppToasts.vue';
 import AppSheet from '@/components/AppSheet.vue';
+import PwaInstallSheet from '@/components/PwaInstallSheet.vue';
 import { bodyAttrs, tabItems } from '@/app/shell';
 import { isJoinSurface, paths } from '@/app/surface';
 import { nativeBridge } from '@/services/native-bridge';
+import { isIos } from '@/services/platform';
 import { navigation } from '@/app/navigation';
 import { preloadTabs, resetPreload } from '@/app/preload';
 import {
@@ -29,7 +31,7 @@ import {
   resetPullVisual,
 } from '@/services/pull-refresh';
 import { api } from '@/app/runtime';
-import { closeSheet, confirmSheet, sheet } from '@/services/sheet';
+import { closeSheet, confirmSheet, openSheet, sheet } from '@/services/sheet';
 import { agreementConsentPending, openAgreementConsentPrompt } from '@/services/agreement-prompt';
 import { flushDeferredToast, toast } from '@/services/toast';
 import { watchSystemMode } from '@/app/theme';
@@ -51,15 +53,35 @@ const logoutBusy = ref(false);
 const bodyEl = ref<HTMLElement>();
 
 /**
- * 报名站的下载条：只有在**系统浏览器**里打开报名站时才出现（应用内已经有 App 了），
- * 并且管理员必须配过下载地址。这条提示常驻，不提供关闭——报名站本身没有 App 完整，
- * 让用户随时能找到回去的路比「少一条横幅」更重要。
+ * 报名站的下载条：只有在**系统浏览器**里打开报名站时才出现（应用内已经有 App 了）。
+ *
+ * Android 与其它平台需要管理员配过下载地址才显示；iOS 没有 APK，条件里不看下载地址，
+ * 改成常驻的「安装到主屏幕」引导——Safari 加到主屏幕就是安装，不依赖 APK。
+ * 这条提示常驻，不提供关闭——报名站本身没有 App 完整，让用户随时能找到回去的路
+ * 比「少一条横幅」更重要。
  */
 const downloadUrl = computed(() => String((bootstrap.download?.url as string) || ''));
-const showDownloadBar = computed(() => isJoinSurface && !nativeBridge.hasNative() && downloadUrl.value !== '');
+/** 平台在页面生命周期里不会变，setup 里读一次即可。 */
+const ios = isIos();
+const showDownloadBar = computed(() => {
+  if (!isJoinSurface || nativeBridge.hasNative()) return false;
+  // iOS 不需要下载地址：给的是安装步骤，不是 APK。
+  return ios || downloadUrl.value !== '';
+});
 
-/** 交给系统浏览器下载：WebView 里除 /app/ 之外的链接本来就交给浏览器处理。 */
-function openDownload(): void {
+/**
+ * 按钮动作按平台分叉：iOS 打开安装步骤抽屉，其它平台交给系统浏览器下载。
+ * WebView 里除 /app/ 之外的链接本来就交给浏览器处理，因此下载不调用原生桥。
+ */
+function onDownloadAction(): void {
+  if (ios) {
+    openSheet({
+      title: t('pwa.install.title'),
+      component: PwaInstallSheet,
+      props: { mode: 'join' },
+    });
+    return;
+  }
   if (!downloadUrl.value) return;
   window.open(downloadUrl.value, '_blank', 'noopener');
 }
@@ -225,10 +247,15 @@ onBeforeUnmount(() => unbindPull?.());
       </div>
       <div v-if="showDownloadBar" class="join-download" role="complementary">
         <span class="join-download-copy">
-          <strong>{{ t('join.downloadBar') }}</strong>
-          <span class="join-download-version" v-if="bootstrap.download?.version">{{ bootstrap.download.version }}</span>
+          <!-- iOS 不说「下载应用」（没有 APK），说安装到主屏幕；版本号只属于 Android 安装包 -->
+          <strong>{{ ios ? t('join.iosBarTitle') : t('join.downloadBar') }}</strong>
+          <span class="join-download-version" v-if="!ios && bootstrap.download?.version">{{
+            bootstrap.download.version
+          }}</span>
         </span>
-        <button class="cta" type="button" @click="openDownload">{{ t('join.downloadApp') }}</button>
+        <button class="cta" type="button" @click="onDownloadAction">
+          {{ ios ? t('join.iosAction') : t('join.downloadApp') }}
+        </button>
       </div>
       <RouterView v-slot="{ Component }">
         <!-- 单独一层承载页面切换动画：`.app-body` 在切换之间是同一个元素，
@@ -253,8 +280,8 @@ onBeforeUnmount(() => unbindPull?.());
 </template>
 
 <style>
-/* 报名站的下载条：吸在内容区顶部的一条悬浮带，滚走内容时仍贴着顶栏。
-   只在系统浏览器里出现（见 showDownloadBar），应用内不会渲染。 */
+/* 报名站的下载 / 安装条：吸在内容区顶部的一条悬浮带，滚走内容时仍贴着顶栏。
+   只在系统浏览器里出现（见 showDownloadBar），应用内不会渲染；iOS 换成安装引导。 */
 .join-download {
   position: sticky;
   top: 0;
