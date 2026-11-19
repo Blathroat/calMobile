@@ -18,6 +18,7 @@ import {
   formatDateWithWeekday,
   formatLocalChineseDate,
   formatMonthHeading,
+  joinText,
   parseDate,
 } from './format';
 
@@ -94,6 +95,27 @@ describe('展会日期区间', () => {
     expect(formatDateRange('2026-11-17', 'not-a-date')).toBe('11月17日（周二）');
     expect(formatDateRange('2026-11-17', '2026-11-17')).toBe('11月17日（周二）');
     expect(formatDateRange('', '2026-11-22')).toBe('');
+  });
+});
+
+describe('一行信息的拼接', () => {
+  it('空时间不占位：不会留下「 · 场馆」或行尾空格', () => {
+    expect(joinText(['', '会展中心'])).toBe('会展中心');
+    expect(joinText(['09:00-17:00', '会展中心'])).toBe('09:00-17:00 · 会展中心');
+    expect(joinText(['09:00-17:00', ''])).toBe('09:00-17:00');
+    expect(joinText([null, undefined, '  ', '会展中心'])).toBe('会展中心');
+    expect(joinText(['', ''])).toBe('');
+  });
+
+  it('日期与时间用空格拼，时间缺失时只有日期', () => {
+    expect(joinText(['11月17日（周二）', '09:00-17:30'], ' ')).toBe('11月17日（周二） 09:00-17:30');
+    expect(joinText(['11月17日（周二）', ''], ' ')).toBe('11月17日（周二）');
+  });
+
+  it('首页分类行把展商名称放在最前面', () => {
+    expect(joinText(['示例展商', '智能家居'])).toBe('示例展商 · 智能家居');
+    expect(joinText(['', '智能家居'])).toBe('智能家居');
+    expect(joinText(['', ''])).toBe('');
   });
 });
 

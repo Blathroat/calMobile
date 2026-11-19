@@ -14,6 +14,7 @@ import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import ExhibitionFormPage from './ExhibitionFormPage.vue';
 import AppSheet from '@/components/AppSheet.vue';
 import { navigation } from '@/app/navigation';
+import { useBootstrapStore } from '@/stores/bootstrap';
 import { clearExhibitionDraft } from '@/services/exhibition-draft';
 import { formatDateWithWeekday } from '@/services/format';
 import { sheet } from '@/services/sheet';
@@ -71,6 +72,8 @@ async function flush(): Promise<void> {
 async function mountForm(): Promise<void> {
   const pinia = createPinia();
   setActivePinia(pinia);
+  // 分类是管理员维护的清单：给抽屉一组选项，新建 / 编辑保存前都要先选中一个。
+  useBootstrapStore().apply({ categories: ['智能家居', '物流技术'] });
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -119,6 +122,18 @@ function fill(id: string, value: string): void {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+/** 打开分类抽屉并选中一个分类（分类必填，保存前要补上）。 */
+async function pickCategory(name = '智能家居'): Promise<void> {
+  trigger('form-category').click();
+  await flush();
+  const option = [...document.querySelectorAll<HTMLButtonElement>('.sheet-option')].find(
+    (item) => item.textContent?.trim() === name,
+  );
+  if (!option) throw new Error(`分类抽屉里没有「${name}」`);
+  option.click();
+  await flush();
+}
+
 /** 保存按钮固定在页脚，点一次触发提交。 */
 function clickSave(): void {
   document.querySelector<HTMLButtonElement>('#app-foot button')?.click();
@@ -153,6 +168,7 @@ describe('编辑展会：日期与时间选择', () => {
     vi.mocked(api.exhibitions.save).mockResolvedValue({ ok: true, exhibition: { id: 'exh-same-day' } });
     fill('form-title', '同一天展会');
     fill('form-venue', '测试展馆');
+    await pickCategory();
     const day = iso(3);
     trigger('form-date').click();
     await flush();
@@ -218,6 +234,54 @@ describe('编辑展会：日期与时间选择', () => {
     expect(sheet.current).toBeNull();
     expect(trigger('form-time-end').textContent).toContain('结束时间');
   });
+
+  it('分类必填：为空时点保存不发请求，并在字段下方提示', async () => {
+    await mountForm();
+    fill('form-title', '未选分类的展会');
+    fill('form-venue', '测试展馆');
+    const day = iso(3);
+    trigger('form-date').click();
+    await flush();
+    dayButton(day).click();
+    await flush();
+    sheetAction('取消').click();
+    await flush();
+
+    clickSave();
+    await flush();
+
+    expect(vi.mocked(api.exhibitions.save)).not.toHaveBeenCalled();
+    const field = trigger('form-category').closest('.field');
+    expect(field?.getAttribute('data-invalid')).toBe('true');
+    expect(field?.querySelector('.field-error')?.textContent).toBe('请选择活动分类');
+    // 分类字段标签上有必填星号。
+    expect(document.querySelector('#form-category-label .required')).not.toBeNull();
+  });
+
+  it('新建表单的时间默认留空，保存时 payload.time 是空串', async () => {
+    await mountForm();
+    vi.mocked(api.exhibitions.save).mockResolvedValue({ ok: true, exhibition: { id: 'exh-no-time' } });
+    // 两个时间滚轮都停在占位文案上，没有默认的 09:00-17:00。
+    expect(trigger('form-time').textContent).toContain('开始时间');
+    expect(trigger('form-time-end').textContent).toContain('结束时间');
+    expect(document.body.textContent).toContain('时间选填，留空则只显示日期。');
+
+    fill('form-title', '无时间展会');
+    fill('form-venue', '测试展馆');
+    const day = iso(3);
+    trigger('form-date').click();
+    await flush();
+    dayButton(day).click();
+    await flush();
+    sheetAction('取消').click();
+    await flush();
+    await pickCategory();
+
+    clickSave();
+    await vi.waitFor(() => expect(vi.mocked(api.exhibitions.save)).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(api.exhibitions.save).mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.time).toBe('');
+  });
 });
 
 describe('编辑展会：活动信息卡与文案', () => {
@@ -270,6 +334,7 @@ describe('编辑展会：活动信息卡与文案', () => {
     await flush();
     sheetAction('取消').click();
     await flush();
+    await pickCategory();
     fill('form-description', '纯文本简介：\n第一行\n第二行');
     fill('form-registration-notice', '请携带身份证\n签到地点：A 口服务台');
 
@@ -295,6 +360,7 @@ describe('编辑展会：活动信息卡与文案', () => {
     await flush();
     sheetAction('取消').click();
     await flush();
+    await pickCategory();
 
     clickSave();
     await vi.waitFor(() => expect(vi.mocked(api.exhibitions.save)).toHaveBeenCalledTimes(1));

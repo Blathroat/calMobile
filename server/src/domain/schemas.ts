@@ -501,7 +501,8 @@ export function exhibitionInputSchema(
       category: textSchema({ label: '展会分类', max: limits.category, required: false }),
       date: isoDateSchema({ label: '展会日期', required: true }),
       endDate: isoDateSchema({ label: '闭展日期' }),
-      time: timeRangeSchema({ label: '展会时间', required: true }),
+      // 时间选填：留空表示只显示日期（详情、月视图与日历文件都按「没有时间」处理）。
+      time: timeRangeSchema({ label: '展会时间', required: false }),
       status: inputString,
       registrationStart: isoDateSchema({ label: '报名开始日期' }),
       registrationEnd: isoDateSchema({ label: '报名截止日期' }),
@@ -531,7 +532,6 @@ export function exhibitionInputSchema(
           params: issueParams('validation.exhibitionTitleRequired'),
         });
       const date = source.date ?? existing?.exhibition_date ?? '';
-      const time = source.time ?? existing?.time ?? '';
       if (creating && !date)
         ctx.addIssue({
           code: 'custom',
@@ -539,12 +539,14 @@ export function exhibitionInputSchema(
           message: '请选择展会日期',
           params: issueParams('validation.dateRequired', { label: '展会日期' }),
         });
-      if (creating && !time)
+      // 分类只在新建时强制：更新时保持宽松，历史空分类的展会（例如只改简介）仍能保存。
+      const category = source.category ?? existing?.category ?? '';
+      if (creating && !category.trim())
         ctx.addIssue({
           code: 'custom',
-          path: ['time'],
-          message: '请输入展会时间',
-          params: issueParams('validation.required', { label: '展会时间' }),
+          path: ['category'],
+          message: '请选择展会分类',
+          params: issueParams('validation.categoryRequired'),
         });
       const registrationStart = source.registrationStart ?? existing?.registration_start ?? '';
       const registrationEnd = source.registrationEnd ?? existing?.registration_end ?? '';

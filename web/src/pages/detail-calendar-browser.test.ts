@@ -152,4 +152,16 @@ describe('浏览器里的加入日历', () => {
     await vi.waitFor(() => expect(toast).toHaveBeenCalledWith('生成日历文件失败，请稍后重试', 'error'));
     expect(calendarButton()?.textContent?.trim()).toBe('加入日历');
   });
+
+  it('展会时间留空时信息行只显示日期，不带行尾空格', async () => {
+    vi.mocked(api.exhibitions.get).mockResolvedValue({
+      ...DETAIL,
+      exhibition: { ...DETAIL.exhibition!, time: '' },
+    });
+    await mountDetail();
+
+    const rows = [...document.querySelectorAll<HTMLElement>('#detail-browser-test .card .row-meta')];
+    expect(rows[0]?.textContent).toBe('11月17日（周二） - 11月22日（周日）');
+    expect(rows[0]?.textContent?.endsWith(' ')).toBe(false);
+  });
 });

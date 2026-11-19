@@ -151,3 +151,45 @@ describe('首页日历相邻月预览', () => {
     expect(next.querySelectorAll('.cal-day').length).toBeGreaterThan(0);
   });
 });
+
+describe('首页展会卡片', () => {
+  it('分类行先写展商名称，时间留空时不会出现「 · 场馆」或空行', async () => {
+    vi.mocked(api.exhibitions.month).mockResolvedValue({
+      day: 12,
+      eventDays: [12],
+      markedDays: [],
+      exhibitions: [
+        {
+          id: 'with-name',
+          day: 12,
+          days: [12],
+          title: '展商与分类展',
+          exhibitor: '示例展商',
+          category: '智能家居',
+          time: '',
+          venue: '会展中心',
+        },
+        {
+          id: 'legacy',
+          day: 12,
+          days: [12],
+          title: '历史空分类展',
+          exhibitor: '',
+          category: '',
+          time: '09:00-17:00',
+          venue: '第二场馆',
+        },
+      ],
+      meetings: [],
+    });
+    const container = await mountHome();
+    const cards = [...container.querySelectorAll<HTMLElement>('.row-card')];
+    const first = cards.find((card) => card.textContent?.includes('展商与分类展'));
+    expect(first?.textContent).toContain('示例展商 · 智能家居');
+    expect(first?.textContent).not.toContain(' · 会展中心');
+    const second = cards.find((card) => card.textContent?.includes('历史空分类展'));
+    expect(second?.textContent).toContain('09:00-17:00 · 第二场馆');
+    // 历史数据既没有展商也没有分类，不再渲染一条空行。
+    expect(second?.querySelectorAll('.row-meta').length).toBe(1);
+  });
+});

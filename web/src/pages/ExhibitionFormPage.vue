@@ -83,7 +83,8 @@ const form = reactive({
   date: '',
   /** 闭展日期；空串表示还没选（单日展会库里存 NULL），与开展同一天时照原样存这一天。 */
   endDate: '',
-  time: '09:00-17:00',
+  // 时间选填，默认留空：只填日期时详情、月视图与日历文件都按「没有时间」展示。
+  time: '',
   status: EXHIBITION_STATUS.REVIEW_REQUIRED as string,
   category: '',
   description: '',
@@ -101,7 +102,7 @@ const fields = ref<CollectField[]>([]);
 
 /**
  * 数据仍只有 `form.time` 一个字段（`HH:MM-HH:MM`），界面上拆成开始 / 结束两个滚轮：
- * 两个都填了才拼成区间；只填一个时留空，仍按原有「时间选填」规则校验，
+ * 两个都填了才拼成区间；只填一个或都不填时提交空串（时间选填），
  * 提交的接口字段名与校验规则都不变。
  */
 const timeStart = ref('');
@@ -345,12 +346,14 @@ function fieldChecks(): Array<[string, () => string]> {
     [
       'category',
       () =>
-        check(form.category, {
-          label: t('admin.limits.category'),
-          max: limit('category', 20),
-          pattern: PATTERNS.category,
-          patternMessage: t('exhibition.form.categoryCharacters'),
-        }),
+        form.category.trim()
+          ? check(form.category, {
+              label: t('admin.limits.category'),
+              max: limit('category', 20),
+              pattern: PATTERNS.category,
+              patternMessage: t('exhibition.form.categoryCharacters'),
+            })
+          : t('exhibition.form.categoryRequired'),
     ],
     [
       'registrationStart',
@@ -805,6 +808,7 @@ function normalizeOptions(options: unknown): string[] {
           </button>
         </div>
         <p v-if="isInvalid('time')" class="field-error" role="alert">{{ formError }}</p>
+        <p class="field-hint">{{ t('exhibition.form.openTimeHint') }}</p>
       </div>
 
       <!-- 报名开始 / 截止也是一组日期范围；两项都可留空，清空即不设报名窗口。 -->
@@ -847,7 +851,9 @@ function normalizeOptions(options: unknown): string[] {
 
       <!-- 分类是管理员在「管理后台-设置」里维护的清单：一行可点的字段，点开抽屉选值 -->
       <div class="field" :data-invalid="isInvalid('category') ? 'true' : 'false'">
-        <span id="form-category-label" class="field-label">{{ t('admin.limits.category') }}</span>
+        <span id="form-category-label" class="field-label"
+          >{{ t('admin.limits.category') }}<span class="required" aria-hidden="true"> *</span></span
+        >
         <button
           id="form-category"
           class="input input-line category-trigger"

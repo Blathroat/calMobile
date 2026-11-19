@@ -41,6 +41,20 @@ export function formatDateRange(start: unknown, end?: unknown): string {
   return last && last !== first ? `${first} - ${last}` : first;
 }
 
+/**
+ * 把若干片段里非空的部分拼成一行。
+ *
+ * 展会时间改为选填后 `time` 可能是空串：直接插进模板会留下行尾空格，或出现
+ * 「 · 场馆」这样的空档。空串、null、undefined 与纯空白都跳过。默认分隔符是次要信息
+ * 之间用的「 · 」，日期与时间这种紧挨着的信息传一个空格。
+ */
+export function joinText(parts: readonly unknown[], separator = ' · '): string {
+  return parts
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean)
+    .join(separator);
+}
+
 /** 日历分节的月份标题：2026年11月（与 `monthLabel` 的「2026 年 11 月」不同，这里给选择器用）。 */
 export function formatMonthHeading(year: number, month: number): string {
   return `${year}年${month}月`;

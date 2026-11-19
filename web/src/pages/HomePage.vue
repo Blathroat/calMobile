@@ -37,7 +37,7 @@ import type { CachedRead } from '@/services/query-cache';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
 import RoleTag from '@/components/RoleTag.vue';
-import { addMonths, formatChineseTime, monthLabel } from '@/services/format';
+import { addMonths, formatChineseTime, joinText, monthLabel } from '@/services/format';
 import { agreementConsentPending } from '@/services/agreement-prompt';
 import type { JsonObject } from '@/api/types';
 import { modeLabel, registrationStatusLabel, statusTone } from '@/services/status';
@@ -584,8 +584,11 @@ onBeforeUnmount(() => {
             :tone="statusTone(String(item.statusCode || ''))"
           />
         </span>
-        <span class="row-meta">{{ item.time }} · {{ item.venue }}</span>
-        <span class="row-meta truncate">{{ item.category || '' }}</span>
+        <span class="row-meta">{{ joinText([item.time, item.venue]) }}</span>
+        <!-- 分类行最前面是展商名称：分类新建时必填，历史数据可能为空，空值不占位。 -->
+        <span v-if="item.exhibitor || item.category" class="row-meta truncate">{{
+          joinText([item.exhibitor, item.category])
+        }}</span>
       </span>
     </button>
     <button

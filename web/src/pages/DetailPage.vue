@@ -27,7 +27,7 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import ImageViewer from '@/components/ImageViewer.vue';
-import { formatDateRange } from '@/services/format';
+import { formatDateRange, joinText } from '@/services/format';
 import { REGISTRATION_STATUS, modeLabel, roleLabel, statusTone } from '@/services/status';
 import type { ExhibitionDetail, JsonObject, Registration } from '@/api/types';
 import { t } from '@/i18n';
@@ -300,7 +300,8 @@ function share(): void {
   const link = registrationLink(bootstrap.publicBaseUrl, item.id);
   const text = [
     String(item.title ?? ''),
-    `${formatDateRange(item.date, item.endDate)} ${String(item.time ?? '')}`.trim(),
+    // 时间选填：留空时只写日期，不留下行尾空格。
+    joinText([formatDateRange(item.date, item.endDate), item.time], ' '),
     String(item.venue ?? ''),
     link ? t('exhibition.detail.registrationLinkPrefix', { link }) : '',
   ]
@@ -404,7 +405,9 @@ onMounted(() => {
     <div class="card" data-tone="fill">
       <div class="row" data-gap="md">
         <span class="dim" aria-hidden="true"><AppIcon name="calendar" size="icon icon-sm" /></span>
-        <span class="row-meta">{{ formatDateRange(exhibition.date, exhibition.endDate) }} {{ exhibition.time }}</span>
+        <span class="row-meta">{{
+          joinText([formatDateRange(exhibition.date, exhibition.endDate), exhibition.time], ' ')
+        }}</span>
       </div>
       <div class="row" data-gap="md">
         <span class="dim" aria-hidden="true"><AppIcon name="home" size="icon icon-sm" /></span>

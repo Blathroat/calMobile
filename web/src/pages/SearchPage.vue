@@ -21,7 +21,7 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import RoleTag from '@/components/RoleTag.vue';
-import { truncate } from '@/services/format';
+import { joinText, truncate } from '@/services/format';
 import { coverOf } from '@/services/cover';
 import type { JsonObject } from '@/api/types';
 import { modeLabel, roleLabel, statusTone, userStatusLabel } from '@/services/status';
@@ -212,7 +212,7 @@ onBeforeUnmount(() => {
                   :tone="statusTone(String(item.statusCode || ''))"
                 />
               </span>
-              <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
+              <span class="row-meta">{{ joinText([item.dateLabel, item.time], ' ') }}</span>
               <span class="row-meta truncate">{{ item.venue }}</span>
             </span>
             <AppIcon name="chevronRight" class="chev" size="icon icon-sm" />

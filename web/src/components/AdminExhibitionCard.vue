@@ -10,7 +10,7 @@ import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
 import { EXHIBITION_STATUS, modeLabel, statusTone } from '@/services/status';
 import { coverOf } from '@/services/cover';
-import { formatDateWithWeekday } from '@/services/format';
+import { formatDateWithWeekday, joinText } from '@/services/format';
 import MediaBox from '@/components/MediaBox.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import type { Exhibition } from '@/api/types';
@@ -61,7 +61,7 @@ function toggleLock(): void {
       <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
       <span class="row-copy">
         <strong class="row-title truncate">{{ item.title }}</strong>
-        <span class="row-meta">{{ `${formatDateWithWeekday(item.date)} ${String(item.time ?? '')}`.trim() }}</span>
+        <span class="row-meta">{{ joinText([formatDateWithWeekday(item.date), item.time], ' ') }}</span>
         <span class="row-meta truncate">{{ item.venue }}</span>
         <span class="row-meta">{{
           t('exhibition.list.statusWithRegistrations', {

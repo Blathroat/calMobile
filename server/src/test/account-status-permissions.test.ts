@@ -148,6 +148,8 @@ test('受限账号不能报名 / 发布展会 / 编辑个人信息，其余照�
         venue: '测试展馆',
         time: '09:00-17:00',
         date: '2026-09-21',
+        // 分类从 0029 起是新建必填（历史数据仍允许为空）：新建用例都要带上。
+        category: '智能家居',
         registrationStart: '2026-01-01',
         registrationEnd: '2026-12-31',
         status: 'optional',

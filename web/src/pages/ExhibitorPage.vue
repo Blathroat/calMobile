@@ -28,6 +28,7 @@ import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
 import { copyText } from '@/services/clipboard';
 import { registrationLink } from '@/services/registration-link';
+import { joinText } from '@/services/format';
 import { modeLabel, statusTone } from '@/services/status';
 import { exhibitionOwnerQuery } from '@/services/exhibition-scope';
 import AppIcon from '@/components/AppIcon.vue';
@@ -256,7 +257,7 @@ usePullRefresh(
             />
             <span class="row-copy">
               <strong class="row-title exh-title">{{ item.title }}</strong>
-              <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
+              <span class="row-meta">{{ joinText([item.dateLabel, item.time], ' ') }}</span>
               <span class="row-meta truncate">{{ item.venue }}</span>
               <!-- 状态与报名数合成一条信号灯：既没有「左边空着」的单独一行，
                    也不会和标题抢宽度。 -->

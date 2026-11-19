@@ -35,7 +35,7 @@ import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import AppIcon from '@/components/AppIcon.vue';
-import { formatDateWithWeekday } from '@/services/format';
+import { formatDateWithWeekday, joinText } from '@/services/format';
 import { coverOf } from '@/services/cover';
 import { loadMarkdownParser, markdownToHtml, sanitizeHtml } from '@/services/markdown';
 import MediaBox from '@/components/MediaBox.vue';
@@ -511,7 +511,7 @@ async function submit(): Promise<void> {
         />
         <span class="row-copy">
           <strong class="row-title truncate">{{ exhibition.title }}</strong>
-          <span class="row-meta">{{ formatDateWithWeekday(exhibition.date) }} {{ exhibition.time }}</span>
+          <span class="row-meta">{{ joinText([formatDateWithWeekday(exhibition.date), exhibition.time], ' ') }}</span>
           <span class="row-meta truncate">{{ exhibition.venue }}</span>
         </span>
         <StatusTag

@@ -118,6 +118,8 @@ function monthSummary(item: ReturnType<typeof exhibitionPayload>, days: number[]
     endDate: item.endDate,
     dateLabel: item.dateLabel,
     title: item.title,
+    // 首页卡片把展商名称放在分类前面：和 exhibitionPayload 的字段同名，页面不用再单独取详情。
+    exhibitor: item.exhibitor,
     time: item.time,
     venue: item.venue,
     // 兼容字段（中文）与协议值都在这里给全：月视图的卡片按 statusCode 取文案。

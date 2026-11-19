@@ -31,7 +31,7 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import QrCanvas from '@/components/QrCanvas.vue';
 import { answerDocument } from '@domain/answer-document';
-import { formatDateRange, formatRecordDate } from '@/services/format';
+import { formatDateRange, formatRecordDate, joinText } from '@/services/format';
 import type { Registration, RegistrationDetail } from '@/api/types';
 import { isJoinSurface, paths } from '@/app/surface';
 import { registrationLink } from '@/services/registration-link';
@@ -339,7 +339,7 @@ onBeforeUnmount(cancelQrHold);
 
     <div class="card" data-tone="fill">
       <strong>{{ record.exhibitionTitle }}</strong>
-      <span class="row-meta">{{ formatRecordDate(record) }} {{ record.exhibitionTime }}</span>
+      <span class="row-meta">{{ joinText([formatRecordDate(record), record.exhibitionTime], ' ') }}</span>
       <span class="row-meta">{{ record.exhibitionVenue }}</span>
     </div>
 
