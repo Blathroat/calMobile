@@ -1,6 +1,9 @@
 /**
  * 通行密钥的调用层：App 里走原生桥（Android Credential Manager），浏览器里走原生 WebAuthn。
  *
+ * 旧 APK 可能还没有 `passkey.*` 动作：新页面先随热更新上线，能力协商（`supportsNativeAction`）
+ * 说不支持时退回浏览器 WebAuthn（与没有原生桥时同一套逻辑），不把「APK 没更新」显示成失败。
+ *
  * 两条路返回的东西是一样的：服务端要的 `{ id, rawId, type, response }`，
  * 字段全是 base64url 字符串。所以上层（安全页、登录页）只认本模块的三个导出，
  * 不需要知道当前跑在哪种容器里。
@@ -15,7 +18,7 @@
  * 模块顶层不碰 window：测试与 SSR 在导入时没有浏览器环境。
  */
 
-import { nativeBridge, NativeBridgeError } from './native-bridge';
+import { NativeBridgeError, nativeBridge, supportsNativeAction } from './native-bridge';
 
 /** 提交给服务端的凭据：字段全是 base64url 字符串。 */
 export interface PasskeyCredentialPayload {
@@ -25,17 +28,24 @@ export interface PasskeyCredentialPayload {
   response: Record<string, string>;
 }
 
-/**
- * 当前环境能不能用通行密钥。
- *
- * App 里有原生桥就认为可用（真正的能力由 `passkey.available` 在调用时报错说明）；
- * 浏览器里要求 WebAuthn 接口存在且是安全上下文（https / localhost）。
- */
-export function isPasskeySupported(): boolean {
-  if (nativeBridge.hasNative()) return true;
+/** 浏览器里能不能用 WebAuthn：接口存在且是安全上下文（https / localhost）。 */
+function browserPasskeySupported(): boolean {
   return (
     typeof window !== 'undefined' && window.isSecureContext === true && typeof window.PublicKeyCredential === 'function'
   );
+}
+
+/**
+ * 当前环境能不能用通行密钥（同步快速判断，供页面首帧决定摆不摆入口）。
+ *
+ * App 里有原生桥先乐观返回真 —— 真正能不能走原生由 `canUseNativePasskey()` 在调用时用
+ * `supportsNativeAction('passkey.available')` 与具体动作判断，旧壳没有通行密钥动作时退回浏览器
+ * WebAuthn；都没有时沿用原有路径（返回 null，页面按不可用处理）。浏览器里要求 WebAuthn 接口存在
+ * 且是安全上下文。
+ */
+export function isPasskeySupported(): boolean {
+  if (nativeBridge.hasNative()) return true;
+  return browserPasskeySupported();
 }
 
 /** 解析原生返回的标准 WebAuthn 响应 JSON。字段已经是 base64url，不用再转换。 */
@@ -149,9 +159,14 @@ function serializeCredential(credential: PublicKeyCredential): PasskeyCredential
   };
 }
 
-/** 统一处理底层调用：没有 WebAuthn / 用户取消返回 null，其它失败原样抛出。 */
+/**
+ * 统一处理浏览器分支：没有 WebAuthn / 用户取消返回 null，其它失败原样抛出。
+ *
+ * 这里只服务浏览器实现：App 里已经按能力协商选了原生；旧壳回退过来时同样要求浏览器真的
+ * 支持 WebAuthn（WebView 通常没有），否则按「环境不支持」返回 null。
+ */
 async function requestCredential(run: () => Promise<Credential | null>): Promise<PasskeyCredentialPayload | null> {
-  if (!isPasskeySupported() || typeof navigator === 'undefined' || !navigator.credentials) return null;
+  if (!browserPasskeySupported() || typeof navigator === 'undefined' || !navigator.credentials) return null;
   let credential: Credential | null;
   try {
     credential = await run();
@@ -163,13 +178,25 @@ async function requestCredential(run: () => Promise<Credential | null>): Promise
 }
 
 /**
+ * 原生壳里能不能走通行密钥：能力清单里同时有 `passkey.available` 与这次要用的动作。
+ *
+ * 旧壳整份清单为空时直接 false，退回浏览器 WebAuthn（与没有原生桥时同一套逻辑）；
+ * 能力协商只问一次，两项判断共用缓存。
+ */
+async function canUseNativePasskey(action: 'passkey.create' | 'passkey.get'): Promise<boolean> {
+  if (!(await supportsNativeAction('passkey.available'))) return false;
+  return supportsNativeAction(action);
+}
+
+/**
  * 创建通行密钥。
  * @param options 服务端下发的 PublicKeyCredentialCreationOptions JSON
  * @returns 可直接提交给 passkeyRegister 的普通对象；用户取消或环境不支持时返回 null
  */
 export async function createCredential(options: unknown): Promise<PasskeyCredentialPayload | null> {
-  // App 里由系统凭据提供方（Credential Manager）完成，选项 JSON 原样交给它。
-  if (nativeBridge.hasNative()) return requestFromBridge('passkey.create', options);
+  // App 里由系统凭据提供方（Credential Manager）完成，选项 JSON 原样交给它；
+  // 旧壳没有这个动作时落到下面的浏览器 WebAuthn（与没有原生桥时一致）。
+  if (await canUseNativePasskey('passkey.create')) return requestFromBridge('passkey.create', options);
   const publicKey = hydrateCreationOptions(options);
   if (!publicKey) return null;
   return requestCredential(() => navigator.credentials.create({ publicKey }));
@@ -181,7 +208,8 @@ export async function createCredential(options: unknown): Promise<PasskeyCredent
  * @returns 可直接提交给 passkeyVerify 的普通对象；用户取消或环境不支持时返回 null
  */
 export async function getCredential(options: unknown): Promise<PasskeyCredentialPayload | null> {
-  if (nativeBridge.hasNative()) return requestFromBridge('passkey.get', options);
+  // 旧壳没有 `passkey.get` 时同样退回浏览器 WebAuthn。
+  if (await canUseNativePasskey('passkey.get')) return requestFromBridge('passkey.get', options);
   const publicKey = hydrateRequestOptions(options);
   if (!publicKey) return null;
   return requestCredential(() => navigator.credentials.get({ publicKey }));

@@ -113,10 +113,12 @@ public class WebAppBridgeTest {
         assertEquals("已取消选择", received[1]);
     }
 
-    /** 错误码是前后端约定的字面量，改名会让前端的取消静默分支失效，因此钉住。 */
+    /** 错误码是前后端约定的字面量，改名会让前端的取消静默 / 回退分支失效，因此钉住。 */
     @Test
     public void errorCodeLiteralsStayFixed() {
         assertEquals("cancelled", WebAppBridge.CODE_CANCELLED);
         assertEquals("timeout", WebAppBridge.CODE_TIMEOUT);
+        // 旧壳没有某个动作时回这个码，页面据此退回浏览器实现（见 device-services 的 nativeOrBrowser）。
+        assertEquals("unsupported", WebAppBridge.CODE_UNSUPPORTED);
     }
 }

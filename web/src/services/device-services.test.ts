@@ -253,3 +253,64 @@ describe('有原生桥时委托给原生动作', () => {
     expect(mocks.imageFileToJpegDataUrl).not.toHaveBeenCalled();
   });
 });
+
+describe('旧壳没有某个原生动作时回退浏览器实现', () => {
+  /** 旧 APK：动作不认识，回稳定码 unsupported。 */
+  function unsupported(): NativeBridgeError {
+    mocks.hasNative.mockReturnValue(true);
+    const error = new NativeBridgeError('未实现的动作：media.pickImage', 'unsupported');
+    mocks.call.mockRejectedValue(error);
+    return error;
+  }
+
+  it('pickImage 回退到浏览器选图，动作名仍然对得上', async () => {
+    unsupported();
+    const file = new File(['x'], 'photo.jpg', { type: 'image/jpeg' });
+    mocks.pickFile.mockResolvedValue(file);
+    mocks.imageFileToJpegDataUrl.mockResolvedValue('data:image/jpeg;base64,fallback');
+
+    await expect(device.pickImage()).resolves.toEqual({ dataUrl: 'data:image/jpeg;base64,fallback' });
+    expect(mocks.call).toHaveBeenCalledWith('media.pickImage', {});
+    expect(mocks.pickFile).toHaveBeenCalledWith('image/*');
+  });
+
+  it('用户取消不触发回退：原样返回 cancelled', async () => {
+    mocks.hasNative.mockReturnValue(true);
+    mocks.call.mockRejectedValue(new NativeBridgeError('已取消选择', 'cancelled'));
+
+    const error = await rejection(device.pickImage());
+    expect(error.code).toBe('cancelled');
+    expect(mocks.pickFile).not.toHaveBeenCalled();
+  });
+
+  it('其它失败照旧抛出，不改用浏览器实现', async () => {
+    mocks.hasNative.mockReturnValue(true);
+    mocks.call.mockRejectedValue(new NativeBridgeError('设备存储已满'));
+
+    const error = await rejection(device.saveImage('data:image/png;base64,x'));
+    expect(error.message).toBe('设备存储已满');
+    expect(mocks.downloadBlob).not.toHaveBeenCalled();
+  });
+
+  it('有浏览器实现的动作都能回退', async () => {
+    unsupported();
+    const file = new File(['{"a":1}'], 'pack.json', { type: 'application/json' });
+    mocks.pickFile.mockResolvedValue(file);
+    mocks.compressImage.mockResolvedValue({ blob: new Blob(['jpeg'], { type: 'image/jpeg' }), width: 1, height: 1 });
+    mocks.shareText.mockResolvedValue({ shared: true, copied: false });
+    mocks.requestNotificationPermission.mockResolvedValue(true);
+
+    await expect(device.importMedia('image')).resolves.toMatchObject({ url: 'blob:test', kind: 'image' });
+    await expect(device.importMedia('video')).resolves.toMatchObject({ kind: 'video' });
+    await expect(device.importText()).resolves.toMatchObject({ text: '{"a":1}' });
+    await expect(device.saveImage('data:image/png;base64,iVBORw0KGgo=')).resolves.toEqual({ saved: true });
+    await expect(device.shareText('标题', '正文')).resolves.toEqual({ shared: true, copied: false });
+    await expect(device.exportCsv('a.csv', 'a,b')).resolves.toEqual({ exported: true });
+    await expect(device.exportText('pack.json', '{}')).resolves.toEqual({ exported: true, fileName: 'pack.json' });
+    await expect(device.requestNotificationPermission()).resolves.toBe(true);
+    await expect(device.ensureCameraPermission()).resolves.toBe(false);
+    await expect(device.discardMedia('temp.jpg')).resolves.toEqual({ ok: true });
+
+    expect(mocks.downloadBlob).toHaveBeenCalledTimes(3);
+  });
+});

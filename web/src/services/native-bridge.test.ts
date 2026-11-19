@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { NativeBridge, NativeBridgeError, nativeBridge } from './native-bridge';
+import {
+  NativeBridge,
+  NativeBridgeError,
+  nativeBridge,
+  resetNativeCapabilitiesForTests,
+  supportsNativeAction,
+} from './native-bridge';
 import { device } from './device-services';
 
 const bridges: NativeBridge[] = [];
@@ -85,5 +91,86 @@ describe('NativeBridge', () => {
     expect(early).toBe('still-pending');
     const late = await interactive;
     expect(late.code).toBe('timeout');
+  });
+
+  it('unsupported 错误码原样交给前端（页面据此退回浏览器实现）', async () => {
+    const { native, fakeWindow, bridge } = createNative();
+    native.invoke = (_action, _payload, callbackId) => {
+      fakeWindow.CalMobileBridge?.onResult(callbackId, false, null, '未实现的动作：app.future', 'unsupported');
+    };
+    const error = await bridge.call('app.capabilities', {}).then(
+      () => null,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(NativeBridgeError);
+    expect((error as NativeBridgeError).code).toBe('unsupported');
+  });
+});
+
+describe('能力协商 supportsNativeAction', () => {
+  afterEach(() => {
+    resetNativeCapabilitiesForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('没有原生桥时任何动作都不支持，也不去问原生', async () => {
+    const call = vi.spyOn(nativeBridge, 'call');
+    // jsdom 里没有 window.CalMobileNative，hasNative() 为 false。
+    await expect(supportsNativeAction('app.capabilities')).resolves.toBe(false);
+    expect(call).not.toHaveBeenCalled();
+  });
+
+  it('只问一次 app.capabilities，并按清单回答', async () => {
+    vi.spyOn(nativeBridge, 'hasNative').mockReturnValue(true);
+    const call = vi
+      .spyOn(nativeBridge, 'call')
+      .mockResolvedValue({ version: '1.2.3', actions: ['app.capabilities', 'media.pickImage'] } as never);
+
+    await expect(supportsNativeAction('media.pickImage')).resolves.toBe(true);
+    await expect(supportsNativeAction('passkey.create')).resolves.toBe(false);
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(call).toHaveBeenCalledWith('app.capabilities', {});
+  });
+
+  it('旧壳不认识 app.capabilities：所有动作都返回 false，且只问一次', async () => {
+    vi.spyOn(nativeBridge, 'hasNative').mockReturnValue(true);
+    const call = vi
+      .spyOn(nativeBridge, 'call')
+      .mockRejectedValue(new NativeBridgeError('未实现的动作：app.capabilities', 'unsupported'));
+
+    await expect(supportsNativeAction('media.pickImage')).resolves.toBe(false);
+    await expect(supportsNativeAction('app.capabilities')).resolves.toBe(false);
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it('能力协商超时不算「没有能力」：下次调用重新问', async () => {
+    vi.spyOn(nativeBridge, 'hasNative').mockReturnValue(true);
+    const call = vi
+      .spyOn(nativeBridge, 'call')
+      .mockRejectedValueOnce(new NativeBridgeError('原生动作 app.capabilities 超时未响应', 'timeout'))
+      .mockResolvedValueOnce({ version: '1.2.3', actions: ['media.pickImage'] } as never);
+
+    await expect(supportsNativeAction('media.pickImage')).resolves.toBe(false);
+    await expect(supportsNativeAction('media.pickImage')).resolves.toBe(true);
+    expect(call).toHaveBeenCalledTimes(2);
+  });
+
+  it('原生回包形状不对时按空清单处理', async () => {
+    vi.spyOn(nativeBridge, 'hasNative').mockReturnValue(true);
+    vi.spyOn(nativeBridge, 'call').mockResolvedValue({ version: '1.2.3', actions: 'media.pickImage' } as never);
+    await expect(supportsNativeAction('media.pickImage')).resolves.toBe(false);
+  });
+
+  it('测试钩子能复位缓存', async () => {
+    vi.spyOn(nativeBridge, 'hasNative').mockReturnValue(true);
+    const call = vi
+      .spyOn(nativeBridge, 'call')
+      .mockResolvedValueOnce({ version: '1.2.3', actions: ['media.pickImage'] } as never)
+      .mockResolvedValueOnce({ version: '1.2.3', actions: [] } as never);
+
+    await expect(supportsNativeAction('media.pickImage')).resolves.toBe(true);
+    resetNativeCapabilitiesForTests();
+    await expect(supportsNativeAction('media.pickImage')).resolves.toBe(false);
+    expect(call).toHaveBeenCalledTimes(2);
   });
 });

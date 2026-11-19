@@ -30,6 +30,7 @@ import java.util.Map;
  * | `session.save` / `session.load` / `session.clear` / `session.device` | 会话与可信设备凭据属于设备状态，存应用私有目录（{@link SessionStore}） |
  * | `passkey.available` / `passkey.create` / `passkey.get` | WebView 没有可靠的 WebAuthn，通行密钥交给系统凭据提供方（Credential Manager，{@link PasskeyActions}） |
  * | `app.exit` | 用户不同意用户协议时关闭应用；只有原生能结束 Activity，网页里做不到 |
+ * | `app.capabilities` | 声明这个壳支持哪些动作；页面据此把新功能交给原生或浏览器实现，APK 更新不再是新功能上线的前提 |
  *
  * 数据行由前端传进来（它已经从后端拿到数据），原生只负责落盘与格式。
  */
@@ -43,6 +44,9 @@ final class WebAppActions {
         Activity activity = bridge.activity();
 
         switch (action) {
+            case "app.capabilities":
+                callback.success(ShellCapabilities.describe());
+                return;
             case "ui.sync":
                 callback.success(SystemActions.syncDeviceMirror(activity, payload));
                 return;
@@ -112,7 +116,9 @@ final class WebAppActions {
                 activity.finish();
                 return;
             default:
-                callback.failure("未实现的动作：" + action);
+                // 稳定错误码：旧壳不认识新页面调的动作用它，页面据此退回浏览器实现，
+                // 而不是把「APK 还没更新」显示成一条故障。
+                callback.failure(WebAppBridge.CODE_UNSUPPORTED, "未实现的动作：" + action);
         }
     }
 
