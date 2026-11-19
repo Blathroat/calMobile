@@ -192,4 +192,55 @@ describe('首页展会卡片', () => {
     // 历史数据既没有展商也没有分类，不再渲染一条空行。
     expect(second?.querySelectorAll('.row-meta').length).toBe(1);
   });
+
+  it('报名截止日已过的展会，卡片状态灯显示「截止报名」', async () => {
+    vi.mocked(api.exhibitions.month).mockResolvedValue({
+      day: 12,
+      eventDays: [12],
+      markedDays: [],
+      exhibitions: [
+        {
+          id: 'ended-registration',
+          day: 12,
+          days: [12],
+          title: '已截止报名展会',
+          statusCode: 'review',
+          registrationEnded: true,
+          openForRegistration: false,
+        },
+        {
+          id: 'open-registration',
+          day: 12,
+          days: [12],
+          title: '仍在报名展会',
+          statusCode: 'review',
+          registrationEnded: false,
+          openForRegistration: true,
+        },
+      ],
+      meetings: [],
+    });
+    const container = await mountHome();
+    const cards = [...container.querySelectorAll<HTMLElement>('.row-card')];
+    const ended = cards.find((card) => card.textContent?.includes('已截止报名展会'));
+    expect(ended?.querySelector('.status-tag')?.textContent?.trim()).toBe('截止报名');
+    const open = cards.find((card) => card.textContent?.includes('仍在报名展会'));
+    expect(open?.querySelector('.status-tag')?.textContent?.trim()).toBe('报名中 · 需审核');
+  });
+});
+
+describe('首页月份切换按钮', () => {
+  it('只剩两颗箭头，命中区、aria-label 与 title 都保留', async () => {
+    const container = await mountHome();
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>('.month-shift .icon-button')];
+    expect(buttons.length).toBe(2);
+    for (const button of buttons) {
+      // 去掉的是圆框样式，不是按钮本身：44px 命中区与无障碍名称都要在。
+      expect(button.getAttribute('data-variant')).toBeNull();
+      expect(button.getAttribute('aria-label')).toBeTruthy();
+      expect(button.getAttribute('title')).toBeTruthy();
+    }
+    expect(buttons[0]?.getAttribute('aria-label')).toBe('上一个月');
+    expect(buttons[1]?.getAttribute('aria-label')).toBe('下一个月');
+  });
 });

@@ -127,6 +127,8 @@ function monthSummary(item: ReturnType<typeof exhibitionPayload>, days: number[]
     statusCode: item.statusCode,
     modeLabel: item.modeLabel,
     openForRegistration: item.openForRegistration,
+    // 首页当天卡片的状态灯：报名截止日已过时改为「截止报名」。
+    registrationEnded: item.registrationEnded,
     imageUri: item.imageUri,
     category: item.category,
   };

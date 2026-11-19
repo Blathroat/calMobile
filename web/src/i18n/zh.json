@@ -445,6 +445,8 @@
       "registerRestricted": "账号已被限制，不能报名",
       "registeredHint": "已报名这场展会，可在报名详情里查看报名码与状态。",
       "registrationClosed": "报名已关闭",
+      "registrationEnded": "报名已截止",
+      "registrationEndedHint": "报名截止日期已过，该展会不再接受报名。",
       "registrationInfo": "报名信息",
       "registrationLinkPrefix": "报名：{link}",
       "registrationNeeded": "需提交报名信息",
@@ -1365,7 +1367,6 @@
     }
   },
   "settings": {
-    "avatar": "头像",
     "avatarRemoved": "头像已移除",
     "avatarUpdated": "头像已更新",
     "changeAvatar": "更换头像",
@@ -1412,7 +1413,8 @@
       "updated": "通知设置已更新"
     },
     "profile": {
-      "avatarHint": "头像改动立即保存，不需要再点「保存」。",
+      "avatarSheetHint": "头像改动立即保存，关闭抽屉即可。",
+      "editAvatar": "编辑头像",
       "editProfile": "编辑资料",
       "nickname": "昵称",
       "region": "地区",

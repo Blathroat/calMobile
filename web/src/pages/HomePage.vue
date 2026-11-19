@@ -40,7 +40,7 @@ import RoleTag from '@/components/RoleTag.vue';
 import { addMonths, formatChineseTime, joinText, monthLabel } from '@/services/format';
 import { agreementConsentPending } from '@/services/agreement-prompt';
 import type { JsonObject } from '@/api/types';
-import { modeLabel, registrationStatusLabel, statusTone } from '@/services/status';
+import { exhibitionModeCode, modeLabel, registrationStatusLabel, statusTone } from '@/services/status';
 import { t } from '@/i18n';
 
 const WEEK_LABELS = [
@@ -477,10 +477,10 @@ onBeforeUnmount(() => {
 
   <div class="row" data-between="true">
     <strong>{{ monthLabel(view.year, view.month) }}</strong>
-    <div class="row">
+    <!-- 上/下月只留两颗箭头，不带圆框；命中区仍是 44px 的 .icon-button。 -->
+    <div class="row month-shift">
       <button
         class="icon-button"
-        data-variant="outlined"
         type="button"
         :aria-label="t('home.previousMonth')"
         :title="t('home.previousMonth')"
@@ -490,7 +490,6 @@ onBeforeUnmount(() => {
       </button>
       <button
         class="icon-button"
-        data-variant="outlined"
         type="button"
         :aria-label="t('home.nextMonth')"
         :title="t('home.nextMonth')"
@@ -579,10 +578,7 @@ onBeforeUnmount(() => {
       <span class="row-copy">
         <span class="row" data-gap="md">
           <strong class="row-title truncate">{{ item.title }}</strong>
-          <StatusTag
-            :text="modeLabel(String(item.statusCode || ''))"
-            :tone="statusTone(String(item.statusCode || ''))"
-          />
+          <StatusTag :text="modeLabel(exhibitionModeCode(item))" :tone="statusTone(exhibitionModeCode(item))" />
         </span>
         <span class="row-meta">{{ joinText([item.time, item.venue]) }}</span>
         <!-- 分类行最前面是展商名称：分类新建时必填，历史数据可能为空，空值不占位。 -->
@@ -617,6 +613,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
+/* 月份切换只剩两颗箭头：去掉圆框后把间距收一档，箭头看起来仍是一组。 */
+.month-shift {
+  gap: var(--s1);
+}
+
 .calendar {
   position: relative;
   z-index: 1;

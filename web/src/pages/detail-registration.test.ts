@@ -46,6 +46,19 @@ const CLOSED_DETAIL: ExhibitionDetail = {
   exhibition: { id: 'exh-1', title: '秋季展会', date: '2026-09-20', openForRegistration: false },
 };
 
+/** 报名方式仍是需审核，但报名截止日已过：服务端把 openForRegistration 也置为 false。 */
+const ENDED_DETAIL: ExhibitionDetail = {
+  found: true,
+  exhibition: {
+    id: 'exh-1',
+    title: '秋季展会',
+    date: '2026-09-20',
+    statusCode: 'review',
+    openForRegistration: false,
+    registrationEnded: true,
+  },
+};
+
 let app: App | undefined;
 
 beforeEach(() => {
@@ -217,5 +230,23 @@ describe('展会详情底部报名按钮', () => {
     await flush();
     expect(api.registrations.list).not.toHaveBeenCalled();
     expect(registerButton()?.textContent?.trim()).toBe('登录后报名');
+  });
+
+  it('报名截止日已过：主按钮置灰并显示「报名已截止」，状态灯显示「截止报名」', async () => {
+    await mountDetail({ loggedIn: true, detail: ENDED_DETAIL });
+    await flush();
+    expect(registerButton()?.textContent?.trim()).toBe('报名已截止');
+    expect(registerButton()?.disabled).toBe(true);
+    expect(footerHint()).toContain('报名截止日期已过');
+    // 状态灯按服务端下发的 registrationEnded 换成「截止报名」，不是「报名中 · 需审核」。
+    expect(document.querySelector('#detail-test .status-tag')?.textContent?.trim()).toBe('截止报名');
+  });
+
+  it('展商手动关闭报名时仍显示「报名已关闭」', async () => {
+    await mountDetail({ loggedIn: true, detail: CLOSED_DETAIL });
+    await flush();
+    expect(registerButton()?.textContent?.trim()).toBe('报名已关闭');
+    expect(registerButton()?.disabled).toBe(true);
+    expect(footerHint()).toContain('该展会当前不接受报名');
   });
 });

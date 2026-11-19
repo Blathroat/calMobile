@@ -39,6 +39,8 @@ export interface ExhibitionRow {
   image_uri?: string | null;
   registration_start?: string | null;
   registration_end?: string | null;
+  /** 报名截止日已过（数据库按 CURRENT_DATE 判定，当天仍算可报名）；是否真算「已截止」还要看报名方式。 */
+  registration_ended?: boolean | null;
   qr_enabled?: boolean | null;
   allow_cancel?: boolean | null;
   exhibitor_id?: string | null;
@@ -132,6 +134,9 @@ export interface AdminUserRow {
 /** 展会行 → 列表 / 详情的展会对象。 */
 export function exhibitionPayload(row: ExhibitionRow) {
   const statusCode = row.status;
+  // 报名已截止：只有报名方式仍是「需审核 / 无需审核」且截止日已过才算；
+  // 「仅展示 / 截止报名 / 已结束」保持自己的状态文案，不再叠加一层「已截止」。
+  const registrationEnded = row.registration_ended === true && labels.acceptsRegistration(statusCode);
   return {
     id: row.id,
     title: row.title,
@@ -146,7 +151,8 @@ export function exhibitionPayload(row: ExhibitionRow) {
     mode: labels.modeOf(statusCode),
     // 兼容字段（中文），规则与前端 `modeLabel(code)` 一致。
     modeLabel: labels.modeLabel(statusCode),
-    openForRegistration: labels.acceptsRegistration(statusCode),
+    // 报名窗口已过时也为 false（原来只看状态码），页面据此把报名按钮置灰。
+    openForRegistration: labels.acceptsRegistration(statusCode) && !registrationEnded,
     year: row.year,
     month: row.month,
     day: row.day,
@@ -161,6 +167,7 @@ export function exhibitionPayload(row: ExhibitionRow) {
     imageUri: row.image_uri || '',
     registrationStart: row.registration_start || '',
     registrationEnd: row.registration_end || '',
+    registrationEnded,
     qrEnabled: row.qr_enabled === true,
     allowCancel: row.allow_cancel !== false,
     registrationCount: Number(row.registration_count) || 0,

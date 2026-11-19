@@ -24,7 +24,7 @@ import RoleTag from '@/components/RoleTag.vue';
 import { joinText, truncate } from '@/services/format';
 import { coverOf } from '@/services/cover';
 import type { JsonObject } from '@/api/types';
-import { modeLabel, roleLabel, statusTone, userStatusLabel } from '@/services/status';
+import { exhibitionModeCode, modeLabel, roleLabel, statusTone, userStatusLabel } from '@/services/status';
 import { t } from '@/i18n';
 
 /** 输入防抖：停手 220ms 才真正发请求，避免逐字打字打出一串请求。 */
@@ -207,10 +207,7 @@ onBeforeUnmount(() => {
               <!-- 信号灯贴标题行右端，箭头留在整行最右，两者不挤在同一侧 -->
               <span class="search-title-line">
                 <strong class="row-title truncate">{{ item.title }}</strong>
-                <StatusTag
-                  :text="modeLabel(String(item.statusCode || ''))"
-                  :tone="statusTone(String(item.statusCode || ''))"
-                />
+                <StatusTag :text="modeLabel(exhibitionModeCode(item))" :tone="statusTone(exhibitionModeCode(item))" />
               </span>
               <span class="row-meta">{{ joinText([item.dateLabel, item.time], ' ') }}</span>
               <span class="row-meta truncate">{{ item.venue }}</span>

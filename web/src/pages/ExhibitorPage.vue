@@ -29,7 +29,7 @@ import { openSheet } from '@/services/sheet';
 import { copyText } from '@/services/clipboard';
 import { registrationLink } from '@/services/registration-link';
 import { joinText } from '@/services/format';
-import { modeLabel, statusTone } from '@/services/status';
+import { exhibitionModeCode, modeLabel, statusTone } from '@/services/status';
 import { exhibitionOwnerQuery } from '@/services/exhibition-scope';
 import AppIcon from '@/components/AppIcon.vue';
 import HintNote from '@/components/HintNote.vue';
@@ -264,11 +264,11 @@ usePullRefresh(
               <StatusTag
                 :text="
                   t('exhibition.list.statusWithRegistrations', {
-                    status: modeLabel(String(item.statusCode ?? '')),
+                    status: modeLabel(exhibitionModeCode(item)),
                     count: String(item.registrationCount ?? 0),
                   })
                 "
-                :tone="statusTone(String(item.statusCode || ''))"
+                :tone="statusTone(exhibitionModeCode(item))"
               />
               <span v-if="item.qrEnabled === true" class="row-meta">{{ t('exhibitor.qrEnabled') }}</span>
             </span>
