@@ -29,7 +29,7 @@ import {
   statusTone,
 } from '@/services/status';
 import { answerDocument } from '@domain/answer-document';
-import { truncate } from '@/services/format';
+import { formatDateRange, truncate } from '@/services/format';
 import { exhibitionOwnerQuery } from '@/services/exhibition-scope';
 import SegControl from '@/components/SegControl.vue';
 import AppIcon from '@/components/AppIcon.vue';
@@ -178,6 +178,11 @@ function openVisitor(record: Registration): void {
 
 function openDetail(record: Registration): void {
   const answers = answerDocument({ source: { text: record.answers } }).lines;
+  // 参加时间是报名时单独填的区间（不在收集项文稿里）：多天展会才有，放在详情的第一项，
+  // 展商不用在收集项里翻。两端都有才展示，没有就不占一行。
+  const attendanceStart = String(record.attendanceStart ?? '');
+  const attendanceEnd = String(record.attendanceEnd ?? '');
+  const attendanceSpan = attendanceStart && attendanceEnd ? formatDateRange(attendanceStart, attendanceEnd) : '';
   const targets = targetsFor(record);
   const hint =
     record.statusCode === REGISTRATION_STATUS.ATTENDED
@@ -204,10 +209,13 @@ function openDetail(record: Registration): void {
       status: registrationStatusLabel(String(record.statusCode ?? '')),
       statusTone: statusTone(String(record.statusCode ?? '')),
       registrationTime: String(record.registrationTime ?? ''),
-      answers: answers.map((line) => ({
-        label: line.label || t('exhibition.detail.additionalInfo'),
-        value: line.value || '—',
-      })),
+      answers: [
+        ...(attendanceSpan ? [{ label: t('registration.detail.attendance'), value: attendanceSpan }] : []),
+        ...answers.map((line) => ({
+          label: line.label || t('exhibition.detail.additionalInfo'),
+          value: line.value || '—',
+        })),
+      ],
       hint: targets.length > 0 ? '' : hint,
     },
     actions,

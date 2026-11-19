@@ -98,6 +98,10 @@ export interface ServerPatch {
   /** 操作日志存储上限：整段 { storageMb } 或扁平 logsStorageMb。 */
   logs?: unknown;
   logsStorageMb?: unknown;
+  /** 匿名报名姓名同义词：整段 { nameFieldTitles } 提交。 */
+  registration?: unknown;
+  /** 也接受管理端表单的扁平写法：直接提交 string 数组。 */
+  registrationNameFieldTitles?: unknown;
 }
 
 interface SettingRow {
@@ -237,6 +241,8 @@ export async function readServerSettings(): Promise<ServerSettings> {
   settings.agreement = normalizeAgreement(settings.agreement);
   // 老库没有 logs 这一项；补上默认（64 MB），并把手改过的值收敛到合法范围。
   settings.logs = normalizeLogs(settings.logs);
+  // 老库没有 registration 这一项；缺键、手改坏的形状都兜回默认姓名同义词。
+  settings.registration = normalizeRegistration(settings.registration);
   // 老库的 limits JSON 没有文本填写和选项上限。缺的键用默认值补上，避免读出来是 undefined。
   const storedLimits = settings.limits;
   settings.limits = {
@@ -264,6 +270,8 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
   // 色板先归一化再夹取 index：老库（4 色）与手改过的色板都按补齐后的长度收敛，
   // 否则同一段代码在两次读取之间会给出不同的合法范围。
   next.theme = normalizeTheme(next.theme);
+  // 老库 / 手写配置可能没有 registration 段：先补成合法结构，下面按提交的键覆盖。
+  next.registration = normalizeRegistration(next.registration);
   if (Object.prototype.hasOwnProperty.call(source, 'themeAccent')) {
     const raw = String(source.themeAccent ?? '').trim();
     if (!COLOR_PATTERN.test(raw)) {
@@ -462,6 +470,28 @@ export function applyServerPatch(current: ServerSettings, patch: ServerPatch | n
     };
   }
   if (
+    Object.prototype.hasOwnProperty.call(source, 'registration') ||
+    Object.prototype.hasOwnProperty.call(source, 'registrationNameFieldTitles')
+  ) {
+    // 整段 { nameFieldTitles } 与扁平数组两种写法都接受；扁平字段优先（管理页表单用它）。
+    let titles: unknown = next.registration.nameFieldTitles;
+    if (Object.prototype.hasOwnProperty.call(source, 'registration')) {
+      const value = source.registration;
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw badRequest('报名设置格式不正确', { code: 'settings.registrationInvalid' });
+      }
+      const section = value as Record<string, unknown>;
+      if (Object.prototype.hasOwnProperty.call(section, 'nameFieldTitles')) titles = section.nameFieldTitles;
+    }
+    if (Object.prototype.hasOwnProperty.call(source, 'registrationNameFieldTitles')) {
+      titles = source.registrationNameFieldTitles;
+    }
+    if (!Array.isArray(titles)) {
+      throw badRequest('姓名同类标题需要是数组', { code: 'settings.registrationNameFieldTitlesInvalid' });
+    }
+    next.registration = normalizeRegistration({ nameFieldTitles: titles });
+  }
+  if (
     Object.prototype.hasOwnProperty.call(source, 'inviteUses') ||
     Object.prototype.hasOwnProperty.call(source, 'inviteValidHours') ||
     Object.prototype.hasOwnProperty.call(source, 'inviteDurationDays')
@@ -490,6 +520,44 @@ export function normalizeLogs(value: unknown): ServerSettings['logs'] {
   return {
     storageMb: clampInt(record.storageMb, DEFAULT_SETTINGS.logs.storageMb, [LOG_STORAGE_MIN_MB, LOG_STORAGE_MAX_MB]),
   };
+}
+
+/** 姓名同义词单项长度上限：标题本身就是短词，超过就截断。 */
+export const NAME_FIELD_TITLE_MAX = 20;
+
+/** 姓名同义词最多条数：留够覆盖面，又不至于把一行标题列表塞到无限长。 */
+export const NAME_FIELD_TITLE_COUNT_MAX = 30;
+
+/**
+ * 归一化匿名报名的姓名同义词列表：逐项 trim、去掉空项、去重，
+ * 每项截到 `NAME_FIELD_TITLE_MAX` 字，最多保留 `NAME_FIELD_TITLE_COUNT_MAX` 项。
+ *
+ * 允许空数组：表示不合并，匿名报名仍显示单独的姓名表单。
+ */
+export function normalizeNameFieldTitles(value: unknown): string[] {
+  const items = Array.isArray(value) ? value : [];
+  const titles: string[] = [];
+  for (const item of items) {
+    const title = String(item ?? '')
+      .trim()
+      .slice(0, NAME_FIELD_TITLE_MAX);
+    if (title && !titles.includes(title)) titles.push(title);
+    if (titles.length >= NAME_FIELD_TITLE_COUNT_MAX) break;
+  }
+  return titles;
+}
+
+/**
+ * 归一化「匿名报名」设置段：老库缺键或非法值（不是对象、nameFieldTitles 不是数组）
+ * 都退回默认列表；空数组是合法值，原样保留（表示不合并）。
+ */
+export function normalizeRegistration(value: unknown): ServerSettings['registration'] {
+  const record = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const titles = record.nameFieldTitles;
+  if (!Array.isArray(titles)) {
+    return { nameFieldTitles: [...DEFAULT_SETTINGS.registration.nameFieldTitles] };
+  }
+  return { nameFieldTitles: normalizeNameFieldTitles(titles) };
 }
 
 /** 用户协议正文长度上限：200k 字符，够放很长的条款；超过按业务失败拒绝。 */

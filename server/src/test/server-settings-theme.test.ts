@@ -386,6 +386,64 @@ test('老库的 app_settings.media 缺 videoSizeMb 时用默认值兜底', async
   }
 });
 
+test('匿名报名姓名同义词：老库缺键兜底默认，bootstrap 与 settings 同源，保存后可读回并归一化', async () => {
+  // 老库（加这一项之前写入的 app_settings）没有 registration 这一行：读出来要是默认列表。
+  await pool.query("DELETE FROM app_settings WHERE key = 'registration'");
+  try {
+    const defaultTitles = DEFAULT_SETTINGS.registration.nameFieldTitles;
+    const bootstrap = await get('/api/v1/bootstrap');
+    assert.deepStrictEqual(
+      bootstrap.body.registration.nameFieldTitles,
+      defaultTitles,
+      'bootstrap 要下发默认的姓名同义词，报名站据此决定是否合并姓名表单',
+    );
+    assert.deepStrictEqual((await get('/api/v1/settings')).body.registration.nameFieldTitles, defaultTitles);
+
+    // 保存时逐项 trim、去空、去重；普通用户也能读到同一份（报名站未登录也要用）。
+    const saved = await put(
+      '/api/v1/settings',
+      { registrationNameFieldTitles: [' 名字 ', '', '名字', '网名'] },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+    assert.deepStrictEqual(saved.body.settings.registration.nameFieldTitles, ['名字', '网名']);
+    assert.deepStrictEqual((await get('/api/v1/settings')).body.registration.nameFieldTitles, ['名字', '网名']);
+    assert.deepStrictEqual((await get('/api/v1/bootstrap')).body.registration.nameFieldTitles, ['名字', '网名']);
+    assert.deepStrictEqual(
+      (await get('/api/v1/settings', { token: tokens.user.token })).body.registration.nameFieldTitles,
+      ['名字', '网名'],
+      '普通用户与访客读到的是同一份服务器设置',
+    );
+
+    // 空数组是合法值：表示不做姓名合并（始终显示单独的姓名表单）。
+    const cleared = await put('/api/v1/settings', { registrationNameFieldTitles: [] }, { token: tokens.admin.token });
+    assert.strictEqual(cleared.body.ok, true, JSON.stringify(cleared.body));
+    assert.deepStrictEqual(cleared.body.settings.registration.nameFieldTitles, []);
+    assert.deepStrictEqual((await get('/api/v1/bootstrap')).body.registration.nameFieldTitles, []);
+
+    // 整段写法也认；非数组按规则失败（200 + ok:false），不静默吞掉。
+    const section = await put(
+      '/api/v1/settings',
+      { registration: { nameFieldTitles: ['称呼'] } },
+      { token: tokens.admin.token },
+    );
+    assert.deepStrictEqual(section.body.settings.registration.nameFieldTitles, ['称呼']);
+    const invalid = await put(
+      '/api/v1/settings',
+      { registrationNameFieldTitles: '姓名' },
+      { token: tokens.admin.token },
+    );
+    assert.strictEqual(invalid.body.ok, false);
+    assert.strictEqual(invalid.body.errorCode, 'settings.registrationNameFieldTitlesInvalid');
+  } finally {
+    await put(
+      '/api/v1/settings',
+      { registrationNameFieldTitles: DEFAULT_SETTINGS.registration.nameFieldTitles },
+      { token: tokens.admin.token },
+    );
+  }
+});
+
 test('外观模式只接受三个取值，且是个人偏好', async () => {
   // 未登录不能写：以前这里是 optionalAuth，匿名请求会把取值写成所有用户的默认外观。
   const defaultBefore = await get('/api/v1/settings');

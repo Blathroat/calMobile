@@ -12,6 +12,7 @@ import { authenticateHono, optionalAuthHono, userOf, type HonoEnv } from './hono
 import * as labels from '../domain/labels.js';
 import { limits as readLimits, parseSchema } from '../domain/validation.js';
 import { answerDocument } from '../domain/answer-document.js';
+import { registrationAttendance } from '../domain/registration-attendance.js';
 import { guestRegistrationSchema, registrationSchema, registrationTargetSchema } from '../domain/schemas.js';
 
 const app = new Hono<HonoEnv>();
@@ -123,6 +124,12 @@ app.post('/', optionalAuthHono, async (c) => {
       ? parseSchema(registrationSchema(), body)
       : { ...parseSchema(guestRegistrationSchema(bounds), body), visitorType: VISITOR_TYPE_GUEST };
     const { visitorName, visitorType, answers } = input;
+    // 参加时间段：多天展会里用户自己选的日期。两端都空表示没选（按整段展会处理），
+    // 只填一端 / 格式不对 / 超出展会区间都按规则失败；登录报名与匿名报名走同一段校验。
+    const attendance = registrationAttendance(input, {
+      date: exhibition.exhibition_date,
+      endDate: exhibition.exhibition_end_date,
+    });
     const document = answerDocument({
       fields: await loadFields(exhibitionId),
       source: { text: answers },
@@ -138,7 +145,7 @@ app.post('/', optionalAuthHono, async (c) => {
       // 建记录时就生成核销凭据：报名码由「展会 + 报名 + 凭据」拼成，
       // 凭据以后可以在退回重审时轮换（见 routes/review-hono.ts）。
       await query(
-        `INSERT INTO registrations (id, exhibition_id, visitor_id, visitor_name, visitor_type, answers, status, check_in_secret, query_token_hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        `INSERT INTO registrations (id, exhibition_id, visitor_id, visitor_name, visitor_type, answers, status, check_in_secret, query_token_hash, attendance_start, attendance_end) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           id,
           exhibitionId,
@@ -149,6 +156,8 @@ app.post('/', optionalAuthHono, async (c) => {
           status,
           labels.newCheckInSecret(),
           queryToken ? queryTokenHash(queryToken) : '',
+          attendance?.start ?? null,
+          attendance?.end ?? null,
         ],
       );
     } catch (error: unknown) {

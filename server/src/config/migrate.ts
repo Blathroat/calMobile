@@ -77,6 +77,13 @@ export interface ServerSettings {
     region: number;
     answer: number;
   };
+  /**
+   * 匿名报名（报名站分享链接、未登录）相关的展示配置。
+   *
+   * `nameFieldTitles` 是姓名同义词列表：展商的文本收集项标题命中其中任意一项时，
+   * 报名页把额外的「姓名」表单合并掉，直接拿这项收集项当姓名；空数组表示不合并。
+   */
+  registration: { nameFieldTitles: string[] };
   announcement: { enabled: boolean; text: string };
   brand: { zh: string; en: string };
   /** 缺省展会封面：展会自己没有封面时用它，空串表示继续用占位图。 */
@@ -809,6 +816,15 @@ export const STEPS: MigrationStep[] = [
         ALTER TABLE exhibitions ADD COLUMN IF NOT EXISTS registration_notice TEXT NOT NULL DEFAULT '';
         `,
   },
+  {
+    // 报名参加时间段：多天展会报名时用户自己选的参加日期。NULL 表示没选（按整段展会处理），
+    // 老数据不回填。用 ADD COLUMN IF NOT EXISTS 保持这一步可重复执行。
+    id: '0028-registration-attendance',
+    sql: `
+        ALTER TABLE registrations ADD COLUMN IF NOT EXISTS attendance_start DATE;
+        ALTER TABLE registrations ADD COLUMN IF NOT EXISTS attendance_end DATE;
+        `,
+  },
 ];
 
 export const DEFAULT_SETTINGS: ServerSettings = {
@@ -817,6 +833,8 @@ export const DEFAULT_SETTINGS: ServerSettings = {
   capabilities: { calendar: false, notifications: false, richText: true, export: true },
   categories: ['智能家居', '物流技术', '医疗健康', '新材料'],
   review: { canRevise: false, canReviseAttended: false, statuses: ['待审核', '已通过', '已拒绝'] },
+  // 匿名报名姓名同义词：默认覆盖常见的叫法。展商收集项标题命中时，报名页不再单独要姓名。
+  registration: { nameFieldTitles: ['姓名', '昵称', '称呼', '圈名'] },
   media: { imageCount: 8, imageSizeMb: 10, videoCount: 2, videoSizeMb: 50 },
   upload: {
     avatarSizeMb: 2,

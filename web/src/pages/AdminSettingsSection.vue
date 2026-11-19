@@ -60,6 +60,8 @@ interface AdminSettingsForm {
   download: { source: 'url' | 'github'; url: string; repo: string };
   /** 用户协议：开关与 Markdown 正文（保存时随其它设置一起提交） */
   agreement: { enabled: boolean; content: string };
+  /** 匿名报名姓名同义词：一行一个标题，保存时拆成数组提交 */
+  registrationNameFieldTitles: string;
 }
 
 interface InviteItem {
@@ -553,6 +555,23 @@ function clearAgreementContent(): void {
           <input id="settings-revise-attended" v-model="form.canReviseAttended" type="checkbox" />
           <span />
         </label>
+      </div>
+    </div>
+
+    <!-- 报名相关：匿名报名（报名站未登录）时，收集项标题命中这些同义词就把额外姓名表单合并掉。
+         空列表表示不合并，仍显示单独的姓名输入。 -->
+    <div class="card">
+      <span class="section-label">{{ t('admin.settings.registrationSection') }}</span>
+      <div class="field">
+        <label for="settings-registration-name-titles">{{ t('admin.settings.registrationNameFieldTitles') }}</label>
+        <textarea
+          id="settings-registration-name-titles"
+          v-model="form.registrationNameFieldTitles"
+          class="textarea"
+          rows="4"
+          :placeholder="t('admin.settings.registrationNameFieldTitlesPlaceholder')"
+        />
+        <p class="field-hint">{{ t('admin.settings.registrationNameFieldTitlesHint') }}</p>
       </div>
     </div>
 

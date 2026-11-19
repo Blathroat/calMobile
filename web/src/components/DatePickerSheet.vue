@@ -9,6 +9,8 @@
  * - `mode: 'single'`：点一天即选中并收起。
  *
  * 面板按月份分节、可一直往后滚，顶部固定「日一二三四五六」表头，今天用圆点标出来。
+ * 可选范围由 `min` / `max` 两端夹住（例如会议不能早于今天、参加时间不能超出展会期间），
+ * 越界的日期禁用而不是从面板里删掉，用户仍看得到整张月历。
  * 取值仍通过 `model` 这个响应式对象交回调用方（与 `ManualCodePanel` 同一套约定），
  * 关闭与底部动作由 `services/sheet.ts` 管，所以这里不 import 面板服务。
  */
@@ -33,12 +35,15 @@ const props = withDefaults(
     endLabel?: string;
     /** 最早可选日期（`YYYY-MM-DD`）；会议申请用它挡住今天以前。 */
     min?: string;
+    /** 最晚可选日期（`YYYY-MM-DD`）；报名参加时间用它挡住闭展日之后。 */
+    max?: string;
   }>(),
   {
     mode: 'range',
     startLabel: '',
     endLabel: '',
     min: '',
+    max: '',
   },
 );
 
@@ -159,6 +164,7 @@ function labelOf(iso: string): string {
 
 function isDisabled(iso: string): boolean {
   if (props.min && iso < props.min) return true;
+  if (props.max && iso > props.max) return true;
   // 已经点了起点、还在等终点：比起点还早的日期不能当终点（闭展不能早于开展）。
   if (props.mode === 'range' && rangeStart() && !rangeEnd() && iso < rangeStart()) return true;
   return false;

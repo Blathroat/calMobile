@@ -72,6 +72,9 @@ export interface RegistrationRow {
   visitor_type: string;
   answers?: string | null;
   status: string;
+  /** 参加时间段（YYYY-MM-DD）：多天展会报名时用户自己选的日期；NULL 表示没选。 */
+  attendance_start?: string | null;
+  attendance_end?: string | null;
   exhibition_qr_enabled?: boolean | null;
   exhibition_allow_cancel?: boolean | null;
   check_in_time?: string | Date | null;
@@ -210,6 +213,9 @@ export function registrationPayload(row: RegistrationRow) {
     status: labels.REGISTRATION_STATUS[statusCode] || '',
     statusLabel: labels.REGISTRATION_STATUS[statusCode] || '',
     statusCode,
+    // 参加时间段：没选时给空串，页面据此不展示「参加时间」这一行。
+    attendanceStart: row.attendance_start || '',
+    attendanceEnd: row.attendance_end || '',
     qrEnabled: row.exhibition_qr_enabled === true,
     allowCancel: row.exhibition_allow_cancel !== false,
     checkInCode: codeAllowed ? labels.checkInCode(row.exhibition_id, row.id, secret) : '',

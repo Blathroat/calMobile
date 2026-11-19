@@ -240,6 +240,8 @@ const form = reactive({
   download: { source: 'url' as 'url' | 'github', url: '', repo: '' },
   /** 用户协议：开关与 Markdown 正文，随其它设置一起保存（正文变化时服务端自增版本） */
   agreement: { enabled: false, content: '' },
+  /** 匿名报名姓名同义词：一行一个标题，保存时拆成数组提交（空列表表示不做姓名合并） */
+  registrationNameFieldTitles: '',
 });
 
 /** 管理页自己的文案：提示与开关说明放在这里，提取脚本会换成文案 key。 */
@@ -692,6 +694,11 @@ function fillForm(data: JsonObject): void {
   form.download.source = download.source === 'github' ? 'github' : 'url';
   form.download.url = String(download.url ?? '');
   form.download.repo = String(download.repo ?? '');
+  // 匿名报名姓名同义词：服务端下发数组，页面上按「一行一个标题」编辑。
+  const registration = (data.registration ?? {}) as JsonObject;
+  form.registrationNameFieldTitles = (Array.isArray(registration.nameFieldTitles) ? registration.nameFieldTitles : [])
+    .map((item) => String(item))
+    .join('\n');
   // 用户协议：管理端额外拿到正文。只在数据里真有这一段时才回填，生成邀请码这类局部刷新
   // 不带 agreement 时不能把正在编辑的正文冲掉；版本与更新时间同样按服务端返回更新。
   const agreement = data.agreement;
@@ -915,6 +922,11 @@ async function saveSettings(): Promise<void> {
         enabled: form.agreement.enabled === true,
         content: form.agreement.content,
       },
+      // 匿名报名姓名同义词：一行一个，空行忽略；空数组表示不合并姓名表单。
+      registrationNameFieldTitles: form.registrationNameFieldTitles
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean),
     };
     for (const item of LIMIT_ITEMS) payload[item.key] = numberField(item.key);
 

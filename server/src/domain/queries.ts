@@ -37,6 +37,9 @@ export const EXHIBITION_FROM = `
 export const REGISTRATION_COLUMNS = `
     r.id, r.exhibition_id, r.visitor_id, r.visitor_name, r.visitor_type, r.answers,
     r.status, r.check_in_time, r.check_in_secret, r.created_at,
+    -- 报名参加时间段：多天展会里用户自己选的日期；NULL 表示没选，按整段展会处理。
+    to_char(r.attendance_start, 'YYYY-MM-DD')   AS attendance_start,
+    to_char(r.attendance_end, 'YYYY-MM-DD')     AS attendance_end,
     e.title                 AS exhibition_title,
     e.venue                 AS exhibition_venue,
     e.time                  AS exhibition_time,

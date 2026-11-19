@@ -289,6 +289,9 @@ export const serverSettingsPatchSchema = z
     // 操作日志存储上限：整段 { storageMb } 或扁平 logsStorageMb。
     logs: z.unknown(),
     logsStorageMb: z.unknown(),
+    // 匿名报名姓名同义词：整段 { nameFieldTitles } 或扁平 registrationNameFieldTitles。
+    registration: z.unknown(),
+    registrationNameFieldTitles: z.unknown(),
     notify: notifySchema,
   })
   .partial()
@@ -617,6 +620,10 @@ export function registrationSchema() {
     visitorName: textSchema({ label: '姓名' }),
     visitorType: textSchema({ label: '参观身份' }),
     answers: inputString,
+    // 参加时间段：宽松收下，格式、顺序与展会区间由 domain/registration-attendance.ts 统一校验。
+    // 未提交时必须是 undefined（报名站旧代码不带这两个字段）。
+    attendanceStart: z.unknown().optional(),
+    attendanceEnd: z.unknown().optional(),
   });
 }
 export type RegistrationInput = z.infer<ReturnType<typeof registrationSchema>>;
@@ -633,6 +640,9 @@ export function guestRegistrationSchema(limits: Limits) {
     exhibitionId: textSchema({ label: '展会', required: false }),
     visitorName: textSchema({ label: '姓名', max: limits.nickname }),
     answers: inputString,
+    // 与登录报名同一套参加时间段字段，校验在路由里与登录报名共用。
+    attendanceStart: z.unknown().optional(),
+    attendanceEnd: z.unknown().optional(),
   });
 }
 export const registrationTargetSchema = z.object({ exhibitionId: textSchema({ required: false }) });

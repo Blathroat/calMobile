@@ -30,11 +30,16 @@ test('我的报名只返回自己的记录', async () => {
     'qrEnabled',
     'allowCancel',
     'checkInCode',
+    'attendanceStart',
+    'attendanceEnd',
   ];
   for (const item of mine.body) {
     for (const key of required) {
       assert.ok(item[key] !== undefined, `报名 ${item.id} 缺少字段 ${key}`);
     }
+    // 老数据没选参加时间段：两个字段给空串，页面据此不显示「参加时间」这一行。
+    assert.strictEqual(item.attendanceStart, '', `没选参加时间段的报名要给空串：${item.id}`);
+    assert.strictEqual(item.attendanceEnd, '', `没选参加时间段的报名要给空串：${item.id}`);
   }
   // 种子数据里 reg-1/reg-3 属于 user，reg-2 属于 exhibitor
   assert.ok(
@@ -170,6 +175,171 @@ test('无需审核的展会提交即通过，撤销后可以重新报名', async
   assert.strictEqual(auto.body.ok, true, JSON.stringify(auto.body));
   assert.strictEqual(auto.body.autoApproved, true, '无需审核的展会应当自动通过');
   assert.strictEqual(auto.body.statusLabel, '已通过');
+});
+
+/**
+ * 建一场用于参加时间段用例的展会：日期相对今天生成，避免写死日期过一阵就过期。
+ * 不上传收集项（答案可以为空），按状态决定是否自动通过。
+ */
+async function createAttendanceExhibition(title: string, date: string, endDate: string, status = 'optional') {
+  return post(
+    '/api/v1/exhibitions',
+    {
+      title,
+      venue: '测试展馆',
+      time: '09:00-17:00',
+      date,
+      endDate,
+      category: '智能家居',
+      status,
+    },
+    { token: tokens.exhibitor.token },
+  );
+}
+
+test('参加时间段：缺一端、开始晚于结束、超出展会区间被拒，合法值可回读', async () => {
+  const exhibition = await createAttendanceExhibition('参加时间段校验展', isoDateAfter(60), isoDateAfter(64));
+  assert.strictEqual(exhibition.body.ok, true, JSON.stringify(exhibition.body));
+  const exhibitionId = String(exhibition.body.exhibition.id);
+  const start = isoDateAfter(61);
+  const end = isoDateAfter(62);
+  const base = { exhibitionId, visitorName: '参加时间', visitorType: '专业观众', answers: '' };
+  try {
+    const onlyStart = await post(
+      '/api/v1/registrations',
+      { ...base, attendanceStart: start },
+      { token: tokens.user.token },
+    );
+    assert.strictEqual(onlyStart.body.ok, false, '只填开始日期必须被拒');
+    assert.strictEqual(onlyStart.body.errorCode, 'registration.attendanceIncomplete');
+    assert.ok(onlyStart.body.error.includes('同时填写'), onlyStart.body.error);
+
+    const reversed = await post(
+      '/api/v1/registrations',
+      { ...base, attendanceStart: end, attendanceEnd: start },
+      { token: tokens.user.token },
+    );
+    assert.strictEqual(reversed.body.ok, false, '开始晚于结束必须被拒');
+    assert.strictEqual(reversed.body.errorCode, 'registration.attendanceOrder');
+
+    const outside = await post(
+      '/api/v1/registrations',
+      { ...base, attendanceStart: isoDateAfter(59), attendanceEnd: end },
+      { token: tokens.user.token },
+    );
+    assert.strictEqual(outside.body.ok, false, '超出展会区间必须被拒');
+    assert.strictEqual(outside.body.errorCode, 'registration.attendanceOutOfRange');
+    assert.ok(
+      outside.body.error.includes(`${isoDateAfter(60)} ~ ${isoDateAfter(64)}`),
+      `提示要带上展会区间：${outside.body.error}`,
+    );
+
+    const saved = await post(
+      '/api/v1/registrations',
+      { ...base, attendanceStart: start, attendanceEnd: end },
+      { token: tokens.user.token },
+    );
+    assert.strictEqual(saved.body.ok, true, JSON.stringify(saved.body));
+    assert.strictEqual(saved.body.registration.attendanceStart, start);
+    assert.strictEqual(saved.body.registration.attendanceEnd, end);
+
+    const detail = await get(`/api/v1/registrations/${saved.body.registration.id}`, { token: tokens.user.token });
+    assert.strictEqual(detail.body.registration.attendanceStart, start, '报名详情要回读参加开始日期');
+    assert.strictEqual(detail.body.registration.attendanceEnd, end, '报名详情要回读参加结束日期');
+  } finally {
+    await del(`/api/v1/exhibitions/${exhibitionId}`, { token: tokens.exhibitor.token });
+  }
+});
+
+test('单日展会：参加时间段两端必须都是开展日', async () => {
+  const day = isoDateAfter(90);
+  const exhibition = await createAttendanceExhibition('单日参加时间展', day, '');
+  assert.strictEqual(exhibition.body.ok, true, JSON.stringify(exhibition.body));
+  const exhibitionId = String(exhibition.body.exhibition.id);
+  const base = { exhibitionId, visitorName: '单日参加', visitorType: '专业观众', answers: '' };
+  try {
+    const mismatch = await post(
+      '/api/v1/registrations',
+      { ...base, attendanceStart: day, attendanceEnd: isoDateAfter(91) },
+      { token: tokens.user.token },
+    );
+    assert.strictEqual(mismatch.body.ok, false, '单日展会的结束日期不能晚于开展日');
+    assert.strictEqual(mismatch.body.errorCode, 'registration.attendanceOutOfRange');
+    assert.ok(mismatch.body.error.includes(day), `单日展会的提示要带上开展日：${mismatch.body.error}`);
+
+    const bothEnds = await post(
+      '/api/v1/registrations',
+      { ...base, attendanceStart: day, attendanceEnd: day },
+      { token: tokens.user.token },
+    );
+    assert.strictEqual(bothEnds.body.ok, true, JSON.stringify(bothEnds.body));
+    assert.strictEqual(bothEnds.body.registration.attendanceStart, day);
+    assert.strictEqual(bothEnds.body.registration.attendanceEnd, day);
+  } finally {
+    await del(`/api/v1/exhibitions/${exhibitionId}`, { token: tokens.exhibitor.token });
+  }
+});
+
+test('月历圆点按参加时间段打点：已通过只标所选日期，待审核不打点', async () => {
+  // 固定用「今天 + 120 天」所在月份的 10～14 日：月内日期，不会跨月，也远离示例展会。
+  const anchor = new Date();
+  anchor.setDate(anchor.getDate() + 120);
+  const year = anchor.getFullYear();
+  const month = anchor.getMonth() + 1;
+  const dateOf = (day: number) => `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+  const approvedExhibition = await createAttendanceExhibition('圆点时间展', dateOf(10), dateOf(14));
+  const pendingExhibition = await createAttendanceExhibition('圆点待审展', dateOf(20), dateOf(21), 'review');
+  assert.strictEqual(approvedExhibition.body.ok, true, JSON.stringify(approvedExhibition.body));
+  assert.strictEqual(pendingExhibition.body.ok, true, JSON.stringify(pendingExhibition.body));
+  const approvedId = String(approvedExhibition.body.exhibition.id);
+  const pendingId = String(pendingExhibition.body.exhibition.id);
+  try {
+    const approved = await post(
+      '/api/v1/registrations',
+      {
+        exhibitionId: approvedId,
+        visitorName: '圆点测试',
+        visitorType: '专业观众',
+        answers: '',
+        attendanceStart: dateOf(11),
+        attendanceEnd: dateOf(12),
+      },
+      { token: tokens.user.token },
+    );
+    assert.strictEqual(approved.body.ok, true, JSON.stringify(approved.body));
+    assert.strictEqual(approved.body.statusLabel, '已通过', '无需审核的展会报名应当直接通过');
+
+    const pending = await post(
+      '/api/v1/registrations',
+      {
+        exhibitionId: pendingId,
+        visitorName: '圆点待审',
+        visitorType: '专业观众',
+        answers: '',
+        attendanceStart: dateOf(20),
+        attendanceEnd: dateOf(21),
+      },
+      { token: tokens.user.token },
+    );
+    assert.strictEqual(pending.body.ok, true, JSON.stringify(pending.body));
+    assert.strictEqual(pending.body.statusLabel, '待审核');
+
+    const monthView = await get(`/api/v1/exhibitions/month?year=${year}&month=${month}`, {
+      token: tokens.user.token,
+    });
+    const markedDays: number[] = monthView.body.markedDays;
+    assert.ok(markedDays.includes(11) && markedDays.includes(12), `所选日期要有圆点：${markedDays}`);
+    for (const dayNumber of [10, 13, 14]) {
+      assert.ok(!markedDays.includes(dayNumber), `未选的展会日期不应有圆点：${markedDays}`);
+    }
+    for (const dayNumber of [20, 21]) {
+      assert.ok(!markedDays.includes(dayNumber), `待审核的报名不打点：${markedDays}`);
+    }
+  } finally {
+    await del(`/api/v1/exhibitions/${approvedId}`, { token: tokens.exhibitor.token });
+    await del(`/api/v1/exhibitions/${pendingId}`, { token: tokens.exhibitor.token });
+  }
 });
 
 test('报名窗口由服务端按数据库当前日期判断', async () => {
