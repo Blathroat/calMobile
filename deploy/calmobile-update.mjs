@@ -2,7 +2,7 @@
 /**
  * 从 npm 更新生产环境的 calMobile 运行时包。
  *
- * 由 `calmobile-update.timer` 每 5 分钟调用一次（见同目录的 unit 文件）。
+ * 由 `calmobile-update.timer` 每 5 分钟调用一次（见 deploy/systemd/ 的单元模板）。
  * 也可以手动执行：
  *
  *   calmobile-update --check                 看当前版本、npm latest 和 pin
@@ -10,6 +10,10 @@
  *   calmobile-update --rollback [版本]       切回上一版（或指定版本）并 pin
  *   calmobile-update --pin <版本>            锁定版本，timer 不再自动更新
  *   calmobile-update --unpin                 解除锁定
+ *
+ * 配置只有一个来源：env 文件（默认 `/etc/calmobile.env`）里的 `CALMOBILE_*` 键。
+ * 优先级：默认值 < env 文件 < 进程环境变量 < 命令行（--env-file / --root / --service）。
+ * 旧版 `/etc/calmobile-update.json` 与 `CALMOBILE_CONFIG_PATH` 已废弃：只提示一次、不再读取。
  *
  * 目录：
  *   <root>/releases/<版本>/{server,web}      解压后的运行时包（server 与 web 必须同级）
@@ -24,6 +28,7 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, readlink, rename, rm, stat, statfs, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -38,15 +43,23 @@ export const DEFAULT_CONFIG = Object.freeze({
   appUrl: 'http://127.0.0.1:3000/app/release.json',
   service: 'calmobile.service',
   envFile: '/etc/calmobile.env',
-  configPath: '/etc/calmobile-update.json',
   updaterPath: '/usr/local/lib/calmobile/calmobile-update.mjs',
   minFreeMb: 512,
+  // 下面几项给 systemd 单元模板用（scripts/render-units.mjs），更新器本身不直接使用。
+  user: 'blathroat',
+  group: 'blathroat',
+  node: '/usr/bin/node',
+  repositoryUrl: 'https://github.com/Blathroat/calMobile',
+  updateService: 'calmobile-update.service',
 });
+
+/** 旧版独立 JSON 配置的位置：现在只用来提示迁移，不再读取。 */
+export const LEGACY_CONFIG_PATH = '/etc/calmobile-update.json';
 
 const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)$/;
 
-/** 运行时包解压后必须有的文件。与 scripts/runtime-bundle.mjs 的清单保持一致。 */
-const REQUIRED_RELEASE_ENTRIES = [
+/** 运行时包解压后必须有的文件。与 scripts/runtime-bundle.mjs 的 REQUIRED_ENTRIES 一致（测试直接比对）。 */
+export const REQUIRED_RELEASE_ENTRIES = [
   'package.json',
   'server/package.json',
   'server/pnpm-lock.yaml',
@@ -61,10 +74,20 @@ const REQUIRED_RELEASE_ENTRIES = [
   'web/dist-join/join.html',
   'server/dist/app-shell-join/join.html',
   'deploy/production.env',
+  'deploy/instance.env.example',
   'deploy/calmobile-update.mjs',
+  'deploy/systemd/calmobile.service.in',
+  'deploy/systemd/calmobile-update.service.in',
+  'deploy/systemd/calmobile-update.timer.in',
   'scripts/sync-production-env.mjs',
   'scripts/client-target.mjs',
+  'scripts/env-file.mjs',
   'scripts/build-icons.mjs',
+  'scripts/icons/png.mjs',
+  'scripts/icons/config.mjs',
+  'scripts/icons/web.mjs',
+  'scripts/icons/android.mjs',
+  'scripts/render-units.mjs',
 ];
 
 const ENV_OVERRIDES = {
@@ -76,9 +99,20 @@ const ENV_OVERRIDES = {
   CALMOBILE_APP_URL: 'appUrl',
   CALMOBILE_SERVICE: 'service',
   CALMOBILE_ENV_FILE: 'envFile',
-  CALMOBILE_CONFIG_PATH: 'configPath',
   CALMOBILE_UPDATER_PATH: 'updaterPath',
   CALMOBILE_MIN_FREE_MB: 'minFreeMb',
+  CALMOBILE_USER: 'user',
+  CALMOBILE_GROUP: 'group',
+  CALMOBILE_NODE: 'node',
+  CALMOBILE_REPOSITORY_URL: 'repositoryUrl',
+  CALMOBILE_UPDATE_SERVICE: 'updateService',
+};
+
+/** 命令行覆盖：`--<键>=<值>`。只开放部署路径这类不需要重启模板的项。 */
+const CLI_OVERRIDES = {
+  'env-file': 'envFile',
+  root: 'root',
+  service: 'service',
 };
 
 const HEALTH_TIMEOUT_MS = 30_000;
@@ -203,13 +237,30 @@ export function normalizeConfig(input = {}) {
   if (!config.package || /\s/.test(config.package)) throw new Error('配置 package 必须是合法的 npm 包名');
   config.registry = String(config.registry ?? '').trim().replace(/\/+$/, '');
   if (!/^https?:\/\//.test(config.registry)) throw new Error('配置 registry 必须是 http(s) 地址');
-  for (const key of ['root', 'envFile', 'configPath', 'updaterPath']) {
+  for (const key of ['root', 'envFile', 'updaterPath', 'node']) {
     const value = String(config[key] ?? '').trim();
     if (!path.isAbsolute(value)) throw new Error(`配置 ${key} 必须是绝对路径：${value}`);
     config[key] = value;
   }
-  config.service = String(config.service ?? '').trim();
-  if (!config.service) throw new Error('配置 service 不能为空');
+  for (const key of ['service', 'updateService']) {
+    const value = String(config[key] ?? '').trim();
+    if (!value) throw new Error(`配置 ${key} 不能为空`);
+    if (!/^[A-Za-z0-9_.@:-]+$/.test(value)) {
+      throw new Error(`配置 ${key} 含有不能用在 systemd 单元名里的字符：${value}`);
+    }
+    config[key] = value;
+  }
+  for (const key of ['user', 'group']) {
+    const value = String(config[key] ?? '').trim();
+    if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(value)) {
+      throw new Error(`配置 ${key} 不是合法的用户/组名：${value || '空'}`);
+    }
+    config[key] = value;
+  }
+  config.repositoryUrl = String(config.repositoryUrl ?? '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//.test(config.repositoryUrl)) {
+    throw new Error('配置 repositoryUrl 必须是 http(s) 地址');
+  }
   config.healthUrl = String(config.healthUrl ?? '').trim();
   if (config.healthUrl && !/^https?:\/\//.test(config.healthUrl)) throw new Error('配置 healthUrl 必须是 http(s) 地址');
   config.appUrl = String(config.appUrl ?? '').trim();
@@ -226,37 +277,100 @@ export function normalizeConfig(input = {}) {
 }
 
 /**
- * @param {{ fileText?: string, env?: Record<string, string | undefined> }} [input]
+ * 解析 env 文件文本。规则与 `scripts/env-file.mjs` 的 parseEnvFile 一致：
+ * 注释、`export ` 前缀、单/双引号和无引号尾部注释都按 dotenv 的口径处理。
+ *
+ * 更新器随运行时包发布，也可能被单独安装到 /usr/local/lib，不能 import 仓库里的模块，
+ * 所以这里保留一份最小实现。
+ *
+ * @param {string} text
+ * @returns {Record<string, string>}
+ */
+export function parseEnvText(text) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const raw of String(text ?? '').split('\n')) {
+    const line = raw.replace(/\r$/, '');
+    if (!line || /^\s*#/.test(line)) continue;
+    const matched = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!matched) continue;
+    const key = matched[1] ?? '';
+    let value = matched[2] ?? '';
+    if (value.startsWith('"')) {
+      const end = value.endsWith('"') ? value.length - 1 : value.length;
+      value = value.slice(1, end).replace(/\\n/g, '\n').replace(/\\"/g, '"');
+    } else if (value.startsWith("'") && value.endsWith("'")) {
+      value = value.slice(1, -1);
+    } else {
+      value = value.replace(/\s+#.*$/, '').trim();
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * 合并配置：默认值 < env 文件（CALMOBILE_*）< 进程环境变量 < 命令行覆盖。
+ *
+ * @param {{
+ *   fileText?: string,
+ *   env?: Record<string, string | undefined>,
+ *   cli?: Record<string, string | undefined>,
+ * }} [input]
  * @returns {typeof DEFAULT_CONFIG}
  */
 export function resolveConfig(input = {}) {
-  const fileText = String(input.fileText ?? '');
+  const fromFile = parseEnvText(String(input.fileText ?? ''));
   const env = input.env ?? process.env;
-  /** @type {Record<string, unknown>} */
-  let parsed = {};
-  if (fileText.trim()) {
-    const value = JSON.parse(fileText);
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      throw new Error('更新器配置必须是 JSON 对象');
-    }
-    parsed = value;
-  }
+  const cli = input.cli ?? {};
   /** @type {Record<string, unknown>} */
   const overrides = {};
   for (const [envKey, configKey] of Object.entries(ENV_OVERRIDES)) {
-    const value = env[envKey];
-    if (typeof value === 'string' && value !== '') overrides[configKey] = value;
+    for (const source of [fromFile, env]) {
+      const value = source[envKey];
+      if (typeof value === 'string' && value.trim() !== '') overrides[configKey] = value.trim();
+    }
   }
-  return normalizeConfig({ ...parsed, ...overrides });
+  for (const key of Object.keys(DEFAULT_CONFIG)) {
+    const value = cli[key];
+    if (typeof value === 'string' && value.trim() !== '') overrides[key] = value.trim();
+  }
+  return normalizeConfig(overrides);
+}
+
+/**
+ * 旧版 /etc/calmobile-update.json 与 CALMOBILE_CONFIG_PATH 已废弃：只提示一次，不读取。
+ *
+ * @param {{ env?: Record<string, string | undefined>, legacyExists?: boolean }} [input]
+ * @returns {string} 空字符串表示没有旧配置。
+ */
+export function legacyConfigWarning(input = {}) {
+  const env = input.env ?? {};
+  const configured = typeof env.CALMOBILE_CONFIG_PATH === 'string' && env.CALMOBILE_CONFIG_PATH.trim() !== '';
+  if (!configured && input.legacyExists !== true) return '';
+  return (
+    '检测到已废弃的 /etc/calmobile-update.json 或 CALMOBILE_CONFIG_PATH：' +
+    '配置已改为 CALMOBILE_* 环境变量（默认 /etc/calmobile.env），旧文件不再读取。'
+  );
 }
 
 /**
  * @param {string[]} argv
- * @returns {{ mode: 'check' | 'update' | 'rollback' | 'pin' | 'unpin' | 'help', force: boolean, version: string }}
+ * @returns {{
+ *   mode: 'check' | 'update' | 'rollback' | 'pin' | 'unpin' | 'help',
+ *   force: boolean,
+ *   version: string,
+ *   overrides: Record<string, string>,
+ * }}
  */
 export function parseCli(argv) {
-  /** @type {{ mode: 'check' | 'update' | 'rollback' | 'pin' | 'unpin' | 'help', force: boolean, version: string }} */
-  const options = { mode: 'update', force: false, version: '' };
+  /** @type {{
+   *   mode: 'check' | 'update' | 'rollback' | 'pin' | 'unpin' | 'help',
+   *   force: boolean,
+   *   version: string,
+   *   overrides: Record<string, string>,
+   * }} */
+  const options = { mode: 'update', force: false, version: '', overrides: {} };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--check') {
@@ -280,6 +394,13 @@ export function parseCli(argv) {
       options.force = true;
     } else if (arg === '--help' || arg === '-h') {
       options.mode = 'help';
+    } else if (arg.startsWith('--') && arg.includes('=')) {
+      const eq = arg.indexOf('=');
+      const name = arg.slice(2, eq);
+      if (!Object.prototype.hasOwnProperty.call(CLI_OVERRIDES, name)) {
+        throw new Error(`不认识的参数：${arg}`);
+      }
+      options.overrides[CLI_OVERRIDES[name]] = arg.slice(eq + 1);
     } else {
       throw new Error(`不认识的参数：${arg}`);
     }
@@ -356,19 +477,37 @@ function sleep(milliseconds) {
 }
 
 /**
- * 配置文件路径本身也允许用环境变量覆盖，所以先解析一次路径再读文件。
+ * 读 env 文件。普通用户读不到 /etc/calmobile.env 时用免密 sudo 兜底。
  *
+ * @param {string} file
+ * @returns {Promise<string>}
+ */
+async function readEnvFileText(file) {
+  try {
+    return await readFile(file, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return '';
+    if (error.code !== 'EACCES' && error.code !== 'EPERM') throw error;
+  }
+  const result = await capture('sudo', ['-n', 'cat', file]);
+  if (result.code === 0) return result.stdout;
+  if (/No such file/i.test(result.stderr)) return '';
+  throw new Error(`读取 ${file} 失败：${result.stderr.trim() || `退出码 ${result.code}`}`);
+}
+
+/**
+ * 先按默认值 / 进程环境 / 命令行确定 env 文件路径，再读文件合并配置。
+ *
+ * @param {Record<string, string>} [cli]
  * @returns {Promise<typeof DEFAULT_CONFIG>}
  */
-async function loadConfig() {
-  const base = resolveConfig({ fileText: '', env: process.env });
-  let fileText = '';
-  try {
-    fileText = await readFile(base.configPath, 'utf8');
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-  }
-  return resolveConfig({ fileText, env: process.env });
+async function loadConfig(cli = {}) {
+  // --env-file 允许写相对路径；配置里的 envFile 必须是绝对路径，单元和 sudo 命令都要直接用。
+  const envFile = path.resolve(
+    String(cli.envFile || process.env.CALMOBILE_ENV_FILE || DEFAULT_CONFIG.envFile).trim(),
+  );
+  const fileText = await readEnvFileText(envFile);
+  return resolveConfig({ fileText, env: process.env, cli: { ...cli, envFile } });
 }
 
 async function readCurrentVersion(config) {
@@ -888,6 +1027,7 @@ async function runCheck(config) {
 
 function printHelp() {
   process.stdout.write(`用法：calmobile-update [--check | --update [--force] | --rollback [版本] | --pin <版本> | --unpin]
+                    [--env-file=<路径>] [--root=<路径>] [--service=<名字>]
 
   --check       只打印当前版本、npm latest 和 pin
   --update      安装 npm latest（默认；timer 调用的就是它）
@@ -895,6 +1035,12 @@ function printHelp() {
   --rollback    切回上一版并 pin；可指定目标版本
   --pin         锁定版本，timer 不再自动更新
   --unpin       解除锁定
+  --env-file    读另一份 env 文件（默认 /etc/calmobile.env）
+  --root        覆盖部署根（默认 /opt/calmobile）
+  --service     覆盖重启的 systemd 服务（默认 calmobile.service）
+
+配置来自 env 文件里的 CALMOBILE_* 键，进程环境变量优先；旧的
+/etc/calmobile-update.json 与 CALMOBILE_CONFIG_PATH 已废弃，只提示一次。
 `);
 }
 
@@ -904,7 +1050,12 @@ async function main() {
     printHelp();
     return;
   }
-  const config = await loadConfig();
+  const legacyWarning = legacyConfigWarning({
+    env: process.env,
+    legacyExists: existsSync(LEGACY_CONFIG_PATH),
+  });
+  if (legacyWarning) warn(legacyWarning);
+  const config = await loadConfig(options.overrides);
   if (options.mode === 'check') {
     await runCheck(config);
     return;

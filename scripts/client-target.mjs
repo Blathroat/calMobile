@@ -2,60 +2,17 @@
  * 应用包的构建目标。Gradle、Vite 和 `pnpm dev` 都读这一份。
  *
  * 用纯 JavaScript：Android CI 在跑 Gradle 之前不安装 server 依赖，这里不能靠 tsx。
- * 进程里已经设好的非空变量优先于 `server/.env`，和后端 dotenv 的规则一致。
+ * env 文件读取搬到了 `scripts/env-file.mjs`，这里 re-export，既有 import 不用改。
  * 正式包地址的拒绝规则要与 `server/src/config/production.ts` 的警告保持一致。
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
+import { loadBuildEnv, parseEnvFile } from './env-file.mjs';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const ENV_PATH = resolve(ROOT, 'server', '.env');
+export { loadBuildEnv, parseEnvFile };
+
 const DEFAULT_APPLICATION_ID = 'com.blathroat.calmobile';
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1']);
-
-/** @param {string} text */
-export function parseEnvFile(text) {
-  /** @type {Record<string, string>} */
-  const out = {};
-  for (const raw of String(text).split('\n')) {
-    const line = raw.replace(/\r$/, '');
-    if (!line || /^\s*#/.test(line)) continue;
-    const matched = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
-    if (!matched) continue;
-    const key = matched[1] ?? '';
-    let value = matched[2] ?? '';
-    if (value.startsWith('"')) {
-      const end = value.endsWith('"') ? value.length - 1 : value.length;
-      value = value.slice(1, end).replace(/\\n/g, '\n').replace(/\\"/g, '"');
-    } else if (value.startsWith("'") && value.endsWith("'")) {
-      value = value.slice(1, -1);
-    } else {
-      value = value.replace(/\s+#.*$/, '').trim();
-    }
-    out[key] = value;
-  }
-  return out;
-}
-
-/**
- * @param {Record<string, string | undefined>} [processEnv]
- * @param {string} [fileText] 单测传入时不再读磁盘。
- */
-export function loadBuildEnv(processEnv = process.env, fileText) {
-  const fromFile =
-    fileText !== undefined
-      ? parseEnvFile(fileText)
-      : existsSync(ENV_PATH)
-        ? parseEnvFile(readFileSync(ENV_PATH, 'utf8'))
-        : {};
-  const merged = { ...fromFile };
-  for (const [key, value] of Object.entries(processEnv)) {
-    if (typeof value === 'string' && value !== '') merged[key] = value;
-  }
-  return merged;
-}
 
 /** @param {Record<string, string | undefined>} env */
 function listenPort(env) {

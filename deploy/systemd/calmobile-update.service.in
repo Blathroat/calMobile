@@ -1,14 +1,14 @@
 [Unit]
 Description=calMobile 运行时更新（从 npm 安装最新运行时包）
-Documentation=https://github.com/Blathroat/calMobile/blob/master/docs/operations.md
+Documentation=@CALMOBILE_REPOSITORY_URL@/blob/master/docs/operations.md
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=blathroat
-Group=blathroat
+User=@CALMOBILE_USER@
+Group=@CALMOBILE_GROUP@
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
-Environment=HOME=/home/blathroat
+Environment=HOME=/home/@CALMOBILE_USER@
 TimeoutStartSec=300
-ExecStart=/usr/bin/node /usr/local/lib/calmobile/calmobile-update.mjs --update
+ExecStart=@CALMOBILE_NODE@ @CALMOBILE_UPDATER_PATH@ --update
