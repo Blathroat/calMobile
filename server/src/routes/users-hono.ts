@@ -31,6 +31,10 @@ import { adminTwoFactorSchema, profilePatchSchema, userRoleSchema, userStatusSch
 
 const app = new Hono<HonoEnv>();
 const USER_ORDER = 'ORDER BY u.registration_time, u.id';
+/** 用户列表的身份筛选：只认 users.role 的三个取值（访客不是账号身份）。 */
+const ROLE_FILTERS = new Set(['user', 'exhibitor', 'admin']);
+/** 用户列表的账号状态筛选：与 labels.USER_STATUS 的 code 一致。 */
+const STATUS_FILTERS = new Set(Object.keys(labels.USER_STATUS));
 function likePattern(keyword: string) {
   return `%${keyword.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 }
@@ -122,15 +126,32 @@ async function publicProfile(viewer: Actor | null, target: UserRow | null) {
 }
 app.get('/', authenticateHono, async (c) => {
   requireAdmin({ user: userOf(c) });
-  // 管理员看用户列表前批量结算：列表里不再出现已经到期的展商。
+  // 管理员看用户列表前批量结算：列表里不再出现已经到期的展商，身份筛选也按结算后的 users.role 走。
   await settleExpiredExhibitors();
   const keyword = String(c.req.query('query') || '').trim();
-  const result = keyword
-    ? await query<AdminUserRow>(
-        `SELECT ${USER_COLUMNS} ${USER_FROM} WHERE u.nickname ILIKE $1 ESCAPE '\\' OR u.username ILIKE $1 ESCAPE '\\' OR u.email ILIKE $1 ESCAPE '\\' ${USER_ORDER}`,
-        [likePattern(keyword)],
-      )
-    : await query<AdminUserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} ${USER_ORDER}`);
+  const role = String(c.req.query('role') || '').trim();
+  const status = String(c.req.query('status') || '').trim();
+  // 三个条件按顺序拼成 AND：关键字的三条 ILIKE 是 OR，必须整组加括号，
+  // 否则后面的身份 / 状态条件只会约束最后一个 OR 分支。
+  const conditions: string[] = [];
+  const params: string[] = [];
+  if (keyword) {
+    params.push(likePattern(keyword));
+    const pattern = `$${params.length}`;
+    conditions.push(
+      `(u.nickname ILIKE ${pattern} ESCAPE '\\' OR u.username ILIKE ${pattern} ESCAPE '\\' OR u.email ILIKE ${pattern} ESCAPE '\\')`,
+    );
+  }
+  if (ROLE_FILTERS.has(role)) {
+    params.push(role);
+    conditions.push(`u.role = $${params.length}`);
+  }
+  if (STATUS_FILTERS.has(status)) {
+    params.push(status);
+    conditions.push(`u.status = $${params.length}`);
+  }
+  const filterClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const result = await query<AdminUserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM}${filterClause} ${USER_ORDER}`, params);
   return jsonResponse(
     c,
     result.rows.map((row, index) => adminUserPayload(row, index)),

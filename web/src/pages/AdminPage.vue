@@ -54,6 +54,11 @@ const TABS = [
 
 const tabIds = new Set(TABS.map((item) => item.value));
 
+/** 用户分区的身份筛选：值沿用协议 code，空串表示「全部」（不发给服务端）。 */
+const USER_ROLE_FILTERS = ['user', 'exhibitor', 'admin'];
+/** 用户分区的账号状态筛选：与账号状态词表一致，空串表示「全部」。 */
+const USER_STATUS_FILTERS: string[] = USER_STATUSES;
+
 /**
  * 字符数上限的唯一清单：控件的键、提交的字段名与后端 `app_settings.limits` 的键名
  * 都从这里派生，新增一项只加一行。取值范围由后端收敛（超出会被夹到合法区间）。
@@ -193,6 +198,9 @@ const session = useSessionStore();
 /** 当前分区来自 URL：从「查看报名」这类二级页返回时，仍停在进入前的分区。 */
 const tab = ref(tabFromQuery());
 const query = ref('');
+/** 用户分区的两个筛选也以地址栏为准：进页面时读一次，之后由 watch 与筛选操作保持同步。 */
+const userRoleFilter = ref(roleFromQuery());
+const userStatusFilter = ref(statusFromQuery());
 const users = useAsync<User[]>();
 const exhibitions = useAsync<Exhibition[]>();
 const settingsQuery = useAsync<JsonObject>();
@@ -355,7 +363,11 @@ function onSearch(value: string): void {
 }
 
 function loadUsers(): Promise<unknown> {
-  return users.run(() => api.users.list({ query: query.value }));
+  // 空筛选不发给服务端：地址栏里的空串只是「全部」的表示，不该进查询参数。
+  const filters: JsonObject = { query: query.value };
+  if (userRoleFilter.value) filters.role = userRoleFilter.value;
+  if (userStatusFilter.value) filters.status = userStatusFilter.value;
+  return users.run(() => api.users.list(filters));
 }
 
 function loadExhibitions(): Promise<unknown> {
@@ -382,6 +394,24 @@ function changeTab(value: string): void {
   void router.replace({ query: { ...route.query, tab: value } });
 }
 
+/** 用户分区改身份筛选：值写回地址栏，由路由监听统一重新取数。 */
+function changeUserRole(value: string): void {
+  updateUserFilters(value, userStatusFilter.value);
+}
+
+/** 用户分区改状态筛选：同样是写回地址栏再取数，与关键字搜索各自独立。 */
+function changeUserStatus(value: string): void {
+  updateUserFilters(userRoleFilter.value, value);
+}
+
+function updateUserFilters(role: string, status: string): void {
+  if (role === userRoleFilter.value && status === userStatusFilter.value) return;
+  // 先更新本地值，控件立即可见；地址栏与取数交给下面的 watch（替换历史，不堆记录）。
+  userRoleFilter.value = role;
+  userStatusFilter.value = status;
+  void router.replace({ query: { ...route.query, tab: 'users', role, status } });
+}
+
 /** 管理页只放最近日志的入口：列表与统计在 /logs 二级页，不占管理分区。 */
 function openLogs(): void {
   void router.push('/logs');
@@ -393,18 +423,37 @@ function tabFromQuery(): string {
   return tabIds.has(value) ? value : (TABS[0]?.value ?? '');
 }
 
-// 从二级页返回、或用户直接改地址栏时，让分区跟着 URL 走。
+/** URL 里的身份筛选；空串或无法识别的值按「全部」处理。 */
+function roleFromQuery(): string {
+  const value = String(route.query.role ?? '');
+  return USER_ROLE_FILTERS.includes(value) ? value : '';
+}
+
+/** URL 里的账号状态筛选；空串或无法识别的值按「全部」处理。 */
+function statusFromQuery(): string {
+  const value = String(route.query.status ?? '');
+  return USER_STATUS_FILTERS.includes(value) ? value : '';
+}
+
+// 从二级页返回、或用户直接改地址栏时，让分区与用户筛选都跟着 URL 走。
 watch(
   () => route.fullPath,
   () => {
-    window.clearTimeout(searchTimer);
-    if (route.path !== '/admin') return;
+    if (route.path !== '/admin') {
+      // 离开管理页时取消尚未触发的搜索防抖，别把旧页面的关键字带到下一次进入。
+      window.clearTimeout(searchTimer);
+      return;
+    }
     const next = tabFromQuery();
     if (next !== tab.value) {
+      window.clearTimeout(searchTimer);
       tab.value = next;
       // 搜索词跟着分区走：换分区后旧的筛选不再适用。
       query.value = '';
     }
+    // 只改用户筛选时不清搜索防抖：关键字等 220ms 后照常取数，两个条件互不覆盖。
+    userRoleFilter.value = roleFromQuery();
+    userStatusFilter.value = statusFromQuery();
     loadPanel();
   },
 );
@@ -1051,9 +1100,13 @@ async function copyInvite(code: string): Promise<void> {
     :users="users"
     :user-items="userItems"
     :query="query"
+    :role-filter="userRoleFilter"
+    :status-filter="userStatusFilter"
     :copy="usersCopy"
     @retry="loadUsers"
     @search="onSearch"
+    @change-role="changeUserRole"
+    @change-status="changeUserStatus"
     @open-public="openPublic"
     @manage="manageUser"
     @adjust-role="manageRole"
