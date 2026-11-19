@@ -5,12 +5,15 @@
  * - 状态只留在卡片右侧的 StatusTag，最近登录行不再重复状态；
  * - 日期后面跟上最近登录 IP 的地区（如「2026-11-17 江苏省苏州市」），地区为空只显示日期；
  * - 时间缺失时用注册时间兜底，真的取不到才显示「未知」。
- * - 搜索框下方是身份 / 状态两组筛选：纯展示 + 事件回抛，取数与地址栏留在 AdminPage。
+ * - 搜索框下方一行放身份 / 状态两个选择栏，点开是带对勾的列表抽屉；纯展示 + 事件回抛，
+ *   取数与地址栏留在 AdminPage。
  */
-import { afterEach, describe, expect, it } from 'vitest';
-import { createApp, ref, type App } from 'vue';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createApp, h, nextTick, ref, type App } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import AdminUsersSection from './AdminUsersSection.vue';
+import AppSheet from '@/components/AppSheet.vue';
+import { closeSheet, sheet } from '@/services/sheet';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import type { User } from '@/api/types';
 
@@ -18,11 +21,29 @@ let app: App | undefined;
 /** 组件回抛的筛选事件（`role:xxx` / `status:xxx`）；每次挂载前清空。 */
 const emitted: string[] = [];
 
+beforeEach(() => {
+  // 减少动效：抽屉关闭的退场计时器直接落 0，断言不用等动画时长。
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: true })),
+  );
+});
+
 afterEach(() => {
   app?.unmount();
   app = undefined;
+  if (sheet.current) closeSheet();
+  vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
+
+/** 等抽屉渲染与关闭的 0ms 计时器都跑完。 */
+async function flush(): Promise<void> {
+  for (let index = 0; index < 8; index += 1) await Promise.resolve();
+  await nextTick();
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
+  await nextTick();
+}
 
 interface MountOptions {
   /** 父组件下发的当前筛选值；空串表示「全部」。 */
@@ -43,20 +64,26 @@ function mountCard(users: User[], options: MountOptions = {}): string {
   setActivePinia(pinia);
   const agreement = options.agreement ?? { enabled: false, version: 0 };
   useBootstrapStore().apply({ agreement: { ...agreement, updatedAt: agreement.updatedAt ?? '' } });
-  app = createApp(AdminUsersSection, {
-    users: { data: ref(options.data ?? users), error: ref(undefined), loading: ref(false) },
-    userItems: users,
-    query: options.query ?? '',
-    roleFilter: options.roleFilter ?? '',
-    statusFilter: options.statusFilter ?? '',
-    copy: {
-      adjustStatus: '调整状态',
-      adjustRole: '调整权限',
-      manageExhibitions: '管理展会',
-      manageMeetings: '管理会议',
-    },
-    onChangeRole: (value: string) => emitted.push(`role:${value}`),
-    onChangeStatus: (value: string) => emitted.push(`status:${value}`),
+  app = createApp({
+    render: () => [
+      h(AdminUsersSection, {
+        users: { data: ref(options.data ?? users), error: ref(undefined), loading: ref(false) },
+        userItems: users,
+        query: options.query ?? '',
+        roleFilter: options.roleFilter ?? '',
+        statusFilter: options.statusFilter ?? '',
+        copy: {
+          adjustStatus: '调整状态',
+          adjustRole: '调整权限',
+          manageExhibitions: '管理展会',
+          manageMeetings: '管理会议',
+        },
+        onChangeRole: (value: string) => emitted.push(`role:${value}`),
+        onChangeStatus: (value: string) => emitted.push(`status:${value}`),
+      }),
+      // 筛选抽屉由外壳统一渲染：挂上来才能验证「点开 → 看到带对勾的选项 → 选中回抛」。
+      h(AppSheet),
+    ],
   });
   app.use(pinia);
   app.mount('#admin-users-test');
@@ -67,15 +94,34 @@ function user(overrides: User): User {
   return { id: 'usr-test', nickname: '测试用户', roleCode: 'user', statusCode: 'active', ...overrides };
 }
 
-/** 两组筛选控件（身份在前、状态在后）。 */
-function segGroups(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>('.seg')];
+/** 身份 / 状态两个选择栏：与编辑展会页的活动分类同一套下划线触发按钮。 */
+function roleTrigger(): HTMLButtonElement {
+  return document.querySelector<HTMLButtonElement>('#admin-user-role-filter')!;
 }
 
-function pressedLabels(): string[] {
-  return [...document.querySelectorAll('.seg button[aria-pressed="true"]')].map(
+function statusTrigger(): HTMLButtonElement {
+  return document.querySelector<HTMLButtonElement>('#admin-user-status-filter')!;
+}
+
+/** 两个选择栏所在的那一行：需求要求它们排成一行。 */
+function filterRow(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('.user-filter-row');
+}
+
+/** 抽屉里当前带对勾的选项文案。 */
+function checkedOptionLabels(): string[] {
+  return [...document.querySelectorAll('.sheet-actions button[data-checked="true"]')].map(
     (node) => node.textContent?.trim() ?? '',
   );
+}
+
+/** 抽屉里的某个选项按钮。 */
+function sheetOption(label: string): HTMLButtonElement {
+  const button = [...document.querySelectorAll<HTMLButtonElement>('.sheet-actions button')].find(
+    (node) => node.textContent?.trim() === label,
+  );
+  if (!button) throw new Error(`抽屉里没有「${label}」选项`);
+  return button;
 }
 
 describe('用户卡片最近登录', () => {
@@ -128,40 +174,69 @@ describe('用户卡片最近登录', () => {
 });
 
 describe('用户筛选控件', () => {
-  it('搜索框下方渲染身份与状态两组筛选，默认都选「全部」', () => {
+  it('搜索框下方一行放身份与状态两个选择栏，默认都显示「全部」', () => {
     const text = mountCard([user({})]);
-    const groups = segGroups();
-    expect(groups).toHaveLength(2);
-    expect(groups[0]?.getAttribute('aria-label')).toBe('身份');
-    expect(groups[1]?.getAttribute('aria-label')).toBe('状态');
-    expect([...groups[0]!.querySelectorAll('button')].map((node) => node.textContent?.trim())).toEqual([
+    const row = filterRow();
+    expect(row).not.toBeNull();
+    // 两个选择栏在同一个 .user-filter-row 里：宽屏并排、窄屏自动落成两行。
+    expect([...row!.querySelectorAll('button')].map((node) => node.id)).toEqual([
+      'admin-user-role-filter',
+      'admin-user-status-filter',
+    ]);
+    expect(roleTrigger().textContent?.trim()).toBe('全部');
+    expect(statusTrigger().textContent?.trim()).toBe('全部');
+    expect(text).toContain('身份');
+    expect(text).toContain('状态');
+  });
+
+  it('当前 props 的筛选值显示在选择栏上', () => {
+    mountCard([user({})], { roleFilter: 'exhibitor', statusFilter: 'banned' });
+    expect(roleTrigger().textContent?.trim()).toBe('展商');
+    expect(statusTrigger().textContent?.trim()).toBe('封禁');
+  });
+
+  it('点开身份栏是带对勾的列表抽屉，选中后只回抛 change-role', async () => {
+    mountCard([user({})]);
+    roleTrigger().click();
+    await flush();
+    expect(sheet.current?.title).toBe('身份');
+    expect([...document.querySelectorAll('.sheet-actions button')].map((node) => node.textContent?.trim())).toEqual([
       '全部',
       '普通用户',
       '展商',
       '管理员',
     ]);
-    expect([...groups[1]!.querySelectorAll('button')].map((node) => node.textContent?.trim())).toEqual([
-      '全部',
-      '正常',
-      '受限',
-      '封禁',
-    ]);
-    // 两个「全部」都是选中态，其余没有默认选中
-    expect(pressedLabels()).toEqual(['全部', '全部']);
-    expect(text).toContain('身份');
-    expect(text).toContain('状态');
+    // 当前是「全部」：抽屉里只有这一项带对勾。
+    expect(checkedOptionLabels()).toEqual(['全部']);
+
+    sheetOption('管理员').click();
+    await flush();
+    expect(emitted).toEqual(['role:admin']);
+    expect(sheet.current).toBeNull();
+    expect(roleTrigger().textContent?.trim()).toBe('全部');
   });
 
-  it('当前 props 的筛选值反映到选中态上', () => {
-    mountCard([user({})], { roleFilter: 'exhibitor', statusFilter: 'banned' });
-    expect(pressedLabels()).toEqual(['展商', '封禁']);
+  it('点开状态栏同样是带对勾的列表抽屉，选中后只回抛 change-status', async () => {
+    mountCard([user({})], { statusFilter: 'limited' });
+    statusTrigger().click();
+    await flush();
+    expect(sheet.current?.title).toBe('状态');
+    expect(checkedOptionLabels()).toEqual(['受限']);
+
+    sheetOption('封禁').click();
+    await flush();
+    expect(emitted).toEqual(['status:banned']);
+    expect(sheet.current).toBeNull();
   });
 
-  it('点击筛选项只回抛变更事件：身份走 change-role，状态走 change-status', () => {
-    mountCard([user({})]);
-    document.querySelector<HTMLButtonElement>('.seg button[data-value="admin"]')?.click();
-    document.querySelector<HTMLButtonElement>('.seg button[data-value="limited"]')?.click();
-    expect(emitted).toEqual(['role:admin', 'status:limited']);
+  it('选中当前已经选中的那一项不再回抛变更，抽屉照常收起', async () => {
+    mountCard([user({})], { roleFilter: 'user' });
+    roleTrigger().click();
+    await flush();
+    sheetOption('普通用户').click();
+    await flush();
+    expect(emitted).toEqual([]);
+    expect(sheet.current).toBeNull();
   });
 
   it('计数 pill 取筛选后的条数，而不是未筛选数据的总数', () => {

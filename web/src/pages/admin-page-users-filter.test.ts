@@ -10,6 +10,8 @@ import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { useSessionStore } from '@/stores/session';
 import AdminPage from './AdminPage.vue';
+import AppSheet from '@/components/AppSheet.vue';
+import { closeSheet, sheet } from '@/services/sheet';
 
 const mocks = vi.hoisted(() => ({
   usersList: vi.fn(),
@@ -36,18 +38,28 @@ beforeEach(() => {
   mocks.usersList.mockResolvedValue([]);
   mocks.exhibitionsList.mockResolvedValue([]);
   mocks.settingsGet.mockResolvedValue({});
+  // 减少动效：抽屉关闭的退场计时器直接落 0，断言不用等动画时长。
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: true })),
+  );
 });
 
 afterEach(() => {
   app?.unmount();
   app = undefined;
   router = undefined;
+  if (sheet.current) closeSheet();
+  vi.unstubAllGlobals();
   document.body.replaceChildren();
   document.getElementById('app-foot')?.remove();
 });
 
+/** 等响应式重渲染、路由替换与抽屉关闭的 0ms 计时器都跑完。 */
 async function flush(): Promise<void> {
   for (let index = 0; index < 12; index += 1) await Promise.resolve();
+  await nextTick();
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
   await nextTick();
 }
 
@@ -70,7 +82,8 @@ async function mountAdmin(path = '/admin?tab=users'): Promise<HTMLElement> {
   await router.push(path);
   const container = document.createElement('div');
   document.body.append(container);
-  app = createApp({ render: () => h(AdminPage) });
+  // 筛选抽屉由外壳统一渲染：挂上 AppSheet 才能点开选择栏选值。
+  app = createApp({ render: () => [h(AdminPage), h(AppSheet)] });
   app.use(pinia);
   app.use(router);
   app.mount(container);
@@ -78,14 +91,24 @@ async function mountAdmin(path = '/admin?tab=users'): Promise<HTMLElement> {
   return container;
 }
 
-/** 按 `data-value` 点某一组筛选里的按钮；身份 / 状态取值和分区 id 不重名。 */
-function segButton(container: HTMLElement, value: string): HTMLButtonElement {
-  return container.querySelector<HTMLButtonElement>(`.seg button[data-value="${value}"]`)!;
+/**
+ * 通过选择栏改一次筛选：点开触发按钮，再在带对勾的列表抽屉里选一项。
+ * 触发按钮的 id 与编辑展会页的分类选择栏同一套语义。
+ */
+async function pickFilter(triggerId: string, label: string): Promise<void> {
+  document.querySelector<HTMLButtonElement>(`#${triggerId}`)?.click();
+  await flush();
+  const option = [...document.querySelectorAll<HTMLButtonElement>('.sheet-actions button')].find(
+    (node) => node.textContent?.trim() === label,
+  );
+  if (!option) throw new Error(`抽屉里没有「${label}」选项`);
+  option.click();
+  await flush();
 }
 
-/** 按分组名取筛选控件（分区切换组也带 aria-label，用「身份」「状态」区分）。 */
-function filterGroup(container: HTMLElement, label: string): HTMLElement {
-  return container.querySelector<HTMLElement>(`.seg[aria-label="${label}"]`)!;
+/** 选择栏上当前显示的文案。 */
+function filterLabelText(triggerId: string): string {
+  return document.querySelector<HTMLButtonElement>(`#${triggerId}`)?.textContent?.trim() ?? '';
 }
 
 describe('管理-用户筛选', () => {
@@ -97,27 +120,26 @@ describe('管理-用户筛选', () => {
   });
 
   it('进页面时从地址栏读筛选值并带进取数', async () => {
-    const container = await mountAdmin('/admin?tab=users&role=exhibitor&status=banned');
+    await mountAdmin('/admin?tab=users&role=exhibitor&status=banned');
     await vi.waitFor(() =>
       expect(mocks.usersList).toHaveBeenCalledWith({ query: '', role: 'exhibitor', status: 'banned' }),
     );
-    const pressed = [...container.querySelectorAll('.seg button[aria-pressed="true"]')].map((node) =>
-      node.textContent?.trim(),
-    );
-    expect(pressed).toContain('展商');
-    expect(pressed).toContain('封禁');
+    // 两个选择栏分别显示带过来的筛选值。
+    expect(filterLabelText('admin-user-role-filter')).toBe('展商');
+    expect(filterLabelText('admin-user-status-filter')).toBe('封禁');
   });
 
   it('改筛选写回地址栏（保留 tab）并重新取数', async () => {
-    const container = await mountAdmin('/admin?tab=users');
+    await mountAdmin('/admin?tab=users');
     await vi.waitFor(() => expect(mocks.usersList).toHaveBeenCalledTimes(1));
 
-    segButton(container, 'exhibitor').click();
+    await pickFilter('admin-user-role-filter', '展商');
     await vi.waitFor(() => expect(mocks.usersList).toHaveBeenLastCalledWith({ query: '', role: 'exhibitor' }));
     expect(router!.currentRoute.value.query.tab).toBe('users');
     expect(router!.currentRoute.value.query.role).toBe('exhibitor');
+    expect(filterLabelText('admin-user-role-filter')).toBe('展商');
 
-    segButton(container, 'banned').click();
+    await pickFilter('admin-user-status-filter', '封禁');
     await vi.waitFor(() =>
       expect(mocks.usersList).toHaveBeenLastCalledWith({ query: '', role: 'exhibitor', status: 'banned' }),
     );
@@ -126,16 +148,17 @@ describe('管理-用户筛选', () => {
   });
 
   it('切回「全部」时地址栏留下空串，但取数不再带该参数', async () => {
-    const container = await mountAdmin('/admin?tab=users&role=user&status=banned');
+    await mountAdmin('/admin?tab=users&role=user&status=banned');
     await vi.waitFor(() => expect(mocks.usersList).toHaveBeenCalledWith({ query: '', role: 'user', status: 'banned' }));
 
-    // 身份 / 状态两组筛选项里的「全部」都是第一颗按钮，按钮的 value 是空串。
-    filterGroup(container, '身份').querySelector('button')!.click();
+    // 「全部」对应空串：地址栏留着空串，但取数不再带该参数。
+    await pickFilter('admin-user-role-filter', '全部');
     await vi.waitFor(() => expect(mocks.usersList).toHaveBeenLastCalledWith({ query: '', status: 'banned' }));
     expect(router!.currentRoute.value.query.role).toBe('');
     expect(router!.currentRoute.value.query.status).toBe('banned');
+    expect(filterLabelText('admin-user-role-filter')).toBe('全部');
 
-    filterGroup(container, '状态').querySelector('button')!.click();
+    await pickFilter('admin-user-status-filter', '全部');
     await vi.waitFor(() => expect(mocks.usersList).toHaveBeenLastCalledWith({ query: '' }));
     expect(router!.currentRoute.value.query.role).toBe('');
     expect(router!.currentRoute.value.query.status).toBe('');
@@ -149,7 +172,7 @@ describe('管理-用户筛选', () => {
     const input = container.querySelector<HTMLInputElement>('#admin-user-search')!;
     input.value = 'demo';
     input.dispatchEvent(new Event('input', { bubbles: true }));
-    segButton(container, 'admin').click();
+    await pickFilter('admin-user-role-filter', '管理员');
 
     await vi.waitFor(() => expect(mocks.usersList).toHaveBeenLastCalledWith({ query: 'demo', role: 'admin' }), {
       timeout: 2000,
