@@ -323,6 +323,54 @@
   box-shadow: 0 0 0 3px var(--accent-glow, rgba(192, 86, 33, 0.12));
 }
 
+/* ── 校验失败：一次性提示 ────────────────────────────────────────
+ * data-invalid 从无到有时字段轻微横向抖一下（2px），错误文字出现时淡入上移；
+ * 两者都只在状态切换的那一次播放，不循环、不改布局，只动 transform / opacity。
+ * 底色与描边的换色交给上面输入框的 transition 平滑过渡，
+ * 减少动效的关闭规则见文件末尾。 */
+
+@keyframes field-invalid-shake {
+  0%,
+  100% {
+    transform: none;
+  }
+
+  25% {
+    transform: translate3d(-2px, 0, 0);
+  }
+
+  55% {
+    transform: translate3d(2px, 0, 0);
+  }
+
+  80% {
+    transform: translate3d(-1px, 0, 0);
+  }
+}
+
+@keyframes field-error-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.field[data-invalid='true'] .input,
+.field[data-invalid='true'] .textarea,
+.field[data-invalid='true'] .select,
+.field[data-invalid='true'] .input-line {
+  animation: field-invalid-shake var(--motion-normal) var(--ease-standard);
+}
+
+.field-error {
+  animation: field-error-in var(--motion-quick) var(--ease-out) both;
+}
+
 /* ── 底部导航：图标弹跳（选中态只靠颜色与字重高亮，不画指示条） ───── */
 
 .tab svg {
@@ -797,6 +845,11 @@
   .cal-day::after,
   .calendar,
   .calendar-grid,
+  .field[data-invalid='true'] .input,
+  .field[data-invalid='true'] .textarea,
+  .field[data-invalid='true'] .select,
+  .field[data-invalid='true'] .input-line,
+  .field-error,
   .EasyMDEContainer {
     animation: none !important;
   }

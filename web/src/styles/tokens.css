@@ -32,6 +32,10 @@
   --warn-tint: #f6eedd;
   --danger-ink: #a33a2a; /* 已拒绝文字 */
   --danger-tint: #f7e6e2;
+  /* 表单校验失败专用：比 --danger-tint 更浅更柔和的暖底，配同档暖红描边。
+     只给 .field[data-invalid] 的输入框用；提示条、状态标签与危险按钮仍用 --danger-tint。 */
+  --danger-wash: #fcf0ea;
+  --danger-edge: #c9836f;
   --info-ink: #2f6f8f; /* 仅展示等中性状态 */
   --info-tint: #e6eef3;
 
@@ -124,6 +128,9 @@
     --warn-tint: #2a2318;
     --danger-ink: #e08a78;
     --danger-tint: #2c1d1a;
+    /* 深色下不用深酒色：校验失败用一档更浅的暖底，描边比文字暗一级。 */
+    --danger-wash: #3d2822;
+    --danger-edge: #b57c6c;
     --info-ink: #7fb7d4;
     --info-tint: #17242b;
     --scrim: rgba(0, 0, 0, 0.6);
@@ -161,6 +168,9 @@
   --warn-tint: #2a2318;
   --danger-ink: #e08a78;
   --danger-tint: #2c1d1a;
+  /* 深色下不用深酒色：校验失败用一档更浅的暖底，描边比文字暗一级。 */
+  --danger-wash: #3d2822;
+  --danger-edge: #b57c6c;
   --info-ink: #7fb7d4;
   --info-tint: #17242b;
   --scrim: rgba(0, 0, 0, 0.6);
@@ -568,7 +578,7 @@ label {
   padding-inline: var(--s2);
 }
 
-/* 地址只占一行：文字在左，右侧是 44px 的复制图标。 */
+/* 地址只占一行：文字在左，右侧是 44px 的图标按钮（复制，私约设置还有二维码）。 */
 .copy-line {
   display: flex;
   align-items: center;
@@ -1281,8 +1291,8 @@ button.avatar {
 .field[data-invalid='true'] .input,
 .field[data-invalid='true'] .textarea,
 .field[data-invalid='true'] .select {
-  border-color: var(--danger-ink);
-  background: var(--danger-tint);
+  border-color: var(--danger-edge);
+  background: var(--danger-wash);
 }
 
 /* ── 下划线变体 ──────────────────────────────────────────────────
@@ -1314,7 +1324,7 @@ button.avatar {
 
 .field[data-invalid='true'] .input-line {
   background-color: transparent;
-  background-image: linear-gradient(var(--danger-ink), var(--danger-ink));
+  background-image: linear-gradient(var(--danger-edge), var(--danger-edge));
   background-size: 100% 2px;
   border-bottom-color: transparent;
 }
