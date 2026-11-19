@@ -323,32 +323,7 @@
   box-shadow: 0 0 0 3px var(--accent-glow, rgba(192, 86, 33, 0.12));
 }
 
-/* ── 底部导航：选中指示条与图标弹跳 ─────────────────────────────── */
-
-.tab {
-  position: relative;
-}
-
-.tab::after {
-  content: '';
-  position: absolute;
-  inset-inline: 50%;
-  bottom: 4px;
-  height: 3px;
-  width: 0;
-  border-radius: var(--r-pill);
-  background: currentColor;
-  opacity: 0;
-  transform: translateX(-50%);
-  transition:
-    width var(--motion-normal) var(--ease-spring),
-    opacity var(--motion-quick) var(--ease-standard);
-}
-
-.tab[aria-current='page']::after {
-  width: 22px;
-  opacity: 1;
-}
+/* ── 底部导航：图标弹跳（选中态只靠颜色与字重高亮，不画指示条） ───── */
 
 .tab svg {
   transition: transform var(--motion-normal) var(--ease-spring);

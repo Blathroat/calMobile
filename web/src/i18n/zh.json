@@ -173,7 +173,11 @@
       "exhibitorSection": "展商相关",
       "maxExhibitionDays": "单个展会最大持续天数",
       "maxExhibitionDaysHint": "0 表示不限；按开展～闭展计算，超过上限时展商不能保存展会。",
-      "daysUnit": "天"
+      "daysUnit": "天",
+      "registrationSection": "报名相关",
+      "registrationNameFieldTitles": "匿名报名姓名同类标题",
+      "registrationNameFieldTitlesHint": "命中这些标题的文本收集项会替代匿名报名的姓名表单，每行一个。",
+      "registrationNameFieldTitlesPlaceholder": "例如：姓名、昵称、称呼、圈名（一行一个）"
     },
     "title": "管理后台",
     "users": {
@@ -511,6 +515,7 @@
       "confirmOnDetail": "保存后可在展会详情页确认展示效果。",
       "cover": "展会封面",
       "coverCompressed": "封面已压缩并上传",
+      "coverRatioHint": "支持3:4~9:16纵图",
       "coverUploaded": "封面已上传",
       "createExhibition": "创建展会",
       "created": "展会已创建",
@@ -520,12 +525,13 @@
       "deleteExhibition": "删除展会",
       "deleteFailed": "删除失败",
       "deleted": "展会已删除",
+      "descriptionLabel": "简介",
+      "descriptionPlaceholder": "简单介绍展会亮点、参展范围与入场提示；需要图片或排版时用 Markdown 编辑",
       "editBlocked": "账号已被限制，不能修改展会",
-      "editDescription": "编辑简介",
+      "editDescription": "使用Markdown编辑简介",
       "emptyDescription": "还没有填写简介，可用 Markdown 编辑并插入图片。",
       "enableCheckInQr": "启用报名二维码",
       "loadInfoFailed": "无法加载展会信息。",
-      "markdownDescriptionSet": "已配置 Markdown 简介",
       "modeSaveFailed": "报名方式保存失败",
       "modeUpdated": "报名方式已更新",
       "openDate": "开展日期",
@@ -548,7 +554,7 @@
       "thisExhibition": "该展会",
       "titlePlaceholder": "例如：智能制造与工业自动化展",
       "venuePlaceholder": "例如：上海新国际博览中心 · N3 馆",
-      "coverAndDescription": "展会封面与简介",
+      "coverAndDescription": "活动信息",
       "endDate": "闭展日期",
       "endBeforeStart": "闭展日期不能早于开展日期",
       "timeStart": "开始时间",
@@ -559,8 +565,8 @@
       "registrationEndShort": "截止",
       "durationHint": "单个展会最长 {max} 天",
       "durationTooLong": "单个展会最长 {max} 天，请缩短展期",
-      "noticeTitle": "注意事项（选填）",
-      "noticeLabel": "注意事项",
+      "noticeTitle": "参与方式（仅通过审核用户可见）",
+      "noticeLabel": "参与方式",
       "noticeHint": "审核通过或已参加的报名者，会在报名详情页看到这段内容；留空则不显示。",
       "noticePlaceholder": "例如：入场需携带身份证、签到地点、现场联系人等"
     },
@@ -807,6 +813,7 @@
   "registration": {
     "detail": {
       "approvedCancelBlocked": "展商未允许撤销已通过的报名。",
+      "attendance": "参加时间",
       "attendedCannotCancel": "已参加的报名不能再撤销。",
       "backToList": "返回列表",
       "cancelConfirmMessage": "确定撤销「{title}」的报名吗？撤销后展商将不再审核该记录。",
@@ -884,6 +891,12 @@
       "submittedPending": "已提交 · 待审核",
       "unsetOption": "未设置选项",
       "name": "姓名",
+      "nickname": "昵称",
+      "nameRequired": "请填写姓名",
+      "attendance": "参加时间",
+      "attendanceStart": "参加开始",
+      "attendanceEnd": "参加结束",
+      "attendanceIncomplete": "请选择完整的参加时间范围",
       "guestApprovedHint": "该展会无需审核，已直接通过。请保存下方查询链接，之后凭它查看报名状态。",
       "guestPendingHint": "需要审核的报名可用保存的查询链接查看状态。",
       "queryTokenMissing": "报名已提交，但没能拿到查询链接，请联系展商。"
@@ -1196,6 +1209,10 @@
     "registration": {
       "afterEnd": "报名已截止",
       "alreadyCancelled": "该报名已撤销，无需重复操作",
+      "attendanceIncomplete": "参加时间需要同时填写开始与结束日期",
+      "attendanceInvalid": "参加时间需要是 YYYY-MM-DD 格式的日期",
+      "attendanceOrder": "参加时间的开始日期不能晚于结束日期",
+      "attendanceOutOfRange": "参加时间需要在展会日期 {range} 内",
       "attendedCannotCancel": "已参加的报名不能再撤销",
       "cancelNotAllowed": "展商未允许撤销已通过的报名",
       "cancelNotYours": "只能撤销自己的报名",
@@ -1264,6 +1281,8 @@
       "hintKeyInvalid": "提示标识不合法",
       "hintLoginRequired": "请先登录后再记录提示状态",
       "notifyLoginRequired": "请先登录后再保存通知偏好",
+      "registrationInvalid": "报名设置格式不正确",
+      "registrationNameFieldTitlesInvalid": "姓名同类标题需要是数组",
       "themeIndexInvalid": "配色下标必须是 0 到 {max} 之间的整数",
       "themeAccentInvalid": "色号必须是 #RRGGBB 格式，例如 #41707E",
       "themeLoginRequired": "请先登录后再保存配色",
@@ -1327,6 +1346,7 @@
     }
   },
   "settings": {
+    "avatar": "头像",
     "avatarRemoved": "头像已移除",
     "avatarUpdated": "头像已更新",
     "changeAvatar": "更换头像",
@@ -1373,6 +1393,7 @@
       "updated": "通知设置已更新"
     },
     "profile": {
+      "avatarHint": "头像改动立即保存，不需要再点「保存」。",
       "editProfile": "编辑资料",
       "nickname": "昵称",
       "region": "地区",

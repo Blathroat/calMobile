@@ -5,8 +5,10 @@
  * 保存的是 Markdown 源码，详情页按 Markdown 渲染；预览走 `@/services/markdown`
  * 的渲染入口（与详情页同一套清洗），不自行拼 HTML。
  * 图片与视频先由原生选择，再上传到服务器，正文只写服务器地址。
+ * 编辑已有展会且从表单带 `?draft=1` 进来时，先用内存稿里的正文起稿
+ * （表单里刚写、还没保存的纯文本简介），保存成功后清掉草稿。
  */
-import { computed, nextTick, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
@@ -17,7 +19,7 @@ import { allowedFormats, uploadCountLimit, uploadSizeLimitMb, uploadSizeError } 
 import { device } from '@/services/device-services';
 import { publishImportedMedia } from '@/services/publish-media';
 import { htmlToMarkdown, loadHtmlConverter, loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
-import { patchExhibitionDraft, readExhibitionDraft } from '@/services/exhibition-draft';
+import { clearExhibitionDraft, patchExhibitionDraft, readExhibitionDraft } from '@/services/exhibition-draft';
 import AppIcon from '@/components/AppIcon.vue';
 import PasteTextPanel from '@/components/PasteTextPanel.vue';
 import StateBlock from '@/components/StateBlock.vue';
@@ -107,6 +109,16 @@ function initialContent(item: JsonObject): string {
   return item.descriptionFormat === 'html' ? htmlToMarkdown(raw) : raw;
 }
 
+/**
+ * 表单点「使用Markdown编辑简介」时带过来的内存稿正文。
+ * 只在编辑已有展会、且草稿记的正是这场展会时采用，避免串到别的展会。
+ */
+function pendingDraftContent(): string | undefined {
+  if (String(route.query.draft ?? '') !== '1') return undefined;
+  const draft = readExhibitionDraft();
+  return draft && draft.id === exhibitionId.value ? draft.description : undefined;
+}
+
 async function load(): Promise<void> {
   if (draftMode.value) {
     const draft = readExhibitionDraft();
@@ -139,7 +151,7 @@ async function load(): Promise<void> {
     return detail;
   });
   if (!data || data.found === false || seeded.value) return;
-  content.value = initialContent((data.exhibition ?? {}) as JsonObject);
+  content.value = pendingDraftContent() ?? initialContent((data.exhibition ?? {}) as JsonObject);
   seeded.value = true;
 }
 
@@ -408,6 +420,8 @@ async function save(): Promise<void> {
       markdown ? t('exhibition.editor.descriptionSaved', { summary }) : t('exhibition.editor.descriptionCleared'),
       'success',
     );
+    // 正文已经落库：带回表单的是服务器那一份，内存稿不再需要。
+    clearExhibitionDraft();
     await router.replace(`/exhibition-form/${encodeURIComponent(String(exhibition.value.id ?? exhibitionId.value))}`);
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -415,6 +429,11 @@ async function save(): Promise<void> {
     saving.value = false;
   }
 }
+
+/** 编辑模式下的内存稿只用来起稿：离开编辑器就丢掉，避免带回表单成为陈旧草稿。 */
+onBeforeUnmount(() => {
+  if (!draftMode.value) clearExhibitionDraft();
+});
 
 function isCancelled(reason: unknown): boolean {
   return Boolean(reason && typeof reason === 'object' && (reason as { code?: unknown }).code === 'cancelled');

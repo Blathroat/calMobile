@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 底部导航：选中项由路由给出，指示条与图标弹跳都在 motion.css 里，
+ * 底部导航：选中项由路由给出，颜色与字重高亮在本组件样式里，图标弹跳在 motion.css 里；
  * 这里只负责结构与可访问性（`aria-current="page"` 由 RouterLink 维护）。
  */
 import { RouterLink } from 'vue-router';
@@ -34,7 +34,7 @@ defineProps<{ items: TabItem[] }>();
   padding: var(--s1);
   border-radius: var(--r-chip);
   /* 底部导航是 RouterLink（`<a>`），浏览器默认给链接加下划线；
-       选中线索只用 motion.css 的主题色指示条，不要文字下划线。 */
+       选中线索只用主题色与字重（见下方 aria-current 规则），不再画下划线或指示条。 */
   text-decoration: none;
   color: var(--ink-3);
   font-size: var(--fs-tag);

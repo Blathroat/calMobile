@@ -1895,30 +1895,6 @@ button.avatar {
   background: var(--screen);
 }
 
-/* 底部导航的选中指示条：切换标签时从上一个位置滑到下一个位置 */
-.tabbar-indicator {
-  position: absolute;
-  bottom: 4px;
-  left: 0;
-  width: 20px;
-  height: 3px;
-  margin-left: -10px;
-  border-radius: var(--r-pill);
-  background: var(--accent);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.tabbar-indicator[data-hidden='false'] {
-  opacity: 1;
-}
-
-.tabbar-indicator[data-ready='true'] {
-  transition:
-    transform var(--motion-normal) var(--ease-spring),
-    opacity var(--motion-quick) var(--ease-standard);
-}
-
 /* ============================================================================
  * 反馈状态：加载、空、错误、成功
  * ==========================================================================*/
