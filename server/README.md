@@ -54,7 +54,7 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 
 这些是当前决定。换库等于重写，先改这里。
 
-- 数据库用 `pg` 手写 SQL。日期用 `to_char`。事务手写 `BEGIN` / `COMMIT`。迁移在 `config/migrate.ts`。
+- 数据库用 `pg` 手写 SQL。日期用 `to_char`。事务手写 `BEGIN` / `COMMIT`。迁移步骤按年代/主题分在 `src/config/migrations/`，`src/config/migrate.ts` 只留运行器与命令行入口（并 re-export `STEPS`）；默认设置与色板在 `src/config/default-settings.ts`，开发库示例数据在 `src/config/seed.ts`。
 - 密码用 `bcryptjs`。访问令牌用 `jose`，固定 HS256。刷新令牌是随机串，只存哈希。
 - 请求校验用 Zod，类型从 schema 推导。
 - 限流、TOTP 和迁移保持自研。登录限流在 `await next()` 之后用 `c.res.clone()` 看信封的 `ok === false`，只记失败。
@@ -80,7 +80,7 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 
 判定在 `src/config/runtime.ts` 的 `resolveRuntime`。启动自检在 `src/config/production.ts`。直接 `tsx src/index.ts`、不带参数，是开发模式。
 
-生产环境由公开 npm 包 `calmobile-server` 分发，服务器上的 `calmobile-update.timer` 从 npm 拉取新版本，安装、迁移、切换目录并重启。发布、目录布局和回滚见 [`docs/operations.md`](../docs/operations.md)。
+生产环境由公开 npm 包 `calmobile-server` 分发，服务器上的 `calmobile-update.timer` 从 npm 拉取新版本，安装、迁移、切换目录并重启。更新器与 systemd 单元的配置统一在 `/etc/calmobile.env`（`CALMOBILE_*` 键，示例见 `deploy/instance.env.example`；单元由 `deploy/systemd/*.in` 渲染），不再使用单独的 `/etc/calmobile-update.json`。发布、目录布局、迁移清单和回滚见 [`docs/operations.md`](../docs/operations.md)。
 
 数据库不可用时进程仍会启动。开发模式下打开 `http://127.0.0.1:3000/status` 可以看到通用失败提示。JSON 探活是 `GET /api/v1/status`。页面源码在 `status-page/`，`pnpm build` 把它内联成单文件。
 
@@ -197,7 +197,7 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 
 `videoSizeMb` 的下限是 1。原生侧 0 会变成不限。头像单文件上限是 `min(upload.avatarSizeMb, UPLOAD_MAX_MB)`，`UPLOAD_MAX_MB` 缺省并封顶 20。封面和简介媒体不走这道 20MB 硬顶，也不走 2MB 的 JSON 体积守卫。
 
-色板定义在 `src/config/migrate.ts` 的 `THEME_COLORS`，当前 12 色（首版发布 8 色，后来追加 4 色）。`app_settings.theme` 是全局默认。`users.ui_theme` 是个人选择。下标 0 固定为默认色，新色只往后追加，0..7 的语义不变。原生 `AppSettings.ACCENTS` 与这里逐位对应。
+色板定义在 `src/config/default-settings.ts` 的 `THEME_COLORS`，当前 12 色（首版发布 8 色，后来追加 4 色）。`app_settings.theme` 是全局默认。`users.ui_theme` 是个人选择。下标 0 固定为默认色，新色只往后追加，0..7 的语义不变。原生 `AppSettings.ACCENTS` 与这里逐位对应。
 
 下发的 `theme.index` 是该调用者实际生效的下标：`users.ui_theme ?? app_settings.theme.index`。`PUT /settings/ui-theme` 越界是 200 + `ok:false`，不夹取。`PUT /settings` 的全局 `themeIndex` 仍按补齐后的色板长度夹取。色板扩容后，老库不用迁移：`readServerSettings()` 的 `normalizeThemeColors()` 会在读取时把存着的短色板补齐到当前 12 色。
 

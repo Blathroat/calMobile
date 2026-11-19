@@ -121,7 +121,7 @@ pnpm build:join # 报名站构建（server 的 pnpm dev 也会自动构建）
 - **Release**：合入 `master` 且推送 CI 成功后，`.github/workflows/release.yml` 按改动路径发布：
   - GitHub Releases 上的 APK（标签 `v0.1.<运行编号>`）
   - 公开 npm 上的运行时包 `calmobile-server@0.1.<运行编号>`（含后端产物与两份页面构建）
-- **服务器更新**：服务器上的 `calmobile-update.timer` 每 5 分钟从 npm 检查新版本，安装依赖、跑迁移、原子切换并重启服务；失败自动回滚。
+- **服务器更新**：服务器上的 `calmobile-update.timer` 每 5 分钟从 npm 检查新版本，安装依赖、跑迁移、原子切换并重启服务；失败自动回滚。应用、更新器与 systemd 单元共用 `/etc/calmobile.env` 一份配置（`CALMOBILE_*` 是实例身份与更新器键，单元由 `deploy/systemd/*.in` 渲染）。
 - **反向代理 / TLS / 通行密钥**：域名、证书、`assetlinks.json`、环境变量等上线步骤见 [`docs/operations.md`](docs/operations.md)。
 
 会触发发布的新改动不要直接推到 `master`，按仓库协作约定走 PR、用合并提交合入。

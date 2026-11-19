@@ -2,7 +2,7 @@
 
 本文件是客户端、前后端边界和界面实现规则的来源。用户可见行为见 [`product.md`](product.md)。响应约定、服务端规则和数据模型见 [`server/README.md`](../server/README.md)。接口路径以各路由模块的注册表和 `web/api-endpoints.mjs` 为准。
 
-颜色、字号、间距、圆角的取值在 `web/src/styles/tokens.css`，动效在 `web/src/styles/motion.css`。只被一个组件使用的样式写在该组件的 `<style>` 里，不加 `scoped`：选择器保持全局，不依赖父子组件的渲染边界。全局样式的导入顺序见 `web/src/main.ts`。
+全局样式按层叠顺序拆在四个文件里：`web/src/styles/tokens.css`（只放设计变量与明暗模式）、`base.css`（重置与外壳/容器/排版原语）、`components.css`（通用控件：按钮、输入、卡片、面板、标签等）、`special.css`（专属组件与 iOS/PWA 适配）；动效在 `web/src/styles/motion.css`。`web/src/main.ts` 与 `web/src/join/main.ts` 按 tokens → base → components → special → 组件样式 → motion 的顺序 import，**不要调换**。只被一个组件使用的样式写在该组件的 `<style>` 里，不加 `scoped`：选择器保持全局，不依赖父子组件的渲染边界。
 
 ## 系统边界
 
@@ -33,7 +33,7 @@
 ### 通行密钥与更新检查
 
 - 两步验证的通行密钥走 WebAuthn：服务端用 `@simplewebauthn/server` 生成选项并校验结果（挑战存 `webauthn_challenges`、凭据存 `passkey_credentials`）；前端 `web/src/services/webauthn.ts` 只用浏览器原生 `navigator.credentials`，自己负责 base64url ↔ ArrayBuffer 的转换，不引客户端库。绑定需要身份复核票；环境不支持 WebAuthn 时页面隐藏添加入口并说明原因。`POST /profile/2fa/passkey/enable` 在账号还没有备用码时顺手生成一批并在响应里返回 `backupCodes`（页面切到「抄下来」那一步展示一次）；已有备用码时不轮换，响应里是空数组。安全页按 `backupCodesLeft` 决定提示：0 枚给警告、动作文案换成「生成备用码」，≤2 枚提醒重新生成。
-- 应用版本在构建期由 `scripts/client-target.mjs` 注入成 `__APP_VERSION__` / `__APP_VERSION_CODE__`（App 与报名站两份构建都注入），与服务端解析出的最新版本比较。`GET /app/release` 公开、`no-store`，GitHub 源由服务端带缓存地读 Release API（不受浏览器 CORS 与额度限制影响）。
+- 应用版本在构建期由 `scripts/client-target.mjs` 注入成 `__APP_VERSION__` / `__APP_VERSION_CODE__`（App 与报名站两份构建都注入；env 读取在 `scripts/env-file.mjs`），与服务端解析出的最新版本比较。`GET /app/release` 公开、`no-store`，GitHub 源由服务端带缓存地读 Release API（不受浏览器 CORS 与额度限制影响）。
 - 「下载并安装」只是打开下载地址：应用里除 `/app/` 之外的链接交给系统浏览器，安装由系统完成，不需要新的原生权限或桥接动作。
 - 报名站的下载条在应用外壳里（`App.vue`），条件是「报名站构建 + 没有原生桥 + 管理员配了下载地址」，常驻不可关闭（报名站本身不完整，用户随时要能找到下载入口）。自动检查更新是设备级偏好，存在本机 `calmobile.autoUpdate`。表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`。后端再校验一次。
 
@@ -94,7 +94,7 @@ iPhone 没有 APK，完整应用以 PWA 方式安装：Safari 打开 `{站点}/a
 ### 安装元信息与构建
 
 - 安装元信息在构建期生成默认值：`web/pwa-build.mjs` 读 `web/src/i18n/zh.json`，在 `web/vite.config.ts` 的构建钩子里写出 `web/dist/manifest.webmanifest` 与 `web/dist/sw.js`；`web/public/icons/` 由 Vite 拷到 `web/dist/icons/`，manifest 里的 `src` 是相对 manifest 的 `icons/…`。部署后服务器会按 `/etc/calmobile.env` 的运行时品牌再生成一份实例页面层（见 `server/src/server/runtime-web.ts`）：它在临时目录复制页面、改标题/manifest/图标、重写 SW 缓存名并重算 `release.json`，不改 `web/dist`。没有品牌变量时不生成，直接托管构建产物。
-- 站点 favicon、PWA 图标和 Android 启动图标共用一份源图：`web/pwa-build.mjs` 调 `scripts/build-icons.mjs`，把 `APP_ICON`（默认 `web/public/icons/icon-1024.png`）生成到 `web/dist/favicon.ico`、`web/dist/icons/`；Gradle 的 `buildIcons` 任务用同一份脚本生成 `app/build/generated/icons/res/`，再作为额外资源目录参与打包，所以各密度启动图标不入库。`APP_ICON_BACKGROUND`（默认 `#41707e`）是 maskable、Apple 主屏幕和 Android 自适应图标的留白底色；`APP_ICON_TRANSPARENT=1` 时站点/PWA 与 Android legacy/round 图标不铺底，Android 也不再生成 adaptive 图标。源图只接受 8 位 RGB/RGBA、非隔行 PNG，非方形会居中裁切。`favicon.ico` 含 16/32/48 三个 PNG 条目；Android 生成 legacy / round / adaptive foreground 三套资源。开发服务器用 `web/public/favicon.ico` 的默认图，生产构建会把生成图写进 `dist`；服务端根路径 `/favicon.ico` 转发同一份产物。服务器运行时可改用 `PWA_ICON_DIR` 指向预生成的一套图标。
+- 站点 favicon、PWA 图标和 Android 启动图标共用一份源图：`web/pwa-build.mjs` 与 Gradle 的 `buildIcons` 任务都调 `scripts/build-icons.mjs`（只是 façade：PNG 编解码、配置、站点图标、Android 图标分别在 `scripts/icons/` 的 `png.mjs` / `config.mjs` / `web.mjs` / `android.mjs`），把 `APP_ICON`（默认 `web/public/icons/icon-1024.png`）生成到 `web/dist/favicon.ico`、`web/dist/icons/`；Gradle 用同一套模块生成 `app/build/generated/icons/res/`，再作为额外资源目录参与打包，所以各密度启动图标不入库。`APP_ICON_BACKGROUND`（默认 `#41707e`）是 maskable、Apple 主屏幕和 Android 自适应图标的留白底色；`APP_ICON_TRANSPARENT=1` 时站点/PWA 与 Android legacy/round 图标不铺底，Android 也不再生成 adaptive 图标。源图只接受 8 位 RGB/RGBA、非隔行 PNG，非方形会居中裁切。`favicon.ico` 含 16/32/48 三个 PNG 条目；Android 生成 legacy / round / adaptive foreground 三套资源。开发服务器用 `web/public/favicon.ico` 的默认图，生产构建会把生成图写进 `dist`；服务端根路径 `/favicon.ico` 转发同一份产物。服务器运行时可改用 `PWA_ICON_DIR` 指向预生成的一套图标。
 - `/app/` 的页面根目录优先取 `web/dist`；运行时包还会把同一份产物复制到 `server/dist/app-shell`，`server/src/server/app-shell.ts` 的 `defaultPackagedAppRoot()` 是副本位置；报名站对应 `server/dist/app-shell-join`（`defaultPackagedJoinRoot()`）。生产 systemd 可能在启动前清掉 `current/web/dist` 或 `web/dist-join`（旧单元把它们当缓存），服务端在构建产物缺失时自动退到副本；部署单元仍不应主动删除它们，见 [`operations.md`](operations.md)。
 - `manifest.webmanifest` 的 `name` 取 `app.documentTitle`，`short_name` 取 `pwa.manifest.shortName`，`description` 取 `pwa.manifest.description`；`id` / `start_url` / `scope` 都是 `/app/`，`display: standalone`，`lang: zh-CN`，主题色与背景色取浅色板面。构建期环境变量 `PWA_APP_NAME` / `PWA_APP_SHORT_NAME` / `PWA_APP_DESCRIPTION` 可覆盖默认值（来自 Vite 读的 `web/.env*` 或构建进程环境）；服务器运行期读 `/etc/calmobile.env` 的同名变量，优先级更高，还支持 `APP_TITLE` / `JOIN_TITLE` / `PWA_LANG` / `PWA_THEME_COLOR` / `PWA_BACKGROUND_COLOR`。解析后 `name` / `short_name` / `description` 任一为空（`zh.json` 缺键、也没给对应 `PWA_*`）就直接构建失败；`short_name` 为空时先回落 `pwa.manifest.shortName`，再回落 `name`。
 - `web/index.html` 里的 `%APP_TITLE%` / `%PWA_SHORT_NAME%` / `%PWA_DESCRIPTION%` 由同一个脚本替换，Apple 主屏幕标题（`apple-mobile-web-app-title`）用同一份 `short_name`；`join.html` 只替换标题，`join.documentTitle` 缺失同样让构建失败。替换后还有未处理的占位符也直接报错，不会把 `%…%` 发上线。服务器运行时品牌会覆盖构建期标题并在 HTML 里注入 `window.__CALMOBILE_BRANDING__`，页面 `app/runtime.ts` 首帧读它；`bootstrap.branding` 再确认一次，旧快照没有注入时也有兜底。
@@ -131,7 +131,7 @@ iPhone 没有 APK，完整应用以 PWA 方式安装：Safari 打开 `{站点}/a
 
 ### iOS 样式
 
-iOS 与主屏幕模式的适配在 `web/src/styles/tokens.css` 末尾：
+iOS 与主屏幕模式的适配在 `web/src/styles/special.css` 末尾：
 
 - 旧版 iOS 不认 `dvh`：`body` 与 `.app` 先给 `100vh`，再用 `100dvh` 覆盖；构建压缩会把同一规则里的重复声明合并掉，所以另用 `@supports not (height: 100dvh)` 给不认 `dvh` 的内核补回 `100vh`。
 - `@supports (-webkit-touch-callout: none)` 里把 `.input` / `.textarea` / `.select` 的字号抬到 `16px`，避免 iOS 聚焦输入框时自动放大整页；只改字号，边框与下划线不变。
@@ -155,6 +155,8 @@ iOS 与主屏幕模式的适配在 `web/src/styles/tokens.css` 末尾：
 
 页面侧统一从 `web/src/services/device-services.ts` 进：有原生桥时调 `nativeBridge.call`，没有时同一组方法落到浏览器实现（`browser-device.ts`，见「iPhone / PWA」的「设备能力」）。因此浏览器里能用的是选文件、下载、分享、通知权限与摄像头；`ui.sync`、`media.store` 这类只在原生壳里存在的动作在浏览器里以 `device.featureUnavailable` 失败。
 
+**能力协商（页面可以比 APK 新）**：`app.capabilities` 是原生壳声明的动作清单（`ShellCapabilities`，排序去重；回包 `{ version, actions }`）。页面用 `native-bridge.ts` 的 `supportsNativeAction(action)` 懒加载并缓存这份清单，没有清单项就当壳不支持；原生对不认识的动作用稳定错误码 `unsupported` 失败，`device-services` 的 `nativeOrBrowser` 收到它时自动改走浏览器实现（`cancelled` 与真失败仍原样抛）。通行密钥也据此判断：旧壳没有 `passkey.*` 时退回浏览器 WebAuthn。因此新功能可以随页面热更新先上线，APK 只是可选增强；**新增原生动作时要同时更新 `ShellCapabilities` 清单与 `WebAppActions.handle` 的 switch**（两边对不上会误判能力，见 `ShellCapabilitiesTest`）。
+
 选图分两条路：`media.pickImage`（头像、扫码选图）在原生侧优先打开系统相册 / Photo Picker——Android 13 起用 `MediaStore.ACTION_PICK_IMAGES`，低版本用 `Intent.ACTION_PICK` + 图片库，系统里没有相册应用时回退文件选择器；`media.import`（封面、视频、语言包正文等）仍走文件选择器，因为这些文件可能在下载目录里、相册看不到。浏览器里两者都退化成 `<input type="file">`，回包形状不变（`media.pick` / `ok` / `uri` / `mimeType` / `dataUrl`，取消走 `CODE_CANCELLED`）。
 
 **为什么通行密钥在原生**：WebView 里 `navigator.credentials` 不可靠（多数版本没有 WebAuthn），而系统凭据提供方（Android 14 的 Credential Manager，低版本由 Google Play 服务提供）能用指纹 / 面容 / 锁屏密码完成同一件事。桥接传的入参与回调都是**标准 WebAuthn JSON**（base64url 字符串），服务端校验逻辑不区分请求来自 App 还是浏览器。页面侧统一走 `web/src/services/webauthn.ts`：有原生桥就调用桥，没有就用浏览器原生接口；用户取消由原生回 `cancelled`，前端归一成「没做这件事」。App 的 `clientDataJSON` 里 origin 是 `android:apk-key-hash:<签名证书 SHA-256 的 base64url>`，所以服务端的 `WEBAUTHN_ORIGINS` 必须包含它（见 `operations.md`）。这一项不是 http(s) 地址，`config/env.ts` 单独认它的形状（43 位 base64url），不能只按 URL 解析——否则会被当成非法项丢掉，App 里的通行密钥全部因来源不符被拒。**取消按系统实际返回判定**：用户划掉面板时凭据提供方回的是 `CreatePublicKeyCredentialDomException`（DOM 类型 Abort / NotAllowed / Timeout），不是 CancellationException；这三类与 Cancellation / Interrupted 一起归成 `cancelled`，页面静默收场。其余失败在原生侧翻成中文说明，系统给的英文原文只进 logcat。网页关着文件与 `content://` 访问，因此从文件安装语言包时正文由原生读出来回传，底稿另存为与二维码保存也走原生。可信设备的随机凭据由原生 `session.device` 生成并保存在设备私有目录。浏览器预览使用本机存储。
@@ -168,7 +170,7 @@ iOS 与主屏幕模式的适配在 `web/src/styles/tokens.css` 末尾：
 ## 界面规则
 
 - 每个字段有可见标签。标签和内容左对齐。
-- **输入框默认是方框**（`--stroke` 描边 + `--f3` 浅底），只有明确需要下划线的地方加 `.input-line`：目前是管理设置页的全部一般输入、编辑展会页的名称/地点/日期与时间触发按钮/分类，以及收集项的「字段标题」。`.input-line` 由 `tokens.css` 统一给出：默认一条 `--stroke` 底边，聚焦时一条主题色下划线**从左侧长满**（320ms，失焦缩回），校验失败直接变砖红——所有下划线输入框共用这一套动画，页面不要自绘。日期与时间不再使用原生 `date` / `time` 控件（全仓已清零），它们的触发按钮借用 `.input.input-line` 的外观（窄屏同样要给 `min-width: 0`，否则固有最小宽会撑破两列布局）。
+- **输入框默认是方框**（`--stroke` 描边 + `--f3` 浅底），只有明确需要下划线的地方加 `.input-line`：目前是管理设置页的全部一般输入、编辑展会页的名称/地点/日期与时间触发按钮/分类，以及收集项的「字段标题」。`.input-line` 由 `styles/components.css` 统一给出：默认一条 `--stroke` 底边，聚焦时一条主题色下划线**从左侧长满**（320ms，失焦缩回），校验失败直接变砖红——所有下划线输入框共用这一套动画，页面不要自绘。日期与时间不再使用原生 `date` / `time` 控件（全仓已清零），它们的触发按钮借用 `.input.input-line` 的外观（窄屏同样要给 `min-width: 0`，否则固有最小宽会撑破两列布局）。
 - 报名截止日已过时，服务端在展会 payload 里下发 `registrationEnded`（数据库按 `CURRENT_DATE > registration_end` 判定，且只有需审核 / 无需审核才为真），`openForRegistration` 同时为 false；卡片状态灯与详情页状态统一读 `services/status.ts` 的 `exhibitionModeCode(item)`（截止后显示「截止报名」），详情页按钮按 `registrationEnded` 显示「报名已截止」、其它关闭原因仍是「报名已关闭」。管理端「暂停 / 恢复报名」按 `acceptsRegistration(statusCode)` 判断，不读 `openForRegistration`，避免已截止的展会显示「恢复报名」。
 - 编辑展会时，闭展日期在提交前按管理员设置的最大持续天数做本地校验（`bootstrap.exhibitor.maxExhibitionDays`）；服务端保存时再校验一次，超限返回 `exhibition.durationTooLong`。分类必填（编辑页校验；服务端 `exhibitionInputSchema` 只在新建时强制，错误码 `validation.categoryRequired`，更新保持宽松以免历史空分类展会只改简介时被拒）；开展时间选填，两个时 / 分滚轮都填才组成区间，都空就是没设置。空时间的展示统一走 `services/format.ts` 的 `joinText(parts, 分隔符)`（过滤空片段再拼），列表、详情、分享文案与报名页卡片都不会留下「 · 场馆」或行尾空格；`calendar-ics` 没有可解析的时间时按全天事件处理。
 - **日期与时间用应用内抽屉**：范围日期（开展/闭展、报名开始/截止）走 `components/DatePickerSheet.vue` 的 `range` 模式，单日期（会议日期）走 `single` 模式；时间走 `components/TimeWheelSheet.vue` 的时 / 分滚轮。入口统一是 `services/pickers.ts` 的 `openDateRange` / `openSingleDate` / `openTime`，页面不要自己拼面板、也不要用系统原生控件。范围选择第一次点选就把起点回填给表单、第二次点选终点后自动收起（因此报名窗口可以只填开始）；第二次点的是同一天时终点也回填这一天，表单两端的框显示同一个日期；已有一段完整区间时点任意一天从该天重新开始；终点早于起点禁用；`min` / `max` 夹住可选范围两端（会议日期挡今天以前，报名参加时间挡展会期间之外）；「清除」清空两端。时间滚轮在值为空时按开始 `09:00` / 结束 `17:00` 摆位，只有点「确认」才写回，「清除」把时间留空（时间选填）。月历按月份分节、周日起排、今天带圆点，渲染从已选月份往前 12 个月到往后 24 个月。
