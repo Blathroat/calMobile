@@ -751,7 +751,7 @@ function normalizeOptions(options: unknown): string[] {
             <span class="picker-trigger-value" :data-empty="form.date ? 'false' : 'true'">{{
               dateText || t('picker.selectDate')
             }}</span>
-            <AppIcon name="chevronDown" size="icon icon-sm" />
+            <AppIcon name="calendar" size="icon icon-sm" />
           </button>
           <p v-if="isInvalid('date')" class="field-error" role="alert">{{ formError }}</p>
         </div>
@@ -768,7 +768,7 @@ function normalizeOptions(options: unknown): string[] {
             <span class="picker-trigger-value" :data-empty="form.endDate ? 'false' : 'true'">{{
               endDateText || t('picker.selectDate')
             }}</span>
-            <AppIcon name="chevronDown" size="icon icon-sm" />
+            <AppIcon name="calendar" size="icon icon-sm" />
           </button>
           <p v-if="isInvalid('endDate')" class="field-error" role="alert">{{ formError }}</p>
           <p v-if="maxExhibitionDays > 0" class="field-hint">
@@ -826,7 +826,7 @@ function normalizeOptions(options: unknown): string[] {
             <span class="picker-trigger-value" :data-empty="form.registrationStart ? 'false' : 'true'">{{
               registrationStartText || t('picker.selectDate')
             }}</span>
-            <AppIcon name="chevronDown" size="icon icon-sm" />
+            <AppIcon name="calendar" size="icon icon-sm" />
           </button>
           <p v-if="isInvalid('registrationStart')" class="field-error" role="alert">{{ formError }}</p>
         </div>
@@ -843,7 +843,7 @@ function normalizeOptions(options: unknown): string[] {
             <span class="picker-trigger-value" :data-empty="form.registrationEnd ? 'false' : 'true'">{{
               registrationEndText || t('picker.selectDate')
             }}</span>
-            <AppIcon name="chevronDown" size="icon icon-sm" />
+            <AppIcon name="calendar" size="icon icon-sm" />
           </button>
           <p v-if="isInvalid('registrationEnd')" class="field-error" role="alert">{{ formError }}</p>
         </div>
@@ -1028,7 +1028,7 @@ function normalizeOptions(options: unknown): string[] {
 }
 
 /* 分类 / 日期 / 时间触发按钮：借用 .input 的外观（下划线随底座走），
-   只补布局：文字靠左、chevron 靠右，值过长时截断。 */
+   只补布局：文字靠左、图标靠右，值过长时截断。 */
 .category-trigger,
 .picker-trigger {
   justify-content: space-between;

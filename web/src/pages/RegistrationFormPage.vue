@@ -557,7 +557,7 @@ async function submit(): Promise<void> {
               <span class="picker-trigger-value" :data-empty="attendanceStart ? 'false' : 'true'">{{
                 attendanceStartText || t('registration.form.attendanceStart')
               }}</span>
-              <AppIcon name="chevronDown" size="icon icon-sm" />
+              <AppIcon name="calendar" size="icon icon-sm" />
             </button>
             <span class="attendance-sep" aria-hidden="true">–</span>
             <button
@@ -571,7 +571,7 @@ async function submit(): Promise<void> {
               <span class="picker-trigger-value" :data-empty="attendanceEnd ? 'false' : 'true'">{{
                 attendanceEndText || t('registration.form.attendanceEnd')
               }}</span>
-              <AppIcon name="chevronDown" size="icon icon-sm" />
+              <AppIcon name="calendar" size="icon icon-sm" />
             </button>
           </div>
           <p v-if="attendanceError" class="field-error" role="alert">{{ attendanceError }}</p>

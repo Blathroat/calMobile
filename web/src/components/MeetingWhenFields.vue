@@ -68,7 +68,7 @@ function pickTime(): void {
         <span class="meeting-when-value" :data-empty="props.date ? 'false' : 'true'">{{
           formatChineseDate(props.date) || t('picker.selectDate')
         }}</span>
-        <AppIcon name="chevronDown" size="icon icon-sm" />
+        <AppIcon name="calendar" size="icon icon-sm" />
       </button>
       <p v-if="dateError" class="field-error" role="alert">{{ dateError }}</p>
     </div>
@@ -93,7 +93,7 @@ function pickTime(): void {
 </template>
 
 <style>
-/* 日期 / 时间触发按钮：借用 .input 的下划线外观，文字靠左、chevron 靠右。 */
+/* 日期 / 时间触发按钮：借用 .input 的下划线外观，文字靠左、图标靠右。 */
 .meeting-when-trigger {
   justify-content: space-between;
   gap: var(--s2);
