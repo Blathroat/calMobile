@@ -2,14 +2,15 @@
  * 应用更新：版本比较、提示判断与本机偏好。
  *
  * 服务端 `GET /app/release` 已经按管理端配置解析好下载源：
- * - `github`：`version` / `notes` 来自最新 Release，版本比本机构建新才提示；
- * - `url`：直链没有版本号，只要有地址就可以下载。
- * 两者都要求 `url` 非空，空串表示管理员还没配。
+ * - `github`：`version` / `notes` 来自最新 Release；
+ * - 直链文件：没有版本号，只要有地址就可以下载；
+ * - 目录：从文件列表里选中最新的 `.apk`，带版本号；同目录 `latest.json` 可带更新日志。
+ * 有版本号时就按版本比较，不依赖 `source`；两者都要求 `url` 非空，空串表示管理员还没配。
  *
  * 本机偏好都吞掉读写异常（隐私模式或配额满不影响主流程）：
  * - `calmobile.autoUpdate`：自动检查开关，未设置时按关闭处理；
  * - `calmobile.lastUpdateCheck`：上次检查的时间戳，六小时内不重复自动检查；
- * - `calmobile.promptedUpdate`：自动提示过的标记（GitHub 用版本号，直链用地址）。
+ * - `calmobile.promptedUpdate`：自动提示过的标记（有版本号用版本号，否则用地址）。
  */
 import type { ReleaseInfo } from '@/api/types';
 
@@ -87,14 +88,13 @@ function versionSegments(version: string): string[] {
   });
 }
 
-/** 是否有值得提示的更新：下载地址非空，GitHub 源还要求版本比本机构建新。 */
+/** 是否有值得提示的更新：下载地址非空；有版本号时要求版本比本机构建新。 */
 export function shouldPrompt(release: ReleaseLike): boolean {
   const url = String(release?.url ?? '').trim();
   if (!url) return false;
-  // 直链没有版本号：只要管理员配了地址就能下载，不跟本机构建比较。
-  if (release?.source !== 'github') return true;
   const version = String(release.version ?? '').trim();
-  if (!version) return false;
+  // 直链文件没有版本号：只要有地址就提示；目录/GitHub 有版本号时按版本比较。
+  if (!version) return true;
   return compareVersions(version, currentVersion()) > 0;
 }
 
@@ -129,8 +129,8 @@ export function markUpdatePrompted(marker: string): void {
 }
 
 /**
- * 自动提示的去重标记：GitHub 用版本号（更高版本出现时能再提示一次），
- * 直链没有版本号，用地址（换了下载地址就重新提示）。
+ * 自动提示的去重标记：有版本号用版本号（更高版本出现时能再提示一次），
+ * 没有版本号时用地址（换了下载地址就重新提示）。
  */
 export function updateMarker(release: ReleaseLike): string {
   const version = String(release?.version ?? '').trim();

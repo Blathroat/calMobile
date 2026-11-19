@@ -507,7 +507,7 @@ export function normalizeAgreement(value: unknown): ServerSettings['agreement'] 
   return { enabled: record.enabled === true, content, version, updatedAt };
 }
 
-/** 下载源只允许两种：直链，或追踪 GitHub 仓库的最新 Release。 */
+/** 下载源只允许两种：直链/目录，或追踪 GitHub 仓库的最新 Release。 */
 const DOWNLOAD_SOURCES = ['url', 'github'];
 
 /** GitHub 仓库写成 owner/repo：两段都只允许字母、数字、下划线、点与横线。 */
@@ -527,7 +527,7 @@ function normalizeDownload(
   if (Object.prototype.hasOwnProperty.call(patch, 'source')) {
     const source = String(patch.source ?? '').trim();
     if (!DOWNLOAD_SOURCES.includes(source)) {
-      throw badRequest('下载源只能是直链或 GitHub 仓库', { code: 'settings.downloadSourceInvalid' });
+      throw badRequest('下载源只能是直链/目录或 GitHub 仓库', { code: 'settings.downloadSourceInvalid' });
     }
     next.source = source as ServerSettings['download']['source'];
   }

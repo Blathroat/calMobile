@@ -56,7 +56,7 @@ interface AdminSettingsForm {
   inviteValidHours: number;
   /** 兑换后展商身份保留的天数；0 表示永久 */
   inviteDurationDays: number;
-  /** 软件包下载源：直链地址或 GitHub 仓库（owner/repo） */
+  /** 软件包下载源：直链/目录或 GitHub 仓库（owner/repo） */
   download: { source: 'url' | 'github'; url: string; repo: string };
   /** 用户协议：开关与 Markdown 正文（保存时随其它设置一起提交） */
   agreement: { enabled: boolean; content: string };
@@ -864,7 +864,7 @@ function clearAgreementContent(): void {
     </div>
 
     <!-- 软件包下载：检查更新和报名站下载条都读这一份配置。
-         直链只填 APK 地址；GitHub 仓库交给服务器追踪最新 Release。 -->
+         直链可填单个 APK，也可填包含版本化 APK 的目录；GitHub 仓库交给服务器追踪最新 Release。 -->
     <div class="card">
       <span class="section-label">{{ t('admin.download.title') }}</span>
       <div class="field">

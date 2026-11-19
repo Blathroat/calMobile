@@ -213,13 +213,13 @@
     "download": {
       "title": "软件包下载",
       "source": "下载源",
-      "sourceUrl": "直链地址",
+      "sourceUrl": "直链 / 目录",
       "sourceGithub": "GitHub 仓库",
-      "url": "APK 下载地址",
-      "urlPlaceholder": "https://example.com/app.apk",
+      "url": "APK 下载地址或目录",
+      "urlPlaceholder": "https://example.com/downloads",
       "repo": "GitHub 仓库",
       "repoPlaceholder": "例如：owner/repo",
-      "hint": "选 GitHub 仓库时，服务器自动追踪最新 Release 里以 .apk 结尾的资产；选直链时直接用下面的地址。",
+      "hint": "直链可填单个 APK 文件，也可填包含版本化 APK 的目录；目录模式会读取 index.json 或目录列表，并从同目录的 latest.json 读取更新日志（如有）。",
       "githubHint": "仓库要发布带 APK 资产的 Release，更新日志取该 Release 的说明。",
       "invalid": "请填写 http(s) 地址或 owner/repo 形式的仓库"
     }
@@ -1269,7 +1269,7 @@
       "themeLoginRequired": "请先登录后再保存配色",
       "uiModeLoginRequired": "请先登录后再保存外观模式",
       "userStatusInvalid": "账号状态只能是 正常 / 受限 / 封禁",
-      "downloadSourceInvalid": "下载源只能是直链或 GitHub 仓库",
+      "downloadSourceInvalid": "下载源只能是直链/目录或 GitHub 仓库",
       "downloadUrlInvalid": "下载地址需要以 http:// 或 https:// 开头",
       "downloadRepoInvalid": "GitHub 仓库需要写成 owner/repo",
       "agreementContentRequired": "开启用户协议前请先上传 Markdown 正文",

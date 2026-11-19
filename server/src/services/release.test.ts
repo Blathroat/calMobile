@@ -6,7 +6,13 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, vi } from 'vitest';
-import { clearReleaseCache, parseLatestRelease, resolveRelease } from './release.js';
+import {
+  clearReleaseCache,
+  compareReleaseVersions,
+  parseLatestRelease,
+  resolveRelease,
+  versionFromFilename,
+} from './release.js';
 
 const SETTINGS = { download: { source: 'url' as const, url: 'https://example.com/app.apk', repo: '' } };
 
@@ -160,4 +166,114 @@ test('仓库为空时直接给空地址，不请求接口', async () => {
   const release = await resolveRelease(githubSettings(''), {});
   assert.equal(release.url, '');
   assert.equal(calls, 0);
+});
+
+function directorySettings(url: string) {
+  return { download: { source: 'url' as const, url, repo: '' } };
+}
+
+test('目录源读取 index.json，选最高版本并读取同目录 latest.json', async () => {
+  const calls: string[] = [];
+  vi.stubGlobal('fetch', async (url: string) => {
+    calls.push(String(url));
+    if (String(url).endsWith('/index.json')) {
+      return jsonResponse({ files: ['app-1.0.0.apk', 'app-1.20.0.apk', 'app-1.3.0.apk'] });
+    }
+    if (String(url).endsWith('/latest.json')) {
+      return jsonResponse({ version: '1.20.0', notes: '新增目录更新', publishedAt: '2026-11-19T00:00:00Z' });
+    }
+    return new Response('', { status: 404 });
+  });
+  const release = await resolveRelease(directorySettings('https://cdn.example.com/downloads'));
+  assert.deepEqual(release, {
+    source: 'url',
+    version: '1.20.0',
+    notes: '新增目录更新',
+    url: 'https://cdn.example.com/downloads/app-1.20.0.apk',
+    publishedAt: '2026-11-19T00:00:00Z',
+  });
+  assert.ok(calls.some((url) => url.endsWith('/index.json')));
+  assert.ok(calls.some((url) => url.endsWith('/latest.json')));
+});
+
+test('没有 index.json 时兼容静态目录 HTML 链接列表', async () => {
+  vi.stubGlobal('fetch', async (url: string) => {
+    if (String(url).endsWith('/index.json')) return new Response('', { status: 404 });
+    if (String(url).endsWith('/latest.json')) return new Response('', { status: 404 });
+    return new Response('<a href="builds/app-2.0.0.apk">下载</a>', {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    });
+  });
+  const release = await resolveRelease(directorySettings('https://example.com/downloads/'));
+  assert.equal(release.version, '2.0.0');
+  assert.equal(release.url, 'https://example.com/downloads/builds/app-2.0.0.apk');
+  assert.equal(release.notes, '');
+});
+
+test('目录里没有可识别 APK 时退回原来的直链行为', async () => {
+  vi.stubGlobal('fetch', async () => new Response('', { status: 404 }));
+  const release = await resolveRelease(directorySettings('https://example.com/downloads'));
+  assert.deepEqual(release, {
+    source: 'url',
+    version: '',
+    notes: '',
+    url: 'https://example.com/downloads',
+    publishedAt: '',
+  });
+});
+
+test('latest.json 的版本和选出的 APK 不一致时，不串用更新日志', async () => {
+  vi.stubGlobal('fetch', async (url: string) => {
+    if (String(url).endsWith('/index.json')) return jsonResponse({ files: ['app-3.0.0.apk'] });
+    if (String(url).endsWith('/latest.json')) return jsonResponse({ version: '2.0.0', notes: '旧说明' });
+    return new Response('', { status: 404 });
+  });
+  const release = await resolveRelease(directorySettings('https://example.com/downloads'));
+  assert.equal(release.version, '3.0.0');
+  assert.equal(release.notes, '');
+  assert.equal(release.publishedAt, '');
+});
+
+test('目录成功结果缓存 5 分钟：期间不再请求外部地址', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-11-19T00:00:00Z'));
+  let calls = 0;
+  vi.stubGlobal('fetch', async (url: string) => {
+    calls += 1;
+    if (String(url).endsWith('/index.json')) return jsonResponse({ files: ['app-1.0.0.apk'] });
+    return new Response('', { status: 404 });
+  });
+  await resolveRelease(directorySettings('https://example.com/downloads'));
+  const first = calls;
+  await resolveRelease(directorySettings('https://example.com/downloads'));
+  assert.equal(calls, first, '5 分钟内命中目录缓存');
+  vi.setSystemTime(new Date('2026-11-19T00:05:01Z'));
+  await resolveRelease(directorySettings('https://example.com/downloads'));
+  assert.ok(calls > first, '缓存过期后重新探测');
+});
+
+test('目录探测失败缓存 60 秒，之后重试', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-11-19T00:00:00Z'));
+  let calls = 0;
+  vi.stubGlobal('fetch', async () => {
+    calls += 1;
+    return new Response('', { status: 500 });
+  });
+  await resolveRelease(directorySettings('https://example.com/downloads'));
+  const first = calls;
+  await resolveRelease(directorySettings('https://example.com/downloads'));
+  assert.equal(calls, first, '失败结果 60 秒内不重复探测');
+  vi.setSystemTime(new Date('2026-11-19T00:01:01Z'));
+  await resolveRelease(directorySettings('https://example.com/downloads'));
+  assert.ok(calls > first, '60 秒后重试');
+});
+
+test('文件名版本号提取与比较', () => {
+  assert.equal(versionFromFilename('app-1.20.0.apk'), '1.20.0');
+  assert.equal(versionFromFilename('app-2.0.apk'), '2.0');
+  assert.equal(versionFromFilename('release.apk'), '');
+  assert.equal(compareReleaseVersions('1.20.0', '1.3.0'), 1);
+  assert.equal(compareReleaseVersions('v1.0', '1.0.0'), 0);
 });
