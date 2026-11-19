@@ -1,0 +1,1132 @@
+/* ============================================================================
+ * calMobile · 通用控件
+ *
+ * 按钮、表单、状态标签、分段控件、底部导航、反馈提示与弹层。
+ * 变量来自 `tokens.css`，基础容器在 `base.css`，专属组件在 `special.css`；
+ * 导入顺序见 `src/main.ts`，规则顺序与拆分前一致，不要重排。
+ * ==========================================================================*/
+
+/* ============================================================================
+ * 状态标签：颜色 + 文字双重线索
+ * ==========================================================================*/
+
+.pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-pill);
+  background: var(--screen);
+  color: var(--ink-2);
+  font-size: var(--fs-tag);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ============================================================================
+ * 按钮
+ * ==========================================================================*/
+
+.cta {
+  width: 100%;
+  min-height: var(--ctrl);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: 0 var(--s4);
+  border-radius: var(--r-input);
+  background: var(--accent);
+  color: var(--on-dark);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition:
+    background var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+/* 次按钮：浅色底与页面底色一致（白底 / 深色模式下的页面底），
+   应用配色只改变它的边框与字体颜色，不改变底色。 */
+.cta.ghost {
+  background: var(--screen);
+  color: var(--accent-ink);
+  border: 1.5px solid var(--accent-edge);
+}
+
+.cta.danger {
+  background: var(--danger-ink);
+  color: var(--screen);
+}
+
+.cta[disabled],
+.cta[aria-disabled='true'] {
+  background: var(--f1);
+  color: var(--ink-3);
+  border-color: transparent;
+  cursor: not-allowed;
+}
+
+.cta[data-loading='true'] {
+  color: transparent;
+  position: relative;
+}
+
+.cta[data-loading='true']::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  color: var(--on-dark);
+  animation: spin 0.7s linear infinite;
+}
+
+.cta.ghost[data-loading='true']::after {
+  color: var(--accent-ink);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 右下角圆形按钮 */
+.round-action {
+  width: 51px;
+  height: 51px;
+  min-width: 51px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-dark);
+  font-size: 0;
+  box-shadow: var(--shadow-float);
+}
+
+.round-action svg {
+  width: 21px;
+  height: 21px;
+}
+
+.round-action[data-variant='ghost'] {
+  background: var(--screen);
+  color: var(--accent-ink);
+  border: 1.5px solid var(--accent-edge);
+  box-shadow: none;
+}
+
+.text-action {
+  display: inline-flex;
+  align-items: center;
+  /* 命中区不小于 44px：文字按钮也点得中，但视觉上仍是一行字。 */
+  min-height: var(--touch);
+  padding: 0 var(--s2);
+  border-radius: var(--r-chip);
+  background: transparent;
+  color: var(--accent-ink);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.link-button {
+  padding: 0;
+  background: none;
+  color: var(--accent-ink);
+  font-size: inherit;
+  font-weight: 700;
+  text-align: start;
+}
+
+/* 用户协议勾选行只是「勾选 + 一条链接」，不套卡片外框：去掉 .check-label 的描边、
+   底色与内距，只保留 44px 命中区。 */
+.agreement-consent .check-label {
+  min-height: var(--touch);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* 用户协议蓝链：`--accent-ink` 在深色底上偏暗，链接统一用可读的蓝色（`--info-ink`）+ 下划线，
+   登录/注册的勾选行与设置页入口共用。 */
+.agreement-link {
+  color: var(--info-ink);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ============================================================================
+ * 表单
+ * ==========================================================================*/
+
+.form {
+  display: grid;
+  gap: var(--s4);
+}
+
+.field {
+  display: grid;
+  gap: var(--s2);
+}
+
+.field > label,
+.field > .field-label,
+.choice-group > legend {
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.field .required {
+  color: var(--accent-ink);
+}
+
+/* 输入框：方框 + 浅填充，是本项目一直以来的样子。
+   只有明确要求「下划线」的地方才加 .input-line（见下面的变体）。 */
+.input,
+.textarea,
+.select {
+  width: 100%;
+  min-height: var(--ctrl);
+  padding: 0 var(--s3);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--f3);
+  color: var(--ink);
+  font-size: var(--fs-body);
+  display: flex;
+  align-items: center;
+}
+
+.textarea {
+  min-height: 105px;
+  padding: var(--s3);
+  display: block;
+  resize: vertical;
+  line-height: var(--lh-base);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--ink-3);
+}
+
+.input:focus-visible,
+.textarea:focus-visible,
+.select:focus-visible {
+  background: var(--screen);
+}
+
+.field[data-invalid='true'] .input,
+.field[data-invalid='true'] .textarea,
+.field[data-invalid='true'] .select {
+  border-color: var(--danger-edge);
+  background: var(--danger-wash);
+}
+
+/* ── 下划线变体 ──────────────────────────────────────────────────
+ * 只给明确要求「下划线」的表单加 .input-line：管理设置页、编辑展会页的字段、
+ * 收集项的标题输入。默认一条 --stroke 底边，聚焦时主题色下划线从左侧长满，
+ * 失焦缩回；校验失败直接长满并变砖红。所有下划线输入框共用这一套动画。
+ * 下划线用一层渐变背景画：0% 宽时露出底边，100% 时整条被主题色盖住。 */
+
+.input-line {
+  border: 0;
+  border-bottom: var(--hairline) solid var(--stroke);
+  border-radius: 0;
+  background-color: transparent;
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-repeat: no-repeat;
+  background-position: left bottom;
+  background-size: 0% 2px;
+  padding-inline: 0;
+  transition:
+    background-size 320ms var(--ease),
+    background-color var(--motion-fast) var(--ease);
+}
+
+.input-line:focus,
+.input-line:focus-visible {
+  background-color: transparent;
+  background-size: 100% 2px;
+}
+
+.field[data-invalid='true'] .input-line {
+  background-color: transparent;
+  background-image: linear-gradient(var(--danger-edge), var(--danger-edge));
+  background-size: 100% 2px;
+  border-bottom-color: transparent;
+}
+
+.field-counter {
+  align-self: flex-end;
+  color: var(--ink-3);
+  font-size: var(--fs-tag);
+  font-variant-numeric: tabular-nums;
+}
+
+.field-counter[data-over='true'] {
+  color: var(--danger-ink);
+}
+
+/* ============================================================================
+ * 状态标签：颜色 + 文字双重线索
+ * ==========================================================================*/
+
+.pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-pill);
+  background: var(--screen);
+  color: var(--ink-2);
+  font-size: var(--fs-tag);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ============================================================================
+ * 按钮
+ * ==========================================================================*/
+
+.cta {
+  width: 100%;
+  min-height: var(--ctrl);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: 0 var(--s4);
+  border-radius: var(--r-input);
+  background: var(--accent);
+  color: var(--on-dark);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition:
+    background var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+/* 次按钮：浅色底与页面底色一致（白底 / 深色模式下的页面底），
+   应用配色只改变它的边框与字体颜色，不改变底色。 */
+.cta.ghost {
+  background: var(--screen);
+  color: var(--accent-ink);
+  border: 1.5px solid var(--accent-edge);
+}
+
+.cta.danger {
+  background: var(--danger-ink);
+  color: var(--screen);
+}
+
+.cta[disabled],
+.cta[aria-disabled='true'] {
+  background: var(--f1);
+  color: var(--ink-3);
+  border-color: transparent;
+  cursor: not-allowed;
+}
+
+.cta[data-loading='true'] {
+  color: transparent;
+  position: relative;
+}
+
+.cta[data-loading='true']::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  color: var(--on-dark);
+  animation: spin 0.7s linear infinite;
+}
+
+.cta.ghost[data-loading='true']::after {
+  color: var(--accent-ink);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 右下角圆形按钮 */
+.round-action {
+  width: 51px;
+  height: 51px;
+  min-width: 51px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-dark);
+  font-size: 0;
+  box-shadow: var(--shadow-float);
+}
+
+.round-action svg {
+  width: 21px;
+  height: 21px;
+}
+
+.round-action[data-variant='ghost'] {
+  background: var(--screen);
+  color: var(--accent-ink);
+  border: 1.5px solid var(--accent-edge);
+  box-shadow: none;
+}
+
+.text-action {
+  display: inline-flex;
+  align-items: center;
+  /* 命中区不小于 44px：文字按钮也点得中，但视觉上仍是一行字。 */
+  min-height: var(--touch);
+  padding: 0 var(--s2);
+  border-radius: var(--r-chip);
+  background: transparent;
+  color: var(--accent-ink);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.link-button {
+  padding: 0;
+  background: none;
+  color: var(--accent-ink);
+  font-size: inherit;
+  font-weight: 700;
+  text-align: start;
+}
+
+/* ============================================================================
+ * 表单
+ * ==========================================================================*/
+
+.form {
+  display: grid;
+  gap: var(--s4);
+}
+
+.field {
+  display: grid;
+  gap: var(--s2);
+}
+
+.field > label,
+.field > .field-label,
+.choice-group > legend {
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.field .required {
+  color: var(--accent-ink);
+}
+
+/* （下划线样式只保留前面 .input-line 那一份，这里不再重复定义。） */
+
+.field-counter {
+  align-self: flex-end;
+  color: var(--ink-3);
+  font-size: var(--fs-tag);
+  font-variant-numeric: tabular-nums;
+}
+
+.field-counter[data-over='true'] {
+  color: var(--danger-ink);
+}
+
+/* ============================================================================
+ * 状态标签：颜色 + 文字双重线索
+ * ==========================================================================*/
+
+.pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-pill);
+  background: var(--screen);
+  color: var(--ink-2);
+  font-size: var(--fs-tag);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ============================================================================
+ * 按钮
+ * ==========================================================================*/
+
+.cta {
+  width: 100%;
+  min-height: var(--ctrl);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: 0 var(--s4);
+  border-radius: var(--r-input);
+  background: var(--accent);
+  color: var(--on-dark);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition:
+    background var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+/* 次按钮：浅色底与页面底色一致（白底 / 深色模式下的页面底），
+   应用配色只改变它的边框与字体颜色，不改变底色。 */
+.cta.ghost {
+  background: var(--screen);
+  color: var(--accent-ink);
+  border: 1.5px solid var(--accent-edge);
+}
+
+.cta.danger {
+  background: var(--danger-ink);
+  color: var(--screen);
+}
+
+.cta[disabled],
+.cta[aria-disabled='true'] {
+  background: var(--f1);
+  color: var(--ink-3);
+  border-color: transparent;
+  cursor: not-allowed;
+}
+
+.cta[data-loading='true'] {
+  color: transparent;
+  position: relative;
+}
+
+.cta[data-loading='true']::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  color: var(--on-dark);
+  animation: spin 0.7s linear infinite;
+}
+
+.cta.ghost[data-loading='true']::after {
+  color: var(--accent-ink);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 右下角圆形按钮 */
+.round-action {
+  width: 51px;
+  height: 51px;
+  min-width: 51px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-dark);
+  font-size: 0;
+  box-shadow: var(--shadow-float);
+}
+
+.round-action svg {
+  width: 21px;
+  height: 21px;
+}
+
+.round-action[data-variant='ghost'] {
+  background: var(--screen);
+  color: var(--accent-ink);
+  border: 1.5px solid var(--accent-edge);
+  box-shadow: none;
+}
+
+.text-action {
+  padding: var(--s2);
+  border-radius: var(--r-chip);
+  background: transparent;
+  color: var(--accent-ink);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.link-button {
+  padding: 0;
+  background: none;
+  color: var(--accent-ink);
+  font-size: inherit;
+  font-weight: 700;
+  text-align: start;
+}
+
+/* ============================================================================
+ * 表单
+ * ==========================================================================*/
+
+.form {
+  display: grid;
+  gap: var(--s4);
+}
+
+.field {
+  display: grid;
+  gap: var(--s2);
+}
+
+.field > label,
+.field > .field-label,
+.choice-group > legend {
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.field .required {
+  color: var(--accent-ink);
+}
+
+/* 输入框的下划线样式（含聚焦生长动画）在文件靠前的「表单」段里定义一次，
+   这里不再重复一份方框版本，否则后者会覆盖前者。 */
+
+.field-error {
+  color: var(--danger-ink);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+
+.field-hint {
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+}
+
+.field-hint[data-one-line='true'] {
+  white-space: nowrap;
+}
+
+.field-static {
+  min-height: var(--ctrl);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--s3);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--f3);
+  color: var(--ink-3);
+  font-size: var(--fs-body);
+}
+
+.choice-group {
+  display: grid;
+  gap: var(--s2);
+}
+
+.check-row {
+  display: grid;
+  gap: var(--s2);
+}
+
+.check-label {
+  min-height: var(--ctrl);
+  height: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--screen);
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.check-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.check-label input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  min-height: var(--ctrl);
+  padding: var(--s3);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--screen);
+}
+
+.option-row .input,
+.option-row > .notch {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+/* 卡片里的一行开关：去掉自身边框，相邻行用分隔线区分。
+   只认显式的 data-flush，其它页面已有的 .switch-row 外观不变。 */
+.switch-row[data-flush='true'] {
+  min-height: var(--ctrl);
+  padding: var(--s2) 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.switch-row[data-flush='true'] + .switch-row[data-flush='true'] {
+  border-top: var(--hairline) solid var(--stroke);
+}
+
+.switch-row .switch-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 45px;
+  height: 27px;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.switch span {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-pill);
+  background: var(--f2);
+  transition: background var(--motion-fast) var(--ease);
+  pointer-events: none;
+}
+
+.switch span::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  inset-inline-start: 3px;
+  width: 21px;
+  height: 21px;
+  border-radius: var(--r-pill);
+  background: var(--screen);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--motion-fast) var(--ease);
+}
+
+.switch input:checked + span {
+  background: var(--accent);
+}
+
+.switch input:checked + span::after {
+  transform: translateX(18px);
+}
+
+.switch input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+ * 分段控件
+ * ==========================================================================*/
+
+.seg {
+  position: relative;
+  display: flex;
+  /* 先按单行等分宽度收缩；每个按钮缩到最小可用宽度还放不下时才换行。
+     滑块按按钮的 offsetLeft / offsetTop 定位，换行后也能贴住正确那一行。 */
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: var(--s1);
+  padding: var(--s1);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--f3);
+}
+
+.seg button {
+  position: relative;
+  z-index: 1;
+  /* 行内等分剩余宽度；min-width 是换行的门槛：一行放不下这么多按钮才折到下一行，
+     标签过长仍用省略号，不把页面顶宽。 */
+  flex: 1 1 0;
+  min-width: 56px;
+  min-height: 44px;
+  padding: 0 var(--s1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: var(--hairline) solid transparent;
+  border-radius: var(--r-chip);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease);
+}
+
+.seg button[aria-pressed='true'] {
+  background: transparent;
+  color: var(--on-dark);
+  border-color: transparent;
+}
+
+/* ============================================================================
+ * 底部导航
+ * ==========================================================================*/
+
+.tabbar {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  gap: var(--s1);
+  padding-top: var(--s2);
+  padding-inline: var(--s2);
+  border-top: var(--hairline) solid var(--stroke);
+  background: var(--screen);
+}
+
+/* ============================================================================
+ * 反馈状态：加载、空、错误、成功
+ * ==========================================================================*/
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: 0 0;
+  }
+}
+
+/* 行内提示条：用于报名截止等原位说明 */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-input);
+  background: var(--f3);
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+}
+
+/* 提示条开头的标签不被说明文字挤成一字一行 */
+.notice > strong,
+.notice > .section-label {
+  flex: none;
+}
+
+.notice[data-tone='accent'] {
+  border-color: var(--accent-edge);
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+}
+
+/* 权限不足、动作失败这类提示：与成功/强调提示一样要有视觉差异，不能只靠文字 */
+.notice[data-tone='error'] {
+  border-color: var(--danger-ink);
+  background: var(--danger-tint);
+  color: var(--danger-ink);
+}
+
+/* 提醒：受限、身份将到期这类「要注意但没坏」的提示。以前只能塞进 accent，
+   读起来像给页面加了个主题色块，语义也不对。 */
+.notice[data-tone='warn'] {
+  border-color: var(--warn-ink);
+  background: var(--warn-tint);
+  color: var(--warn-ink);
+}
+
+/* 成功：操作已完成。 */
+.notice[data-tone='ok'] {
+  border-color: var(--ok-ink);
+  background: var(--ok);
+  color: var(--ok-ink);
+}
+
+/* ============================================================================
+ * 弹层：底部面板与确认对话框
+ * ==========================================================================*/
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  background: var(--scrim);
+  animation: fade-in var(--motion-fast) var(--ease) both;
+}
+
+.sheet[hidden] {
+  display: none;
+}
+
+.sheet-panel {
+  width: 100%;
+  max-width: var(--app-max);
+  max-height: 86dvh;
+  overflow-y: auto;
+  display: grid;
+  gap: var(--s3);
+  padding: var(--s4) var(--s4) calc(var(--s4) + var(--safe-bottom));
+  border-radius: var(--r-panel) var(--r-panel) 0 0;
+  background: var(--screen);
+  box-shadow: var(--shadow-float);
+  animation: sheet-in var(--motion-base) var(--ease) both;
+}
+
+.sheet-panel[data-size='full'] {
+  max-height: 92dvh;
+}
+
+.sheet-title {
+  font-size: var(--fs-h3);
+  font-weight: 700;
+}
+
+/* ============================================================================
+ * 大图查看：封面点开后铺满屏幕，支持双指缩放
+ * ==========================================================================*/
+
+/* 一排并排的文字按钮（富文本编辑器的「预览 / 粘贴 Markdown」）：
+   文案必须一行显示。按钮按内容取宽。
+   `.cta` 默认 width:100%，这里要改回按内容取宽，否则每颗都占满一行。 */
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.action-row::-webkit-scrollbar {
+  display: none;
+}
+
+.action-row > .cta {
+  flex: 0 0 auto;
+  width: auto;
+  padding-inline: var(--s2);
+  white-space: nowrap;
+}
+
+/* 卡片里的操作要同时看见，不能沿用上面的横向滚动：
+   `.cta` 默认 width:100%，再加 flex:0 0 auto 时每颗按钮都占满一行，后面的按钮被滑出屏幕。 */
+.card .action-row {
+  overflow: visible;
+}
+
+.card .action-row > .cta {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.hint-note > .text-action {
+  flex: none;
+  white-space: nowrap;
+}
+
+.sheet-actions {
+  display: flex;
+  gap: var(--s2);
+  justify-content: flex-end;
+}
+
+/* 面板里的按钮不占满整行：并排放在右下角，宽度一致。 */
+.sheet-actions .cta {
+  width: auto;
+  min-width: 98px;
+}
+
+/* 选项多、文案长短不一的面板（例如用户状态、报名方式列表）竖着排更好读 */
+.sheet-actions[data-layout='stack'] {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.sheet-actions[data-layout='stack'] .cta {
+  width: 100%;
+  min-width: 0;
+}
+
+/* 最后一颗（关闭）独占下一行。上面的操作均分，避免四颗按钮被挤出屏幕。 */
+.sheet-actions[data-layout='close-below'] {
+  flex-wrap: wrap;
+  justify-content: stretch;
+}
+
+.sheet-actions[data-layout='close-below'] .cta {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.sheet-actions[data-layout='close-below'] .cta:last-child {
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+/* 选项列表：整行可点、行与行之间一条分隔线，当前值右侧带对勾。 */
+.sheet-actions[data-layout='list'] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  border-top: var(--hairline) solid var(--stroke);
+}
+
+.sheet-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  width: 100%;
+  min-height: 52px;
+  padding: 0 var(--s1);
+  border: 0;
+  border-bottom: var(--hairline) solid var(--stroke);
+  border-radius: 0;
+  background: var(--screen);
+  color: var(--ink);
+  font-size: var(--fs-body);
+  text-align: start;
+  transition:
+    background var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+.sheet-option:disabled {
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.sheet-option[data-checked='true'] {
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.sheet-option-check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+
+@media (hover: hover) {
+  .sheet-option:not(:disabled):hover {
+    background: var(--f3);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* ============================================================================
+ * 轻提示
+ * ==========================================================================*/
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ============================================================================
+ * 悬浮指示：离线或原生桥不可用
+ * ==========================================================================*/
+
+.bridge-warning {
+  padding: var(--s2) var(--s4);
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+  font-size: var(--fs-meta);
+  text-align: center;
+}

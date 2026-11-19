@@ -702,7 +702,7 @@ function escapeRegExp(value: string): string {
   line-height: 1;
 }
 
-/* 预览 / 粘贴 Markdown 这一行不在 `.card` 里，tokens.css 靠后的 `.action-row > .cta`
+/* 预览 / 粘贴 Markdown 这一行不在 `.card` 里，components.css 靠后的 `.action-row > .cta`
    按内容取宽。这里显式改回等分：一行两列、横向铺满、文案不折行。 */
 .action-row[data-fill='true'] {
   align-items: stretch;

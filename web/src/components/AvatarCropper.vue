@@ -45,7 +45,7 @@ const state = reactive({
 /**
  * 裁剪框的实测边长。
  *
- * `.crop-stage` 在 tokens.css 里只有形状没有尺寸，这里用实测值参与取景换算：
+ * `.crop-stage` 只在本组件的 `<style>` 里给了形状、没有固定尺寸，这里用实测值参与取景换算：
  * 容器被主题或父级改过尺寸时，裁剪结果不会跟着偏。
  */
 let stageEdge = STAGE_SIZE;
@@ -381,7 +381,7 @@ onBeforeUnmount(() => {
     >
       <div ref="panelEl" class="sheet-panel">
         <h2 class="sheet-title">{{ t('media.cropAvatar') }}</h2>
-        <!-- 圆形取景框由 tokens.css 的 .crop-stage 圆角给出；手势绑在框上而不是图片上 -->
+        <!-- 圆形取景框由本组件的 .crop-stage 圆角给出；手势绑在框上而不是图片上 -->
         <div class="crop-wrap">
           <div ref="stageEl" class="crop-stage" :style="stageStyle">
             <img

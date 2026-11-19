@@ -6,7 +6,7 @@
  * `.seg-indicator[data-animate="true"]`。
  *
  * 分段控件优先排成一行：空间不够时按钮等分宽度收缩，每个按钮缩到最小可用宽度
- * （`tokens.css` 的 `.seg button { min-width }`）之后才换行；标签过长用省略号，
+ * （`styles/components.css` 的 `.seg button { min-width }`）之后才换行；标签过长用省略号，
  * 不横向滚动、也不把页面顶宽。滑块按按钮的 `offsetLeft / offsetTop / 尺寸` 定位，
  * 换行后也能贴住正确那一行；容器尺寸变化（旋转、分屏、字体加载）用 ResizeObserver 重新量一次。
  */

@@ -3,7 +3,7 @@
  * 报名里的单选按钮。
  *
  * 所有选项都能在一行里单行显示时横排均分；有一项放不下就改成每项独占一行。
- * 独占一行仍放不下时，按钮本身换行增高（样式在 tokens.css）。
+ * 独占一行仍放不下时，按钮本身换行增高（样式在 `styles/components.css`）。
  */
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { choiceNeedsStack } from '@/services/choice-layout';

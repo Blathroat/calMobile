@@ -4,8 +4,11 @@
  */
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-// 与 src/main.ts 同一套顺序：tokens.css → 组件样式 → motion.css。
+// 与 src/main.ts 同一套顺序：tokens → base → components → special → 组件样式 → motion。
 import '@/styles/tokens.css';
+import '@/styles/base.css';
+import '@/styles/components.css';
+import '@/styles/special.css';
 import App from '@/app/App.vue';
 import { paths } from '@/app/surface';
 import { bootApp } from '@/app/runtime';

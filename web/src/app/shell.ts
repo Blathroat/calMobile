@@ -2,7 +2,7 @@
  * 应用外壳的派生规则：底部导航项、内容区密度、顶栏标题。
  *
  * 外壳（`.app` / `.topbar` / `.app-body` / `.tabbar`）只在这里和 `App.vue` 里描述一次，
- * 页面只提供内容。布局的类名与 `styles/tokens.css`、`styles/motion.css` 一一对应，
+ * 页面只提供内容。布局的类名与 `styles/base.css` / `styles/components.css`、`styles/motion.css` 一一对应，
  * 页面不再自己拼 `.page` 这类旧容器的类名。
  */
 import { t } from '@/i18n';
@@ -51,7 +51,7 @@ export function tabItems(can: Record<string, boolean> | undefined): TabItem[] {
   return items;
 }
 
-/** 内容区属性：只在 meta 明确要求时输出，其余交给 tokens.css 的默认值。 */
+/** 内容区属性：只在 meta 明确要求时输出，其余交给 base.css 的默认值。 */
 export function bodyAttrs(meta: ShellMeta): Record<string, string> {
   const attrs: Record<string, string> = {};
   if (meta.bodyPad === 'none') attrs['data-pad'] = 'none';
