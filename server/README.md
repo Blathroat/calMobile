@@ -23,7 +23,7 @@ pnpm db:seed     # 仅开发库。生产会拒绝
 pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 ```
 
-开发库示例账号是 `demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`。生产环境不使用这组账号。
+开发库示例账号是 `demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`；另外还有 `mediaexpo`（第二个展商）、`limiteduser`（受限）、`banneduser`（封禁）、`trialexpo`（已到期展商）用来验证角色与账号状态。示例数据覆盖五种报名方式的展会（含管理员主办的展会）、单日与多天、进行中 / 未开始 / 已截止 / 不设窗口的报名窗口、各状态报名（含参加时间段与已核销）、各状态私人会议，以及两枚固定邀请码 `DEMOEXPO` / `TRIAL30`。生产环境不使用这组账号。
 
 `pnpm dev` 会构建并托管报名站，页面源码变化时重新构建。报名站不打进 APK。改报名站页面后刷新浏览器即可。
 
@@ -173,6 +173,7 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - `GET /api/v1/users`（仅管理员）支持 `query` / `role` / `status` 过滤：`role` 取 `user` / `exhibitor` / `admin`，`status` 取 `active` / `limited` / `banned`，空串或无法识别的值按不过滤处理；三者 AND 组合，身份按 `settleExpiredExhibitors()` 结算后的 `users.role` 判断。
 - 展商到期按访问惰性结算，没有定时任务：认证解析（`middleware/auth.ts`）读到已到期的展商时把 `role` 改回 `user`、`accept_meetings` 关掉，并保留到期时间作为「已到期」历史。公开页、搜索和会议宿主这些读别人角色的地方用 `domain/membership.ts` 的 `effectiveRole()` / `canHostMeetings()` 判断，不依赖对方先登录。管理员用户列表在读取前批量结算一次。已到期的展商调用展商接口返回 403，文案说明「展商身份已到期」。
 - 登录成功（密码登录、两步验证通过、可信设备跳过验证、通行密钥验证通过，以及注册建号即登录）刷新 `users.last_login_time`、`users.last_login_ip`、`users.last_login_region`。地区由服务端用离线库解析：只支持 IPv4（IPv4-mapped IPv6 归一），私网 / 回环 / 链路本地 / CGNAT / 组播 / 保留段显示「内网」，纯 IPv6、非法地址与查不到给空串；展示为中国境内「省 + 市」（省市重复时去重，如「北京市」）、非中国「国家 + 省 + 市」，不展示运营商。IP 原文只落库、不下发；管理员用户列表下发 `lastLoginRegion`，`lastLoginTime` 为空时用 `registrationTime` 兜底。
+- 展会 payload 的报名状态：`registrationEnded` 由数据库判定（`registration_end IS NOT NULL AND CURRENT_DATE > registration_end`），且只有报名方式仍是需审核 / 无需审核时才为 true；`openForRegistration` 在它之后也是 false。仅展示 / 截止报名 / 已结束保持原状态语义，不叠加「已截止」。
 - 展会开展时间选填：`exhibitions.time` 可以是空串，表示只展示日期（列表、详情、分享文案与 `calendar-ics` 都按全天处理）。分类在新建时必填（`validation.categoryRequired`）；更新时保持宽松，历史空分类的展会仍可只改简介。
 - 展会闭展日期选填（`exhibitions.exhibition_end_date`，NULL = 单日），不能早于开展日期；更新时没传 `endDate` 保留库里的值，传空串改回单日。展会另有「报名注意事项」`exhibitions.registration_notice`（TEXT，默认空串，最多 2000 字）：展商在编辑页填写，报名详情 payload 只在报名状态为 `approved` / `attended` 时下发 `exhibitionNotice` 正文，其它状态下发空串。单个展会最长持续天数由 `app_settings.exhibitor.maxExhibitionDays` 控制（默认 0 = 不限，管理端 `PUT /settings` 提交，范围 0～365）：按开展～闭展含两端计算天数，超过时新建 / 更新都返回 `exhibition.durationTooLong`。
 - 注册用户名允许 Unicode 字母、数字、组合符（`\p{L}\p{N}\p{M}`）以及 `_ . -`，与前端 `services/validate.ts` 的 `PATTERNS.username` 是同一套规则；长度取管理员配置的 `limits.usernameMin/Max`，两侧空白 trim，不做 Unicode 归一化。内部空白、控制字符、标点与 emoji 拒绝，错误码 `validation.usernameCharset`。

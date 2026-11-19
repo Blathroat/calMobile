@@ -169,6 +169,7 @@ iOS 与主屏幕模式的适配在 `web/src/styles/tokens.css` 末尾：
 
 - 每个字段有可见标签。标签和内容左对齐。
 - **输入框默认是方框**（`--stroke` 描边 + `--f3` 浅底），只有明确需要下划线的地方加 `.input-line`：目前是管理设置页的全部一般输入、编辑展会页的名称/地点/日期与时间触发按钮/分类，以及收集项的「字段标题」。`.input-line` 由 `tokens.css` 统一给出：默认一条 `--stroke` 底边，聚焦时一条主题色下划线**从左侧长满**（320ms，失焦缩回），校验失败直接变砖红——所有下划线输入框共用这一套动画，页面不要自绘。日期与时间不再使用原生 `date` / `time` 控件（全仓已清零），它们的触发按钮借用 `.input.input-line` 的外观（窄屏同样要给 `min-width: 0`，否则固有最小宽会撑破两列布局）。
+- 报名截止日已过时，服务端在展会 payload 里下发 `registrationEnded`（数据库按 `CURRENT_DATE > registration_end` 判定，且只有需审核 / 无需审核才为真），`openForRegistration` 同时为 false；卡片状态灯与详情页状态统一读 `services/status.ts` 的 `exhibitionModeCode(item)`（截止后显示「截止报名」），详情页按钮按 `registrationEnded` 显示「报名已截止」、其它关闭原因仍是「报名已关闭」。管理端「暂停 / 恢复报名」按 `acceptsRegistration(statusCode)` 判断，不读 `openForRegistration`，避免已截止的展会显示「恢复报名」。
 - 编辑展会时，闭展日期在提交前按管理员设置的最大持续天数做本地校验（`bootstrap.exhibitor.maxExhibitionDays`）；服务端保存时再校验一次，超限返回 `exhibition.durationTooLong`。分类必填（编辑页校验；服务端 `exhibitionInputSchema` 只在新建时强制，错误码 `validation.categoryRequired`，更新保持宽松以免历史空分类展会只改简介时被拒）；开展时间选填，两个时 / 分滚轮都填才组成区间，都空就是没设置。空时间的展示统一走 `services/format.ts` 的 `joinText(parts, 分隔符)`（过滤空片段再拼），列表、详情、分享文案与报名页卡片都不会留下「 · 场馆」或行尾空格；`calendar-ics` 没有可解析的时间时按全天事件处理。
 - **日期与时间用应用内抽屉**：范围日期（开展/闭展、报名开始/截止）走 `components/DatePickerSheet.vue` 的 `range` 模式，单日期（会议日期）走 `single` 模式；时间走 `components/TimeWheelSheet.vue` 的时 / 分滚轮。入口统一是 `services/pickers.ts` 的 `openDateRange` / `openSingleDate` / `openTime`，页面不要自己拼面板、也不要用系统原生控件。范围选择第一次点选就把起点回填给表单、第二次点选终点后自动收起（因此报名窗口可以只填开始）；第二次点的是同一天时终点也回填这一天，表单两端的框显示同一个日期；已有一段完整区间时点任意一天从该天重新开始；终点早于起点禁用；`min` / `max` 夹住可选范围两端（会议日期挡今天以前，报名参加时间挡展会期间之外）；「清除」清空两端。时间滚轮在值为空时按开始 `09:00` / 结束 `17:00` 摆位，只有点「确认」才写回，「清除」把时间留空（时间选填）。月历按月份分节、周日起排、今天带圆点，渲染从已选月份往前 12 个月到往后 24 个月。
 - **状态标签是「信号灯」**：`StatusTag` 只有色点 + 文字，没有边框与底色（ok 绿 / pending 琥珀 / danger 砖红 / info 灰蓝 / muted 灰），用在报名状态、展会报名方式与账号状态上。**身份标签不是状态**：展商 / 管理员走 `RoleTag`，保留原来的方框小签（浅底 + `--accent-edge` 描边 + 强调色文字），不要换成信号灯。
@@ -177,7 +178,7 @@ iOS 与主屏幕模式的适配在 `web/src/styles/tokens.css` 末尾：
 - 分段控件（`components/SegControl.vue`）**优先排成一行**：`.seg` 允许换行、按钮等分剩余宽度收缩；每个按钮缩到最小可用宽度（`min-width: 56px`，`.seg button`）之后还放不下才换行，标签过长用省略号，不横向滚动、也不撑宽页面。选中滑块按按钮的 `offsetLeft / offsetTop / 宽度 / 高度` 定位，换行后贴在选中按钮所在那一行；容器尺寸变化由 `ResizeObserver` 重新量。
 - 上传卡（封面、缺省封面）统一版式：左侧 96×170（9:16）预览，右侧竖排「上传/更换 / 移除」按钮与格式说明，窄屏上下堆叠。
 - 编辑展会页的「活动信息」卡自上而下是封面行（右侧写「支持3:4~9:16纵图」与允许的格式）→ 简介 textarea（`#form-description`，直接编辑 Markdown 源码）→「使用Markdown编辑简介」按钮 →「参与方式（仅通过审核用户可见）」textarea（`#form-registration-notice`，2000 字）。点 Markdown 按钮时先把当前表单 stash 成内存稿（`services/exhibition-draft.ts`，草稿带展会 id），二级编辑器用它起稿；保存或离开编辑器时清掉草稿，新建与编辑两条路径都保证文本框和二级页是同一份正文。二级编辑器页面本身不再渲染展会标题卡，页面顶部只由外壳顶栏负责。
-- 图标是 24 视窗、1.5 描边、无填充的细线。顶栏图标没有圆底。底部导航是图标加文字，选中项只换 `--accent-ink` 与字重（图标轻微上浮），不画下划线或滑动指示条。
+- 图标是 24 视窗、1.5 描边、无填充的细线。顶栏图标没有圆底。底部导航是图标加文字，选中项只换 `--accent-ink` 与字重（图标轻微上浮），不画下划线或滑动指示条。表单右侧的展开 / 下拉统一用 `chevronDown`（管理用户筛选、活动分类等），日期触发按钮用 `calendar`，时间触发按钮用 `chevronDown`；`AppIcon` 的 `PATHS` 没登记的名字会回退成 `info` 圆形提示图标，新增图标名必须同时在 `PATHS` 里登记。
 - 触控命中区域至少 44px。生产界面以 1080×2400、xxhdpi（逻辑画布 360×800）为密度基准，字号、间距和圆角取 `web/src/styles/tokens.css` 的当前值。状态同时用文字和颜色或描边表达。空、加载、错误、成功和禁用状态在原位置给出下一步。
 - 顶栏使用 `--topbar-h`，再叠 `--safe-top`。有底部导航时内容区叠 `--safe-bottom`。Android WebView 里这两项 `env()` 经常是 0，因此 `WebShellActivity` 按系统栏 inset 缩小页面。并排字段等高。日期、时间和状态使用选择器、分段控件或面板。
 - **海报缩略图与详情大图**：列表缩略图高度固定（`MediaBox` 按图片真实比例写行内 `aspect-ratio`），宽度在 **9:16 ～ 3:4（纵向 4:3）** 之间自适应，所以同一列表的卡片高度一致；超出范围的海报按最接近的一端比例收进区间、`object-fit: cover` 裁切填满。详情页只展示展会自己上传的海报（`imageUri`）：为空时不渲染海报区、占位图与灯箱入口，**不回退** `coverOf` 的管理员缺省封面；有海报时等比完整展示（`width: 100%; height: auto`，高度随海报比例，不裁切），特别长的海报用 `max-height` 兜住并 `object-fit: contain`；灯箱同样只做等比缩放，不裁切、不拉变形。
@@ -189,14 +190,15 @@ iOS 与主屏幕模式的适配在 `web/src/styles/tokens.css` 末尾：
 - 卡片里再套 `.row-card` 会形成双层边框：可点的整行不要包在第二层 `.card` 里；需要分区时改用卡片 `gap`、局部间距类与 `section-label` 层级，**不再画发丝线**（`hr.divider` 已从设置类、详情类卡片里移除）；只有列表行之间的分隔才用线（例如相邻 `.switch-row[data-flush='true']` 的上边线）。
 - 展商后台：顶部一颗「核销报名码」，列表每张卡上半是整块可点的主体（右侧垂直居中一枚 44px 命中区的二维码分享按钮），下半放 ghost 小按钮（查看报名 / 编辑展会 / 复制链接），上下两段只用间距分开、不加分隔线；「复制链接」点击即复制（`services/clipboard.ts` 的 `copyText`，Clipboard API 失败时退回隐藏 textarea + `execCommand`），成功或失败都只 toast，不再弹手动复制面板；二维码按钮打开 `components/ShareQrSheet.vue`，二维码内容是报名站分享链接，导出透明底黑点 PNG（`qr-encoder.ts` 的 `background: 'transparent'` + `foreground: '#000000'`，保存走 `media.saveImage`，浏览器里退回下载）。「新建展会」是右下角悬浮圆形按钮（`Teleport` 到 `body`，否则路由容器的 `transform` 会成为 `fixed` 的包含块），空态时由 `.state` 的入口承担、不再显示悬浮按钮。
 - 设置类页面里，「设置项标题」用 `--fs-body` / 700 / `--ink`，说明文字用 `.field-hint`（`--fs-meta` / `--ink-3`）——两者不能同字号同颜色，否则读不出层级。间距也按这一层级排：**标题与它下面那句说明 2px**（读成一块），**设置项与设置项之间 16px**，卡片内组标题到内容 12px；说明最长 34em，不要拉到屏幕右边缘。
-- 头像只在资料编辑抽屉里改（`components/ProfileAvatarField.vue`，位置在昵称之前，设置页与个人页的身份卡只展示头像）：选图 → `AvatarCropper` 裁剪 → `POST /profile/avatar` 立即保存（`DELETE /profile/avatar` 移除），成功后刷新会话并合并进调用方持有的资料；`PUT /profile` 仍原样回传 `avatar`，避免把头像当成清空。管理员代改别人资料（`targetUserId`）时抽屉不渲染头像块，因为头像接口只作用于当前登录账号。
+- 资料抽屉最上方的头像块（`components/ProfileAvatarField.vue`）只剩居中的大头像与右下角铅笔（44px 命中区），设置页与个人页的身份卡只展示头像。点铅笔由 `services/profile-editor.ts` 先 `PUT /profile` 保存当前资料，成功后关闭资料抽屉，等退场动画（260ms）再打开头像编辑抽屉（`components/ProfileAvatarSheet.vue`）：选图 → `AvatarCropper` 裁剪 → `POST /profile/avatar` 立即保存（`DELETE /profile/avatar` 移除），成功后刷新会话并合并进调用方持有的资料；`PUT /profile` 仍原样回传 `avatar`，避免把头像当成清空。管理员代改别人资料（`targetUserId`）时不渲染头像块，因为头像接口只作用于当前登录账号。
+- `AvatarBox` 是唯一渲染用户头像的组件：图片 404 / 加载失败 / 解码失败时回退成昵称首字（`@error` 置失败态，`src` 变化后重新尝试），不留破图；回退态的边框与底色跟「没有头像」一致。
 - 用户公开页扉页上的「已参加展会」是单个统计，数字与标签**居中**排；个人页的活动概览是两列并列统计，保持左对齐，不要一起改成居中。管理员视角（`viewedAsAdmin`）在昵称右侧显示小铅笔（`.public-edit`），复用 `services/profile-editor.ts` 的资料抽屉：传 `targetUserId` 时保存走 `PUT /users/:id/profile`，只合并目标用户资料，不改当前管理员会话。
 - 「我的活动」的列表行：缩略图高 78（竖版海报比例，宽度随海报比例在 9:16～3:4 纵向之间自适应），标题单行截断，状态信号灯压在标题行右端，下面依次是「日期 · 时间」、地点与摘要（摘要两行截断，用 `.clamp-2`）。展商卡同理，但状态与报名数合成**一条**信号灯文字，避免出现「左边空着」的独立一行。
 - 报名收集项仍是「一张卡 + 横线分隔」的老结构，段内顺序不变（字段标题输入 → 类型分段 → 提示 → 选项行 → 必填与删除）。只把「字段标题」那一个输入框换成下划线：「标题」两个字作**占位符**显示在框内，不再浮在输入框上方；每一项上方留 12px、分隔线下方 16px，不靠浮动标签撑间距。
 - 展商后台的列表卡：上半是整块可点的主体，下半是配置动作按钮，两者之间**不加分隔线**（只靠卡片自身的间距分开）；「我的活动」等其它列表卡不受此影响。
 - 用户公开页的「已参加展会」用两列网格，每格图片 `aspect-ratio: 3 / 4`，图下两行小字（名称 + 日期）。
 - 动效只动画 `transform` 与 `opacity`，并遵守 `prefers-reduced-motion`。动效全失时先看设备动画 scale，步骤见 [`operations.md`](operations.md)。
-- 首页月历滑动用三块 `components/CalendarMonthPanel.vue`：当前月可交互，左右两份是相邻月预览（只按本地日期排，不带展会高亮，`aria-hidden` + `inert`，按钮全部禁用）。拖动时三块一起平移，露出的位置始终是相邻月份的日历而不是空白；松手过阈值后卡片与预览一起滑到位再换月，动画结束用新月份接口数据重画。相邻预览不额外发请求；切月动画只动 transform，减少动效时直接换月。
+- 首页切月有两种入口：两颗不带圆框的 `chevronLeft` / `chevronRight` 按钮（`.icon-button`，去掉 `data-variant="outlined"`），以及下面的滑动。滑动用三块 `components/CalendarMonthPanel.vue`：当前月可交互，左右两份是相邻月预览（只按本地日期排，不带展会高亮，`aria-hidden` + `inert`，按钮全部禁用）。拖动时三块一起平移，露出的位置始终是相邻月份的日历而不是空白；松手过阈值后卡片与预览一起滑到位再换月，动画结束用新月份接口数据重画。相邻预览不额外发请求；切月动画只动 transform，减少动效时直接换月。
 - 第三方库由 `web/package.json` 与锁文件管理。重型功能动态导入，构建进页面包，运行时不引用 CDN。页面包随 APK 带一份；正式包再从本站 `/app/` 热更新到本机快照，切换页面只读这份快照。
 - 二维码在 Worker 里串行解码。暂停与换页后丢弃过期帧，离开时释放 Worker 和摄像头。WASM 通过构建资源定位到本地文件。
 

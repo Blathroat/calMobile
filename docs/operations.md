@@ -206,7 +206,7 @@ pnpm dev                      # 终端 A，http://127.0.0.1:3000
 pnpm --dir web build          # 终端 B，从仓库根目录执行
 ```
 
-Chrome 打开 `http://127.0.0.1:3000/app/`，用 `demo` / `exhibitor` / `user`（密码都是 `password`）验证三种角色。DevTools → Application 里可以看 Manifest、Service Workers、Cache Storage；Network 勾 Offline 后刷新可以验证页面壳离线。地址栏的安装按钮可以装到桌面。这里能验证 manifest、SW、API、选图/下载/CSV/ICS、通知权限、响应式布局；iOS 的独立窗口、安全区、HEIC/MOV、系统分享面板和主屏幕安装仍要 iPhone。
+Chrome 打开 `http://127.0.0.1:3000/app/`，用 `demo` / `exhibitor` / `user`（密码都是 `password`）验证三种角色；示例库里还有 `mediaexpo`（第二展商）、`limiteduser`（受限）、`banneduser`（封禁）、`trialexpo`（已到期展商），以及两枚固定邀请码 `DEMOEXPO` / `TRIAL30`，展会覆盖五种报名方式（含管理员主办）、单日与多天、各种报名窗口，报名覆盖待审核 / 已通过 / 已拒绝 / 已取消 / 已参加，私人会议也各有状态。DevTools → Application 里可以看 Manifest、Service Workers、Cache Storage；Network 勾 Offline 后刷新可以验证页面壳离线。地址栏的安装按钮可以装到桌面。这里能验证 manifest、SW、API、选图/下载/CSV/ICS、通知权限、响应式布局；iOS 的独立窗口、安全区、HEIC/MOV、系统分享面板和主屏幕安装仍要 iPhone。
 
 **B. iPhone 真机（cloudflared 临时 HTTPS，推荐）**
 
