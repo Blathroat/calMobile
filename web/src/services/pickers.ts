@@ -47,7 +47,10 @@ export function openDateRange(options: {
   end?: string;
   startLabel: string;
   endLabel: string;
+  /** 最早可选日期（`YYYY-MM-DD`）；空串不限制。 */
   min?: string;
+  /** 最晚可选日期（`YYYY-MM-DD`）；空串不限制。超出它的日期在面板里禁用。 */
+  max?: string;
   title?: string;
   onChange: (value: DateRangeSelection) => void;
 }): void {
@@ -67,6 +70,7 @@ export function openDateRange(options: {
       startLabel: options.startLabel,
       endLabel: options.endLabel,
       min: options.min ?? '',
+      max: options.max ?? '',
     },
     size: 'full',
     actions: [

@@ -1,5 +1,6 @@
 /**
- * 日期选择面板：范围选择的两次点选、重新开始、终点不能早于起点、今天标记与单日期模式。
+ * 日期选择面板：范围选择的两次点选、重新开始、终点不能早于起点、今天标记、单日期模式，
+ * 以及 min / max 两端边界的禁用。
  *
  * 面板直接挂到 jsdom 上（不经过共享底部面板），取值全部经由 `model` 的响应式对象交回，
  * 所以这里只验证组件自己的选择语义与回填时机。
@@ -13,6 +14,7 @@ interface MountOptions {
   start?: string;
   end?: string;
   min?: string;
+  max?: string;
 }
 
 let app: App | undefined;
@@ -59,6 +61,7 @@ function mountPicker(options: MountOptions = {}) {
         startLabel: '开展',
         endLabel: '闭展',
         min: options.min ?? '',
+        max: options.max ?? '',
       }),
   });
   app.mount(container);
@@ -156,6 +159,17 @@ describe('日期选择面板', () => {
     await flush();
     expect(dayButton(iso(-1)).disabled).toBe(true);
     expect(dayButton(iso(1)).disabled).toBe(false);
+  });
+
+  it('max 之后的日期不可选（参加时间不能超出闭展日）', async () => {
+    mountPicker({ max: iso(5) });
+    await flush();
+    expect(dayButton(iso(5)).disabled).toBe(false);
+    expect(dayButton(iso(6)).disabled).toBe(true);
+    // 点击被禁用的日期不写回任何值。
+    dayButton(iso(6)).click();
+    await flush();
+    expect(document.querySelector('[data-state="single"]')).toBeNull();
   });
 
   it('右上角关闭按钮交回调给调用方', async () => {

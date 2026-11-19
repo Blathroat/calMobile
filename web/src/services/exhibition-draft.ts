@@ -7,10 +7,12 @@
 import type { CollectField } from '@/components/CollectFieldsCard.vue';
 
 export interface ExhibitionDraft {
+  /** 编辑已有展会时带的展会 id（新建为空串，缺省）：二级页据此判断草稿属于哪场展会。 */
+  id?: string;
   title: string;
   venue: string;
   date: string;
-  /** 闭展日期；空串（或缺省）表示单日展会。 */
+  /** 闭展日期；空串（或缺省）表示还没选（单日展会按 NULL 存），与开展同一天时照原样记这一天。 */
   endDate?: string;
   time: string;
   status: string;

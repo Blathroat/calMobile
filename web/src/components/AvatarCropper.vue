@@ -45,7 +45,7 @@ const state = reactive({
 /**
  * 裁剪框的实测边长。
  *
- * `.crop-stage` 在 tokens.css 里只有形状没有尺寸，这里用实测值参与取景换算：
+ * `.crop-stage` 只在本组件的 `<style>` 里给了形状、没有固定尺寸，这里用实测值参与取景换算：
  * 容器被主题或父级改过尺寸时，裁剪结果不会跟着偏。
  */
 let stageEdge = STAGE_SIZE;
@@ -269,8 +269,17 @@ function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+/**
+ * Escape 只关裁剪面板。
+ *
+ * 面板可能叠在资料编辑抽屉上（抽屉由 AppSheet 渲染，同样在 document 上监听 Escape）。
+ * 这里挂在 window 的捕获阶段并停住事件：先于抽屉拿到按键，按一次只退一层，不会连
+ * 下面还没保存的资料一起关掉。其它按键（Tab 等）照常冒泡给抽屉做焦点管理。
+ */
 function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') requestClose();
+  if (event.key !== 'Escape') return;
+  event.stopPropagation();
+  requestClose();
 }
 
 /** 关闭：先播退场（`data-closing`），动画结束再让页面卸载组件。 */
@@ -341,7 +350,7 @@ function confirm(): void {
 
 onMounted(() => {
   unbindGestures = bindGestures();
-  document.addEventListener('keydown', onKeydown);
+  window.addEventListener('keydown', onKeydown, true);
   // 图片是 data URL，缓存命中时 load 可能在挂载前就结束了，这里补一次初始化。
   const image = imageEl.value;
   if (image?.complete && image.naturalWidth > 0) onImageLoad();
@@ -352,47 +361,52 @@ onMounted(() => {
 onBeforeUnmount(() => {
   unbindGestures?.();
   unbindGestures = undefined;
-  document.removeEventListener('keydown', onKeydown);
+  window.removeEventListener('keydown', onKeydown, true);
   if (closeTimer !== undefined) window.clearTimeout(closeTimer);
   closeTimer = undefined;
 });
 </script>
 
 <template>
-  <div
-    class="sheet"
-    role="dialog"
-    aria-modal="true"
-    :data-closing="closing ? 'true' : 'false'"
-    @click.self="requestClose"
-  >
-    <div ref="panelEl" class="sheet-panel">
-      <h2 class="sheet-title">{{ t('media.cropAvatar') }}</h2>
-      <!-- 圆形取景框由 tokens.css 的 .crop-stage 圆角给出；手势绑在框上而不是图片上 -->
-      <div class="crop-wrap">
-        <div ref="stageEl" class="crop-stage" :style="stageStyle">
-          <img
-            ref="imageEl"
-            class="crop-image"
-            :src="props.source"
-            :style="imageStyle"
-            alt=""
-            @load="onImageLoad"
-            @error="onImageError"
-          />
+  <!-- 挂到 body：页面容器（.route-enter.page-surface）带着填充到结束态的 transform 动画，
+       即使动画播完也仍是恒等矩阵，会成为 position: fixed 的包含块 —— 面板会被压进页面内容区
+       缩一圈（背景遮罩只盖内容、高度按内容算）。body 级挂载和 ImageViewer 的做法一致。 -->
+  <Teleport to="body">
+    <div
+      class="sheet"
+      role="dialog"
+      aria-modal="true"
+      :data-closing="closing ? 'true' : 'false'"
+      @click.self="requestClose"
+    >
+      <div ref="panelEl" class="sheet-panel">
+        <h2 class="sheet-title">{{ t('media.cropAvatar') }}</h2>
+        <!-- 圆形取景框由本组件的 .crop-stage 圆角给出；手势绑在框上而不是图片上 -->
+        <div class="crop-wrap">
+          <div ref="stageEl" class="crop-stage" :style="stageStyle">
+            <img
+              ref="imageEl"
+              class="crop-image"
+              :src="props.source"
+              :style="imageStyle"
+              alt=""
+              @load="onImageLoad"
+              @error="onImageError"
+            />
+          </div>
+        </div>
+        <div class="row" data-between="true">
+          <span class="field-hint">{{ t('media.pinchZoom') }}</span>
+          <span class="crop-scale">{{ zoomLabel }}</span>
+        </div>
+        <p class="field-hint" :data-tone="hintTone || undefined">{{ hint }}</p>
+        <div class="sheet-actions">
+          <button class="cta ghost" type="button" @click="requestClose">{{ t('common.cancel') }}</button>
+          <button class="cta" type="button" @click="confirm">{{ t('media.usePhoto') }}</button>
         </div>
       </div>
-      <div class="row" data-between="true">
-        <span class="field-hint">{{ t('media.pinchZoom') }}</span>
-        <span class="crop-scale">{{ zoomLabel }}</span>
-      </div>
-      <p class="field-hint" :data-tone="hintTone || undefined">{{ hint }}</p>
-      <div class="sheet-actions">
-        <button class="cta ghost" type="button" @click="requestClose">{{ t('common.cancel') }}</button>
-        <button class="cta" type="button" @click="confirm">{{ t('media.usePhoto') }}</button>
-      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <style>

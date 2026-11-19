@@ -318,6 +318,45 @@ test('日志存储上限收敛到 1～10240 MB', () => {
   assert.throws(() => applyServerPatch(defaults(), { logs: 'x' }), /格式不正确/);
 });
 
+/**
+ * 匿名报名姓名同义词：默认覆盖常见叫法；保存时逐项 trim、去空、去重，
+ * 每项截到 20 字、最多 30 项，空数组表示不合并。
+ * 落库与 bootstrap 下发由契约测试覆盖（`server/src/test/server-settings-theme.test.ts`）。
+ */
+test('匿名报名姓名同义词：默认值与归一化', () => {
+  const current = defaults();
+  assert.deepEqual(current.registration.nameFieldTitles, ['姓名', '昵称', '称呼', '圈名']);
+
+  assert.deepEqual(
+    applyServerPatch(current, {
+      registrationNameFieldTitles: [' 姓名 ', '', '姓名', '昵称', '名字'.repeat(20)],
+    }).registration.nameFieldTitles,
+    ['姓名', '昵称', '名字'.repeat(10)],
+    '去空白、去空项、去重，每项截到 20 字',
+  );
+  assert.deepEqual(
+    applyServerPatch(current, { registrationNameFieldTitles: [] }).registration.nameFieldTitles,
+    [],
+    '空数组是合法值：表示不做姓名合并',
+  );
+  assert.deepEqual(
+    applyServerPatch(current, { registration: { nameFieldTitles: ['称呼', '圈名'] } }).registration.nameFieldTitles,
+    ['称呼', '圈名'],
+    '整段写法也认',
+  );
+
+  // 老库没有 registration 这一项：补默认值，而不是给出 undefined
+  const legacy = defaults();
+  delete (legacy as { registration?: unknown }).registration;
+  assert.deepEqual(applyServerPatch(legacy, {}).registration.nameFieldTitles, ['姓名', '昵称', '称呼', '圈名']);
+
+  // 非数组 / 整段不是对象按规则失败，不静默吞掉
+  assert.throws(() => applyServerPatch(current, { registrationNameFieldTitles: '姓名' }), /数组/);
+  assert.throws(() => applyServerPatch(current, { registration: '姓名' }), /格式不正确/);
+  // 没提交就不动
+  assert.deepEqual(applyServerPatch(current, {}).registration.nameFieldTitles, ['姓名', '昵称', '称呼', '圈名']);
+});
+
 /** 展商策略：单个展会最长持续天数 0～365，0 表示不限（与前端表单上限一致）。 */
 test('单个展会最大持续天数收敛到 0～365', () => {
   assert.equal(applyServerPatch(defaults(), { maxExhibitionDays: 7 }).exhibitor.maxExhibitionDays, 7);

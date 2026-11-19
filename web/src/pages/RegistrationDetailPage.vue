@@ -31,7 +31,7 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import QrCanvas from '@/components/QrCanvas.vue';
 import { answerDocument } from '@domain/answer-document';
-import { formatRecordDate } from '@/services/format';
+import { formatDateRange, formatRecordDate, joinText } from '@/services/format';
 import type { Registration, RegistrationDetail } from '@/api/types';
 import { isJoinSurface, paths } from '@/app/surface';
 import { registrationLink } from '@/services/registration-link';
@@ -45,6 +45,12 @@ const session = useSessionStore();
 const query = useAsync<RegistrationDetail>();
 const record = computed<Registration | undefined>(() => query.data.value?.registration);
 const answers = computed(() => answerDocument({ source: { text: record.value?.answers } }).lines);
+/** 参加时间：多天展会报名时选的区间；两端都有才显示，没有就是空串（不指定）。 */
+const attendanceSpan = computed(() => {
+  const start = String(record.value?.attendanceStart ?? '');
+  const end = String(record.value?.attendanceEnd ?? '');
+  return start && end ? formatDateRange(start, end) : '';
+});
 
 /** 查询链接的凭据。只有报名站的状态页会带 `?token=`；应用内不认这个参数。 */
 const token = computed(() => (isJoinSurface ? String(route.query.token ?? '').trim() : ''));
@@ -333,7 +339,7 @@ onBeforeUnmount(cancelQrHold);
 
     <div class="card" data-tone="fill">
       <strong>{{ record.exhibitionTitle }}</strong>
-      <span class="row-meta">{{ formatRecordDate(record) }} {{ record.exhibitionTime }}</span>
+      <span class="row-meta">{{ joinText([formatRecordDate(record), record.exhibitionTime], ' ') }}</span>
       <span class="row-meta">{{ record.exhibitionVenue }}</span>
     </div>
 
@@ -353,6 +359,10 @@ onBeforeUnmount(cancelQrHold);
         <div class="row" data-between="true">
           <span class="row-meta">{{ t('registration.detail.identity') }}</span>
           <span class="strong truncate">{{ roleLabel(String(record.visitorType || '')) || '—' }}</span>
+        </div>
+        <div v-if="attendanceSpan" class="row" data-between="true">
+          <span class="row-meta">{{ t('registration.detail.attendance') }}</span>
+          <span class="strong truncate">{{ attendanceSpan }}</span>
         </div>
         <template v-if="answers.length > 0">
           <div v-for="(line, index) in answers" :key="`${line.label}-${index}`" class="row" data-between="true">

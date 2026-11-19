@@ -23,7 +23,7 @@ pnpm db:seed     # 仅开发库。生产会拒绝
 pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 ```
 
-开发库示例账号是 `demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`。生产环境不使用这组账号。
+开发库示例账号是 `demo`（管理员）、`exhibitor`（展商）、`user`（普通用户），密码都是 `password`；另外还有 `mediaexpo`（第二个展商）、`limiteduser`（受限）、`banneduser`（封禁）、`trialexpo`（已到期展商）用来验证角色与账号状态。示例数据覆盖五种报名方式的展会（含管理员主办的展会）、单日与多天、进行中 / 未开始 / 已截止 / 不设窗口的报名窗口、各状态报名（含参加时间段与已核销）、各状态私人会议，以及两枚固定邀请码 `DEMOEXPO` / `TRIAL30`。生产环境不使用这组账号。
 
 `pnpm dev` 会构建并托管报名站，页面源码变化时重新构建。报名站不打进 APK。改报名站页面后刷新浏览器即可。
 
@@ -54,7 +54,7 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 
 这些是当前决定。换库等于重写，先改这里。
 
-- 数据库用 `pg` 手写 SQL。日期用 `to_char`。事务手写 `BEGIN` / `COMMIT`。迁移在 `config/migrate.ts`。
+- 数据库用 `pg` 手写 SQL。日期用 `to_char`。事务手写 `BEGIN` / `COMMIT`。迁移步骤按年代/主题分在 `src/config/migrations/`，`src/config/migrate.ts` 只留运行器与命令行入口（并 re-export `STEPS`）；默认设置与色板在 `src/config/default-settings.ts`，开发库示例数据在 `src/config/seed.ts`。
 - 密码用 `bcryptjs`。访问令牌用 `jose`，固定 HS256。刷新令牌是随机串，只存哈希。
 - 请求校验用 Zod，类型从 schema 推导。
 - 限流、TOTP 和迁移保持自研。登录限流在 `await next()` 之后用 `c.res.clone()` 看信封的 `ok === false`，只记失败。
@@ -80,7 +80,7 @@ pnpm dev         # http://127.0.0.1:3000 ，并托管报名站
 
 判定在 `src/config/runtime.ts` 的 `resolveRuntime`。启动自检在 `src/config/production.ts`。直接 `tsx src/index.ts`、不带参数，是开发模式。
 
-生产环境由公开 npm 包 `calmobile-server` 分发，服务器上的 `calmobile-update.timer` 从 npm 拉取新版本，安装、迁移、切换目录并重启。发布、目录布局和回滚见 [`docs/operations.md`](../docs/operations.md)。
+生产环境由公开 npm 包 `calmobile-server` 分发，服务器上的 `calmobile-update.timer` 从 npm 拉取新版本，安装、迁移、切换目录并重启。更新器与 systemd 单元的配置统一在 `/etc/calmobile.env`（`CALMOBILE_*` 键，示例见 `deploy/instance.env.example`；单元由 `deploy/systemd/*.in` 渲染），不再使用单独的 `/etc/calmobile-update.json`。发布、目录布局、迁移清单和回滚见 [`docs/operations.md`](../docs/operations.md)。
 
 数据库不可用时进程仍会启动。开发模式下打开 `http://127.0.0.1:3000/status` 可以看到通用失败提示。JSON 探活是 `GET /api/v1/status`。页面源码在 `status-page/`，`pnpm build` 把它内联成单文件。
 
@@ -170,11 +170,14 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - 管理员不能改自己的状态。管理员关闭他人两步验证是对方邮箱不可用时的出口。`enabled:true` 会被拒。
 - 管理员可以通过 `PUT /users/:id/profile` 代改用户公开资料（昵称 / 简介 / 地区 / 社交账号 / 展示报名开关），字段校验与本人 `PUT /profile` 共用 `profilePatchSchema` 和 `domain/profile-update.ts`；邮箱仍走验证流程，头像只能清空或走上传接口。管理员不能改自己的权限，也不能去掉最后一位管理员。把展商或管理员改成普通用户时，`accept_meetings` 置为 false。管理员手动把角色设成展商时视为永久（`exhibitor_expires_at = NULL`）；改成普通用户或管理员时一并清空到期时间。邀请码只会把身份设为展商，不能设成管理员。
 - 邀请码有两套时间：`expires_at` 是码本身的有效期（按小时，0 表示不过期）；`duration_days` 是兑换后展商身份保留的天数（0 表示永久，上限 3650）。用户行上的 `exhibitor_expires_at` 是到期时间，NULL 表示永久。删除是直接删行，列表时清掉已过期和已作废的码，这两类不再展示。注册时邀请码可选，先记在验证码票上，建号时与插入同一事务里消耗并写入到期时间。已登录用户用 `POST /profile/invite` 兑换：普通用户开通；限时展商从 `max(now(), 原到期时间)` 顺延，0 天码转为永久；永久展商与管理员拒绝且不消耗。受限账号不能兑换。
+- `GET /api/v1/users`（仅管理员）支持 `query` / `role` / `status` 过滤：`role` 取 `user` / `exhibitor` / `admin`，`status` 取 `active` / `limited` / `banned`，空串或无法识别的值按不过滤处理；三者 AND 组合，身份按 `settleExpiredExhibitors()` 结算后的 `users.role` 判断。
 - 展商到期按访问惰性结算，没有定时任务：认证解析（`middleware/auth.ts`）读到已到期的展商时把 `role` 改回 `user`、`accept_meetings` 关掉，并保留到期时间作为「已到期」历史。公开页、搜索和会议宿主这些读别人角色的地方用 `domain/membership.ts` 的 `effectiveRole()` / `canHostMeetings()` 判断，不依赖对方先登录。管理员用户列表在读取前批量结算一次。已到期的展商调用展商接口返回 403，文案说明「展商身份已到期」。
 - 登录成功（密码登录、两步验证通过、可信设备跳过验证、通行密钥验证通过，以及注册建号即登录）刷新 `users.last_login_time`、`users.last_login_ip`、`users.last_login_region`。地区由服务端用离线库解析：只支持 IPv4（IPv4-mapped IPv6 归一），私网 / 回环 / 链路本地 / CGNAT / 组播 / 保留段显示「内网」，纯 IPv6、非法地址与查不到给空串；展示为中国境内「省 + 市」（省市重复时去重，如「北京市」）、非中国「国家 + 省 + 市」，不展示运营商。IP 原文只落库、不下发；管理员用户列表下发 `lastLoginRegion`，`lastLoginTime` 为空时用 `registrationTime` 兜底。
+- 展会 payload 的报名状态：`registrationEnded` 由数据库判定（`registration_end IS NOT NULL AND CURRENT_DATE > registration_end`），且只有报名方式仍是需审核 / 无需审核时才为 true；`openForRegistration` 在它之后也是 false。仅展示 / 截止报名 / 已结束保持原状态语义，不叠加「已截止」。
+- 展会开展时间选填：`exhibitions.time` 可以是空串，表示只展示日期（列表、详情、分享文案与 `calendar-ics` 都按全天处理）。分类在新建时必填（`validation.categoryRequired`）；更新时保持宽松，历史空分类的展会仍可只改简介。
 - 展会闭展日期选填（`exhibitions.exhibition_end_date`，NULL = 单日），不能早于开展日期；更新时没传 `endDate` 保留库里的值，传空串改回单日。展会另有「报名注意事项」`exhibitions.registration_notice`（TEXT，默认空串，最多 2000 字）：展商在编辑页填写，报名详情 payload 只在报名状态为 `approved` / `attended` 时下发 `exhibitionNotice` 正文，其它状态下发空串。单个展会最长持续天数由 `app_settings.exhibitor.maxExhibitionDays` 控制（默认 0 = 不限，管理端 `PUT /settings` 提交，范围 0～365）：按开展～闭展含两端计算天数，超过时新建 / 更新都返回 `exhibition.durationTooLong`。
 - 注册用户名允许 Unicode 字母、数字、组合符（`\p{L}\p{N}\p{M}`）以及 `_ . -`，与前端 `services/validate.ts` 的 `PATTERNS.username` 是同一套规则；长度取管理员配置的 `limits.usernameMin/Max`，两侧空白 trim，不做 Unicode 归一化。内部空白、控制字符、标点与 emoji 拒绝，错误码 `validation.usernameCharset`。
-- 报名站分享链接允许未登录报名：`POST /api/v1/registrations` 带有效 `Authorization` 时行为与原来完全一致；**完全不带** `Authorization` 时按匿名报名处理（`visitor_id` NULL、`visitor_type = 'guest'`、姓名必填，上限 `limits.nickname`），响应额外带一次性 `queryToken`（32 字节 base64url，库里只存 sha256 hex）。带 `Authorization` 但令牌无效 / 过期仍是 401，不降级成匿名，避免应用内过期令牌提交出无主记录。匿名报名没有账号身份，不受「同一用户同一展会一条未撤销报名」约束。
+- 报名站分享链接允许未登录报名：`POST /api/v1/registrations` 带有效 `Authorization` 时行为与原来完全一致；**完全不带** `Authorization` 时按匿名报名处理（`visitor_id` NULL、`visitor_type = 'guest'`、姓名必填，上限 `limits.nickname`），响应额外带一次性 `queryToken`（32 字节 base64url，库里只存 sha256 hex）。匿名报名的姓名由页面决定来源（命中同义词的文本收集项或单独的昵称输入），服务端只校验 `visitorName` 非空与长度。带 `Authorization` 但令牌无效 / 过期仍是 401，不降级成匿名，避免应用内过期令牌提交出无主记录。匿名报名没有账号身份，不受「同一用户同一展会一条未撤销报名」约束。
 - `GET /api/v1/registrations/query/:token`（公开，`Cache-Control: no-store`）：按 sha256 匹配，返回与 `GET /registrations/:id` 同形的 `{ found, registration }`（含 `checkInCode`——凭据就是匿名报名人的身份）；无效凭据返回 200 + `{ found:false, error:'查询链接无效或已失效', errorCode:'registration.queryLinkInvalid' }`。
 - `POST /api/v1/registrations/claim`（需登录，body `{ token }`）：把凭据对应的、`visitor_id IS NULL` 的报名关联到当前账号，只补 `visitor_id`，保留匿名报名时填的姓名与 `visitor_type = 'guest'`；同账号幂等，被别的账号认领或与账号已有同展会报名冲突（唯一部分索引）时 200 + `ok:false`，已撤销的匿名报名也可以认领。
 - 操作日志（`app_logs`）：服务端在响应后异步写入，记录变更类请求（非 GET）、4xx / 5xx 响应以及登录 / 注册 / 找回密码的结果；读接口成功不记，**不记录请求体**，只留方法、路径、状态码、耗时、操作人（未登录记「访客」）与 IP。写日志失败只打服务端日志，不影响请求本身。
@@ -184,6 +187,8 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 - 用户协议是可选功能，正文与管理端开关存在 `app_settings.agreement`（Markdown 原文；`version` 只在正文变化时 +1，只拨开关不升版本；`updatedAt` 是正文最后更新时间）。管理端通过 `PUT /settings` 的 `agreement: { enabled, content }` 提交：开启时正文不能为空（`settings.agreementContentRequired`），正文上限 200000 字符（超出 `settings.agreementTooLong`）；`GET /settings` 只给管理员下发正文，其他角色拿 `{ enabled, version, updatedAt }`。
 - `GET /api/v1/agreement`（公开，`Cache-Control: no-store`）下发 `{ enabled, version, updatedAt, content }`，登录/注册页与协议浏览页在未登录时也能读；`GET /bootstrap` 只带 `{ enabled, version, updatedAt }` 摘要，不带正文。
 - `POST /api/v1/profile/agreement`（需登录，body `{ version }`）把当前账号的同意版本记到 `users.agreed_terms_version` / `users.agreed_terms_at`。只接受服务端当前版本：协议未开启返回 `profile.agreementDisabled`，版本已过期返回 `profile.agreementVersionChanged`，两种情况都是 200 + `ok:false`。管理员用户列表下发每个账号的 `agreedTermsVersion` / `agreedTermsAt`，管理页据此标识同意状态。
+- 报名参加时间段（迁移 0028）：`POST /registrations` 接受可选的 `attendanceStart` / `attendanceEnd`（`YYYY-MM-DD`），登录与匿名报名共用 `domain/registration-attendance.ts` 的校验——两端都给或都不给；只给一端 `registration.attendanceIncomplete`、格式不对 `registration.attendanceInvalid`、开始晚于结束 `registration.attendanceOrder`、超出展会开展～闭展（单日展会就是开展当天）`registration.attendanceOutOfRange`（文案带区间）。通过后写入 `registrations.attendance_start` / `attendance_end`；报名 payload 下发 `attendanceStart` / `attendanceEnd`（NULL → 空串）。`GET /exhibitions/month` 的 `markedDays` 对 `approved` / `attended` 的报名优先按这段区间打点（与展会区间、本月取交集），没选的老报名仍按整场展会。
+- 匿名报名姓名同义词存在 `app_settings.registration.nameFieldTitles`（默认 `['姓名','昵称','称呼','圈名']`，空数组表示不合并），管理端通过 `PUT /settings` 的扁平 `registrationNameFieldTitles`（string 数组，trim、去空、去重、每项 ≤20 字、最多 30 项）或整段 `registration: { nameFieldTitles }` 提交；`GET /bootstrap` 与 `GET /settings` 都下发 `registration` 段。非数组返回 200 + `ok:false`（`settings.registrationNameFieldTitlesInvalid`），整段形状不对返回 `settings.registrationInvalid`。
 - 私人会议未开放时，申请表单不返回收集项。被限制的会议，主办人改状态得到 403。
 
 ## 媒体与配色
@@ -192,7 +197,7 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 
 `videoSizeMb` 的下限是 1。原生侧 0 会变成不限。头像单文件上限是 `min(upload.avatarSizeMb, UPLOAD_MAX_MB)`，`UPLOAD_MAX_MB` 缺省并封顶 20。封面和简介媒体不走这道 20MB 硬顶，也不走 2MB 的 JSON 体积守卫。
 
-色板定义在 `src/config/migrate.ts` 的 `THEME_COLORS`，当前 12 色（首版发布 8 色，后来追加 4 色）。`app_settings.theme` 是全局默认。`users.ui_theme` 是个人选择。下标 0 固定为默认色，新色只往后追加，0..7 的语义不变。原生 `AppSettings.ACCENTS` 与这里逐位对应。
+色板定义在 `src/config/default-settings.ts` 的 `THEME_COLORS`，当前 12 色（首版发布 8 色，后来追加 4 色）。`app_settings.theme` 是全局默认。`users.ui_theme` 是个人选择。下标 0 固定为默认色，新色只往后追加，0..7 的语义不变。原生 `AppSettings.ACCENTS` 与这里逐位对应。
 
 下发的 `theme.index` 是该调用者实际生效的下标：`users.ui_theme ?? app_settings.theme.index`。`PUT /settings/ui-theme` 越界是 200 + `ok:false`，不夹取。`PUT /settings` 的全局 `themeIndex` 仍按补齐后的色板长度夹取。色板扩容后，老库不用迁移：`readServerSettings()` 的 `normalizeThemeColors()` 会在读取时把存着的短色板补齐到当前 12 色。
 
@@ -211,8 +216,8 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 ## 数据模型
 
 - 状态存英文代码。中文标签只在 `src/domain/labels.ts` 映射，与前端的状态词汇是同一批字符串。
-- 展会日期只存 `exhibition_date`（开展）与 `exhibition_end_date`（闭展，NULL = 单日）。`exhibitions.registration_notice` 存报名注意事项（选填，最多 2000 字），不进入公开展会详情卡，只随报名详情按状态下发。年、月、日由 SQL 派生，并用 `to_char` 取成字符串。`GET /exhibitions/month` 按区间取“与本月有交集”的展会，并把每场展会展开成本月覆盖的 `days` 数组：`eventDays` 是并集，选中日按 `days` 命中，跨月展会拆到两个月分别返回。
-- 报名记录不冗余展会标题、时间和地点。读取时 JOIN 展会表。匿名报名的查询凭据只存 sha256（`registrations.query_token_hash`，空串表示账号报名与老数据），唯一部分索引 `WHERE query_token_hash <> ''`。
+- 展会日期只存 `exhibition_date`（开展）与 `exhibition_end_date`（闭展，NULL = 单日）。`exhibitions.registration_notice` 存报名注意事项（选填，最多 2000 字），不进入公开展会详情卡，只随报名详情按状态下发。年、月、日由 SQL 派生，并用 `to_char` 取成字符串。`GET /exhibitions/month` 按区间取“与本月有交集”的展会，并把每场展会展开成本月覆盖的 `days` 数组：`eventDays` 是并集，选中日按 `days` 命中，跨月展会拆到两个月分别返回。每条展会带 `exhibitor`（展商昵称），首页卡片据此把展商名放在分类前面。
+- 报名记录不冗余展会标题、时间和地点。读取时 JOIN 展会表。匿名报名的查询凭据只存 sha256（`registrations.query_token_hash`，空串表示账号报名与老数据），唯一部分索引 `WHERE query_token_hash <> ''`。多天展会的参加时间段存 `registrations.attendance_start` / `attendance_end`（DATE，NULL = 没选，按整段展会处理；老数据不回填）。
 - 登录审计在 `users.last_login_time` / `last_login_ip` / `last_login_region`；IP 原文只落库，接口只下发格式化后的地区。
 - 操作日志在 `app_logs`（迁移 0026）：`level` / `category` / `message` / `actor_id` / `actor_name` / `method` / `path` / `status` / `duration_ms` / `ip` / `detail` / `size_bytes` / `created_at`。`size_bytes` 在写入时算好，清理按它累计；`actor_id` 不建外键，账号删除后日志保留当时的名字。
 - 用户协议同意状态在 `users.agreed_terms_version` / `users.agreed_terms_at`（迁移 0025）：0 表示从未同意，时间戳是最后一次同意的时间。协议正文与版本不单独建表，存在 `app_settings.agreement` 这一段 JSON 里。

@@ -8,14 +8,29 @@
  * 只复制运行时要用的文件。源码、测试、开发脚本和 `.env` 不进包。
  * `server/dist` 里另外带 `app-shell/`、`app-shell-join/` 两份页面壳副本，`web/dist`
  * 或 `web/dist-join` 被 systemd 误删时服务端可以回退；`scripts/build-icons.mjs`
- * 供服务器启动时按 `APP_ICON` 生成运行时图标。
+ * 供服务器启动时按 `APP_ICON` 生成运行时图标，图标实现拆在 `scripts/icons/`。
+ * 部署配置以 `deploy/instance.env.example` 说明、`deploy/systemd/*.in` 提供单元模板，
+ * 由 `scripts/render-units.mjs` 渲染；包名默认 `calmobile-server`，可用
+ * `CALMOBILE_PACKAGE` 覆盖。
  */
 
 import { copyFile, cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const PACKAGE_NAME = 'calmobile-server';
+/** 默认的 npm 包名。多实例或改名发布时用 CALMOBILE_PACKAGE 覆盖。 */
+export const DEFAULT_PACKAGE_NAME = 'calmobile-server';
+
+/**
+ * @param {Record<string, string | undefined>} [env]
+ * @returns {string}
+ */
+export function resolvePackageName(env = process.env) {
+  const value = String(env.CALMOBILE_PACKAGE ?? '').trim();
+  if (!value) return DEFAULT_PACKAGE_NAME;
+  if (/\s/.test(value)) throw new Error(`CALMOBILE_PACKAGE 必须是合法的 npm 包名：${value}`);
+  return value;
+}
 
 /** 版本号与仓库里 `0.1.<运行编号>` 的发布口径一致。 */
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
@@ -29,14 +44,25 @@ export const RUNTIME_ENTRIES = [
   ['web/dist', 'web/dist'],
   ['web/dist-join', 'web/dist-join'],
   ['deploy/production.env', 'deploy/production.env'],
+  ['deploy/instance.env.example', 'deploy/instance.env.example'],
   ['deploy/calmobile-update.mjs', 'deploy/calmobile-update.mjs'],
+  ['deploy/systemd/calmobile.service.in', 'deploy/systemd/calmobile.service.in'],
+  ['deploy/systemd/calmobile-update.service.in', 'deploy/systemd/calmobile-update.service.in'],
+  ['deploy/systemd/calmobile-update.timer.in', 'deploy/systemd/calmobile-update.timer.in'],
   ['scripts/sync-production-env.mjs', 'scripts/sync-production-env.mjs'],
   ['scripts/client-target.mjs', 'scripts/client-target.mjs'],
-  // 运行时品牌层在服务启动时按 APP_ICON 生成图标，生成器和它依赖的构建目标脚本一起进包。
+  ['scripts/env-file.mjs', 'scripts/env-file.mjs'],
+  // 运行时品牌层在服务启动时按 APP_ICON 生成图标，生成器和它依赖的模块一起进包。
   ['scripts/build-icons.mjs', 'scripts/build-icons.mjs'],
+  ['scripts/icons/png.mjs', 'scripts/icons/png.mjs'],
+  ['scripts/icons/config.mjs', 'scripts/icons/config.mjs'],
+  ['scripts/icons/web.mjs', 'scripts/icons/web.mjs'],
+  ['scripts/icons/android.mjs', 'scripts/icons/android.mjs'],
+  // 服务器上的 systemd 单元用这份脚本按实例配置渲染。
+  ['scripts/render-units.mjs', 'scripts/render-units.mjs'],
 ];
 
-/** 服务器更新器解压后必须能找到的文件。 */
+/** 服务器更新器解压后必须能找到的文件。与 deploy/calmobile-update.mjs 的清单一致（测试直接比对）。 */
 export const REQUIRED_ENTRIES = [
   'package.json',
   'server/package.json',
@@ -52,10 +78,20 @@ export const REQUIRED_ENTRIES = [
   'web/dist-join/join.html',
   'server/dist/app-shell-join/join.html',
   'deploy/production.env',
+  'deploy/instance.env.example',
   'deploy/calmobile-update.mjs',
+  'deploy/systemd/calmobile.service.in',
+  'deploy/systemd/calmobile-update.service.in',
+  'deploy/systemd/calmobile-update.timer.in',
   'scripts/sync-production-env.mjs',
   'scripts/client-target.mjs',
+  'scripts/env-file.mjs',
   'scripts/build-icons.mjs',
+  'scripts/icons/png.mjs',
+  'scripts/icons/config.mjs',
+  'scripts/icons/web.mjs',
+  'scripts/icons/android.mjs',
+  'scripts/render-units.mjs',
 ];
 
 /** 这些路径出现在包里说明复制范围写错了。 */
@@ -72,13 +108,14 @@ export const FORBIDDEN_PATHS = [
 
 /**
  * @param {string} version
+ * @param {string} [name] npm 包名，默认取 CALMOBILE_PACKAGE 或 calmobile-server
  * @returns {{ name: string, version: string, description: string, private: boolean, license: string, engines: { node: string } }}
  */
-export function runtimePackageJson(version) {
+export function runtimePackageJson(version, name = resolvePackageName()) {
   const text = String(version);
   if (!VERSION_PATTERN.test(text)) throw new Error(`运行时包版本号必须是 x.y.z：${text}`);
   return {
-    name: PACKAGE_NAME,
+    name,
     version: text,
     description: '展会排期助手运行时包：服务端与两份页面产物',
     private: false,
@@ -154,8 +191,9 @@ async function readJson(root, relative) {
  *
  * @param {string} dir
  * @param {string} [expectedVersion]
+ * @param {string} [expectedName] 默认取 CALMOBILE_PACKAGE 或 calmobile-server
  */
-export async function verifyRuntimePackage(dir, expectedVersion) {
+export async function verifyRuntimePackage(dir, expectedVersion, expectedName = resolvePackageName()) {
   const root = path.resolve(dir);
   const files = await listFiles(root);
   const problems = verifyRuntimeManifest(files);
@@ -163,7 +201,7 @@ export async function verifyRuntimePackage(dir, expectedVersion) {
   if (!problems.length) {
     const rootPackage = await readJson(root, 'package.json');
     version = typeof rootPackage.version === 'string' ? rootPackage.version : '';
-    if (rootPackage.name !== PACKAGE_NAME) problems.push(`包名必须是 ${PACKAGE_NAME}：${String(rootPackage.name)}`);
+    if (rootPackage.name !== expectedName) problems.push(`包名必须是 ${expectedName}：${String(rootPackage.name)}`);
     if (expectedVersion && rootPackage.version !== expectedVersion) {
       problems.push(`包版本必须是 ${expectedVersion}：${String(rootPackage.version)}`);
     }
@@ -186,7 +224,8 @@ export async function stageRuntimePackage(input) {
   const repoRoot = path.resolve(input.repoRoot);
   const outDir = path.resolve(input.outDir);
   const version = String(input.version);
-  runtimePackageJson(version);
+  const packageName = resolvePackageName();
+  runtimePackageJson(version, packageName);
 
   const missing = [];
   for (const [from] of RUNTIME_ENTRIES) {
@@ -228,7 +267,7 @@ export async function stageRuntimePackage(input) {
 
   await writeFile(
     path.join(outDir, 'package.json'),
-    `${JSON.stringify(runtimePackageJson(version), null, 2)}\n`,
+    `${JSON.stringify(runtimePackageJson(version, packageName), null, 2)}\n`,
     'utf8',
   );
   const serverPackagePath = path.join(outDir, 'server/package.json');
@@ -238,7 +277,7 @@ export async function stageRuntimePackage(input) {
     'utf8',
   );
 
-  const result = await verifyRuntimePackage(outDir, version);
+  const result = await verifyRuntimePackage(outDir, version, packageName);
   return { dir: outDir, version, files: result.files };
 }
 

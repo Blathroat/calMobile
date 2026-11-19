@@ -105,6 +105,33 @@ export function exhibitionStatusLabel(status: string): string {
   }
 }
 
+/**
+ * 报名方式是否处于「报名中」：只有需审核 / 无需审核两种才算。
+ *
+ * 管理端暂停 / 恢复报名按它判断，不看 `openForRegistration`：报名截止日已过的展会
+ * 也是 `openForRegistration === false`，但那不是展商手动暂停。
+ */
+export function acceptsRegistration(statusCode: unknown): boolean {
+  const status = String(statusCode ?? '');
+  return status === EXHIBITION_STATUS.REVIEW_REQUIRED || status === EXHIBITION_STATUS.REVIEW_OPTIONAL;
+}
+
+/**
+ * 展会的展示状态：报名已截止时用 `closed`（截止报名）覆盖原报名方式。
+ *
+ * 服务端只在报名方式仍是需审核 / 无需审核、且报名截止日已过时下发 `registrationEnded`，
+ * 「仅展示 / 截止报名 / 已结束」保持自己的状态文案。卡片状态灯与详情页统一读它，
+ * 不要各自按 `openForRegistration` 判断。
+ */
+export function exhibitionModeCode(item: {
+  statusCode?: unknown;
+  registrationEnded?: unknown;
+  [key: string]: unknown;
+}): string {
+  const status = String(item.statusCode ?? '');
+  return item.registrationEnded === true && acceptsRegistration(status) ? EXHIBITION_STATUS.CLOSED : status;
+}
+
 export function userStatusLabel(status: string): string {
   switch (status) {
     case USER_STATUS.NORMAL:

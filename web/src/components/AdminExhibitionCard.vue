@@ -8,9 +8,9 @@ import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
-import { EXHIBITION_STATUS, modeLabel, statusTone } from '@/services/status';
+import { EXHIBITION_STATUS, acceptsRegistration, exhibitionModeCode, modeLabel, statusTone } from '@/services/status';
 import { coverOf } from '@/services/cover';
-import { formatDateWithWeekday } from '@/services/format';
+import { formatDateWithWeekday, joinText } from '@/services/format';
 import MediaBox from '@/components/MediaBox.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import type { Exhibition } from '@/api/types';
@@ -23,7 +23,9 @@ const router = useRouter();
 /** 暂停 / 恢复报名：管理员暂停后普通用户不能报名，展商不能自行恢复。 */
 function toggleLock(): void {
   const item = props.item;
-  const closing = item.openForRegistration === true;
+  // 暂停 / 恢复只按报名方式判断：报名截止日已过的展会 openForRegistration 也是 false，
+  // 但状态仍是「报名中」，不能因此把按钮换成「恢复报名」。
+  const closing = acceptsRegistration(item.statusCode);
   const title = closing ? t('admin.exhibitions.pauseRegistration') : t('admin.exhibitions.resumeRegistration');
   const nextStatus = closing ? EXHIBITION_STATUS.CLOSED : EXHIBITION_STATUS.REVIEW_REQUIRED;
   const message = closing
@@ -61,16 +63,16 @@ function toggleLock(): void {
       <MediaBox :src="coverOf(item.imageUri)" class-name="thumb thumb-cover" :alt="String(item.title || '')" />
       <span class="row-copy">
         <strong class="row-title truncate">{{ item.title }}</strong>
-        <span class="row-meta">{{ `${formatDateWithWeekday(item.date)} ${String(item.time ?? '')}`.trim() }}</span>
+        <span class="row-meta">{{ joinText([formatDateWithWeekday(item.date), item.time], ' ') }}</span>
         <span class="row-meta truncate">{{ item.venue }}</span>
         <span class="row-meta">{{
           t('exhibition.list.statusWithRegistrations', {
-            status: modeLabel(String(item.statusCode ?? '')),
+            status: modeLabel(exhibitionModeCode(item)),
             count: String(item.registrationCount ?? 0),
           })
         }}</span>
       </span>
-      <StatusTag :text="modeLabel(String(item.statusCode || ''))" :tone="statusTone(String(item.statusCode || ''))" />
+      <StatusTag :text="modeLabel(exhibitionModeCode(item))" :tone="statusTone(exhibitionModeCode(item))" />
     </button>
     <div class="grid-cols-2">
       <button
@@ -91,7 +93,7 @@ function toggleLock(): void {
       </button>
       <button class="cta ghost" data-size="small" type="button" @click="toggleLock">
         {{
-          item.openForRegistration === true
+          acceptsRegistration(item.statusCode)
             ? t('admin.exhibitions.pauseRegistration')
             : t('admin.exhibitions.resumeRegistration')
         }}

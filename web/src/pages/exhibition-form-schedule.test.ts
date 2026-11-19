@@ -1,10 +1,11 @@
 /**
- * 编辑展会页的日期 / 时间选择与卡片分区（需求 2/3/5/6）。
+ * 编辑展会页的日期 / 时间选择与卡片分区（需求 1-5）。
  *
  * 这里把页面和共享底部面板一起挂到 jsdom 上，走完整的「点字段 → 抽屉 → 选值 → 回填」路径：
  * - 开展 / 闭展是一组日期范围，报名开始 / 截止是另一组，选完两个日期自动收起；
+ *   两次点同一天时闭展也回填这一天，只点开展就用「取消」收起时闭展留空；
  * - 开展时间点开后是时 / 分滚轮，确认后回填成 HH:MM；
- * - 「展会封面与简介」卡里有简介入口，「报名设置」卡里不再有分隔横线。
+ * - 「活动信息」卡里有纯文本简介、Markdown 编辑入口与参与方式，「报名设置」卡里不再有分隔横线。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, type App } from 'vue';
@@ -13,6 +14,7 @@ import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import ExhibitionFormPage from './ExhibitionFormPage.vue';
 import AppSheet from '@/components/AppSheet.vue';
 import { navigation } from '@/app/navigation';
+import { useBootstrapStore } from '@/stores/bootstrap';
 import { clearExhibitionDraft } from '@/services/exhibition-draft';
 import { formatDateWithWeekday } from '@/services/format';
 import { sheet } from '@/services/sheet';
@@ -70,6 +72,8 @@ async function flush(): Promise<void> {
 async function mountForm(): Promise<void> {
   const pinia = createPinia();
   setActivePinia(pinia);
+  // 分类是管理员维护的清单：给抽屉一组选项，新建 / 编辑保存前都要先选中一个。
+  useBootstrapStore().apply({ categories: ['智能家居', '物流技术'] });
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -110,6 +114,31 @@ function sheetAction(label: string): HTMLButtonElement {
   return button;
 }
 
+/** 往输入框填值并触发 input 事件，模拟用户打字。 */
+function fill(id: string, value: string): void {
+  const input = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`);
+  if (!input) throw new Error(`缺少输入框 #${id}`);
+  input.value = value;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** 打开分类抽屉并选中一个分类（分类必填，保存前要补上）。 */
+async function pickCategory(name = '智能家居'): Promise<void> {
+  trigger('form-category').click();
+  await flush();
+  const option = [...document.querySelectorAll<HTMLButtonElement>('.sheet-option')].find(
+    (item) => item.textContent?.trim() === name,
+  );
+  if (!option) throw new Error(`分类抽屉里没有「${name}」`);
+  option.click();
+  await flush();
+}
+
+/** 保存按钮固定在页脚，点一次触发提交。 */
+function clickSave(): void {
+  document.querySelector<HTMLButtonElement>('#app-foot button')?.click();
+}
+
 describe('编辑展会：日期与时间选择', () => {
   it('开展 / 闭展是一组日期范围，选完两个日期回填并收起抽屉', async () => {
     await mountForm();
@@ -132,6 +161,36 @@ describe('编辑展会：日期与时间选择', () => {
     expect(sheet.current).toBeNull();
     expect(trigger('form-date').textContent).toContain(formatDateWithWeekday(start));
     expect(trigger('form-end-date').textContent).toContain(formatDateWithWeekday(end));
+  });
+
+  it('同一天点两次：抽屉收起，两个触发按钮都显示这一天，保存的 endDate 等于 date', async () => {
+    await mountForm();
+    vi.mocked(api.exhibitions.save).mockResolvedValue({ ok: true, exhibition: { id: 'exh-same-day' } });
+    fill('form-title', '同一天展会');
+    fill('form-venue', '测试展馆');
+    await pickCategory();
+    const day = iso(3);
+    trigger('form-date').click();
+    await flush();
+
+    dayButton(day).click();
+    await flush();
+    // 第一次点选只回填开展，抽屉还开着，闭展仍是占位。
+    expect(sheet.current).not.toBeNull();
+    expect(trigger('form-date').textContent).toContain(formatDateWithWeekday(day));
+    expect(trigger('form-end-date').textContent).toContain('选择日期');
+
+    dayButton(day).click();
+    await flush();
+    expect(sheet.current).toBeNull();
+    expect(trigger('form-date').textContent).toContain(formatDateWithWeekday(day));
+    expect(trigger('form-end-date').textContent).toContain(formatDateWithWeekday(day));
+
+    clickSave();
+    await vi.waitFor(() => expect(vi.mocked(api.exhibitions.save)).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(api.exhibitions.save).mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.date).toBe(day);
+    expect(payload.endDate).toBe(day);
   });
 
   it('报名开始 / 截止也是范围选择，两端小字是「开始 / 截止」', async () => {
@@ -175,37 +234,98 @@ describe('编辑展会：日期与时间选择', () => {
     expect(sheet.current).toBeNull();
     expect(trigger('form-time-end').textContent).toContain('结束时间');
   });
+
+  it('分类必填：为空时点保存不发请求，并在字段下方提示', async () => {
+    await mountForm();
+    fill('form-title', '未选分类的展会');
+    fill('form-venue', '测试展馆');
+    const day = iso(3);
+    trigger('form-date').click();
+    await flush();
+    dayButton(day).click();
+    await flush();
+    sheetAction('取消').click();
+    await flush();
+
+    clickSave();
+    await flush();
+
+    expect(vi.mocked(api.exhibitions.save)).not.toHaveBeenCalled();
+    const field = trigger('form-category').closest('.field');
+    expect(field?.getAttribute('data-invalid')).toBe('true');
+    expect(field?.querySelector('.field-error')?.textContent).toBe('请选择活动分类');
+    // 分类字段标签上有必填星号。
+    expect(document.querySelector('#form-category-label .required')).not.toBeNull();
+  });
+
+  it('新建表单的时间默认留空，保存时 payload.time 是空串', async () => {
+    await mountForm();
+    vi.mocked(api.exhibitions.save).mockResolvedValue({ ok: true, exhibition: { id: 'exh-no-time' } });
+    // 两个时间滚轮都停在占位文案上，没有默认的 09:00-17:00。
+    expect(trigger('form-time').textContent).toContain('开始时间');
+    expect(trigger('form-time-end').textContent).toContain('结束时间');
+    expect(document.body.textContent).toContain('时间选填，留空则只显示日期。');
+
+    fill('form-title', '无时间展会');
+    fill('form-venue', '测试展馆');
+    const day = iso(3);
+    trigger('form-date').click();
+    await flush();
+    dayButton(day).click();
+    await flush();
+    sheetAction('取消').click();
+    await flush();
+    await pickCategory();
+
+    clickSave();
+    await vi.waitFor(() => expect(vi.mocked(api.exhibitions.save)).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(api.exhibitions.save).mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.time).toBe('');
+  });
 });
 
-describe('编辑展会：卡片分区与文案', () => {
-  it('封面卡里能进简介编辑器，报名设置卡不再画分隔线', async () => {
+describe('编辑展会：活动信息卡与文案', () => {
+  it('「活动信息」卡里有纯文本简介、Markdown 编辑入口与参与方式，不再有独立的注意事项卡片', async () => {
     await mountForm();
     const cards = [...document.querySelectorAll<HTMLElement>('#form-test .card')];
-    const cover = cards.find((card) => card.textContent?.includes('展会封面与简介'));
+    const cover = cards.find((card) => card.textContent?.includes('活动信息'));
     const registration = cards.find((card) => card.textContent?.includes('报名设置'));
     expect(cover).not.toBeUndefined();
     expect(registration).not.toBeUndefined();
-    expect(cover?.textContent).toContain('编辑简介');
     expect(cover?.querySelector('.cover-row')).not.toBeNull();
+    // 封面区右侧的尺寸提示改成比例说明。
+    expect(cover?.textContent).toContain('支持3:4~9:16纵图');
+    // 原来按钮下面那行简介摘要已经删掉。
+    expect(cover?.querySelector('.row-meta')).toBeNull();
     // 页面上不再有卡片内分区横线。
     expect(document.querySelectorAll('#form-test hr.divider')).toHaveLength(0);
+
+    const description = cover?.querySelector<HTMLTextAreaElement>('#form-description');
+    const notice = cover?.querySelector<HTMLTextAreaElement>('#form-registration-notice');
+    expect(description).not.toBeNull();
+    expect(notice).not.toBeNull();
+    expect(description?.classList.contains('textarea')).toBe(true);
+    expect(description?.rows).toBe(6);
+    expect(notice?.classList.contains('textarea')).toBe(true);
+    expect(notice?.getAttribute('maxlength')).toBe('2000');
+    // 参与方式只在活动信息卡里出现一次，没有独立的注意事项卡片。
+    expect(cards.filter((card) => card.querySelector('#form-registration-notice'))).toHaveLength(1);
+    expect(cover?.textContent).toContain('参与方式（仅通过审核用户可见）');
+    expect(cover?.textContent).toContain('审核通过或已参加的报名者');
+
+    // 顺序：纯文本简介 → 「使用Markdown编辑简介」按钮 → 参与方式。
+    const markdownButton = [...(cover?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+      (item) => item.textContent?.trim() === '使用Markdown编辑简介',
+    );
+    expect(markdownButton).not.toBeUndefined();
+    expect(description!.compareDocumentPosition(markdownButton!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(markdownButton!.compareDocumentPosition(notice!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   });
 
-  it('收集项下面是「注意事项（选填）」卡片，保存时带上 registrationNotice', async () => {
+  it('活动信息卡保存时带上纯文本简介与参与方式正文', async () => {
     await mountForm();
-    const notice = document.querySelector<HTMLTextAreaElement>('#form-registration-notice');
-    expect(notice).not.toBeNull();
-    expect(notice?.closest('.card')?.textContent).toContain('注意事项（选填）');
-    expect(notice?.closest('.card')?.textContent).toContain('审核通过或已参加的报名者');
-
     vi.mocked(api.exhibitions.save).mockResolvedValue({ ok: true, exhibition: { id: 'exh-new' } });
-    const fill = (id: string, value: string) => {
-      const input = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`);
-      if (!input) throw new Error(`缺少输入框 #${id}`);
-      input.value = value;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    };
-    fill('form-title', '注意事项测试展');
+    fill('form-title', '活动信息测试展');
     fill('form-venue', '测试展馆');
     const start = iso(3);
     trigger('form-date').click();
@@ -214,23 +334,21 @@ describe('编辑展会：卡片分区与文案', () => {
     await flush();
     sheetAction('取消').click();
     await flush();
+    await pickCategory();
+    fill('form-description', '纯文本简介：\n第一行\n第二行');
     fill('form-registration-notice', '请携带身份证\n签到地点：A 口服务台');
 
-    document.querySelector<HTMLButtonElement>('#app-foot button')?.click();
+    clickSave();
     await vi.waitFor(() => expect(vi.mocked(api.exhibitions.save)).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(api.exhibitions.save).mock.calls[0]![0] as Record<string, unknown>;
+    // 纯文本简介与 RichEditorPage 共用 form.description，保存时原样带上。
+    expect(payload.description).toBe('纯文本简介：\n第一行\n第二行');
     expect(payload.registrationNotice).toBe('请携带身份证\n签到地点：A 口服务台');
   });
 
   it('保存时 payload 带上闭展日期；只选开展就是空串（单日展会）', async () => {
     await mountForm();
     vi.mocked(api.exhibitions.save).mockResolvedValue({ ok: true, exhibition: { id: 'exh-new' } });
-    const fill = (id: string, value: string) => {
-      const input = document.querySelector<HTMLInputElement>(`#${id}`);
-      if (!input) throw new Error(`缺少输入框 #${id}`);
-      input.value = value;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    };
     fill('form-title', '接口测试展');
     fill('form-venue', '测试展馆');
 
@@ -242,9 +360,9 @@ describe('编辑展会：卡片分区与文案', () => {
     await flush();
     sheetAction('取消').click();
     await flush();
+    await pickCategory();
 
-    const saveButton = document.querySelector<HTMLButtonElement>('#app-foot button');
-    saveButton?.click();
+    clickSave();
     await vi.waitFor(() => expect(vi.mocked(api.exhibitions.save)).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(api.exhibitions.save).mock.calls[0]![0] as Record<string, unknown>;
     expect(payload.date).toBe(start);

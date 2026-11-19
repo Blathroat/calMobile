@@ -22,6 +22,7 @@ import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { confirmSheet } from '@/services/sheet';
 import { openProfileEditor } from '@/services/profile-editor';
+import ProfileAvatarCropper from '@/components/ProfileAvatarCropper.vue';
 import { paths } from '@/app/surface';
 import { REGISTRATION_STATUS, USER_STATUS, roleLabel, userStatusLabel } from '@/services/status';
 import { daysUntil, formatLocalChineseDate } from '@/services/format';
@@ -403,6 +404,9 @@ function logout(): void {
       </div>
     </template>
   </template>
+
+  <!-- 头像裁剪抽屉：点资料抽屉里的铅笔后，保存资料、关抽屉、拉起系统选图，选到图由这里渲染 -->
+  <ProfileAvatarCropper />
 </template>
 
 <style>

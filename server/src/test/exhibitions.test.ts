@@ -79,6 +79,14 @@ test('月视图返回三块数据，且原样返回请求的月份与日期', as
   assert.ok(june.body.monthLabel.includes(String(landing.year)));
   assert.ok(june.body.eventDays.includes(june.body.day), '缺省选中日期应当是有展会的日期');
   assert.ok(Array.isArray(june.body.exhibitions) && Array.isArray(june.body.selected));
+  // 首页卡片把展商名称放在分类前面：月视图每一项都要带上 exhibitor。
+  for (const item of [...june.body.exhibitions, ...june.body.selected]) {
+    assert.strictEqual(typeof item.exhibitor, 'string', `月视图缺少 exhibitor：${JSON.stringify(item)}`);
+  }
+  assert.ok(
+    june.body.exhibitions.every((item: { exhibitor?: string }) => item.exhibitor === 'exhibitor'),
+    '月视图的展商名称要与列表接口一致',
+  );
   assert.deepStrictEqual(june.body.markedDays, [], '未登录不返回个人活动圆点');
   assert.deepStrictEqual(june.body.meetings, [], '未登录不返回私人会议卡片');
 
@@ -96,6 +104,80 @@ test('月视图返回三块数据，且原样返回请求的月份与日期', as
   assert.strictEqual(emptyMonth.body.month, ((landing.month + 5) % 12) + 1);
   assert.strictEqual(emptyMonth.body.eventDays.length, 0);
   assert.strictEqual(emptyMonth.body.day, 0);
+});
+
+test('活动时间改选填：不填时间也能新建，回读是空串', async () => {
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '无时间展会',
+      venue: '测试展馆',
+      date: '2026-09-21',
+      category: '智能家居',
+      status: 'review',
+    },
+    { token: tokens.exhibitor.token },
+  );
+  assert.strictEqual(created.body.ok, true, `新建失败：${JSON.stringify(created.body)}`);
+  assert.strictEqual(created.body.exhibition.time, '', '没填时间要存成空串');
+  const id = String(created.body.exhibition.id);
+  try {
+    const read = await get(`/api/v1/exhibitions/${id}`);
+    assert.strictEqual(read.body.exhibition.time, '', '详情回读也要是空串');
+  } finally {
+    await del(`/api/v1/exhibitions/${id}`, { token: tokens.exhibitor.token });
+  }
+});
+
+test('活动分类新建必填，更新保持宽松', async () => {
+  const missing = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '没有分类的展会',
+      venue: '测试展馆',
+      date: '2026-09-21',
+      time: '09:00-17:00',
+      status: 'review',
+    },
+    { token: tokens.exhibitor.token },
+  );
+  assert.strictEqual(missing.body.ok, false, '新建时不填分类必须被拒');
+  assert.strictEqual(missing.body.errorCode, 'validation.categoryRequired');
+  assert.match(String(missing.body.error), /分类/, `提示不对：${missing.body.error}`);
+
+  // 更新保持宽松：历史空分类的展会（例如只改简介）仍能保存。
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '分类可清空的展会',
+      venue: '测试展馆',
+      date: '2026-09-21',
+      time: '09:00-17:00',
+      category: '智能家居',
+      status: 'review',
+    },
+    { token: tokens.exhibitor.token },
+  );
+  assert.strictEqual(created.body.ok, true, JSON.stringify(created.body));
+  const id = String(created.body.exhibition.id);
+  try {
+    const updated = await put(
+      `/api/v1/exhibitions/${id}`,
+      {
+        title: '分类可清空的展会',
+        venue: '测试展馆',
+        date: '2026-09-21',
+        time: '09:00-17:00',
+        category: '',
+        status: 'review',
+      },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(updated.body.ok, true, `更新被分类必填拦住了：${JSON.stringify(updated.body)}`);
+    assert.strictEqual(updated.body.exhibition.category, '');
+  } finally {
+    await del(`/api/v1/exhibitions/${id}`, { token: tokens.exhibitor.token });
+  }
 });
 
 test('展会详情带收集项，找不到时给 found:false', async () => {

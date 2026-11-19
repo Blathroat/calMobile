@@ -3,7 +3,7 @@
  *
  * jsdom 不会真的解码图片，这里直接给 `<img>` 定义自然尺寸再派发 load / error，
  * 只验证组件算出的行内 `aspect-ratio`。样式（高度、宽度推算、cover 裁切）在
- * `tokens.css` 的 `.thumb` 上。
+ * `styles/base.css` 的 `.thumb` 上。
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp, nextTick, type App } from 'vue';

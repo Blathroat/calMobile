@@ -51,6 +51,11 @@ public class WebAppBridge {
     static final String CODE_CANCELLED = "cancelled";
     /** 原生动作迟迟不回调（前端兜底超时用）。 */
     static final String CODE_TIMEOUT = "timeout";
+    /**
+     * 这个壳没有该动作：页面据此退回浏览器实现（旧 APK + 新页面的能力协商，见
+     * {@link ShellCapabilities}）。与「动作执行失败」区分开，后者没有稳定错误码。
+     */
+    static final String CODE_UNSUPPORTED = "unsupported";
 
     /** 启动系统界面或申请权限时暂存的前端回调。 */
     static final class PendingResult {

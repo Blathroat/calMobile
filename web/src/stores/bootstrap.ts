@@ -1,6 +1,6 @@
 /**
  * 启动数据 store：`/bootstrap` 一次性下发的全局快照（品牌、限制、分类、公告、
- * 日历、媒体、上传、审核开关与配色）。
+ * 日历、媒体、上传、审核开关、报名配置与配色）。
  *
  * 为什么放一处：这些值几乎每屏都要读（表单长度上限、上传上限、日历落点、强调色），
  * 却只在启动时变一次，集中存放可以避免各页各请求一次后端。
@@ -55,6 +55,12 @@ export interface BootstrapState {
   cover: JsonObject;
   /** 展商端策略：`maxFutureExhibitions` / `maxFutureMeetings` 为 0 时表示不限 */
   exhibitor: JsonObject;
+  /**
+   * 报名相关配置：`nameFieldTitles` 是匿名报名里「姓名」收集项的同义词表，
+   * 标题命中其中任何一个词的文本收集项直接当作姓名来源。老服务端不下发时为空对象，
+   * 读取处自己按缺省四词兜底。
+   */
+  registration: JsonObject & { nameFieldTitles?: unknown };
   /** 用户协议摘要：关闭时所有入口不渲染；版本与用户已同意版本比较决定是否弹确认。 */
   agreement: JsonObject & { enabled?: boolean; version?: number; updatedAt?: string };
   /**
@@ -91,6 +97,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
     theme: {},
     cover: {},
     exhibitor: {},
+    registration: {},
     agreement: { enabled: false, version: 0, updatedAt: '' },
     download: {},
     publicBaseUrl: '',
@@ -120,6 +127,7 @@ export const useBootstrapStore = defineStore('bootstrap', {
       this.theme = { ...this.theme, ...asObject(data.theme) };
       this.cover = { ...this.cover, ...asObject(data.cover) };
       this.exhibitor = { ...this.exhibitor, ...asObject(data.exhibitor) };
+      this.registration = { ...this.registration, ...asObject(data.registration) };
       this.agreement = { ...this.agreement, ...asObject(data.agreement) };
       this.download = { ...this.download, ...asObject(data.download) };
       if (typeof data.publicBaseUrl === 'string') this.publicBaseUrl = data.publicBaseUrl;

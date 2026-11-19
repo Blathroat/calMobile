@@ -76,14 +76,26 @@ function classify(file) {
   const hit = { ...none };
   if (isApk(file)) hit.apk = true;
   if (isServer(file)) hit.server = true;
-  // 图标构建同时服务 APK（启动图标）、应用页面（favicon / PWA 图标）与 Android 资源生成；
-  // 报名站构建也会 import 这份纯 Node 模块，虽然不生成图标。
+  // 图标生成拆在 scripts/icons/：Android 资源影响 APK，站点图标影响两份页面，
+  // PNG 与配置是三者共用的纯函数；入口 build-icons.mjs 仍按三者处理。
   if (file === 'scripts/build-icons.mjs') {
     hit.apk = true;
     hit.app = true;
     hit.join = true;
   }
-  if (file.startsWith('web/public/icons/')) hit.apk = true;
+  if (file === 'scripts/icons/android.mjs') hit.apk = true;
+  if (file === 'scripts/icons/web.mjs') {
+    hit.app = true;
+    hit.join = true;
+  }
+  if (file === 'scripts/icons/png.mjs' || file === 'scripts/icons/config.mjs') {
+    hit.apk = true;
+    hit.app = true;
+    hit.join = true;
+  }
+  // 默认源图 web/public/icons/icon-1024.png 会在构建时生成 APK 启动图标；
+  // 其余图标只随两份页面发布，不再整目录触发 APK。
+  if (file === 'web/public/icons/icon-1024.png') hit.apk = true;
   if (file === 'server/src/domain/answer-document.ts') {
     hit.app = true;
     hit.join = true;
@@ -122,7 +134,11 @@ function isServer(file) {
   if (
     file.startsWith('deploy/') ||
     file === 'scripts/sync-production-env.mjs' ||
-    file === 'scripts/runtime-bundle.mjs'
+    file === 'scripts/runtime-bundle.mjs' ||
+    // 构建期 env 读取随运行时包发布（服务端运行时也会用到同一份合并规则）。
+    file === 'scripts/env-file.mjs' ||
+    // systemd 单元模板的渲染脚本随运行时包发布。
+    file === 'scripts/render-units.mjs'
   ) {
     return true;
   }

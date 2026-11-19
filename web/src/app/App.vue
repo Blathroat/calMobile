@@ -2,7 +2,7 @@
 /**
  * 应用外壳：顶栏 + 可滚动内容区 + 底部导航（或页面页脚）。
  *
- * 结构与 `styles/tokens.css` 的 `.app` 网格一一对应，页面只往内容区放内容：
+ * 结构与 `styles/base.css` 的 `.app` 网格一一对应，页面只往内容区放内容：
  * - 顶栏标题、返回键与底部导航项由路由 meta 决定（见 `app/shell.ts`）；
  * - 页面需要固定操作区时用 `Teleport to="#app-foot"`，它落在网格的第三行；
  * - 轻提示与底部面板是全局的，每个页面都不用自己挂载容器；整页重载前排队的那条提示
@@ -214,7 +214,7 @@ onBeforeUnmount(() => unbindPull?.());
     :data-tab-move="navigation.tabMove.value === 'none' ? undefined : navigation.tabMove.value"
   >
     <!-- 页脚槽写在最前面：页面用 Teleport 投递固定操作区，目标必须已经存在。
-         它在网格里的位置由 tokens.css 固定到第三行。 -->
+         它在网格里的位置由 base.css 固定到第三行。 -->
     <div id="app-foot" class="app-foot" />
     <AppTopBar :title="title" :show-back="route.meta.back === true" :back-to="paths.home">
       <template #actions>

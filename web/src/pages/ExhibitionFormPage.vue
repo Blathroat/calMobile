@@ -3,7 +3,8 @@
  * 屏幕 11 · 展会编辑（新建 / 编辑）
  *
  * 展商后台卡片上的「报名方式」「编辑简介」收进本页：「报名方式」在「报名设置」卡里，
- * 「编辑简介」并进展会封面卡（「展会封面与简介」）。日期与时间都走应用内抽屉：
+ * 简介与「参与方式」并进「活动信息」卡（封面、纯文本简介、Markdown 编辑入口）。
+ * 日期与时间都走应用内抽屉：
  * 开展 / 闭展、报名开始 / 截止各是一组日期范围，开展时间是两个时 / 分滚轮。
  * 「删除展会」放在页面内容最下方。新建与编辑共用同一页：
  * 路由带 `:id` 就是编辑（先取详情），不带就是新建（空表单），保存成功后换成编辑地址。
@@ -26,7 +27,6 @@ import { EXHIBITION_STATUS, FIELD_TYPE, REGISTRATION_MODES, exhibitionStatusLabe
 import { canManageExhibition } from '@/services/exhibition-scope';
 import { device } from '@/services/device-services';
 import { publishImportedMedia } from '@/services/publish-media';
-import { loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
 import CollectFieldsCard, { type CollectField } from '@/components/CollectFieldsCard.vue';
 import { firstCollectFieldError } from '@/services/collect-fields';
 import {
@@ -81,9 +81,10 @@ const form = reactive({
   title: '',
   venue: '',
   date: '',
-  /** 闭展日期；空串表示单日展会（库里存 NULL）。 */
+  /** 闭展日期；空串表示还没选（单日展会库里存 NULL），与开展同一天时照原样存这一天。 */
   endDate: '',
-  time: '09:00-17:00',
+  // 时间选填，默认留空：只填日期时详情、月视图与日历文件都按「没有时间」展示。
+  time: '',
   status: EXHIBITION_STATUS.REVIEW_REQUIRED as string,
   category: '',
   description: '',
@@ -101,7 +102,7 @@ const fields = ref<CollectField[]>([]);
 
 /**
  * 数据仍只有 `form.time` 一个字段（`HH:MM-HH:MM`），界面上拆成开始 / 结束两个滚轮：
- * 两个都填了才拼成区间；只填一个时留空，仍按原有「时间选填」规则校验，
+ * 两个都填了才拼成区间；只填一个或都不填时提交空串（时间选填），
  * 提交的接口字段名与校验规则都不变。
  */
 const timeStart = ref('');
@@ -157,8 +158,8 @@ function openExhibitionDateRange(): void {
     endLabel: t('exhibition.form.endDateShort'),
     onChange: ({ start, end }) => {
       form.date = start;
-      // 闭展与开展同一天没有额外信息：按「单日展会」存空值。
-      form.endDate = end && end !== start ? end : '';
+      // 第二次点的是同一天也照原样回填：两个框都显示这一天，展示侧只显示一天。
+      form.endDate = end;
     },
   });
 }
@@ -245,18 +246,12 @@ const built = ref(false);
 const formError = ref('');
 const invalidField = ref('');
 
-// ── 封面 / 报名方式 / 简介的可变展示 ──────────────────────────────
+// ── 封面 / 报名方式的可变展示 ────────────────────────────────────
 
 /** 允许的图片后缀：管理员在「管理-设置」里配置，缺省时给一句常见格式。 */
 const formatHint = computed(() => {
   const list = allowedFormats('image');
   return list.length > 0 ? list.map((item) => `.${item}`).join('/') : t('exhibition.form.commonImageFormats');
-});
-
-/** 简介预览：Markdown 先渲染再抽纯文本，摘要与详情页看到的一致。 */
-const descriptionSummary = computed(() => {
-  if (!form.description) return t('exhibition.form.emptyDescription');
-  return plainText(markdownToHtml(form.description), 70) || t('exhibition.form.markdownDescriptionSet');
 });
 
 const qrHint = computed(() => (form.qrEnabled ? t('exhibition.form.checkInQrOn') : t('exhibition.form.checkInQrOff')));
@@ -351,12 +346,14 @@ function fieldChecks(): Array<[string, () => string]> {
     [
       'category',
       () =>
-        check(form.category, {
-          label: t('admin.limits.category'),
-          max: limit('category', 20),
-          pattern: PATTERNS.category,
-          patternMessage: t('exhibition.form.categoryCharacters'),
-        }),
+        form.category.trim()
+          ? check(form.category, {
+              label: t('admin.limits.category'),
+              max: limit('category', 20),
+              pattern: PATTERNS.category,
+              patternMessage: t('exhibition.form.categoryCharacters'),
+            })
+          : t('exhibition.form.categoryRequired'),
     ],
     [
       'registrationStart',
@@ -455,6 +452,7 @@ function applyDraft(draft: ExhibitionDraft): void {
 
 function currentDraft(): ExhibitionDraft {
   return {
+    id: createdId.value || exhibitionId.value,
     title: form.title,
     venue: form.venue,
     date: form.date,
@@ -479,11 +477,7 @@ async function load(): Promise<void> {
     built.value = true;
     return;
   }
-  const data = await detail.run(async () => {
-    const result = await api.exhibitions.get(exhibitionId.value);
-    if (result.exhibition?.description) await loadMarkdownParser();
-    return result;
-  });
+  const data = await detail.run(() => api.exhibitions.get(exhibitionId.value));
   if (!data || data.found === false) return;
   if (!canManageExhibition(session.user, data.exhibition)) {
     toast(t('server.permission.exhibitionNotYours'), 'error');
@@ -505,9 +499,9 @@ onMounted(() => {
   if (!built.value) void load();
 });
 
-/** 离开新建页时丢掉内存稿。去简介编辑器除外，否则返回后填不回表单。 */
+/** 离开表单页时丢掉内存稿（新建与编辑都清）。去简介编辑器除外，那边要拿它起稿。 */
 onBeforeRouteLeave((to) => {
-  if (!isCreate.value || to.path === '/rich-editor') return;
+  if (to.path === '/rich-editor') return;
   clearExhibitionDraft();
 });
 
@@ -563,14 +557,18 @@ async function saveStatusOnly(): Promise<void> {
   }
 }
 
+/**
+ * 进 Markdown 编辑器。两种情况都先把当前表单（含纯文本简介）存成内存稿：
+ * 编辑已有展会时二级页从这份稿起稿，textarea 里刚写、还没保存的正文不会丢。
+ */
 function editDescription(): void {
   const id = createdId.value || exhibitionId.value;
+  stashExhibitionDraft(currentDraft());
   if (!id) {
-    stashExhibitionDraft(currentDraft());
     void router.push('/rich-editor?draft=1');
     return;
   }
-  void router.push(`/rich-editor?id=${encodeURIComponent(id)}`);
+  void router.push(`/rich-editor?id=${encodeURIComponent(id)}&draft=1`);
 }
 
 function askDelete(): void {
@@ -736,7 +734,7 @@ function normalizeOptions(options: unknown): string[] {
       </div>
 
       <!-- 开展 / 闭展是一组日期范围：点任意一侧都打开同一个范围抽屉，选完一起回填。
-           闭展可以留空（单日展会）；「清除」把两个日期一起清掉。 -->
+           闭展可以留空（单日展会），两次点同一天时闭展也回填这一天；「清除」把两个日期一起清掉。 -->
       <div class="form-pair">
         <div class="field" :data-invalid="isInvalid('date') ? 'true' : 'false'">
           <span id="form-date-label" class="field-label"
@@ -753,7 +751,7 @@ function normalizeOptions(options: unknown): string[] {
             <span class="picker-trigger-value" :data-empty="form.date ? 'false' : 'true'">{{
               dateText || t('picker.selectDate')
             }}</span>
-            <AppIcon name="chevronDown" size="icon icon-sm" />
+            <AppIcon name="calendar" size="icon icon-sm" />
           </button>
           <p v-if="isInvalid('date')" class="field-error" role="alert">{{ formError }}</p>
         </div>
@@ -770,7 +768,7 @@ function normalizeOptions(options: unknown): string[] {
             <span class="picker-trigger-value" :data-empty="form.endDate ? 'false' : 'true'">{{
               endDateText || t('picker.selectDate')
             }}</span>
-            <AppIcon name="chevronDown" size="icon icon-sm" />
+            <AppIcon name="calendar" size="icon icon-sm" />
           </button>
           <p v-if="isInvalid('endDate')" class="field-error" role="alert">{{ formError }}</p>
           <p v-if="maxExhibitionDays > 0" class="field-hint">
@@ -810,6 +808,7 @@ function normalizeOptions(options: unknown): string[] {
           </button>
         </div>
         <p v-if="isInvalid('time')" class="field-error" role="alert">{{ formError }}</p>
+        <p class="field-hint">{{ t('exhibition.form.openTimeHint') }}</p>
       </div>
 
       <!-- 报名开始 / 截止也是一组日期范围；两项都可留空，清空即不设报名窗口。 -->
@@ -827,7 +826,7 @@ function normalizeOptions(options: unknown): string[] {
             <span class="picker-trigger-value" :data-empty="form.registrationStart ? 'false' : 'true'">{{
               registrationStartText || t('picker.selectDate')
             }}</span>
-            <AppIcon name="chevronDown" size="icon icon-sm" />
+            <AppIcon name="calendar" size="icon icon-sm" />
           </button>
           <p v-if="isInvalid('registrationStart')" class="field-error" role="alert">{{ formError }}</p>
         </div>
@@ -844,7 +843,7 @@ function normalizeOptions(options: unknown): string[] {
             <span class="picker-trigger-value" :data-empty="form.registrationEnd ? 'false' : 'true'">{{
               registrationEndText || t('picker.selectDate')
             }}</span>
-            <AppIcon name="chevronDown" size="icon icon-sm" />
+            <AppIcon name="calendar" size="icon icon-sm" />
           </button>
           <p v-if="isInvalid('registrationEnd')" class="field-error" role="alert">{{ formError }}</p>
         </div>
@@ -852,7 +851,9 @@ function normalizeOptions(options: unknown): string[] {
 
       <!-- 分类是管理员在「管理后台-设置」里维护的清单：一行可点的字段，点开抽屉选值 -->
       <div class="field" :data-invalid="isInvalid('category') ? 'true' : 'false'">
-        <span id="form-category-label" class="field-label">{{ t('admin.limits.category') }}</span>
+        <span id="form-category-label" class="field-label"
+          >{{ t('admin.limits.category') }}<span class="required" aria-hidden="true"> *</span></span
+        >
         <button
           id="form-category"
           class="input input-line category-trigger"
@@ -873,8 +874,9 @@ function normalizeOptions(options: unknown): string[] {
       <p v-if="isInvalid('fields')" class="field-error" role="alert">{{ formError }}</p>
     </div>
 
-    <!-- 封面与简介：1080×1920 竖版封面在上，简介入口与摘要跟在下面。
-         简介原先在「报名与简介设置」里，按需求并进封面卡，入口与草稿逻辑不变。 -->
+    <!-- 活动信息：竖版封面在上，纯文本简介、Markdown 编辑入口与参与方式依次跟在下面。
+         简介与 RichEditorPage 共用 form.description：点 Markdown 入口时先把当前表单存成内存稿
+         （新建与编辑都一样），二级页以它为起稿，所以两边始终是同一份正文。 -->
     <div class="card cover-card">
       <span class="section-label">{{ t('exhibition.form.coverAndDescription') }}</span>
       <div class="cover-row">
@@ -889,17 +891,38 @@ function normalizeOptions(options: unknown): string[] {
           <button v-if="form.imageUri" class="cta ghost" data-size="small" type="button" @click="removeCover">
             {{ t('admin.media.removeCover') }}
           </button>
-          <p class="field-hint">1080 × 1920</p>
+          <p class="field-hint">{{ t('exhibition.form.coverRatioHint') }}</p>
           <p class="field-hint">{{ formatHint }}</p>
         </div>
       </div>
-      <div class="stack" data-gap="sm">
+      <div class="field">
+        <label class="field-label" for="form-description">{{ t('exhibition.form.descriptionLabel') }}</label>
+        <textarea
+          id="form-description"
+          v-model="form.description"
+          class="textarea"
+          rows="6"
+          :placeholder="t('exhibition.form.descriptionPlaceholder')"
+        />
         <div class="row">
           <button class="cta ghost" data-size="small" type="button" @click="editDescription">
             {{ t('exhibition.form.editDescription') }}
           </button>
         </div>
-        <p class="row-meta clamp-2">{{ descriptionSummary }}</p>
+      </div>
+      <div class="field">
+        <label class="field-label" for="form-registration-notice">{{ t('exhibition.form.noticeTitle') }}</label>
+        <textarea
+          id="form-registration-notice"
+          v-model="form.registrationNotice"
+          class="textarea"
+          rows="6"
+          maxlength="2000"
+          :placeholder="t('exhibition.form.noticePlaceholder')"
+          :aria-describedby="'form-registration-notice-hint'"
+        />
+        <p id="form-registration-notice-hint" class="field-hint">{{ t('exhibition.form.noticeHint') }}</p>
+        <p v-if="isInvalid('registrationNotice')" class="field-error" role="alert">{{ formError }}</p>
       </div>
     </div>
 
@@ -949,22 +972,6 @@ function normalizeOptions(options: unknown): string[] {
       :check-max="limit('checkOption', 60)"
     />
 
-    <!-- 报名注意事项：审核通过 / 已参加的报名者在报名详情页看到这段正文。选填。 -->
-    <div class="card">
-      <span class="section-label">{{ t('exhibition.form.noticeTitle') }}</span>
-      <textarea
-        id="form-registration-notice"
-        v-model="form.registrationNotice"
-        class="textarea"
-        rows="6"
-        maxlength="2000"
-        :placeholder="t('exhibition.form.noticePlaceholder')"
-        :aria-describedby="'form-registration-notice-hint'"
-      />
-      <p id="form-registration-notice-hint" class="field-hint">{{ t('exhibition.form.noticeHint') }}</p>
-      <p v-if="isInvalid('registrationNotice')" class="field-error" role="alert">{{ formError }}</p>
-    </div>
-
     <!-- 删除放在内容最下，保存仍固定在页脚。新建还没有展会，按钮不可点。 -->
     <div class="card danger-zone">
       <span class="section-label">{{ t('exhibition.form.dangerZone') }}</span>
@@ -988,12 +995,8 @@ function normalizeOptions(options: unknown): string[] {
 </template>
 
 <style scoped>
-/* 只作用于本页自己的类名：卡片内距由外壳与 .card 给，这里不再补左右 padding。 */
-.clamp-2 {
-  -webkit-line-clamp: 2;
-}
-
-/* 表单列宽跟容器走：隐式 auto 轨道会被子项的 max-content 撑宽，320 宽时会横向溢出。 */
+/* 只写本页自己的类名：卡片内距由外壳与 .card 给，这里不再补左右 padding。
+   表单列宽跟容器走：隐式 auto 轨道会被子项的 max-content 撑宽，320 宽时会横向溢出。 */
 .form {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -1025,7 +1028,7 @@ function normalizeOptions(options: unknown): string[] {
 }
 
 /* 分类 / 日期 / 时间触发按钮：借用 .input 的外观（下划线随底座走），
-   只补布局：文字靠左、chevron 靠右，值过长时截断。 */
+   只补布局：文字靠左、图标靠右，值过长时截断。 */
 .category-trigger,
 .picker-trigger {
   justify-content: space-between;

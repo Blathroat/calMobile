@@ -5,15 +5,19 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { REQUIRED_ENTRIES } from '../scripts/runtime-bundle.mjs';
 import {
   DEFAULT_CONFIG,
+  REQUIRED_RELEASE_ENTRIES,
   appShellAvailable,
   compareVersions,
   decideUpdate,
   ensureTarball,
   isVersion,
+  legacyConfigWarning,
   normalizeConfig,
   parseCli,
+  parseEnvText,
   registryLatestUrl,
   resolveConfig,
   selectRollbackRelease,
@@ -71,41 +75,108 @@ test('npm latest 地址按包名编码', () => {
   );
 });
 
-test('配置默认值、文件覆盖和环境变量覆盖', () => {
+test('env 文件文本按 dotenv 规则解析', () => {
+  const parsed = parseEnvText(`
+# 注释行
+CALMOBILE_PACKAGE=calmobile-server
+CALMOBILE_REGISTRY="https://registry.npmmirror.com"
+CALMOBILE_KEEP='5'
+export CALMOBILE_MIN_FREE_MB=1024
+CALMOBILE_HEALTH_URL=http://127.0.0.1:3000/ping # 行尾注释
+NOT_A_CALMOBILE_KEY=ignored
+`);
+  assert.equal(parsed.CALMOBILE_PACKAGE, 'calmobile-server');
+  assert.equal(parsed.CALMOBILE_REGISTRY, 'https://registry.npmmirror.com');
+  assert.equal(parsed.CALMOBILE_KEEP, '5');
+  assert.equal(parsed.CALMOBILE_MIN_FREE_MB, '1024');
+  assert.equal(parsed.CALMOBILE_HEALTH_URL, 'http://127.0.0.1:3000/ping');
+});
+
+test('配置默认值、env 文件、进程环境和命令行按优先级合并', () => {
   const defaults = resolveConfig({ fileText: '', env: EMPTY_ENV });
   assert.equal(defaults.package, 'calmobile-server');
   assert.equal(defaults.root, '/opt/calmobile');
   assert.equal(defaults.keep, 3);
+  assert.equal(defaults.envFile, '/etc/calmobile.env');
+  assert.equal(defaults.user, 'blathroat');
+  assert.equal(defaults.updateService, 'calmobile-update.service');
+  assert.equal(Object.prototype.hasOwnProperty.call(DEFAULT_CONFIG, 'configPath'), false);
 
   const fromFile = resolveConfig({
-    fileText: JSON.stringify({ registry: 'https://registry.npmmirror.com', keep: 5, pin: '0.1.3' }),
+    fileText: 'CALMOBILE_REGISTRY=https://registry.npmmirror.com/\nCALMOBILE_KEEP=5\nCALMOBILE_ROOT="/srv/calmobile"\n',
     env: EMPTY_ENV,
   });
   assert.equal(fromFile.registry, 'https://registry.npmmirror.com');
   assert.equal(fromFile.keep, 5);
+  assert.equal(fromFile.root, '/srv/calmobile');
 
   const fromEnv = resolveConfig({
-    fileText: '',
-    env: { CALMOBILE_REGISTRY: 'https://registry.npmmirror.com/', CALMOBILE_KEEP: '4' },
+    fileText: 'CALMOBILE_KEEP=5\nCALMOBILE_REGISTRY=https://registry.npmmirror.com/\n',
+    env: { CALMOBILE_KEEP: '4', CALMOBILE_USER: 'ops', CALMOBILE_ROOT: '/srv/from-env' },
   });
-  assert.equal(fromEnv.registry, 'https://registry.npmmirror.com');
   assert.equal(fromEnv.keep, 4);
+  assert.equal(fromEnv.user, 'ops');
+  assert.equal(fromEnv.root, '/srv/from-env');
 
+  const fromCli = resolveConfig({
+    fileText: '',
+    env: { CALMOBILE_ROOT: '/srv/from-env' },
+    cli: { root: '/srv/from-cli', envFile: '/etc/other.env', service: 'custom.service' },
+  });
+  assert.equal(fromCli.root, '/srv/from-cli');
+  assert.equal(fromCli.envFile, '/etc/other.env');
+  assert.equal(fromCli.service, 'custom.service');
+});
+
+test('配置非法值在启动前报错', () => {
   assert.throws(() => normalizeConfig({ registry: 'ftp://example.com' }), /registry 必须是 http\(s\) 地址/);
   assert.throws(() => normalizeConfig({ root: 'relative/path' }), /root 必须是绝对路径/);
   assert.throws(() => normalizeConfig({ keep: 0 }), /keep 必须是 1\.\.10/);
-  assert.throws(() => resolveConfig({ fileText: '[]', env: EMPTY_ENV }), /必须是 JSON 对象/);
+  assert.throws(() => normalizeConfig({ user: 'bad user' }), /user 不是合法的用户\/组名/);
+  assert.throws(() => normalizeConfig({ service: 'calmobile service' }), /service 含有不能用在 systemd 单元名里的字符/);
+  assert.throws(() => normalizeConfig({ repositoryUrl: 'git@example.com' }), /repositoryUrl 必须是 http\(s\) 地址/);
 });
 
-test('命令行参数解析', () => {
-  assert.deepEqual(parseCli([]), { mode: 'update', force: false, version: '' });
-  assert.deepEqual(parseCli(['--check']), { mode: 'check', force: false, version: '' });
-  assert.deepEqual(parseCli(['--update', '--force']), { mode: 'update', force: true, version: '' });
-  assert.deepEqual(parseCli(['--rollback']), { mode: 'rollback', force: false, version: '' });
-  assert.deepEqual(parseCli(['--rollback', '0.1.5']), { mode: 'rollback', force: false, version: '0.1.5' });
-  assert.deepEqual(parseCli(['--pin', '0.1.5']), { mode: 'pin', force: false, version: '0.1.5' });
-  assert.deepEqual(parseCli(['--unpin']), { mode: 'unpin', force: false, version: '' });
+test('旧 JSON 配置不再读取，只提示一次迁移', () => {
+  const config = resolveConfig({
+    fileText: JSON.stringify({ registry: 'https://old.example.com', keep: 9 }),
+    env: EMPTY_ENV,
+  });
+  assert.equal(config.registry, DEFAULT_CONFIG.registry);
+  assert.equal(config.keep, DEFAULT_CONFIG.keep);
+
+  const warning = legacyConfigWarning({ env: { CALMOBILE_CONFIG_PATH: '/etc/calmobile-update.json' } });
+  assert.match(warning, /已废弃/);
+  assert.match(warning, /CALMOBILE_\*/);
+  assert.match(legacyConfigWarning({ env: EMPTY_ENV, legacyExists: true }), /不再读取/);
+  assert.equal(legacyConfigWarning({ env: EMPTY_ENV, legacyExists: false }), '');
+
+  // CALMOBILE_CONFIG_PATH 只用来提示，不参与配置。
+  const withLegacyEnv = resolveConfig({ fileText: '', env: { CALMOBILE_CONFIG_PATH: '/etc/old.json' } });
+  assert.equal(withLegacyEnv.root, DEFAULT_CONFIG.root);
+});
+
+test('命令行参数解析与覆盖', () => {
+  assert.deepEqual(parseCli([]), { mode: 'update', force: false, version: '', overrides: {} });
+  assert.deepEqual(parseCli(['--check']), { mode: 'check', force: false, version: '', overrides: {} });
+  assert.deepEqual(parseCli(['--update', '--force']), { mode: 'update', force: true, version: '', overrides: {} });
+  assert.deepEqual(parseCli(['--rollback']), { mode: 'rollback', force: false, version: '', overrides: {} });
+  assert.deepEqual(parseCli(['--rollback', '0.1.5']), {
+    mode: 'rollback',
+    force: false,
+    version: '0.1.5',
+    overrides: {},
+  });
+  assert.deepEqual(parseCli(['--pin', '0.1.5']), { mode: 'pin', force: false, version: '0.1.5', overrides: {} });
+  assert.deepEqual(parseCli(['--unpin']), { mode: 'unpin', force: false, version: '', overrides: {} });
+  assert.deepEqual(parseCli(['--env-file=/etc/other.env', '--root=/srv/app', '--service=custom.service']), {
+    mode: 'update',
+    force: false,
+    version: '',
+    overrides: { envFile: '/etc/other.env', root: '/srv/app', service: 'custom.service' },
+  });
   assert.throws(() => parseCli(['--nope']), /不认识的参数/);
+  assert.throws(() => parseCli(['--keep=5']), /不认识的参数/);
 });
 
 test('健康检查接受 3xx 重定向，不把 Host 不一致当缺产物', () => {
@@ -128,9 +199,14 @@ async function writeFixture(root, relative, text) {
   await writeFile(file, text, 'utf8');
 }
 
+test('运行时包必须文件清单与 runtime-bundle 保持同步', () => {
+  assert.deepEqual([...REQUIRED_RELEASE_ENTRIES].sort(), [...REQUIRED_ENTRIES].sort());
+});
+
 test('解压后的运行时包必须文件齐全且版本一致', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'calmobile-release-'));
   try {
+    /** @type {Record<string, string>} */
     const entries = {
       'package.json': '{"version":"0.1.7"}',
       'server/package.json': '{"version":"0.1.7"}',
@@ -145,12 +221,10 @@ test('解压后的运行时包必须文件齐全且版本一致', async () => {
       'server/dist/app-shell/index.html': '<!doctype html>\n',
       'web/dist-join/join.html': '<!doctype html>\n',
       'server/dist/app-shell-join/join.html': '<!doctype html>\n',
-      'deploy/production.env': 'NODE_ENV=production\n',
-      'deploy/calmobile-update.mjs': '// updater\n',
-      'scripts/sync-production-env.mjs': 'export {};\n',
-      'scripts/client-target.mjs': 'export {};\n',
-      'scripts/build-icons.mjs': 'export {};\n',
     };
+    for (const entry of REQUIRED_RELEASE_ENTRIES) {
+      if (!Object.prototype.hasOwnProperty.call(entries, entry)) entries[entry] = '// fixture\n';
+    }
     for (const [relative, text] of Object.entries(entries)) {
       await writeFixture(directory, relative, text);
     }

@@ -17,6 +17,9 @@ export const EXHIBITION_COLUMNS = `
     EXTRACT(DAY FROM e.exhibition_date)::int                AS day,
     to_char(e.registration_start, 'YYYY-MM-DD')             AS registration_start,
     to_char(e.registration_end, 'YYYY-MM-DD')             AS registration_end,
+    -- 报名截止日已过（当天仍算可报名）。是否算「已截止报名」还要看报名方式，
+    -- 见 domain/payloads.ts 的 exhibitionPayload：仅展示 / 已结束不算。
+    (e.registration_end IS NOT NULL AND CURRENT_DATE > e.registration_end) AS registration_ended,
     COALESCE(u.nickname, '')                                AS exhibitor,
     -- 展商时长已走完时按普通用户展示（只影响展示，角色结算见 domain/membership.ts）
     CASE WHEN u.role = 'exhibitor' AND u.exhibitor_expires_at IS NOT NULL
@@ -37,6 +40,9 @@ export const EXHIBITION_FROM = `
 export const REGISTRATION_COLUMNS = `
     r.id, r.exhibition_id, r.visitor_id, r.visitor_name, r.visitor_type, r.answers,
     r.status, r.check_in_time, r.check_in_secret, r.created_at,
+    -- 报名参加时间段：多天展会里用户自己选的日期；NULL 表示没选，按整段展会处理。
+    to_char(r.attendance_start, 'YYYY-MM-DD')   AS attendance_start,
+    to_char(r.attendance_end, 'YYYY-MM-DD')     AS attendance_end,
     e.title                 AS exhibition_title,
     e.venue                 AS exhibition_venue,
     e.time                  AS exhibition_time,

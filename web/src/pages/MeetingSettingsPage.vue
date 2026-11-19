@@ -2,7 +2,8 @@
 /**
  * 私人会议相关设置。
  *
- * 页顶是可复制的申请地址和一行说明。开关控制是否接受新的预约。
+ * 页顶是可复制的申请地址和一行说明，右侧的二维码按钮打开与展商后台同一个分享抽屉。
+ * 开关控制是否接受新的预约。
  * 收集项卡片与编辑展会的报名收集项是同一个组件。
  * 受限或封禁的账号开关强制关闭，也不能保存。
  */
@@ -19,6 +20,7 @@ import { firstCollectFieldError } from '@/services/collect-fields';
 import { FIELD_TYPE } from '@/services/status';
 import AppIcon from '@/components/AppIcon.vue';
 import CollectFieldsCard, { type CollectField } from '@/components/CollectFieldsCard.vue';
+import ShareQrSheet from '@/components/ShareQrSheet.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import type { JsonObject } from '@/api/types';
@@ -54,6 +56,11 @@ const COPY = {
   missing: t('exhibition.detail.registrationSiteMissing'),
   copied: t('meeting.linkCopied'),
   shareHint: t('meeting.settings.shareHint'),
+  shareQr: t('meeting.settings.shareQr'),
+  qrTitle: t('meeting.settings.qrTitle'),
+  qrLabel: t('meeting.settings.qrLabel'),
+  qrHint: t('meeting.settings.qrHint'),
+  qrSaved: t('meeting.settings.qrSaved'),
 };
 
 async function copyLink(): Promise<void> {
@@ -71,6 +78,27 @@ async function copyLink(): Promise<void> {
       actions: [{ label: t('common.cancel'), onClick: (close) => close() }],
     });
   }
+}
+
+/** 分享预约二维码：复用展商后台的分享抽屉，只把展会文案换成私人会议文案。 */
+function openShareQr(): void {
+  if (!link.value) {
+    toast(COPY.missing, 'error');
+    return;
+  }
+  openSheet({
+    title: COPY.qrTitle,
+    component: ShareQrSheet,
+    // 面板状态是全局响应式的：只传字符串快照，避免把会变的共享对象/ref 包成代理。
+    props: {
+      text: link.value,
+      title: String(session.user.nickname || session.user.username || ''),
+      fileName: `meeting-qr-${String(session.user.id)}.png`,
+      qrLabel: COPY.qrLabel,
+      hint: COPY.qrHint,
+      savedText: COPY.qrSaved,
+    },
+  });
 }
 
 function apply(data: JsonObject): void {
@@ -149,6 +177,9 @@ async function save(): Promise<void> {
       <span class="row-meta truncate">{{ link || COPY.missing }}</span>
       <button class="icon-hit" type="button" :aria-label="COPY.copy" @click="copyLink">
         <AppIcon name="copy" size="icon icon-sm" />
+      </button>
+      <button class="icon-hit" type="button" :aria-label="COPY.shareQr" :title="COPY.shareQr" @click="openShareQr">
+        <AppIcon name="qr" size="icon icon-sm" />
       </button>
     </div>
     <p class="field-hint" data-one-line="true">{{ COPY.shareHint }}</p>

@@ -9,7 +9,7 @@ import { hasRememberedSession } from '@/services/session-hint';
  * - `back`：顶栏是否显示返回键，二级页为 true、标签页为 false；
  * - `tab`：底部导航选中项，**存在即显示底部导航**（外壳只看它是不是 undefined）；
  * - `topAction`：顶栏右侧的页面级操作 `{ icon, to, label }`，目前只有个人页用它进设置；
- * - `bodyGap` / `bodyPad` / `bodyAlign`：内容区间距与对齐，只在要偏离 tokens.css 默认值时写；
+ * - `bodyGap` / `bodyPad` / `bodyAlign`：内容区间距与对齐，只在要偏离 base.css 默认值时写；
  * - `requiresAuth` / `roles` / `capability`：访问约束，只被下面的守卫读取，外壳不关心。
  *
  * 守卫按固定顺序判定，先命中先返回（顺序不能调换）：
@@ -88,7 +88,7 @@ declare module 'vue-router' {
     tab?: string;
     /** 顶栏右侧的页面级操作（例如个人页的「设置」入口），`label` 同样是文案 key */
     topAction?: { icon: string; to?: string; label: string; action?: 'logout' };
-    /** 内容区间距：`tight` 用于信息密集页，其余交给 tokens.css 默认值 */
+    /** 内容区间距：`tight` 用于信息密集页，其余交给 base.css 默认值 */
     bodyGap?: BodyGap;
     /** 内容区去掉内边距（整屏自定义布局的页面用） */
     bodyPad?: 'none';

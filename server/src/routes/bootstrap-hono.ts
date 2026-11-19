@@ -69,6 +69,9 @@ export function createBootstrapRoutes(options: { branding?: BrandingConfig } = {
       capabilities: { ...settings.capabilities },
       categories: settings.categories,
       review: settings.review,
+      // 匿名报名姓名同义词：报名站据此决定是否把收集项当姓名、隐藏额外的姓名表单。
+      // 空数组表示不合并（始终显示单独姓名表）。
+      registration: settings.registration,
       media: settings.media,
       announcement: settings.announcement,
       brand: settings.brand,

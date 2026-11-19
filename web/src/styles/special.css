@@ -1,0 +1,248 @@
+/* ============================================================================
+ * calMobile · 专属组件与适配
+ *
+ * 富文本 / Markdown、日历、二维码、悬停与宽屏、iOS 与主屏幕 PWA。
+ * 末尾的媒体查询与前面各段构成层叠关系；导入顺序见 `src/main.ts`，不要单独调整位置。
+ * ==========================================================================*/
+
+/* ============================================================================
+ * 富文本展示与编辑
+ * ==========================================================================*/
+
+.rich-content {
+  display: grid;
+  /* 单列兜住内容宽度：否则宽表格会把这一列撑到自己的固有宽度，卡片被撑破，
+     表格自己的 max-width 也就失去了参照。 */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s3);
+  color: var(--ink);
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.rich-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--r-input);
+  border: var(--hairline) solid var(--stroke);
+}
+
+.rich-content h1,
+.rich-content h2,
+.rich-content h3 {
+  font-size: var(--fs-h3);
+}
+
+.rich-content ul,
+.rich-content ol {
+  padding-inline-start: 1.4em;
+}
+
+.rich-content a {
+  color: var(--accent-ink);
+}
+
+.rich-content blockquote {
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  border-inline-start: 3px solid var(--accent-edge);
+  background: var(--f3);
+  color: var(--ink-2);
+}
+
+/* 表格：整张表连同每个单元格都是同口径的 1px 框线。
+   行高与列宽都跟着内容走（不给 nowrap、也不给固定行高），列宽按内容分配；
+   窄屏放不下时只有表格自己横向滚动，不撑破卡片。 */
+.rich-content table {
+  display: block; /* 表格要成为滚动容器，不能用默认的 table 布局 */
+  width: max-content; /* 内容窄时外框贴着内容，不拉满整行 */
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  table-layout: auto;
+  /* display:block 时折叠边框模型会把最外圈算两遍，实测外框会变粗成 2px 双线。
+     这里保留 1px 的边框宽度但不上色，外框交给最外圈的 th/td，四边一律 1px。 */
+  border: var(--hairline) solid transparent;
+}
+
+.rich-content th,
+.rich-content td {
+  padding: var(--s2) var(--s3);
+  border: var(--hairline) solid var(--stroke);
+  /* 每列至少放得下几个字：没有这个下限时，5 列以上的表会被压到每格一两个字，
+     行高被拉成几百像素（实测 644px）。给下限后列宽仍随内容增长，放不下就横向滚动。 */
+  min-width: 4.5em;
+  text-align: start;
+  vertical-align: top;
+  /* 盖掉 .rich-content 的 anywhere：单元格的固有宽度按词计算，
+     表格才有触发横向滚动的下限；过长的串仍在单元格内断开，不会溢出。 */
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.rich-content th {
+  background: var(--f3);
+  font-weight: 700;
+}
+
+/* ============================================================================
+ * 日历（首页月视图）
+ * ==========================================================================*/
+
+/* 日历外层：横向手势由脚本接管，纵向仍然交给页面滚动 */
+.calendar-swipe {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border-radius: var(--r-panel);
+  touch-action: pan-y;
+}
+
+/* ============================================================================
+ * 报名码（用户报名详情里展示的二维码）
+ * ==========================================================================*/
+
+.qr-wrap {
+  display: grid;
+  place-items: center;
+  padding: var(--s2) 0;
+}
+
+.qr-code-text {
+  display: block;
+  padding: var(--s2);
+  border-radius: var(--r-chip);
+  background: var(--f3);
+  color: var(--ink-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-tag);
+  text-align: center;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+/* ============================================================================
+ * 扫码核销（展商现场核销报名码）
+ * ==========================================================================*/
+
+/* ============================================================================
+ * 悬停与指针设备（外观与线框一致：白底描边按钮填充强调色）
+ * ==========================================================================*/
+
+@media (hover: hover) {
+  .cta:hover {
+    background: var(--accent-ink);
+  }
+
+  .cta.ghost:hover {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-dark);
+  }
+
+  .cta.danger:hover {
+    background: #8c2f22;
+  }
+
+  .icon-button:hover {
+    color: var(--accent-ink);
+  }
+
+  .card[data-pressable='true']:hover,
+  .row-card[data-pressable='true']:hover {
+    border-color: var(--accent);
+    background: var(--accent-tint);
+  }
+
+  .tab:hover {
+    color: var(--accent-ink);
+  }
+
+  .cal-day:hover {
+    color: var(--accent-ink);
+  }
+
+  /* 选中日期保持无底色：悬停时只把数字下划线加粗一档 */
+  .cal-day[aria-pressed='true']:hover {
+    background: transparent;
+    color: var(--accent-ink);
+  }
+
+  .cal-day[aria-pressed='true']:hover .cal-day-num {
+    border-bottom-color: var(--accent-ink);
+  }
+
+  .seg button:not([aria-pressed='true']):hover {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-dark);
+  }
+
+  .seg button[aria-pressed='true']:hover {
+    background: transparent;
+    border-color: transparent;
+    color: var(--on-dark);
+  }
+
+  .text-action:hover,
+  .link-button:hover {
+    text-decoration: underline;
+  }
+
+  .round-action:hover {
+    background: var(--accent-ink);
+  }
+
+  .round-action[data-variant='ghost']:hover {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-dark);
+  }
+}
+
+@media (min-width: 721px) {
+  .app {
+    border-inline: var(--hairline) solid var(--stroke);
+    box-shadow:
+      0 0 0 1px rgba(31, 35, 40, 0.02),
+      0 18px 40px rgba(31, 35, 40, 0.06);
+  }
+}
+
+/* ============================================================================
+ * iOS 与已安装到主屏幕的 PWA
+ * ==========================================================================*/
+
+/* 构建目标默认支持 dvh，CSS 压缩会把上面同一条规则里的 100vh 兜底当重复声明删掉，
+   所以给不认 dvh 的旧内核再补一次 vh（认 dvh 的浏览器不会命中这段）。 */
+@supports not (height: 100dvh) {
+  body {
+    min-height: 100vh;
+  }
+
+  .app {
+    height: 100vh;
+  }
+}
+
+/* iOS Safari 在输入框字号小于 16px 时，聚焦会顺手把整页放大，且不会自动缩回。
+   `-webkit-touch-callout` 只有 iOS 的 WebKit 认，所以用它把表单字号抬到 16px，
+   其它浏览器不受影响。这里只改字号：边框、底色、下划线仍由前面各段决定，
+   .input-line 只覆盖外观属性，字号照样跟着这条走。 */
+@supports (-webkit-touch-callout: none) {
+  .input,
+  .textarea,
+  .select {
+    font-size: 16px;
+  }
+}
+
+/* 已安装到主屏幕时页面本身就是独立窗口，系统的下拉回弹 / 下拉刷新会跟页面内的
+   下拉刷新叠在一起：两边都关掉，下拉手势只交给页面自己的刷新逻辑。 */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+}

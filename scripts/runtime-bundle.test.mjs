@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import {
-  PACKAGE_NAME,
+  DEFAULT_PACKAGE_NAME,
   REQUIRED_ENTRIES,
   listFiles,
+  resolvePackageName,
   rewriteServerPackage,
   runtimePackageJson,
   stageRuntimePackage,
@@ -39,10 +40,20 @@ before(async () => {
   await write(fixtureRoot, 'web/dist-join/join.html', '<!doctype html><title>join</title>\n');
   await write(fixtureRoot, 'web/src/main.ts', 'export {};\n');
   await write(fixtureRoot, 'deploy/production.env', 'NODE_ENV=production\nPORT=3000\n');
+  await write(fixtureRoot, 'deploy/instance.env.example', 'CALMOBILE_ROOT=/opt/calmobile\n');
   await write(fixtureRoot, 'deploy/calmobile-update.mjs', '// updater\n');
+  await write(fixtureRoot, 'deploy/systemd/calmobile.service.in', '[Service]\n');
+  await write(fixtureRoot, 'deploy/systemd/calmobile-update.service.in', '[Service]\n');
+  await write(fixtureRoot, 'deploy/systemd/calmobile-update.timer.in', '[Timer]\n');
   await write(fixtureRoot, 'scripts/sync-production-env.mjs', 'export {};\n');
   await write(fixtureRoot, 'scripts/client-target.mjs', 'export {};\n');
+  await write(fixtureRoot, 'scripts/env-file.mjs', 'export {};\n');
   await write(fixtureRoot, 'scripts/build-icons.mjs', 'export {};\n');
+  await write(fixtureRoot, 'scripts/icons/png.mjs', 'export {};\n');
+  await write(fixtureRoot, 'scripts/icons/config.mjs', 'export {};\n');
+  await write(fixtureRoot, 'scripts/icons/web.mjs', 'export {};\n');
+  await write(fixtureRoot, 'scripts/icons/android.mjs', 'export {};\n');
+  await write(fixtureRoot, 'scripts/render-units.mjs', 'export {};\n');
 });
 
 after(async () => {
@@ -60,7 +71,7 @@ test('暂存运行时包保持 server 与 web 同级，并写入发布版本', a
   assert.ok(!files.some((file) => file.startsWith('web/src/')), '源码不应进包');
 
   const rootPackage = JSON.parse(await readFile(path.join(outDir, 'package.json'), 'utf8'));
-  assert.equal(rootPackage.name, PACKAGE_NAME);
+  assert.equal(rootPackage.name, DEFAULT_PACKAGE_NAME);
   assert.equal(rootPackage.version, '0.1.42');
 
   const serverPackage = JSON.parse(await readFile(path.join(outDir, 'server/package.json'), 'utf8'));
@@ -92,6 +103,22 @@ test('校验会发现缺文件和多余源码', async () => {
 test('清单校验只认包内相对路径', () => {
   assert.deepEqual(verifyRuntimeManifest(REQUIRED_ENTRIES), []);
   assert.deepEqual(verifyRuntimeManifest([...REQUIRED_ENTRIES, 'server/src/a.ts']), ['不该打包：server/src/a.ts']);
+});
+
+test('包名默认 calmobile-server，可由 CALMOBILE_PACKAGE 覆盖', () => {
+  const previous = process.env.CALMOBILE_PACKAGE;
+  delete process.env.CALMOBILE_PACKAGE;
+  try {
+    assert.equal(DEFAULT_PACKAGE_NAME, 'calmobile-server');
+    assert.equal(resolvePackageName({}), DEFAULT_PACKAGE_NAME);
+    assert.equal(resolvePackageName({ CALMOBILE_PACKAGE: 'custom-runtime' }), 'custom-runtime');
+    assert.throws(() => resolvePackageName({ CALMOBILE_PACKAGE: 'bad name' }), /合法的 npm 包名/);
+    assert.equal(runtimePackageJson('0.1.7').name, DEFAULT_PACKAGE_NAME);
+    assert.equal(runtimePackageJson('0.1.7', 'custom-runtime').name, 'custom-runtime');
+  } finally {
+    if (previous === undefined) delete process.env.CALMOBILE_PACKAGE;
+    else process.env.CALMOBILE_PACKAGE = previous;
+  }
 });
 
 test('版本号必须是 x.y.z，改写只动 server 版本', () => {

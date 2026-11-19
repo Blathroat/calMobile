@@ -5,27 +5,35 @@
  * 纯展示 + 事件回抛：状态、取数、防抖与导航都留在 AdminPage。
  * 根节点保持多根 fragment，条件与原顺序不变，不额外包一层元素。
  */
+import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import RoleTag from '@/components/RoleTag.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { formatLocalChineseDate, truncate } from '@/services/format';
+import { openSheet } from '@/services/sheet';
 import { statusTone, userStatusLabel } from '@/services/status';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { computed, type Ref } from 'vue';
 import type { User } from '@/api/types';
 import { t } from '@/i18n';
 
-defineProps<{
+const props = defineProps<{
   users: { data: Ref<User[] | undefined>; error: Ref<Error | undefined>; loading: Ref<boolean> };
   userItems: User[];
   query: string;
+  /** 当前身份筛选值：user / exhibitor / admin，空串表示「全部」。 */
+  roleFilter: string;
+  /** 当前账号状态筛选值：active / limited / banned，空串表示「全部」。 */
+  statusFilter: string;
   copy: { adjustStatus: string; adjustRole: string; manageExhibitions: string; manageMeetings: string };
 }>();
 const emit = defineEmits<{
   retry: [];
   search: [value: string];
+  'change-role': [value: string];
+  'change-status': [value: string];
   'open-public': [user: User];
   manage: [user: User];
   'adjust-role': [user: User];
@@ -33,6 +41,88 @@ const emit = defineEmits<{
   'open-exhibitions': [user: User];
   'open-meetings': [user: User];
 }>();
+
+interface FilterItem {
+  value: string;
+  label: string;
+}
+
+/**
+ * 身份 / 状态筛选项：值沿用协议 code，空串是「全部」（父组件不会把它发给服务端）。
+ * 「普通用户」比权限面板里的「用户」更明确；状态文案与卡片右侧的标签保持一致。
+ */
+const ROLE_FILTER_ITEMS: FilterItem[] = [
+  { value: '', label: t('admin.users.filterAll') },
+  { value: 'user', label: t('admin.users.filterRoleUser') },
+  { value: 'exhibitor', label: t('admin.users.filterRoleExhibitor') },
+  { value: 'admin', label: t('admin.users.filterRoleAdmin') },
+];
+const STATUS_FILTER_ITEMS: FilterItem[] = [
+  { value: '', label: t('admin.users.filterAll') },
+  { value: 'active', label: t('admin.users.filterStatusActive') },
+  { value: 'limited', label: t('admin.users.filterStatusLimited') },
+  { value: 'banned', label: t('admin.users.filterStatusBanned') },
+];
+
+/** 选择栏上显示的当前值文案：值为空串时是「全部」。 */
+function filterLabel(items: readonly FilterItem[], value: string): string {
+  return items.find((item) => item.value === value)?.label ?? items[0]!.label;
+}
+
+const roleFilterLabel = computed(() => filterLabel(ROLE_FILTER_ITEMS, props.roleFilter));
+const statusFilterLabel = computed(() => filterLabel(STATUS_FILTER_ITEMS, props.statusFilter));
+
+/**
+ * 打开筛选抽屉：与编辑展会页选分类同一套画法（带对勾的列表，点一项即收起）。
+ * 只有换了一项才回抛，和原来分段控件的行为一致；取数与地址栏仍留在 AdminPage。
+ */
+function openFilterSheet(
+  title: string,
+  items: readonly FilterItem[],
+  current: string,
+  onPick: (value: string) => void,
+): void {
+  openSheet({
+    title,
+    layout: 'list',
+    actions: items.map((item) => ({
+      label: item.label,
+      checked: item.value === current,
+      onClick: (close: () => void) => {
+        close();
+        if (item.value !== current) onPick(item.value);
+      },
+    })),
+  });
+}
+
+function openRoleSheet(): void {
+  openFilterSheet(t('admin.users.filterRole'), ROLE_FILTER_ITEMS, props.roleFilter, (value) =>
+    emit('change-role', value),
+  );
+}
+
+function openStatusSheet(): void {
+  openFilterSheet(t('admin.users.filterStatus'), STATUS_FILTER_ITEMS, props.statusFilter, (value) =>
+    emit('change-status', value),
+  );
+}
+
+/** 是否有筛选生效：空态文案据此区分「本来就没有用户」和「被筛掉了」。 */
+const filtersActive = computed(() => props.roleFilter !== '' || props.statusFilter !== '');
+
+/**
+ * 列表为空时的标题：关键字与筛选同时生效时说明两者共同作用的结果，
+ * 不能复用「没有找到与某关键字匹配的用户」——那时用户可能压根没搜过。
+ */
+const emptyTitle = computed(() => {
+  if (props.query) {
+    return filtersActive.value
+      ? t('admin.users.noMatchFiltered', { query: props.query })
+      : t('admin.users.noMatch', { query: props.query });
+  }
+  return filtersActive.value ? t('admin.users.noFilterMatch') : t('admin.users.empty');
+});
 
 /** 限时展商的到期说明；永久展商与普通用户不显示这一行。 */
 function exhibitorMeta(user: User): string {
@@ -107,14 +197,43 @@ function agreementMeta(user: User): string {
         @input="emit('search', ($event.target as HTMLInputElement).value)"
       />
     </div>
+    <!-- 身份与状态排成一行：借用编辑展会页「活动分类」的下划线选择栏，
+         点开是带对勾的列表抽屉；变化只回抛，地址栏与取数留在 AdminPage。 -->
+    <div class="user-filter-row">
+      <div class="field">
+        <span id="admin-user-role-label" class="field-label">{{ t('admin.users.filterRole') }}</span>
+        <button
+          id="admin-user-role-filter"
+          class="input input-line filter-trigger"
+          type="button"
+          aria-haspopup="dialog"
+          aria-labelledby="admin-user-role-label"
+          @click="openRoleSheet"
+        >
+          <span class="filter-value">{{ roleFilterLabel }}</span>
+          <AppIcon name="chevronDown" size="icon icon-sm" />
+        </button>
+      </div>
+      <div class="field">
+        <span id="admin-user-status-label" class="field-label">{{ t('admin.users.filterStatus') }}</span>
+        <button
+          id="admin-user-status-filter"
+          class="input input-line filter-trigger"
+          type="button"
+          aria-haspopup="dialog"
+          aria-labelledby="admin-user-status-label"
+          @click="openStatusSheet"
+        >
+          <span class="filter-value">{{ statusFilterLabel }}</span>
+          <AppIcon name="chevronDown" size="icon icon-sm" />
+        </button>
+      </div>
+    </div>
     <div v-if="users.error.value" class="notice" data-tone="accent">
       <span>{{ users.error.value.message }}</span>
     </div>
 
-    <StateBlock
-      v-if="userItems.length === 0"
-      :title="query ? t('admin.users.noMatch', { query }) : t('admin.users.empty')"
-    />
+    <StateBlock v-if="userItems.length === 0" :title="emptyTitle" />
     <div v-else class="list" data-gap="sm" :data-busy="users.loading.value ? 'true' : undefined">
       <div v-for="user in userItems" :key="String(user.id)" class="card">
         <button
@@ -179,3 +298,33 @@ function agreementMeta(user: User): string {
     </div>
   </template>
 </template>
+
+<style>
+/* 身份 / 状态两个选择栏排成一行：宽屏并排、窄屏按 150px 下限自动落成两行，
+   与编辑展会页的日期 / 分类选择器同一套版式（下划线触发按钮 + 右侧箭头）。 */
+.user-filter-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s4);
+}
+
+.filter-trigger {
+  justify-content: space-between;
+  gap: var(--s2);
+  text-align: start;
+}
+
+.filter-trigger svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-3);
+}
+
+.filter-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>

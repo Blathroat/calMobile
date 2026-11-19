@@ -289,6 +289,9 @@ export const serverSettingsPatchSchema = z
     // 操作日志存储上限：整段 { storageMb } 或扁平 logsStorageMb。
     logs: z.unknown(),
     logsStorageMb: z.unknown(),
+    // 匿名报名姓名同义词：整段 { nameFieldTitles } 或扁平 registrationNameFieldTitles。
+    registration: z.unknown(),
+    registrationNameFieldTitles: z.unknown(),
     notify: notifySchema,
   })
   .partial()
@@ -498,7 +501,8 @@ export function exhibitionInputSchema(
       category: textSchema({ label: '展会分类', max: limits.category, required: false }),
       date: isoDateSchema({ label: '展会日期', required: true }),
       endDate: isoDateSchema({ label: '闭展日期' }),
-      time: timeRangeSchema({ label: '展会时间', required: true }),
+      // 时间选填：留空表示只显示日期（详情、月视图与日历文件都按「没有时间」处理）。
+      time: timeRangeSchema({ label: '展会时间', required: false }),
       status: inputString,
       registrationStart: isoDateSchema({ label: '报名开始日期' }),
       registrationEnd: isoDateSchema({ label: '报名截止日期' }),
@@ -528,7 +532,6 @@ export function exhibitionInputSchema(
           params: issueParams('validation.exhibitionTitleRequired'),
         });
       const date = source.date ?? existing?.exhibition_date ?? '';
-      const time = source.time ?? existing?.time ?? '';
       if (creating && !date)
         ctx.addIssue({
           code: 'custom',
@@ -536,12 +539,14 @@ export function exhibitionInputSchema(
           message: '请选择展会日期',
           params: issueParams('validation.dateRequired', { label: '展会日期' }),
         });
-      if (creating && !time)
+      // 分类只在新建时强制：更新时保持宽松，历史空分类的展会（例如只改简介）仍能保存。
+      const category = source.category ?? existing?.category ?? '';
+      if (creating && !category.trim())
         ctx.addIssue({
           code: 'custom',
-          path: ['time'],
-          message: '请输入展会时间',
-          params: issueParams('validation.required', { label: '展会时间' }),
+          path: ['category'],
+          message: '请选择展会分类',
+          params: issueParams('validation.categoryRequired'),
         });
       const registrationStart = source.registrationStart ?? existing?.registration_start ?? '';
       const registrationEnd = source.registrationEnd ?? existing?.registration_end ?? '';
@@ -617,6 +622,10 @@ export function registrationSchema() {
     visitorName: textSchema({ label: '姓名' }),
     visitorType: textSchema({ label: '参观身份' }),
     answers: inputString,
+    // 参加时间段：宽松收下，格式、顺序与展会区间由 domain/registration-attendance.ts 统一校验。
+    // 未提交时必须是 undefined（报名站旧代码不带这两个字段）。
+    attendanceStart: z.unknown().optional(),
+    attendanceEnd: z.unknown().optional(),
   });
 }
 export type RegistrationInput = z.infer<ReturnType<typeof registrationSchema>>;
@@ -633,6 +642,9 @@ export function guestRegistrationSchema(limits: Limits) {
     exhibitionId: textSchema({ label: '展会', required: false }),
     visitorName: textSchema({ label: '姓名', max: limits.nickname }),
     answers: inputString,
+    // 与登录报名同一套参加时间段字段，校验在路由里与登录报名共用。
+    attendanceStart: z.unknown().optional(),
+    attendanceEnd: z.unknown().optional(),
   });
 }
 export const registrationTargetSchema = z.object({ exhibitionId: textSchema({ required: false }) });

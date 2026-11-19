@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 用户设置：头像、通知与隐私、外观（配色与明暗）、语言。
+ * 用户设置：通知与隐私、外观（配色与明暗）、语言、邀请码与账号信息。
  *
  * 版式按「账号 / 通知与隐私 / 外观 / 语言 / 邀请码 / 安装到主屏幕 / 应用更新」分组：组标题
  * 在卡片外，卡片里的开关行用 `.switch-row[data-flush='true']` 的分隔线版式，不再套第二层
@@ -8,14 +8,13 @@
  * 「安装到主屏幕」只在 iOS 浏览器且尚未安装时出现，「应用更新」只在 Android 原生壳里出现，
  * 两者互斥，都不和协议入口混在一起。
  *
- * 编辑资料与个人页身份卡右侧的铅笔共用 `services/profile-editor.ts` 的同一抽屉。
- * 头像、通知、配色、明暗、语言、隐私留在这里，因为它们各自写不同的接口。
- * 安全设置只从个人页进入，本页不再提供入口。语言包在本机，不写后端。
+ * 账号组只保留身份展示（头像、昵称、角色、邮箱）与「编辑资料」入口：编辑资料与个人页
+ * 身份卡右侧的铅笔共用 `services/profile-editor.ts` 的同一抽屉；头像的选图、裁剪、更换、
+ * 移除都在抽屉最上方，点完立即保存（见 `components/ProfileAvatarField.vue`）。本页不再
+ * 有头像动作按钮，也不渲染裁剪组件。
  *
- * 头像链路：`media.pickImage` 选图 → 共享组件 `AvatarCropper`（单指拖动 + 双指捏合裁剪）
- * → `POST /profile/avatar` 把方图传到服务器。手势、取景与导出都在组件里，本页只负责
- * 「拿到裁剪后的 dataUrl 之后的事」；组件交付 dataUrl 后自己走退场动画，上传不受影响。
- * 导出格式跟管理设置里的头像格式走：优先 jpeg，否则 png，再否则 webp。
+ * 通知、配色、明暗、语言、隐私留在这里，因为它们各自写不同的接口。
+ * 安全设置只从个人页进入，本页不再提供入口。语言包在本机，不写后端。
  *
  * 配色与明暗模式都**没有**「保存」按钮：两者走 `app/preferences`，它内部是
  * 「本地立即生效 → 落库 → 失败回滚」，失败时界面不会停在没保存成功的颜色/模式上。
@@ -33,9 +32,9 @@ import { device } from '@/services/device-services';
 import { nativeBridge } from '@/services/native-bridge';
 import { isIosInstallOffer } from '@/services/pwa';
 import { toast } from '@/services/toast';
-import { avatarExportMime } from '@/services/validate';
 import { formatLocalChineseDate } from '@/services/format';
 import { openProfileEditor } from '@/services/profile-editor';
+import ProfileAvatarCropper from '@/components/ProfileAvatarCropper.vue';
 import { openSheet } from '@/services/sheet';
 import {
   autoUpdateEnabled,
@@ -51,7 +50,6 @@ import LanguagePackCard from '@/components/LanguagePackCard.vue';
 import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import RoleTag from '@/components/RoleTag.vue';
-import AvatarCropper from '@/components/AvatarCropper.vue';
 import UpdateSheet from '@/components/UpdateSheet.vue';
 import PwaInstallSheet from '@/components/PwaInstallSheet.vue';
 import SegControl from '@/components/SegControl.vue';
@@ -108,8 +106,6 @@ const inviteRenewHint = computed(() => {
  * 本页专用说法。`t()` 不依赖响应式数据，在 setup 里取一次即可。
  */
 const COPY = {
-  /** 已经有头像时按钮要换个说法（资源里只有「上传头像」）。 */
-  changeAvatar: t('settings.changeAvatar'),
   /** 配色没有保存按钮，用它解释「点了就生效」。 */
   accentHint: t('settings.theme.accentHint'),
 };
@@ -193,15 +189,7 @@ usePullRefresh(
   loggedIn,
 );
 
-// ── 头像：选图 → 共享组件裁剪 → 上传到服务器 ────────────────────
-
-const avatarMime = computed(() => avatarExportMime());
-
-const avatarBusy = ref(false);
-const avatarMessage = ref('');
-const avatarError = ref('');
-/** 非空时渲染裁剪面板；组件关闭后由 `@close` 清空，避免下次打开先闪一眼上一张。 */
-const cropSource = ref('');
+// ── 资料写入：编辑资料与隐私开关共用同一道守卫 ──────────────────
 
 /** 资料未读成功或账号受限时不能覆盖写入，动作入口与禁用状态保持一致。 */
 function guardProfileWrite(): boolean {
@@ -214,99 +202,7 @@ function guardProfileWrite(): boolean {
   return true;
 }
 
-/** 选图只负责拿到 dataUrl；裁剪交给 AvatarCropper，取消选图不做提示（与系统选择器一致）。 */
-async function pickAvatar(): Promise<void> {
-  if (guardProfileWrite()) return;
-  avatarMessage.value = '';
-  avatarError.value = '';
-  let picked;
-  try {
-    picked = await device.pickImage();
-  } catch (reason) {
-    // 用户在系统选择器点了取消：按稳定错误码判断，不匹配文案。
-    if ((reason as { code?: string } | null)?.code === 'cancelled') return;
-    avatarError.value = errorText(reason);
-    return;
-  }
-  const source = String(picked?.dataUrl || '');
-  if (!source) {
-    avatarError.value = t('admin.media.unreadableImage');
-    return;
-  }
-  cropSource.value = source;
-}
-
-/**
- * 裁剪面板报错：面板自己不关闭，所以同时落原位提示与 toast。
- *
- * 原位提示要等面板关掉才看得见，toast 的层级（z-index 60）高于面板（40），
- * 用户在面板还开着的时候就能读到原因。
- */
-function onCropError(message: string): void {
-  avatarError.value = message;
-  toast(message, 'error');
-}
-
-/** 把裁剪结果的 data URL 解成字节。认不出时返回 null，由调用方提示。 */
-function avatarBytes(dataUrl: string): { bytes: Uint8Array; contentType: string } | null {
-  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/i.exec(dataUrl.trim());
-  const payload = match?.[2]?.replace(/\s/g, '') ?? '';
-  if (!match?.[1] || !payload) return null;
-  const binary = atob(payload);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return { bytes, contentType: match[1].toLowerCase() };
-}
-
-/** `@done` 拿到的就是裁剪后的方图 dataUrl；这里上传到服务器并写进资料。 */
-async function storeAvatar(dataUrl: string): Promise<void> {
-  if (guardProfileWrite()) return;
-  const image = avatarBytes(dataUrl);
-  if (!image) {
-    avatarError.value = t('admin.media.unreadableImage');
-    toast(avatarError.value, 'error');
-    return;
-  }
-  avatarBusy.value = true;
-  try {
-    const saved = await api.profile.uploadAvatar(image.bytes, image.contentType);
-    const fresh = (saved.user as JsonObject | undefined) ?? {};
-    session.bumpProfile();
-    session.applyUser({ ...user.value, ...fresh });
-    Object.assign(profile, fresh);
-    avatarMessage.value = t('settings.avatarUpdated');
-    toast(avatarMessage.value, 'success');
-  } catch (reason) {
-    avatarError.value = errorText(reason);
-    toast(avatarError.value, 'error');
-  } finally {
-    avatarBusy.value = false;
-  }
-}
-
-/** 移除头像：服务端清掉资料里的地址，并删除自己保存的文件。 */
-async function removeAvatar(): Promise<void> {
-  if (guardProfileWrite()) return;
-  avatarBusy.value = true;
-  avatarMessage.value = '';
-  avatarError.value = '';
-  try {
-    const saved = await api.profile.removeAvatar();
-    const fresh = (saved.user as JsonObject | undefined) ?? {};
-    session.bumpProfile();
-    session.applyUser({ ...user.value, ...fresh });
-    Object.assign(profile, fresh);
-    avatarMessage.value = t('settings.avatarRemoved');
-    toast(avatarMessage.value, 'success');
-  } catch (reason) {
-    avatarError.value = errorText(reason);
-    toast(avatarError.value, 'error');
-  } finally {
-    avatarBusy.value = false;
-  }
-}
-
-/** 编辑资料：与个人页铅笔打开的是同一抽屉。资料没加载完或账号受限时先拦住。 */
+/** 编辑资料：与个人页铅笔打开的是同一抽屉；头像在抽屉最上方，点完立即保存。 */
 function openEditor(): void {
   openProfileEditor(profile, { blocked: guardProfileWrite });
 }
@@ -557,7 +453,7 @@ async function checkUpdate(auto = false): Promise<void> {
           :action-label="t('common.retry')"
           @action="loadProfile"
         />
-        <!-- 身份卡：当前头像、昵称与邮箱；编辑资料、更换头像、移除头像同一行。资料失败时卡片仍在，按钮置灰。 -->
+        <!-- 身份卡：只展示当前头像、昵称、角色与邮箱；头像动作和编辑资料都在抽屉里。资料失败时卡片仍在，按钮置灰。 -->
         <div class="card" data-tone="fill" :data-busy="profileLoading ? 'true' : undefined">
           <div class="row" data-gap="md">
             <AvatarBox :src="String(user.avatar || '')" :name="String(user.nickname || user.username || '')" large />
@@ -580,30 +476,7 @@ async function checkUpdate(auto = false): Promise<void> {
             >
               {{ t('settings.profile.editProfile') }}
             </button>
-            <button
-              class="cta ghost"
-              data-size="small"
-              type="button"
-              :disabled="limited || !profileReady || avatarBusy"
-              :title="limited ? limitHint : undefined"
-              @click="pickAvatar"
-            >
-              {{ user.avatar ? COPY.changeAvatar : t('settings.uploadAvatar') }}
-            </button>
-            <button
-              v-if="user.avatar"
-              class="cta ghost"
-              data-size="small"
-              type="button"
-              :disabled="limited || !profileReady || avatarBusy"
-              :title="limited ? limitHint : undefined"
-              @click="removeAvatar"
-            >
-              {{ t('settings.removeAvatar') }}
-            </button>
           </div>
-          <p v-if="avatarMessage" class="notice" data-tone="accent" role="status">{{ avatarMessage }}</p>
-          <p v-if="avatarError" class="field-error" role="alert">{{ avatarError }}</p>
         </div>
 
         <div v-if="limited" class="notice" data-tone="accent">
@@ -807,15 +680,8 @@ async function checkUpdate(auto = false): Promise<void> {
     </div>
   </template>
 
-  <!-- 裁剪面板：共享组件负责手势、取景与导出；这里只在有图时挂载，关闭即丢弃旧图 -->
-  <AvatarCropper
-    v-if="cropSource"
-    :source="cropSource"
-    :mime="avatarMime"
-    @done="storeAvatar"
-    @close="cropSource = ''"
-    @error="onCropError"
-  />
+  <!-- 头像裁剪抽屉：与个人页共用同一份全局状态（点铅笔保存资料后拉起系统选图） -->
+  <ProfileAvatarCropper />
 </template>
 
 <style>

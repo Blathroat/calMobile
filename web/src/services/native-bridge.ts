@@ -12,7 +12,8 @@ import { t } from '@/i18n';
  * 超时后迟到的回调（绝不能把结果落到别的调用上）。
  *
  * **稳定错误码**：`cancelled`（用户在系统弹窗里点了取消）与 `timeout`（原生没回话）是约定好的两类
- * 非故障结果，页面不该拿它们弹错误提示；`code` 为 undefined 才是真失败。判断时读 `error.code`，
+ * 非故障结果，页面不该拿它们弹错误提示；`unsupported` 表示这个壳没有该动作（旧 APK + 新页面），
+ * 调用方应退回浏览器实现或隐藏入口；`code` 为 undefined 才是真失败。判断时读 `error.code`，
  * 不要匹配 `message` 文案 —— 文案是给人看的，随时会改。
  *
  * **为什么不给交互动作设超时**：选图、导入、导出、申请权限会停在系统 UI 上等用户操作，定时器会把
@@ -27,6 +28,10 @@ import { t } from '@/i18n';
 /**
  * 原生动作名全集。命名是 `域.动作`，域与 `SystemActions` / `SessionStore` 等原生实现一一对应。
  * 新增动作必须同时补两张映射表，否则 `call` 的参数与返回值都没有类型。
+ *
+ * **能力协商**：页面随热更新可以比 APK 新。新功能先用 `app.capabilities` 问一次这个壳支持
+ * 哪些动作（`supportsNativeAction`），清单里没有的动作退回浏览器实现（见 `device-services.ts`），
+ * APK 从此是可选增强而不是新页面的前提。
  */
 export type NativeAction =
   | 'ui.sync'
@@ -50,13 +55,15 @@ export type NativeAction =
   | 'passkey.available'
   | 'passkey.create'
   | 'passkey.get'
+  | 'app.capabilities'
   | 'app.exit';
 
 /**
- * 稳定错误码：只有这两类在原生侧被规范化，其余失败的 `code` 是 undefined。
- * `cancelled` 是用户放弃，`timeout` 是原生没回话 —— 都不是故障。
+ * 稳定错误码：只有这三类在原生侧被规范化，其余失败的 `code` 是 undefined。
+ * `cancelled` 是用户放弃，`timeout` 是原生没回话 —— 都不是故障；
+ * `unsupported` 是旧壳不认识这个动作，调用方应退回浏览器实现。
  */
-export type NativeErrorCode = 'cancelled' | 'timeout';
+export type NativeErrorCode = 'cancelled' | 'timeout' | 'unsupported';
 
 /**
  * 每个动作的入参形状。字段名必须与原生读取的键名一致（`date`、`kind`、`refreshToken` 等），
@@ -114,6 +121,11 @@ export interface NativeActionPayloads {
   'passkey.create': { optionsJson: string };
   /** 通行密钥断言（登录）。 */
   'passkey.get': { optionsJson: string };
+  /**
+   * 能力协商：问一次这个壳支持哪些动作。廉价、非交互，必须立刻回，
+   * 因此走普通超时（不在 `INTERACTIVE_ACTIONS` 里）。
+   */
+  'app.capabilities': Record<string, never>;
   /** 不同意用户协议时退出应用：结束当前 Activity，无参数。 */
   'app.exit': Record<string, never>;
 }
@@ -158,13 +170,15 @@ export interface NativeActionResults {
   'passkey.create': { credentialJson: string };
   /** 系统返回的标准 AuthenticationResponseJSON。 */
   'passkey.get': { credentialJson: string };
+  /** 壳版本（与 `BuildConfig.VERSION_NAME` 同源）与支持的全部动作名（排序、去重）。 */
+  'app.capabilities': { version: string; actions: string[] };
   /** closed=false 表示浏览器里关不掉窗口（没有原生桥），由页面提示用户自行关闭。 */
   'app.exit': { closed: boolean };
 }
 
 /**
- * 桥接失败。`code` 有值表示约定好的非故障结果（用户取消 / 超时），无值是真失败
- * （没有原生桥、原生同步抛错、动作名不认识）。调用方按 `error.code` 判断，不要匹配文案。
+ * 桥接失败。`code` 有值表示约定好的可预期结果（用户取消 / 超时 / 旧壳没有该动作），
+ * 无值是真失败（没有原生桥、原生同步抛错、动作执行失败）。调用方按 `error.code` 判断，不要匹配文案。
  */
 export class NativeBridgeError extends Error {
   readonly code?: NativeErrorCode;
@@ -208,6 +222,7 @@ const INTERACTIVE_ACTIONS = new Set<NativeAction>([
   'passkey.create',
   'passkey.get',
 ]);
+// `app.capabilities` 是例外：能力协商必须立刻回，属于非交互动作，走普通 30 秒超时。
 
 /** 交互动作的兜底超时：5 分钟。选图、保存文件这类操作可能被用户撂在一边很久。 */
 const INTERACTIVE_TIMEOUT_MS = 5 * 60_000;
@@ -349,3 +364,61 @@ export class NativeBridge {
 
 /** 全应用共用的桥接实例。页面不要自己 new NativeBridge，否则两个实例会互相覆盖回调出口。 */
 export const nativeBridge = new NativeBridge();
+
+/**
+ * 能力协商缓存：`app.capabilities` 整个页面只问一次。
+ * - `undefined`：还没问过；
+ * - Promise：正在问或已经问完的清单。旧壳不认识这个动作时缓存成空集合，
+ *   避免每次调用都去问一个必然失败的动作。
+ * 其它失败（超时、桥已释放）不缓存：一次抖动不该永久关掉原生路径。
+ */
+let capabilitiesRequest: Promise<ReadonlySet<string>> | undefined;
+
+/** 原生回包里的动作名只取字符串：坏数据当成空清单，不让页面跟着崩。 */
+function readCapabilityActions(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+/** 懒加载 `app.capabilities`：并发调用共用同一个请求。 */
+function loadCapabilities(): Promise<ReadonlySet<string>> {
+  if (!capabilitiesRequest) {
+    capabilitiesRequest = nativeBridge.call('app.capabilities', {}).then(
+      (result) => new Set(readCapabilityActions(result.actions)),
+      (reason: unknown) => {
+        if (reason instanceof NativeBridgeError && reason.code === 'unsupported') {
+          // 旧壳没有这个动作：整份清单按空处理，所有动作都返回 false。
+          return new Set<string>();
+        }
+        // 其它失败不能当成「这个壳没有能力」：清掉缓存，下次调用重新问。
+        capabilitiesRequest = undefined;
+        throw reason;
+      },
+    );
+  }
+  return capabilitiesRequest;
+}
+
+/**
+ * 这个壳能不能执行某个原生动作。
+ *
+ * 没有原生桥（浏览器 / iPhone 主屏幕应用）一律返回 false；有桥时懒加载一次
+ * `app.capabilities` 并缓存。旧壳不认识 `app.capabilities`（`unsupported`）时整份
+ * 清单为空，所有动作都返回 false —— 页面据此退回浏览器实现，APK 只是可选增强。
+ *
+ * 已经直接调了原生动作的调用点不用先问这里：失败回调里 `error.code === 'unsupported'`
+ * 是同一个事实（见 `device-services.ts` 的 `nativeOrBrowser`）。
+ */
+export async function supportsNativeAction(action: NativeAction): Promise<boolean> {
+  if (!nativeBridge.hasNative()) return false;
+  try {
+    return (await loadCapabilities()).has(action);
+  } catch {
+    // 协商本身失败（超时 / 桥已释放）：本次按不支持处理；缓存已清掉，下次重试。
+    return false;
+  }
+}
+
+/** 测试钩子：清掉能力协商缓存，让下一次 `supportsNativeAction` 重新问原生。 */
+export function resetNativeCapabilitiesForTests(): void {
+  capabilitiesRequest = undefined;
+}

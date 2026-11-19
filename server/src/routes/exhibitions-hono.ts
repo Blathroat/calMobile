@@ -118,6 +118,8 @@ function monthSummary(item: ReturnType<typeof exhibitionPayload>, days: number[]
     endDate: item.endDate,
     dateLabel: item.dateLabel,
     title: item.title,
+    // 首页卡片把展商名称放在分类前面：和 exhibitionPayload 的字段同名，页面不用再单独取详情。
+    exhibitor: item.exhibitor,
     time: item.time,
     venue: item.venue,
     // 兼容字段（中文）与协议值都在这里给全：月视图的卡片按 statusCode 取文案。
@@ -125,6 +127,8 @@ function monthSummary(item: ReturnType<typeof exhibitionPayload>, days: number[]
     statusCode: item.statusCode,
     modeLabel: item.modeLabel,
     openForRegistration: item.openForRegistration,
+    // 首页当天卡片的状态灯：报名截止日已过时改为「截止报名」。
+    registrationEnded: item.registrationEnded,
     imageUri: item.imageUri,
     category: item.category,
   };
@@ -242,17 +246,26 @@ app.get('/month', optionalAuthHono, async (c) => {
   if (viewer?.userId) {
     const marked = await query<{ day: number }>(
       `SELECT DISTINCT day FROM (
-         -- 用户的报名 / 自己开办的展会：按开展～闭展覆盖的每一天打点，跨月时只取本月那几天。
+         -- 用户的报名：已通过 / 已参加的报名在选了参加时间段时只给所选那几天打点，
+         -- 没选（attendance_start 为空）时退回原来的整段展会区间。
+         -- 跨月与脏数据都靠 GREATEST / LEAST 与展会区间、本月区间取交集兜住：
+         -- start 超过 end 时 generate_series 为空，不会画出额外的圆点。
          SELECT EXTRACT(DAY FROM generate_series(
-                  GREATEST(e.exhibition_date, make_date($1::int, $2::int, 1)),
-                  LEAST(COALESCE(e.exhibition_end_date, e.exhibition_date),
+                  GREATEST(COALESCE(r.attendance_start, e.exhibition_date),
+                           e.exhibition_date,
+                           make_date($1::int, $2::int, 1)),
+                  LEAST(COALESCE(r.attendance_end, r.attendance_start, e.exhibition_end_date, e.exhibition_date),
+                        COALESCE(e.exhibition_end_date, e.exhibition_date),
                         (make_date($1::int, $2::int, 1) + interval '1 month - 1 day')::date),
                   interval '1 day'))::int AS day
            FROM registrations r
            JOIN exhibitions e ON e.id = r.exhibition_id
           WHERE r.visitor_id = $3 AND r.status IN ('approved', 'attended')
-            AND e.exhibition_date <= (make_date($1::int, $2::int, 1) + interval '1 month - 1 day')::date
-            AND COALESCE(e.exhibition_end_date, e.exhibition_date) >= make_date($1::int, $2::int, 1)
+            AND GREATEST(COALESCE(r.attendance_start, e.exhibition_date), e.exhibition_date)
+                <= (make_date($1::int, $2::int, 1) + interval '1 month - 1 day')::date
+            AND LEAST(COALESCE(r.attendance_end, r.attendance_start, e.exhibition_end_date, e.exhibition_date),
+                      COALESCE(e.exhibition_end_date, e.exhibition_date))
+                >= make_date($1::int, $2::int, 1)
          UNION
          SELECT EXTRACT(DAY FROM generate_series(
                   GREATEST(e.exhibition_date, make_date($1::int, $2::int, 1)),

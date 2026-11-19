@@ -13,16 +13,23 @@
  * 3. mount 之后再异步 `bootApp()`（恢复会话 → 取 bootstrap → 落到各 store），
  *    成功后按下面的规则纠正入口；失败只记日志，访客首页照常可用。
  *
- * 全局样式只在这里引一次（`tokens.css` 提供变量、`motion.css` 提供动效），
- * 页面与组件不再自己 import 全局样式；组件专用的样式写在各自 SFC 的 `<style>` 里。
+ * 全局样式只在这里按顺序引一次，页面与组件不再自己 import 全局样式；
+ * 组件专用的样式写在各自 SFC 的 `<style>` 里。
  *
- * 导入顺序就是 CSS 的产出顺序，别调换：先 `tokens.css`（变量与公共类），
- * 中间是 App.vue 与各页面的 `<style>`（组件样式要能盖住公共类），
- * 最后 `motion.css`（动效覆盖在上）。
+ * 导入顺序就是 CSS 的产出顺序，别调换：
+ * 1. `tokens.css` 只声明设计变量与明暗模式，后面的规则都读它；
+ * 2. `base.css`（重置与外壳）、`components.css`（通用控件）、`special.css`
+ *    （专属组件与 iOS/PWA）按拆分前 `tokens.css` 的原有顺序接续，选择器与
+ *    媒体查询的相对顺序不能变，否则层叠结果会变；
+ * 3. 中间是 App.vue 与各页面的 `<style>`（组件样式要能盖住公共类）；
+ * 4. 最后 `motion.css`（动效覆盖在上）。
  */
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import '@/styles/tokens.css';
+import '@/styles/base.css';
+import '@/styles/components.css';
+import '@/styles/special.css';
 import App from '@/app/App.vue';
 import { router } from '@/app/router';
 import { bootApp } from '@/app/runtime';

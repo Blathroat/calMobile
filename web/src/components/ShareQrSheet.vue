@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /**
  * 「分享展会」抽屉：白底卡片上展示报名二维码、展会名称与报名链接，底部「保存到本地」。
+ * 私人会议设置复用同一个抽屉：传 `qrLabel` / `hint` / `savedText` 换掉展会话术，
+ * 不传时沿用 `share.*` 的现有文案，展商页的表现因此完全不变。
  *
  * 二维码内容由调用方拼好（`services/registration-link.ts` 的 `registrationLink`）；
  * 没配报名站地址时调用方直接提示、不会打开本抽屉，所以这里默认 `text` 非空。
@@ -10,7 +12,7 @@
  * （`device.saveImage`）；浏览器预览里没有原生桥，退回浏览器下载，与报名码
  * 长按保存同一套退路。
  *
- * 面板只负责内容，关闭由 `ExhibitorPage` 通过 `openSheet` 的 actions 控制。
+ * 面板只负责内容；关闭与保存都由内容里的按钮完成，调用方只负责打开。
  */
 import { computed, ref } from 'vue';
 import QrCanvas from './QrCanvas.vue';
@@ -24,12 +26,18 @@ const props = withDefaults(
   defineProps<{
     /** 二维码内容：报名站分享链接，调用方已校验非空。 */
     text: string;
-    /** 展会名称，显示在二维码下方。 */
+    /** 二维码下方的主标题：展会名称，或私人会议的主办人昵称。 */
     title?: string;
     /** 保存成图片的文件名；原生只当展示名，落盘名由系统补全。 */
     fileName?: string;
+    /** 二维码的无障碍标签；缺省沿用展商分享的 `share.qrLabel`。 */
+    qrLabel?: string;
+    /** 二维码下方的说明；缺省沿用展商分享的 `share.hint`。 */
+    hint?: string;
+    /** 保存成功提示；缺省沿用展商分享的 `share.saved`。 */
+    savedText?: string;
   }>(),
-  { title: '', fileName: 'exhibition-qr.png' },
+  { title: '', fileName: 'exhibition-qr.png', qrLabel: '', hint: '', savedText: '' },
 );
 
 const qrRef = ref<InstanceType<typeof QrCanvas> | null>(null);
@@ -37,6 +45,10 @@ const qrError = ref('');
 const saving = ref(false);
 
 const fileName = computed(() => props.fileName || 'exhibition-qr.png');
+/** 文案都有缺省值：展商页不传这几项，屏幕上仍是原来的展会分享文案。 */
+const qrLabel = computed(() => props.qrLabel || t('share.qrLabel'));
+const hint = computed(() => props.hint || t('share.hint'));
+const savedText = computed(() => props.savedText || t('share.saved'));
 
 /** 浏览器预览里的退路：交给浏览器下载，文件确实落地成 PNG，因此按保存成功提示。 */
 function download(dataUrl: string): void {
@@ -46,7 +58,7 @@ function download(dataUrl: string): void {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  toast(t('share.saved'), 'success');
+  toast(savedText.value, 'success');
 }
 
 async function saveToLocal(): Promise<void> {
@@ -68,7 +80,7 @@ async function saveToLocal(): Promise<void> {
       toast(t('share.saveFailed'), 'error');
       return;
     }
-    toast(t('share.saved'), 'success');
+    toast(savedText.value, 'success');
   } catch (reason) {
     // 用户在系统面板里取消按稳定错误码判断，不匹配文案。
     if ((reason as { code?: string } | null)?.code === 'cancelled') return;
@@ -89,14 +101,14 @@ async function saveToLocal(): Promise<void> {
         :size="480"
         background="transparent"
         foreground="#000000"
-        :label="t('share.qrLabel')"
+        :label="qrLabel"
         @error="qrError = $event"
       />
     </div>
     <p v-if="qrError" class="field-hint text-center">{{ t('share.qrErrorHint', { error: qrError }) }}</p>
     <strong v-if="props.title" class="share-qr-title">{{ props.title }}</strong>
     <span class="share-qr-link row-meta truncate">{{ props.text }}</span>
-    <p class="field-hint text-center">{{ t('share.hint') }}</p>
+    <p class="field-hint text-center">{{ hint }}</p>
     <!-- 两颗按钮并排：保存是主操作，关闭是退路；都放在内容里，不再交给 sheet 的 actions
          叠成两行（面板只有一个内容组件时，动作栏会独占一行）。 -->
     <div class="share-qr-actions">

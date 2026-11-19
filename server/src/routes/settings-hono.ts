@@ -41,6 +41,8 @@ async function settingsPayload(userId: string | null | undefined, role?: string 
     brand: settings.brand,
     categories: settings.categories,
     review: settings.review,
+    // 匿名报名姓名同义词（管理页可编辑）；bootstrap 下发的也是同一份设置。
+    registration: settings.registration,
     media: settings.media,
     upload: settings.upload,
     limits: settings.limits,

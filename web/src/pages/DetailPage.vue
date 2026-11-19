@@ -27,8 +27,8 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import ImageViewer from '@/components/ImageViewer.vue';
-import { formatDateRange } from '@/services/format';
-import { REGISTRATION_STATUS, modeLabel, roleLabel, statusTone } from '@/services/status';
+import { formatDateRange, joinText } from '@/services/format';
+import { REGISTRATION_STATUS, exhibitionModeCode, modeLabel, roleLabel, statusTone } from '@/services/status';
 import type { ExhibitionDetail, JsonObject, Registration } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -123,7 +123,12 @@ const myRegistration = computed<Registration | null>(() => {
 const registerLabel = computed(() => {
   // 已报名时主按钮是「去哪看报名」，与报名是否关闭、账号是否受限无关。
   if (myRegistration.value) return t('exhibition.detail.viewMyRegistration');
-  if (exhibition.value?.openForRegistration === false) return t('exhibition.detail.registrationClosed');
+  if (exhibition.value?.openForRegistration === false) {
+    // 报名截止日已过与展商手动截止 / 仅展示 / 已结束分开说，用户才知道为什么不能报名。
+    return exhibition.value.registrationEnded === true
+      ? t('exhibition.detail.registrationEnded')
+      : t('exhibition.detail.registrationClosed');
+  }
   // 报名站：未登录也可以直接报名，按钮文案保持「立即报名」，不再写「登录后报名」。
   if (isJoinSurface && session.loggedIn !== true) return t('exhibition.detail.registerNow');
   return registerLimited.value || canRegister.value
@@ -144,6 +149,7 @@ function footerHint(): string {
   // 已报名的说明优先：报名关闭 / 受限都不影响「我已经报上了」这件事。
   if (myRegistration.value) return t('exhibition.detail.registeredHint');
   if (item.openForRegistration === false) {
+    if (item.registrationEnded === true) return t('exhibition.detail.registrationEndedHint');
     return t('exhibition.detail.closedWithMode', { mode: modeLabel(String(item.statusCode || '')) });
   }
   if (registerLimited.value) return t('exhibition.detail.registerRestricted');
@@ -300,7 +306,8 @@ function share(): void {
   const link = registrationLink(bootstrap.publicBaseUrl, item.id);
   const text = [
     String(item.title ?? ''),
-    `${formatDateRange(item.date, item.endDate)} ${String(item.time ?? '')}`.trim(),
+    // 时间选填：留空时只写日期，不留下行尾空格。
+    joinText([formatDateRange(item.date, item.endDate), item.time], ' '),
     String(item.venue ?? ''),
     link ? t('exhibition.detail.registrationLinkPrefix', { link }) : '',
   ]
@@ -404,7 +411,9 @@ onMounted(() => {
     <div class="card" data-tone="fill">
       <div class="row" data-gap="md">
         <span class="dim" aria-hidden="true"><AppIcon name="calendar" size="icon icon-sm" /></span>
-        <span class="row-meta">{{ formatDateRange(exhibition.date, exhibition.endDate) }} {{ exhibition.time }}</span>
+        <span class="row-meta">{{
+          joinText([formatDateRange(exhibition.date, exhibition.endDate), exhibition.time], ' ')
+        }}</span>
       </div>
       <div class="row" data-gap="md">
         <span class="dim" aria-hidden="true"><AppIcon name="home" size="icon icon-sm" /></span>
@@ -412,8 +421,8 @@ onMounted(() => {
       </div>
       <div class="row" data-gap="md">
         <StatusTag
-          :text="modeLabel(String(exhibition.statusCode || ''))"
-          :tone="statusTone(String(exhibition.statusCode || ''))"
+          :text="modeLabel(exhibitionModeCode(exhibition))"
+          :tone="statusTone(exhibitionModeCode(exhibition))"
         />
         <span class="row-meta">{{
           exhibition.openForRegistration

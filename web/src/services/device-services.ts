@@ -9,9 +9,10 @@
  * 业务数据一律走 `api/client.ts`；设备桥不承载业务数据，也不在本地存业务数据。
  *
  * **失败语义**：Promise 失败一律是 `NativeBridgeError`；用户取消（`code === 'cancelled'`）
- * 属于约定好的非故障结果，页面按码判断、不弹错误提示。其它失败的消息都来自 `t()`，
- * 页面可以直接显示。少数浏览器里做不到的动作（落盘、外观镜像）仍然只在原生里有，
- * 浏览器打开时以 `device.featureUnavailable` 失败，页面据此隐藏入口。
+ * 属于约定好的非故障结果，页面按码判断、不弹错误提示。旧壳没有某个动作（`code === 'unsupported'`）
+ * 时，`nativeOrBrowser` 会改用浏览器实现 —— 页面随热更新先上线、APK 慢慢更新，新功能不靠 APK。
+ * 其它失败的消息都来自 `t()`，页面可以直接显示。少数浏览器里做不到的动作（落盘、外观镜像）
+ * 仍然只在原生里有，浏览器打开时以 `device.featureUnavailable` 失败，页面据此隐藏入口。
  *
  * 参数形状用 `Parameters<typeof nativeBridge.call<...>>[1]` 从 `NativeActionPayloads` 派生：
  * 字段只在 `native-bridge.ts` 定义一次，避免两处抄写后改漏一处。
@@ -28,9 +29,24 @@ import {
   shareText as shareBrowserText,
 } from './browser-device';
 
-/** 有原生桥走原生动作，没有时走浏览器实现；两边返回同一种结果形状。 */
+/** 旧壳没有这个动作：页面先热更新上线时，新功能退回浏览器实现，不把旧 APK 变成故障。 */
+function isUnsupportedAction(reason: unknown): boolean {
+  return reason instanceof NativeBridgeError && reason.code === 'unsupported';
+}
+
+/**
+ * 有原生桥走原生动作，没有时走浏览器实现；两边返回同一种结果形状。
+ *
+ * 原生回 `unsupported`（旧壳没有这个动作）时同样走浏览器实现：
+ * 新页面不要求用户先更新 APK。用户取消（`cancelled`）与其它真失败仍然原样抛出，
+ * 不能因为「换个实现再试一次」把取消变成一次浏览器操作。
+ */
 function nativeOrBrowser<T>(native: () => Promise<T>, browser: () => Promise<T>): Promise<T> {
-  return nativeBridge.hasNative() ? native() : browser();
+  if (!nativeBridge.hasNative()) return browser();
+  return native().catch((reason: unknown) => {
+    if (isUnsupportedAction(reason)) return browser();
+    throw reason;
+  });
 }
 
 /** 原生独有的动作（落盘、外观镜像）：浏览器里明确失败，不改成本地假成功。 */

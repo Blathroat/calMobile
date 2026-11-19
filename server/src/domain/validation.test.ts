@@ -307,16 +307,14 @@ test('资料 schema 使用服务器上限', () => {
   );
 });
 
-test('更新展会时显式清空日期和时间仍会报错', () => {
+test('更新展会时显式清空日期仍会报错，时间可以清空（时间选填）', () => {
   const existing = { title: '展会', exhibition_date: '2026-03-01', time: '09:00' };
   assert.equal(
     messageOf(() => parseSchema(exhibitionInputSchema(limits, existing), { title: '展会', date: '' })),
     '请选择展会日期',
   );
-  assert.equal(
-    messageOf(() => parseSchema(exhibitionInputSchema(limits, existing), { title: '展会', time: '' })),
-    '请输入展会时间',
-  );
+  // 时间选填：显式清空表示只显示日期，保存后库里存空串。
+  assert.equal(parseSchema(exhibitionInputSchema(limits, existing), { title: '展会', time: '' }).time, '');
 });
 
 test('更新展会没带 endDate 时保留库里的闭展日期', () => {

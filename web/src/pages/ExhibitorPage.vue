@@ -28,7 +28,8 @@ import { toast } from '@/services/toast';
 import { openSheet } from '@/services/sheet';
 import { copyText } from '@/services/clipboard';
 import { registrationLink } from '@/services/registration-link';
-import { modeLabel, statusTone } from '@/services/status';
+import { joinText } from '@/services/format';
+import { exhibitionModeCode, modeLabel, statusTone } from '@/services/status';
 import { exhibitionOwnerQuery } from '@/services/exhibition-scope';
 import AppIcon from '@/components/AppIcon.vue';
 import HintNote from '@/components/HintNote.vue';
@@ -256,18 +257,18 @@ usePullRefresh(
             />
             <span class="row-copy">
               <strong class="row-title exh-title">{{ item.title }}</strong>
-              <span class="row-meta">{{ item.dateLabel }} {{ item.time }}</span>
+              <span class="row-meta">{{ joinText([item.dateLabel, item.time], ' ') }}</span>
               <span class="row-meta truncate">{{ item.venue }}</span>
               <!-- 状态与报名数合成一条信号灯：既没有「左边空着」的单独一行，
                    也不会和标题抢宽度。 -->
               <StatusTag
                 :text="
                   t('exhibition.list.statusWithRegistrations', {
-                    status: modeLabel(String(item.statusCode ?? '')),
+                    status: modeLabel(exhibitionModeCode(item)),
                     count: String(item.registrationCount ?? 0),
                   })
                 "
-                :tone="statusTone(String(item.statusCode || ''))"
+                :tone="statusTone(exhibitionModeCode(item))"
               />
               <span v-if="item.qrEnabled === true" class="row-meta">{{ t('exhibitor.qrEnabled') }}</span>
             </span>

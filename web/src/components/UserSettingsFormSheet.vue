@@ -1,6 +1,13 @@
 <script setup lang="ts">
-/** 用户设置里的资料与密码表单内容；抽屉标题和保存 / 取消动作由全局 AppSheet 负责。 */
+/**
+ * 用户设置里的资料表单内容；抽屉标题和保存 / 取消动作由全局 AppSheet 负责。
+ *
+ * 头像块只放在抽屉最上方，且只给本人：管理员代改别人资料时传 showAvatar: false，
+ * 因为头像接口只作用于当前登录账号。头像块里只剩一颗铅笔，点它只发 `editAvatar`：
+ * 「先保存资料、退出资料抽屉，再打头像编辑抽屉」由 `services/profile-editor.ts` 负责。
+ */
 import { computed } from 'vue';
+import ProfileAvatarField from '@/components/ProfileAvatarField.vue';
 import { t } from '@/i18n';
 
 interface Props {
@@ -9,12 +16,16 @@ interface Props {
   invalid: Record<string, boolean>;
   error: string | (() => string);
   limits: Record<string, number>;
+  /** 是否渲染头像块；缺省渲染，管理员代改别人资料时传 false。 */
+  showAvatar?: boolean;
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
   update: [field: string, value: string];
   submit: [];
+  /** 用户点了头像块里的铅笔：调用方先保存资料，再打头像编辑抽屉。 */
+  editAvatar: [];
 }>();
 
 const errorMessage = computed(() => (typeof props.error === 'function' ? props.error() : props.error));
@@ -27,6 +38,8 @@ function update(field: string, event: Event): void {
 <template>
   <form class="form" novalidate @submit.prevent="emit('submit')">
     <template v-if="mode === 'profile'">
+      <!-- 头像在昵称之前：先看到自己现在长什么样，再改文字资料 -->
+      <ProfileAvatarField v-if="props.showAvatar !== false" @edit="emit('editAvatar')" />
       <div class="field" :data-invalid="invalid.nickname ? 'true' : 'false'">
         <label for="settings-nickname">{{ t('settings.profile.nickname') }}</label>
         <input

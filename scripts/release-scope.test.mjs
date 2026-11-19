@@ -60,7 +60,7 @@ test('报名站和 App 共用的源两份一起同步', () => {
   });
 });
 
-test('PWA 构建脚本与图标源：图标源触发 APK，构建脚本两份页面同步', () => {
+test('PWA 构建脚本与图标源：默认源图触发 APK，构建脚本两份页面同步', () => {
   assert.deepEqual(flags(['web/pwa-build.mjs']), {
     apk: false,
     server: false,
@@ -73,8 +73,16 @@ test('PWA 构建脚本与图标源：图标源触发 APK，构建脚本两份页
     app: true,
     join: true,
   });
-  assert.deepEqual(flags(['web/public/icons/icon-192.png', 'web/public/icons/apple-touch-icon-180.png']), {
+  // 只有默认 APP_ICON 源图会生成 APK 启动图标。
+  assert.deepEqual(flags(['web/public/icons/icon-1024.png']), {
     apk: true,
+    server: false,
+    app: true,
+    join: true,
+  });
+  // 其它预生成图标只随两份页面发布，不再整目录算 APK。
+  assert.deepEqual(flags(['web/public/icons/icon-192.png', 'web/public/icons/apple-touch-icon-180.png']), {
+    apk: false,
     server: false,
     app: true,
     join: true,
@@ -84,6 +92,45 @@ test('PWA 构建脚本与图标源：图标源触发 APK，构建脚本两份页
     server: false,
     app: true,
     join: true,
+  });
+});
+
+test('图标生成模块按用途归类，env 读取与单元渲染随运行时包发布', () => {
+  assert.deepEqual(flags(['scripts/icons/android.mjs']), {
+    apk: true,
+    server: false,
+    app: false,
+    join: false,
+  });
+  assert.deepEqual(flags(['scripts/icons/web.mjs']), {
+    apk: false,
+    server: false,
+    app: true,
+    join: true,
+  });
+  assert.deepEqual(flags(['scripts/icons/png.mjs']), {
+    apk: true,
+    server: false,
+    app: true,
+    join: true,
+  });
+  assert.deepEqual(flags(['scripts/icons/config.mjs']), {
+    apk: true,
+    server: false,
+    app: true,
+    join: true,
+  });
+  assert.deepEqual(flags(['scripts/env-file.mjs']), {
+    apk: false,
+    server: true,
+    app: false,
+    join: false,
+  });
+  assert.deepEqual(flags(['scripts/render-units.mjs']), {
+    apk: false,
+    server: true,
+    app: false,
+    join: false,
   });
 });
 
@@ -211,8 +258,10 @@ test('任一类改动都发布运行时包，全不命中才跳过', () => {
   assert.equal(runtimePublish({ apk: false, server: false, app: false, join: false }), false);
 });
 
-test('更新器和打包脚本都会触发运行时包发布', () => {
+test('更新器、单元模板、实例 env 与打包脚本都会触发运行时包发布', () => {
   assert.equal(flags(['deploy/calmobile-update.mjs']).server, true);
-  assert.equal(flags(['deploy/calmobile-update.timer']).server, true);
+  assert.equal(flags(['deploy/systemd/calmobile.service.in']).server, true);
+  assert.equal(flags(['deploy/systemd/calmobile-update.timer.in']).server, true);
+  assert.equal(flags(['deploy/instance.env.example']).server, true);
   assert.equal(flags(['scripts/runtime-bundle.mjs']).server, true);
 });
