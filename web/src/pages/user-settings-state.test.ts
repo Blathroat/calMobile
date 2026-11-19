@@ -10,6 +10,7 @@ import { useSessionStore } from '@/stores/session';
 import { nativeBridge } from '@/services/native-bridge';
 import { isIosInstallOffer } from '@/services/pwa';
 import { closeSheet, sheet } from '@/services/sheet';
+import { toast } from '@/services/toast';
 
 vi.mock('@/app/runtime', () => ({
   bootApp: async () => undefined,
@@ -91,18 +92,23 @@ function button(label: string): HTMLButtonElement | undefined {
 }
 
 describe('设置页独立取数状态', () => {
-  it('资料失败时阻止头像覆盖写入，通知可保存，重试成功后保留完整资料', async () => {
+  it('资料失败时不能覆盖写入：身份卡仍在、编辑入口不可用，通知可保存，重试后恢复', async () => {
     vi.mocked(api.profile.get).mockRejectedValueOnce(new Error('资料请求暂时失败'));
     await mountSettings();
-    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
-    button('移除头像')!.click();
-    await nextTick();
-    expect(api.profile.removeAvatar).not.toHaveBeenCalled();
-    expect(button('移除头像')!.disabled).toBe(true);
+    await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
+    // 身份卡仍在（头像、昵称、角色、邮箱）——资料失败时也不清空。
+    expect(document.querySelector('.card .identity-name')).not.toBeNull();
+    expect(document.querySelector('.card .avatar')).not.toBeNull();
+    // 设置页只剩身份展示：头像动作按钮已经搬进抽屉，这里一个都不该有。
+    expect(button('上传头像')).toBeUndefined();
+    expect(button('更换头像')).toBeUndefined();
+    expect(button('移除头像')).toBeUndefined();
+    // 资料没加载成功时抽屉不许打开，头像与文字资料都不会被覆盖写入。
     expect(button('编辑资料')!.disabled).toBe(true);
     expect(document.querySelector<HTMLInputElement>('#settings-privacy-registrations')!.disabled).toBe(true);
-    button('移除头像')!.dispatchEvent(new Event('click'));
+    button('编辑资料')!.dispatchEvent(new Event('click'));
     await nextTick();
+    expect(document.querySelector('.sheet-panel')).toBeNull();
     expect(api.profile.removeAvatar).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain('资料请求暂时失败');
 
@@ -112,10 +118,13 @@ describe('设置页独立取数状态', () => {
     await vi.waitFor(() => expect(api.profile.saveNotifications).toHaveBeenCalledWith({ exhibitionReminder: false }));
 
     button('重试')!.click();
-    await vi.waitFor(() => expect(button('移除头像')!.disabled).toBe(false));
+    await vi.waitFor(() => expect(button('编辑资料')!.disabled).toBe(false));
     expect(api.profile.notifications).toHaveBeenCalledTimes(1);
-    button('移除头像')!.click();
-    await vi.waitFor(() => expect(api.profile.removeAvatar).toHaveBeenCalled());
+    // 资料到齐后抽屉可以打开，头像块在抽屉里而不是设置页的卡片上。
+    button('编辑资料')!.click();
+    await nextTick();
+    expect(document.querySelector('.sheet-panel [data-avatar-field]')).not.toBeNull();
+    expect(document.querySelector('.card [data-avatar-field]')).toBeNull();
   });
 
   it('通知偏好失败时禁用其开关并可独立重试，资料仍然可以编辑', async () => {
@@ -133,14 +142,14 @@ describe('设置页独立取数状态', () => {
   it('资料编辑在抽屉里完成并在保存成功后关闭', async () => {
     await mountSettings();
     await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
+    // 身份卡上是唯一的编辑入口；头像的预览、上传、更换与移除都不在设置页。
     const actions = document.querySelector('.card .action-row');
     expect([...(actions?.querySelectorAll('button') ?? [])].map((item) => item.textContent?.trim())).toEqual([
       '编辑资料',
-      '更换头像',
-      '移除头像',
     ]);
     button('编辑资料')!.click();
     await nextTick();
+    expect(document.querySelector('.sheet-panel [data-avatar-field]')).not.toBeNull();
     expect(document.querySelector('.sheet-panel #settings-nickname')).not.toBeNull();
     expect(document.querySelector('.sheet-panel #settings-bio')).not.toBeNull();
     expect(document.querySelector('.sheet-panel #settings-region')).not.toBeNull();
@@ -159,7 +168,7 @@ describe('设置页独立取数状态', () => {
   it('按账号、通知与隐私、外观、语言、邀请码、应用更新分组', async () => {
     // 应用更新只属于 Android 原生壳：这里 mock 成有原生桥。
     await mountSettings({ native: true });
-    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
     const labels = [...document.querySelectorAll('.settings-section .section-label')].map((node) =>
       node.textContent?.trim(),
     );
@@ -168,7 +177,7 @@ describe('设置页独立取数状态', () => {
 
   it('浏览器模式下不出现应用更新分组', async () => {
     await mountSettings();
-    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
     const labels = [...document.querySelectorAll('.settings-section .section-label')].map((node) =>
       node.textContent?.trim(),
     );
@@ -178,7 +187,7 @@ describe('设置页独立取数状态', () => {
   it('iOS 未安装时提供安装到主屏幕入口，点击打开安装说明', async () => {
     vi.mocked(isIosInstallOffer).mockReturnValue(true);
     await mountSettings();
-    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
     // 独立分组：既不在协议卡片里，也不跟应用更新（浏览器模式下本来就不出现）混在一起。
     const labels = [...document.querySelectorAll('.settings-section .section-label')].map((node) =>
       node.textContent?.trim(),
@@ -219,7 +228,7 @@ describe('设置页独立取数状态', () => {
 
   it('不再提供安全设置入口', async () => {
     await mountSettings();
-    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
     expect(document.querySelectorAll('button.row-card')).toHaveLength(0);
     expect(document.body.textContent).not.toContain('安全设置');
   });
@@ -227,7 +236,7 @@ describe('设置页独立取数状态', () => {
   it('邀请码卡片在应用更新之前：普通用户与限时展商可兑换，永久展商和管理员只看说明', async () => {
     // 原生壳里才有「应用更新」组；这里保留原断言，同时让分组顺序可比较。
     await mountSettings({ native: true });
-    await vi.waitFor(() => expect(button('移除头像')).toBeDefined());
+    await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
     // 「应用更新」组排在最后，邀请码卡片是它前面的一组。
     const sections = [...document.querySelectorAll<HTMLElement>('.settings-groups > *')];
     const inviteSection = sections.find(
@@ -257,5 +266,23 @@ describe('设置页独立取数状态', () => {
       expect(lastSection()?.querySelector('#settings-invite')).toBeNull();
       expect(lastSection()?.textContent).toContain(hint);
     }
+  });
+
+  it('抽屉里的头像动作立即保存，与底部「保存」无关', async () => {
+    await mountSettings();
+    await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
+    button('编辑资料')!.click();
+    await nextTick();
+    const remove = [...document.querySelectorAll<HTMLButtonElement>('.sheet-panel [data-avatar-field] button')].find(
+      (item) => item.textContent?.trim() === '移除头像',
+    );
+    expect(remove).toBeDefined();
+    remove!.click();
+    await vi.waitFor(() => expect(api.profile.removeAvatar).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(toast).toHaveBeenCalledWith('头像已移除', 'success'));
+    expect(useSessionStore().user.avatar).toBe('');
+    // 头像写入不经过 PUT /profile，也不会顺手关掉抽屉。
+    expect(api.profile.save).not.toHaveBeenCalled();
+    expect(sheet.current?.closing).toBe(false);
   });
 });

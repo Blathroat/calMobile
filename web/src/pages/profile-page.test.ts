@@ -6,13 +6,14 @@ import ProfilePage from './ProfilePage.vue';
 import AppSheet from '@/components/AppSheet.vue';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
+import { openProfileEditor } from '@/services/profile-editor';
 import { closeSheet, sheet } from '@/services/sheet';
 import { toast } from '@/services/toast';
 
 vi.mock('@/app/runtime', () => ({
   bootApp: async () => undefined,
   api: {
-    profile: { get: vi.fn(), save: vi.fn() },
+    profile: { get: vi.fn(), save: vi.fn(), uploadAvatar: vi.fn(), removeAvatar: vi.fn() },
     auth: { logout: vi.fn() },
     registrations: { list: vi.fn() },
   },
@@ -137,6 +138,45 @@ describe('个人页资料展示与编辑', () => {
     await vi.waitFor(() => expect(cards()[2]?.textContent).toContain('杭州'));
     expect(cards()[1]?.textContent).not.toContain('杭州');
     expect(cards()[0]?.textContent).not.toContain('杭州');
+  });
+
+  it('点铅笔打开资料抽屉，头像区在昵称输入框之前', async () => {
+    await mountProfile();
+    await vi.waitFor(() => expect(editButton()?.disabled).toBe(false));
+    editButton()?.click();
+    await nextTick();
+    const avatarField = document.querySelector<HTMLElement>('.sheet-panel [data-avatar-field]');
+    expect(avatarField).not.toBeNull();
+    // 预览 + 更换 + 移除整块都在抽屉最上方。
+    expect(avatarField?.querySelector('.avatar')).not.toBeNull();
+    const labels = [...(avatarField?.querySelectorAll('button') ?? [])].map((item) => item.textContent?.trim());
+    expect(labels).toEqual(['更换头像', '移除头像']);
+    const nickname = document.querySelector('.sheet-panel #settings-nickname')!;
+    expect(avatarField!.compareDocumentPosition(nickname) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('受限账号即使打开资料抽屉，头像动作也不可用', async () => {
+    await mountProfile({ can: { profile: false } });
+    await vi.waitFor(() => expect(editButton()?.disabled).toBe(true));
+    // 页面入口已经禁用；直接打开抽屉验证兜底规则本身（后端也会拒绝写入）。
+    openProfileEditor({}, {});
+    await nextTick();
+    const avatarField = document.querySelector<HTMLElement>('.sheet-panel [data-avatar-field]');
+    expect(avatarField).not.toBeNull();
+    expect(avatarField?.textContent).toContain('账号已被限制，不能编辑个人信息');
+    const buttons = [...(avatarField?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+    expect(buttons.length).toBeGreaterThan(0);
+    expect(buttons.every((item) => item.disabled)).toBe(true);
+    expect(api.profile.uploadAvatar).not.toHaveBeenCalled();
+    expect(api.profile.removeAvatar).not.toHaveBeenCalled();
+  });
+
+  it('管理员代改别人资料时不显示头像块', async () => {
+    await mountProfile();
+    openProfileEditor({ id: 'u2', nickname: '别人' }, { targetUserId: 'u2' });
+    await nextTick();
+    expect(document.querySelector('.sheet-panel [data-avatar-field]')).toBeNull();
+    expect(document.querySelector<HTMLInputElement>('.sheet-panel #settings-nickname')?.value).toBe('别人');
   });
 
   it('地区为空时公开资料卡显示未填写', async () => {

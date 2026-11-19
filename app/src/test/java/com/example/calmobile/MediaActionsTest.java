@@ -6,6 +6,10 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import android.content.Intent;
+import android.os.Build;
+import android.provider.MediaStore;
+
 import java.nio.charset.StandardCharsets;
 
 import org.junit.Test;
@@ -109,5 +113,19 @@ public class MediaActionsTest {
         String unknown = MediaActions.textTooLargeReason(limit + 1, -1, limit);
         assertTrue(unknown, unknown.contains("超过上限 524288"));
         assertFalse(unknown, unknown.contains("超出"));
+    }
+
+    /**
+     * 相册选图按系统版本挑动作：Android 13 起用系统 Photo Picker，低版本退回相册应用的
+     * ACTION_PICK（不再从文件选择器里翻图片）。
+     *
+     * 只钉版本分支：Intent 的构造与系统解析依赖 Android 框架，普通 JUnit 里测不了。
+     */
+    @Test
+    public void picksGalleryActionBySdkVersion() {
+        assertEquals(MediaStore.ACTION_PICK_IMAGES, MediaActions.galleryPickAction(Build.VERSION_CODES.TIRAMISU));
+        assertEquals(MediaStore.ACTION_PICK_IMAGES, MediaActions.galleryPickAction(Build.VERSION_CODES.TIRAMISU + 1));
+        assertEquals(Intent.ACTION_PICK, MediaActions.galleryPickAction(Build.VERSION_CODES.TIRAMISU - 1));
+        assertEquals(Intent.ACTION_PICK, MediaActions.galleryPickAction(Build.VERSION_CODES.N));
     }
 }

@@ -2,7 +2,11 @@
  * 个人页与用户设置共用的「编辑资料」抽屉。
  *
  * 两边打开的是同一块面板（`UserSettingsFormSheet` 的 profile 模式）：
- * 昵称、简介、地区、社交账号。保存走 `PUT /profile`，成功后写回会话，并合并进调用方持有的资料对象。
+ * 最上方是头像（选图 / 裁剪 / 更换 / 移除，走 `POST|DELETE /profile/avatar`，点完立即保存），
+ * 下面才是昵称、简介、地区、社交账号（保存走 `PUT /profile`）。
+ *
+ * 管理员从公开页代改别人资料时传 `targetUserId`：走管理员接口、不改当前会话，
+ * 也不渲染头像块——头像接口只作用于当前登录账号。
  */
 import { reactive, ref } from 'vue';
 import { api } from '@/app/runtime';
@@ -82,7 +86,8 @@ export function openProfileEditor(
         bio: editForm.bio.trim(),
         region: editForm.region.trim(),
         socialMedia: editForm.socialMedia.trim(),
-        // 头像与公开开关不在这个表单里改，但仍要原样回传，避免后端把未提及的字段当成清空。
+        // 头像在抽屉里单独保存，这里仍要原样回传：PUT /profile 是整份覆盖，少传字段会被当成清空。
+        // 本人编辑取会话里的最新头像（抽屉里刚换过也已写回 session.user）；代改别人资料时取目标用户的。
         avatar: String(targetUserId ? profile.avatar || '' : session.user.avatar || ''),
         showRegistrations: profile.showRegistrations === true,
       };
@@ -121,6 +126,10 @@ export function openProfileEditor(
         region: limit('region', 40),
         socialMedia: limit('socialMedia', 40),
       },
+      // 头像块只给本人：代改别人资料时头像接口仍然只会改当前登录账号。
+      showAvatar: !targetUserId,
+      // 头像写入成功后并进调用方持有的资料对象；会话已由头像块自己刷新。
+      onAvatarUpdated: (fresh: JsonObject) => Object.assign(profile, fresh),
       onUpdate: updateField,
       onSubmit: saveEditor,
     },

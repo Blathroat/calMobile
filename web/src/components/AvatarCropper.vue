@@ -269,8 +269,17 @@ function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+/**
+ * Escape 只关裁剪面板。
+ *
+ * 面板可能叠在资料编辑抽屉上（抽屉由 AppSheet 渲染，同样在 document 上监听 Escape）。
+ * 这里挂在 window 的捕获阶段并停住事件：先于抽屉拿到按键，按一次只退一层，不会连
+ * 下面还没保存的资料一起关掉。其它按键（Tab 等）照常冒泡给抽屉做焦点管理。
+ */
 function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') requestClose();
+  if (event.key !== 'Escape') return;
+  event.stopPropagation();
+  requestClose();
 }
 
 /** 关闭：先播退场（`data-closing`），动画结束再让页面卸载组件。 */
@@ -341,7 +350,7 @@ function confirm(): void {
 
 onMounted(() => {
   unbindGestures = bindGestures();
-  document.addEventListener('keydown', onKeydown);
+  window.addEventListener('keydown', onKeydown, true);
   // 图片是 data URL，缓存命中时 load 可能在挂载前就结束了，这里补一次初始化。
   const image = imageEl.value;
   if (image?.complete && image.naturalWidth > 0) onImageLoad();
@@ -352,7 +361,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   unbindGestures?.();
   unbindGestures = undefined;
-  document.removeEventListener('keydown', onKeydown);
+  window.removeEventListener('keydown', onKeydown, true);
   if (closeTimer !== undefined) window.clearTimeout(closeTimer);
   closeTimer = undefined;
 });

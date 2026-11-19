@@ -955,8 +955,93 @@ final class MediaActions {
         return BuildConfig.BRAND_SLUG + "-qr-" + stamp + "." + extension;
     }
 
-    /** 选择图片：把结果交回前端做裁剪等后续处理。 */
+    /**
+     * 选择图片：优先拉起系统相册 / Photo Picker，而不是文件选择器。
+     * <p>
+     * 头像的图基本都在相册里，文件选择器要多点几层才能翻到图片，用户也容易误选文档目录里的
+     * 其它文件。Android 13（API 33）起系统提供 Photo Picker
+     * （{@link MediaStore#ACTION_PICK_IMAGES}），界面统一且不需要存储权限；更低版本退回相册
+     * 应用的 {@link Intent#ACTION_PICK}。
+     * <p>
+     * 系统里没有相册 / Photo Picker 的设备（极简 ROM、组件被禁用）回退到原来的文件选择器，
+     * 选图始终可用。回包形状不变：pending 仍是 {@code media.pick}，结果由
+     * {@link #onActivityResult} 的通用分支读成 {@code ok / uri / mimeType / dataUrl}。
+     * <p>
+     * 封面与视频（{@code media.import}）继续走文件选择器，不要改：它们允许任意图片 / 视频
+     * 文件，也可能来自下载目录，这些在相册里看不到。
+     */
     static void pickImage(WebAppBridge bridge, WebAppBridge.ResultCallback callback) {
-        pickFile(bridge, "image/*", "选择图片", callback);
+        Intent intent = galleryPickIntent(bridge.activity());
+        if (intent == null) {
+            // 老系统能直接问出「有没有相册应用」：没有就保持原来的文件选择器，选图仍然可用。
+            pickFile(bridge, "image/*", "选择图片", callback);
+            return;
+        }
+        bridge.startForResult(intent, bridge.nextRequestCode(),
+                new WebAppBridge.PendingResult("media.pick", galleryFallback(bridge, callback)));
+    }
+
+    /**
+     * 相册选图启动失败时的退路。
+     * <p>
+     * {@link WebAppBridge#startForResult} 把启动系统界面抛的 ActivityNotFoundException 转成
+     * 失败回调，页面本身分不清「没有相册」和「其它启动失败」；在这里接住单参数失败、改开
+     * 文件选择器，避免设备没有相册就完全选不了图。用户取消带稳定错误码走下面那个重载，
+     * 原样转给页面；成功也原样转。
+     */
+    private static WebAppBridge.ResultCallback galleryFallback(WebAppBridge bridge,
+            WebAppBridge.ResultCallback callback) {
+        return new WebAppBridge.ResultCallback() {
+            @Override
+            public void success(Object data) {
+                callback.success(data);
+            }
+
+            @Override
+            public void failure(String message) {
+                pickFile(bridge, "image/*", "选择图片", callback);
+            }
+
+            @Override
+            public void failure(String code, String message) {
+                callback.failure(code, message);
+            }
+        };
+    }
+
+    /**
+     * 按系统版本挑相册选图动作。
+     * <p>
+     * 抽成纯函数是为了能在普通 JUnit 里钉住版本分支：Intent 本身依赖 Android 框架，测不了。
+     *
+     * @param sdkInt 设备 API 级别（生产代码传 {@link Build.VERSION#SDK_INT}）
+     * @return Android 13 起是系统 Photo Picker，低版本是系统相册的 ACTION_PICK
+     */
+    static String galleryPickAction(int sdkInt) {
+        return sdkInt >= Build.VERSION_CODES.TIRAMISU
+                ? MediaStore.ACTION_PICK_IMAGES
+                : Intent.ACTION_PICK;
+    }
+
+    /**
+     * 相册选图的 Intent；Android 10 及以下能确认系统里没有相册应用时返回 null。
+     * <p>
+     * 只在老系统用 resolveActivity 预检：Android 11 起的包可见性会把没装进白名单的相册应用
+     * 过滤成「查不到」，但隐式 Intent 交给系统仍然能打开。新系统上真没有应用时，启动会抛
+     * ActivityNotFoundException，由 {@link #galleryFallback} 接住并改用文件选择器。
+     */
+    static Intent galleryPickIntent(Activity activity) {
+        Intent intent = new Intent(galleryPickAction(Build.VERSION.SDK_INT));
+        if (MediaStore.ACTION_PICK_IMAGES.equals(intent.getAction())) {
+            intent.setType("image/*");
+        } else {
+            intent.setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*");
+        }
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+                && intent.resolveActivity(activity.getPackageManager()) == null) {
+            return null;
+        }
+        return intent;
     }
 }
