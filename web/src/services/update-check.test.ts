@@ -26,4 +26,10 @@ describe('应用更新判断', () => {
     expect(compareVersions('v1.0', '1.0.0')).toBe(0);
     expect(compareVersions('0.9.9', '1.0.0')).toBe(-1);
   });
+
+  it('Android 外壳注入原生版本时优先用原生版本', () => {
+    window.__CALMOBILE_NATIVE_VERSION__ = '0.1.109';
+    expect(currentVersion()).toBe('0.1.109');
+    delete window.__CALMOBILE_NATIVE_VERSION__;
+  });
 });

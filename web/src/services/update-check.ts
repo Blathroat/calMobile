@@ -49,8 +49,10 @@ function write(key: string, value: string): void {
   }
 }
 
-/** 构建期注入的版本号；没有注入时返回空串。 */
+/** 已安装版本：Android 外壳优先给原生版本名；浏览器/PWA 用页面构建版本。 */
 export function currentVersion(): string {
+  const native = typeof window === 'undefined' ? '' : String(window.__CALMOBILE_NATIVE_VERSION__ ?? '').trim();
+  if (native) return native;
   return typeof __APP_VERSION__ === 'string' ? __APP_VERSION__.trim() : '';
 }
 
