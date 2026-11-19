@@ -4,8 +4,9 @@
  * 两边打开的是同一块面板（`UserSettingsFormSheet` 的 profile 模式）：
  * 最上方是头像块（只留一颗铅笔入口），下面才是昵称、简介、地区、社交账号（保存走 `PUT /profile`）。
  *
- * 头像不在这一层改：点铅笔时先把当前资料保存下来并退出资料抽屉，等退场动画结束再打开
- * 头像编辑抽屉（`ProfileAvatarSheet.vue`：选图 → 裁剪 → `POST|DELETE /profile/avatar` 立即保存）。
+ * 头像不在这一层改：点铅笔时先把当前资料保存下来并退出资料抽屉，退场动画结束后**直接拉起
+ * 系统选图**，选定图片再弹出裁剪抽屉（`components/ProfileAvatarCropper.vue`，状态在
+ * `services/profile-avatar.ts`），裁剪完立即上传。
  * 校验或保存失败就留在资料抽屉里显示错误，不会带着还没保存的改动跳走。
  *
  * 管理员从公开页代改别人资料时传 `targetUserId`：走管理员接口、不改当前会话，
@@ -14,7 +15,8 @@
 import { reactive, ref } from 'vue';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
-import ProfileAvatarSheet from '@/components/ProfileAvatarSheet.vue';
+import { device } from '@/services/device-services';
+import { openAvatarCropper } from '@/services/profile-avatar';
 import UserSettingsFormSheet from '@/components/UserSettingsFormSheet.vue';
 import type { JsonObject } from '@/api/types';
 import { t } from '@/i18n';
@@ -129,26 +131,34 @@ export function openProfileEditor(
     }
   }
 
-  /** 头像编辑抽屉：上传 / 移除成功后把最新资料并回调用方；关闭由底部动作负责。 */
-  function openAvatarSheet(): void {
-    openSheet({
-      title: t('settings.profile.editAvatar'),
-      component: ProfileAvatarSheet,
-      props: {
-        // 头像写入成功后的最新用户字段：调用方持有的资料对象跟着更新。
-        onAvatarUpdated: (fresh: JsonObject) => Object.assign(profile, fresh),
-      },
-      size: 'full',
-      actions: [{ label: t('common.close'), onClick: (close) => close() }],
-    });
+  /**
+   * 选头像：系统相册 / 文件选择里拿到图片后直接弹裁剪抽屉，不再先开一页让用户再点一次。
+   * 用户取消不提示；图片读不出来或选图失败才 toast。没有图时什么都不弹。
+   */
+  async function pickAvatar(): Promise<void> {
+    try {
+      const picked = await device.pickImage();
+      const source = String(picked?.dataUrl || '');
+      if (!source) {
+        toast(t('admin.media.unreadableImage'), 'error');
+        return;
+      }
+      // 上传成功后把最新资料并回调用方；会话由裁剪抽屉自己刷新。
+      openAvatarCropper(source, (fresh) => Object.assign(profile, fresh));
+    } catch (reason) {
+      // 用户在系统选图里取消：按稳定错误码判断，不提示。
+      if ((reason as { code?: string } | null)?.code === 'cancelled') return;
+      toast(errorText(reason), 'error');
+    } finally {
+      switchingToAvatar = false;
+    }
   }
 
   /**
-   * 点头像铅笔：先保存当前资料并退出资料抽屉，再打开头像编辑抽屉。
+   * 点头像铅笔：先保存当前资料并退出资料抽屉，再直接拉起系统选图，选定后弹裁剪抽屉。
    *
-   * 头像抽屉会替换资料抽屉：没保存的文字改动不能跟着丢，所以先走一遍校验与 `PUT /profile`；
-   * 校验或保存失败时留在资料抽屉里显示错误。抽屉退场要 220ms，等它播完再开新的，
-   * 免得第二层抽屉在旧抽屉还没落下去时叠上去。
+   * 没保存的文字改动不能跟着丢，所以先走一遍校验与 `PUT /profile`；校验或保存失败时留在
+   * 资料抽屉里显示错误。抽屉退场要 220ms，等它落下去再拉起系统界面，避免面板还开着就跳走。
    */
   async function openAvatarEditor(): Promise<void> {
     if (switchingToAvatar) return;
@@ -158,10 +168,7 @@ export function openProfileEditor(
       return;
     }
     closeSheet();
-    window.setTimeout(() => {
-      switchingToAvatar = false;
-      openAvatarSheet();
-    }, AVATAR_SHEET_DELAY_MS);
+    window.setTimeout(() => void pickAvatar(), AVATAR_SHEET_DELAY_MS);
   }
 
   openSheet({

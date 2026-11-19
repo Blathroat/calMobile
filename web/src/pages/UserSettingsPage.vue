@@ -34,6 +34,7 @@ import { isIosInstallOffer } from '@/services/pwa';
 import { toast } from '@/services/toast';
 import { formatLocalChineseDate } from '@/services/format';
 import { openProfileEditor } from '@/services/profile-editor';
+import ProfileAvatarCropper from '@/components/ProfileAvatarCropper.vue';
 import { openSheet } from '@/services/sheet';
 import {
   autoUpdateEnabled,
@@ -678,6 +679,9 @@ async function checkUpdate(auto = false): Promise<void> {
       </section>
     </div>
   </template>
+
+  <!-- 头像裁剪抽屉：与个人页共用同一份全局状态（点铅笔保存资料后拉起系统选图） -->
+  <ProfileAvatarCropper />
 </template>
 
 <style>

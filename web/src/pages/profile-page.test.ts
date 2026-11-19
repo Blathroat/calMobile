@@ -7,6 +7,8 @@ import AppSheet from '@/components/AppSheet.vue';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
 import { openProfileEditor } from '@/services/profile-editor';
+import { closeAvatarCropper } from '@/services/profile-avatar';
+import { device } from '@/services/device-services';
 import { closeSheet, sheet } from '@/services/sheet';
 import { toast } from '@/services/toast';
 
@@ -19,6 +21,7 @@ vi.mock('@/app/runtime', () => ({
   },
 }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
+vi.mock('@/services/device-services', () => ({ device: { pickImage: vi.fn() } }));
 
 const PROFILE = {
   id: 'u1',
@@ -43,9 +46,11 @@ beforeEach(async () => {
   }
   vi.resetAllMocks();
   document.body.innerHTML = '<div id="profile-test"></div>';
+  closeAvatarCropper();
   vi.mocked(api.profile.get).mockResolvedValue(PROFILE);
   vi.mocked(api.profile.save).mockResolvedValue({ ok: true, user: { ...PROFILE, region: '杭州' } });
   vi.mocked(api.registrations.list).mockResolvedValue([]);
+  vi.mocked(device.pickImage).mockResolvedValue({ dataUrl: 'data:image/jpeg;base64,BBBB' });
 });
 
 afterEach(() => {
@@ -162,7 +167,7 @@ describe('个人页资料展示与编辑', () => {
     expect(avatarField?.querySelector('[data-avatar-edit] .avatar-field-pencil')).not.toBeNull();
   });
 
-  it('点头像铅笔先保存资料并退出资料抽屉，再打开头像编辑抽屉', async () => {
+  it('点头像铅笔先保存资料并退出抽屉，然后直接拉起系统选图、再弹出裁剪抽屉', async () => {
     await mountProfile();
     await vi.waitFor(() => expect(editButton()?.disabled).toBe(false));
     editButton()?.click();
@@ -171,20 +176,15 @@ describe('个人页资料展示与编辑', () => {
     // 先走一遍 PUT /profile：保存成功才关资料抽屉。
     await vi.waitFor(() => expect(api.profile.save).toHaveBeenCalledTimes(1), { timeout: 1000 });
     expect(api.profile.save).toHaveBeenCalledWith(expect.objectContaining({ avatar: '/avatar.jpg' }));
-    // 保存成功后资料抽屉才开始退场，退场动画结束才开头像抽屉。
+    // 保存成功后资料抽屉开始退场，退场动画结束直接拉起系统选图。
     await vi.waitFor(() => expect(sheet.current?.closing).toBe(true), { timeout: 1000 });
-    // 新的头像抽屉里没有资料字段。
-    await vi.waitFor(() => expect(sheet.current?.title).toBe('编辑头像'), { timeout: 1000 });
-    expect(document.querySelector('.sheet-panel #settings-nickname')).toBeNull();
-    const panel = document.querySelector('.sheet-panel');
-    expect(panel?.querySelector('.avatar')).not.toBeNull();
-    expect(panel?.textContent).toContain('更换头像');
-    expect(panel?.textContent).toContain('移除头像');
-    // 关闭由底部动作负责。
-    expect(sheet.current?.actions.map((item) => item.label)).toEqual(['关闭']);
+    await vi.waitFor(() => expect(device.pickImage).toHaveBeenCalledTimes(1), { timeout: 1000 });
+    // 没有中转页：资料抽屉关掉后不会再冒出「编辑头像」面板，只有裁剪抽屉。
+    expect(sheet.current).toBeNull();
+    await vi.waitFor(() => expect(document.body.textContent).toContain('裁剪头像'), { timeout: 1000 });
   });
 
-  it('资料校验失败时留在资料抽屉，不打开头像编辑抽屉', async () => {
+  it('资料校验失败时留在资料抽屉，不拉起系统选图也不出现裁剪抽屉', async () => {
     await mountProfile();
     await vi.waitFor(() => expect(editButton()?.disabled).toBe(false));
     editButton()?.click();
@@ -193,9 +193,11 @@ describe('个人页资料展示与编辑', () => {
     nickname.value = '';
     nickname.dispatchEvent(new Event('input', { bubbles: true }));
     document.querySelector<HTMLButtonElement>('.sheet-panel [data-avatar-edit]')!.click();
-    // 校验失败：不发 PUT、不关抽屉，错误留在原位。
+    // 校验失败：不发 PUT、不关抽屉，也不去选图，错误留在原位。
     await new Promise((resolve) => setTimeout(resolve, 350));
     expect(api.profile.save).not.toHaveBeenCalled();
+    expect(device.pickImage).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain('裁剪头像');
     expect(sheet.current?.title).toBe('编辑资料');
     expect(sheet.current?.closing).toBe(false);
     expect(document.querySelector('.sheet-panel #settings-nickname')).not.toBeNull();
@@ -213,12 +215,13 @@ describe('个人页资料展示与编辑', () => {
     expect(avatarField?.textContent).toContain('账号已被限制，不能编辑个人信息');
     const pencil = avatarField?.querySelector<HTMLButtonElement>('[data-avatar-edit]');
     expect(pencil?.disabled).toBe(true);
-    // 点了也不会离开资料抽屉去开头像抽屉。
+    // 点了也不会离开资料抽屉去选图或弹裁剪抽屉。
     pencil?.dispatchEvent(new Event('click'));
     await new Promise((resolve) => setTimeout(resolve, 350));
     expect(sheet.current?.title).toBe('编辑资料');
+    expect(device.pickImage).not.toHaveBeenCalled();
     expect(api.profile.uploadAvatar).not.toHaveBeenCalled();
-    expect(api.profile.removeAvatar).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain('裁剪头像');
   });
 
   it('管理员代改别人资料时不显示头像块', async () => {

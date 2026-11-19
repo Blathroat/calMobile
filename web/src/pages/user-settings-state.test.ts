@@ -9,8 +9,9 @@ import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { nativeBridge } from '@/services/native-bridge';
 import { isIosInstallOffer } from '@/services/pwa';
+import { closeAvatarCropper } from '@/services/profile-avatar';
+import { device } from '@/services/device-services';
 import { closeSheet, sheet } from '@/services/sheet';
-import { toast } from '@/services/toast';
 
 vi.mock('@/app/runtime', () => ({
   bootApp: async () => undefined,
@@ -25,6 +26,7 @@ vi.mock('@/app/runtime', () => ({
   },
 }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
+vi.mock('@/services/device-services', () => ({ device: { pickImage: vi.fn() } }));
 // 安装引导是否出现由平台判断；这里只控制「iOS 未安装」这一种状态。
 vi.mock('@/services/pwa', () => ({
   isIosInstallOffer: vi.fn(),
@@ -56,6 +58,8 @@ beforeEach(async () => {
   vi.mocked(api.profile.save).mockResolvedValue({ ok: true, user: { ...PROFILE, avatar: '' } });
   vi.mocked(api.profile.removeAvatar).mockResolvedValue({ ok: true, user: { ...PROFILE, avatar: '' } });
   vi.mocked(api.profile.saveNotifications).mockResolvedValue({ ok: true, notify: { exhibitionReminder: false } });
+  closeAvatarCropper();
+  vi.mocked(device.pickImage).mockResolvedValue({ dataUrl: 'data:image/jpeg;base64,BBBB' });
 });
 
 afterEach(() => {
@@ -99,7 +103,7 @@ describe('设置页独立取数状态', () => {
     // 身份卡仍在（头像、昵称、角色、邮箱）——资料失败时也不清空。
     expect(document.querySelector('.card .identity-name')).not.toBeNull();
     expect(document.querySelector('.card .avatar')).not.toBeNull();
-    // 设置页只剩身份展示：头像动作按钮已经搬进抽屉，这里一个都不该有。
+    // 设置页只剩身份展示：头像编辑入口在资料抽屉里，这里一个按钮都不该有。
     expect(button('上传头像')).toBeUndefined();
     expect(button('更换头像')).toBeUndefined();
     expect(button('移除头像')).toBeUndefined();
@@ -151,7 +155,7 @@ describe('设置页独立取数状态', () => {
     await nextTick();
     const avatarField = document.querySelector<HTMLElement>('.sheet-panel [data-avatar-field]');
     expect(avatarField).not.toBeNull();
-    // 头像块只剩一颗铅笔：上传 / 更换 / 移除都搬进了头像编辑抽屉。
+    // 头像块只剩一颗铅笔：点它先保存资料，再直接拉起系统选图。
     expect([...(avatarField?.querySelectorAll('button') ?? [])].map((item) => item.getAttribute('aria-label'))).toEqual(
       ['编辑头像'],
     );
@@ -273,30 +277,23 @@ describe('设置页独立取数状态', () => {
     }
   });
 
-  it('点头像铅笔先保存资料，再在头像编辑抽屉里移除头像', async () => {
-    // 保存资料的响应带着当前头像：否则切完抽屉头像就没了，没有可移除的东西。
+  it('点头像铅笔先保存资料并关掉抽屉，再直接拉起系统选图并弹出裁剪抽屉', async () => {
     vi.mocked(api.profile.save).mockResolvedValue({ ok: true, user: { ...PROFILE } });
     await mountSettings();
     await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
     button('编辑资料')!.click();
     await nextTick();
-    // 资料抽屉里没有上传 / 移除按钮，只有铅笔。
+    // 资料抽屉里没有上传 / 更换 / 移除按钮，只有铅笔。
     expect(button('上传头像')).toBeUndefined();
+    expect(button('更换头像')).toBeUndefined();
     expect(button('移除头像')).toBeUndefined();
     document.querySelector<HTMLButtonElement>('.sheet-panel [data-avatar-edit]')!.click();
-    // 先 PUT /profile，再退场并换成头像编辑抽屉。
+    // 先 PUT /profile：保存成功才关资料抽屉，然后直接拉起系统选图。
     await vi.waitFor(() => expect(api.profile.save).toHaveBeenCalledTimes(1), { timeout: 1000 });
-    await vi.waitFor(() => expect(sheet.current?.title).toBe('编辑头像'), { timeout: 1000 });
-    const remove = [...document.querySelectorAll<HTMLButtonElement>('.sheet-panel button')].find(
-      (item) => item.textContent?.trim() === '移除头像',
-    );
-    expect(remove).toBeDefined();
-    remove!.click();
-    await vi.waitFor(() => expect(api.profile.removeAvatar).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(toast).toHaveBeenCalledWith('头像已移除', 'success'));
-    expect(useSessionStore().user.avatar).toBe('');
-    // 移除不经过 PUT /profile，也不会顺手关掉头像抽屉。
-    expect(api.profile.save).toHaveBeenCalledTimes(1);
-    expect(sheet.current?.closing).toBe(false);
+    await vi.waitFor(() => expect(device.pickImage).toHaveBeenCalledTimes(1), { timeout: 1000 });
+    // 没有中转页：不会再冒出「编辑头像」面板，选到图后出现裁剪抽屉。
+    await vi.waitFor(() => expect(document.body.textContent).toContain('裁剪头像'), { timeout: 1000 });
+    expect(sheet.current).toBeNull();
+    expect(button('移除头像')).toBeUndefined();
   });
 });

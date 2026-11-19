@@ -1367,9 +1367,7 @@
     }
   },
   "settings": {
-    "avatarRemoved": "头像已移除",
     "avatarUpdated": "头像已更新",
-    "changeAvatar": "更换头像",
     "emailEmpty": "未填写邮箱",
     "invite": {
       "alreadyAdmin": "当前是管理员，不需要邀请码",
@@ -1413,7 +1411,6 @@
       "updated": "通知设置已更新"
     },
     "profile": {
-      "avatarSheetHint": "头像改动立即保存，关闭抽屉即可。",
       "editAvatar": "编辑头像",
       "editProfile": "编辑资料",
       "nickname": "昵称",
@@ -1424,7 +1421,6 @@
     },
     "registrationsHidden": "已关闭公开展示",
     "registrationsShown": "已开启公开展示",
-    "removeAvatar": "移除头像",
     "section": {
       "account": "账号",
       "appearance": "外观",
@@ -1444,7 +1440,6 @@
       "light": "浅色"
     },
     "title": "设置",
-    "uploadAvatar": "上传头像",
     "update": {
       "title": "应用更新",
       "check": "检查更新",
