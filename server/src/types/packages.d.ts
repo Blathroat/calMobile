@@ -2,7 +2,7 @@
  * 未自带类型、也还没有 `@types/*` 的 CommonJS 依赖的最小声明。
  *
  * 只声明本仓库真正用到的那几个签名，不做 `any` 兜底 —— 这个包的去处是：
- * `nodemailer` 是刻意留用的零依赖 SMTP 客户端（见 ADR 0001「留用与删除」）。
+ * `nodemailer` 是刻意留用的零依赖 SMTP 客户端（依赖取舍见 `server/README.md`）。
  *
  * 之所以必须写在这里：ESM 下没有 `require()`，而 `noImplicitAny` 会让
  * 「导入一个没有声明的模块」直接成为编译错误，不能像 CJS 时代那样运行时才炸。
