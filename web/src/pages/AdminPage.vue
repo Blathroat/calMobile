@@ -236,7 +236,7 @@ const form = reactive({
   inviteValidHours: 168,
   /** 兑换后展商身份保留的天数；0 表示永久 */
   inviteDurationDays: 0,
-  /** 软件包下载源：直链地址或 GitHub 仓库（owner/repo） */
+  /** 软件包下载源：直链/目录或 GitHub 仓库（owner/repo） */
   download: { source: 'url' as 'url' | 'github', url: '', repo: '' },
   /** 用户协议：开关与 Markdown 正文，随其它设置一起保存（正文变化时服务端自增版本） */
   agreement: { enabled: false, content: '' },

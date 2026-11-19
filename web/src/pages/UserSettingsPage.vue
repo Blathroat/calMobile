@@ -492,7 +492,7 @@ function openInstallSheet(): void {
  * 检查更新。
  *
  * `auto` 为真时不显示加载态、失败也不提示；命中新版本且本机还没自动提示过
- * 同一个标记（GitHub 是版本号，直链是下载地址）时才弹抽屉。
+ * 同一个标记（有版本号用版本号，否则用下载地址）时才弹抽屉。
  */
 async function checkUpdate(auto = false): Promise<void> {
   if (auto) {

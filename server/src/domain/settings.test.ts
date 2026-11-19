@@ -204,7 +204,10 @@ test('下载源默认直链且为空，合法值按段保存', () => {
 });
 
 test('下载源的非法值按规则失败，空串合法，未提交的字段保持原值', () => {
-  assert.throws(() => applyServerPatch(defaults(), { download: { source: 'ftp' } }), /下载源只能是直链或 GitHub 仓库/);
+  assert.throws(
+    () => applyServerPatch(defaults(), { download: { source: 'ftp' } }),
+    /下载源只能是直链\/目录或 GitHub 仓库/,
+  );
   assert.throws(() => applyServerPatch(defaults(), { downloadUrl: 'example.com/app.apk' }), /http:\/\/ 或 https:\/\//);
   assert.throws(() => applyServerPatch(defaults(), { downloadRepo: 'owner' }), /owner\/repo/);
   assert.throws(() => applyServerPatch(defaults(), { download: 'nope' }), /下载源设置格式不正确/);

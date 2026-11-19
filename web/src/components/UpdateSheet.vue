@@ -16,8 +16,8 @@ const props = defineProps<{ release: ReleaseInfo }>();
 const version = computed(() => String(props.release.version ?? '').trim());
 const url = computed(() => String(props.release.url ?? '').trim());
 const notes = computed(() => String(props.release.notes ?? '').trim());
-/** 更新日志只有 GitHub 源才有。 */
-const showNotes = computed(() => props.release.source === 'github' && notes.value !== '');
+/** 更新日志：GitHub Release 或目录的 latest.json 都可能带。 */
+const showNotes = computed(() => notes.value !== '');
 const title = computed(() =>
   version.value
     ? t('settings.update.availableTitle', { version: version.value })
@@ -34,13 +34,13 @@ function download(): void {
 
 <template>
   <div class="update-content">
-    <!-- 版本行：GitHub 源带版本号；直链没有版本号，只说「发现新版本」 -->
+    <!-- 版本行：目录/GitHub 源带版本号；普通直链没有版本号，只说「发现新版本」 -->
     <div class="update-version">
       <strong class="update-title">{{ title }}</strong>
       <span v-if="current" class="row-meta">{{ t('settings.update.currentVersion', { version: current }) }}</span>
     </div>
 
-    <!-- 更新日志：纯文本保留换行，不解析 Markdown -->
+    <!-- 更新日志：GitHub Release 或目录的 latest.json 都可能带。 -->
     <div v-if="showNotes" class="update-log">
       <span class="section-label">{{ t('settings.update.notes') }}</span>
       <p class="update-notes">{{ notes }}</p>

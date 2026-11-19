@@ -221,8 +221,10 @@ export interface ReviewList extends JsonObject {
 /**
  * 最新版本与下载地址（`GET /app/release`，公开）。
  *
- * `source` 是管理端设置的下载源：`github` 时 `version` / `notes` 来自最新 release，
- * 直链时两者为空。`url` 为空表示管理员还没配下载地址，界面不要渲染下载入口。
+ * `source` 是管理端设置的下载源：`github` 时版本/日志来自最新 Release；
+ * `url` 填 .apk 时是普通直链，填目录时服务端从目录索引里选最高版本，
+ * 目录里的 `latest.json` 可提供日志。`url` 为空表示管理员还没配下载地址，
+ * 界面不要渲染下载入口。
  */
 export interface ReleaseInfo extends JsonObject {
   source: 'url' | 'github';

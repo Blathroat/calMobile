@@ -202,9 +202,10 @@ HTTP 状态码表达认证、授权、可用性和内部故障。业务规则的
 
 - `GET /api/v1/settings` 与 `PUT /api/v1/settings` 都带 `download`。保存时 `source` 只允许 `url` / `github`；`url` 必须以 `http(s)://` 开头（空串合法）；`repo` 必须匹配 `owner/repo`（空串合法）。非法值按写接口约定回 200 + `ok:false`，错误码 `settings.download*`。也接受 `downloadSource` / `downloadUrl` / `downloadRepo` 的扁平写法。
 - `GET /api/v1/app/release`（公开，`Cache-Control: no-store`）返回 `{ ok:true, source, version, notes, url, publishedAt }`。
-  - `source = url`：`url` 是设置里的直链，`version` / `notes` / `publishedAt` 为空。
+  - `source = url`，地址以 `.apk` 结尾：`url` 原样下发，`version` / `notes` / `publishedAt` 为空。
+  - `source = url`，地址是目录：服务端请求 `<目录>/index.json`（也兼容目录 HTML 里的 `.apk` 链接），按文件名里的版本号选最高一版。`index.json` 可以是文件名数组、`{ files: [...] }` 或 `{ versions: [...] }`；版本号从 `app-1.2.3.apk` 这类文件名提取。下载地址由目录和文件名拼出。同目录可放 `latest.json`：`{ "version":"1.2.3", "notes":"...", "publishedAt":"..." }`；只有版本与选中的 APK 一致时才带出日志。目录探测不到 `.apk` 时退回原来的直链行为，不报 5xx。
   - `source = github`：读 `https://api.github.com/repos/<repo>/releases/latest`，请求头 `Accept: application/vnd.github+json`、`User-Agent: calMobile-server`，配了 `GITHUB_TOKEN` 时带 `Authorization: Bearer`。`version` 是 `tag_name` 去掉一个前缀 `v`，`notes` 是 `body` 原文，`publishedAt` 是 `published_at`。下载地址取第一个文件名以 `.apk` 结尾的资产；没有这样的资产时退回 Release 页面 `html_url`。
-  - 成功缓存 5 分钟、失败缓存 60 秒（模块级 Map，按 repo 存）；请求超时 4 秒。GitHub 限流、超时、仓库写错都只让 `url` 为空并写服务端日志，**不抛 5xx**。
+  - 成功缓存 5 分钟、失败缓存 60 秒（模块级 Map，按 repo 或目录存）；请求超时 4 秒。外部地址限流、超时、配置写错都只让 `url` 为空或退回直链，并写服务端日志，**不抛 5xx**。
 - `GET /api/v1/bootstrap` 的 `download` 是同一份解析结果的摘要：`{ source, version, url }`（报名站在系统浏览器打开时用它显示下载条）；解析失败时给 `{ source:'url', version:'', url:'' }`。
 
 ## 数据模型
