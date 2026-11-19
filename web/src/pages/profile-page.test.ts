@@ -140,22 +140,69 @@ describe('个人页资料展示与编辑', () => {
     expect(cards()[0]?.textContent).not.toContain('杭州');
   });
 
-  it('点铅笔打开资料抽屉，头像区在昵称输入框之前', async () => {
+  it('资料抽屉的头像块只剩居中的头像与铅笔，没有标题、大按钮和说明', async () => {
     await mountProfile();
     await vi.waitFor(() => expect(editButton()?.disabled).toBe(false));
     editButton()?.click();
     await nextTick();
     const avatarField = document.querySelector<HTMLElement>('.sheet-panel [data-avatar-field]');
     expect(avatarField).not.toBeNull();
-    // 预览 + 更换 + 移除整块都在抽屉最上方。
+    // 预览在块里、在昵称输入框之前。
     expect(avatarField?.querySelector('.avatar')).not.toBeNull();
-    const labels = [...(avatarField?.querySelectorAll('button') ?? [])].map((item) => item.textContent?.trim());
-    expect(labels).toEqual(['更换头像', '移除头像']);
     const nickname = document.querySelector('.sheet-panel #settings-nickname')!;
     expect(avatarField!.compareDocumentPosition(nickname) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 没有「头像」标题、说明与上传 / 更换 / 移除大按钮：只剩一颗铅笔。
+    expect(avatarField?.querySelector('.field-label')).toBeNull();
+    expect(avatarField?.textContent).not.toContain('更换头像');
+    expect(avatarField?.textContent).not.toContain('移除头像');
+    const buttons = [...(avatarField?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]?.getAttribute('aria-label')).toBe('编辑头像');
+    // 铅笔小圆叠在头像右下角。
+    expect(avatarField?.querySelector('[data-avatar-edit] .avatar-field-pencil')).not.toBeNull();
   });
 
-  it('受限账号即使打开资料抽屉，头像动作也不可用', async () => {
+  it('点头像铅笔先保存资料并退出资料抽屉，再打开头像编辑抽屉', async () => {
+    await mountProfile();
+    await vi.waitFor(() => expect(editButton()?.disabled).toBe(false));
+    editButton()?.click();
+    await nextTick();
+    document.querySelector<HTMLButtonElement>('.sheet-panel [data-avatar-edit]')!.click();
+    // 先走一遍 PUT /profile：保存成功才关资料抽屉。
+    await vi.waitFor(() => expect(api.profile.save).toHaveBeenCalledTimes(1), { timeout: 1000 });
+    expect(api.profile.save).toHaveBeenCalledWith(expect.objectContaining({ avatar: '/avatar.jpg' }));
+    // 保存成功后资料抽屉才开始退场，退场动画结束才开头像抽屉。
+    await vi.waitFor(() => expect(sheet.current?.closing).toBe(true), { timeout: 1000 });
+    // 新的头像抽屉里没有资料字段。
+    await vi.waitFor(() => expect(sheet.current?.title).toBe('编辑头像'), { timeout: 1000 });
+    expect(document.querySelector('.sheet-panel #settings-nickname')).toBeNull();
+    const panel = document.querySelector('.sheet-panel');
+    expect(panel?.querySelector('.avatar')).not.toBeNull();
+    expect(panel?.textContent).toContain('更换头像');
+    expect(panel?.textContent).toContain('移除头像');
+    // 关闭由底部动作负责。
+    expect(sheet.current?.actions.map((item) => item.label)).toEqual(['关闭']);
+  });
+
+  it('资料校验失败时留在资料抽屉，不打开头像编辑抽屉', async () => {
+    await mountProfile();
+    await vi.waitFor(() => expect(editButton()?.disabled).toBe(false));
+    editButton()?.click();
+    await nextTick();
+    const nickname = document.querySelector<HTMLInputElement>('.sheet-panel #settings-nickname')!;
+    nickname.value = '';
+    nickname.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector<HTMLButtonElement>('.sheet-panel [data-avatar-edit]')!.click();
+    // 校验失败：不发 PUT、不关抽屉，错误留在原位。
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(api.profile.save).not.toHaveBeenCalled();
+    expect(sheet.current?.title).toBe('编辑资料');
+    expect(sheet.current?.closing).toBe(false);
+    expect(document.querySelector('.sheet-panel #settings-nickname')).not.toBeNull();
+    expect(document.querySelector('.sheet-panel .field-error')?.textContent).toContain('昵称');
+  });
+
+  it('受限账号即使打开资料抽屉，头像铅笔也不可用', async () => {
     await mountProfile({ can: { profile: false } });
     await vi.waitFor(() => expect(editButton()?.disabled).toBe(true));
     // 页面入口已经禁用；直接打开抽屉验证兜底规则本身（后端也会拒绝写入）。
@@ -164,9 +211,12 @@ describe('个人页资料展示与编辑', () => {
     const avatarField = document.querySelector<HTMLElement>('.sheet-panel [data-avatar-field]');
     expect(avatarField).not.toBeNull();
     expect(avatarField?.textContent).toContain('账号已被限制，不能编辑个人信息');
-    const buttons = [...(avatarField?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
-    expect(buttons.length).toBeGreaterThan(0);
-    expect(buttons.every((item) => item.disabled)).toBe(true);
+    const pencil = avatarField?.querySelector<HTMLButtonElement>('[data-avatar-edit]');
+    expect(pencil?.disabled).toBe(true);
+    // 点了也不会离开资料抽屉去开头像抽屉。
+    pencil?.dispatchEvent(new Event('click'));
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(sheet.current?.title).toBe('编辑资料');
     expect(api.profile.uploadAvatar).not.toHaveBeenCalled();
     expect(api.profile.removeAvatar).not.toHaveBeenCalled();
   });

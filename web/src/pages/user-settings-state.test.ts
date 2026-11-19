@@ -149,7 +149,12 @@ describe('设置页独立取数状态', () => {
     ]);
     button('编辑资料')!.click();
     await nextTick();
-    expect(document.querySelector('.sheet-panel [data-avatar-field]')).not.toBeNull();
+    const avatarField = document.querySelector<HTMLElement>('.sheet-panel [data-avatar-field]');
+    expect(avatarField).not.toBeNull();
+    // 头像块只剩一颗铅笔：上传 / 更换 / 移除都搬进了头像编辑抽屉。
+    expect([...(avatarField?.querySelectorAll('button') ?? [])].map((item) => item.getAttribute('aria-label'))).toEqual(
+      ['编辑头像'],
+    );
     expect(document.querySelector('.sheet-panel #settings-nickname')).not.toBeNull();
     expect(document.querySelector('.sheet-panel #settings-bio')).not.toBeNull();
     expect(document.querySelector('.sheet-panel #settings-region')).not.toBeNull();
@@ -268,12 +273,21 @@ describe('设置页独立取数状态', () => {
     }
   });
 
-  it('抽屉里的头像动作立即保存，与底部「保存」无关', async () => {
+  it('点头像铅笔先保存资料，再在头像编辑抽屉里移除头像', async () => {
+    // 保存资料的响应带着当前头像：否则切完抽屉头像就没了，没有可移除的东西。
+    vi.mocked(api.profile.save).mockResolvedValue({ ok: true, user: { ...PROFILE } });
     await mountSettings();
     await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
     button('编辑资料')!.click();
     await nextTick();
-    const remove = [...document.querySelectorAll<HTMLButtonElement>('.sheet-panel [data-avatar-field] button')].find(
+    // 资料抽屉里没有上传 / 移除按钮，只有铅笔。
+    expect(button('上传头像')).toBeUndefined();
+    expect(button('移除头像')).toBeUndefined();
+    document.querySelector<HTMLButtonElement>('.sheet-panel [data-avatar-edit]')!.click();
+    // 先 PUT /profile，再退场并换成头像编辑抽屉。
+    await vi.waitFor(() => expect(api.profile.save).toHaveBeenCalledTimes(1), { timeout: 1000 });
+    await vi.waitFor(() => expect(sheet.current?.title).toBe('编辑头像'), { timeout: 1000 });
+    const remove = [...document.querySelectorAll<HTMLButtonElement>('.sheet-panel button')].find(
       (item) => item.textContent?.trim() === '移除头像',
     );
     expect(remove).toBeDefined();
@@ -281,8 +295,8 @@ describe('设置页独立取数状态', () => {
     await vi.waitFor(() => expect(api.profile.removeAvatar).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(toast).toHaveBeenCalledWith('头像已移除', 'success'));
     expect(useSessionStore().user.avatar).toBe('');
-    // 头像写入不经过 PUT /profile，也不会顺手关掉抽屉。
-    expect(api.profile.save).not.toHaveBeenCalled();
+    // 移除不经过 PUT /profile，也不会顺手关掉头像抽屉。
+    expect(api.profile.save).toHaveBeenCalledTimes(1);
     expect(sheet.current?.closing).toBe(false);
   });
 });
