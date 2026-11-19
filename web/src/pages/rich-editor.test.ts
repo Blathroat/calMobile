@@ -97,6 +97,24 @@ describe('简介加载、编辑与保存', () => {
     expect(document.querySelector<HTMLButtonElement>('#app-foot button')?.disabled).toBe(false);
   });
 
+  it('页面顶部不再有展会标题卡，工具条直接跟在顶栏下面', async () => {
+    vi.mocked(api.exhibitions.get).mockResolvedValue({
+      found: true,
+      exhibition: { id: 'exh-1', title: '秋季展会', description: '原简介', descriptionFormat: 'md' },
+    });
+    await mountEditor();
+    await vi.waitFor(() => expect(document.querySelector('textarea')).not.toBeNull());
+
+    const host = document.querySelector('#editor-test')!;
+    // 标题由外壳顶栏负责：页面里不再有一张写着展会名称的标题卡。
+    expect(host.querySelector('.card')).toBeNull();
+    expect(host.textContent).not.toContain('秋季展会');
+    // 去掉标题卡后工具条就是页面第一个元素，加载与保存流程不受影响。
+    expect(host.firstElementChild?.classList.contains('toolbar')).toBe(true);
+    expect(document.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('原简介');
+    expect(document.querySelector<HTMLButtonElement>('#app-foot button')?.disabled).toBe(false);
+  });
+
   it('历史 HTML 打开再保存仍保留链接、图片、视频和格式', async () => {
     vi.mocked(api.exhibitions.get).mockResolvedValue({
       found: true,
@@ -159,7 +177,8 @@ describe('简介加载、编辑与保存', () => {
     });
     await mountEditor('/rich-editor?draft=1');
     await vi.waitFor(() => expect(document.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('草稿'));
-    expect(document.querySelector('.card strong')?.textContent).toBe('新展会');
+    // 新建展会同样不再显示标题卡：顶栏已经写着「编辑展会简介」。
+    expect(document.querySelector('.card')).toBeNull();
     const area = document.querySelector<HTMLTextAreaElement>('textarea');
     if (!area) throw new Error('缺少编辑区');
     area.value = '改过的简介';

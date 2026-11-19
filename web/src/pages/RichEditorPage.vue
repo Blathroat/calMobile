@@ -466,11 +466,8 @@ function escapeRegExp(value: string): string {
   />
 
   <template v-else>
-    <div class="card" data-tone="fill">
-      <strong>{{ exhibition.title || t('exhibition.editor.newExhibition') }}</strong>
-    </div>
-
-    <!-- 工具条只留格式。预览和粘贴在编辑区下方，避免同一颗粘贴出现两次。 -->
+    <!-- 页面顶部由外壳顶栏负责，不再重复一张展会标题卡；工具条只留格式。
+         预览和粘贴在编辑区下方，避免同一颗粘贴出现两次。 -->
     <div class="toolbar" role="toolbar" :aria-label="t('exhibition.editor.title')">
       <button type="button" :aria-pressed="false" :title="t('exhibition.editor.heading')" @click="prefixLine('## ')">
         H2
