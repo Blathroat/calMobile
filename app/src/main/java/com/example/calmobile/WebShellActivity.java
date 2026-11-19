@@ -28,6 +28,8 @@ import android.widget.FrameLayout;
 
 import com.google.gson.Gson;
 
+import org.json.JSONObject;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -182,6 +184,10 @@ public class WebShellActivity extends Activity {
                 if (!PageOrigin.isAppDocument(url, BuildConfig.APP_ORIGIN)) {
                     return;
                 }
+                // 页面包可能比外壳新；更新检查以已安装 APK 的版本名为准，不能被页面构建号带偏。
+                view.evaluateJavascript(
+                        "window.__CALMOBILE_NATIVE_VERSION__=" + JSONObject.quote(BuildConfig.VERSION_NAME) + ";",
+                        null);
                 // 页面脚本加载完成后通知前端，前端据此拉取 bootstrap 数据。
                 view.evaluateJavascript("window.CalMobileWeb&&window.CalMobileWeb.ready&&"
                         + "window.CalMobileWeb.ready();", null);
