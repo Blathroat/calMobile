@@ -368,40 +368,45 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-    class="sheet"
-    role="dialog"
-    aria-modal="true"
-    :data-closing="closing ? 'true' : 'false'"
-    @click.self="requestClose"
-  >
-    <div ref="panelEl" class="sheet-panel">
-      <h2 class="sheet-title">{{ t('media.cropAvatar') }}</h2>
-      <!-- 圆形取景框由 tokens.css 的 .crop-stage 圆角给出；手势绑在框上而不是图片上 -->
-      <div class="crop-wrap">
-        <div ref="stageEl" class="crop-stage" :style="stageStyle">
-          <img
-            ref="imageEl"
-            class="crop-image"
-            :src="props.source"
-            :style="imageStyle"
-            alt=""
-            @load="onImageLoad"
-            @error="onImageError"
-          />
+  <!-- 挂到 body：页面容器（.route-enter.page-surface）带着填充到结束态的 transform 动画，
+       即使动画播完也仍是恒等矩阵，会成为 position: fixed 的包含块 —— 面板会被压进页面内容区
+       缩一圈（背景遮罩只盖内容、高度按内容算）。body 级挂载和 ImageViewer 的做法一致。 -->
+  <Teleport to="body">
+    <div
+      class="sheet"
+      role="dialog"
+      aria-modal="true"
+      :data-closing="closing ? 'true' : 'false'"
+      @click.self="requestClose"
+    >
+      <div ref="panelEl" class="sheet-panel">
+        <h2 class="sheet-title">{{ t('media.cropAvatar') }}</h2>
+        <!-- 圆形取景框由 tokens.css 的 .crop-stage 圆角给出；手势绑在框上而不是图片上 -->
+        <div class="crop-wrap">
+          <div ref="stageEl" class="crop-stage" :style="stageStyle">
+            <img
+              ref="imageEl"
+              class="crop-image"
+              :src="props.source"
+              :style="imageStyle"
+              alt=""
+              @load="onImageLoad"
+              @error="onImageError"
+            />
+          </div>
+        </div>
+        <div class="row" data-between="true">
+          <span class="field-hint">{{ t('media.pinchZoom') }}</span>
+          <span class="crop-scale">{{ zoomLabel }}</span>
+        </div>
+        <p class="field-hint" :data-tone="hintTone || undefined">{{ hint }}</p>
+        <div class="sheet-actions">
+          <button class="cta ghost" type="button" @click="requestClose">{{ t('common.cancel') }}</button>
+          <button class="cta" type="button" @click="confirm">{{ t('media.usePhoto') }}</button>
         </div>
       </div>
-      <div class="row" data-between="true">
-        <span class="field-hint">{{ t('media.pinchZoom') }}</span>
-        <span class="crop-scale">{{ zoomLabel }}</span>
-      </div>
-      <p class="field-hint" :data-tone="hintTone || undefined">{{ hint }}</p>
-      <div class="sheet-actions">
-        <button class="cta ghost" type="button" @click="requestClose">{{ t('common.cancel') }}</button>
-        <button class="cta" type="button" @click="confirm">{{ t('media.usePhoto') }}</button>
-      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <style>
