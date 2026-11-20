@@ -73,7 +73,7 @@ export interface ServerSettings {
    *
    * - url：直接用管理员填的直链；
    * - github：追踪 repo 仓库的最新 Release，取第一个 .apk 资产的下载地址。
-   * 空串表示没配，更新检查与报名站的下载条据此隐藏下载入口。
+   * 空串表示没配，更新检查与报名站的顶栏下载 / 安装入口据此隐藏。
    */
   download: { source: 'url' | 'github'; url: string; repo: string };
   /**

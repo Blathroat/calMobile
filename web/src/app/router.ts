@@ -38,7 +38,7 @@ import { hasRememberedSession } from '@/services/session-hint';
  *   不再先画登录页；登录态恢复后首页自己重取数据，`main.ts` 只负责把停在 `/login` 的一屏
  *   纠正到 `redirect` 或 `/home`；
  * - 每次导航先 `navigation.begin()` 取消上一次未完成的导航，`afterEach` 再记方向给动效；
- * - 新增页面要同步 `app/shell.test.ts` 的 `ROUTES` 与 `docs/engineering.md` 的屏幕表。
+ * - 新增页面要同步 `app/shell.test.ts` 的 `ROUTES`。
  */
 import { createRouter, createWebHashHistory, type RouterHistory } from 'vue-router';
 import HomePage from '@/pages/HomePage.vue';

@@ -88,7 +88,7 @@ export function createBootstrapRoutes(options: { branding?: BrandingConfig } = {
       // 前者给列表 / 详情做兜底图，后者给展商表单做提示与前端预校验。
       cover: settings.cover,
       exhibitor: settings.exhibitor,
-      // 最新版本的下载地址：报名站（系统浏览器打开时）据此决定要不要显示下载条。
+      // 最新版本的下载地址：报名站（系统浏览器打开时）据此决定要不要显示下载 / 安装入口。
       // 与 GET /app/release 读同一份缓存；解析失败时给空地址，启动数据本身不失败。
       download: await releaseDownload(settings),
       calendar: { available: false, landing: await landingMonth() },

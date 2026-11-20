@@ -153,7 +153,7 @@ export function createApp(options: AppOptions): Hono {
   app.route('/api/v1', createBootstrapRoutes({ branding: options.branding }));
   // 公开的用户协议：登录/注册页与协议浏览页在未登录时也能读。
   app.route('/api/v1', createAgreementRoutes());
-  // 公开的「最新版本 / 下载地址」：网页端检查更新与报名站下载条共用。
+  // 公开的「最新版本 / 下载地址」：网页端检查更新与报名站下载 / 安装入口共用。
   app.route('/api/v1', createAppRoutes());
   app.route('/api/v1/users', createUsersRoutes());
   app.route('/api/v1/search', createSearchRoutes());

@@ -1,17 +1,18 @@
-# Domain Docs
+# 领域文档与词表
 
-工程技能在摸代码库时，按这里消费本仓库的领域文档。
+本文件给 agent 用：摸代码库前读哪些文档、领域概念用哪些词、与已写决定冲突时怎么办。
 
 ## 动手探索前先读这些
 
-- [`docs/product.md`](../product.md)、[`docs/engineering.md`](../engineering.md)、[`docs/operations.md`](../operations.md)。后端细节看 [`server/README.md`](../../server/README.md)，其中包含依赖取舍。
-- 仓库根目录的 **`CONTEXT.md`**，或根目录若有 **`CONTEXT-MAP.md`**：它指向每个上下文一份 `CONTEXT.md`。读与当前主题相关的那些。
+- [`product.md`](../product.md)：用户可见行为。
+- [`engineering.md`](../engineering.md)：客户端与前后端边界、界面实现。
+- [`operations.md`](../operations.md)：构建、验证与上线。
+- [`server.md`](../server.md)：后端骨架、响应约定、业务规则、数据模型与依赖取舍。
+- [`implementation.md`](implementation.md)：文件级实现约束与改动检查清单。
 
-这些文件若还不存在，**安静继续**。不要报缺；不要建议先去建。`/domain-modeling` 技能（经 `/grill-with-docs` 与 `/improve-codebase-architecture` 进入）会在术语或决策真正敲定后再惰性创建。
+按任务选读，读完再改。
 
 ## 文件结构
-
-本仓库是 single-context（绝大多数仓库如此）：
 
 ```
 /
@@ -19,22 +20,36 @@
 │   ├── product.md
 │   ├── engineering.md
 │   ├── operations.md
+│   ├── server.md
 │   └── agents/
+│       ├── domain.md
+│       ├── implementation.md
+│       └── github.md
 ├── app/
 ├── web/
-└── server/
+├── server/
+├── deploy/
+└── scripts/
 ```
 
-若根目录出现 `CONTEXT-MAP.md`，才按 multi-context 读：各上下文自己的 `CONTEXT.md` 在对应目录下。
+面向产品、工程、运维与后端的正式文档是 docs 下的这四份；协作规则在 `docs/agents/`。
 
-## 用词表里的词汇
+## 术语表
 
-输出里点名领域概念时（issue 标题、重构提案、假设、测试名），用 `CONTEXT.md` 里定义的那个词。不要滑到词表明确避开的同义词。
+输出里点名领域概念时（issue 标题、重构提案、假设、测试名），用下面定义的词，不要滑到 Avoid 列的同义词。
 
-需要的概念还不在词表里，这是信号：要么你在发明项目不用的说法（重新考虑），要么是真缺口（记下来给 `/domain-modeling`）。
+**界面文案**：
+用户在应用或报名站界面上看见的句子。
+_Avoid_: 文案、字符串资源
+
+**邮件正文**：
+验证码邮件里写给收件人的句子。
+_Avoid_: 界面文案
+
+需要的概念还不在表里，是信号：要么在发明项目不用的说法（重新考虑），要么是真缺口（交给 `/domain-modeling` 补进这张表）。
 
 ## 标出与已写决定的冲突
 
-若输出与 `server/README.md` 或上述三份文档里写明的决定矛盾，明确摊开，不要默默覆盖：
+输出与上述文档写明的决定矛盾时，明确摊开，不要默默覆盖：
 
-> _与 server/README 的依赖取舍矛盾，但值得重开，因为……_
+> _与 server.md 的依赖取舍矛盾，但值得重开，因为……_
