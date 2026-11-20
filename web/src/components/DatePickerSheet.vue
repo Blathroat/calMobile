@@ -450,7 +450,7 @@ onMounted(() => {
 .date-picker-day[data-state='start'] .date-picker-num,
 .date-picker-day[data-state='end'] .date-picker-num,
 .date-picker-day[data-state='single'] .date-picker-num {
-  color: var(--on-dark);
+  color: var(--on-accent);
   font-weight: 700;
 }
 

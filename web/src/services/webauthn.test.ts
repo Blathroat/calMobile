@@ -112,12 +112,18 @@ describe('createCredential / getCredential 的路径选择', () => {
     expect(mocks.call).not.toHaveBeenCalled();
   });
 
-  it('原生与浏览器都不支持时返回 null（现有不可用处理）', async () => {
+  it('旧壳没有通行密钥动作、容器又没有 WebAuthn 时给出可读失败，不再静默返回 null', async () => {
     mocks.supportsNativeAction.mockResolvedValue(false);
-    // 不桩 WebAuthn：jsdom 没有 PublicKeyCredential。
+    // 不桩 WebAuthn：jsdom 没有 PublicKeyCredential，等同 WebView 里旧壳回退失败。
+    await expect(createCredential({})).rejects.toThrow(/更新应用/u);
+    await expect(getCredential({})).rejects.toThrow(/更新应用/u);
+    expect(mocks.call).not.toHaveBeenCalled();
+  });
+
+  it('没有原生桥且浏览器没有 WebAuthn 时仍按「环境不支持」返回 null', async () => {
+    mocks.hasNative.mockReturnValue(false);
     await expect(createCredential({})).resolves.toBeNull();
     await expect(getCredential({})).resolves.toBeNull();
-    expect(mocks.call).not.toHaveBeenCalled();
   });
 
   it('原生被用户取消时归一成 null，不抛错', async () => {

@@ -53,21 +53,22 @@ const logoutBusy = ref(false);
 const bodyEl = ref<HTMLElement>();
 
 /**
- * 报名站的下载条：只有在**系统浏览器**里打开报名站时才出现（应用内已经有 App 了）。
+ * 报名站的下载 / 安装入口：放在顶栏右侧的一颗图标按钮，不再单独占一条横幅。
  *
- * Android 与其它平台需要管理员配过下载地址才显示；iOS 没有 APK，条件里不看下载地址，
- * 改成常驻的「安装到主屏幕」引导——Safari 加到主屏幕就是安装，不依赖 APK。
- * 这条提示常驻，不提供关闭——报名站本身没有 App 完整，让用户随时能找到回去的路
- * 比「少一条横幅」更重要。
+ * 只有「报名站 + 没有原生桥」才出现（应用内已经有 App 了）。Android 与其它平台需要
+ * 管理员配过下载地址才显示；iOS 没有 APK，条件里不看下载地址，点开是「安装到主屏幕」
+ * 引导——Safari 加到主屏幕就是安装，不依赖 APK。入口常驻，不提供关闭。
  */
 const downloadUrl = computed(() => String((bootstrap.download?.url as string) || ''));
 /** 平台在页面生命周期里不会变，setup 里读一次即可。 */
 const ios = isIos();
-const showDownloadBar = computed(() => {
+const showDownloadEntry = computed(() => {
   if (!isJoinSurface || nativeBridge.hasNative()) return false;
   // iOS 不需要下载地址：给的是安装步骤，不是 APK。
   return ios || downloadUrl.value !== '';
 });
+/** 顶栏按钮的读屏文案：iOS 是安装引导，其它平台是下载 APK。 */
+const downloadLabel = computed(() => (ios ? t('join.iosAction') : t('join.downloadApp')));
 
 /**
  * 按钮动作按平台分叉：iOS 打开安装步骤抽屉，其它平台交给系统浏览器下载。
@@ -231,6 +232,17 @@ onBeforeUnmount(() => unbindPull?.());
         >
           <AppIcon :name="topAction.icon" />
         </button>
+        <!-- 报名站的下载 / 安装入口：跟随页面顶栏，不另起一条横幅 -->
+        <button
+          v-if="showDownloadEntry"
+          class="icon-button"
+          type="button"
+          :aria-label="downloadLabel"
+          :title="downloadLabel"
+          @click="onDownloadAction"
+        >
+          <AppIcon name="download" />
+        </button>
       </template>
     </AppTopBar>
     <main
@@ -245,18 +257,7 @@ onBeforeUnmount(() => unbindPull?.());
         <span class="pull-spinner" :data-spin="pullSpinning ? 'true' : undefined" />
         <span class="sr-only">{{ showPull ? t('common.refreshing') : t('common.pullRefresh') }}</span>
       </div>
-      <div v-if="showDownloadBar" class="join-download" role="complementary">
-        <span class="join-download-copy">
-          <!-- iOS 不说「下载应用」（没有 APK），说安装到主屏幕；版本号只属于 Android 安装包 -->
-          <strong>{{ ios ? t('join.iosBarTitle') : t('join.downloadBar') }}</strong>
-          <span class="join-download-version" v-if="!ios && bootstrap.download?.version">{{
-            bootstrap.download.version
-          }}</span>
-        </span>
-        <button class="cta" type="button" @click="onDownloadAction">
-          {{ ios ? t('join.iosAction') : t('join.downloadApp') }}
-        </button>
-      </div>
+
       <RouterView v-slot="{ Component }">
         <!-- 单独一层承载页面切换动画：`.app-body` 在切换之间是同一个元素，
              动画需要挂在每次都重建的节点上。
@@ -279,48 +280,4 @@ onBeforeUnmount(() => unbindPull?.());
   </div>
 </template>
 
-<style>
-/* 报名站的下载 / 安装条：吸在内容区顶部的一条悬浮带，滚走内容时仍贴着顶栏。
-   只在系统浏览器里出现（见 showDownloadBar），应用内不会渲染；iOS 换成安装引导。 */
-.join-download {
-  position: sticky;
-  top: 0;
-  z-index: 7;
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  margin: calc(var(--s4) * -1) calc(var(--s4) * -1) 0;
-  padding: var(--s2) var(--s4);
-  background: var(--accent-tint);
-  border-bottom: var(--hairline) solid var(--accent-edge);
-}
-
-.join-download-copy {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.join-download-copy > strong {
-  color: var(--accent-ink);
-  font-size: var(--fs-label);
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.join-download-version {
-  color: var(--ink-3);
-  font-size: var(--fs-tag);
-  font-variant-numeric: tabular-nums;
-}
-
-.join-download .cta {
-  flex: none;
-  width: auto;
-  min-height: 36px;
-  padding-inline: var(--s3);
-  font-size: var(--fs-label);
-}
-</style>
+<style></style>

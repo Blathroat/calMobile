@@ -19,20 +19,56 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
     <title>%APP_TITLE%</title>
     <script>
-      // 在样式表生效前先落到上次选择的明暗模式与强调色，避免首帧闪一下默认外观。
+      // 在样式表生效前先落到实际明暗与强调色，避免首帧闪一下默认外观。
       // 两者都是账号偏好，bootstrap 落定后会用服务端的值再覆盖一次。
-      try {
-        var mode = localStorage.getItem('calmobile.mode');
-        if (mode === 'dark' || mode === 'light') {
-          document.documentElement.dataset.mode = mode;
+      //
+      // 明暗：显式 light / dark 优先；auto（或没有缓存）时先问原生壳的同步接口——
+      // Android WebView 里 prefers-color-scheme 不可靠，系统深色只能由原生读出来。
+      // 没有壳（浏览器 / PWA）或旧壳没有这个方法时退回 matchMedia。
+      // 两种来源都写 <html data-mode>：令牌只认它，页面不再依赖 media query。
+      (function () {
+        var mode = '';
+        try {
+          mode = localStorage.getItem('calmobile.mode') || '';
+        } catch (ignored) {
+          // 隐私模式下读不到缓存：按跟随系统处理
         }
-        var accent = localStorage.getItem('calmobile.accent');
-        if (accent && /^#[0-9a-fA-F]{6}$/.test(accent)) {
-          document.documentElement.style.setProperty('--accent', accent);
+        if (mode !== 'dark' && mode !== 'light') {
+          var systemDark = null;
+          try {
+            var native = window.CalMobileNative;
+            if (native && typeof native.systemAppearance === 'function') {
+              var appearance = JSON.parse(native.systemAppearance());
+              if (appearance) {
+                // 本机缓存被清掉时，原生镜像里的显式偏好仍然比「系统」更接近账号设置。
+                if (appearance.mode === 'dark' || appearance.mode === 'light') {
+                  mode = appearance.mode;
+                }
+                if (typeof appearance.systemDark === 'boolean') {
+                  systemDark = appearance.systemDark;
+                }
+              }
+            }
+          } catch (ignoredBridge) {
+            // 桥调用失败不能挡住首帧：退回 matchMedia（浏览器语义）
+          }
+          if (mode !== 'dark' && mode !== 'light') {
+            if (systemDark === null) {
+              systemDark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            }
+            mode = systemDark ? 'dark' : 'light';
+          }
         }
-      } catch (ignored) {
-        // 隐私模式下忽略存储读取失败，保持跟随系统
-      }
+        document.documentElement.dataset.mode = mode;
+        try {
+          var accent = localStorage.getItem('calmobile.accent');
+          if (accent && /^#[0-9a-fA-F]{6}$/.test(accent)) {
+            document.documentElement.style.setProperty('--accent', accent);
+          }
+        } catch (ignoredAccent) {
+          // 隐私模式下忽略缓存读取失败，用 tokens.css 的首帧回退色
+        }
+      })();
     </script>
   </head>
   <body>

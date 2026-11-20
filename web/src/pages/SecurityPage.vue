@@ -380,6 +380,20 @@ async function verifyIdentity(method: IdentityMethod, code: string, scope: Ident
 }
 
 /**
+ * 把通行密钥失败翻成一句能给用户看的中文。
+ *
+ * - 服务端返回的 ApiError 自带本机语言文案，原样透出；
+ * - 原生侧已经把系统错误翻成中文，含中文的说明也原样透出（例如「这台设备不支持通行密钥」）；
+ * - 其余（系统英文原文、网络层英文）统一换成通用说明，不让中文界面里冒出英文报错。
+ */
+function passkeyFailure(reason: unknown): Error {
+  if (reason instanceof Error && reason.name === 'ApiError') return reason;
+  const message = reason instanceof Error ? reason.message.trim() : '';
+  if (message && /[\u4e00-\u9fff]/u.test(message)) return new Error(message);
+  return new Error(t('security.passkey.addFailed'));
+}
+
+/**
  * 绑定一枚通行密钥：身份复核票换注册选项 → 系统面板创建 → 只保存凭据。
  * 绑定本身不切换两步验证方式；用户取消时返回 null（不抛错）。
  */
@@ -396,9 +410,8 @@ async function registerPasskey(stepUpToken: string): Promise<JsonObject | null> 
     assertOk(registered);
     return registered;
   } catch (reason) {
-    // 系统面板拒绝、验证过期、服务端规则失败都落在这一条：不再暴露底层英文报错
-    if (reason instanceof Error && reason.name === 'ApiError') throw reason;
-    throw new Error(t('security.passkey.failed'));
+    // 系统面板拒绝、验证过期、服务端规则失败都落在这一条：可读中文，不暴露底层英文
+    throw passkeyFailure(reason);
   }
 }
 

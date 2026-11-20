@@ -4,6 +4,9 @@
  * 原生通道里选择器会落盘一份副本，上传失败也要删掉，否则副本会留在设备里；
  * 浏览器通道里 `importMedia` 给的是 `blob:` object URL，上传结束或失败都要
  * `URL.revokeObjectURL`，否则整段媒体会一直被页面引用着占内存。原生 URL 不碰。
+ *
+ * 上传进度由 `onProgress` 透传给 `api.media.upload`：调用方在图片显示位置画遮罩。
+ * 这里的进度只代表「字节发出去多少」，不代表服务器已完成校验与落盘；成功后仍以返回地址为准。
  */
 import { api } from '@/app/runtime';
 import { t } from '@/i18n';
@@ -12,6 +15,7 @@ import { device } from '@/services/device-services';
 export async function publishImportedMedia(
   kind: 'image' | 'video',
   imported: { url?: string; fileName?: string },
+  onProgress?: (percent: number) => void,
 ): Promise<string> {
   const localUrl = String(imported.url || '');
   const fileName = String(imported.fileName || '');
@@ -34,7 +38,7 @@ export async function publishImportedMedia(
     const bytes = new Uint8Array(await response.arrayBuffer());
     const header = response.headers.get('content-type') || '';
     const contentType = header.split(';')[0]?.trim() || (kind === 'video' ? 'video/mp4' : 'image/jpeg');
-    const saved = await api.media.upload(bytes, contentType, kind);
+    const saved = await api.media.upload(bytes, contentType, kind, onProgress);
     const url = String(saved.url || '');
     if (!url) throw new Error(t('media.missingUploadUrl'));
     release();

@@ -9,6 +9,9 @@
  * 「删除展会」放在页面内容最下方。新建与编辑共用同一页：
  * 路由带 `:id` 就是编辑（先取详情），不带就是新建（空表单），保存成功后换成编辑地址。
  *
+ * 内存稿与未保存提示：去「使用Markdown编辑简介」的二级页时把整张表单 stash 成内存稿，
+ * 回来时按 id 恢复（编辑已有展会也一样，二级页保存简介后其他未保存字段不会丢）；
+ * 离开本页（去二级页除外）前用「已保存基线」判断有没有未保存修改，有就弹「保存 / 不保存 / 取消」。
  * 表单只填一次（`built` 闸）：首屏取数回来才落模型，之后的渲染不再覆盖用户输入。
  * 校验规则与上限统一走 `@/services/validate`，错误就地显示在 `.field-error` 并标 `data-invalid`。
  */
@@ -39,6 +42,7 @@ import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import SegControl from '@/components/SegControl.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import UploadProgressMask from '@/components/upload-progress-mask.vue';
 import type { ExhibitionDetail, JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -77,26 +81,114 @@ const notFound = computed(
 );
 const loadFailed = computed(() => detail.error.value !== undefined && detail.data.value === undefined);
 
-const form = reactive({
-  title: '',
-  venue: '',
-  date: '',
+/**
+ * 表单模型：与保存时提交的字段一一对应，收集项单独放在 `fields` 里。
+ * 新建空表单、服务器详情、内存稿三条来源都先映射成这个形状，
+ * 「已保存基线」与当前值才能用同一种写法比较。
+ */
+interface FormModel {
+  title: string;
+  venue: string;
+  date: string;
   /** 闭展日期；空串表示还没选（单日展会库里存 NULL），与开展同一天时照原样存这一天。 */
-  endDate: '',
+  endDate: string;
   // 时间选填，默认留空：只填日期时详情、月视图与日历文件都按「没有时间」展示。
-  time: '',
-  status: EXHIBITION_STATUS.REVIEW_REQUIRED as string,
-  category: '',
-  description: '',
-  imageUri: '',
-  registrationStart: '',
-  registrationEnd: '',
-  qrEnabled: false,
-  allowCancel: true,
+  time: string;
+  status: string;
+  category: string;
+  description: string;
+  imageUri: string;
+  registrationStart: string;
+  registrationEnd: string;
+  qrEnabled: boolean;
+  allowCancel: boolean;
   /** 注意事项（选填，最多 2000 字）：审核通过 / 已参加的报名者在报名详情里看到。 */
-  registrationNotice: '',
-});
+  registrationNotice: string;
+}
+
+/** 一份完整的表单内容：模型 + 收集项。首屏取数、内存稿回填与基线快照都用它。 */
+interface FormContent {
+  model: FormModel;
+  fields: CollectField[];
+}
+
+/** 新建 / 空表单的默认值。 */
+function emptyModel(): FormModel {
+  return {
+    title: '',
+    venue: '',
+    date: '',
+    endDate: '',
+    time: '',
+    status: EXHIBITION_STATUS.REVIEW_REQUIRED,
+    category: '',
+    description: '',
+    imageUri: '',
+    registrationStart: '',
+    registrationEnd: '',
+    qrEnabled: false,
+    allowCancel: true,
+    registrationNotice: '',
+  };
+}
+
+const form = reactive<FormModel>(emptyModel());
 const fields = ref<CollectField[]>([]);
+
+// ── 未保存修改：已保存基线 ───────────────────────────────────────
+
+/**
+ * 「已保存」基线：最近一次取数成功或保存成功时的提交字段快照（JSON 字符串）。
+ * 当前快照与它不一致，就说明表单里有未保存的修改（路由守卫据此弹抽屉）。
+ * 空串表示编辑页首屏数据还没回来，此时不提示。
+ */
+const baseline = ref('');
+
+/** 提交字段的规范化形状：组装保存 payload 与比较基线共用这一份。 */
+function submittedData(model: FormModel, fieldValues: CollectField[]): JsonObject {
+  return {
+    title: model.title.trim(),
+    venue: model.venue.trim(),
+    date: model.date,
+    endDate: model.endDate,
+    time: model.time.trim(),
+    status: model.status,
+    category: model.category.trim(),
+    description: model.description,
+    descriptionFormat: 'md',
+    imageUri: model.imageUri,
+    registrationStart: model.registrationStart,
+    registrationEnd: model.registrationEnd,
+    qrEnabled: model.qrEnabled,
+    allowCancel: model.allowCancel,
+    registrationNotice: model.registrationNotice.trim(),
+    // 空标题的收集项本就不会提交，不参与比较。
+    fields: fieldValues
+      .filter((item) => item.title.trim() !== '')
+      .map((item) => ({
+        title: item.title.trim(),
+        type: item.type,
+        required: item.required,
+        options: item.type === FIELD_TYPE.TEXT ? [] : item.options.map((option) => option.trim()).filter(Boolean),
+      })),
+  };
+}
+
+/** 当前表单内容的快照。 */
+function currentSnapshot(): string {
+  return JSON.stringify(submittedData(form, fields.value));
+}
+
+/** 记下新的「已保存」基线：首屏取数、保存、报名方式即时保存之后调用。 */
+function markSaved(content?: FormContent): void {
+  const target = content ?? { model: form, fields: fields.value };
+  baseline.value = JSON.stringify(submittedData(target.model, target.fields));
+}
+
+/** 有没有未保存的修改。 */
+function isDirty(): boolean {
+  return baseline.value !== '' && currentSnapshot() !== baseline.value;
+}
 
 // ── 开展时间：两个时间滚轮 ───────────────────────────────────────
 
@@ -402,52 +494,68 @@ function isInvalid(name: string): boolean {
 
 // ── 取数 ─────────────────────────────────────────────────────────
 
-function fillFrom(item: JsonObject, data: ExhibitionDetail): void {
-  form.title = String(item.title ?? '');
-  form.venue = String(item.venue ?? '');
-  form.date = String(item.date ?? '');
-  form.endDate = String(item.endDate ?? '');
-  form.time = String(item.time ?? '');
+/** 服务器详情 → 表单内容。老数据的分类不在清单里也原样保留，不悄悄改成空值。 */
+function contentFromServer(item: JsonObject, data: ExhibitionDetail): FormContent {
   const status = String(item.statusCode ?? '');
-  form.status = MODES.some((mode) => mode.value === status) ? status : EXHIBITION_STATUS.REVIEW_REQUIRED;
-  form.category = String(item.category ?? '');
-  form.description = String(item.description ?? '');
-  form.imageUri = String(item.imageUri ?? '');
-  form.registrationStart = String(item.registrationStart ?? '');
-  form.registrationEnd = String(item.registrationEnd ?? '');
-  form.qrEnabled = item.qrEnabled === true;
-  form.allowCancel = item.allowCancel !== false;
-  form.registrationNotice = String(item.registrationNotice ?? '');
-  fields.value = (data.fields ?? []).map((field) => ({
-    title: String(field.title ?? ''),
-    type: String(field.type ?? FIELD_TYPE.TEXT),
-    required: field.required === true,
-    // 选项在模型里统一为数组，界面上按条目增删。
-    options: normalizeOptions(field.options),
-  }));
+  return {
+    model: {
+      title: String(item.title ?? ''),
+      venue: String(item.venue ?? ''),
+      date: String(item.date ?? ''),
+      endDate: String(item.endDate ?? ''),
+      time: String(item.time ?? ''),
+      status: MODES.some((mode) => mode.value === status) ? status : EXHIBITION_STATUS.REVIEW_REQUIRED,
+      category: String(item.category ?? ''),
+      description: String(item.description ?? ''),
+      imageUri: String(item.imageUri ?? ''),
+      registrationStart: String(item.registrationStart ?? ''),
+      registrationEnd: String(item.registrationEnd ?? ''),
+      qrEnabled: item.qrEnabled === true,
+      allowCancel: item.allowCancel !== false,
+      registrationNotice: String(item.registrationNotice ?? ''),
+    },
+    fields: (data.fields ?? []).map((field) => ({
+      title: String(field.title ?? ''),
+      type: String(field.type ?? FIELD_TYPE.TEXT),
+      required: field.required === true,
+      // 选项在模型里统一为数组，界面上按条目增删。
+      options: normalizeOptions(field.options),
+    })),
+  };
 }
 
-function applyDraft(draft: ExhibitionDraft): void {
-  form.title = draft.title;
-  form.venue = draft.venue;
-  form.date = draft.date;
-  form.endDate = draft.endDate ?? '';
-  form.time = draft.time;
-  form.status = MODES.some((mode) => mode.value === draft.status) ? draft.status : EXHIBITION_STATUS.REVIEW_REQUIRED;
-  form.category = draft.category;
-  form.description = draft.description;
-  form.imageUri = draft.imageUri;
-  form.registrationStart = draft.registrationStart;
-  form.registrationEnd = draft.registrationEnd;
-  form.qrEnabled = draft.qrEnabled;
-  form.allowCancel = draft.allowCancel;
-  form.registrationNotice = draft.registrationNotice ?? '';
-  fields.value = draft.fields.map((field) => ({
-    title: field.title,
-    type: field.type,
-    required: field.required,
-    options: [...field.options],
-  }));
+/** 内存稿 → 表单内容：草稿里是用户还没保存的输入，原样填回。 */
+function contentFromDraft(draft: ExhibitionDraft): FormContent {
+  return {
+    model: {
+      title: draft.title,
+      venue: draft.venue,
+      date: draft.date,
+      endDate: draft.endDate ?? '',
+      time: draft.time,
+      status: MODES.some((mode) => mode.value === draft.status) ? draft.status : EXHIBITION_STATUS.REVIEW_REQUIRED,
+      category: draft.category,
+      description: draft.description,
+      imageUri: draft.imageUri,
+      registrationStart: draft.registrationStart,
+      registrationEnd: draft.registrationEnd,
+      qrEnabled: draft.qrEnabled,
+      allowCancel: draft.allowCancel,
+      registrationNotice: draft.registrationNotice ?? '',
+    },
+    fields: draft.fields.map((field) => ({
+      title: field.title,
+      type: field.type,
+      required: field.required,
+      options: [...field.options],
+    })),
+  };
+}
+
+/** 把一份内容落到响应式表单上（首屏取数与内存稿回填共用）。 */
+function fillContent(content: FormContent): void {
+  Object.assign(form, content.model);
+  fields.value = content.fields;
 }
 
 function currentDraft(): ExhibitionDraft {
@@ -471,56 +579,161 @@ function currentDraft(): ExhibitionDraft {
   };
 }
 
-/** 新建展会没有要取的数据。从简介页返回时把内存里的稿填回来。 */
+/** 新建展会没有要取的数据；编辑页取数既填表单，也拍下「已保存」基线。 */
 async function load(): Promise<void> {
-  if (isCreate.value) {
-    built.value = true;
-    return;
-  }
+  if (isCreate.value) return;
   const data = await detail.run(() => api.exhibitions.get(exhibitionId.value));
   if (!data || data.found === false) return;
   if (!canManageExhibition(session.user, data.exhibition)) {
     toast(t('server.permission.exhibitionNotYours'), 'error');
+    // 归属不对要退回展商后台：这次离开不是用户放弃编辑，不再弹未保存提示。
+    allowLeave = true;
     await router.replace('/exhibitor');
     return;
   }
+  const content = contentFromServer(data.exhibition ?? {}, data);
+  // 有内存稿时表单已经被它填好（未保存的修改比服务器新），这里只补基线，不能再盖回去。
+  markSaved(content);
   if (built.value) return;
   built.value = true;
-  fillFrom(data.exhibition ?? {}, data);
+  fillContent(content);
 }
 
-if (isCreate.value) {
+/** 当前表单的内存稿：新建稿 id 为空串，编辑稿 id 是这场展会。 */
+function currentDraftId(): string {
+  return createdId.value || exhibitionId.value;
+}
+
+/** 内存稿只属于这张表单：id 对不上（别的展会 / 上一次没清干净的稿）就不采用。 */
+function matchingDraft(): ExhibitionDraft | null {
   const draft = readExhibitionDraft();
-  if (draft) applyDraft(draft);
+  return draft && (draft.id ?? '') === currentDraftId() ? draft : null;
+}
+
+// 首屏：新建表单本来就是空的，空表单即「已保存」基线；从简介编辑器返回时把内存稿填回来，
+// 草稿算未保存修改，不能当基线。编辑页先用内存稿恢复整张表单，「已保存」基线等详情回来再拍。
+const restoredDraft = matchingDraft();
+if (isCreate.value) {
   built.value = true;
+  markSaved();
+  if (restoredDraft) fillContent(contentFromDraft(restoredDraft));
+} else if (restoredDraft) {
+  built.value = true;
+  fillContent(contentFromDraft(restoredDraft));
 }
 
 onMounted(() => {
-  if (!built.value) void load();
+  // 还没有基线就取数：新建页不用取，编辑页取回来当基线。
+  if (baseline.value === '') void load();
 });
 
-/** 离开表单页时丢掉内存稿（新建与编辑都清）。去简介编辑器除外，那边要拿它起稿。 */
+// ── 未保存修改：路由守卫与三选一提示 ────────────────────────────
+
+/** 一次性放行：保存成功 / 不保存 / 删除成功 / 权限退回时由页面自己发起导航，守卫不能再拦。 */
+let allowLeave = false;
+
+/** 受限、加载失败、不存在这几种状态整页是提示块，没有可保存的表单，不拦。 */
+function shouldWarnUnsaved(): boolean {
+  return built.value && !limited.value && !loadFailed.value && !notFound.value && isDirty();
+}
+
+/** 放行一次导航：先置标记再跳转，守卫看到标记就直接通过。 */
+function leaveTo(target: string): void {
+  allowLeave = true;
+  void router.replace(target);
+}
+
+/** 弹「保存 / 不保存 / 取消」：目标路由就是被取消掉的这次导航。 */
+function askUnsaved(target: string): void {
+  openSheet({
+    title: t('exhibition.form.unsavedTitle'),
+    message: t('exhibition.form.unsavedMessage'),
+    // 三颗按钮横向一行：文案都很短，并排一屏放得下，也让选择动作更顺手。
+    layout: 'row',
+    actions: [
+      {
+        label: t('common.save'),
+        variant: 'primary',
+        onClick: async (close) => {
+          close();
+          // 校验与错误提示沿用保存按钮那一套：失败就留在本页，抽屉不弹第二次。
+          if (await persist()) leaveTo(target);
+        },
+      },
+      {
+        label: t('exhibition.form.unsavedDiscard'),
+        variant: 'danger',
+        onClick: (close) => {
+          close();
+          clearExhibitionDraft();
+          leaveTo(target);
+        },
+      },
+      {
+        label: t('common.cancel'),
+        onClick: (close) => close(),
+      },
+    ],
+  });
+}
+
+/**
+ * 离开表单页的守卫。
+ *
+ * - 去 Markdown 简介编辑器是同一份草稿流程，不算离开：不清草稿、不弹提示；
+ * - 真的离开且表单有未保存修改时，先取消这次导航，弹抽屉让用户选；
+ * - 其余情况（没有改动 / 受限 / 加载失败 / 不存在 / 页面自己发起的跳转）放行并清掉内存稿。
+ *
+ * 浏览器返回与顶部返回键走的都是路由导航，因此同样会被这里拦下。
+ */
 onBeforeRouteLeave((to) => {
   if (to.path === '/rich-editor') return;
-  clearExhibitionDraft();
+  if (allowLeave) {
+    allowLeave = false;
+    return;
+  }
+  if (!shouldWarnUnsaved()) {
+    clearExhibitionDraft();
+    return;
+  }
+  askUnsaved(to.fullPath);
+  return false;
 });
 
 // ── 封面 ─────────────────────────────────────────────────────────
 
-/** 封面先在设备上选择，再上传到服务器，表单里只留服务器地址。 */
+/** 上传中（含系统选择器停留期间）：按钮禁用，避免同时开两份上传。 */
+const coverBusy = ref(false);
+/** 封面位置上的进度遮罩；null 表示没有上传在跑（遮罩随之卸载）。 */
+const coverProgress = ref<number | null>(null);
+
+/**
+ * 封面先在设备上选择，再上传到服务器，表单里只留服务器地址。
+ * 上传期间在封面位置盖进度遮罩：字节发完只到 99%，服务器确认后落 100 并停留约 150ms
+ * （由遮罩的 settled 通知卸载），成功换成新图，失败 / 取消立即复位。
+ */
 async function pickCover(): Promise<void> {
+  if (coverBusy.value) return;
+  coverBusy.value = true;
   try {
     const stored = await device.importMedia('image');
     if (!stored?.url) {
       toast(t('admin.media.unreadableImage'), 'error');
       return;
     }
-    form.imageUri = await publishImportedMedia('image', stored);
+    coverProgress.value = 0;
+    form.imageUri = await publishImportedMedia('image', stored, (percent) => {
+      coverProgress.value = Math.min(99, Math.max(0, percent));
+    });
+    coverProgress.value = 100;
     toast(stored.compressed ? t('exhibition.form.coverCompressed') : t('exhibition.form.coverUploaded'), 'success');
   } catch (reason) {
-    // 用户在系统选择器点了取消：按稳定错误码判断，不匹配文案。
+    // 失败 / 取消都先撤掉遮罩，不让它停在半路；取消是用户自己的操作，不提示错误。
+    coverProgress.value = null;
     if (isCancelled(reason)) return;
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
+  } finally {
+    coverBusy.value = false;
   }
 }
 
@@ -551,6 +764,8 @@ async function saveStatusOnly(): Promise<void> {
       toast(String(saved?.error || t('exhibition.form.modeSaveFailed')), 'error');
       return;
     }
+    // 这一下提交的是整份 payload：当前内容（包括刚切换的报名方式）已经落库，就是新基线。
+    markSaved();
     toast(t('exhibition.form.modeUpdated'), 'success');
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -588,7 +803,12 @@ function askDelete(): void {
           String(ok ? t('exhibition.form.deleted') : result?.error || t('exhibition.form.deleteFailed')),
           ok ? 'success' : 'error',
         );
-        if (ok) await router.replace('/exhibitor');
+        if (ok) {
+          // 展会已经删掉：这次离开不是放弃编辑，不弹未保存提示。
+          clearExhibitionDraft();
+          allowLeave = true;
+          await router.replace('/exhibitor');
+        }
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
       }
@@ -602,44 +822,27 @@ function askDelete(): void {
 function buildPayload(): JsonObject {
   return {
     id: createdId.value || exhibitionId.value,
-    title: form.title.trim(),
-    venue: form.venue.trim(),
-    date: form.date,
-    endDate: form.endDate,
+    ...submittedData(form, fields.value),
     day: Number(form.date.slice(8, 10)) || 0,
-    time: form.time.trim(),
-    status: form.status,
-    category: form.category.trim(),
-    description: form.description,
-    descriptionFormat: 'md',
-    imageUri: form.imageUri,
-    registrationStart: form.registrationStart,
-    registrationEnd: form.registrationEnd,
-    qrEnabled: form.qrEnabled,
-    allowCancel: form.allowCancel,
-    registrationNotice: form.registrationNotice.trim(),
-    // 空选项不下发，避免保存出无意义的选项条目。
-    fields: fields.value
-      .filter((item) => item.title.trim() !== '')
-      .map((item) => ({
-        title: item.title.trim(),
-        type: item.type,
-        required: item.required,
-        options: item.type === FIELD_TYPE.TEXT ? [] : item.options.map((option) => option.trim()).filter(Boolean),
-      })),
   };
 }
 
-async function submit(): Promise<void> {
-  if (saving.value) return;
-  if (failFirst()) return;
+/**
+ * 校验并保存整份表单；成功返回 true 并把基线推到当前内容，失败留在本页（原位报错 + 轻提示）。
+ *
+ * 保存按钮、未保存提示里的「保存」与「报名方式」即时保存共用同一套校验与错误提示。
+ * 保存中再次触发直接返回 false，既防重复提交，也避免抽屉里连点两次跳两次。
+ */
+async function persist(): Promise<boolean> {
+  if (saving.value) return false;
+  if (failFirst()) return false;
   saving.value = true;
   try {
     const saved = await api.exhibitions.save(buildPayload());
     if (saved?.ok !== true) {
       formError.value = String(saved?.error || t('exhibition.form.saveFailed'));
       toast(formError.value, 'error');
-      return;
+      return false;
     }
     const exhibition = (saved.exhibition ?? {}) as JsonObject;
     createdId.value = String(exhibition.id ?? createdId.value);
@@ -647,15 +850,24 @@ async function submit(): Promise<void> {
     form.imageUri = String(exhibition.imageUri ?? form.imageUri);
     toast(isCreate.value ? t('exhibition.form.created') : t('exhibition.form.saved'), 'success');
     clearExhibitionDraft();
-    // 新建成功后换成编辑地址：再点保存就是更新，删除按钮也出现。
-    if (isCreate.value) await router.replace(`/exhibition-form/${encodeURIComponent(createdId.value)}`);
-    else await router.replace('/exhibitor');
+    // 服务器可能归一化了简介 / 封面地址：基线按落库后的内容拍，不拿提交前的值。
+    markSaved();
+    return true;
   } catch (reason) {
     formError.value = reason instanceof Error ? reason.message : String(reason);
     toast(formError.value, 'error');
+    return false;
   } finally {
     saving.value = false;
   }
+}
+
+/** 页脚「保存」：保存成功后回展商后台（新建则先换成编辑地址）。 */
+async function submit(): Promise<void> {
+  if (!(await persist())) return;
+  // 新建成功后换成编辑地址：再点保存就是更新，删除按钮也出现。
+  if (isCreate.value) await router.replace(`/exhibition-form/${encodeURIComponent(createdId.value)}`);
+  else await router.replace('/exhibitor');
 }
 
 function isCancelled(reason: unknown): boolean {
@@ -684,7 +896,8 @@ function normalizeOptions(options: unknown): string[] {
     @action="router.replace('/exhibitor')"
   />
 
-  <SkeletonBlock v-else-if="detail.loading.value && !detail.data.value" :rows="4" />
+  <!-- 有内存稿时表单已经画出来了：补基线的那次取数不再闪骨架屏。 -->
+  <SkeletonBlock v-else-if="!built && detail.loading.value && !detail.data.value" :rows="4" />
 
   <StateBlock
     v-else-if="loadFailed"
@@ -876,19 +1089,35 @@ function normalizeOptions(options: unknown): string[] {
 
     <!-- 活动信息：竖版封面在上，纯文本简介、Markdown 编辑入口与参与方式依次跟在下面。
          简介与 RichEditorPage 共用 form.description：点 Markdown 入口时先把当前表单存成内存稿
-         （新建与编辑都一样），二级页以它为起稿，所以两边始终是同一份正文。 -->
+         （新建与编辑都一样），二级页以它为起稿、保存后把最新正文写回同一份稿，返回时整张表单
+         按它恢复，所以两边始终是同一份正文，其他未保存字段也不会在往返中丢。 -->
     <div class="card cover-card">
       <span class="section-label">{{ t('exhibition.form.coverAndDescription') }}</span>
       <div class="cover-row">
-        <div v-if="form.imageUri" class="cover-frame ph-img">
-          <img :src="form.imageUri" :alt="t('exhibition.form.cover')" />
+        <!-- 封面槽位始终在：上传期间遮罩盖在它上面，失败 / 取消随进度清空一起撤掉。 -->
+        <div class="cover-frame ph-img">
+          <img v-if="form.imageUri" :src="form.imageUri" :alt="t('exhibition.form.cover')" />
+          <UploadProgressMask v-if="coverProgress !== null" :progress="coverProgress" @settled="coverProgress = null" />
         </div>
-        <div v-else class="cover-frame ph-img" aria-hidden="true" />
         <div class="cover-side">
-          <button class="cta ghost" data-size="small" type="button" @click="pickCover">
+          <button
+            class="cta ghost"
+            data-size="small"
+            type="button"
+            :disabled="coverBusy"
+            :data-loading="coverBusy ? 'true' : 'false'"
+            @click="pickCover"
+          >
             {{ form.imageUri ? t('admin.media.changeCover') : t('admin.media.uploadCover') }}
           </button>
-          <button v-if="form.imageUri" class="cta ghost" data-size="small" type="button" @click="removeCover">
+          <button
+            v-if="form.imageUri"
+            class="cta ghost"
+            data-size="small"
+            type="button"
+            :disabled="coverBusy"
+            @click="removeCover"
+          >
             {{ t('admin.media.removeCover') }}
           </button>
           <p class="field-hint">{{ t('exhibition.form.coverRatioHint') }}</p>

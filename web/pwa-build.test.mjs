@@ -43,9 +43,8 @@ test('zh.json 里有安装元信息需要的文案', () => {
     'pwa.install.intro',
     'pwa.install.stepOpen',
     'join.documentTitle',
+    'join.downloadApp',
     'join.iosAction',
-    'join.iosBarTitle',
-    'join.iosHint',
   ];
   for (const key of keys) {
     assert.equal(typeof copy[key], 'string', `${key} 应存在`);

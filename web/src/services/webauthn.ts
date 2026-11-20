@@ -15,9 +15,14 @@
  * base64url 的普通对象（ArrayBuffer 不能 JSON 化）。这里只做这两次转换，以及把
  * 「用户取消」归一成 `null`。
  *
+ * **只有「用户取消」才返回 `null`**：原生回包解析不出来、旧壳没有通行密钥动作而
+ * WebView 又没有 WebAuthn 时，抛一句可读中文让页面显示原因。以前这些情况一起返回 null，
+ * 页面把「失败」当成「用户取消」静默收场，看起来就像点了没反应。
+ *
  * 模块顶层不碰 window：测试与 SSR 在导入时没有浏览器环境。
  */
 
+import { t } from '@/i18n';
 import { NativeBridgeError, nativeBridge, supportsNativeAction } from './native-bridge';
 
 /** 提交给服务端的凭据：字段全是 base64url 字符串。 */
@@ -48,6 +53,20 @@ export function isPasskeySupported(): boolean {
   return browserPasskeySupported();
 }
 
+/**
+ * 原生桥成功回调里没有可用的 WebAuthn 响应（缺字段 / 不是 JSON）。
+ *
+ * 这不是用户取消：必须抛出来让页面显示失败，否则抽屉会被静默关掉。
+ */
+function bridgePayloadError(): NativeBridgeError {
+  return new NativeBridgeError(t('device.passkeyBroken'));
+}
+
+/** 旧壳没有通行密钥动作，而当前容器（WebView）也没有 WebAuthn：明确告诉用户要更新应用。 */
+function shellOutdatedError(): NativeBridgeError {
+  return new NativeBridgeError(t('device.passkeyShellOutdated'));
+}
+
 /** 解析原生返回的标准 WebAuthn 响应 JSON。字段已经是 base64url，不用再转换。 */
 function parseBridgeCredential(raw: unknown): PasskeyCredentialPayload | null {
   if (typeof raw !== 'string' || raw === '') return null;
@@ -72,7 +91,9 @@ async function requestFromBridge(
 ): Promise<PasskeyCredentialPayload | null> {
   try {
     const result = await nativeBridge.call(action, { optionsJson: JSON.stringify(options ?? {}) });
-    return parseBridgeCredential(result.credentialJson);
+    const credential = parseBridgeCredential(result?.credentialJson);
+    if (!credential) throw bridgePayloadError();
+    return credential;
   } catch (reason) {
     if (reason instanceof NativeBridgeError && reason.code === 'cancelled') return null;
     throw reason;
@@ -160,10 +181,10 @@ function serializeCredential(credential: PublicKeyCredential): PasskeyCredential
 }
 
 /**
- * 统一处理浏览器分支：没有 WebAuthn / 用户取消返回 null，其它失败原样抛出。
+ * 统一处理浏览器分支：用户取消返回 null，其它失败原样抛出。
  *
- * 这里只服务浏览器实现：App 里已经按能力协商选了原生；旧壳回退过来时同样要求浏览器真的
- * 支持 WebAuthn（WebView 通常没有），否则按「环境不支持」返回 null。
+ * 浏览器不支持 WebAuthn 时返回 null：调用方只在「当前环境不支持」时走到这里
+ * （App 里旧壳回退且 WebView 没有 WebAuthn 的情况在调用处就明确失败了）。
  */
 async function requestCredential(run: () => Promise<Credential | null>): Promise<PasskeyCredentialPayload | null> {
   if (!browserPasskeySupported() || typeof navigator === 'undefined' || !navigator.credentials) return null;
@@ -191,26 +212,35 @@ async function canUseNativePasskey(action: 'passkey.create' | 'passkey.get'): Pr
 /**
  * 创建通行密钥。
  * @param options 服务端下发的 PublicKeyCredentialCreationOptions JSON
- * @returns 可直接提交给 passkeyRegister 的普通对象；用户取消或环境不支持时返回 null
+ * @returns 可直接提交给 passkeyRegister 的普通对象；**只有用户取消**返回 null，
+ *   其它失败（旧壳不支持、选项损坏、系统拒绝）都抛出可读中文。
  */
 export async function createCredential(options: unknown): Promise<PasskeyCredentialPayload | null> {
-  // App 里由系统凭据提供方（Credential Manager）完成，选项 JSON 原样交给它；
-  // 旧壳没有这个动作时落到下面的浏览器 WebAuthn（与没有原生桥时一致）。
-  if (await canUseNativePasskey('passkey.create')) return requestFromBridge('passkey.create', options);
+  // App 里由系统凭据提供方（Credential Manager）完成，选项 JSON 交给原生校验后再递给系统。
+  if (nativeBridge.hasNative()) {
+    if (await canUseNativePasskey('passkey.create')) return requestFromBridge('passkey.create', options);
+    // 旧壳没有这个动作：按能力协商退回浏览器实现；WebView 里通常没有 WebAuthn，
+    // 这时必须明确失败，否则页面会把「返回 null」当成用户取消而静默收起抽屉。
+    if (!browserPasskeySupported()) throw shellOutdatedError();
+  }
   const publicKey = hydrateCreationOptions(options);
-  if (!publicKey) return null;
+  if (!publicKey) throw bridgePayloadError();
   return requestCredential(() => navigator.credentials.create({ publicKey }));
 }
 
 /**
  * 用通行密钥做断言（登录）。
  * @param options 服务端下发的 PublicKeyCredentialRequestOptions JSON
- * @returns 可直接提交给 passkeyVerify 的普通对象；用户取消或环境不支持时返回 null
+ * @returns 可直接提交给 passkeyVerify 的普通对象；**只有用户取消**返回 null，
+ *   其它失败（旧壳不支持、选项损坏、系统拒绝）都抛出可读中文。
  */
 export async function getCredential(options: unknown): Promise<PasskeyCredentialPayload | null> {
   // 旧壳没有 `passkey.get` 时同样退回浏览器 WebAuthn。
-  if (await canUseNativePasskey('passkey.get')) return requestFromBridge('passkey.get', options);
+  if (nativeBridge.hasNative()) {
+    if (await canUseNativePasskey('passkey.get')) return requestFromBridge('passkey.get', options);
+    if (!browserPasskeySupported()) throw shellOutdatedError();
+  }
   const publicKey = hydrateRequestOptions(options);
-  if (!publicKey) return null;
+  if (!publicKey) throw bridgePayloadError();
   return requestCredential(() => navigator.credentials.get({ publicKey }));
 }

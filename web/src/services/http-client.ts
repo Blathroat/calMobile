@@ -19,6 +19,10 @@ import { t, type TParams } from '@/i18n';
  * 与超时共用同一个 controller。两者都以 AbortError 结束，靠 `reason` 分开：
  * `'timeout'` 是自己掐的，`'aborted'` 是调用方取消的（页面切走、重新取数），文案不同也便于排障。
  *
+ * **上传进度**：带 `bytes` 且传入 `onUploadProgress` 的请求改走 `XMLHttpRequest`，因为它能报
+ * `upload` 的已发送字节数；其余请求仍用 `fetch`。两条路的响应处理完全一致：401 刷新重放、
+ * 5xx 归传输、`ok:false` 归业务、JSON 解析失败归传输，都在下面共用一段逻辑。
+ *
  * 这里不做传输重试（只有 401 刷新后的那次重放）、不缓存、也不解析业务字段：
  * 缓存与失效在 `query-cache.ts` / `api/client.ts`，令牌的存取在 `session-client.ts`。
  */
@@ -61,6 +65,13 @@ export interface HttpRequest {
   /** 原始字节。设置后不再把 `body` 编成 JSON，并使用 `contentType`。 */
   bytes?: Uint8Array;
   contentType?: string;
+  /**
+   * 上传进度回调（只对带 `bytes` 的请求有意义）：参数是已发送字节的百分比，0–100。
+   *
+   * 只有传了这个回调，请求才改走 `XMLHttpRequest` 以便读到 `upload` 事件；回调抛错会被吞掉，
+   * 不影响上传本身。进度只是界面反馈，不参与成功/失败判定。
+   */
+  onUploadProgress?: (percent: number) => void;
   /** 单次超时。缺省用客户端的 `timeoutMs`。头像上传比普通 JSON 更久。 */
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -70,6 +81,7 @@ export interface HttpRequest {
  * `HttpClient` 的构造参数。
  * - `timeoutMs`：单次请求超时，缺省 10000 毫秒。
  * - `fetcher`：注入用（测试替身）；缺省时保存全局 fetch，注意构造函数里的 this 绑定说明。
+ * - `xhrFactory`：上传进度用的 XHR 工厂（测试替身）；缺省用全局 `XMLHttpRequest`。
  * - `getAccessToken`：每次请求前现取令牌；返回空就不发 Authorization 头，登录类接口依赖这一点。
  * - `refresh`：刷新令牌；返回 false 表示刷新失败，此时原始的 401 会作为 `ApiError` 抛给上层。
  */
@@ -77,6 +89,7 @@ export interface HttpClientOptions {
   baseUrl: string;
   timeoutMs?: number;
   fetcher?: typeof fetch;
+  xhrFactory?: () => XMLHttpRequest;
   getAccessToken?: () => string | undefined;
   /** 身份切换会作废本次请求；续期不改变此信号。 */
   getSessionSignal?: () => AbortSignal;
@@ -124,12 +137,26 @@ function errorParams(raw: unknown): TParams {
   return params;
 }
 
+/** 一次请求在响应到手之后、判定成败之前需要的东西。 */
+interface ResponseContext {
+  path: string;
+  token?: string;
+  canRefresh: boolean;
+}
+
+/** XHR 拿到的响应：状态码与已解析的 JSON 体。 */
+interface RawResponse {
+  status: number;
+  data: unknown;
+}
+
 /**
- * 带超时、令牌注入与单次刷新重试的 HTTP 客户端。
+ * 带超时、令牌注入、单次刷新重试与上传进度的 HTTP 客户端。
  * 一个实例对应一个后端基地址；请求之间除了共用的令牌刷新外不共享状态。
  */
 export class HttpClient {
   private readonly fetcher: typeof fetch;
+  private readonly xhrFactory: () => XMLHttpRequest;
   private readonly timeoutMs: number;
   // 正在进行的令牌刷新。并发的 401 复用它，避免同时打出多个刷新请求。
   private refreshing: { signal?: AbortSignal; promise: Promise<boolean> } | undefined;
@@ -137,6 +164,8 @@ export class HttpClient {
   constructor(private readonly options: HttpClientOptions) {
     // WebView 对原生 fetch 的 this 绑定严格，保存函数后必须绑定全局对象再调用。
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
+    // XMLHttpRequest 同理：测试里用替身，生产里每次新建一份。
+    this.xhrFactory = options.xhrFactory ?? (() => new XMLHttpRequest());
     // 10 秒覆盖登录和注册在移动网络上的往返。上传另行传入更长的超时。
     this.timeoutMs = options.timeoutMs ?? 10000;
   }
@@ -156,7 +185,7 @@ export class HttpClient {
     const url = `${this.options.baseUrl.replace(/\/$/, '')}${path}${queryString(request.query)}`;
     const controller = new AbortController();
     const sessionSignal = this.options.getSessionSignal?.();
-    // 超时即 abort，fetch 会以 AbortError 结束；reason 用来把它和「调用方取消」分开。
+    // 超时即 abort，fetch / XHR 都会以 AbortError 结束；reason 用来把它和「调用方取消」分开。
     const timeoutMs = request.timeoutMs ?? this.timeoutMs;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     // 调用方取消也走同一个 controller，统一在 finally 里解绑。
@@ -168,6 +197,15 @@ export class HttpClient {
     try {
       controller.signal.throwIfAborted();
       const token = this.options.getAccessToken?.();
+      // 带字节且要进度：XMLHttpRequest 才能读到 upload 的已发送字节数。
+      if (request.bytes !== undefined && request.onUploadProgress) {
+        const raw = await this.sendUpload(url, request, token, controller.signal, timeoutMs);
+        if (raw.status === 401 && (await this.refreshOnce(canRefresh, sessionSignal))) {
+          controller.signal.throwIfAborted();
+          return this.request<T>(path, request, false);
+        }
+        return this.interpret<T>(this.context(path, token, canRefresh), raw.status, raw.data);
+      }
       const payload =
         request.bytes !== undefined
           ? copyBytes(request.bytes)
@@ -195,21 +233,10 @@ export class HttpClient {
       });
       controller.signal.throwIfAborted();
 
-      if (response.status === 401 && canRefresh && this.options.refresh) {
-        // 并发的 401 共用同一个刷新 Promise；刷新一结束就置空，否则下一次 401 会复用一个已结算的旧结果。
-        if (!this.refreshing || this.refreshing.signal !== sessionSignal) {
-          const current = {
-            signal: sessionSignal,
-            promise: this.options.refresh().finally(() => {
-              if (this.refreshing === current) this.refreshing = undefined;
-            }),
-          };
-          this.refreshing = current;
-        }
+      if (response.status === 401 && (await this.refreshOnce(canRefresh, sessionSignal))) {
         // 刷新成功才重放；canRefresh=false 保证重放后再 401 就直接抛给上层，不再刷新。
-        const renewed = await this.refreshing.promise;
         controller.signal.throwIfAborted();
-        if (renewed) return this.request<T>(path, request, false);
+        return this.request<T>(path, request, false);
       }
 
       let data: unknown;
@@ -227,27 +254,7 @@ export class HttpClient {
       // 失败响应统一按码换文案：ok:false 与 found:false 两种形态都在这里覆盖，
       // 且必须早于下面用 `data.error` 组装 ApiError 的两条路径。
       localizeError(data);
-      // 5xx 归传输失败：后端或代理异常，不是业务规则的判定结果。
-      if (response.status >= 500) throw new TransportError(t('app.netServerError', { status: response.status }));
-      if (!response.ok) {
-        // 刷新后重放仍被拒绝，说明本次登录态已经失效。登录、刷新、登出等认证接口
-        // 自己返回 401 时不能按这个规则处理。
-        if (response.status === 401 && !canRefresh && token && !path.startsWith('/auth/')) {
-          this.options.onSessionExpired?.();
-        }
-        // 4xx：优先用后端给的 error 文案，没有就退回状态码。
-        const message =
-          typeof data === 'object' && data !== null && 'error' in data
-            ? String(data.error)
-            : t('app.netRequestFailed', { status: response.status });
-        throw new ApiError(message, response.status);
-      }
-      // 200 + ok:false 是后端的规则失败约定，同样按业务失败抛出，不让页面去判 ok。
-      if (typeof data === 'object' && data !== null && 'ok' in data && data.ok === false) {
-        throw new ApiError('error' in data ? String(data.error) : t('common.failed'), response.status);
-      }
-      // 响应体未做运行时校验：字段是否存在、类型对不对，由页面按可选类型自行兜底。
-      return data as T;
+      return this.interpret<T>(this.context(path, token, canRefresh), response.status, data);
     } catch (error) {
       if (error instanceof ApiError || error instanceof TransportError) throw error;
       if (controller.signal.aborted) {
@@ -269,11 +276,155 @@ export class HttpClient {
       sessionSignal?.removeEventListener('abort', abortFromCaller);
     }
   }
+
+  /** 组织响应阶段的上下文：只有路径、令牌与能否刷新三项。 */
+  private context(path: string, token: string | undefined, canRefresh: boolean): ResponseContext {
+    return { path, token, canRefresh };
+  }
+
+  /**
+   * 共用 401 刷新：并发请求复用同一个 Promise，身份切换（sessionSignal 变了）时重新发起。
+   * @returns 是否刷新成功；没传 `refresh` 或 `canRefresh` 为 false 时直接 false。
+   */
+  private async refreshOnce(canRefresh: boolean, sessionSignal: AbortSignal | undefined): Promise<boolean> {
+    if (!canRefresh || !this.options.refresh) return false;
+    if (!this.refreshing || this.refreshing.signal !== sessionSignal) {
+      const current = {
+        signal: sessionSignal,
+        promise: this.options.refresh().finally(() => {
+          if (this.refreshing === current) this.refreshing = undefined;
+        }),
+      };
+      this.refreshing = current;
+    }
+    return this.refreshing.promise;
+  }
+
+  /**
+   * 判定一次已解析的响应：5xx 归传输、3xx/4xx 归业务（401 且不再刷新时结束会话）、
+   * 200 + `ok:false` 归业务，其余原样返回。
+   */
+  private interpret<T>(context: ResponseContext, status: number, data: unknown): T {
+    // 5xx 归传输失败：后端或代理异常，不是业务规则的判定结果。
+    if (status >= 500) throw new TransportError(t('app.netServerError', { status }));
+    if (status < 200 || status >= 300) {
+      // 刷新后重放仍被拒绝，说明本次登录态已经失效。登录、刷新、登出等认证接口
+      // 自己返回 401 时不能按这个规则处理。
+      if (status === 401 && !context.canRefresh && context.token && !context.path.startsWith('/auth/')) {
+        this.options.onSessionExpired?.();
+      }
+      // 4xx：优先用后端给的 error 文案，没有就退回状态码。
+      const message =
+        typeof data === 'object' && data !== null && 'error' in data
+          ? String((data as { error: unknown }).error)
+          : t('app.netRequestFailed', { status });
+      throw new ApiError(message, status);
+    }
+    // 200 + ok:false 是后端的规则失败约定，同样按业务失败抛出，不让页面去判 ok。
+    if (typeof data === 'object' && data !== null && 'ok' in data && (data as { ok?: unknown }).ok === false) {
+      throw new ApiError('error' in data ? String((data as { error: unknown }).error) : t('common.failed'), status);
+    }
+    // 响应体未做运行时校验：字段是否存在、类型对不对，由页面按可选类型自行兜底。
+    return data as T;
+  }
+
+  /**
+   * 用 XMLHttpRequest 发送原始字节，边发边报进度。
+   *
+   * 这里只负责拿到状态码与解析后的 JSON；401 刷新重放、错误分类仍由 `request()` 统一处理。
+   * 取消与超时都通过传进来的 `signal`（即请求的 controller.signal）中断，最终由 `request()`
+   * 的 catch 按 aborted / timeout 归类；网络错误与 JSON 解析错误则在这里直接给出传输失败。
+   */
+  private sendUpload(
+    url: string,
+    request: HttpRequest,
+    token: string | undefined,
+    signal: AbortSignal,
+    timeoutMs: number,
+  ): Promise<RawResponse> {
+    return new Promise<RawResponse>((resolve, reject) => {
+      let xhr: XMLHttpRequest;
+      try {
+        xhr = this.xhrFactory();
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      const report = (percent: number): void => {
+        const callback = request.onUploadProgress;
+        if (!callback) return;
+        try {
+          callback(Math.min(100, Math.max(0, Math.round(percent))));
+        } catch {
+          // 进度回调只是界面反馈：它自己抛错不能打断上传。
+        }
+      };
+      // signal 被 abort（超时或调用方取消）时中断 XHR；XHR 自己的 timeout 只作兜底。
+      const abortFromSignal = (): void => xhr.abort();
+      signal.addEventListener('abort', abortFromSignal, { once: true });
+      const cleanup = (): void => signal.removeEventListener('abort', abortFromSignal);
+
+      xhr.open(request.method ?? 'GET', url, true);
+      xhr.timeout = timeoutMs;
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.setRequestHeader('Content-Type', request.contentType || 'application/octet-stream');
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+      // upload.progress 在部分内核里不保证最后一次一定 loaded === total，用 load 兜到 100。
+      xhr.upload?.addEventListener('progress', (event) => {
+        if (!event.lengthComputable || !event.total) return;
+        report((event.loaded / event.total) * 100);
+      });
+      xhr.upload?.addEventListener('load', () => report(100));
+
+      xhr.onload = (): void => {
+        cleanup();
+        if (!xhr.status) {
+          reject(new Error('network error'));
+          return;
+        }
+        let data: unknown;
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch (error) {
+          reject(
+            new TransportError(
+              t('app.netBadJson', { detail: error instanceof Error ? error.message : String(error ?? '') }),
+            ),
+          );
+          return;
+        }
+        localizeError(data);
+        resolve({ status: xhr.status, data });
+      };
+      xhr.onerror = (): void => {
+        cleanup();
+        reject(new Error(xhr.statusText || 'network error'));
+      };
+      xhr.ontimeout = (): void => {
+        cleanup();
+        // 交给 request() 归成 timeout：controller 的计时器也会在差不多同时 abort。
+        reject(new Error('timeout'));
+      };
+      xhr.onabort = (): void => {
+        cleanup();
+        reject(new Error('aborted'));
+      };
+
+      report(0);
+      try {
+        xhr.send(copyBytes(request.bytes as Uint8Array));
+      } catch (error) {
+        cleanup();
+        reject(error);
+      }
+    });
+  }
 }
 
 /**
  * 拷成独立的 ArrayBuffer。
- * `Uint8Array` 的底层缓冲可能是 SharedArrayBuffer，fetch 不接受这种视图。
+ * `Uint8Array` 的底层缓冲可能是 SharedArrayBuffer，fetch / XHR 不接受这种视图。
  */
 function copyBytes(bytes: Uint8Array): ArrayBuffer {
   const copy = new ArrayBuffer(bytes.byteLength);

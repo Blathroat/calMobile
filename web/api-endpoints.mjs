@@ -94,6 +94,7 @@ export const ENDPOINTS = {
     path: `/users/${encodeURIComponent(payload.id)}/profile`,
     body: { nickname: 'n' },
   }),
+  'users.uploadAvatar': (payload) => ({ method: 'POST', path: `/users/${encodeURIComponent(payload.id)}/avatar` }),
   'users.public': (payload) => ({ method: 'GET', path: '/users/public', query: payload }),
   'search.query': (payload) => ({ method: 'GET', path: '/search', query: payload }),
   'settings.get': () => ({ method: 'GET', path: '/settings' }),

@@ -42,9 +42,13 @@ import { toasts } from '@/services/toast';
 
 .toast[data-tone='error'] {
   background: var(--toast-error);
+  /* 成功 / 失败提示的底色是彩色深底（不随主题反转），文字固定用白；
+       默认 toast 在深色模式下反而是浅底，继续用 --on-dark。 */
+  color: var(--on-accent);
 }
 
 .toast[data-tone='success'] {
   background: var(--toast-ok);
+  color: var(--on-accent);
 }
 </style>

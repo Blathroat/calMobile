@@ -319,6 +319,8 @@ const storagePolicies = [
   { value: 'evict-oldest', label: COPY.storageEvict },
 ];
 const coverBusy = ref(false);
+/** 缺省封面上传进度（0–100）；null 表示没有上传在跑。 */
+const coverProgress = ref<number | null>(null);
 const inviteBusy = ref(false);
 const invites = ref<
   Array<{
@@ -824,8 +826,11 @@ const storageCaption = computed(() =>
 /**
  * 缺省封面：先在设备上选择，再上传到服务器。
  * 只改表单里的值，点「保存设置」才落库。
+ * 上传期间在预览位置盖进度遮罩（字节到 100 只算 99，服务器确认后才落 100 并停留约 150ms），
+ * 失败 / 取消立即撤掉遮罩。
  */
 async function pickDefaultCover(): Promise<void> {
+  if (coverBusy.value) return;
   coverBusy.value = true;
   try {
     const stored = await device.importMedia('image');
@@ -833,8 +838,13 @@ async function pickDefaultCover(): Promise<void> {
       toast(t('admin.media.unreadableImage'), 'error');
       return;
     }
-    form.defaultCover = await publishImportedMedia('image', stored);
+    coverProgress.value = 0;
+    form.defaultCover = await publishImportedMedia('image', stored, (percent) => {
+      coverProgress.value = Math.min(99, Math.max(0, percent));
+    });
+    coverProgress.value = 100;
   } catch (reason) {
+    coverProgress.value = null;
     // 用户在系统选择器点了取消：按稳定错误码判断，不提示错误。
     if (reason && typeof reason === 'object' && (reason as { code?: unknown }).code === 'cancelled') return;
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -1136,6 +1146,7 @@ async function copyInvite(code: string): Promise<void> {
     :settings-error="settingsError"
     :settings-saving="settingsSaving"
     :cover-busy="coverBusy"
+    :cover-progress="coverProgress"
     :can-edit-settings="canEditSettings"
     :storage-full="storageFull"
     :storage-percent="storagePercent"
@@ -1152,6 +1163,7 @@ async function copyInvite(code: string): Promise<void> {
     @retry="loadSettings"
     @save="saveSettings"
     @pick-cover="pickDefaultCover"
+    @cover-settled="coverProgress = null"
     @generate="generateInvite"
     @revoke="revokeInvite"
     @copy="copyInvite"

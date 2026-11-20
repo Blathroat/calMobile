@@ -6,10 +6,11 @@
  * 的渲染入口（与详情页同一套清洗），不自行拼 HTML。
  * 图片与视频先由原生选择，再上传到服务器，正文只写服务器地址。
  * 编辑已有展会且从表单带 `?draft=1` 进来时，先用内存稿里的正文起稿
- * （表单里刚写、还没保存的纯文本简介），保存成功后清掉草稿。
+ * （表单里刚写、还没保存的纯文本简介），保存成功后把最新正文写回草稿并带回表单：
+ * 表单靠它恢复其他还没保存的字段，也不清掉草稿。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
 import { useBootstrapStore } from '@/stores/bootstrap';
@@ -21,6 +22,7 @@ import { publishImportedMedia } from '@/services/publish-media';
 import { htmlToMarkdown, loadHtmlConverter, loadMarkdownParser, markdownToHtml, plainText } from '@/services/markdown';
 import { clearExhibitionDraft, patchExhibitionDraft, readExhibitionDraft } from '@/services/exhibition-draft';
 import AppIcon from '@/components/AppIcon.vue';
+import UploadProgressMask from '@/components/upload-progress-mask.vue';
 import PasteTextPanel from '@/components/PasteTextPanel.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
@@ -30,6 +32,20 @@ import { t } from '@/i18n';
 interface MediaTile {
   kind: 'image' | 'video';
   url: string;
+}
+
+/**
+ * 正在上传的媒体占位：上传期间在媒体网格里显示本地预览 / 文件名 + 进度遮罩，
+ * 成功后把地址换成服务器地址、遮罩满 100 停留结束才移除占位（正文那时已有服务器地址）。
+ */
+interface PendingMedia {
+  /** 区分先后两次上传：回调只改自己那一份占位。 */
+  id: number;
+  kind: 'image' | 'video';
+  /** 图片先放本地地址预览；上传成功后换成服务器地址。 */
+  url: string;
+  fileName: string;
+  progress: number;
 }
 
 const route = useRoute();
@@ -87,6 +103,23 @@ const media = computed<MediaTile[]>(() => {
   }
   return list;
 });
+
+/** 正在上传的媒体占位；同一时间只跑一份，工具条按钮在上传期间禁用。 */
+const pendingMedia = ref<PendingMedia | null>(null);
+/** 自增 id：进度回调与成功回填只在占位没被换掉时生效。 */
+let pendingSeq = 0;
+
+/** 网格里显示正文媒体，但占位已经换成服务器地址的那一格先藏起来，避免同一张图出现两格。 */
+const visibleMedia = computed(() => {
+  const pendingUrl = pendingMedia.value?.url;
+  if (!pendingUrl) return media.value;
+  return media.value.filter((item) => item.url !== pendingUrl);
+});
+
+/** 遮罩在 100% 上停留结束：移除占位，正文里那一格由 media 自己画出来。 */
+function clearPendingMedia(): void {
+  pendingMedia.value = null;
+}
 
 /** 媒体限制说明：数量与大小上限都来自「管理-设置」。 */
 const mediaHint = computed(() => {
@@ -226,8 +259,9 @@ function formatsHint(kind: 'image' | 'video'): string {
   return formats.length > 0 ? formats.map((item) => `.${item}`).join('/') : t('exhibition.editor.commonFormats');
 }
 
-/** 插入图片：设备选完后上传，正文只留下服务器地址。 */
+/** 插入图片：设备选完后在网格里先放本地预览，上传期间盖进度遮罩，成功后换成服务器地址。 */
 async function insertImage(): Promise<void> {
+  if (pendingMedia.value) return;
   const max = Number(bootstrap.media.imageCount) || 8;
   const current = media.value.filter((item) => item.kind === 'image').length;
   if (current >= max) {
@@ -240,8 +274,21 @@ async function insertImage(): Promise<void> {
       toast(t('admin.media.unreadableImage'), 'error');
       return;
     }
-    const url = await publishImportedMedia('image', result);
+    const id = ++pendingSeq;
+    pendingMedia.value = { id, kind: 'image', url: result.url, fileName: String(result.fileName ?? ''), progress: 0 };
+    const url = await publishImportedMedia('image', result, (percent) => {
+      const pending = pendingMedia.value;
+      if (!pending || pending.id !== id) return;
+      // 字节发完只到 99：服务器确认（返回地址）后才落 100。
+      pending.progress = Math.min(99, Math.max(0, percent));
+    });
     appendText(`\n\n![${t('exhibition.editor.imageAlt')}](${url})\n\n`);
+    const pending = pendingMedia.value;
+    if (pending && pending.id === id) {
+      // 占位换成服务器地址；本地 object URL 已由 publish-media 收回。
+      pending.url = url;
+      pending.progress = 100;
+    }
     const size = formatBytes(result.bytes);
     toast(
       result.compressed
@@ -250,6 +297,7 @@ async function insertImage(): Promise<void> {
       'success',
     );
   } catch (reason) {
+    pendingMedia.value = null;
     if (isCancelled(reason)) return;
     toast(
       reason instanceof Error
@@ -260,8 +308,9 @@ async function insertImage(): Promise<void> {
   }
 }
 
-/** 插入视频：与图片同一条路，区别只在写进正文的形式（详情页白名单允许 `<video>`）。 */
+/** 插入视频：与图片同一条路，占位只显示文件名（不预览视频），成功后换成服务器地址。 */
 async function insertVideo(): Promise<void> {
+  if (pendingMedia.value) return;
   const max = uploadCountLimit('video');
   const current = media.value.filter((item) => item.kind === 'video').length;
   if (current >= max) {
@@ -281,10 +330,22 @@ async function insertVideo(): Promise<void> {
       toast(oversized, 'error');
       return;
     }
-    const url = await publishImportedMedia('video', result);
+    const id = ++pendingSeq;
+    pendingMedia.value = { id, kind: 'video', url: '', fileName: String(result.fileName ?? ''), progress: 0 };
+    const url = await publishImportedMedia('video', result, (percent) => {
+      const pending = pendingMedia.value;
+      if (!pending || pending.id !== id) return;
+      pending.progress = Math.min(99, Math.max(0, percent));
+    });
     appendText(`\n\n<video controls src="${url}"></video>\n\n`);
+    const pending = pendingMedia.value;
+    if (pending && pending.id === id) {
+      pending.url = url;
+      pending.progress = 100;
+    }
     toast(t('exhibition.editor.videoInserted', { size: formatBytes(result.bytes) }), 'success');
   } catch (reason) {
+    pendingMedia.value = null;
     if (isCancelled(reason)) return;
     toast(
       reason instanceof Error
@@ -420,8 +481,9 @@ async function save(): Promise<void> {
       markdown ? t('exhibition.editor.descriptionSaved', { summary }) : t('exhibition.editor.descriptionCleared'),
       'success',
     );
-    // 正文已经落库：带回表单的是服务器那一份，内存稿不再需要。
-    clearExhibitionDraft();
+    // 正文已经落库，但草稿不能清：表单里其他字段可能还是未保存的修改，
+    // 把最新简介写回草稿，表单返回后用草稿恢复，那些内容才不会丢。
+    patchExhibitionDraft(markdown);
     await router.replace(`/exhibition-form/${encodeURIComponent(String(exhibition.value.id ?? exhibitionId.value))}`);
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -430,9 +492,18 @@ async function save(): Promise<void> {
   }
 }
 
-/** 编辑模式下的内存稿只用来起稿：离开编辑器就丢掉，避免带回表单成为陈旧草稿。 */
-onBeforeUnmount(() => {
-  if (!draftMode.value) clearExhibitionDraft();
+/** 目标是展会编辑表单（新建 `/exhibition-form`，编辑 `/exhibition-form/:id`）。 */
+function isExhibitionFormPath(path: string): boolean {
+  return path === '/exhibition-form' || path.startsWith('/exhibition-form/');
+}
+
+/**
+ * 内存稿是表单那一份草稿：只有回到编辑表单时才留着 —— 保存简介后表单要用它恢复
+ * 其他还没保存的字段；去别处说明这次编辑流程已经结束，顺手清掉，避免陈旧稿串到下一次。
+ */
+onBeforeRouteLeave((to) => {
+  if (isExhibitionFormPath(to.path)) return;
+  clearExhibitionDraft();
 });
 
 function isCancelled(reason: unknown): boolean {
@@ -510,10 +581,22 @@ function escapeRegExp(value: string): string {
       >
         <AppIcon name="share" size="icon icon-sm" />
       </button>
-      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.insertImage')" @click="insertImage">
+      <button
+        type="button"
+        :aria-pressed="false"
+        :title="t('exhibition.editor.insertImage')"
+        :disabled="pendingMedia !== null"
+        @click="insertImage"
+      >
         <AppIcon name="image" size="icon icon-sm" />
       </button>
-      <button type="button" :aria-pressed="false" :title="t('exhibition.editor.insertVideo')" @click="insertVideo">
+      <button
+        type="button"
+        :aria-pressed="false"
+        :title="t('exhibition.editor.insertVideo')"
+        :disabled="pendingMedia !== null"
+        @click="insertVideo"
+      >
         <AppIcon name="video" size="icon icon-sm" />
       </button>
       <button
@@ -579,9 +662,11 @@ function escapeRegExp(value: string): string {
           t('exhibition.editor.mediaCount', { count: media.length })
         }}</span>
       </div>
-      <p v-if="media.length === 0" class="field-hint">{{ t('exhibition.form.emptyDescription') }}</p>
-      <div v-else class="media-grid">
-        <div v-for="tile in media" :key="tile.url" class="media-tile">
+      <p v-if="media.length === 0 && pendingMedia === null" class="field-hint">
+        {{ t('exhibition.form.emptyDescription') }}
+      </p>
+      <div v-if="media.length > 0 || pendingMedia !== null" class="media-grid">
+        <div v-for="tile in visibleMedia" :key="tile.url" class="media-tile">
           <img
             v-if="tile.kind === 'image'"
             :src="tile.url"
@@ -591,6 +676,17 @@ function escapeRegExp(value: string): string {
           <!-- 视频用同一套槽位：`.media-tile img` 的铺满规则同样适用于 video -->
           <video v-else :src="tile.url" muted playsinline preload="metadata" @error="removeMedia(tile)" />
           <button type="button" :aria-label="t('exhibition.editor.clearContent')" @click="removeMedia(tile)">×</button>
+        </div>
+        <!-- 上传中的占位：图片显示本地预览，视频只垫文件名；遮罩从底部向上变亮并报百分比。
+             遮罩满 100 停留结束后发 settled，占位这时才移除，正文里的服务器地址由真实格子补上。 -->
+        <div v-if="pendingMedia !== null" class="media-tile media-tile-pending">
+          <img
+            v-if="pendingMedia.kind === 'image' && pendingMedia.url"
+            :src="pendingMedia.url"
+            :alt="t('exhibition.editor.insertImage')"
+          />
+          <span v-else class="media-file-name">{{ pendingMedia.fileName || t('exhibition.editor.insertVideo') }}</span>
+          <UploadProgressMask :progress="pendingMedia.progress" @settled="clearPendingMedia" />
         </div>
       </div>
     </div>
@@ -697,9 +793,31 @@ function escapeRegExp(value: string): string {
   place-items: center;
   border-radius: var(--r-pill);
   background: var(--media-scrim);
-  color: var(--on-dark);
+  color: var(--on-media);
   font-size: 16px;
   line-height: 1;
+}
+
+/* 上传中的占位：图片铺满（沿用 `.media-tile img`），视频没有预览就垫一条文件名。
+   文件名压在遮罩上面（进度数字居中、文件名贴底），长文件名省略号截断。 */
+.media-tile-pending {
+  display: grid;
+  place-items: center;
+}
+
+.media-file-name {
+  position: absolute;
+  inset-inline: var(--s1);
+  bottom: var(--s1);
+  z-index: 1;
+  overflow: hidden;
+  padding: 2px var(--s1);
+  border-radius: var(--r-chip);
+  background: var(--screen);
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 预览 / 粘贴 Markdown 这一行不在 `.card` 里，components.css 靠后的 `.action-row > .cta`

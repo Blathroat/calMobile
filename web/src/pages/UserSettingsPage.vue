@@ -5,8 +5,8 @@
  * 版式按「账号 / 通知与隐私 / 外观 / 语言 / 邀请码 / 安装到主屏幕 / 应用更新」分组：组标题
  * 在卡片外，卡片里的开关行用 `.switch-row[data-flush='true']` 的分隔线版式，不再套第二层
  * 边框。邀请码固定在页面底部：普通用户显示输入框，展商与管理员只说明身份已升级。
- * 「安装到主屏幕」只在 iOS 浏览器且尚未安装时出现，「应用更新」只在 Android 原生壳里出现，
- * 两者互斥，都不和协议入口混在一起。
+ * 「安装到主屏幕」在浏览器访问（非独立 PWA 且没有原生桥）时出现，原生 App 里不出现；
+ * 「应用更新」只在 Android 原生壳里出现。两者互斥，都不和协议入口混在一起。
  *
  * 账号组只保留身份展示（头像、昵称、角色、邮箱）与「编辑资料」入口：编辑资料与个人页
  * 身份卡右侧的铅笔共用 `services/profile-editor.ts` 的同一抽屉；头像的选图、裁剪、更换、
@@ -30,7 +30,8 @@ import { useSessionStore } from '@/stores/session';
 import { useSettingsStore } from '@/stores/settings';
 import { device } from '@/services/device-services';
 import { nativeBridge } from '@/services/native-bridge';
-import { isIosInstallOffer } from '@/services/pwa';
+import { isAndroid, isIos } from '@/services/platform';
+import { shouldOfferPwaInstall } from '@/services/pwa';
 import { toast } from '@/services/toast';
 import { formatLocalChineseDate } from '@/services/format';
 import { openProfileEditor } from '@/services/profile-editor';
@@ -71,8 +72,15 @@ const loggedIn = computed(() => session.loggedIn);
  * 整组入口与自动检查都跟着这个开关走，避免让用户点到一个永远装不上的按钮。
  */
 const showNativeUpdate = nativeBridge.hasNative();
-/** iOS 尚未安装到主屏幕时给一个入口，说明抽屉与首页的一次性提示共用。 */
-const showInstallEntry = isIosInstallOffer();
+/** 浏览器访问（还没装到主屏幕、也没有原生桥）时给一个入口，抽屉与首页的提示共用。 */
+const showInstallEntry = shouldOfferPwaInstall();
+/** 安装卡片的一句说明按平台换，和抽屉里的开头段保持同一分支，不把 Safari 文案给 Android。 */
+function installEntryHint(): string {
+  if (isIos()) return t('pwa.install.intro');
+  if (isAndroid()) return t('pwa.install.androidIntro');
+  return t('pwa.install.desktopIntro');
+}
+const installIntro = showInstallEntry ? installEntryHint() : '';
 /** 受限账号：只有后端明确下发 `false` 才算，老后端不下发 `profile` 时行为不变。 */
 const limited = computed(() => user.value.can?.profile === false);
 /** 受限时统一用同一句说明原因，避免每个入口各写一套说法。 */
@@ -626,11 +634,11 @@ async function checkUpdate(auto = false): Promise<void> {
         </div>
       </section>
 
-      <!-- 安装到主屏幕：只有 iOS 浏览器且还没安装时出现；入口不依赖原生桥 -->
+      <!-- 安装到主屏幕：浏览器访问且还没装到主屏幕时出现；原生 App 里不出现 -->
       <section v-if="showInstallEntry" class="settings-section">
         <span class="section-label">{{ t('pwa.install.title') }}</span>
         <div class="card user-settings-card">
-          <p class="field-hint">{{ t('pwa.install.intro') }}</p>
+          <p class="field-hint">{{ installIntro }}</p>
           <button class="cta ghost" type="button" @click="openInstallSheet">
             {{ t('pwa.install.settingsEntry') }}
           </button>

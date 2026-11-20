@@ -2,9 +2,10 @@
 /**
  * 用户设置里的资料表单内容；抽屉标题和保存 / 取消动作由全局 AppSheet 负责。
  *
- * 头像块只放在抽屉最上方，且只给本人：管理员代改别人资料时传 showAvatar: false，
- * 因为头像接口只作用于当前登录账号。头像块里只剩一颗铅笔，点它只发 `editAvatar`：
- * 「先保存资料、退出资料抽屉，再打头像编辑抽屉」由 `services/profile-editor.ts` 负责。
+ * 头像块放在抽屉最上方，本人与管理员代改都渲染：本人用会话里的头像，管理员代改时由
+ * `services/profile-editor.ts` 传入目标用户的 `avatar` / `nickname`，上传也走目标账号。
+ * 头像块里只剩一颗铅笔，点它只发 `editAvatar`：「先保存资料、退出资料抽屉，再打头像编辑抽屉」
+ * 由 `services/profile-editor.ts` 负责。
  */
 import { computed } from 'vue';
 import ProfileAvatarField from '@/components/ProfileAvatarField.vue';
@@ -16,8 +17,14 @@ interface Props {
   invalid: Record<string, boolean>;
   error: string | (() => string);
   limits: Record<string, number>;
-  /** 是否渲染头像块；缺省渲染，管理员代改别人资料时传 false。 */
+  /** 是否渲染头像块；缺省渲染。 */
   showAvatar?: boolean;
+  /** 头像预览地址；缺省取当前登录账号。管理员代改时传目标用户。 */
+  avatar?: string;
+  /** 头像预览昵称；缺省取当前登录账号。管理员代改时传目标用户。 */
+  nickname?: string;
+  /** 头像块是否受限；缺省按当前登录账号判断。管理员代改时传 false。 */
+  limited?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -39,7 +46,13 @@ function update(field: string, event: Event): void {
   <form class="form" novalidate @submit.prevent="emit('submit')">
     <template v-if="mode === 'profile'">
       <!-- 头像在昵称之前：先看到自己现在长什么样，再改文字资料 -->
-      <ProfileAvatarField v-if="props.showAvatar !== false" @edit="emit('editAvatar')" />
+      <ProfileAvatarField
+        v-if="props.showAvatar !== false"
+        :avatar="props.avatar"
+        :nickname="props.nickname"
+        :limited="props.limited"
+        @edit="emit('editAvatar')"
+      />
       <div class="field" :data-invalid="invalid.nickname ? 'true' : 'false'">
         <label for="settings-nickname">{{ t('settings.profile.nickname') }}</label>
         <input

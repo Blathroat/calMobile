@@ -8,7 +8,7 @@ import { api } from '@/app/runtime';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { nativeBridge } from '@/services/native-bridge';
-import { isIosInstallOffer } from '@/services/pwa';
+import { shouldOfferPwaInstall } from '@/services/pwa';
 import { closeAvatarCropper } from '@/services/profile-avatar';
 import { device } from '@/services/device-services';
 import { closeSheet, sheet } from '@/services/sheet';
@@ -27,11 +27,9 @@ vi.mock('@/app/runtime', () => ({
 }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 vi.mock('@/services/device-services', () => ({ device: { pickImage: vi.fn() } }));
-// 安装引导是否出现由平台判断；这里只控制「iOS 未安装」这一种状态。
+// 安装入口是否出现由平台与原生桥判断；这里只控制「浏览器里还没安装」这一种状态。
 vi.mock('@/services/pwa', () => ({
-  isIosInstallOffer: vi.fn(),
-  iosInstallHintDismissed: vi.fn(),
-  dismissIosInstallHint: vi.fn(),
+  shouldOfferPwaInstall: vi.fn(),
 }));
 
 const PROFILE = {
@@ -193,8 +191,8 @@ describe('设置页独立取数状态', () => {
     expect(labels).not.toContain('应用更新');
   });
 
-  it('iOS 未安装时提供安装到主屏幕入口，点击打开安装说明', async () => {
-    vi.mocked(isIosInstallOffer).mockReturnValue(true);
+  it('浏览器里没装到主屏幕时提供安装入口，点击打开按平台给的安装说明', async () => {
+    vi.mocked(shouldOfferPwaInstall).mockReturnValue(true);
     await mountSettings();
     await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
     // 独立分组：既不在协议卡片里，也不跟应用更新（浏览器模式下本来就不出现）混在一起。
@@ -202,17 +200,30 @@ describe('设置页独立取数状态', () => {
       node.textContent?.trim(),
     );
     expect(labels).toEqual(['账号', '通知与隐私', '外观', '语言', '邀请码', '安装到主屏幕']);
+    // 卡片里的说明按平台换：jsdom 是桌面浏览器，不会出现 iOS 的 Safari 文案。
+    expect(document.body.textContent).toContain('在浏览器菜单里安装或添加到主屏幕');
 
     button('安装到主屏幕')!.click();
     await nextTick();
     expect(sheet.current?.title).toBe('安装到主屏幕');
     const panel = document.querySelector('.sheet-panel');
-    expect(panel?.textContent).toContain('用 Safari 打开后添加到主屏幕');
+    expect(panel?.textContent).toContain('在浏览器菜单中选择「安装」或「添加到主屏幕」');
+    expect(panel?.textContent).not.toContain('用 Safari 打开这个地址');
     // app 模式不出现「打开完整应用」，那是报名站才有的入口。
     expect(button('打开完整应用')).toBeUndefined();
     button('关闭')!.click();
     await nextTick();
     expect(sheet.current?.closing).toBe(true);
+  });
+
+  it('原生 App（有桥）或已装到主屏幕时不出现安装入口', async () => {
+    vi.mocked(shouldOfferPwaInstall).mockReturnValue(false);
+    await mountSettings({ native: true });
+    await vi.waitFor(() => expect(button('编辑资料')).toBeDefined());
+    const labels = [...document.querySelectorAll('.settings-section .section-label')].map((node) =>
+      node.textContent?.trim(),
+    );
+    expect(labels).not.toContain('安装到主屏幕');
   });
 
   it('配色色板按服务端色板渲染，选中项用对勾标出', async () => {

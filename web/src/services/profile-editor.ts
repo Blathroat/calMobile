@@ -1,16 +1,17 @@
 /**
- * 个人页与用户设置共用的「编辑资料」抽屉。
+ * 个人页、用户设置与用户公开页共用的「编辑资料」抽屉。
  *
- * 两边打开的是同一块面板（`UserSettingsFormSheet` 的 profile 模式）：
- * 最上方是头像块（只留一颗铅笔入口），下面才是昵称、简介、地区、社交账号（保存走 `PUT /profile`）。
+ * 打开的是同一块面板（`UserSettingsFormSheet` 的 profile 模式）：
+ * 最上方是头像块（只留一颗铅笔入口），下面才是昵称、简介、地区、社交账号。
+ * 本人保存走 `PUT /profile`；管理员从公开页代改别人资料时传 `targetUserId`，
+ * 保存走 `PUT /users/:id/profile`、不改当前会话。
  *
  * 头像不在这一层改：点铅笔时先把当前资料保存下来并退出资料抽屉，退场动画结束后**直接拉起
  * 系统选图**，选定图片再弹出裁剪抽屉（`components/ProfileAvatarCropper.vue`，状态在
- * `services/profile-avatar.ts`），裁剪完立即上传。
+ * `services/profile-avatar.ts`），裁剪完立即上传。本人上传走 `POST /profile/avatar`；
+ * 管理员代改时头像块显示的是目标用户的头像，上传走 `POST /users/:id/avatar`，
+ * 管理员的会话与头像都不受影响。
  * 校验或保存失败就留在资料抽屉里显示错误，不会带着还没保存的改动跳走。
- *
- * 管理员从公开页代改别人资料时传 `targetUserId`：走管理员接口、不改当前会话，
- * 也不渲染头像块——头像接口只作用于当前登录账号。
  */
 import { reactive, ref } from 'vue';
 import { api } from '@/app/runtime';
@@ -134,6 +135,8 @@ export function openProfileEditor(
   /**
    * 选头像：系统相册 / 文件选择里拿到图片后直接弹裁剪抽屉，不再先开一页让用户再点一次。
    * 用户取消不提示；图片读不出来或选图失败才 toast。没有图时什么都不弹。
+   *
+   * 管理员代改时把目标账号交给裁剪抽屉：上传走管理员接口，只写目标账号。
    */
   async function pickAvatar(): Promise<void> {
     try {
@@ -143,8 +146,20 @@ export function openProfileEditor(
         toast(t('admin.media.unreadableImage'), 'error');
         return;
       }
-      // 上传成功后把最新资料并回调用方；会话由裁剪抽屉自己刷新。
-      openAvatarCropper(source, (fresh) => Object.assign(profile, fresh));
+      // 上传成功后把新头像并回调用方；本人会话由裁剪抽屉自己刷新。
+      openAvatarCropper(
+        source,
+        (fresh) => {
+          if (targetUserId) {
+            // 管理员代改：目标用户 payload 不能整份并进公开页（角色字段口径不同），只合并头像。
+            if (fresh.avatar !== undefined) profile.avatar = String(fresh.avatar || '');
+          } else {
+            Object.assign(profile, fresh);
+          }
+          options?.onSaved?.(fresh);
+        },
+        targetUserId,
+      );
     } catch (reason) {
       // 用户在系统选图里取消：按稳定错误码判断，不提示。
       if ((reason as { code?: string } | null)?.code === 'cancelled') return;
@@ -185,8 +200,13 @@ export function openProfileEditor(
         region: limit('region', 40),
         socialMedia: limit('socialMedia', 40),
       },
-      // 头像块只给本人：代改别人资料时头像接口仍然只会改当前登录账号。
-      showAvatar: !targetUserId,
+      // 头像块本人与管理员代改都渲染：代改时显示目标用户的头像，上传也写到目标账号。
+      showAvatar: true,
+      // 本人不传：头像块自己从会话取最新头像与受限状态。代改时以目标用户为准，
+      // 目标受限 / 封禁不影响管理员操作，所以显式给 limited: false。
+      avatar: targetUserId ? String(profile.avatar || '') : undefined,
+      nickname: targetUserId ? String(profile.nickname || '') : undefined,
+      limited: targetUserId ? false : undefined,
       // 点铅笔：先保存资料并关掉这一层，再打头像编辑抽屉。
       onEditAvatar: () => void openAvatarEditor(),
       onUpdate: updateField,

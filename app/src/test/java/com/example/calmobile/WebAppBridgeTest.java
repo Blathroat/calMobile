@@ -113,6 +113,61 @@ public class WebAppBridgeTest {
         assertEquals("已取消选择", received[1]);
     }
 
+    /**
+     * 首帧外观 JSON 是页面与原生之间的契约：字段名与 mode 的归一化结果固定。
+     * index.html 的内联脚本按 systemDark 决定 data-mode；字段名或类型一变，
+     * 页面会退回 matchMedia——在 Android WebView 里等于「跟随系统失效」。
+     */
+    @Test
+    public void serializesSystemAppearanceForFirstFrame() {
+        assertEquals("{\"systemDark\":true,\"mode\":\"auto\"}", WebAppBridge.appearanceJson("auto", true));
+        assertEquals("{\"systemDark\":false,\"mode\":\"light\"}", WebAppBridge.appearanceJson("light", false));
+        assertEquals("{\"systemDark\":true,\"mode\":\"dark\"}", WebAppBridge.appearanceJson("dark", true));
+        // 非法 / 缺失的 mode 一律归一化成 auto：JSON 里不能出现 null 或空串
+        assertEquals("{\"systemDark\":false,\"mode\":\"auto\"}", WebAppBridge.appearanceJson("乱填", false));
+        assertEquals("{\"systemDark\":false,\"mode\":\"auto\"}", WebAppBridge.appearanceJson(null, false));
+    }
+
+
+    /**
+     * 写回页面的脚本必须对任意回调 id 都保持一个合法表达式。
+     *
+     * 换行 / U+2028 / U+2029 在 JavaScript 里是行终止符：只转义反斜杠和单引号的话，
+     * 拼出来的脚本会变成语法错误，页面永远等不到回调（看起来就是「点了没反应」）。
+     */
+    @Test
+    public void quotesCallbackIdAsJavaScriptStringLiteral() {
+        assertEquals("'cb-7'", WebAppBridge.quote("cb-7"));
+        assertEquals("''", WebAppBridge.quote(null));
+        assertEquals("'a\\'b'", WebAppBridge.quote("a'b"));
+        assertEquals("'a\\\\b'", WebAppBridge.quote("a\\b"));
+
+        String[] tricky = { "a\nb", "a\rb", "a\u2028b", "a\u2029b", "a\u0001b" };
+        for (String value : tricky) {
+            String quoted = WebAppBridge.quote(value);
+            for (int index = 0; index < quoted.length(); index++) {
+                char current = quoted.charAt(index);
+                assertTrue("引号结果不能含裸控制字符", current >= 0x20 && current != 0x2028 && current != 0x2029);
+            }
+        }
+        assertTrue(WebAppBridge.quote("a\nb").contains("\\u000a"));
+        assertTrue(WebAppBridge.quote("a\u2028b").contains("\\u2028"));
+    }
+
+    /** 脚本的参数顺序就是前端 onResult(callbackId, ok, result, error, code) 的契约。 */
+    @Test
+    public void assemblesResultScriptInProtocolOrder() {
+        assertEquals(
+                "window.CalMobileBridge&&window.CalMobileBridge.onResult('cb-7',true,{\"supported\":true},'',null);",
+                WebAppBridge.resultScript("cb-7", true, "{\"supported\":true}", "''", "null"));
+        assertEquals(
+                "window.CalMobileBridge&&window.CalMobileBridge.onResult('cb-8',false,null,'已取消添加通行密钥','cancelled');",
+                WebAppBridge.resultScript("cb-8", false, "null", "'已取消添加通行密钥'", "'cancelled'"));
+        // 回调 id 里带单引号也不能提前闭合字符串字面量
+        String injected = WebAppBridge.resultScript("cb-');alert(1);//", true, "null", "''", "null");
+        assertTrue(injected.contains("onResult('cb-\\');alert(1);//'"));
+    }
+
     /** 错误码是前后端约定的字面量，改名会让前端的取消静默 / 回退分支失效，因此钉住。 */
     @Test
     public void errorCodeLiteralsStayFixed() {

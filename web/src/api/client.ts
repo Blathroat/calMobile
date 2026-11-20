@@ -126,8 +126,15 @@ export interface ApiClient {
     get(): Promise<JsonObject>;
     /** 保存资料；会同时失效 `profile` 与 `users.public`（资料会出现在公开主页）。 */
     save(payload: JsonObject): Promise<ApiResult>;
-    /** 上传裁剪后的头像字节。成功后服务端写入资料并返回新的用户对象。 */
-    uploadAvatar(bytes: Uint8Array, contentType: string): Promise<ApiResult>;
+    /**
+     * 上传裁剪后的头像字节。成功后服务端写入资料并返回新的用户对象。
+     * @param onUploadProgress 上传进度（0–100），用于图片位置上的进度遮罩。
+     */
+    uploadAvatar(
+      bytes: Uint8Array,
+      contentType: string,
+      onUploadProgress?: (percent: number) => void,
+    ): Promise<ApiResult>;
     /** 移除头像，并删掉服务器上的文件。 */
     removeAvatar(): Promise<ApiResult>;
     /** 已通过用途受限的身份复核票后修改密码；成功后服务端撤销全部会话。 */
@@ -151,7 +158,16 @@ export interface ApiClient {
   };
   /** 展会封面和简介媒体。字节上传后返回可写入正文的地址。 */
   media: {
-    upload(bytes: Uint8Array, contentType: string, kind: 'image' | 'video'): Promise<ApiResult>;
+    /**
+     * 上传封面 / 简介媒体字节。
+     * @param onUploadProgress 上传进度（0–100），用于图片位置上的进度遮罩。
+     */
+    upload(
+      bytes: Uint8Array,
+      contentType: string,
+      kind: 'image' | 'video',
+      onUploadProgress?: (percent: number) => void,
+    ): Promise<ApiResult>;
   };
   /** 安全设置：两步验证与邮箱变更。全部不走缓存（一次性凭据多，缓存无益且有风险）。 */
   security: {
@@ -265,6 +281,16 @@ export interface ApiClient {
     disableTwoFactor(id: Id): Promise<ApiResult>;
     /** 管理员代改指定用户的公开资料（昵称 / 简介 / 地区 / 社交账号等）。 */
     updateProfile(id: Id, payload: JsonObject): Promise<ApiResult>;
+    /**
+     * 管理员代改指定用户的头像（裁剪后的方图字节）：只写目标账号，不碰当前管理员会话。
+     * @param onUploadProgress 上传进度（0–100），用于头像位置上的进度遮罩。
+     */
+    uploadAvatar(
+      id: Id,
+      bytes: Uint8Array,
+      contentType: string,
+      onUploadProgress?: (percent: number) => void,
+    ): Promise<ApiResult>;
     /** 公开主页数据：按用户名/ID 查对外可见的信息。 */
     publicProfile(query: JsonObject): Promise<JsonObject>;
   };
@@ -471,13 +497,14 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
     profile: {
       get: () => read<JsonObject>('profile', '/profile'),
       save: (payload) => write<ApiResult>('/profile', { method: 'PUT', body: payload }, ['profile', 'users.public']),
-      uploadAvatar: (bytes, contentType) =>
+      uploadAvatar: (bytes, contentType, onUploadProgress) =>
         write<ApiResult>(
           '/profile/avatar',
           {
             method: 'POST',
             bytes,
             contentType,
+            onUploadProgress,
             timeoutMs: 20_000,
           },
           ['profile', 'users', 'search'],
@@ -499,11 +526,12 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
         ),
     },
     media: {
-      upload: (bytes, contentType, kind) =>
+      upload: (bytes, contentType, kind, onUploadProgress) =>
         write<ApiResult>('/media', {
           method: 'POST',
           bytes,
           contentType,
+          onUploadProgress,
           query: { kind },
           timeoutMs: kind === 'video' ? 60_000 : 20_000,
         }),
@@ -643,6 +671,18 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
           'users.public',
           'search',
         ]),
+      uploadAvatar: (id, bytes, contentType, onUploadProgress) =>
+        write<ApiResult>(
+          `/users/${encodeURIComponent(id)}/avatar`,
+          {
+            method: 'POST',
+            bytes,
+            contentType,
+            onUploadProgress,
+            timeoutMs: 20_000,
+          },
+          ['profile', 'users', 'users.public', 'search'],
+        ),
       publicProfile: (query) => read<JsonObject>('users.public', '/users/public', { query }),
     },
     // 搜索一次返回展会与用户两组结果，返回体是对象而不是数组。

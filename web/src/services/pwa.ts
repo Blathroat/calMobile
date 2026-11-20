@@ -1,9 +1,11 @@
 /**
- * PWA 的两件事：注册离线用的 Service Worker，以及记录 iOS「添加到主屏幕」提示关没关过。
+ * PWA 的两件事：注册离线用的 Service Worker，以及判断要不要给「安装到主屏幕」引导。
  *
- * **为什么 iOS 要单独一套提示**：iOS Safari 不支持 `beforeinstallprompt`，安装只能靠用户
- * 依次点「分享 → 添加到主屏幕」。页面只能自己给引导，并且要记住「别再显示了」——
- * 这个记录按设备存在 localStorage，换浏览器或清缓存后会重新出现，属于可接受的退化。
+ * **安装引导不再是 iOS 专属**：只要当前不是在主屏幕的独立窗口里打开，并且没有原生桥
+ * （不是 App 自带的 WebView），页面就在每次进入应用时提示一次「安装到主屏幕」。
+ * 这里**不记录「已关闭」**——关掉只影响当次，下次访问仍会提示，直到用户真的装到主屏幕
+ * （`isStandalonePwa()` 变真）或以后从原生 App 打开（有桥）。各平台的步骤差异在
+ * `components/PwaInstallSheet.vue` 里按 UA 分支。
  *
  * **Service Worker 只在浏览器构建里注册**：App 里页面由 WebView 从本机快照加载，Service Worker
  * 帮不上忙还可能留下旧缓存；报名站是一次性的报名表单，不需要装到桌面。开发服务器没有生成
@@ -13,40 +15,16 @@
  */
 import { isJoinSurface } from '@/app/surface';
 import { nativeBridge } from '@/services/native-bridge';
-import { isIos, isStandalonePwa } from './platform';
-
-/** iOS 安装提示「不再显示」的存储键。值只是存在标记，内容不重要。 */
-export const IOS_INSTALL_HINT_KEY = 'calmobile.iosInstallHint';
-
-/** 本机记下的「已关闭」标记。换值会让所有老用户重看一次提示，不要改。 */
-const DISMISSED_VALUE = '1';
+import { isStandalonePwa } from './platform';
 
 /**
- * 要不要给用户看 iOS 安装引导：是 iOS，并且当前不是从主屏幕启动的（即还没安装）。
- * 不看「关过没有」——那是调用点结合 `iosInstallHintDismissed()` 自己决定的展示时机。
+ * 要不要给用户看 PWA 安装引导：不是从主屏幕启动的独立窗口，也没有原生桥。
+ *
+ * 没有「本机关过没有」这一层：每次进入应用都重新给一次；用户装到主屏幕后
+ * `isStandalonePwa()` 变真，条件自然为假。
  */
-export function isIosInstallOffer(): boolean {
-  return isIos() && !isStandalonePwa();
-}
-
-/** 本机是否已经关过 iOS 安装提示。存储不可读（隐私模式）时当作没关过。 */
-export function iosInstallHintDismissed(): boolean {
-  try {
-    if (typeof localStorage === 'undefined') return false;
-    return localStorage.getItem(IOS_INSTALL_HINT_KEY) === DISMISSED_VALUE;
-  } catch {
-    return false;
-  }
-}
-
-/** 记下「不再显示 iOS 安装提示」。写失败只意味着下次还会出现，不往上抛。 */
-export function dismissIosInstallHint(): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(IOS_INSTALL_HINT_KEY, DISMISSED_VALUE);
-  } catch {
-    // 隐私模式或被禁用的存储：忽略。
-  }
+export function shouldOfferPwaInstall(): boolean {
+  return !isStandalonePwa() && !nativeBridge.hasNative();
 }
 
 /**

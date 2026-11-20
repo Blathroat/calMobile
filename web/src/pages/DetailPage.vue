@@ -15,6 +15,7 @@ import { tagRead, type CachedRead } from '@/services/query-cache';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 import { registrationLink } from '@/services/registration-link';
+import { canManageExhibition } from '@/services/exhibition-scope';
 import { device } from '@/services/device-services';
 import { addExhibitionToCalendar } from '@/services/calendar-ics';
 import { nativeBridge } from '@/services/native-bridge';
@@ -48,6 +49,16 @@ const exhibition = computed(() => query.data.value?.exhibition);
 const fields = computed<JsonObject[]>(() => query.data.value?.fields ?? []);
 const found = computed(() => query.data.value?.found !== false);
 const exhibitionId = computed(() => String(route.params.id ?? ''));
+/**
+ * 管理员与这场展会的创建者能在详情页直接进编辑。
+ *
+ * 只决定要不要摆入口；真正的写权限仍由服务端按归属再判一次，
+ * 与展商后台卡片上的「编辑」用的是同一个 `canManageExhibition()`。
+ */
+const canEditExhibition = computed(
+  // 报名站没有编辑页：只在完整应用（App / PWA）里给这个入口，不要在报名站点开一个空页。
+  () => !isJoinSurface && found.value && canManageExhibition(session.user, exhibition.value),
+);
 
 /** 我的报名列表（缓存键 `registrations`）。只有已登录时才请求；取不到就是空表。 */
 const registrations = ref<Registration[]>([]);
@@ -300,6 +311,12 @@ function openExhibitorHome(): void {
   else void router.push({ path: '/login', query: { redirect: target } });
 }
 
+/** 右上角铅笔：进入这场展会的编辑页（带 id 的现有展会编辑路由）。 */
+function editExhibition(): void {
+  if (!exhibitionId.value) return;
+  void router.push('/exhibition-form/' + encodeURIComponent(exhibitionId.value));
+}
+
 function share(): void {
   const item = exhibition.value;
   if (!item) return;
@@ -356,6 +373,17 @@ onMounted(() => {
 
 <template>
   <Teleport defer to="#app-top-actions">
+    <!-- 管理员 / 创建者才会看到：分享按钮左边一颗小铅笔，直接进编辑页 -->
+    <button
+      v-if="canEditExhibition"
+      class="icon-button"
+      type="button"
+      :aria-label="t('exhibition.detail.edit')"
+      :title="t('exhibition.detail.edit')"
+      @click="editExhibition"
+    >
+      <AppIcon name="edit" />
+    </button>
     <button
       class="icon-button"
       type="button"

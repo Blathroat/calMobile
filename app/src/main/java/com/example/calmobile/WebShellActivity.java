@@ -6,6 +6,7 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Insets;
 import android.net.Uri;
 import android.os.Build;
@@ -95,6 +96,8 @@ public class WebShellActivity extends Activity {
     private static final int BRIDGE_REQUEST_CODE_BASE = 6000;
 
     private WebView webView;
+    /** 包住 WebView 的容器：深色模式下要跟页面同色，否则页面切换 / 回弹会露出白底。 */
+    private FrameLayout container;
     private WebAppBridge bridge;
     /** 这次进程读的页面目录。null 表示用 APK 里的那份。进程内不替换。 */
     private File pageFiles;
@@ -118,7 +121,7 @@ public class WebShellActivity extends Activity {
         // API 30–34 仍要自己关掉「装饰避开系统栏」，否则内边距会再垫一层。
         drawBehindSystemBars();
 
-        FrameLayout container = new FrameLayout(this);
+        container = new FrameLayout(this);
         container.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         // 底色跟随外观模式，深色模式下不会在页面切换时闪出白底。
@@ -154,7 +157,8 @@ public class WebShellActivity extends Activity {
                 ? WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 : WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // 深色模式由前端令牌控制。setForceDark 在 targetSdk ≥ 33 已是空操作，
+            // 深色模式由前端令牌控制（系统深浅色经 {@link WebAppBridge#systemAppearance()}
+            // 与配置变化事件告诉页面）。setForceDark 在 targetSdk ≥ 33 已是空操作，
             // 这里关掉 WebView 的算法反色，避免系统把页面再涂一遍。
             settings.setAlgorithmicDarkeningAllowed(false);
         }
@@ -276,6 +280,60 @@ public class WebShellActivity extends Activity {
                 webView.loadUrl(BuildConfig.APP_PAGE_URL);
             }
         }
+    }
+
+    /**
+     * 外观变化后统一刷新原生侧：系统栏颜色、容器与 WebView 底色。
+     *
+     * 页面自己的令牌由前端负责；这里只管 WebView 之外看得见的几层，
+     * 否则「页面已经变深色、状态栏与容器还是浅色」会在切换时露出来。
+     */
+    void applyAppearance() {
+        AppSettings.applyWindowColors(this);
+        int surface = AppSettings.getScreenColor(this);
+        if (container != null) {
+            container.setBackgroundColor(surface);
+        }
+        if (webView != null) {
+            webView.setBackgroundColor(surface);
+        }
+    }
+
+    /**
+     * 把系统外观推给页面（{@code app/theme.ts} 的 {@code window.CalMobileWeb.appearance}）。
+     * 页面只在账号的 mode 为 auto 时跟随；显式 light / dark 由前端忽略。
+     */
+    private void notifyWebAppearance() {
+        if (webView == null) {
+            return;
+        }
+        webView.evaluateJavascript(
+                "window.CalMobileWeb&&window.CalMobileWeb.appearance&&"
+                        + "window.CalMobileWeb.appearance(" + WebAppBridge.systemAppearanceJson(this) + ");",
+                null);
+    }
+
+    /**
+     * 系统深浅色切换不会重建 Activity（manifest 的 {@code configChanges} 含 {@code uiMode}），
+     * 因此必须在这里重画系统栏与容器底色，并把新的系统外观推给页面。
+     * 不重载页面：页面只换令牌，滚动位置与表单状态都保留。
+     */
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyAppearance();
+        notifyWebAppearance();
+    }
+
+    /**
+     * 回到前台再兜一次外观：后台期间系统深浅色可能变了，而配置回调在恢复时不一定每次都到
+     * （进程被回收重建时页面也会自己重新读 {@code systemAppearance()}，两条路径结果一致）。
+     */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        applyAppearance();
+        notifyWebAppearance();
     }
 
     /** 正式包优先用对得上当前外壳的本机快照。调试包始终用刚打进 APK 的页面。 */

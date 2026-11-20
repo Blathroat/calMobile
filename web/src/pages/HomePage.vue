@@ -1,3 +1,19 @@
+<script lang="ts">
+/**
+ * 本次页面访问是否已经弹过 PWA 安装引导。
+ *
+ * 模块级标记：SPA 内在底部导航切走再切回首页会重新挂载页面，但模块不重建，所以同一次访问
+ * 只提示一次，不会来回盖抽屉；整页刷新 / 重新打开应用会重建模块，于是「每次访问提示一次」
+ * 成立。关闭抽屉不写任何本机存储，这个标记也只活到本次页面关闭。
+ */
+let installHintOfferedThisVisit = false;
+
+/** 测试用：重置「本次访问已提示」标记，等同于刷新页面后模块重建。 */
+export function resetInstallHintVisitForTests(): void {
+  installHintOfferedThisVisit = false;
+}
+</script>
+
 <script setup lang="ts">
 /**
  * 屏幕 02 · 首页（月视图 + 当天展会列表）
@@ -31,7 +47,7 @@ import { useAsync } from '@/composables/useAsync';
 import { useRevealReady } from '@/composables/useReveal';
 import { suppressPull, usePullRefresh } from '@/services/pull-refresh';
 import { resolveCalendarSwipe } from '@/services/calendar-swipe';
-import { dismissIosInstallHint, iosInstallHintDismissed, isIosInstallOffer } from '@/services/pwa';
+import { shouldOfferPwaInstall } from '@/services/pwa';
 import { openSheet, sheet } from '@/services/sheet';
 import type { CachedRead } from '@/services/query-cache';
 import { coverOf } from '@/services/cover';
@@ -167,7 +183,7 @@ function prefersReducedMotion(): boolean {
 let slideTimer: number | undefined;
 /** 回弹动画的兜底计时器：新一次拖动开始时要取消，免得它把正在拖的卡片复位。 */
 let snapTimer: number | undefined;
-/** iOS 安装引导的延迟计时器：离开首页时必须清掉，否则会在别的页面上弹。 */
+/** PWA 安装引导的延迟计时器：离开首页时必须清掉，否则会在别的页面上弹。 */
 let installHintTimer: number | undefined;
 /** 只约一次安装提示：`bootstrap.booted` 可能在挂载前就已经是 true。 */
 let installHintScheduled = false;
@@ -410,29 +426,39 @@ function announce(): void {
 }
 
 /**
- * iOS 安装引导：只在 Safari 且没有原生壳、用户还没关过时提示一次。
+ * PWA 安装引导：每次进入首页，启动数据落定后提示一次。
+ *
+ * 条件只看「不是独立 PWA、也没有原生桥」（见 `shouldOfferPwaInstall()`）：浏览器里每次访问
+ * 都提示，关掉不记任何状态；装到主屏幕或从原生 App 打开后条件自然为假。设置页里的入口
+ * 仍可随时打开同一份说明。
+ *
+ * **同一次访问只提示一次**：模块级 `installHintOfferedThisVisit` 在打开抽屉时置位，
+ * 底部导航切走再切回首页（页面重新挂载）不会反复弹；整页刷新后模块重建，才会再次提示。
  *
  * 延到首屏之后（600ms）再弹，别跟启动公告、首屏取数在同一帧抢注意力；
  * 页面在这段时间里被换掉时由 `onBeforeUnmount` 清掉定时器，不会在别的页面上弹出来。
- * 关掉就算看过（`dismissIosInstallHint`），设置页里的入口仍然可以再打开说明。
  */
 function scheduleInstallHint(): void {
+  // 本次访问已经提示过（例如从别的页面切回首页）：不再排定时器。
+  if (installHintOfferedThisVisit) return;
   // 等启动数据到齐再约：协议更新确认要在同一批数据落定后弹，先弹安装引导会把它挡掉。
-  // 只约一次；`bootstrap.booted` 从 false 变 true 时触发。
+  // 每次挂载只约一次；`bootstrap.booted` 从 false 变 true 时触发。
   if (installHintScheduled) return;
   installHintScheduled = true;
   installHintTimer = window.setTimeout(() => {
     installHintTimer = undefined;
-    if (!isIosInstallOffer() || iosInstallHintDismissed()) return;
+    // 定时器等待期间可能已经从别的页面切回来并提示过；同一次访问不再弹第二次。
+    if (installHintOfferedThisVisit) return;
+    if (!shouldOfferPwaInstall()) return;
     // 用户协议更新必须由用户做出选择，安装提示不能抢在它前面。
     if (agreementConsentPending()) return;
     // 别的面板已经开着（例如协议更新确认）时让用户先处理，不在它上面再盖一层。
     if (sheet.current) return;
+    installHintOfferedThisVisit = true;
     openSheet({
       title: t('pwa.install.title'),
       component: PwaInstallSheet,
       props: { mode: 'app' },
-      onClose: dismissIosInstallHint,
     });
   }, 600);
 }

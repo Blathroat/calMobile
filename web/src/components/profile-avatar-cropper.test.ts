@@ -1,8 +1,9 @@
 /**
- * 头像裁剪抽屉：系统选图之后由个人页 / 用户设置页常驻渲染，裁剪完直接上传。
+ * 头像裁剪抽屉：系统选图之后由个人页 / 用户设置页 / 用户公开页常驻渲染，裁剪完直接上传。
  *
  * `AvatarCropper` 是独立的全屏面板（依赖图片加载与手势），这里用桩替掉它，只验证
- * `ProfileAvatarCropper` 自己的状态、上传与失败处理；真实裁剪面板另有组件测试。
+ * `ProfileAvatarCropper` 自己的状态、上传（本人 / 管理员代改两条接口）、进度遮罩与失败处理；
+ * 真实裁剪面板另有组件测试。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, type App } from 'vue';
@@ -10,11 +11,11 @@ import { createPinia, setActivePinia } from 'pinia';
 import ProfileAvatarCropper from './ProfileAvatarCropper.vue';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
-import { closeAvatarCropper, openAvatarCropper } from '@/services/profile-avatar';
+import { avatarCropper, closeAvatarCropper, openAvatarCropper } from '@/services/profile-avatar';
 import { toast } from '@/services/toast';
 
 vi.mock('@/app/runtime', () => ({
-  api: { profile: { uploadAvatar: vi.fn() } },
+  api: { profile: { uploadAvatar: vi.fn() }, users: { uploadAvatar: vi.fn() } },
 }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 /** 裁剪面板的桩：点按钮分别发 done / close / error，done 带一张可解析的小 data URL。 */
@@ -46,6 +47,7 @@ vi.mock('@/components/AvatarCropper.vue', async () => {
 });
 
 const PROFILE = { id: 'u1', nickname: '旧昵称', avatar: '/avatar.jpg' };
+const TARGET = { id: 'u2', nickname: '目标用户', avatar: '/target-old.jpg' };
 let app: App | undefined;
 
 beforeEach(() => {
@@ -53,6 +55,7 @@ beforeEach(() => {
   document.body.innerHTML = '<div id="avatar-crop-test"></div>';
   closeAvatarCropper();
   vi.mocked(api.profile.uploadAvatar).mockResolvedValue({ ok: true, user: { ...PROFILE, avatar: '/new.jpg' } });
+  vi.mocked(api.users.uploadAvatar).mockResolvedValue({ ok: true, user: { ...TARGET, avatar: '/target-new.jpg' } });
 });
 
 afterEach(() => {
@@ -85,9 +88,10 @@ describe('头像裁剪抽屉', () => {
     document.querySelector<HTMLButtonElement>('#crop-close')!.click();
     await nextTick();
     expect(document.querySelector('.crop-stub')).toBeNull();
+    expect(avatarCropper.source).toBe('');
   });
 
-  it('裁剪完成直接上传：刷新会话、通知调用方并收起面板', async () => {
+  it('本人裁剪完成直接上传：刷新会话、通知调用方并收起进度遮罩', async () => {
     const onUpdated = vi.fn();
     mount();
     openAvatarCropper('data:image/jpeg;base64,BBBB', onUpdated);
@@ -95,13 +99,58 @@ describe('头像裁剪抽屉', () => {
 
     document.querySelector<HTMLButtonElement>('#crop-done')!.click();
     await vi.waitFor(() => expect(api.profile.uploadAvatar).toHaveBeenCalledTimes(1));
-    const [bytes, contentType] = vi.mocked(api.profile.uploadAvatar).mock.calls[0]!;
+    const [bytes, contentType, onProgress] = vi.mocked(api.profile.uploadAvatar).mock.calls[0]!;
     expect(bytes).toBeInstanceOf(Uint8Array);
     expect(contentType).toBe('image/jpeg');
+    expect(onProgress).toBeTypeOf('function');
     await vi.waitFor(() => expect(toast).toHaveBeenCalledWith('头像已更新', 'success'));
     expect(onUpdated).toHaveBeenCalledWith(expect.objectContaining({ avatar: '/new.jpg' }));
     expect(useSessionStore().user.avatar).toBe('/new.jpg');
-    expect(document.querySelector('.crop-stub')).toBeNull();
+    // 遮罩 100% 停留后收起，裁剪面板随之卸载。
+    await vi.waitFor(() => expect(document.querySelector('.crop-stub')).toBeNull(), { timeout: 1500 });
+    expect(document.querySelector('[data-avatar-uploading]')).toBeNull();
+    expect(avatarCropper.source).toBe('');
+  });
+
+  it('管理员代改头像走用户管理接口：只回调目标账号，当前管理员会话不动', async () => {
+    const onUpdated = vi.fn();
+    mount();
+    openAvatarCropper('data:image/jpeg;base64,BBBB', onUpdated, 'u2');
+    await nextTick();
+
+    document.querySelector<HTMLButtonElement>('#crop-done')!.click();
+    await vi.waitFor(() => expect(api.users.uploadAvatar).toHaveBeenCalledTimes(1));
+    const [targetId, bytes, contentType] = vi.mocked(api.users.uploadAvatar).mock.calls[0]!;
+    expect(targetId).toBe('u2');
+    expect(bytes).toBeInstanceOf(Uint8Array);
+    expect(contentType).toBe('image/jpeg');
+    expect(api.profile.uploadAvatar).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(toast).toHaveBeenCalledWith('头像已更新', 'success'));
+    expect(onUpdated).toHaveBeenCalledWith(expect.objectContaining({ id: 'u2', avatar: '/target-new.jpg' }));
+    // 管理员自己的头像与会话完全不变。
+    expect(useSessionStore().user.avatar).toBe('/avatar.jpg');
+    await vi.waitFor(() => expect(document.querySelector('.crop-stub')).toBeNull(), { timeout: 1500 });
+  });
+
+  it('上传期间显示百分比遮罩，100% 停留后才卸载', async () => {
+    let release!: (value: unknown) => void;
+    vi.mocked(api.users.uploadAvatar).mockImplementation((_id, _bytes, _contentType, onProgress) => {
+      onProgress?.(42);
+      return new Promise((resolve) => {
+        release = resolve as (value: unknown) => void;
+      }) as never;
+    });
+    mount();
+    openAvatarCropper('data:image/jpeg;base64,BBBB', vi.fn(), 'u2');
+    await nextTick();
+    document.querySelector<HTMLButtonElement>('#crop-done')!.click();
+
+    // 上传还没结束时遮罩在页面上，并按服务端进度显示百分比。
+    await vi.waitFor(() => expect(document.querySelector('[data-avatar-uploading]')?.textContent).toContain('42%'));
+    expect(document.querySelector('[data-avatar-uploading]')?.textContent).toContain('上传中 42%');
+    release({ ok: true, user: { ...TARGET, avatar: '/target-new.jpg' } });
+    await vi.waitFor(() => expect(document.querySelector('[data-avatar-uploading]')).toBeNull(), { timeout: 1500 });
+    expect(avatarCropper.source).toBe('');
   });
 
   it('裁剪结果认不出时不发请求，只提示并收起面板', async () => {
@@ -112,6 +161,7 @@ describe('头像裁剪抽屉', () => {
     document.querySelector<HTMLButtonElement>('#crop-done')!.click();
     await vi.waitFor(() => expect(toast).toHaveBeenCalledWith('未能读取所选图片', 'error'));
     expect(api.profile.uploadAvatar).not.toHaveBeenCalled();
+    expect(api.users.uploadAvatar).not.toHaveBeenCalled();
     expect(document.querySelector('.crop-stub')).toBeNull();
   });
 
@@ -126,6 +176,7 @@ describe('头像裁剪抽屉', () => {
     expect(onUpdated).not.toHaveBeenCalled();
     expect(useSessionStore().user.avatar).toBe('/avatar.jpg');
     expect(document.querySelector('.crop-stub')).toBeNull();
+    expect(document.querySelector('[data-avatar-uploading]')).toBeNull();
   });
 
   it('裁剪面板报错只做轻提示，面板留在原地让用户重试', async () => {

@@ -1,7 +1,8 @@
 /**
- * 报名站的下载条：iOS 没有 APK 也要出现，点了打开安装说明；其它平台保持原来的下载行为。
+ * 报名站的下载 / 安装入口：放在页面顶栏右侧，不再单独占一条横幅。
  *
- * 外壳同时挂 `AppSheet`，所以点「查看安装方法」之后能直接看到抽屉内容。
+ * iOS 没有 APK 也出现，点了打开安装说明；其它平台只有管理员配了下载地址才出现，
+ * 点击交给系统浏览器下载。外壳同时挂 `AppSheet`，所以点「查看安装方法」后能看到抽屉内容。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, type App } from 'vue';
@@ -25,6 +26,8 @@ vi.mock('@/app/surface', async (importOriginal) => {
 vi.mock('@/services/platform', () => ({
   isIos: vi.fn(() => false),
   isIosSafari: vi.fn(() => true),
+  isAndroid: vi.fn(() => false),
+  isInAppBrowser: vi.fn(() => false),
   isStandalonePwa: vi.fn(() => false),
 }));
 
@@ -59,23 +62,22 @@ async function mountShell(ios: boolean, downloadUrl = ''): Promise<HTMLElement> 
   return document.getElementById('app-shell-test') as HTMLElement;
 }
 
-function barButton(container: HTMLElement, label: string): HTMLButtonElement | undefined {
-  return [...container.querySelectorAll<HTMLButtonElement>('.join-download button')].find(
-    (item) => item.textContent?.trim() === label,
+/** 顶栏右侧的图标按钮：下载 / 安装入口与页面级动作共用 `.icon-button`。 */
+function topButton(container: HTMLElement, label: string): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll<HTMLButtonElement>('.topbar .icon-button')].find(
+    (item) => item.getAttribute('aria-label') === label,
   );
 }
 
-describe('报名站下载条：iOS 换成安装引导', () => {
-  it('iOS 即使没有下载地址也显示安装条，点击打开安装说明而不是去下载 APK', async () => {
+describe('报名站下载入口：放在顶栏右侧', () => {
+  it('iOS 即使没有下载地址也出现，点击打开安装说明而不是去下载 APK', async () => {
     const container = await mountShell(true);
-    const bar = container.querySelector('.join-download');
-    expect(bar).not.toBeNull();
-    expect(bar?.textContent).toContain('在 iPhone 上使用完整应用');
-    // 版本号只说 Android 安装包，iOS 上不显示
-    expect(container.querySelector('.join-download-version')).toBeNull();
+    // 不再有独立的下载横幅，避免和页面顶栏叠成两层。
+    expect(container.querySelector('.join-download')).toBeNull();
+    expect(container.querySelectorAll('.topbar')).toHaveLength(1);
 
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
-    barButton(container, '查看安装方法')!.click();
+    topButton(container, '查看安装方法')!.click();
     await nextTick();
     const panel = document.querySelector('.sheet-panel');
     expect(sheet.current?.title).toBe('安装到主屏幕');
@@ -85,19 +87,15 @@ describe('报名站下载条：iOS 换成安装引导', () => {
     expect(panel?.textContent).toContain('打开完整应用');
   });
 
-  it('Android / 其它平台保持原样：有地址才出现，按钮走系统浏览器下载', async () => {
+  it('Android / 其它平台：有地址才出现，按钮走系统浏览器下载', async () => {
     const container = await mountShell(false, 'https://download.example.com/app.apk');
-    const bar = container.querySelector('.join-download');
-    expect(bar?.textContent).toContain('在应用里用更顺手');
-    expect(container.querySelector('.join-download-version')?.textContent).toBe('9.9.9');
-
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
-    barButton(container, '下载应用')!.click();
+    topButton(container, '下载应用')!.click();
     expect(open).toHaveBeenCalledWith('https://download.example.com/app.apk', '_blank', 'noopener');
   });
 
-  it('非 iOS 且没有下载地址时不显示下载条', async () => {
+  it('非 iOS 且没有下载地址时不显示下载入口', async () => {
     const container = await mountShell(false);
-    expect(container.querySelector('.join-download')).toBeNull();
+    expect(topButton(container, '下载应用')).toBeUndefined();
   });
 });
