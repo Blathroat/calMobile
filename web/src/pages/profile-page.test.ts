@@ -7,7 +7,7 @@ import AppSheet from '@/components/AppSheet.vue';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
 import { openProfileEditor } from '@/services/profile-editor';
-import { closeAvatarCropper } from '@/services/profile-avatar';
+import { avatarCropper, closeAvatarCropper } from '@/services/profile-avatar';
 import { device } from '@/services/device-services';
 import { closeSheet, sheet } from '@/services/sheet';
 import { toast } from '@/services/toast';
@@ -16,6 +16,7 @@ vi.mock('@/app/runtime', () => ({
   bootApp: async () => undefined,
   api: {
     profile: { get: vi.fn(), save: vi.fn(), uploadAvatar: vi.fn(), removeAvatar: vi.fn() },
+    users: { updateProfile: vi.fn(), uploadAvatar: vi.fn() },
     auth: { logout: vi.fn() },
     registrations: { list: vi.fn() },
   },
@@ -49,6 +50,11 @@ beforeEach(async () => {
   closeAvatarCropper();
   vi.mocked(api.profile.get).mockResolvedValue(PROFILE);
   vi.mocked(api.profile.save).mockResolvedValue({ ok: true, user: { ...PROFILE, region: '杭州' } });
+  vi.mocked(api.users.updateProfile).mockResolvedValue({
+    ok: true,
+    profile: { id: 'u2', nickname: '别人', bio: '', region: '', socialMedia: '', avatar: '/someone.jpg' },
+  });
+  vi.mocked(api.users.uploadAvatar).mockResolvedValue({ ok: true, user: { id: 'u2', avatar: '/someone-new.jpg' } });
   vi.mocked(api.registrations.list).mockResolvedValue([]);
   vi.mocked(device.pickImage).mockResolvedValue({ dataUrl: 'data:image/jpeg;base64,BBBB' });
 });
@@ -224,12 +230,41 @@ describe('个人页资料展示与编辑', () => {
     expect(document.body.textContent).not.toContain('裁剪头像');
   });
 
-  it('管理员代改别人资料时不显示头像块', async () => {
+  it('管理员代改别人资料时头像块显示目标用户头像，不是管理员自己的', async () => {
     await mountProfile();
-    openProfileEditor({ id: 'u2', nickname: '别人' }, { targetUserId: 'u2' });
+    openProfileEditor({ id: 'u2', nickname: '别人', avatar: '/someone.jpg' }, { targetUserId: 'u2' });
     await nextTick();
-    expect(document.querySelector('.sheet-panel [data-avatar-field]')).toBeNull();
+    const avatarField = document.querySelector<HTMLElement>('.sheet-panel [data-avatar-field]');
+    expect(avatarField).not.toBeNull();
+    // 预览用目标用户的头像；管理员会话里的 /avatar.jpg 不能出现在抽屉里。
+    const image = avatarField?.querySelector<HTMLImageElement>('.avatar img');
+    expect(image?.getAttribute('src')).toContain('/someone.jpg');
+    expect(image?.getAttribute('src')).not.toContain('/avatar.jpg');
+    expect(avatarField?.querySelector('[data-avatar-edit]')?.getAttribute('aria-label')).toBe('编辑头像');
     expect(document.querySelector<HTMLInputElement>('.sheet-panel #settings-nickname')?.value).toBe('别人');
+  });
+
+  it('管理员代改时点铅笔：先走管理员保存接口，成功后关抽屉并拉起选图与裁剪', async () => {
+    const onSaved = vi.fn();
+    await mountProfile();
+    openProfileEditor({ id: 'u2', nickname: '别人', avatar: '/someone.jpg' }, { targetUserId: 'u2', onSaved });
+    await nextTick();
+    document.querySelector<HTMLButtonElement>('.sheet-panel [data-avatar-edit]')!.click();
+    // 保存走 PUT /users/:id/profile，不能用本人接口，也不能用管理员自己的头像覆盖目标。
+    await vi.waitFor(() => expect(api.users.updateProfile).toHaveBeenCalledTimes(1), { timeout: 1000 });
+    const [targetId, payload] = vi.mocked(api.users.updateProfile).mock.calls[0]!;
+    expect(targetId).toBe('u2');
+    expect(payload).toEqual(expect.objectContaining({ nickname: '别人', avatar: '/someone.jpg' }));
+    expect(api.profile.save).not.toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    // 保存成功后资料抽屉退场，随后直接拉起系统选图、弹出裁剪抽屉（上传接口由裁剪层选择）。
+    await vi.waitFor(() => expect(sheet.current?.closing).toBe(true), { timeout: 1000 });
+    await vi.waitFor(() => expect(device.pickImage).toHaveBeenCalledTimes(1), { timeout: 1000 });
+    await vi.waitFor(() => expect(document.body.textContent).toContain('裁剪头像'), { timeout: 1000 });
+    // 裁剪抽屉带着目标账号打开：上传会走 POST /users/:id/avatar。
+    expect(avatarCropper.targetUserId).toBe('u2');
+    // 管理员自己的头像没有被改。
+    expect(useSessionStore().user.avatar).toBe('/avatar.jpg');
   });
 
   it('地区为空时公开资料卡显示未填写', async () => {

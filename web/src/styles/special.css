@@ -132,17 +132,17 @@
 
 @media (hover: hover) {
   .cta:hover {
-    background: var(--accent-ink);
+    background: var(--accent-hover);
   }
 
   .cta.ghost:hover {
     border-color: var(--accent);
     background: var(--accent);
-    color: var(--on-dark);
+    color: var(--on-accent);
   }
 
   .cta.danger:hover {
-    background: #8c2f22;
+    background: var(--danger-hover);
   }
 
   .icon-button:hover {
@@ -176,13 +176,13 @@
   .seg button:not([aria-pressed='true']):hover {
     border-color: var(--accent);
     background: var(--accent);
-    color: var(--on-dark);
+    color: var(--on-accent);
   }
 
   .seg button[aria-pressed='true']:hover {
     background: transparent;
     border-color: transparent;
-    color: var(--on-dark);
+    color: var(--on-accent);
   }
 
   .text-action:hover,
@@ -191,13 +191,13 @@
   }
 
   .round-action:hover {
-    background: var(--accent-ink);
+    background: var(--accent-hover);
   }
 
   .round-action[data-variant='ghost']:hover {
     border-color: var(--accent);
     background: var(--accent);
-    color: var(--on-dark);
+    color: var(--on-accent);
   }
 }
 

@@ -8,6 +8,7 @@
  */
 import AppIcon from '@/components/AppIcon.vue';
 import SegControl from '@/components/SegControl.vue';
+import UploadProgressMask from '@/components/upload-progress-mask.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import { computed, ref, type Ref } from 'vue';
@@ -82,6 +83,8 @@ const props = defineProps<{
   settingsError: string;
   settingsSaving: boolean;
   coverBusy: boolean;
+  /** 缺省封面上传进度（0–100）；null 表示没有上传在跑。 */
+  coverProgress: number | null;
   canEditSettings: boolean;
   storageFull: boolean;
   storagePercent: number;
@@ -119,6 +122,8 @@ const emit = defineEmits<{
   retry: [];
   save: [];
   'pick-cover': [];
+  /** 100% 停留结束，父组件据此清掉进度、卸载遮罩。 */
+  'cover-settled': [];
   generate: [];
   revoke: [id: string];
   copy: [code: string];
@@ -427,10 +432,15 @@ function clearAgreementContent(): void {
     <div class="card">
       <span class="section-label">{{ copy.coverTitle }}</span>
       <div class="cover-row">
-        <div v-if="form.defaultCover" class="cover-frame ph-img">
-          <img :src="form.defaultCover" :alt="copy.coverTitle" />
+        <!-- 预览槽位始终在：上传期间盖进度遮罩，失败 / 取消随进度清空一起撤掉。 -->
+        <div class="cover-frame ph-img">
+          <img v-if="form.defaultCover" :src="form.defaultCover" :alt="copy.coverTitle" />
+          <UploadProgressMask
+            v-if="coverProgress !== null"
+            :progress="coverProgress"
+            @settled="emit('cover-settled')"
+          />
         </div>
-        <div v-else class="cover-frame ph-img" aria-hidden="true" />
         <div class="cover-side">
           <button
             class="cta ghost"
@@ -447,6 +457,7 @@ function clearAgreementContent(): void {
             class="cta ghost"
             data-size="small"
             type="button"
+            :disabled="coverBusy"
             @click="form.defaultCover = ''"
           >
             {{ t('admin.media.removeCover') }}

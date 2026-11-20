@@ -6,12 +6,19 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import org.junit.Assume;
 import org.junit.Test;
 
 /**
@@ -90,5 +97,38 @@ public class ShellCapabilitiesTest {
     @Test
     public void actionsListIsReadOnly() {
         assertThrows(UnsupportedOperationException.class, () -> ShellCapabilities.actions().add("app.fake"));
+    }
+
+    /**
+     * 能力清单与 {@code WebAppActions.handle} 的 switch 是同一份契约的两半，必须一一对应：
+     * 清单多了，页面会以为能动用原生、调用时才发现动作不存在；清单少了，页面会白走浏览器实现。
+     *
+     * 这里直接读源码里的 {@code case "..."} 标签做双向核对（纯 JVM，不启动 Android）。
+     * 在常规单元测试工作目录（app/）下能读到；读不到时跳过，不让环境差异变成红灯。
+     */
+    @Test
+    public void capabilityListMatchesActionSwitch() throws Exception {
+        File source = findSource("src/main/java/com/example/calmobile/WebAppActions.java");
+        Assume.assumeTrue("找不到 WebAppActions.java 源码，跳过 switch 核对", source != null);
+        String text = new String(Files.readAllBytes(source.toPath()), StandardCharsets.UTF_8);
+        List<String> declared = new ArrayList<>();
+        Matcher matcher = Pattern.compile("case \"([a-zA-Z.]+)\":").matcher(text);
+        while (matcher.find()) {
+            declared.add(matcher.group(1));
+        }
+        assertFalse("switch 里一个动作都没读到，源码格式可能变了", declared.isEmpty());
+        assertEquals("能力清单必须与 WebAppActions.handle 的 switch 一一对应",
+                new TreeSet<>(ShellCapabilities.actions()), new TreeSet<>(declared));
+    }
+
+    /** 在几个可能的工作目录下找源码：Gradle 单测默认在模块目录（app/），也兼容从仓库根跑。 */
+    private static File findSource(String relative) {
+        for (String root : new String[] { ".", "..", "../app" }) {
+            File file = new File(root, relative);
+            if (file.isFile()) {
+                return file;
+            }
+        }
+        return null;
     }
 }

@@ -38,7 +38,7 @@
   padding: 0 var(--s4);
   border-radius: var(--r-input);
   background: var(--accent);
-  color: var(--on-dark);
+  color: var(--on-accent);
   font-size: var(--fs-body);
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -82,7 +82,7 @@
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
-  color: var(--on-dark);
+  color: var(--on-accent);
   animation: spin 0.7s linear infinite;
 }
 
@@ -107,7 +107,7 @@
   padding: 0;
   border-radius: var(--r-pill);
   background: var(--accent);
-  color: var(--on-dark);
+  color: var(--on-accent);
   font-size: 0;
   box-shadow: var(--shadow-float);
 }
@@ -310,7 +310,7 @@
   padding: 0 var(--s4);
   border-radius: var(--r-input);
   background: var(--accent);
-  color: var(--on-dark);
+  color: var(--on-accent);
   font-size: var(--fs-body);
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -354,7 +354,7 @@
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
-  color: var(--on-dark);
+  color: var(--on-accent);
   animation: spin 0.7s linear infinite;
 }
 
@@ -379,7 +379,7 @@
   padding: 0;
   border-radius: var(--r-pill);
   background: var(--accent);
-  color: var(--on-dark);
+  color: var(--on-accent);
   font-size: 0;
   box-shadow: var(--shadow-float);
 }
@@ -489,7 +489,7 @@
   padding: 0 var(--s4);
   border-radius: var(--r-input);
   background: var(--accent);
-  color: var(--on-dark);
+  color: var(--on-accent);
   font-size: var(--fs-body);
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -533,7 +533,7 @@
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
-  color: var(--on-dark);
+  color: var(--on-accent);
   animation: spin 0.7s linear infinite;
 }
 
@@ -558,7 +558,7 @@
   padding: 0;
   border-radius: var(--r-pill);
   background: var(--accent);
-  color: var(--on-dark);
+  color: var(--on-accent);
   font-size: 0;
   box-shadow: var(--shadow-float);
 }
@@ -823,7 +823,7 @@
 
 .seg button[aria-pressed='true'] {
   background: transparent;
-  color: var(--on-dark);
+  color: var(--on-accent);
   border-color: transparent;
 }
 

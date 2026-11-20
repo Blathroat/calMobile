@@ -24,6 +24,9 @@
        运行时会用强调色与页面底色混出同样的结果，令牌值只作为首帧回退。 */
   --accent-tint: #ffffff; /* 强调色浅底 = 页面底色 */
   --accent-edge: #e0a97f; /* 强调色描边 */
+  /* 主按钮悬浮底色：比强调色深一档，白字仍然可读。运行时按实际强调色重算；
+     深色下 --accent-ink 已经往白混，不能再拿它当悬浮底（白字会压在浅色上）。 */
+  --accent-hover: #2f515b;
   --frame: #252a31; /* 深石墨，按钮悬浮 */
   --dark: #48515d; /* 主按钮与选中态 */
   --ok: #e4efe8; /* 成功底色 */
@@ -32,6 +35,9 @@
   --warn-tint: #f6eedd;
   --danger-ink: #a33a2a; /* 已拒绝文字 */
   --danger-tint: #f7e6e2;
+  /* 危险按钮悬浮底色：与强调色无关，但深浅两套主题要各自取一档（深色下压暗后仍是浅底，
+     深色的文字 --screen 才读得清）。 */
+  --danger-hover: #8c2f22;
   /* 表单校验失败专用：比 --danger-tint 更浅更柔和的暖底，配同档暖红描边。
      只给 .field[data-invalid] 的输入框用；提示条、状态标签与危险按钮仍用 --danger-tint。 */
   --danger-wash: #fcf0ea;
@@ -90,7 +96,12 @@
   --toast-bg: rgba(37, 42, 49, 0.94);
   --toast-ok: rgba(36, 93, 60, 0.96);
   --toast-error: rgba(163, 58, 42, 0.96);
-  --on-dark: #ffffff; /* 深色底上的文字 */
+  --on-dark: #ffffff; /* 底色反转的浮层（轻提示、--dark 选中态）上的文字 */
+  /* 强调色底上的文字：浅色 / 深色都用白色（强调色在两套主题里都是深底）。
+     以前借用 --on-dark，深色模式下它变成近黑，压在强调色按钮上几乎读不出来。 */
+  --on-accent: #ffffff;
+  /* 始终深色的底（灯箱、媒体遮罩）上的文字与图标：两套主题都用白色。 */
+  --on-media: #ffffff;
   /* 配色色板上的选中对勾：色板里的强调色都是深底，固定用白色，不随明暗模式反转 */
   --swatch-mark: #ffffff;
   --shadow-card: 0 1px 2px rgba(31, 35, 40, 0.04);
@@ -102,8 +113,10 @@
 
 /* ============================================================================
  * 深色模式：同一套令牌换一组取值，页面与组件不写死颜色，因此无需逐页适配。
- * 偏好保存在本机（个人页「深色模式」开关），也可跟随系统；data-mode 由
- * 桥接层写入 <html>，首帧由 index.html 的内联脚本先落一次，避免闪白。
+ * 明暗的权威信号是 <html data-mode>（light / dark，**始终有值**）：首帧由 index.html
+ * 的内联脚本落一次（跟随系统时先问原生壳的同步接口，浏览器退回 matchMedia），
+ * 之后由 app/theme.ts 与原生外观事件维护。下面的 @media 只在拿不到脚本信号时兜底
+ * （报名站首帧 / 脚本被禁用），页面不依赖 WebView 的 prefers-color-scheme。
  * ==========================================================================*/
 
 @media (prefers-color-scheme: dark) {
@@ -119,7 +132,11 @@
     --f3: #1e2229;
     --stroke: #363c45;
     --accent-tint: #171a1f;
-    --accent-edge: #8a4a22;
+    /* 首帧回退值，运行时由 applyTheme 按实际强调色重算：默认强调色 #41707E
+       往白混到 ≥4.5:1（文字）与 ≥3:1（描边），而不是往页面底色混（那会越混越暗）。 */
+    --accent-ink: #618894;
+    --accent-edge: #58818d;
+    --accent-hover: #345a65;
     --frame: #e7e9ec;
     --dark: #8e9aa8;
     --ok: #1b2b22;
@@ -128,6 +145,7 @@
     --warn-tint: #2a2318;
     --danger-ink: #e08a78;
     --danger-tint: #2c1d1a;
+    --danger-hover: #b87162; /* 深色下按钮文字是 --screen（近黑），悬浮底压暗一档仍保持 4.6:1 */
     /* 深色下不用深酒色：校验失败用一档更浅的暖底，描边比文字暗一级。 */
     --danger-wash: #3d2822;
     --danger-edge: #b57c6c;
@@ -135,9 +153,11 @@
     --info-tint: #17242b;
     --scrim: rgba(0, 0, 0, 0.6);
     --toast-bg: rgba(238, 240, 243, 0.94);
-    --toast-ok: rgba(62, 132, 87, 0.96);
+    --toast-ok: rgba(48, 112, 74, 0.96); /* 白字 5.9:1；比原来深一档，12px 提示才读得清 */
     --toast-error: rgba(163, 58, 42, 0.96);
-    --on-dark: #12151a;
+    --on-dark: #12151a; /* 浮层在深色模式变浅，文字跟着反转为近黑 */
+    --on-accent: #ffffff;
+    --on-media: #ffffff;
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-float: 0 12px 28px rgba(0, 0, 0, 0.55);
     --shadow-panel: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -159,7 +179,11 @@
   --f3: #1e2229;
   --stroke: #363c45;
   --accent-tint: #171a1f;
-  --accent-edge: #8a4a22;
+  /* 首帧回退值，运行时由 applyTheme 按实际强调色重算：默认强调色 #41707E
+     往白混到 ≥4.5:1（文字）与 ≥3:1（描边），而不是往页面底色混（那会越混越暗）。 */
+  --accent-ink: #618894;
+  --accent-edge: #58818d;
+  --accent-hover: #345a65;
   --frame: #e7e9ec;
   --dark: #8e9aa8;
   --ok: #1b2b22;
@@ -168,6 +192,7 @@
   --warn-tint: #2a2318;
   --danger-ink: #e08a78;
   --danger-tint: #2c1d1a;
+  --danger-hover: #b87162; /* 深色下按钮文字是 --screen（近黑），悬浮底压暗一档仍保持 4.6:1 */
   /* 深色下不用深酒色：校验失败用一档更浅的暖底，描边比文字暗一级。 */
   --danger-wash: #3d2822;
   --danger-edge: #b57c6c;
@@ -175,9 +200,11 @@
   --info-tint: #17242b;
   --scrim: rgba(0, 0, 0, 0.6);
   --toast-bg: rgba(238, 240, 243, 0.94);
-  --toast-ok: rgba(62, 132, 87, 0.96);
+  --toast-ok: rgba(48, 112, 74, 0.96); /* 白字 5.9:1；比原来深一档，12px 提示才读得清 */
   --toast-error: rgba(163, 58, 42, 0.96);
-  --on-dark: #12151a;
+  --on-dark: #12151a; /* 浮层在深色模式变浅，文字跟着反转为近黑 */
+  --on-accent: #ffffff;
+  --on-media: #ffffff;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-float: 0 12px 28px rgba(0, 0, 0, 0.55);
   --shadow-panel: 0 4px 12px rgba(0, 0, 0, 0.5);

@@ -20,6 +20,7 @@ import { toast } from '@/services/toast';
 import AppIcon from '@/components/AppIcon.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import MediaBox from '@/components/MediaBox.vue';
+import ProfileAvatarCropper from '@/components/ProfileAvatarCropper.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
@@ -306,6 +307,9 @@ usePullRefresh(
       </p>
     </section>
   </template>
+
+  <!-- 头像裁剪抽屉：管理员在资料抽屉里点铅笔后，保存资料、关抽屉、拉起系统选图，选到图由这里渲染 -->
+  <ProfileAvatarCropper />
 </template>
 
 <style>

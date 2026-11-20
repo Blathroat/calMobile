@@ -410,6 +410,8 @@
     "bridgeReleased": "原生桥接已释放",
     "featureUnavailable": "当前环境不支持这个操作，请改用页面上的其它入口",
     "noBridge": "当前环境不支持这个操作，请改用页面上的其它入口",
+    "passkeyBroken": "通行密钥数据不完整，请重新发起一次",
+    "passkeyShellOutdated": "当前应用版本太旧，不支持通行密钥；更新应用后再试",
     "shareUnavailable": "当前环境不支持分享，请手动复制内容"
   },
   "exhibition": {
@@ -678,6 +680,7 @@
     "missingVideo": "没有读到视频",
     "pinchZoom": "双指捏合缩放",
     "unreadableFile": "读不到刚选择的文件",
+    "uploadingPercent": "上传中 {percent}%",
     "usePhoto": "使用这张"
   },
   "pwa": {
@@ -1107,6 +1110,7 @@
       "removed": "已删除通行密钥",
       "unsupported": "当前环境不支持通行密钥，请在系统浏览器或支持通行密钥的设备上添加。",
       "failed": "通行密钥验证没有通过，请重试。",
+      "addFailed": "添加通行密钥没有完成，请重试。",
       "createdAt": "添加于 {time}",
       "lastUsed": "最近使用：{time}",
       "neverUsed": "还没有使用过",

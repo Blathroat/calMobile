@@ -12,7 +12,7 @@ import { useSessionStore } from '@/stores/session';
 import { sheet, closeSheet } from '@/services/sheet';
 
 vi.mock('@/app/runtime', () => ({
-  api: { users: { publicProfile: vi.fn(), updateProfile: vi.fn() } },
+  api: { users: { publicProfile: vi.fn(), updateProfile: vi.fn(), uploadAvatar: vi.fn() } },
 }));
 
 const PROFILE = {
@@ -24,6 +24,7 @@ const PROFILE = {
   bio: '简介',
   region: '上海',
   socialMedia: '@user',
+  avatar: '/public.jpg',
   showRegistrations: false,
   attendedCount: 3,
   registrations: [],
@@ -82,6 +83,11 @@ describe('用户公开页身份卡', () => {
     const form = sheet.current?.props.form as { nickname: string; bio: string } | undefined;
     expect(form?.nickname).toBe('user');
     expect(form?.bio).toBe('简介');
+    // 头像块也渲染，并且预览的是目标用户的公开头像；目标是否受限不影响管理员操作。
+    expect(sheet.current?.props.showAvatar).toBe(true);
+    expect(sheet.current?.props.avatar).toBe('/public.jpg');
+    expect(sheet.current?.props.nickname).toBe('user');
+    expect(sheet.current?.props.limited).toBe(false);
   });
 
   it('管理员保存资料走用户管理接口，不使用当前管理员会话', async () => {

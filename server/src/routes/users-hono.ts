@@ -12,17 +12,18 @@ import {
   adminUserPayload,
   exhibitionPayload,
   publicRegistrationPayload,
+  userPayload,
   type AdminUserRow,
   type ExhibitionRow,
   type RegistrationRow,
   type UserRow,
 } from '../domain/payloads.js';
 import * as labels from '../domain/labels.js';
-import { canHostMeetings, requireAdmin, type Actor } from '../domain/permissions.js';
+import { canHostMeetings, capabilities, requireAdmin, type Actor } from '../domain/permissions.js';
 import { effectiveRole, isPastExpiry, settleExpiredExhibitor, settleExpiredExhibitors } from '../domain/membership.js';
 import { badRequest, notFound } from '../domain/errors.js';
 import { revokeAllDevicesForUser } from '../domain/session.js';
-import { updateProfileRecord } from '../domain/profile-update.js';
+import { replaceAvatarFromUpload, updateProfileRecord } from '../domain/profile-update.js';
 import { jsonResponse, mutate } from '../http/respond.js';
 import { authenticateHono, optionalAuthHono, userOf, type HonoEnv } from './hono-utils.js';
 import { readJsonBody } from '../http/body-limit.js';
@@ -199,6 +200,26 @@ app.put('/:id/profile', authenticateHono, async (c) => {
     };
   });
 });
+/**
+ * 管理员代改指定用户的头像。
+ *
+ * 校验、落盘、替换与旧文件清理复用本人上传的 `replaceAvatarFromUpload()`，两条路由只差
+ * 操作哪个账号。这里只认管理员，目标账号是否受限 / 封禁都不影响结果；只写目标账号的
+ * `users.avatar`，不碰当前管理员的会话。
+ */
+app.post('/:id/avatar', authenticateHono, async (c) => {
+  requireAdmin({ user: userOf(c) });
+  const target = await findUserById(c.req.param('id'));
+  if (!target) throw notFound('用户不存在或已删除', { code: 'users.notFound' });
+  return mutate(c, async () => {
+    const { url } = await replaceAvatarFromUpload(target.id, {
+      stream: c.req.raw.body,
+      contentLength: c.req.header('content-length'),
+    });
+    const fresh = (await findUserById(target.id)) || target;
+    return { url, user: userPayload(fresh, capabilities(fresh.role, fresh.status as string | undefined)) };
+  });
+});
 app.put('/:id/status', authenticateHono, async (c) => {
   const actor = requireAdmin({ user: userOf(c) });
   const rawBody = bodyRecord(await readJsonBody(c));
@@ -273,6 +294,8 @@ export const USERS_ENDPOINTS: readonly [string, string][] = [
   ['GET', '/'],
   ['GET', '/public'],
   ['GET', '/:id'],
+  ['POST', '/:id/avatar'],
+  ['PUT', '/:id/profile'],
   ['PUT', '/:id/status'],
   ['PUT', '/:id/role'],
   ['PUT', '/:id/two-factor'],

@@ -127,6 +127,25 @@ public class AppSettingsTest {
         assertEquals(0xFF41707E, AppSettings.accentColorAt(expected.length));
     }
 
+    /**
+     * 系统深浅色只看 uiMode 的 night 位：这是「跟随系统」的唯一依据，页面首帧拿到的
+     * systemDark 就是它（Android WebView 的 prefers-color-scheme 不可靠）。
+     * 掩码之外的位（界面类型位、其它标志）不能影响判断。
+     */
+    @Test
+    public void readsSystemDarkFromUiModeNightBit() {
+        // UI_MODE_NIGHT_YES = 0x20，UI_MODE_NIGHT_NO = 0x10，UI_MODE_NIGHT_UNDEFINED = 0
+        assertTrue(AppSettings.isNightUiMode(0x20));
+        assertFalse(AppSettings.isNightUiMode(0x10));
+        assertFalse(AppSettings.isNightUiMode(0));
+        // 叠加类型位之后仍只看 0x30 这两位：系统深色 + 桌面模式 / 未定义类型都要判成深色
+        assertTrue(AppSettings.isNightUiMode(0x20 | 0x02));
+        assertTrue(AppSettings.isNightUiMode(0x2f));
+        assertFalse(AppSettings.isNightUiMode(0x10 | 0x04));
+        // 其它位（例如 UI_MODE_TYPE_APPLIANCE = 0x40）不代表深色
+        assertFalse(AppSettings.isNightUiMode(0x40));
+    }
+
     /** 管理端下发的 #RRGGBB 色号只在合法时接受，非法值回落到按色板取色。 */
     @Test
     public void parsesCustomAccentColor() {

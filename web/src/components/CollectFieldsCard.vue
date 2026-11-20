@@ -399,7 +399,7 @@ function itemLabel(index: number): string {
   content: '';
   width: 5px;
   height: 9px;
-  border: solid var(--on-dark);
+  border: solid var(--on-accent);
   border-width: 0 2px 2px 0;
   transform: translateY(-1px) rotate(45deg);
 }

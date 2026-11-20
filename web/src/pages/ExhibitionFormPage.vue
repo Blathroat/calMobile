@@ -39,6 +39,7 @@ import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import SegControl from '@/components/SegControl.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import UploadProgressMask from '@/components/upload-progress-mask.vue';
 import type { ExhibitionDetail, JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -507,20 +508,38 @@ onBeforeRouteLeave((to) => {
 
 // ── 封面 ─────────────────────────────────────────────────────────
 
-/** 封面先在设备上选择，再上传到服务器，表单里只留服务器地址。 */
+/** 上传中（含系统选择器停留期间）：按钮禁用，避免同时开两份上传。 */
+const coverBusy = ref(false);
+/** 封面位置上的进度遮罩；null 表示没有上传在跑（遮罩随之卸载）。 */
+const coverProgress = ref<number | null>(null);
+
+/**
+ * 封面先在设备上选择，再上传到服务器，表单里只留服务器地址。
+ * 上传期间在封面位置盖进度遮罩：字节发完只到 99%，服务器确认后落 100 并停留约 150ms
+ * （由遮罩的 settled 通知卸载），成功换成新图，失败 / 取消立即复位。
+ */
 async function pickCover(): Promise<void> {
+  if (coverBusy.value) return;
+  coverBusy.value = true;
   try {
     const stored = await device.importMedia('image');
     if (!stored?.url) {
       toast(t('admin.media.unreadableImage'), 'error');
       return;
     }
-    form.imageUri = await publishImportedMedia('image', stored);
+    coverProgress.value = 0;
+    form.imageUri = await publishImportedMedia('image', stored, (percent) => {
+      coverProgress.value = Math.min(99, Math.max(0, percent));
+    });
+    coverProgress.value = 100;
     toast(stored.compressed ? t('exhibition.form.coverCompressed') : t('exhibition.form.coverUploaded'), 'success');
   } catch (reason) {
-    // 用户在系统选择器点了取消：按稳定错误码判断，不匹配文案。
+    // 失败 / 取消都先撤掉遮罩，不让它停在半路；取消是用户自己的操作，不提示错误。
+    coverProgress.value = null;
     if (isCancelled(reason)) return;
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
+  } finally {
+    coverBusy.value = false;
   }
 }
 
@@ -880,15 +899,30 @@ function normalizeOptions(options: unknown): string[] {
     <div class="card cover-card">
       <span class="section-label">{{ t('exhibition.form.coverAndDescription') }}</span>
       <div class="cover-row">
-        <div v-if="form.imageUri" class="cover-frame ph-img">
-          <img :src="form.imageUri" :alt="t('exhibition.form.cover')" />
+        <!-- 封面槽位始终在：上传期间遮罩盖在它上面，失败 / 取消随进度清空一起撤掉。 -->
+        <div class="cover-frame ph-img">
+          <img v-if="form.imageUri" :src="form.imageUri" :alt="t('exhibition.form.cover')" />
+          <UploadProgressMask v-if="coverProgress !== null" :progress="coverProgress" @settled="coverProgress = null" />
         </div>
-        <div v-else class="cover-frame ph-img" aria-hidden="true" />
         <div class="cover-side">
-          <button class="cta ghost" data-size="small" type="button" @click="pickCover">
+          <button
+            class="cta ghost"
+            data-size="small"
+            type="button"
+            :disabled="coverBusy"
+            :data-loading="coverBusy ? 'true' : 'false'"
+            @click="pickCover"
+          >
             {{ form.imageUri ? t('admin.media.changeCover') : t('admin.media.uploadCover') }}
           </button>
-          <button v-if="form.imageUri" class="cta ghost" data-size="small" type="button" @click="removeCover">
+          <button
+            v-if="form.imageUri"
+            class="cta ghost"
+            data-size="small"
+            type="button"
+            :disabled="coverBusy"
+            @click="removeCover"
+          >
             {{ t('admin.media.removeCover') }}
           </button>
           <p class="field-hint">{{ t('exhibition.form.coverRatioHint') }}</p>

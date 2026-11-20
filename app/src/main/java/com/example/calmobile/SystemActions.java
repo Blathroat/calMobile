@@ -54,7 +54,13 @@ final class SystemActions {
                     WebAppBridge.text(upload, "imageFormats", ""),
                     WebAppBridge.text(upload, "videoFormats", ""));
         }
-        AppSettings.applyWindowColors(activity);
+        // 外观变化后系统栏、容器与 WebView 底色要一起刷新：只改系统栏会在页面切换 /
+        // 回弹时露出旧的 WebView 底色（见 WebShellActivity.applyAppearance）。
+        if (activity instanceof WebShellActivity) {
+            ((WebShellActivity) activity).applyAppearance();
+        } else {
+            AppSettings.applyWindowColors(activity);
+        }
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("mode", mode);

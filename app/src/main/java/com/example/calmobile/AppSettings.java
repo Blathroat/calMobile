@@ -18,9 +18,12 @@ import java.util.Locale;
  *
  * 服务器设置（软件标题、公告、分类、审核策略、字符数上限）与个人偏好现在都由后端持有
  * （`server/` 的 `app_settings` 与 `users.ui_mode`），前端从接口拿。
- * 但有两类东西只能在设备上生效，原生必须自己知道：
+ * 但有三类东西只能在设备上生效，原生必须自己知道：
  *
  * - **系统栏配色**：状态栏 / 导航栏颜色、深色模式下 WebView 的底色；
+ * - **系统深色**：Android WebView 的 {@code prefers-color-scheme} 不可靠，系统是否深色只能由
+ *   {@code Configuration.uiMode} 读出，再通过同步接口 / 配置变化事件告诉页面（见
+ *   {@link WebAppBridge#systemAppearance()} 与 {@code WebShellActivity.onConfigurationChanged}）；
  * - **媒体压缩与格式上限**：选图后压缩到多大、允许哪些后缀。
  *
  * 因此这份存储不再是「数据的权威来源」，而是前端通过 `ui.sync` 动作推过来的镜像：
@@ -44,6 +47,12 @@ public final class AppSettings {
     public static final String MODE_AUTO = "auto";
     public static final String MODE_LIGHT = "light";
     public static final String MODE_DARK = "dark";
+
+    // android.content.res.Configuration 的两个字面量（UI_MODE_NIGHT_MASK = 0x30，
+    // UI_MODE_NIGHT_YES = 0x20）。写在这里而不是直接引用：判断函数因此不碰 Android API，
+    // 普通 JVM 单测能直接断言「auto 是否跟随系统」这一唯一依据。
+    private static final int UI_MODE_NIGHT_MASK = 0x30;
+    private static final int UI_MODE_NIGHT_YES = 0x20;
 
     /** 深色模式下页面底色，与前端 tokens.css 的 --screen 深色值一致（同样写字面量）。 */
     private static final int DARK_SURFACE = 0xFF171A1F;
@@ -152,6 +161,11 @@ public final class AppSettings {
         return MODE_AUTO;
     }
 
+    /** 系统当前是否处于深色（只看系统配置，不看用户选择的明暗模式）。 */
+    public static boolean isSystemDark(Context context) {
+        return isNightUiMode(context.getResources().getConfiguration().uiMode);
+    }
+
     /** 当前是否使用深色外观：auto 时跟随系统。 */
     public static boolean isDarkMode(Context context) {
         String mode = getUiMode(context);
@@ -161,9 +175,19 @@ public final class AppSettings {
         if (MODE_LIGHT.equals(mode)) {
             return false;
         }
-        return (context.getResources().getConfiguration().uiMode
-                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
-                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        return isSystemDark(context);
+    }
+
+    /**
+     * 按系统 {@code uiMode} 判断深色。纯函数（不读 Android API），
+     * 供 {@link #isSystemDark(Context)} 与实际测试共用。
+     *
+     * 页面首帧通过 {@link WebAppBridge#systemAppearance()} 拿到的 {@code systemDark}
+     * 就是它的结果：Android WebView 的 {@code prefers-color-scheme} 在 Light 主题的
+     * Activity 下不可靠，系统深色只能由原生读 {@code Configuration.uiMode}。
+     */
+    static boolean isNightUiMode(int uiMode) {
+        return (uiMode & UI_MODE_NIGHT_MASK) == UI_MODE_NIGHT_YES;
     }
 
     // ── 系统栏颜色 ─────────────────────────────────────────────────

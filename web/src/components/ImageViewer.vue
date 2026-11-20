@@ -276,6 +276,7 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--on-dark);
+  /* 灯箱底永远是深色（不是 --on-dark 那种随主题反转的浮层），文字必须固定用白。 */
+  color: var(--on-media);
 }
 </style>

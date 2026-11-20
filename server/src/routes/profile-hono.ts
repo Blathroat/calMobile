@@ -65,16 +65,8 @@ import {
   saveSeenHint,
 } from '../domain/settings.js';
 import { resolveUploadConfig } from '../config/upload.js';
-import { updateProfileRecord } from '../domain/profile-update.js';
-import {
-  deleteStoredAvatar,
-  formatAllowed,
-  inspectAvatar,
-  readCappedBytes,
-  storedAvatarUrl,
-  writeAvatarFile,
-} from '../services/avatar-store.js';
-import { ensureRoom } from '../services/media-gc.js';
+import { replaceAvatarFromUpload, updateProfileRecord } from '../domain/profile-update.js';
+import { deleteStoredAvatar } from '../services/avatar-store.js';
 import { hashToken, revokeAllDevicesForUser, revokeDeviceForUser } from '../domain/session.js';
 import { readJsonBody } from '../http/body-limit.js';
 import { clientIp } from '../http/client-ip.js';
@@ -202,48 +194,20 @@ export function createProfileRoutes(options: RequestIpOptions) {
     });
   });
 
+  /**
+   * 换头像：只改当前登录账号。
+   *
+   * 校验、落盘、替换与旧文件清理在 `replaceAvatarFromUpload()`，与管理员代改的
+   * `POST /users/:id/avatar` 共用同一份实现，两条路由只差操作哪个账号。
+   */
   app.post('/avatar', authenticateHono, async (c) => {
     const user = requireUser({ user: userOf(c) });
     assertNotLimited(user, 'profile');
     return mutate(c, async () => {
-      const settings = await readServerSettings();
-      const config = resolveUploadConfig();
-      const limitMb = Math.min(settings.upload.avatarSizeMb, config.maxMb);
-      const maxBytes = limitMb * 1024 * 1024;
-      const declared = Number(c.req.header('content-length'));
-      const read = await readCappedBytes(c.req.raw.body, maxBytes, Number.isFinite(declared) ? declared : undefined);
-      if (!read.ok)
-        throw badRequest(`头像超过 ${limitMb} MB 限制`, {
-          code: 'profile.avatarTooLarge',
-          params: { max: limitMb },
-        });
-      const inspected = inspectAvatar(read.bytes);
-      if (!inspected.ok) {
-        const tooLarge = inspected.reason === 'too-large';
-        throw badRequest(tooLarge ? '图片尺寸过大' : '无法识别的图片', {
-          code: tooLarge ? 'media.imageDimensionsTooLarge' : 'media.imageUnreadable',
-        });
-      }
-      if (!formatAllowed(inspected.image.extension, settings.upload.avatarFormats)) {
-        throw badRequest(
-          `服务器设置不允许上传 .${inspected.image.extension} 格式，允许：${settings.upload.avatarFormats.join('、')}`,
-          {
-            code: 'profile.avatarFormatRejected',
-            params: { ext: inspected.image.extension, formats: settings.upload.avatarFormats.join('、') },
-          },
-        );
-      }
-      await ensureRoom(read.bytes.byteLength);
-      const previous = await currentAvatar(user.userId);
-      const fileName = await writeAvatarFile(read.bytes, inspected.image.extension, config);
-      const url = storedAvatarUrl(fileName, config);
-      try {
-        await query('UPDATE users SET avatar = $2, updated_at = now() WHERE id = $1', [user.userId, url]);
-      } catch (error) {
-        await deleteStoredAvatar(url, config);
-        throw error;
-      }
-      await deleteStoredAvatar(previous, config);
+      const { url } = await replaceAvatarFromUpload(user.userId, {
+        stream: c.req.raw.body,
+        contentLength: c.req.header('content-length'),
+      });
       return { url, user: await loadUser(user.userId) };
     });
   });
