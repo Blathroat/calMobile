@@ -32,7 +32,8 @@
 
 ### 通行密钥与更新检查
 
-- 两步验证的通行密钥走 WebAuthn：服务端用 `@simplewebauthn/server` 生成选项并校验结果（挑战存 `webauthn_challenges`、凭据存 `passkey_credentials`）；前端 `web/src/services/webauthn.ts` 只用浏览器原生 `navigator.credentials`，自己负责 base64url ↔ ArrayBuffer 的转换，不引客户端库。绑定需要身份复核票；环境不支持 WebAuthn 时页面隐藏添加入口并说明原因。`POST /profile/2fa/passkey/enable` 在账号还没有备用码时顺手生成一批并在响应里返回 `backupCodes`（页面切到「抄下来」那一步展示一次）；已有备用码时不轮换，响应里是空数组。安全页按 `backupCodesLeft` 决定提示：0 枚给警告、动作文案换成「生成备用码」，≤2 枚提醒重新生成。
+- 两步验证的通行密钥走 WebAuthn：服务端用 `@simplewebauthn/server` 生成选项并校验结果（挑战存 `webauthn_challenges`、凭据存 `passkey_credentials`）；前端 `web/src/services/webauthn.ts` 只用浏览器原生 `navigator.credentials`，自己负责 base64url ↔ ArrayBuffer 的转换，不引客户端库。绑定需要身份复核票；环境不支持 WebAuthn 时页面隐藏添加入口并说明原因。**只有用户取消才返回 `null`**：原生回包解析不出来、旧壳没有 `passkey.*` 而 WebView 又没有 WebAuthn 时抛出可读中文，页面显示原因，不能静默关掉抽屉。
+- 原生通行密钥的边界按「不信任输入、不漏 Throwable」实现（否则主线程异常就是一次闪退）：`WebAppBridge` 的 `invoke` / `dispatch` / `respond` / `onActivityResult` / `onPermissionResult`，以及 `PasskeyActions` 的同步入口与 Credential Manager 的 `onResult` / `onError` 回调全部 catch `Throwable`；回调用 `OneShot` 只认第一次，避免系统重复回调写回两次。选项 JSON 进系统前先校验（空 / 超长 / 非对象 / 缺 challenge、rp.id、user.id、user.name、pubKeyCredParams、rpId 都在本地挡下并给中文说明）。`passkey.available` 按 androidx.credentials 1.3.0 的 provider 选择规则真实判断：API 34+ 看系统 `credential` 服务、缺席时退回 Play 服务提供方，API 33 及以下要求 GMS 版本 ≥ `230815045` —— `CredentialManager.create()` 只是拿到门面对象，不能当作可用。`respond` 拼回页面脚本时 callbackId 里的换行与 U+2028 / U+2029 必须转义，否则整段脚本变成语法错误、页面永远等不到回调。`POST /profile/2fa/passkey/enable` 在账号还没有备用码时顺手生成一批并在响应里返回 `backupCodes`（页面切到「抄下来」那一步展示一次）；已有备用码时不轮换，响应里是空数组。安全页按 `backupCodesLeft` 决定提示：0 枚给警告、动作文案换成「生成备用码」，≤2 枚提醒重新生成。
 - 应用版本在构建期由 `scripts/client-target.mjs` 注入成 `__APP_VERSION__` / `__APP_VERSION_CODE__`（App 与报名站两份构建都注入；env 读取在 `scripts/env-file.mjs`），与服务端解析出的最新版本比较。`GET /app/release` 公开、`no-store`，GitHub 源由服务端带缓存地读 Release API（不受浏览器 CORS 与额度限制影响）。
 - 「下载并安装」只是打开下载地址：应用里除 `/app/` 之外的链接交给系统浏览器，安装由系统完成，不需要新的原生权限或桥接动作。
 - 报名站的下载条在应用外壳里（`App.vue`），条件是「报名站构建 + 没有原生桥 + 管理员配了下载地址」，常驻不可关闭（报名站本身不完整，用户随时要能找到下载入口）。自动检查更新是设备级偏好，存在本机 `calmobile.autoUpdate`。表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`。后端再校验一次。
@@ -55,7 +56,8 @@
 - 入口 `/` 恒 redirect `/home`：未登录首帧就以访客态落在首页，不再先画登录页；需要登录的页面由守卫跳 `/login?redirect=<原地址>`，登录页只在需要登录时出现。整页重载时会话恢复的等待只发生在 `meta.requiresAuth` 的页面与直接停在 `/login` 的情况；`main.ts` 只负责把「已登录却停在 `/login`（或 `/` 还没落定）」的一屏替换到 `redirect` 或首页。
 - 标签页之间的过渡只位移、不淡入。淡入期间新页面还是透明的，露出来的是外壳背景，浅色模式下会闪一下白。同一屏只换 query 时方向信号保持不动，否则动画名会被换成淡入。
 - 页面自己 `watch` query 完成切换的，在 `meta` 里声明 `queryInPlace: true`。外壳改用 `path` 作键，分区切换不重建页面，并预热那几个分区的读接口。
-- 明暗模式与强调色在 `web/src/app/theme.ts` 落到 `<html data-mode>` 与 `--accent*`。首帧由 `index.html` 的内联脚本按本机缓存落一次。用户自己的明暗模式与强调色是账号偏好（`users.ui_mode` / `users.ui_theme`，经 `PUT /settings/ui-mode`、`PUT /settings/ui-theme` 保存）。本机只缓存一份供首帧使用。切换走 `web/src/app/preferences.ts`：本地先生效，落库失败回滚。`app_settings.theme` 只提供默认色板与全局默认下标。
+- 明暗模式与强调色在 `web/src/app/theme.ts` 落到 `<html data-mode>` 与 `--accent*`。`data-mode` **始终有值**：`auto` 也写解析后的 `light` / `dark`，不再删属性把明暗交给 CSS media query。系统深浅色在 Android WebView 里不可靠（Activity 是 Light 主题、`configChanges` 含 `uiMode` 后不会重建），所以原生壳用同步接口 `window.CalMobileNative.systemAppearance()`（返回 `{ systemDark, mode }`，`systemDark` 来自 `Configuration.uiMode`）回答首帧；配置变化时 `WebShellActivity.onConfigurationChanged` 重画系统栏 / 容器 / WebView 底色，再 `evaluateJavascript` 调 `window.CalMobileWeb.appearance(...)` 推给页面，页面只在账号 mode 为 `auto` 时跟随。浏览器 / PWA 与没有同步接口的旧壳退回 `matchMedia`。首帧仍由 `index.html` 的内联脚本落一次（先读本机缓存的显式选择，没有就问原生同步接口，再退回 matchMedia），不闪白。用户自己的明暗模式与强调色是账号偏好（`users.ui_mode` / `users.ui_theme`，经 `PUT /settings/ui-mode`、`PUT /settings/ui-theme` 保存）。本机只缓存一份供首帧使用。切换走 `web/src/app/preferences.ts`：本地先生效，落库失败回滚。`app_settings.theme` 只提供默认色板与全局默认下标。
+- 深色下的强调色衍生值必须保证可读：`--accent-ink` 往**白**混到在页面底色上 ≥4.5:1（往底色混只会越混越暗），`--accent-edge` 混到 ≥3:1；浅色模式仍往黑白混、视觉不变。**不要把 `--on-dark` 当强调色底上的文字**：`--on-dark` 只给底色反转的浮层（深色模式下 toast 变浅底、文字变近黑）。强调色底上的文字用 `--on-accent`、灯箱与媒体遮罩上的文字用 `--on-media`，两者在两套主题下都是白色；主按钮悬浮色是 `--accent-hover`（深色下把强调色压暗，白字仍可读）。对比度回归见 `web/src/app/theme.test.ts`。
 
 新的应用页面在 `web/src/app/router.ts` 注册（`meta.title` / `back` / `tab`），并更新 `web/src/app/shell.test.ts` 的 `ROUTES`。报名站不写入 `ROUTES`。实现和产品行为冲突时，未决项写入 [`product.md`](product.md) 的待裁决项。
 
@@ -155,6 +157,8 @@ iOS 与主屏幕模式的适配在 `web/src/styles/special.css` 末尾：
 
 页面侧统一从 `web/src/services/device-services.ts` 进：有原生桥时调 `nativeBridge.call`，没有时同一组方法落到浏览器实现（`browser-device.ts`，见「iPhone / PWA」的「设备能力」）。因此浏览器里能用的是选文件、下载、分享、通知权限与摄像头；`ui.sync`、`media.store` 这类只在原生壳里存在的动作在浏览器里以 `device.featureUnavailable` 失败。
 
+`WebAppBridge` 另有一个**同步**方法 `systemAppearance()`（不是动作、不进动作表与能力清单）：`index.html` 的内联脚本在首帧同步读 `{ systemDark, mode }`，让「跟随系统」在 Android WebView 里也能落到正确的深色（见「应用外壳」的明暗模式）。
+
 **能力协商（页面可以比 APK 新）**：`app.capabilities` 是原生壳声明的动作清单（`ShellCapabilities`，排序去重；回包 `{ version, actions }`）。页面用 `native-bridge.ts` 的 `supportsNativeAction(action)` 懒加载并缓存这份清单，没有清单项就当壳不支持；原生对不认识的动作用稳定错误码 `unsupported` 失败，`device-services` 的 `nativeOrBrowser` 收到它时自动改走浏览器实现（`cancelled` 与真失败仍原样抛）。通行密钥也据此判断：旧壳没有 `passkey.*` 时退回浏览器 WebAuthn。因此新功能可以随页面热更新先上线，APK 只是可选增强；**新增原生动作时要同时更新 `ShellCapabilities` 清单与 `WebAppActions.handle` 的 switch**（两边对不上会误判能力，见 `ShellCapabilitiesTest`）。
 
 选图分两条路：`media.pickImage`（头像、扫码选图）在原生侧优先打开系统相册 / Photo Picker——Android 13 起用 `MediaStore.ACTION_PICK_IMAGES`，低版本用 `Intent.ACTION_PICK` + 图片库，系统里没有相册应用时回退文件选择器；`media.import`（封面、视频、语言包正文等）仍走文件选择器，因为这些文件可能在下载目录里、相册看不到。浏览器里两者都退化成 `<input type="file">`，回包形状不变（`media.pick` / `ok` / `uri` / `mimeType` / `dataUrl`，取消走 `CODE_CANCELLED`）。
@@ -166,6 +170,8 @@ iOS 与主屏幕模式的适配在 `web/src/styles/special.css` 末尾：
 日历只用后端下发的 `YYYY-MM-DD`。缺失或非法日期直接失败。
 
 头像、封面和简介媒体上传到服务器。设备只负责选择和压缩，选完就把临时文件删掉。资源路径只允许单层文件名。大小、格式和存储上限由管理设置控制，口径见 [`server/README.md`](../server/README.md) 的媒体一节。头像格式只接受 jpg、jpeg、png、webp。
+
+**上传进度**：字节上传可以带 `onUploadProgress(percent)`（`api.media.upload`、`api.profile.uploadAvatar`、管理员用的 `api.users.uploadAvatar` 与 `services/publish-media.ts` 的第三个参数）。`HttpClient` 只在同时带 `bytes` 与这个回调时改走 `XMLHttpRequest`（`upload` 事件能报已发送字节数），其余请求仍是 `fetch`；两条路的 401 刷新重放、超时/取消、5xx 与 `ok:false` 分类完全一致。界面统一用 `components/UploadProgressMask.vue` 盖在图片显示位置：暗色 scrim 从顶部退下、底部按百分比变亮，中间是百分比数字；父容器自己保持 `position: relative`，100% 至少停留 150ms 再由调用方卸载，失败/取消直接清掉。编辑展会封面、管理缺省封面、富文本插图与头像裁剪上传都接这一层，不要各自手写遮罩。
 
 ## 界面规则
 
@@ -193,7 +199,7 @@ iOS 与主屏幕模式的适配在 `web/src/styles/special.css` 末尾：
 - 卡片里再套 `.row-card` 会形成双层边框：可点的整行不要包在第二层 `.card` 里；需要分区时改用卡片 `gap`、局部间距类与 `section-label` 层级，**不再画发丝线**（`hr.divider` 已从设置类、详情类卡片里移除）；只有列表行之间的分隔才用线（例如相邻 `.switch-row[data-flush='true']` 的上边线）。
 - 展商后台：顶部一颗「核销报名码」，列表每张卡上半是整块可点的主体（右侧垂直居中一枚 44px 命中区的二维码分享按钮），下半放 ghost 小按钮（查看报名 / 编辑展会 / 复制链接），上下两段只用间距分开、不加分隔线；「复制链接」点击即复制（`services/clipboard.ts` 的 `copyText`，Clipboard API 失败时退回隐藏 textarea + `execCommand`），成功或失败都只 toast，不再弹手动复制面板；二维码按钮打开 `components/ShareQrSheet.vue`，二维码内容是报名站分享链接，导出透明底黑点 PNG（`qr-encoder.ts` 的 `background: 'transparent'` + `foreground: '#000000'`，保存走 `media.saveImage`，浏览器里退回下载）。「新建展会」是右下角悬浮圆形按钮（`Teleport` 到 `body`，否则路由容器的 `transform` 会成为 `fixed` 的包含块），空态时由 `.state` 的入口承担、不再显示悬浮按钮。
 - 设置类页面里，「设置项标题」用 `--fs-body` / 700 / `--ink`，说明文字用 `.field-hint`（`--fs-meta` / `--ink-3`）——两者不能同字号同颜色，否则读不出层级。间距也按这一层级排：**标题与它下面那句说明 2px**（读成一块），**设置项与设置项之间 16px**，卡片内组标题到内容 12px；说明最长 34em，不要拉到屏幕右边缘。
-- 资料抽屉最上方的头像块（`components/ProfileAvatarField.vue`）只剩居中的大头像与右下角铅笔（44px 命中区），设置页与个人页的身份卡只展示头像。点铅笔由 `services/profile-editor.ts` 先 `PUT /profile` 保存当前资料，成功后关闭资料抽屉；退场动画（260ms）结束再直接 `device.pickImage()` 拉起系统选图，选定图片后写 `services/profile-avatar.ts` 的 `source`，由个人页 / 用户设置页常驻的 `components/ProfileAvatarCropper.vue` 弹出 `AvatarCropper` 裁剪抽屉，裁剪完成立即 `POST /profile/avatar` 上传并刷新会话（没有中转页，也不提供移除头像入口；取消选图静默结束）。`PUT /profile` 仍原样回传 `avatar`，避免把头像当成清空。管理员代改别人资料（`targetUserId`）时不渲染头像块，因为头像接口只作用于当前登录账号。
+- 资料抽屉最上方的头像块（`components/ProfileAvatarField.vue`）只剩居中的大头像与右下角铅笔（44px 命中区），设置页与个人页的身份卡只展示头像。点铅笔由 `services/profile-editor.ts` 先 `PUT /profile` 保存当前资料，成功后关闭资料抽屉；退场动画（260ms）结束再直接 `device.pickImage()` 拉起系统选图，选定图片后写 `services/profile-avatar.ts` 的 `source`，由个人页 / 用户设置页常驻的 `components/ProfileAvatarCropper.vue` 弹出 `AvatarCropper` 裁剪抽屉，裁剪完成立即 `POST /profile/avatar` 上传并刷新会话（裁剪面板确认后会自行退场，上传进度改为挂到 body 的固定层，在居中的头像槽位里显示同一套百分比遮罩；没有中转页，也不提供移除头像入口；取消选图静默结束）。`PUT /profile` 仍原样回传 `avatar`，避免把头像当成清空。管理员从公开页代改别人资料（`targetUserId`）时头像块照常渲染，但显示的是目标用户的头像：点铅笔仍先 `PUT /users/:id/profile` 保存，再选图裁剪，上传改调 `POST /users/:id/avatar`，成功后把新 `avatar` 合并回调用方的资料对象并触发 `onSaved`，**不写当前管理员会话**；`ProfileAvatarField` 因此接受外部传入的 `avatar` / `nickname` / `limited`（缺省仍取会话），`services/profile-avatar.ts` 与 `ProfileAvatarCropper.vue` 按有无 `targetUserId` 选择上传接口。
 - `AvatarBox` 是唯一渲染用户头像的组件：图片 404 / 加载失败 / 解码失败时回退成昵称首字（`@error` 置失败态，`src` 变化后重新尝试），不留破图；回退态的边框与底色跟「没有头像」一致。
 - 用户公开页扉页上的「已参加展会」是单个统计，数字与标签**居中**排；个人页的活动概览是两列并列统计，保持左对齐，不要一起改成居中。管理员视角（`viewedAsAdmin`）在昵称右侧显示小铅笔（`.public-edit`），复用 `services/profile-editor.ts` 的资料抽屉：传 `targetUserId` 时保存走 `PUT /users/:id/profile`，只合并目标用户资料，不改当前管理员会话。
 - 「我的活动」的列表行：缩略图高 78（竖版海报比例，宽度随海报比例在 9:16～3:4 纵向之间自适应），标题单行截断，状态信号灯压在标题行右端，下面依次是「日期 · 时间」、地点与摘要（摘要两行截断，用 `.clamp-2`）。展商卡同理，但状态与报名数合成**一条**信号灯文字，避免出现「左边空着」的独立一行。
