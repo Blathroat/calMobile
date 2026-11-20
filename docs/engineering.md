@@ -36,7 +36,7 @@
 - 原生通行密钥的边界按「不信任输入、不漏 Throwable」实现（否则主线程异常就是一次闪退）：`WebAppBridge` 的 `invoke` / `dispatch` / `respond` / `onActivityResult` / `onPermissionResult`，以及 `PasskeyActions` 的同步入口与 Credential Manager 的 `onResult` / `onError` 回调全部 catch `Throwable`；回调用 `OneShot` 只认第一次，避免系统重复回调写回两次。选项 JSON 进系统前先校验（空 / 超长 / 非对象 / 缺 challenge、rp.id、user.id、user.name、pubKeyCredParams、rpId 都在本地挡下并给中文说明）。`passkey.available` 按 androidx.credentials 1.3.0 的 provider 选择规则真实判断：API 34+ 看系统 `credential` 服务、缺席时退回 Play 服务提供方，API 33 及以下要求 GMS 版本 ≥ `230815045` —— `CredentialManager.create()` 只是拿到门面对象，不能当作可用。`respond` 拼回页面脚本时 callbackId 里的换行与 U+2028 / U+2029 必须转义，否则整段脚本变成语法错误、页面永远等不到回调。`POST /profile/2fa/passkey/enable` 在账号还没有备用码时顺手生成一批并在响应里返回 `backupCodes`（页面切到「抄下来」那一步展示一次）；已有备用码时不轮换，响应里是空数组。安全页按 `backupCodesLeft` 决定提示：0 枚给警告、动作文案换成「生成备用码」，≤2 枚提醒重新生成。
 - 应用版本在构建期由 `scripts/client-target.mjs` 注入成 `__APP_VERSION__` / `__APP_VERSION_CODE__`（App 与报名站两份构建都注入；env 读取在 `scripts/env-file.mjs`），与服务端解析出的最新版本比较。`GET /app/release` 公开、`no-store`，GitHub 源由服务端带缓存地读 Release API（不受浏览器 CORS 与额度限制影响）。
 - 「下载并安装」只是打开下载地址：应用里除 `/app/` 之外的链接交给系统浏览器，安装由系统完成，不需要新的原生权限或桥接动作。
-- 报名站的下载条在应用外壳里（`App.vue`），条件是「报名站构建 + 没有原生桥 + 管理员配了下载地址」，常驻不可关闭（报名站本身不完整，用户随时要能找到下载入口）。自动检查更新是设备级偏好，存在本机 `calmobile.autoUpdate`。表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`。后端再校验一次。
+- 报名站的下载 / 安装入口在应用外壳的顶栏右侧（`App.vue` 的 `#app-top-actions` 旁的一颗 `icon-button`），条件是「报名站构建 + 没有原生桥 +（iOS 或管理员配了下载地址）」，常驻不可关闭（报名站本身不完整，用户随时要能找到下载入口）；不再单独渲染一条下载横幅。自动检查更新是设备级偏好，存在本机 `calmobile.autoUpdate`。表单校验走 `web/src/services/validate.ts`，上限取 `useBootstrapStore().limits`。后端再校验一次。
 
 角色由服务端判定。展商身份可以按天发放（`users.exhibitor_expires_at`，NULL 表示永久）：到期在服务端认证解析时惰性结算成普通用户，页面只读后端下发的有效角色、`exhibitorExpiresAt` 与 `exhibitorExpired` 做展示，不自己算过期，也不在页面里另写一套续期规则。
 
@@ -45,7 +45,9 @@
 外壳在 `web/src/app/App.vue`：`.app` 网格是顶栏、可滚动的内容区和底部导航（或页面页脚）。页面只往内容区放内容。
 
 - 顶栏标题、返回键、底部导航项与内容区密度都由路由 `meta` 决定（`title` / `back` / `tab` / `bodyGap` / `bodyPad` / `bodyAlign` / `queryInPlace`）。导航项按角色过滤（`web/src/app/shell.ts`）。
-- 页面级顶栏操作写在 `meta.topAction`（`{ icon, to, label }`，或 `{ icon, label, action: 'logout' }`）。外壳据此渲染右上角图标按钮。
+- 页面级顶栏操作写在 `meta.topAction`（`{ icon, to, label }`，或 `{ icon, label, action: 'logout' }`）。外壳据此渲染右上角图标按钮。页面也可以把额外的顶栏按钮 `Teleport` 到 `#app-top-actions`（详情页的分享 / 编辑入口就是这样，模板顺序决定从左到右的顺序）。
+- 报名站的下载 / 安装入口是外壳顶栏上的一颗 `icon-button`（见 `App.vue` 的 `showDownloadEntry` / `onDownloadAction`），不再单独渲染一条悬浮横幅；iOS 点开安装说明，其它平台打开管理员配置的下载地址。
+- 展会详情页里，`canManageExhibition()` 为真的管理员 / 展商创建者会多一颗编辑铅笔（在分享按钮左边），直达 `/exhibition-form/:id`；报名站没有编辑页，所以那里不渲染。
 - 固定操作区用 `<Teleport defer to="#app-foot">` 投递 `.page-foot`，落在网格第三行。`defer` 让目标元素与页面在同一次渲染里创建时也能找到。入口页是例外：注册和忘记密码两个文字入口跟在表单后面随内容滚动，不占页脚槽。
 - 页面不自建 `.page` / `.topbar` / `.app-body` / `.tabbar`，也不写颜色、字号、间距与圆角。
 - 内容区的左右内距由外壳给两道（`.app-body` 与路由容器 `.page-surface` 各 `var(--s4)`，合计 24px）。页面不再加左右内距。通栏页面用路由 `meta.bodyPad: 'none'`，两道一起去掉。
@@ -91,7 +93,7 @@
 
 ## iPhone / PWA
 
-iPhone 没有 APK，完整应用以 PWA 方式安装：Safari 打开 `{站点}/app/`，分享 →「添加到主屏幕」。页面代码不按平台分叉业务逻辑：是否使用原生桥由 `nativeBridge.hasNative()` 判断，安装引导用 `web/src/services/platform.ts` 的 iOS / 主屏幕判断（见下），两边共用同一套路由、页面与数据层。
+iPhone 没有 APK，完整应用以 PWA 方式安装：Safari 打开 `{站点}/app/`，分享 →「添加到主屏幕」。页面代码不按平台分叉业务逻辑：是否使用原生桥由 `nativeBridge.hasNative()` 判断，安装引导用 `web/src/services/platform.ts` 的 iOS / Android / 内置浏览器 / 主屏幕判断（见下），两边共用同一套路由、页面与数据层。
 
 ### 安装元信息与构建
 
@@ -114,10 +116,10 @@ iPhone 没有 APK，完整应用以 PWA 方式安装：Safari 打开 `{站点}/a
 
 ### 安装引导
 
-- iOS 没有 `beforeinstallprompt`，安装只能走「分享 → 添加到主屏幕」，页面自己给引导。`services/pwa.ts` 的 `isIosInstallOffer()` 判断「是 iOS 且不是从主屏幕启动」；关过提示记在本机 `calmobile.iosInstallHint`（localStorage，按设备，清缓存后会重新出现一次）。
-- 首页在首屏之后延迟弹一次 `components/PwaInstallSheet.vue`（`mode: 'app'`）；别的面板开着时不盖上去，关掉即记下、不再自动弹。
-- 设置页在同一个条件下常驻「安装到主屏幕」入口，打开同一个抽屉；`mode: 'join'` 时多一颗「打开完整应用」。抽屉里给出完整应用地址（`PUBLIC_BASE_URL` + `/app/`，没配时退回当前 origin）、复制按钮与三步说明；非 Safari 的 iOS 浏览器先提示换到 Safari。
-- 报名站的悬浮条在 iOS 上改成安装引导（不要求管理员配下载地址），其它平台仍是下载条。
+- 安装引导不依赖 `beforeinstallprompt`（iOS Safari 没有，Android 与桌面浏览器也不统一）。`services/pwa.ts` 的 `shouldOfferPwaInstall()` 只判断「不是从主屏幕启动的独立窗口（`isStandalonePwa()`）且没有原生桥」；**不记录本机「已关闭」**，于是每次访问应用都会重新提示，装到主屏幕或从原生 App 打开后条件自然为假。
+- 首页在首屏之后延迟 600ms 弹 `components/PwaInstallSheet.vue`（`mode: 'app'`）；别的面板开着时不盖上去。关闭不写任何存储。`HomePage.vue` 的模块级标记 `installHintOfferedThisVisit` 保证同一次页面会话只提示一次：底部导航切走再切回不重复，刷新 / 重开页面后模块重建，于是「每次访问」都会提示。
+- 设置页在 `shouldOfferPwaInstall()` 为真时常驻「安装到主屏幕」入口，打开同一个抽屉；`mode: 'join'` 时多一颗「打开完整应用」。抽屉里给出完整应用地址（`PUBLIC_BASE_URL` + `/app/`，没配时退回当前 origin）与复制按钮，步骤按平台分支：iOS Safari 用分享面板（`stepOpen` / `stepShare` / `stepAdd`）；iOS 非 Safari 先提示换到 Safari（`notSafari`）；Android 用浏览器菜单（`androidIntro` / `androidStepOpen` / `androidStepMenu` / `androidStepAdd`）；桌面等只有 `desktopIntro` + `desktopStep`；Android / 桌面的内置浏览器加 `browserNotInstallable`。
+- 报名站顶栏的下载 / 安装入口：iOS 打开安装引导（不要求管理员配下载地址），其它平台有下载地址才出现，点击走系统浏览器下载；入口在顶栏右侧，不再单独占一条悬浮条。
 
 ### 设备能力（浏览器实现）
 
@@ -185,7 +187,8 @@ iOS 与主屏幕模式的适配在 `web/src/styles/special.css` 末尾：
 - **用户协议**：登录/注册页的勾选行只是「勾选 + 蓝链」，不套卡片外框（`.agreement-consent .check-label` 去掉描边、底色与内距，保留 44px 命中区）。管理员在「管理-设置」用开关 + Markdown 文件上传正文（应用内 `device.importText('text/markdown,text/plain', 1MB)` 读正文，浏览器退回 `<input type=file>` + `File.text()`；正文上限 200000 字符，随保存一起 `PUT /settings` 的 `agreement: { enabled, content }` 提交）。开启后登录/注册页显示「我已阅读并同意《用户协议》」勾选框，链接是 `--accent-ink` 的蓝链、打开 `/agreement`；用户设置页最底部同一入口；关闭时这些入口与更新弹窗全部不渲染。协议浏览页用 `api.agreement.get()` 公开取数（不进查询缓存），正文走 `markdownToHtml()` 清洗后渲染到 `.rich-content`。登录/注册页的勾选在各提交点（密码登录、两步验证、通行密钥、注册发码与提交）拦截，会话建立后调 `POST /profile/agreement` 记录当前版本，失败静默交给全局更新弹窗兜底。
 - 分段控件（`components/SegControl.vue`）**优先排成一行**：`.seg` 允许换行、按钮等分剩余宽度收缩；每个按钮缩到最小可用宽度（`min-width: 56px`，`.seg button`）之后还放不下才换行，标签过长用省略号，不横向滚动、也不撑宽页面。选中滑块按按钮的 `offsetLeft / offsetTop / 宽度 / 高度` 定位，换行后贴在选中按钮所在那一行；容器尺寸变化由 `ResizeObserver` 重新量。
 - 上传卡（封面、缺省封面）统一版式：左侧 96×170（9:16）预览，右侧竖排「上传/更换 / 移除」按钮与格式说明，窄屏上下堆叠。
-- 编辑展会页的「活动信息」卡自上而下是封面行（右侧写「支持3:4~9:16纵图」与允许的格式）→ 简介 textarea（`#form-description`，直接编辑 Markdown 源码）→「使用Markdown编辑简介」按钮 →「参与方式（仅通过审核用户可见）」textarea（`#form-registration-notice`，2000 字）。点 Markdown 按钮时先把当前表单 stash 成内存稿（`services/exhibition-draft.ts`，草稿带展会 id），二级编辑器用它起稿；保存或离开编辑器时清掉草稿，新建与编辑两条路径都保证文本框和二级页是同一份正文。二级编辑器页面本身不再渲染展会标题卡，页面顶部只由外壳顶栏负责。
+- 编辑展会页的「活动信息」卡自上而下是封面行（右侧写「支持3:4~9:16纵图」与允许的格式）→ 简介 textarea（`#form-description`，直接编辑 Markdown 源码）→「使用Markdown编辑简介」按钮 →「参与方式（仅通过审核用户可见）」textarea（`#form-registration-notice`，2000 字）。点 Markdown 按钮时先把当前表单 stash 成内存稿（`services/exhibition-draft.ts`，草稿带展会 id），二级编辑器用它起稿，新建与编辑两条路径都保证文本框和二级页是同一份正文。编辑已有展会时二级页保存简介**仍然立即写库**，成功后把最新正文 `patchExhibitionDraft()` 写回草稿、**不清掉**，返回表单时按 id 恢复整张草稿，其他未保存字段不丢；只有离开到 `/exhibition-form*` 以外的目标时才清草稿。二级编辑器页面本身不再渲染展会标题卡，页面顶部只由外壳顶栏负责。
+- 编辑 / 新建展会页的「已保存基线」是提交字段的 JSON 快照（初次取数、成功保存、报名方式即时保存、新建空表单时更新）；离开时 `onBeforeRouteLeave` 对「已构建且未受限 / 未加载失败 / 未丢失且有未保存修改」取消导航并打开抽屉（`layout: 'stack'`，保存 / 不保存 / 取消）。去 `/rich-editor` 直接放行且不清草稿；保存、不保存、删除成功与权限退回用自己的放行标记再 `router.replace(目标)`，保存失败留在本页原位报错。
 - 图标是 24 视窗、1.5 描边、无填充的细线。顶栏图标没有圆底。底部导航是图标加文字，选中项只换 `--accent-ink` 与字重（图标轻微上浮），不画下划线或滑动指示条。表单右侧的展开 / 下拉统一用 `chevronDown`（管理用户筛选、活动分类等），日期触发按钮用 `calendar`，时间触发按钮用 `chevronDown`；`AppIcon` 的 `PATHS` 没登记的名字会回退成 `info` 圆形提示图标，新增图标名必须同时在 `PATHS` 里登记。
 - 触控命中区域至少 44px。生产界面以 1080×2400、xxhdpi（逻辑画布 360×800）为密度基准，字号、间距和圆角取 `web/src/styles/tokens.css` 的当前值。状态同时用文字和颜色或描边表达。空、加载、错误、成功和禁用状态在原位置给出下一步。
 - 顶栏使用 `--topbar-h`，再叠 `--safe-top`。有底部导航时内容区叠 `--safe-bottom`。Android WebView 里这两项 `env()` 经常是 0，因此 `WebShellActivity` 按系统栏 inset 缩小页面。并排字段等高。日期、时间和状态使用选择器、分段控件或面板。
@@ -217,6 +220,6 @@ iOS 与主屏幕模式的适配在 `web/src/styles/special.css` 末尾：
 
 界面文案在 `web/src/i18n/zh.json`，**嵌套 JSON**（`{"auth": {"login": {"title": "登录"}}}`）；前端仍用点分路径 `t('auth.login.title')` 读取，加载时压成扁平表，热路径不逐层查找。带变量的整句写成一条，变量在文案里写 `{名字}`，取值时用第二个参数给：`t('auth.login.secondsUntilResend', { seconds: 30 })`，值可以是字符串或数字；参数里缺哪个名字，屏幕上就原样留着 `{名字}`（跟整条缺失时显示路径同理），所以调用处不要把取到的文案再拼给别人看。模板里的中文写成 `:placeholder="t('exhibition.form.venuePlaceholder')"` 这种绑定，带参数是 `:aria-label="t('profile.avatarLabel', { name: props.name })"`。别的语言缺哪条，就用中文那条。周几、年月留在 `web/src/services/format.ts`，不进这张表。邮件正文在后端，不进这张表。构建时中文表打进应用页面包和报名站包，不单独发布源文件。
 
-PWA 安装元信息同样来自这张表：`app.documentTitle`、`pwa.manifest.shortName`、`pwa.manifest.description`，安装引导用 `pwa.install.*`，报名站的 iOS 引导用 `join.ios*`。`web/pwa-build.mjs` 在构建时读这些键生成 manifest 与 HTML 占位符；缺键（manifest 的 `name` / `short_name` / `description`、`join.documentTitle`）或占位符没替换完，构建直接失败，不会把空值或 `%…%` 发上线。新增可见文案先进 `zh.json`，不要散落在构建脚本、HTML 或页面组件里。
+PWA 安装元信息同样来自这张表：`app.documentTitle`、`pwa.manifest.shortName`、`pwa.manifest.description`，安装引导用 `pwa.install.*`（含 Android / 桌面 / 内置浏览器分支文案），报名站的顶栏下载 / 安装入口用 `join.downloadApp` 与 `join.iosAction`。`web/pwa-build.mjs` 在构建时读这些键生成 manifest 与 HTML 占位符；缺键（manifest 的 `name` / `short_name` / `description`、`join.documentTitle`）或占位符没替换完，构建直接失败，不会把空值或 `%…%` 发上线。新增可见文案先进 `zh.json`，不要散落在构建脚本、HTML 或页面组件里。
 
 用户自己的语言包记在本机 `localStorage`，不在 `web/dist` 或客户端快照里。语言包与内置中文表同一套嵌套格式（`strings` 里对象套对象、叶子是字符串），顶层是 `id` / `name` / `version`（包内版本号，非负整数，缺省 0）；带变量的文案同样写 `{名字}`、名字要和中文表对得上（对不上就原样留在屏幕上），包里那条要是没有 `{名字}` 的旧片段文案，参数不会补进去、屏幕上会少一段，改过占位或把片段合成整句之后语言包要跟着一起更新，落盘时也写嵌套，否则升级后已装包会被当成坏包丢掉；旧的扁平包按约定不再兼容，服务器 `LANG_PACK_URLS` 指向的包也要换成嵌套版（「下载中文底稿」的输出可直接当模板）。个人设置可以切换语言，也可以粘贴链接或选择 JSON 文件安装（应用里由原生读文件正文，见「原生桥接」）。应用与报名站都按服务器默认语言（`LANG_PACK_DEFAULT`）选语言：应用里用户显式选择过则优先，报名站不看个人选择；默认名称对应的包没装时都回退中文。自动下载不会覆盖已经安装的同名包；唯一例外是**跟随服务器默认语言**（应用里没选过语言，报名站始终如此）：启动后拉一份服务器上的默认包，按包内 `version` 比本机那份新就覆盖（用户显式选过语言的包不动，检查失败静默跳过）。切换语言后整页重新加载；默认包按版本更新后也重载一次，让整页都用新文案。安装成功的提示排到重载之后（`services/toast.ts` 的 `toastAfterReload`），重载后的首帧靠 `services/session-hint.ts` 那条本机提示先等会话恢复，不闪登录页。下载中文底稿在应用里走系统「另存为」，浏览器里退回浏览器下载。
