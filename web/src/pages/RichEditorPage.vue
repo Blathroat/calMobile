@@ -6,10 +6,11 @@
  * 的渲染入口（与详情页同一套清洗），不自行拼 HTML。
  * 图片与视频先由原生选择，再上传到服务器，正文只写服务器地址。
  * 编辑已有展会且从表单带 `?draft=1` 进来时，先用内存稿里的正文起稿
- * （表单里刚写、还没保存的纯文本简介），保存成功后清掉草稿。
+ * （表单里刚写、还没保存的纯文本简介），保存成功后把最新正文写回草稿并带回表单：
+ * 表单靠它恢复其他还没保存的字段，也不清掉草稿。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useAsync } from '@/composables/useAsync';
 import { useBootstrapStore } from '@/stores/bootstrap';
@@ -480,8 +481,9 @@ async function save(): Promise<void> {
       markdown ? t('exhibition.editor.descriptionSaved', { summary }) : t('exhibition.editor.descriptionCleared'),
       'success',
     );
-    // 正文已经落库：带回表单的是服务器那一份，内存稿不再需要。
-    clearExhibitionDraft();
+    // 正文已经落库，但草稿不能清：表单里其他字段可能还是未保存的修改，
+    // 把最新简介写回草稿，表单返回后用草稿恢复，那些内容才不会丢。
+    patchExhibitionDraft(markdown);
     await router.replace(`/exhibition-form/${encodeURIComponent(String(exhibition.value.id ?? exhibitionId.value))}`);
   } catch (reason) {
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -490,9 +492,18 @@ async function save(): Promise<void> {
   }
 }
 
-/** 编辑模式下的内存稿只用来起稿：离开编辑器就丢掉，避免带回表单成为陈旧草稿。 */
-onBeforeUnmount(() => {
-  if (!draftMode.value) clearExhibitionDraft();
+/** 目标是展会编辑表单（新建 `/exhibition-form`，编辑 `/exhibition-form/:id`）。 */
+function isExhibitionFormPath(path: string): boolean {
+  return path === '/exhibition-form' || path.startsWith('/exhibition-form/');
+}
+
+/**
+ * 内存稿是表单那一份草稿：只有回到编辑表单时才留着 —— 保存简介后表单要用它恢复
+ * 其他还没保存的字段；去别处说明这次编辑流程已经结束，顺手清掉，避免陈旧稿串到下一次。
+ */
+onBeforeRouteLeave((to) => {
+  if (isExhibitionFormPath(to.path)) return;
+  clearExhibitionDraft();
 });
 
 function isCancelled(reason: unknown): boolean {

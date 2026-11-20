@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, nextTick, type App } from 'vue';
+import { createApp, h, nextTick, type App } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { createMemoryHistory, createRouter } from 'vue-router';
+import { RouterView, createMemoryHistory, createRouter } from 'vue-router';
 import RichEditorPage from './RichEditorPage.vue';
 import { api } from '@/app/runtime';
 import { clearExhibitionDraft, readExhibitionDraft, stashExhibitionDraft } from '@/services/exhibition-draft';
@@ -44,7 +44,10 @@ async function mountEditor(path = '/rich-editor?id=exh-1'): Promise<void> {
   });
   await router.push('/exhibition-form');
   await router.push(path);
-  app = createApp(RichEditorPage).use(pinia).use(router);
+  // 页面挂在 RouterView 里：onBeforeRouteLeave 需要一条激活的路由记录，直接挂组件会报 R0020。
+  app = createApp({ render: () => h(RouterView) })
+    .use(pinia)
+    .use(router);
   app.mount('#editor-test');
   await nextTick();
 }
@@ -190,7 +193,7 @@ describe('简介加载、编辑与保存', () => {
     expect(api.exhibitions.get).not.toHaveBeenCalled();
   });
 
-  it('编辑已有展会且带 ?draft=1 时用草稿正文起稿，保存后清掉草稿', async () => {
+  it('编辑已有展会且带 ?draft=1 时用草稿正文起稿，保存后把最新正文写回草稿', async () => {
     vi.mocked(api.exhibitions.get).mockResolvedValue({
       found: true,
       exhibition: {
@@ -209,12 +212,19 @@ describe('简介加载、编辑与保存', () => {
     // 详情照常请求：保存 payload 里的其它字段仍来自服务端。
     expect(api.exhibitions.get).toHaveBeenCalledWith('exh-1');
 
+    const area = document.querySelector<HTMLTextAreaElement>('textarea');
+    if (!area) throw new Error('缺少编辑区');
+    area.value = '编辑器里改过的简介';
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
     document.querySelector<HTMLButtonElement>('#app-foot button')?.click();
     await vi.waitFor(() => expect(api.exhibitions.save).toHaveBeenCalledOnce());
     const payload = vi.mocked(api.exhibitions.save).mock.calls[0]![0];
-    expect(payload.description).toBe('文本框里刚写的简介');
+    expect(payload.description).toBe('编辑器里改过的简介');
     expect(payload.venue).toBe('测试展馆');
-    expect(readExhibitionDraft()).toBeNull();
+    // 正文落库后不清草稿：返回表单要靠它恢复其他还没保存的字段，最新简介也在里面。
+    await vi.waitFor(() => expect(readExhibitionDraft()?.description).toBe('编辑器里改过的简介'));
+    expect(readExhibitionDraft()?.id).toBe('exh-1');
   });
 
   it('草稿记的不是当前展会时不用它起稿，仍显示服务端正文', async () => {
@@ -228,7 +238,7 @@ describe('简介加载、编辑与保存', () => {
     expect(readExhibitionDraft()?.id).toBe('exh-2');
   });
 
-  it('编辑模式没保存就离开编辑器也会清掉草稿', async () => {
+  it('编辑模式没保存就离开编辑器时草稿留给表单，不随卸载清掉', async () => {
     vi.mocked(api.exhibitions.get).mockResolvedValue({
       found: true,
       exhibition: { id: 'exh-1', title: '秋季展会', description: '服务端简介', descriptionFormat: 'md' },
@@ -240,8 +250,10 @@ describe('简介加载、编辑与保存', () => {
     );
     expect(readExhibitionDraft()).not.toBeNull();
 
+    // 卸载本身不再清草稿：回表单的路由目标才是判断依据（见 ExhibitionFormPage 的往返用例）。
     app?.unmount();
     app = undefined;
-    expect(readExhibitionDraft()).toBeNull();
+    expect(readExhibitionDraft()).not.toBeNull();
+    expect(readExhibitionDraft()?.description).toBe('还没保存的简介');
   });
 });

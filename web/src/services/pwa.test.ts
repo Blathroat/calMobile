@@ -1,16 +1,18 @@
 /**
- * PWA 的两块状态：iOS 安装提示的「已关闭」记录，与 Service Worker 的注册守卫。
+ * PWA 的两块状态：安装引导的展示条件，与 Service Worker 的注册守卫。
+ *
+ * 安装引导只看平台与原生桥两个信号：非独立 PWA（不是从主屏幕启动）且没有原生桥（不是 App
+ * 里的 WebView）才提示。**没有「本机关过没有」的本机存储**——每次进入应用都会重新判断，
+ * 装到主屏幕或从原生 App 打开后条件自然为假。
  *
  * 注册本身不联网：把 `navigator.serviceWorker`、构建环境与 `isSecureContext` 换成目标状态，
- * 只验证「该不该注册、注册到哪个地址、失败会不会把页面带崩」。平台判断与原生桥用 mock
- * 固定，安装提示的展示条件不依赖真实 UA。
+ * 只验证「该不该注册、注册到哪个地址、失败会不会把页面带崩」。平台判断与原生桥用 mock 固定。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   joinSurface: false,
   hasNative: false,
-  ios: false,
   standalone: false,
 }));
 
@@ -25,17 +27,10 @@ vi.mock('@/services/native-bridge', () => ({
 }));
 
 vi.mock('./platform', () => ({
-  isIos: () => state.ios,
   isStandalonePwa: () => state.standalone,
 }));
 
-import {
-  IOS_INSTALL_HINT_KEY,
-  dismissIosInstallHint,
-  iosInstallHintDismissed,
-  isIosInstallOffer,
-  registerPwaServiceWorker,
-} from './pwa';
+import { registerPwaServiceWorker, shouldOfferPwaInstall } from './pwa';
 
 interface Stub {
   target: object;
@@ -84,9 +79,7 @@ const flush = (): Promise<void> =>
 beforeEach(() => {
   state.joinSurface = false;
   state.hasNative = false;
-  state.ios = false;
   state.standalone = false;
-  localStorage.removeItem(IOS_INSTALL_HINT_KEY);
 });
 
 afterEach(() => {
@@ -102,45 +95,27 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('iOS 安装提示', () => {
-  it('存储键固定为本机约定的名字', () => {
-    expect(IOS_INSTALL_HINT_KEY).toBe('calmobile.iosInstallHint');
-  });
-
-  it('关掉后记在本机，之后读到的是已关掉', () => {
-    expect(iosInstallHintDismissed()).toBe(false);
-
-    dismissIosInstallHint();
-
-    expect(localStorage.getItem(IOS_INSTALL_HINT_KEY)).toBe('1');
-    expect(iosInstallHintDismissed()).toBe(true);
-  });
-
-  it('localStorage 读写抛错时安全降级', () => {
-    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('存储被禁用');
-    });
-    expect(iosInstallHintDismissed()).toBe(false);
-    getItem.mockRestore();
-
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('配额已满');
-    });
-    expect(() => dismissIosInstallHint()).not.toThrow();
-    setItem.mockRestore();
-  });
-
-  it('是 iOS 且还没安装时才给安装引导', () => {
-    state.ios = true;
+describe('安装引导的展示条件', () => {
+  it('非独立 PWA 且没有原生桥时提供安装引导', () => {
     state.standalone = false;
-    expect(isIosInstallOffer()).toBe(true);
+    state.hasNative = false;
+    expect(shouldOfferPwaInstall()).toBe(true);
+  });
 
+  it('已经装到主屏幕（独立 PWA）时不再提示', () => {
     state.standalone = true;
-    expect(isIosInstallOffer()).toBe(false);
+    expect(shouldOfferPwaInstall()).toBe(false);
+  });
 
-    state.ios = false;
-    state.standalone = false;
-    expect(isIosInstallOffer()).toBe(false);
+  it('原生 App（有原生桥）里不提示', () => {
+    state.hasNative = true;
+    expect(shouldOfferPwaInstall()).toBe(false);
+  });
+
+  it('独立 PWA 与原生桥同时成立时同样不提示', () => {
+    state.standalone = true;
+    state.hasNative = true;
+    expect(shouldOfferPwaInstall()).toBe(false);
   });
 });
 

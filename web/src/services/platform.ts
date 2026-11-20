@@ -45,6 +45,9 @@ const IPHONE_DEVICE = /iphone/i;
 const IPAD_DEVICE = /ipad/i;
 const IPOD_DEVICE = /ipod/i;
 
+/** Android 设备（含内置浏览器与各家壳）的 UA 标记；安装引导据此换一套步骤。 */
+const ANDROID_DEVICE = /android/i;
+
 /** iPadOS 桌面版 UA 的 `Macintosh` 标记。 */
 const MACINTOSH_DESKTOP = /macintosh/i;
 
@@ -179,6 +182,16 @@ export function isIos(): boolean {
 export function isIosSafari(): boolean {
   const platform = currentPlatform();
   return platform.ios && platform.safari;
+}
+
+/**
+ * 当前是不是 Android 设备。
+ *
+ * 安装引导要按 Android、iOS 与桌面分开给步骤，但 Android 不参与 iOS / Safari 的判断，
+ * 所以只读 UA，不往 `PlatformInfo` 里加字段（iPadOS 桌面版 UA 的坑见文件头）。
+ */
+export function isAndroid(): boolean {
+  return ANDROID_DEVICE.test(snapshotOfCurrentPlatform().userAgent);
 }
 
 /** 当前是不是从主屏幕启动的 PWA（已安装），此时不再提示「添加到主屏幕」。 */
