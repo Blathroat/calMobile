@@ -1,8 +1,8 @@
 # 构建、测试与上线
 
-本文件是跨模块的验证和上线步骤。后端启动、模式差异和响应约定见 [`server/README.md`](../server/README.md)。环境变量以 `server/.env.example` 的注释为准；运行期 PWA/标题/图标品牌见 `server/.env.example` 的「运行时品牌」，构建期默认值见 `web/.env.example`。Node 版本以 `server/package.json` 和 `web/package.json` 的 `engines` 为准。
+本文件是跨模块的验证和上线步骤。后端启动、模式差异和响应约定见 [`server.md`](server.md)。环境变量以 `server/.env.example` 的注释为准；运行期 PWA、标题与图标品牌见该文件的「运行时品牌」，构建期默认值见 `web/.env.example`。Node 版本以 `server/package.json` 和 `web/package.json` 的 `engines` 为准。
 
-前端 `vue-tsc` 停在 TypeScript 6（`web/package.json` 的 `typescript`）。当前 Vue 类型检查器用不上 TypeScript 7 的原生编译入口。后端使用 TypeScript 7。升级时保留 `.vue` 类型检查。
+前端类型检查用 `web/package.json` 里的 TypeScript 6（Vue 类型检查器还接不上 TypeScript 7 的原生编译入口），后端用 TypeScript 7。升级时保留 `.vue` 类型检查。
 
 ## 按改动验证
 
@@ -59,9 +59,9 @@ server {
 
 应用包里的接口地址来自 `APP_API_BASE`（`server/.env`，进程里已有的同名变量优先）。没配时是 `http://127.0.0.1:<PORT>/api/v1`。它只决定 APK 外壳加载哪个源的 `/app/index.html`、开发代理目标、明文/混合内容和 APK 页面源；页面包本身一律用相对 `/api/v1`，同一份 `web/dist` 可部署到任意 `PUBLIC_BASE_URL`。报名站不读它，接口仍是相对的 `/api/v1`。改 APK 指向的实例仍要重新构建 APK。
 
-**经 Cloudflare 转发时**（橙色云或 Cloudflare Tunnel）：边缘把真实客户端地址写进 `CF-Connecting-IP`，同时让 `X-Forwarded-For` 再追加一跳，只按跳数解析会把 Cloudflare 边缘地址当成客户端——最近登录地区会一直是机房所在地，按 IP 的验证码限流还会误伤同一边缘下的所有用户。服务器 `/etc/calmobile.env` 保持 `TRUST_PROXY=1` 并打开 `TRUST_CLOUDFLARE=1`（`deploy/production.env` 已带这一项，更新时会补进还没有它的服务器）：地址链里至少有一跳可信反代时，服务端改用 `CF-Connecting-IP`（见 `server/src/http/client-ip.ts`）。这个头只有经过 Cloudflare 时才是真的，**源站要只接受 Cloudflare 与反代的流量**；不走 Cloudflare 的部署把它改成 0。反代不需要额外配置，nginx 默认会把请求头一起转给上游。
+**经 Cloudflare 转发时**（橙色云或 Cloudflare Tunnel）：边缘把真实客户端地址写进 `CF-Connecting-IP`，同时让 `X-Forwarded-For` 再追加一跳；只按跳数解析会把 Cloudflare 边缘地址当成客户端，登录地区与按 IP 的验证码限流都会出错。服务器 `/etc/calmobile.env` 保持 `TRUST_PROXY=1` 并打开 `TRUST_CLOUDFLARE=1`（`deploy/production.env` 已带这一项，更新时会补进还没有它的服务器）。地址链里至少有一跳可信反代时，服务端改用 `CF-Connecting-IP`（见 `server/src/http/client-ip.ts`）。这个头只有经过 Cloudflare 时才是真的，**源站要只接受 Cloudflare 与反代的流量**；不走 Cloudflare 的部署把它设为 0。反代不需要额外配置，nginx 默认会把请求头一起转给上游。
 
-包名默认 `com.blathroat.calmobile`。Java 源码仍在 `com.example.calmobile`。调试包和正式包都用这个包名。手机上已经装过 `com.example.calmobile` 的，是另一个应用，要先卸掉。
+包名默认 `com.blathroat.calmobile`（Java 源码在 `com.example.calmobile`）。调试包和正式包都用这个包名；手机上装过 `com.example.calmobile` 的是另一个应用，要先卸掉。
 
 `./gradlew :app:assembleDebug` 使用当前这份配置，不要求公网地址或签名。`./gradlew :app:assembleRelease` 会拒绝：地址不是公网 https、包名是 `com.example`、签名四项缺一或密钥文件不存在。
 
@@ -88,7 +88,7 @@ iPhone 没有 APK，安装文件是 `web/dist` 里随页面一起发布的静态
 | `PWA_APP_NAME` | `manifest.name` 与应用页标题后缀（页面标题是「品牌 · 应用名」） |
 | `PWA_APP_SHORT_NAME` | `manifest.short_name`、`apple-mobile-web-app-title` |
 | `PWA_APP_DESCRIPTION` | `manifest.description`、`meta name="description"` |
-| `APP_TITLE` | 应用页完整标题覆盖；设置后不再拼品牌前缀 |
+| `APP_TITLE` | 应用页完整标题覆盖；设置后不拼品牌前缀 |
 | `JOIN_TITLE` | 报名站页签标题 |
 | `PWA_LANG` / `PWA_THEME_COLOR` / `PWA_THEME_COLOR_DARK` / `PWA_BACKGROUND_COLOR` | manifest 语言、主题色与背景色 |
 | `APP_ICON` / `APP_ICON_BACKGROUND` / `APP_ICON_TRANSPARENT` | 运行时生成 PWA/favicon 图标；透明模式同时影响 Android 构建 |
@@ -96,7 +96,7 @@ iPhone 没有 APK，安装文件是 `web/dist` 里随页面一起发布的静态
 
 没有品牌变量时服务器直接托管构建产物，零额外开销；有品牌变量时启动会复制一份临时页面层、改完并重算 `release.json`，进程退出时清理。单个品牌项（标题、manifest、图标、SW 缓存名）失败只回退该项并打 warning，`release.json` 生成失败才整体回退静态页面。`web/dist` 本身不被修改。改这些变量要重启服务；Android 热更新会按新的 `release.json` 校验并拉取新页面。构建期 `PWA_*` 仍给 APK 和默认页面兜底，写在构建机的 `web/.env` / `.env.local` 或构建进程环境里。
 
-图标生成和 `APP_ICON` 配置见下面的「应用图标」。主屏幕名称与图标在安装时写进系统；改 `PWA_*`、`APP_ICON` 或 `JOIN_TITLE` 后要重启服务，并让用户删除旧主屏幕图标后重新「添加到主屏幕」才会看到新名称/图标。
+图标生成和 `APP_ICON` 配置见下面的「应用图标」。主屏幕名称与图标在安装时写进系统；改 `PWA_*`、`APP_ICON` 或 `JOIN_TITLE` 后要重启服务，并让用户删除已安装的主屏幕图标后重新「添加到主屏幕」才会看到新名称/图标。
 
 发布后确认（把 `<域名>` 换成实际域名）：
 
@@ -113,9 +113,9 @@ curl -s https://<域名>/app/sw.js | sed -n 's/^const PRECACHE = //p'
 
 iPhone 真机验收（Safari，或从主屏幕打开）：
 
-1. Safari 打开 `/app/`：首页出现一次「安装到主屏幕」引导，关掉后刷新不再自动出现；设置页仍有「安装到主屏幕」入口，能重新打开同一份说明；用微信等非 Safari 浏览器打开时，说明提示先换到 Safari。
+1. Safari 打开 `/app/`：首屏之后提示一次「安装到主屏幕」；关掉后同一次页面会话里在底部导航之间切换不重复弹，重新打开或刷新页面会再提示一次。设置页仍有「安装到主屏幕」入口，能重新打开同一份说明；用微信等非 Safari 浏览器打开时，说明提示先换到 Safari。
 2. 分享 →「添加到主屏幕」：名称与图标正确；从主屏幕打开是独立窗口（没有 Safari 地址栏），首页月历与展会能正常加载。第一次打开可能需要重新登录，登录后数据正常。
-3. 报名站（`/e/…`）在 iPhone 上：顶部显示安装引导而不是下载条，按钮打开同一份说明，「打开完整应用」能跳到 `/app/`。
+3. 报名站（`/e/…`）在 iPhone 上：顶栏右侧有安装图标，按钮打开同一份说明，「打开完整应用」能跳到 `/app/`。Android 浏览器打开报名站时顶栏右侧是下载图标（管理员没配下载地址时不显示），点击交给系统浏览器。
 4. 详情页「加入日历」生成 `.ics` 并通过分享面板存到「文件」，点开后能加入系统日历；页面上没有「移出日历」。
 5. 头像、封面、简介图片能选图并上传；语言包与协议 Markdown 能选文件；CSV、语言包底稿、二维码图片落成下载文件；分享走系统面板，退回复制时提示成功。
 6. 核销页能用摄像头扫码；拒绝相机权限或没有摄像头时提示改用选图或手动输入。
@@ -124,13 +124,13 @@ iPhone 真机验收（Safari，或从主屏幕打开）：
 
 ### 应用图标
 
-网站 favicon、PWA 主屏幕图标、Apple 主屏幕图标和 APK 启动图标共用一张源图，避免四处各放一份后改漏。构建期和服务器运行期读同一组变量：构建时生成页面/APK 的默认图标，服务器启动时可以按实例再生成一套 PWA/favicon 图标（见上面的「PWA 与 iPhone 主屏幕」）。
+网站 favicon、PWA 主屏幕图标、Apple 主屏幕图标和 APK 启动图标共用一张源图。构建期和服务器运行期读同一组变量：构建时生成页面/APK 的默认图标，服务器启动时可以按实例再生成一套 PWA/favicon 图标（见上面的「PWA 与 iPhone 主屏幕」）。
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `APP_ICON` | `web/public/icons/icon-1024.png` | 方形 PNG；构建时相对仓库根，运行时相对包根或绝对路径 |
 | `APP_ICON_BACKGROUND` | `#41707e` | 十六进制底色；maskable、Apple 主屏幕、Android 自适应图标留白用；需与 `APP_ICON` 或 `PWA_ICON_DIR` 一起配 |
-| `APP_ICON_TRANSPARENT` | 空 | `1` 时生成透明图标；Android 侧不再生成 adaptive 图标；需与图标源一起配 |
+| `APP_ICON_TRANSPARENT` | 空 | `1` 时生成透明图标；Android 侧不生成 adaptive 图标；需与图标源一起配 |
 | `PWA_ICON_DIR` | 空 | 服务器运行时直接使用预生成的 `favicon.ico` + `icons/*`（需含 192/512/1024/maskable/favicon-32/apple-180），与 `APP_ICON` 二选一 |
 
 构建期写在构建机的 `server/.env` 或构建进程环境里（`web/.env` 不作为图标配置来源，避免网页和 APK 拿到不同源图）。运行时写在服务器 `/etc/calmobile.env`；两者同名时运行时优先。
@@ -143,7 +143,7 @@ iPhone 真机验收（Safari，或从主屏幕打开）：
 | Android 启动图标 | `app/build/generated/icons/res/mipmap-*/ic_launcher.png`、`ic_launcher_round.png`（mdpi 48 到 xxxhdpi 192） |
 | Android 自适应 | `mipmap-anydpi-v26/ic_launcher.xml`、`ic_launcher_round.xml`、`mipmap-*/ic_launcher_foreground.png`（108～432）、`values/ic_launcher_background.xml`；`APP_ICON_TRANSPARENT=1` 时不生成 |
 
-网页图标在 `pnpm --dir web build` 时由 `web/pwa-build.mjs` 调 `scripts/build-icons.mjs` 生成；Android 图标由 Gradle 的 `buildIcons` 任务在 `preBuild` 时生成。两者都走同一个纯 Node 入口：`build-icons.mjs` 只是 façade，PNG 编解码、配置、站点图标与 Android 图标分别在 `scripts/icons/` 的 `png.mjs` / `config.mjs` / `web.mjs` / `android.mjs`，没有额外图片工具依赖。
+网页图标在 `pnpm --dir web build` 时由 `web/pwa-build.mjs` 调 `scripts/build-icons.mjs` 生成；Android 图标由 Gradle 的 `buildIcons` 任务在 `preBuild` 时生成。两者都走同一个纯 Node 入口：`build-icons.mjs` 是 façade，PNG 编解码、配置、站点图标与 Android 图标分别在 `scripts/icons/` 的 `png.mjs` / `config.mjs` / `web.mjs` / `android.mjs`，没有额外图片工具依赖。
 
 源图要求：
 
@@ -174,10 +174,10 @@ APP_ICON=/path/to/icon.png node scripts/build-icons.mjs --target android
 发布链路：
 
 - 只改 `web/pwa-build.mjs`、`scripts/icons/web.mjs`：发运行时包，不发 APK（页面热更新即可）。
-- 改 `scripts/icons/android.mjs`、默认源图 `web/public/icons/icon-1024.png`（或 `scripts/icons/png.mjs` / `config.mjs` 这类共用模块）：按 [`scripts/release-scope.mjs`](../scripts/release-scope.mjs) 归类会发 APK，同时发运行时包，避免新装 APK 还是旧图标。
-- 改其它预生成图标（`web/public/icons/` 里除 `icon-1024.png` 之外的文件）：只发运行时包（两份页面会跟着换图标），不再触发 APK。
+- 改 `scripts/icons/android.mjs`、默认源图 `web/public/icons/icon-1024.png`（或 `scripts/icons/png.mjs` / `config.mjs` 这类共用模块）：按 `scripts/release-scope.mjs` 归类会发 APK，同时发运行时包，避免新装 APK 的图标与页面不一致。
+- 改其它预生成图标（`web/public/icons/` 里除 `icon-1024.png` 之外的文件）：只发运行时包（两份页面会跟着换图标），不发 APK。
 - 只改 `APP_ICON` / `APP_ICON_BACKGROUND` / `PWA_ICON_DIR` 环境变量或服务器上的图片文件时，release-scope 不会命中，也不需要发版；改服务器 `/etc/calmobile.env` 后重启服务即可。
-- 主屏幕 / 桌面图标是安装时写进系统的快照：重新生成后，用户要删掉旧图标重新「添加到主屏幕」，或重装 APK，才会看到新图。
+- 主屏幕 / 桌面图标是安装时写进系统的快照：重新生成后，用户要删掉已安装的主屏幕图标重新「添加到主屏幕」，或重装 APK，才会看到新图。
 
 发布后检查：
 
@@ -236,7 +236,7 @@ $env:TRUST_PROXY = "1"
 pnpm --dir server dev
 ```
 
-4. iPhone Safari 打开 `$BASE/app/`：首页应出现安装引导（其它浏览器与桌面打开 `/app/` 也会提示，步骤按平台不同）；分享 →「添加到主屏幕」后从主屏幕启动。按上面的真机验收清单勾一遍。
+4. iPhone Safari 打开 `$BASE/app/`：首屏之后应出现安装引导，每次访问都会提示一次（其它浏览器与桌面打开 `/app/` 也会提示，步骤按平台不同）；分享 →「添加到主屏幕」后从主屏幕启动。按上面的真机验收清单勾一遍。
 
 注意：
 
@@ -246,9 +246,11 @@ pnpm --dir server dev
 - 验证离线：首次在线打开、等 SW 装好并刷新一次后，开飞行模式从主屏幕启动；页面壳应出现，数据请求失败要有可见提示；恢复网络后重新打开。
 - 验证安装名/描述：服务器 `/etc/calmobile.env` 配 `PWA_APP_NAME` / `PWA_APP_SHORT_NAME` / `PWA_APP_DESCRIPTION` / `APP_TITLE` / `JOIN_TITLE` 后重启服务，重新添加到主屏幕；构建期 `PWA_*` 只是默认值。已安装的名称为系统快照，不会自动更新。
 
+## 发布
+
 ### 发布链路
 
-推送到 `master` 的合并提交在 CI 成功之后，`.github/workflows/release.yml` 按这次推送的路径发布。普通提交只跑 CI，不发布；功能分支和拉取请求不发布。会触发发布或更新的改动走 PR，用合并提交合入，不要直接推到 `master`。合入前要等该拉取请求自己的 CI 成功。检查还在跑或失败时不要合并。合并之后 `master` 上还会再跑一次推送 CI，那一次才决定自动 Release。
+推送到 `master` 的合并提交在 CI 成功之后，`.github/workflows/release.yml` 按这次推送的路径发布。普通提交只跑 CI，不发布；功能分支和拉取请求不发布。会触发发布或更新的改动走 PR，用合并提交合入，不要直接推到 `master`。合入前要等该拉取请求自己的 CI 成功；检查还在跑或失败时不要合并。合并之后 `master` 上还会再跑一次推送 CI，那一次才决定自动 Release。
 
 一次 Release 产出两件东西：
 
@@ -257,7 +259,7 @@ pnpm --dir server dev
 
 运行时包里有 `server/dist`（含页面壳副本 `server/dist/app-shell`、报名站副本 `server/dist/app-shell-join`）、`web/dist`、`web/dist-join`、`scripts/build-icons.mjs` 与 `scripts/icons/`、`scripts/env-file.mjs`、`scripts/render-units.mjs`、`deploy/instance.env.example`、`deploy/systemd/*.in`、服务端依赖清单和更新器脚本。服务器解压后 `server/` 与 `web/` 同级；服务端优先读 `web/dist`、`web/dist-join`，缺失时分别读 `server/dist/app-shell`、`server/dist/app-shell-join`。配置了运行时品牌时，服务启动后会在临时目录生成实例页面层，`web/dist` 本身不改。`web/src` 和 `server/src` 不进包；界面文案在构建时已经打进两份页面产物的脚本里。
 
-路径归类在 [`scripts/release-scope.mjs`](../scripts/release-scope.mjs)。CI 在 push 时记下 `before..after` 的文件清单，Release 读取它：
+路径归类在 `scripts/release-scope.mjs`。CI 在 push 时记下 `before..after` 的文件清单，Release 读取它：
 
 - 原生外壳（`app/src/main`、`app/build.gradle`、Gradle、`scripts/client-target.mjs`）发布 APK。
 - 服务端运行时代码、依赖锁、`deploy/`、`scripts/runtime-bundle.mjs`、`scripts/sync-production-env.mjs`、`scripts/env-file.mjs`、`scripts/render-units.mjs`、`scripts/icons/png.mjs`、`scripts/icons/config.mjs`、`scripts/build-icons.mjs` 发布运行时包。
@@ -272,13 +274,13 @@ pnpm --dir server dev
 
 路径不需要发布时，Release 仍然成功，但 APK 和运行时包都跳过，也不建标签。手动强制发布是另一次运行。两次各占一个运行编号，所以标签和包版本可以跳号。
 
-已经在 `master` 上、并且这次提交的 CI 已经成功时，可以在 Actions 里手动运行 Release，强制发布当时的 `master`。四个开关默认都开：发 APK、服务端、应用页面、报名站。`server` / `app` / `join` 任选其一就会发布完整运行时包，包内不会只带其中一部分。发 APK 时总会发布运行时包。强制发布不看这次推送改了哪些文件，构建的是当前提交。功能分支不能强制发布。检查还在跑、或者还没有成功的 master CI 时，强制发布会拒绝。撤回合并再发布会发布撤回之后的旧代码，不要用撤回来补发。
+已经在 `master` 上、并且这次提交的 CI 已经成功时，可以在 Actions 里手动运行 Release，强制发布当时的 `master`。四个开关默认都开：发 APK、服务端、应用页面、报名站。`server` / `app` / `join` 任选其一就会发布完整运行时包，包内不会只带其中一部分。发 APK 时总会发布运行时包。强制发布不看这次推送改了哪些文件，构建的是当前提交。功能分支不能强制发布。检查还在跑、或者还没有成功的 master CI 时，强制发布会拒绝。撤回合并再发布会发布撤回之后的代码，不要用撤回来补发。
 
 npm 上同一个版本已经存在时，发布步骤会跳过，不会让重跑失败。npm 发布带 provenance，仓库和包都公开。
 
 ### 服务器更新
 
-服务器不再由 CI 通过 SSH 推送，而是由 systemd timer 从 npm 拉取：
+服务器由 systemd timer 从 npm 拉取新版本：
 
 ```
 /opt/calmobile/current -> releases/0.1.<编号>
@@ -297,7 +299,7 @@ ExecStart=/usr/bin/node dist/index.js --production
 
 更新器是 `/usr/local/lib/calmobile/calmobile-update.mjs`，随运行时包一起发布；一次成功切换后会把自己更新到新版本。`calmobile-update.timer` 每 5 分钟触发一次 `calmobile-update.service`，开机 3 分钟后第一次。
 
-更新器与 systemd 单元只认一份配置：**`/etc/calmobile.env` 里的 `CALMOBILE_*` 键**（应用自身的变量也在同一份文件）。优先级是「默认值 < env 文件 < 进程环境变量 < 命令行 `--env-file` / `--root` / `--service`」；完整键表与默认值见仓库 [`deploy/instance.env.example`](../deploy/instance.env.example) 和 [`deploy/production.env`](../deploy/production.env)。旧版 `/etc/calmobile-update.json` 与 `CALMOBILE_CONFIG_PATH` 已废弃：新版更新器只打印一次迁移提示、不再读取，升级前要把其中的值按对照表搬进 `/etc/calmobile.env`。国内网络访问 npm 官方源慢时，把 `CALMOBILE_REGISTRY` 改成可达的镜像；镜像同步有延迟，更新会晚一点。
+更新器与 systemd 单元只认一份配置：**`/etc/calmobile.env` 里的 `CALMOBILE_*` 键**（应用自身的变量也在同一份文件）。优先级是「默认值 < env 文件 < 进程环境变量 < 命令行 `--env-file` / `--root` / `--service`」；完整键表与默认值见 `deploy/instance.env.example` 和 `deploy/production.env`。服务器上如果还有 `/etc/calmobile-update.json`，按 `deploy/instance.env.example` 末尾的对照表把值搬进 `/etc/calmobile.env`；更新器只读 env 文件，`CALMOBILE_CONFIG_PATH` 不生效。国内网络访问 npm 官方源慢时，把 `CALMOBILE_REGISTRY` 改成可达的镜像；镜像同步有延迟，更新会晚一点。
 
 手动操作：
 
@@ -309,40 +311,32 @@ node /usr/local/lib/calmobile/calmobile-update.mjs --rollback
 node /usr/local/lib/calmobile/calmobile-update.mjs --unpin
 ```
 
-一次更新依次做：校验 npm 元数据和 tarball 完整性 → 解压到 `releases/.tmp-*` → `pnpm install --frozen-lockfile --prod` → 补齐 `/etc/calmobile.env` 缺失的键 → 用新版本代码跑迁移 → 原子切换 `current` → 重启 `calmobile.service` → 轮询 `/ping`。成功后删除超出 `keep`（默认 3）的旧版本和旧缓存。服务端的离线 IP 归属地库（`ip2region-ts`）随依赖一起装进版本目录，数据文件在包里，不需要额外环境变量或手工放文件；解析失败只让最近登录地区为空，不影响登录。
+一次更新依次做：校验 npm 元数据和 tarball 完整性 → 解压到 `releases/.tmp-*` → `pnpm install --frozen-lockfile --prod` → 补齐 `/etc/calmobile.env` 缺失的键 → 用新版本代码跑迁移 → 原子切换 `current` → 重启 `calmobile.service` → 轮询 `/ping`。成功后删除超出 `keep`（默认 3）的上一版本和对应缓存。服务端的离线 IP 归属地库（`ip2region-ts`）随依赖一起装进版本目录，数据文件在包里，不需要额外环境变量或手工放文件；解析失败只让最近登录地区为空，不影响登录。
 
-**`current/web/dist` 不是缓存**：它是运行时包里 PWA 的 `/app/`、Android 热更新清单和 favicon 的来源。更新器只删除超出 `keep` 的旧版本目录，不碰当前版本的 `web/dist`；生产服务单元也不要在启动前删除它（单元模板见 [`deploy/systemd/calmobile.service.in`](../deploy/systemd/calmobile.service.in)，用 `scripts/render-units.mjs` 渲染）。如果旧单元里有 `ExecStartPre=rm -rf .../current/web/dist`，去掉。运行时包另带 `server/dist/app-shell` 与 `server/dist/app-shell-join` 副本，旧单元仍清掉 `web/dist` 或 `web/dist-join` 时服务端会自动退到对应副本，`/app/`、PWA、报名站和 Android 热更新不会消失；但清理构建产物仍是错误配置，先修单元再回滚临时方案。
+**`current/web/dist` 不是缓存**：它是运行时包里 PWA 的 `/app/`、Android 热更新清单和 favicon 的来源。更新器只删除超出 `keep` 的上一版本目录，不碰当前版本的 `web/dist`；生产服务单元不能在启动前删除或清空它（单元模板见 `deploy/systemd/calmobile.service.in`，用 `scripts/render-units.mjs` 渲染）。运行时包另带 `server/dist/app-shell` 与 `server/dist/app-shell-join` 副本，构建产物缺失时服务端会退到副本；但清理构建产物仍是错误配置，应按模板把单元修好。
 
 失败时不会把线上搞挂：
 
-- 下载、校验、依赖安装、环境文件合并或迁移失败：不切换，旧版本继续服务，timer 下次重试。
+- 下载、校验、依赖安装、环境文件合并或迁移失败：不切换，上一版本继续服务，timer 下次重试。
 - 切换后启动失败或 `/ping` 超过 30 秒不返回 200：自动切回上一版本、重启并写 `state/pin`，需要修好之后执行 `--unpin`（或 `--update --force`）恢复自动更新。
-- 回滚只换程序，不撤销数据库迁移。迁移只追加，旧版本可以读新库；高风险迁移前另外备份数据库。
+- 回滚只换程序，不撤销数据库迁移。迁移只追加，上一版本可以读新库；高风险迁移前另外备份数据库。
 - 手动 `--rollback` 同样会写 pin，避免 5 分钟后被自动更新拉回坏版本。
 
 服务器上要能不用密码执行 `sudo`（安装环境文件、执行迁移、重启服务），Node 要满足 `engines`，`pnpm` 和 `tar` 在 `PATH` 里，运行更新的账号对 `/opt/calmobile` 可写。磁盘至少留 `minFreeMb`（默认 512 MB）。
 
-首次从 SSH 部署切换到 npm：
+### APK 页面与热更新
 
-1. 等一次 Release 成功，确认 npm 上已经有 `calmobile-server@0.1.<编号>`。
-2. 把 `deploy/calmobile-update.mjs` 放到 `/usr/local/lib/calmobile/calmobile-update.mjs`，把 `deploy/instance.env.example` 抄成 `/etc/calmobile.env` 并按本机填好（含 `CALMOBILE_*` 实例身份；旧的 `/etc/calmobile-update.json` 不再读取，按对照表搬进 env）。
-3. 运行 `node /usr/local/lib/calmobile/calmobile-update.mjs --update`：建立 `releases/0.1.<编号>`、`current`，完成依赖安装和迁移。此时 `calmobile.service` 还指向旧目录，这一步只是重启旧服务，不影响访问。
-4. 生成并安装单元：`node scripts/render-units.mjs --env-file /etc/calmobile.env --out /etc/systemd/system`（从运行时包或仓库根执行，输出文件名按 `CALMOBILE_SERVICE` / `CALMOBILE_UPDATE_SERVICE`），`systemctl daemon-reload` 后重启。模板见 [`deploy/systemd/`](../deploy/systemd/)：`/opt/calmobile/current/web/dist` 和 `web/dist-join` 是运行时包的一部分，PWA 的 `/app/`、Android 热更新清单、站点图标和报名站都从这里读，**不要在 `ExecStartPre` 里删除或清空它们**；旧单元里有这类清理命令时删掉，只保留入口存在性检查。运行时包同时带 `server/dist/app-shell`、`server/dist/app-shell-join` 副本，服务端在构建产物被清理时会退到它们，但应把单元修好而不是依赖副本。
-5. `systemctl enable --now calmobile-update.timer`。
-6. 确认 `/ping`、`/`、`/app/index.html`、`/app/release.json`、`/join` 都正常后，删除旧的 `/opt/calmobile/server`、`/opt/calmobile/web` 和 `dist.prev`。
-7. 在 GitHub 删除不再使用的 `DEPLOY_*` Secrets / Variables。
+应用页面打进 APK 一份。正式包打开接口所在源的 `/app/index.html`，WebView 把这个路径拦截到本机快照，页面切换不访问网络。快照没有，或不是当前 `versionCode`，就用包内那份。首屏出来之后才后台拉取 `/app/release.json`；有新版本才下到待用目录，下次冷启动再换上，使用中不重载。调试包（接口是 http）不热更新。页面包本身用相对 `/api/v1`，不含 `APP_API_BASE` 域名；`APP_API_BASE` 只决定 APK 外壳加载哪个源，因此 APK 仍按实例构建，但同一份运行时包里的 `web/dist` 不必按域名重建。
 
 ### 环境文件
 
-进程里已有的非空变量仍然优先于 `server/.env`。生产单元用 `EnvironmentFile=/etc/calmobile.env` 把这份文件注进进程。部署目录里不要再放一份开发用的 `.env`。上传目录用绝对路径，放在部署目录外面，不随版本切换。
+进程里已有的非空变量优先于 `server/.env`。生产单元用 `EnvironmentFile=/etc/calmobile.env` 把这份文件注进进程。部署目录里不放开发用的 `.env`。上传目录用绝对路径，放在部署目录外面，不随版本切换。
 
-`/etc/calmobile.env` 是服务器运行配置的唯一来源。更新器只把运行时包里 `deploy/production.env` 有、而服务器上没有的键补进去；服务器上已有的非空值不覆盖，文件里多出来的键保留，空的密钥不写入。`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL` 缺失时更新器在合并环境文件的阶段就中止，不会切换版本。要改一个已经存在的值，直接改服务器上的 `/etc/calmobile.env` 并重启服务。GitHub Variables 不再写进服务器；数据库、邮件等按机器变化的值只维护在服务器上。
+`/etc/calmobile.env` 是服务器运行配置的唯一来源。更新器只把运行时包里 `deploy/production.env` 有、而服务器上没有的键补进去；服务器上已有的非空值不覆盖，文件里多出来的键保留，空的密钥不写入。`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`ADMIN_EMAIL` 缺失时更新器在合并环境文件的阶段就中止，不会切换版本。要改一个已经存在的值，直接改服务器上的 `/etc/calmobile.env` 并重启服务。GitHub Variables 只用于构建 APK 与页面，不进服务器；数据库、邮件等按机器变化的值只维护在服务器上。
 
 新增一个键时：非密钥的固定项写进 `deploy/production.env`，下一次更新自动补进还没有它的服务器；密钥或必须按机器填的值直接写进服务器 `/etc/calmobile.env`。缺了它会让生产自检拒绝启动的必填密钥，还要加进 `scripts/sync-production-env.mjs` 的 `REQUIRED_SERVER_SECRETS`，更新器会在切换版本前拦住。
 
-**更新器与 systemd 单元也读同一份 `/etc/calmobile.env`**：实例身份/路径/服务名用 `CALMOBILE_*` 前缀（见 `deploy/instance.env.example`），不再有单独的 `/etc/calmobile-update.json`。单元文件不是手写的：`deploy/systemd/*.in` 里的 `@CALMOBILE_*@` 占位符由 `node scripts/render-units.mjs --env-file /etc/calmobile.env --out <systemd 目录>` 渲染，改用户、路径、服务名或 env 文件位置后要重新渲染并 `systemctl daemon-reload`。
-
-应用页面打进 APK 一份。正式包打开接口所在源的 `/app/index.html`，WebView 把这个路径拦截到本机快照，页面切换不访问网络。快照没有，或不是当前 `versionCode`，就用包内那份。首屏出来之后才后台拉取 `/app/release.json`；有新版本才下到待用目录，下次冷启动再换上，使用中不重载。调试包（接口是 http）不热更新。页面包本身用相对 `/api/v1`，不含 `APP_API_BASE` 域名；`APP_API_BASE` 只决定 APK 外壳加载哪个源，因此 APK 仍按实例构建，但同一份运行时包里的 `web/dist` 不必按域名重建。
+更新器与 systemd 单元也读同一份 `/etc/calmobile.env`：实例身份、路径与服务名用 `CALMOBILE_*` 前缀（见 `deploy/instance.env.example`）。单元文件不是手写的：`deploy/systemd/*.in` 里的 `@CALMOBILE_*@` 占位符由 `node scripts/render-units.mjs --env-file /etc/calmobile.env --out <systemd 目录>` 渲染，改用户、路径、服务名或 env 文件位置后要重新渲染并 `systemctl daemon-reload`。
 
 ### 多实例部署
 
@@ -350,7 +344,7 @@ node /usr/local/lib/calmobile/calmobile-update.mjs --unpin
 
 - 页面包不含 API 域名。应用、PWA、报名站的接口和媒体都走相对 `/api/v1`、`/media/...`，由当前页面 origin 决定实际实例。反代必须把 `/app/`、`/api/`、`/media/` 放在同一个源下。
 - 每个实例只改自己的 `/etc/calmobile.env`：`PUBLIC_BASE_URL`（分享链接、安装说明地址、canonical redirect、WebAuthn 默认 RP/origin）、数据库、邮件、`LANG_PACK_URLS`、隐私政策，以及运行时品牌（`PWA_APP_NAME` / `PWA_APP_SHORT_NAME` / `PWA_APP_DESCRIPTION` / `APP_TITLE` / `JOIN_TITLE` / `APP_ICON` 等，见「PWA 与 iPhone 主屏幕」）。`PUBLIC_BASE_URL` 必须和用户实际访问的域名一致。
-- `APP_API_BASE` 只用于 APK 外壳加载 `/app/index.html` 和开发代理；它不再进入页面包，也不参与运行时包构建。**APK 仍按实例构建**（同一个 APK 不能指向多个域名）；运行时包里的页面产物是共享的。
+- `APP_API_BASE` 只用于 APK 外壳加载 `/app/index.html` 和开发代理；它不进入页面包，也不参与运行时包构建。**APK 仍按实例构建**（同一个 APK 不能指向多个域名）；运行时包里的页面产物是共享的。
 - 构建后可用下面的检查确认页面包没有写死实例域名；`web/check-page-bundle.mjs` 已经接成 Vite 构建插件，`pnpm --dir web build`、`build:join` 与 `--watch` 每次写完后都会检查，出现域名就让构建失败：
 
 ```bash
@@ -358,37 +352,38 @@ node web/check-page-bundle.mjs web/dist web/dist-join
 ```
 
 - PWA 的 `manifest.start_url` / `scope` 是 `/app/`，图标和 Service Worker 也都是相对路径；同一份页面放到不同 `PUBLIC_BASE_URL` 下即可安装。安装后的主屏幕名称/图标是各实例安装时的快照，改运行时品牌后要重新添加。
-- 如果某个实例把 API 放到另一个源，请在反代上把 `/api`、`/media` 同域转发到 API；不要把域名写进页面包，否则会重新引入“换域名要重建”的问题，并额外破坏 WebAuthn 的 RP ID/origin 校验。
+- 如果某个实例把 API 放到另一个源，请在反代上把 `/api`、`/media` 同域转发到 API；不要把域名写进页面包，否则会重新引入「换域名要重建」的问题，并额外破坏 WebAuthn 的 RP ID/origin 校验。
 
 ### 实例迁移清单
 
-适用场景：换服务器（同域名）、换域名、新建/复制实例、从旧的 SSH 部署迁到 npm 运行时包。运行时包、页面包与 APK 的边界见上面的「发布链路」「服务器更新」「多实例部署」。
+适用场景：换服务器（同域名）、换域名、新建或复制实例。运行时包、页面包与 APK 的边界见「发布链路」「服务器更新」「多实例部署」。
 
 **0. 先备份，且确认三样东西不会丢**：数据库（`pg_dump`）、上传目录（`UPLOAD_DIR` 指向的目录，媒体以 `/media/...` 相对路径引用）、服务器 `/etc/calmobile.env`。另外 **APK 签名密钥**（丢了就无法给已安装用户升级）与 **`TOTP_SECRET_KEY`**（丢了已绑定的验证器无法解密）不可重置，单独归档。
 
 **1. 新机器准备**：Node（满足 `engines`）、`pnpm`、`tar`、PostgreSQL（时区 `Asia/Shanghai`，`docker-compose.yml` 是开发用的参考）、反向代理（`/`、`/app/`、`/api/`、`/media/` 同源）、运行更新的账号可无密码 `sudo`、`/opt/calmobile` 可写、磁盘至少留 `CALMOBILE_MIN_FREE_MB`。
 
-**2. 写一份 `/etc/calmobile.env`**（应用、更新器、systemd 单元都只认这一份；参考仓库 `deploy/instance.env.example`，逐键说明与默认值见文件注释）：
+**2. 写一份 `/etc/calmobile.env`**（应用、更新器、systemd 单元都只认这一份；逐键说明与默认值见 `deploy/instance.env.example`）：
 
 - 必填密钥：`JWT_SECRET`、`TOTP_SECRET_KEY`、`DB_PASSWORD`、`MAIL_SMTP_PASSWORD`、`ADMIN_USERNAME` / `ADMIN_PASSWORD` / `ADMIN_EMAIL`；
 - 实例地址与安全：`PUBLIC_BASE_URL`（必须与实际访问域名一致）、`APP_API_BASE`（同源，只给 APK 外壳与开发代理）、`CORS_ORIGIN`、`WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGINS`（App 内使用通行密钥时再加 `android:apk-key-hash:<签名证书 SHA-256 的 base64url>`）、`PRIVACY_POLICY_URL`、`LANG_PACK_DEFAULT` / `LANG_PACK_URLS`；
 - 运行时品牌与存储：`PWA_*` / `APP_TITLE` / `JOIN_TITLE` / `APP_ICON*`、`UPLOAD_DIR`、`UPLOAD_MAX_MB`；
-- 实例身份与更新器：`CALMOBILE_PACKAGE` / `REGISTRY` / `ROOT` / `KEEP` / `HEALTH_URL` / `APP_URL` / `SERVICE` / `UPDATE_SERVICE` / `ENV_FILE` / `UPDATER_PATH` / `MIN_FREE_MB` / `USER` / `GROUP` / `NODE` / `REPOSITORY_URL`。旧版 `/etc/calmobile-update.json` 与 `CALMOBILE_CONFIG_PATH` 已废弃：只提示、不读取，升级前按 `deploy/instance.env.example` 末尾的对照表搬进 env。
+- 实例身份与更新器：`CALMOBILE_PACKAGE` / `REGISTRY` / `ROOT` / `KEEP` / `HEALTH_URL` / `APP_URL` / `SERVICE` / `UPDATE_SERVICE` / `ENV_FILE` / `UPDATER_PATH` / `MIN_FREE_MB` / `USER` / `GROUP` / `NODE` / `REPOSITORY_URL`。
 
 **3. 恢复数据**：恢复 `pg_dump`，运行 `pnpm --dir server db:migrate`（或让更新器首轮执行）；确认 `schema_migrations` 与库里数据对得上。迁移只追加，不靠回滚撤销。
 
-**4. 安装更新器与单元**：把运行时包/仓库里的 `deploy/calmobile-update.mjs` 放到 `/usr/local/lib/calmobile/calmobile-update.mjs`；用 `node scripts/render-units.mjs --env-file /etc/calmobile.env --out /etc/systemd/system` 渲染三个单元（文件名按 `CALMOBILE_SERVICE` / `CALMOBILE_UPDATE_SERVICE`），`systemctl daemon-reload`；首次 `node /usr/local/lib/calmobile/calmobile-update.mjs --update` 建立 `releases/0.1.<编号>` 与 `current`，再 `systemctl enable --now calmobile-update.timer`。
+**4. 安装更新器与单元**：确认 npm 上已有 `calmobile-server@0.1.<编号>`（先让 Release 跑一次）；把运行时包/仓库里的 `deploy/calmobile-update.mjs` 放到 `/usr/local/lib/calmobile/calmobile-update.mjs`；从运行时包或仓库根用 `node scripts/render-units.mjs --env-file /etc/calmobile.env --out /etc/systemd/system` 渲染单元（文件名按 `CALMOBILE_SERVICE` / `CALMOBILE_UPDATE_SERVICE`），`systemctl daemon-reload`；首次 `node /usr/local/lib/calmobile/calmobile-update.mjs --update` 建立 `releases/0.1.<编号>` 与 `current`，再 `systemctl enable --now calmobile-update.timer`。
 
 **5. 证书与关联**：反代终止 TLS；`/.well-known/assetlinks.json` 按本实例包名与证书摘要提供（App 内通行密钥必需），`content-type` 必须是 `application/json`；`WEBAUTHN_ORIGINS` 同时列域名与 apk-key-hash。
 
-**6. 客户端**：页面/PWA/报名站共用同一个运行时包，不需要按域名重建；换域名或运行时品牌后，PWA 需要重新「添加到主屏幕」。**APK 仍按实例构建**：`APP_API_BASE`、`ANDROID_APPLICATION_ID`、签名、图标与应用名都要按本实例来，发布到该实例的下载源。旧 APK 的页面会随热更新更新，新原生能力按 `app.capabilities` 协商回退（见 `docs/engineering.md` 的「能力协商」），因此迁移不强制用户立刻重装。
+**6. 客户端**：页面/PWA/报名站共用同一个运行时包，不需要按域名重建；换域名或运行时品牌后，PWA 需要重新「添加到主屏幕」。**APK 仍按实例构建**：`APP_API_BASE`、`ANDROID_APPLICATION_ID`、签名、图标与应用名都要按本实例来，发布到该实例的下载源。已安装 APK 的页面会随热更新更新，新原生能力按 `app.capabilities` 协商回退（见 [`engineering.md`](engineering.md) 的「能力协商」）。
 
-**7. 切换与验证**：切换 DNS/反代后再停旧实例。逐项确认 `/ping`、`/`（登录页）、`/app/index.html`、`/app/release.json`、`/join`、`/api/v1/bootstrap`、后台上传媒体、浏览器与 App 内通行密钥、`node ... --check` 的版本与 pin 状态。
+**7. 切换与验证**：切换 DNS/反代后再停上一实例。逐项确认 `/ping`、`/`（登录页）、`/app/index.html`、`/app/release.json`、`/join`、`/api/v1/bootstrap`、后台上传媒体、浏览器与 App 内通行密钥、`node ... --check` 的版本与 pin 状态。
 
-**8. 回滚**：程序问题用 `calmobile-update --rollback`（会写 pin，修好后 `--unpin` 或 `--update --force`）；数据库问题只能用备份恢复。切换前确认旧实例仍能读新库（迁移只追加，旧版本可读新库）。
+**8. 回滚**：程序问题用 `calmobile-update --rollback`（会写 pin，修好后 `--unpin` 或 `--update --force`）；数据库问题只能用备份恢复。切换前确认上一实例仍能读新库（迁移只追加，上一版本可读新库）。
 
 **不要做**：把实例域名/API 地址写进页面包、让一个 APK 指向多个域名、共用签名密钥给多个互不信任的实例、丢失签名密钥或 `TOTP_SECRET_KEY`、为了补发直接推 `master` 绕过 PR/CI。
-### 反向代理、证书与通行密钥
+
+### 签名、证书与通行密钥
 
 正式签名只生成一次，密钥文件自己保管。丢了就不能给已经安装的 `com.blathroat.calmobile` 发更新。
 
@@ -398,7 +393,7 @@ keytool -genkeypair -v -keystore calmobile-release.jks -alias upload -keyalg RSA
 
 把 `calmobile-release.jks` 做一次 base64，放进 GitHub Secret `ANDROID_KEYSTORE_BASE64`。口令和别名放进下面的 Secrets。不要把密钥文件或口令提交进仓库。
 
-**通行密钥在 App 内工作还需要两件部署侧的事**：① 把 App 的签名证书哈希加进 `WEBAUTHN_ORIGINS`（形如 `android:apk-key-hash:<base64url>`，用 `keytool -list -v -keystore <keystore> -alias <alias>` 取 SHA-256 后按 base64url 编码，去掉填充）。整串原样粘进去，服务端按 43 位 base64url 的形状校验，写错的条目会被丢掉；② 在 `https://<域名>/.well-known/assetlinks.json` 声明应用与域名的关联（`package_name` 用 `ANDROID_APPLICATION_ID`，`sha256_cert_fingerprints` 用同一份证书摘要），系统凭据提供方据此确认「这个应用可以代表这个域名使用通行密钥」。两个来源都要列（写着 WEBAUTHN_ORIGINS 就等于替换掉默认那组，所以 `https://<域名>` 那一条也别漏）。浏览器里使用通行密钥不需要这两步。
+**通行密钥在 App 内工作还需要两件部署侧的事**：① 把 App 的签名证书哈希加进 `WEBAUTHN_ORIGINS`（形如 `android:apk-key-hash:<base64url>`，用 `keytool -list -v -keystore <keystore> -alias <alias>` 取 SHA-256 后按 base64url 编码，去掉填充）。整串原样粘进去，服务端按 43 位 base64url 的形状校验，写错的条目会被丢掉；② 在 `https://<域名>/.well-known/assetlinks.json` 声明应用与域名的关联（`package_name` 用 `ANDROID_APPLICATION_ID`，`sha256_cert_fingerprints` 用同一份证书摘要），系统凭据提供方据此确认「这个应用可以代表这个域名使用通行密钥」。两个来源都要列（写着 `WEBAUTHN_ORIGINS` 就等于替换掉默认那组，所以 `https://<域名>` 那一条也别漏）。浏览器里使用通行密钥不需要这两步。
 
 **assetlinks.json 怎么放**：反代在这个仓库外面，服务器上按静态文件提供 —— 文件放 `/var/www/calmobile/.well-known/assetlinks.json`，nginx 的 443 段加一条精确匹配：
 
@@ -419,17 +414,19 @@ GitHub Variables：`APP_API_BASE`（`https://域名/api/v1`，只给 APK 外壳�
 
 GitHub Secrets：`NPM_TOKEN`（能发布 `calmobile-server` 的 npm automation token，允许绕过 2FA）、`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。
 
-### 发布前检查
+GitHub 里只保留本节列出的 Variables 与 Secrets；服务器从 npm 拉取更新，不需要 `DEPLOY_*` 一类的部署凭据，有的话删除。
+
+## 发布前检查
 
 发布前下面每一项都成立：
 
-1. `pnpm start` 的自检通过。生产不跑 `pnpm db:seed`。自检会拒绝启动的项和只警告的项，见 [`server/README.md`](../server/README.md) 的模式表。
+1. `pnpm start` 的自检通过。生产不跑 `pnpm db:seed`。自检会拒绝启动的项和只警告的项，见 [`server.md`](server.md) 的模式表。
 2. 反代只暴露 443，并送出 `X-Forwarded-Proto` 与 `X-Forwarded-For`。服务端设 `TRUST_PROXY=1`。经 Cloudflare 转发时再设 `TRUST_CLOUDFLARE=1`，并且源站只接受 Cloudflare 与反代的流量。
 3. 确认 https 全站可用之后，再开 `FORCE_HTTPS` 和长 `HSTS_MAX_AGE`。
 4. `CORS_ORIGIN` 写成真实来源。
 5. 状态页保持关闭，或在反代上加 Basic Auth 并只允许内网访问。公网探活只用 `/ping`。
 6. `JWT_SECRET` 与 `TOTP_SECRET_KEY` 各自至少 32 个随机字符。数据库口令不是示例值。`MAIL_FROM_ADDRESS` 已显式配置。生产发信走托管中继，SPF 只 include 中继方，不把源站地址写进 DNS。中继的登录口令放在服务器 `/etc/calmobile.env`。本地开发用 Mailpit。
-7. 服务器上的 Node 满足 `engines`，`pnpm`、`tar` 在 `PATH` 里，运行更新的账号能免密 `sudo`。首次切换到 npm 更新时按上面的步骤完成一次 `--update`，确认迁移和重启成功。
+7. 服务器上的 Node 满足 `engines`，`pnpm`、`tar` 在 `PATH` 里，运行更新的账号能免密 `sudo`。首次接入 npm 更新时按「实例迁移清单」完成一次 `--update`，确认迁移和重启成功。
 8. 数据库时区是 `Asia/Shanghai`。原因写在仓库根 `docker-compose.yml`。备份和恢复演练已经做过。
 9. `client_max_body_size` 盖住视频单文件上限。视频默认 50MB 时至少写 `64m`。头像那一道传输硬顶盖不住视频。上传目录和开关见 `server/.env.example`。存满之后的产品行为见 [`product.md`](product.md)。
 10. 注册页有收集说明。`PRIVACY_POLICY_URL` 是 https 政策地址。当前邮件只有验证码，没有营销信。
