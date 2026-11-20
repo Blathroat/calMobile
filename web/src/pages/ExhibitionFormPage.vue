@@ -648,8 +648,8 @@ function askUnsaved(target: string): void {
   openSheet({
     title: t('exhibition.form.unsavedTitle'),
     message: t('exhibition.form.unsavedMessage'),
-    // 三颗按钮竖排：文案长短不一，并排会挤。
-    layout: 'stack',
+    // 三颗按钮横向一行：文案都很短，并排一屏放得下，也让选择动作更顺手。
+    layout: 'row',
     actions: [
       {
         label: t('common.save'),

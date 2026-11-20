@@ -264,7 +264,7 @@ describe('编辑展会：未保存就离开', () => {
     expect(sheet.current?.title).toBe('有未保存的修改');
     expect(sheet.current?.message).toBe('离开后，未保存的修改会丢失。');
     // 三颗按钮竖排：文案长短不一，并排会挤。
-    expect(sheet.current?.layout).toBe('stack');
+    expect(sheet.current?.layout).toBe('row');
     expect(sheet.current?.actions.map((action) => action.label)).toEqual(['保存', '不保存', '取消']);
     // 抽屉真的渲染出来了：说明文字与按钮次序都对。
     expect(sheetLabels()).toEqual(['保存', '不保存', '取消']);
