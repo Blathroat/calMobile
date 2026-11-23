@@ -216,7 +216,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 
 ### 展商后台与管理页
 
-- 管理-展会卡片（`AdminExhibitionCard.vue`）上半是「整块可点的主体 + 右侧竖排（状态灯 + 二维码分享按钮）」：按钮不能嵌在行按钮里，所以右侧那一列放在主体按钮外面；二维码按钮复用展商后台的 `ShareQrSheet` 与 `services/registration-link.ts` 的 `registrationLink()`，没配报名站地址时只 toast。
+- 管理-展会卡片（`AdminExhibitionCard.vue`）的版式与展商后台的展会卡一一对应：缩略图 78 高、标题最多两行、状态灯与报名数合成一条放在内容里，二维码按钮绝对定位在右侧垂直居中（主体按钮的右内距留出 44px 触控位），操作行用 `.action-row` 的 ghost 小按钮；组件不能用页面的 `.exh-*` 选择器，所以这里的类名与样式是 `.admin-exh-*` 的 scoped 副本。按钮不能嵌在主体 `<button>` 里。二维码按钮复用 `ShareQrSheet` 与 `services/registration-link.ts` 的 `registrationLink()`，没配报名站地址时只 toast；「暂停 / 恢复报名」按 `canManageExhibition()`（管理员或展会主办人）决定是否出现。
 - 展商后台：顶部一颗「核销报名码」，列表每张卡上半是整块可点的主体（右侧垂直居中一枚 44px 命中区的二维码分享按钮），下半放 ghost 小按钮（查看报名 / 编辑展会 / 复制链接），上下两段只用间距分开、不加分隔线（其它列表卡不受这条影响）；「复制链接」点击即复制（`web/src/services/clipboard.ts` 的 `copyText`，Clipboard API 失败时退回隐藏 textarea + `execCommand`），成功或失败都只 toast，不弹手动复制面板；二维码按钮打开 `web/src/components/ShareQrSheet.vue`，二维码内容是报名站分享链接，导出透明底黑点 PNG（`web/src/services/qr-encoder.ts` 的 `background: 'transparent'` + `foreground: '#000000'`，保存走 `media.saveImage`，浏览器里退回下载）。「新建展会」是右下角悬浮圆形按钮（`Teleport` 到 `body`），空态时由 `.state` 的入口承担、不显示悬浮按钮。
 - 管理-用户分区按身份与账号状态筛选：筛选值写进地址栏（`?tab=users&role=&status=`，非法值按「全部」），`GET /users` 接受 `role` / `status`，与 `query` 关键字同时生效（三者 AND）。两个筛选是排成一行的下划线选择栏（`.user-filter-row` 自适应网格，与编辑展会页的活动分类同一套；点开走 `openSheet` 的 `layout: list`，当前值带对勾），`AdminUsersSection` 只回抛事件，URL 同步与取数留在 `AdminPage`。
 - 管理-设置的「日志」卡片里有「查看最近日志」按钮（整行浅色描边按钮，`cta ghost`，位于上限设置下方）：`AdminSettingsSection` 发 `open-logs` 事件，`AdminPage` 负责跳转到 `/logs`。日志页支持全部 / 信息 / 警告 / 错误筛选与下拉刷新；日志的写入、容量上限与接口参数见 [`../server.md`](../server.md)。
