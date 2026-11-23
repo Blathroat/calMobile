@@ -1,9 +1,16 @@
 import { Hono } from 'hono';
 import type { PoolClient } from 'pg';
 import { query, transaction } from '../config/pool.js';
-import { EXHIBITION_COLUMNS, EXHIBITION_FROM } from '../domain/queries.js';
-import { exhibitionPayload, fieldPayload, type ExhibitionRow, type FieldRow } from '../domain/payloads.js';
-import { requireExhibitor, assertCanManageExhibition, assertNotLimited } from '../domain/permissions.js';
+import { EXHIBITION_COLUMNS, EXHIBITION_FROM, USER_COLUMNS, USER_FROM } from '../domain/queries.js';
+import {
+  exhibitionPayload,
+  fieldPayload,
+  type ExhibitionRow,
+  type FieldRow,
+  type UserRow,
+} from '../domain/payloads.js';
+import { requireExhibitor, requireAdmin, assertCanManageExhibition, assertNotLimited } from '../domain/permissions.js';
+import { effectiveRole } from '../domain/membership.js';
 import { readSection } from '../domain/settings.js';
 import { withExhibitionQuota } from '../domain/exhibition-quota.js';
 import { limits, parseSchema } from '../domain/validation.js';
@@ -12,6 +19,7 @@ import {
   fieldsSchema,
   monthQuerySchema,
   exhibitionStatusSchema,
+  exhibitionOwnerSchema,
   type ExhibitionInput,
 } from '../domain/schemas.js';
 import { badRequest, notFound } from '../domain/errors.js';
@@ -425,6 +433,46 @@ app.put('/:id/fields', authenticateHono, async (c) => {
   });
 });
 
+/** 按邮箱找账号：邮箱在库里大小写无关唯一，因此最多命中一行。 */
+async function findUserByEmail(email: string) {
+  const result = await query<UserRow>(`SELECT ${USER_COLUMNS} ${USER_FROM} WHERE lower(u.email) = lower($1) LIMIT 1`, [
+    email,
+  ]);
+  return result.rows[0] || null;
+}
+
+/**
+ * 更改展会归属：管理员按邮箱把这场展会交给另一个账号（改 `exhibitions.exhibitor_id`）。
+ *
+ * 只认管理员：这是「把别人 / 自己的展会交给谁」的授权操作，展商不能自行转手。
+ * 目标账号必须还能管理展会（展商或管理员，到期展商按普通用户算），否则接手后既编辑不了
+ * 也看不到，等于把一场展会锁死；封禁账号登不进来，同理拒掉。
+ * 换人后原账号立刻失去编辑权，服务端的归属判定本来就在每次写操作时重算，不需要额外清理。
+ */
+app.put('/:id/owner', authenticateHono, async (c) => {
+  requireAdmin({ user: userOf(c) }, '只有管理员可以更改展会归属', { code: 'permission.exhibitionOwnerAdmin' });
+  const existing = await findRow(c.req.param('id'));
+  if (!existing) throw notFound(NOT_FOUND_TEXT);
+  const body = bodyRecord(await readJsonBody(c));
+  return mutate(c, async () => {
+    const { email } = parseSchema(exhibitionOwnerSchema, body);
+    const target = await findUserByEmail(email);
+    if (!target) throw badRequest('没有找到该邮箱对应的账号', { code: 'exhibition.ownerEmailNotFound' });
+    if (target.id === existing.exhibitor_id) {
+      throw badRequest('这场展会已经归属这个账号', { code: 'exhibition.ownerUnchanged' });
+    }
+    if (target.status === 'banned') {
+      throw badRequest('该账号已被封禁，不能接收展会', { code: 'exhibition.ownerBanned' });
+    }
+    const role = effectiveRole(target.role, target.exhibitor_expires_at);
+    if (role !== 'exhibitor' && role !== 'admin') {
+      throw badRequest('该账号不是展商，请先在用户管理里调整权限', { code: 'exhibition.ownerNotExhibitor' });
+    }
+    await query('UPDATE exhibitions SET exhibitor_id = $2, updated_at = now() WHERE id = $1', [existing.id, target.id]);
+    return { exhibition: exhibitionPayload((await findRow(existing.id))!) };
+  });
+});
+
 export function createExhibitionsRoutes() {
   return app;
 }
@@ -439,4 +487,5 @@ export const EXHIBITION_ENDPOINTS: readonly [string, string][] = [
   ['DELETE', '/:id'],
   ['PUT', '/:id/status'],
   ['PUT', '/:id/fields'],
+  ['PUT', '/:id/owner'],
 ];

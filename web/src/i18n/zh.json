@@ -589,7 +589,18 @@
       "noticeTitle": "参与方式（仅通过审核用户可见）",
       "noticeLabel": "参与方式",
       "noticeHint": "审核通过或已参加的报名者，会在报名详情页看到这段内容；留空则不显示。",
-      "noticePlaceholder": "例如：入场需携带身份证、签到地点、现场联系人等"
+      "noticePlaceholder": "例如：入场需携带身份证、签到地点、现场联系人等",
+      "ownerSection": "展会归属",
+      "ownerCurrent": "当前归属：{name}",
+      "ownerNone": "未指定",
+      "ownerEmailLabel": "新归属用户邮箱",
+      "ownerEmailPlaceholder": "输入对方的账号邮箱",
+      "ownerEmailInvalid": "邮箱格式不正确",
+      "ownerSubmit": "改为该用户",
+      "ownerConfirmTitle": "更改展会归属",
+      "ownerConfirmMessage": "把这场展会交给 {email} 对应的账号？更改后立即生效，原账号随即失去编辑权。",
+      "ownerUpdated": "展会归属已更改",
+      "ownerHint": "只有管理员能改，且只能指定展商或管理员账号。"
     },
     "list": {
       "countLabel": "{count} 个 · {registrations} 条报名",
@@ -1144,7 +1155,11 @@
     },
     "exhibition": {
       "notFound": "展会不存在或已删除",
-      "durationTooLong": "单个展会最长天数超过管理员限制"
+      "durationTooLong": "单个展会最长天数超过管理员限制",
+      "ownerEmailNotFound": "没有找到该邮箱对应的账号",
+      "ownerNotExhibitor": "该账号不是展商，请先在用户管理里调整权限",
+      "ownerBanned": "该账号已被封禁，不能接收展会",
+      "ownerUnchanged": "这场展会已经归属这个账号"
     },
     "invite": {
       "exhausted": "邀请码已用完",
@@ -1208,6 +1223,7 @@
     "permission": {
       "adminOnly": "只有管理员可以修改服务器设置",
       "exhibitionNotYours": "只能管理自己举办的展会",
+      "exhibitionOwnerAdmin": "只有管理员可以更改展会归属",
       "exhibitorExpired": "展商身份已到期，填写邀请码续期后才能使用展商功能",
       "exhibitorOnly": "只有展商或管理员可以执行此操作",
       "forbidden": "无权执行此操作",

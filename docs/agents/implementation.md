@@ -18,7 +18,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 ## 样式分层与令牌
 
 - 页面不自建 `.page` / `.topbar` / `.app-body` / `.tabbar`，也不写颜色、字号、间距与圆角；用 `web/src/styles/tokens.css` 的令牌与 `web/src/styles/base.css` 的原语。
-- 输入框默认是方框（`--stroke` 描边 + `--f3` 浅底），只有明确需要下划线的地方加 `.input-line`：管理设置页的全部一般输入、编辑展会页的名称 / 地点 / 日期与时间触发按钮 / 分类，以及收集项的「字段标题」。`.input-line` 由 `web/src/styles/components.css` 统一给出：默认一条 `--stroke` 底边，聚焦时主题色下划线从左侧长满（320ms，失焦缩回），校验失败直接变砖红；所有下划线输入框共用这一套动画，页面不要自绘。日期与时间触发按钮借用 `.input.input-line` 的外观，窄屏同样给 `min-width: 0`，否则固有最小宽会撑破两列布局。
+- 输入框默认是方框（`--stroke` 描边 + `--f3` 浅底），只有明确需要下划线的地方加 `.input-line`：管理设置页的全部一般输入、编辑展会页的名称 / 地点 / 日期与时间触发按钮 / 分类 / 归属卡里的邮箱，以及收集项的「字段标题」。`.input-line` 由 `web/src/styles/components.css` 统一给出：默认一条 `--stroke` 底边，聚焦时主题色下划线从左侧长满（320ms，失焦缩回），校验失败直接变砖红；所有下划线输入框共用这一套动画，页面不要自绘。日期与时间触发按钮借用 `.input.input-line` 的外观，窄屏同样给 `min-width: 0`，否则固有最小宽会撑破两列布局。
 - 校验失败用专用 token：底色 `--danger-wash`、描边与下划线 `--danger-edge`（比 `--danger-tint` / `--danger-ink` 浅一档，明暗主题都定义），文字仍用 `--danger-ink`；`--danger-tint` 的其它用途（状态标签、提示条、危险按钮）不动。`data-invalid` 从无到有时字段播一次轻微横向抖动，`.field-error` 淡入上移；`prefers-reduced-motion: reduce` 下这两段动画关闭。
 - 强调色使用 `--accent*`。二维码展示时保持白底黑点（展商分享图的导出是唯一例外：透明底、黑色点，白底只来自展示容器）。Markdown / HTML 先经 `web/src/services/markdown.ts` 清洗再渲染；Markdown 表格渲染成 1px 框线、列宽随内容、单元格可换行、放不下时表格自己横向滚动的样式，定义在 `.rich-content`。
 - 管理-设置的保存按钮是右下角悬浮圆形按钮（`.round-action`，投递到 `body`，否则页面切换动画的 transform 祖先会改掉 `position: fixed` 的包含块）。
@@ -86,7 +86,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 
 - 接口路径以各路由模块导出的注册表和 `web/api-endpoints.mjs` 为准。页面数据只走 `web/src/api/client.ts`，页面不直接 `fetch`，也不通过原生桥取业务数据。
 - 写接口返回 `{ ok, error, ... }`：规则失败用 200 + `ok:false`，认证授权用 4xx，数据库不可用用 503；响应里只放给用户看的文案。完整响应约定与错误分类见 [`../server.md`](../server.md)。
-- 新接口同时改 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由和 `server/src/test/` 下的契约测试；前端动作总数 90 个钉在 `server/src/test/routes-contract.test.ts`，加接口要一起改。
+- 新接口同时改 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由和 `server/src/test/` 下的契约测试；前端动作总数 91 个钉在 `server/src/test/routes-contract.test.ts`，加接口要一起改。
 - 协议值（状态、报名方式、收集项类型、角色）一律用英文 code：服务端 `server/src/domain/labels.ts` 与前端 `web/src/services/status.ts` 是同一套 code 的定义处，改一边必须同步另一边。接口只下发 code（`statusCode` / `role`，如 `pending` / `review` / `text` / `exhibitor`），界面按 code 查 `status.*` / `role.*` / `fieldType.*` 取文案。
 - 中文标签字段（`status` / `statusLabel` / `modeLabel` / `roleLabel`）是兼容层，新代码不要读，更不要拿它当比较或回传的值——装了语言包会比不中、还会把译文写进库里。`web/src/api/compat-fields.test.ts` 盯着 `statusLabel` / `modeLabel` / `roleLabel` 三个读取；`status` 太容易和 HTTP 状态、表单模型撞名，靠扫描与评审。客户端快照全部升级后，服务端删掉这几个字段与这条守卫测试。
 - 服务端侧：客户端地址由 `server/src/http/client-ip.ts` 统一解析——`TRUST_PROXY` 决定怎么读 `X-Forwarded-For`（跳数或可信来源），`TRUST_CLOUDFLARE` 打开时只要地址链里经过可信反代就改用 Cloudflare 写入的 `CF-Connecting-IP`。登录 / 注册、验证码限流、请求日志与操作日志都走这一个函数。登录成功时 `recordLogin()` 每次刷新 `last_login_time` / `last_login_ip` / `last_login_region`，地区由 `server/src/services/ip-region.ts` 用离线 xdb 解析，IP 原文只落库、不下发。
@@ -206,6 +206,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 - 报名收集项是「一张卡 + 横线分隔」结构，段内顺序是：字段标题输入 → 类型分段 → 提示 → 选项行 → 必填与删除。只把「字段标题」那一个输入框换成下划线：「标题」两个字作**占位符**显示在框内，不浮在输入框上方；每一项上方留 12px、分隔线下方 16px，不靠浮动标签撑间距。
 - 编辑展会时，闭展日期在提交前按管理员设置的最大持续天数做本地校验（`bootstrap.exhibitor.maxExhibitionDays`）；服务端保存时再校验一次，超限返回 `exhibition.durationTooLong`。分类必填（编辑页校验；服务端 `exhibitionInputSchema` 只在新建时强制，错误码 `validation.categoryRequired`，更新保持宽松，让空分类的已有展会只改简介时不被拒）；开展时间选填，两个时 / 分滚轮都填才组成区间，都空就是没设置。空时间的展示统一走 `web/src/services/format.ts` 的 `joinText(parts, 分隔符)`（过滤空片段再拼），列表、详情、分享文案与报名页卡片都不会留下「 · 场馆」或行尾空格；`web/src/services/calendar-ics.ts` 没有可解析的时间时按全天事件处理。
 - 报名截止日已过时，服务端在展会 payload 里下发 `registrationEnded`（数据库按 `CURRENT_DATE > registration_end` 判定，且只有需审核 / 无需审核才为真），`openForRegistration` 同时为 false；卡片状态灯与详情页状态统一读 `web/src/services/status.ts` 的 `exhibitionModeCode(item)`（截止后显示「截止报名」），详情页按钮按 `registrationEnded` 显示「报名已截止」、其它关闭原因仍是「报名已关闭」。管理端「暂停 / 恢复报名」按 `acceptsRegistration(statusCode)` 判断，不读 `openForRegistration`，避免已截止的展会显示「恢复报名」。
+- 编辑展会页的「展会归属」卡（`ExhibitionFormPage.vue`）只在 `!isCreate && session.user.can?.admin` 时渲染，放在「危险操作」之前（删除仍是内容最下方的一颗）。卡里的当前归属人取详情 `exhibition.exhibitor`，改归属成功后用 `api.exhibitions.setOwner()` 的响应就地更新，**不重载整张表单**（`load()` 会按服务器内容重拍「已保存」基线，未保存的修改会被当成已保存）。提交前用 `validate.ts` 的 `check` + `PATTERNS.email` 校验，`confirmSheet` 确认后写库；服务端的规则失败（`server.exhibition.owner*`）就地显示在输入框下。归属改动不属于表单提交字段，不影响未保存修改的判定。
 
 ### 首页月历与扫码
 
@@ -239,7 +240,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 | `web/src/app/shell.test.ts` | 每个页面渲染在外壳内容区、导航与角色过滤 |
 | `web/src/api/compat-fields.test.ts` | 页面不读 `statusLabel` / `modeLabel` / `roleLabel` |
 | `web/src/components/pwa-install-sheet.test.ts`、`web/src/pages/home-pwa-install-hint.test.ts` | 安装引导条件与每次访问只提示一次 |
-| `server/src/test/routes-contract.test.ts` | 前端动作与后端路由一一对应、动作总数 90 |
+| `server/src/test/routes-contract.test.ts` | 前端动作与后端路由一一对应、动作总数 91 |
 | `app/src/test/`（含 `ShellCapabilitiesTest`） | 原生能力清单与动作表一致 |
 
 校验命令：

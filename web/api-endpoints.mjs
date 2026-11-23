@@ -70,6 +70,11 @@ export const ENDPOINTS = {
     method: 'PUT',
     path: `/exhibitions/${encodeURIComponent(payload.id)}/fields`,
   }),
+  'exhibitions.setOwner': (payload) => ({
+    method: 'PUT',
+    path: `/exhibitions/${encodeURIComponent(payload.id)}/owner`,
+    body: { email: 'sample@example.com' },
+  }),
   'registrations.list': () => ({ method: 'GET', path: '/registrations' }),
   'registrations.get': (payload) => ({ method: 'GET', path: `/registrations/${encodeURIComponent(payload.id)}` }),
   // 公开的查询链接：凭据在路径里。样例没有 token 时用一个固定占位值，只用于对路由。
