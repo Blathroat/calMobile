@@ -5,7 +5,8 @@
  * `web/public/icons/icon-1024.png`。`APP_ICON_BACKGROUND` 是可选的十六进制底色，
  * 用于 PWA maskable、Apple 主屏幕、Android 自适应图标和圆角图标留白；不配时用
  * 默认强调色 `#41707e`。`APP_ICON_TRANSPARENT=1` 时不铺底色，并且 Android
- * 不生成 adaptive 图标（启动器可能把透明背景渲染成黑底）。
+ * 不生成 adaptive 图标（启动器可能把透明背景渲染成黑底）。Apple 主屏幕图标是例外：
+ * iOS 会把透明像素画成黑底，所以 `apple-touch-icon-180.png` 始终铺底色。
  *
  * 实现拆在 `scripts/icons/`：
  * - png.mjs：PNG 编解码、颜色解析、缩放渲染与 ICO 组装（纯函数，只用 zlib）；

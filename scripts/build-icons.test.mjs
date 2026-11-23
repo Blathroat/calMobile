@@ -132,6 +132,30 @@ test('APP_ICON_TRANSPARENT 生成透明站点图标，四角 alpha 为 0', () =>
   }
 });
 
+test('透明模式下 Apple 主屏幕图标仍铺 APP_ICON_BACKGROUND（iOS 会把透明画成黑底）', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'calmobile-icons-apple-'));
+  try {
+    const source = path.join(dir, 'edge.png');
+    writeFileSync(source, transparentEdgePng(8));
+    const out = path.join(dir, 'dist');
+    buildWebIcons(out, {
+      APP_ICON: source,
+      APP_ICON_BACKGROUND: '#123456',
+      APP_ICON_TRANSPARENT: '1',
+    });
+    const apple = decodePng(readFileSync(path.join(out, 'icons', 'apple-touch-icon-180.png')));
+    assert.equal(apple.width, 180);
+    assert.deepEqual([...apple.data.subarray(0, 4)], [0x12, 0x34, 0x56, 255], '四角必须是底色而不是透明');
+    const center = (90 * 180 + 90) * 4;
+    assert.deepEqual([...apple.data.subarray(center, center + 4)], [255, 0, 0, 255], '中心仍是源图');
+    // 同一份构建里其它 PWA 图标保持透明：只修 Apple 主屏幕这一枚。
+    const icon = decodePng(readFileSync(path.join(out, 'icons', 'icon-192.png')));
+    assert.equal(icon.data[3], 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('Android 图标覆盖 5 个密度、圆角与自适应前景', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'calmobile-icons-android-'));
   try {

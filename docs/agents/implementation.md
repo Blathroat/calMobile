@@ -160,7 +160,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 ### 图标
 
 - 站点 favicon、PWA 图标和 Android 启动图标共用一份源图：`web/pwa-build.mjs` 与 Gradle 的 `buildIcons` 任务都调 `scripts/build-icons.mjs`（只是统一入口：PNG 编解码、配置、站点图标、Android 图标分别在 `scripts/icons/` 的 `png.mjs` / `config.mjs` / `web.mjs` / `android.mjs`），把 `APP_ICON`（默认 `web/public/icons/icon-1024.png`）生成到 `web/dist/favicon.ico`、`web/dist/icons/`；Gradle 用同一套模块生成 `app/build/generated/icons/res/`，再作为额外资源目录参与打包，所以各密度启动图标不入库。
-- `APP_ICON_BACKGROUND`（默认 `#41707e`）是 maskable、Apple 主屏幕和 Android 自适应图标的留白底色；`APP_ICON_TRANSPARENT=1` 时站点 / PWA 与 Android legacy / round 图标不铺底，Android 也不生成 adaptive 图标。源图只接受 8 位 RGB/RGBA、非隔行 PNG，非方形会居中裁切。`favicon.ico` 含 16/32/48 三个 PNG 条目；Android 生成 legacy / round / adaptive foreground 三套资源。开发服务器用 `web/public/favicon.ico` 的默认图，生产构建会把生成图写进 `dist`；服务端根路径 `/favicon.ico` 转发同一份产物。服务器运行时可改用 `PWA_ICON_DIR` 指向预生成的一套图标。
+- `APP_ICON_BACKGROUND`（默认 `#41707e`）是 maskable、Apple 主屏幕和 Android 自适应图标的留白底色；`APP_ICON_TRANSPARENT=1` 时站点 / PWA 与 Android legacy / round 图标不铺底，Android 也不生成 adaptive 图标。**`apple-touch-icon-180.png` 是唯一例外**：`scripts/icons/web.mjs` 无论透明设置如何都给它铺 `APP_ICON_BACKGROUND`——iOS 会把主屏幕图标的透明像素画成黑底，透明模式只该作用于其它图标（`PWA_ICON_DIR` 由使用者自行保证那枚图不透明）。源图只接受 8 位 RGB/RGBA、非隔行 PNG，非方形会居中裁切。`favicon.ico` 含 16/32/48 三个 PNG 条目；Android 生成 legacy / round / adaptive foreground 三套资源。开发服务器用 `web/public/favicon.ico` 的默认图，生产构建会把生成图写进 `dist`；服务端根路径 `/favicon.ico` 转发同一份产物。服务器运行时可改用 `PWA_ICON_DIR` 指向预生成的一套图标。
 
 ### Service Worker 缓存边界
 
