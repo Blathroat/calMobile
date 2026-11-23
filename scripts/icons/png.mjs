@@ -164,6 +164,41 @@ export function decodePng(buffer) {
 }
 
 /**
+ * 有没有半透明或全透明的像素：有就需要给 iOS 主屏幕图标补一层不透明底。
+ * @param {{ width: number, height: number, data: Uint8Array }} image
+ * @returns {boolean}
+ */
+export function hasTransparency(image) {
+  const { data } = image;
+  for (let index = 3; index < data.length; index += 4) if ((data[index] ?? 0) < 255) return true;
+  return false;
+}
+
+/**
+ * 可见像素的平均亮度（0–1，按 alpha 加权），用来判断图标偏深还是偏浅。
+ *
+ * 只做「黑底还是白底」的粗判断，因此直接在 8 位 sRGB 值上按感知权重加权，
+ * 不转线性光；整张全透明（没有任何可见像素）时返回 null。
+ * @param {{ width: number, height: number, data: Uint8Array }} image
+ * @returns {number | null}
+ */
+export function visibleLuminance(image) {
+  const { data } = image;
+  let sum = 0;
+  let weight = 0;
+  for (let index = 0; index < data.length; index += 4) {
+    const alpha = (data[index + 3] ?? 0) / 255;
+    if (alpha <= 0) continue;
+    const red = data[index] ?? 0;
+    const green = data[index + 1] ?? 0;
+    const blue = data[index + 2] ?? 0;
+    sum += (0.2126 * red + 0.7152 * green + 0.0722 * blue) * alpha;
+    weight += alpha;
+  }
+  return weight > 0 ? sum / weight / 255 : null;
+}
+
+/**
  * @param {string} type
  * @param {Buffer} data
  * @returns {Buffer}
