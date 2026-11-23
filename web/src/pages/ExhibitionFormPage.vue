@@ -1233,6 +1233,10 @@ function normalizeOptions(options: unknown): string[] {
           :label="t('exhibition.form.registrationMode')"
           @update:model-value="changeMode"
         />
+        <!-- 只有「需审核」需要展商回到报名管理逐条处理，说明只在这一档出现。 -->
+        <p v-if="form.status === EXHIBITION_STATUS.REVIEW_REQUIRED" id="form-review-mode-hint" class="field-hint">
+          {{ t('exhibition.form.reviewModeHint') }}
+        </p>
       </div>
       <div class="stack" data-gap="sm">
         <div class="switch-row">
