@@ -7,6 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import { DEFAULT_SETTINGS } from '../config/migrate.js';
+import { pool } from '../config/pool.js';
 import {
   createVerifiedAccount,
   del,
@@ -340,6 +341,80 @@ test('另一个展商不能修改、改状态、改收集项或删除别人的�
   const unchanged = await get('/api/v1/exhibitions/exh-1');
   assert.strictEqual(unchanged.body.exhibition.exhibitorId, 'usr-2');
   assert.strictEqual(unchanged.body.exhibition.statusCode, beforeStatus);
+});
+
+// ── 展会归属 ────────────────────────────────────────────────────
+
+test('只有管理员能按邮箱更改展会归属，且新主人必须还能管理展会', async () => {
+  await createVerifiedAccount('usr-owner', 'owner2', 'owner2@example.com', 'password', 'exhibitor');
+  await createVerifiedAccount('usr-owner-plain', 'ownerplain', 'ownerplain@example.com', 'password', 'user');
+  await createVerifiedAccount('usr-owner-banned', 'ownerbanned', 'ownerbanned@example.com', 'password', 'exhibitor');
+  await pool.query(`UPDATE users SET status = 'banned' WHERE id = 'usr-owner-banned'`);
+
+  const created = await post(
+    '/api/v1/exhibitions',
+    {
+      title: '改归属用展会',
+      venue: '测试展馆',
+      date: '2026-09-21',
+      category: '智能家居',
+      status: 'review',
+    },
+    { token: tokens.exhibitor.token },
+  );
+  assert.strictEqual(created.body.ok, true, `新建失败：${JSON.stringify(created.body)}`);
+  const id = String(created.body.exhibition.id);
+  const owner = (token?: string, email = 'owner2@example.com') =>
+    put(`/api/v1/exhibitions/${id}/owner`, { email }, { token });
+
+  try {
+    assert.strictEqual((await owner()).status, 401, '访客不能改归属');
+    assert.strictEqual((await owner(tokens.user.token)).status, 403, '普通用户不能改归属');
+    assert.strictEqual((await owner(tokens.exhibitor.token)).status, 403, '展商不能把展会转给别人');
+
+    // 校验与业务规则的失败都是 200 + ok:false，并带稳定错误码。
+    const malformed = await owner(tokens.admin.token, 'not-an-email');
+    assert.strictEqual(malformed.body.ok, false);
+    assert.strictEqual(malformed.body.errorCode, 'validation.emailInvalid');
+
+    const missing = await owner(tokens.admin.token, 'ghost@example.com');
+    assert.strictEqual(missing.body.ok, false);
+    assert.strictEqual(missing.body.errorCode, 'exhibition.ownerEmailNotFound');
+
+    const plain = await owner(tokens.admin.token, 'ownerplain@example.com');
+    assert.strictEqual(plain.body.ok, false);
+    assert.strictEqual(plain.body.errorCode, 'exhibition.ownerNotExhibitor');
+
+    const banned = await owner(tokens.admin.token, 'ownerbanned@example.com');
+    assert.strictEqual(banned.body.ok, false);
+    assert.strictEqual(banned.body.errorCode, 'exhibition.ownerBanned');
+
+    // 成功：邮箱大小写无关，响应里带新展商名，回读一致。
+    const moved = await owner(tokens.admin.token, 'OWNER2@example.com');
+    assert.strictEqual(moved.body.ok, true, JSON.stringify(moved.body));
+    assert.strictEqual(moved.body.exhibition.exhibitorId, 'usr-owner');
+    assert.strictEqual(moved.body.exhibition.exhibitor, 'owner2');
+    const read = await get(`/api/v1/exhibitions/${id}`);
+    assert.strictEqual(read.body.exhibition.exhibitorId, 'usr-owner');
+
+    // 新主人接手后立刻能管理，原主人失去编辑权。
+    const newOwner = await login('owner2');
+    const edited = await put(`/api/v1/exhibitions/${id}/status`, { status: 'optional' }, { token: newOwner.token });
+    assert.strictEqual(edited.body.ok, true, JSON.stringify(edited.body));
+    const oldOwner = await put(
+      `/api/v1/exhibitions/${id}/status`,
+      { status: 'review' },
+      { token: tokens.exhibitor.token },
+    );
+    assert.strictEqual(oldOwner.status, 403);
+
+    // 已经是这个账号：不重复写库，直接告诉管理员。
+    const unchanged = await owner(tokens.admin.token, 'owner2@example.com');
+    assert.strictEqual(unchanged.body.ok, false);
+    assert.strictEqual(unchanged.body.errorCode, 'exhibition.ownerUnchanged');
+  } finally {
+    await del(`/api/v1/exhibitions/${id}`, { token: tokens.admin.token });
+  }
 });
 
 test('展会收集项可以整体覆盖并读回', async () => {

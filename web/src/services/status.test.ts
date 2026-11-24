@@ -15,7 +15,7 @@ describe('已截止报名的展示状态', () => {
       const mode = exhibitionModeCode({ statusCode, registrationEnded: true });
       expect(mode).toBe(EXHIBITION_STATUS.CLOSED);
       expect(modeLabel(mode)).toBe('截止报名');
-      expect(statusTone(mode)).toBe('warn');
+      expect(statusTone(mode)).toBe('danger');
     }
   });
 
@@ -47,7 +47,8 @@ describe('状态标签色调', () => {
     expect(statusTone(REGISTRATION_STATUS.APPROVED)).toBe('ok');
     expect(statusTone(REGISTRATION_STATUS.PENDING)).toBe('pending');
     expect(statusTone(REGISTRATION_STATUS.REJECTED)).toBe('danger');
-    expect(statusTone(EXHIBITION_STATUS.CLOSED)).toBe('warn');
+    // 截止报名是终态：砖红（与「已拒绝 / 已撤销」同一档），不是琥珀。
+    expect(statusTone(EXHIBITION_STATUS.CLOSED)).toBe('danger');
     expect(statusTone(EXHIBITION_STATUS.DISPLAY_ONLY)).toBe('info');
   });
 

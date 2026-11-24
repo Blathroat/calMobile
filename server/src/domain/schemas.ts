@@ -355,6 +355,10 @@ export const exhibitionStatusSchema = z.object({
     'validation.exhibitionStatusInvalid',
   ),
 });
+/** 更改展会归属：管理员按用户邮箱指定新的主办人。 */
+export const exhibitionOwnerSchema = z.object({
+  email: emailInputSchema('请输入有效的邮箱地址', 'validation.emailInvalid'),
+});
 /** 筛选条上的「不筛选」：'all' 是新前端的哨兵（只在本机用），'全部' 是旧前端传过的值。 */
 const ALL_FILTERS = ['all', '全部'];
 export const reviewQuerySchema = z

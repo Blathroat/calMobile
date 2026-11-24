@@ -26,12 +26,14 @@ function solidPng(size, color) {
 }
 
 /** 四边透明、中心不透明的图，用来断言透明模式没有铺底色。 */
-function transparentEdgePng(size) {
+function transparentEdgePng(size, color = { r: 255, g: 0, b: 0 }) {
   const data = new Uint8Array(size * size * 4);
   for (let y = 1; y < size - 1; y += 1) {
     for (let x = 1; x < size - 1; x += 1) {
       const index = (y * size + x) * 4;
-      data[index] = 255;
+      data[index] = color.r;
+      data[index + 1] = color.g;
+      data[index + 2] = color.b;
       data[index + 3] = 255;
     }
   }
@@ -127,6 +129,40 @@ test('APP_ICON_TRANSPARENT 生成透明站点图标，四角 alpha 为 0', () =>
     assert.equal(icon.data[3], 0, '左上角应透明');
     const center = (96 * 192 + 96) * 4;
     assert.equal(icon.data[center + 3], 255, '中心应不透明');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('透明模式下 Apple 主屏幕图标按图标深浅补黑 / 白底，其它图标仍透明', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'calmobile-icons-apple-'));
+  try {
+    const dark = path.join(dir, 'dark.png');
+    const light = path.join(dir, 'light.png');
+    writeFileSync(dark, transparentEdgePng(8, { r: 8, g: 16, b: 40 }));
+    writeFileSync(light, transparentEdgePng(8, { r: 250, g: 245, b: 235 }));
+
+    const darkOut = path.join(dir, 'dark-dist');
+    buildWebIcons(darkOut, { APP_ICON: dark, APP_ICON_BACKGROUND: '#123456', APP_ICON_TRANSPARENT: '1' });
+    const darkApple = decodePng(readFileSync(path.join(darkOut, 'icons', 'apple-touch-icon-180.png')));
+    assert.equal(darkApple.width, 180);
+    assert.deepEqual([...darkApple.data.subarray(0, 4)], [0, 0, 0, 255], '深色图标应铺黑底，不能留透明');
+    const center = (90 * 180 + 90) * 4;
+    assert.deepEqual([...darkApple.data.subarray(center, center + 4)], [8, 16, 40, 255], '中心仍是源图');
+
+    const lightOut = path.join(dir, 'light-dist');
+    buildWebIcons(lightOut, { APP_ICON: light, APP_ICON_BACKGROUND: '#123456', APP_ICON_TRANSPARENT: '1' });
+    const lightApple = decodePng(readFileSync(path.join(lightOut, 'icons', 'apple-touch-icon-180.png')));
+    assert.deepEqual([...lightApple.data.subarray(0, 4)], [255, 255, 255, 255], '浅色图标应铺白底');
+
+    // 同一份构建里其它 PWA 图标保持透明：只处理 Apple 主屏幕这一枚。
+    assert.equal(decodePng(readFileSync(path.join(lightOut, 'icons', 'icon-192.png'))).data[3], 0);
+
+    // 不透明模式不受影响：仍用管理员配置的 APP_ICON_BACKGROUND。
+    const opaqueOut = path.join(dir, 'opaque-dist');
+    buildWebIcons(opaqueOut, { APP_ICON: dark, APP_ICON_BACKGROUND: '#123456' });
+    const opaqueApple = decodePng(readFileSync(path.join(opaqueOut, 'icons', 'apple-touch-icon-180.png')));
+    assert.deepEqual([...opaqueApple.data.subarray(0, 4)], [0x12, 0x34, 0x56, 255]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

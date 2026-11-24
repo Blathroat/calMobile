@@ -129,9 +129,9 @@ iPhone 真机验收（Safari，或从主屏幕打开）：
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `APP_ICON` | `web/public/icons/icon-1024.png` | 方形 PNG；构建时相对仓库根，运行时相对包根或绝对路径 |
-| `APP_ICON_BACKGROUND` | `#41707e` | 十六进制底色；maskable、Apple 主屏幕、Android 自适应图标留白用；需与 `APP_ICON` 或 `PWA_ICON_DIR` 一起配 |
-| `APP_ICON_TRANSPARENT` | 空 | `1` 时生成透明图标；Android 侧不生成 adaptive 图标；需与图标源一起配 |
-| `PWA_ICON_DIR` | 空 | 服务器运行时直接使用预生成的 `favicon.ico` + `icons/*`（需含 192/512/1024/maskable/favicon-32/apple-180），与 `APP_ICON` 二选一 |
+| `APP_ICON_BACKGROUND` | `#41707e` | 十六进制底色；maskable、Apple 主屏幕（仅非透明模式）、Android 自适应图标留白用；需与 `APP_ICON` 或 `PWA_ICON_DIR` 一起配 |
+| `APP_ICON_TRANSPARENT` | 空 | `1` 时生成透明图标；Android 侧不生成 adaptive 图标；iOS 主屏幕图标例外（渲染出透明像素时按图标深浅补黑 / 白底，iOS 会把透明画成黑底）；需与图标源一起配 |
+| `PWA_ICON_DIR` | 空 | 服务器运行时直接使用预生成的 `favicon.ico` + `icons/*`（需含 192/512/1024/maskable/favicon-32/apple-180），与 `APP_ICON` 二选一；这套图自己负责，`apple-touch-icon-180.png` 必须是不透明的 |
 
 构建期写在构建机的 `server/.env` 或构建进程环境里（`web/.env` 不作为图标配置来源，避免网页和 APK 拿到不同源图）。运行时写在服务器 `/etc/calmobile.env`；两者同名时运行时优先。
 
@@ -169,7 +169,7 @@ node scripts/build-icons.mjs
 APP_ICON=/path/to/icon.png node scripts/build-icons.mjs --target android
 ```
 
-服务器运行时换图标不需要重建页面包：把 PNG 放到服务器（例如 `/etc/calmobile/icon.png`），在 `/etc/calmobile.env` 配 `APP_ICON=/etc/calmobile/icon.png`（透明图再加 `APP_ICON_TRANSPARENT=1`），重启服务即可；服务启动时生成 `/app/icons/*`、`/app/favicon.ico` 并重算 `release.json`。也可以改用 `PWA_ICON_DIR` 指向预生成的 `favicon.ico` + `icons/*`。
+服务器运行时换图标不需要重建页面包：把 PNG 放到服务器（例如 `/etc/calmobile/icon.png`），在 `/etc/calmobile.env` 配 `APP_ICON=/etc/calmobile/icon.png`（透明图再加 `APP_ICON_TRANSPARENT=1`），重启服务即可；服务启动时生成 `/app/icons/*`、`/app/favicon.ico` 并重算 `release.json`。透明模式只影响站点 / PWA 与 Android legacy / round 图标；`apple-touch-icon-180.png` 只要有透明像素就补一层不透明底，底色按图标深浅选（偏深铺黑、偏浅铺白，不透明模式仍用 `APP_ICON_BACKGROUND`），否则 iPhone 添加到主屏幕后透明区域会变黑底。也可以改用 `PWA_ICON_DIR` 指向预生成的 `favicon.ico` + `icons/*`，这时那套图里的 `apple-touch-icon-180.png` 要自己做不透明。
 
 发布链路：
 

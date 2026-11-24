@@ -174,6 +174,7 @@ HTTP 状态码表达认证、授权、可用性和内部故障；业务规则的
 - 闭展日期选填（`exhibitions.exhibition_end_date`，NULL = 单日），不能早于开展日期；更新时没传 `endDate` 保留库里的值，传空串改回单日。
 - 展会另有「报名注意事项」`exhibitions.registration_notice`（TEXT，默认空串，最多 2000 字）：展商在编辑页填写，报名详情 payload 只在报名状态为 `approved` / `attended` 时下发 `exhibitionNotice` 正文，其它状态下发空串。
 - 单个展会最长持续天数由 `app_settings.exhibitor.maxExhibitionDays` 控制（默认 0 = 不限，管理端 `PUT /settings` 提交，范围 0～365）：按开展～闭展含两端计算天数，超过时新建 / 更新都返回 `exhibition.durationTooLong`。
+- 展会归属由 `PUT /exhibitions/:id/owner`（仅管理员，body `{ email }`）改：按邮箱大小写无关匹配账号，把 `exhibitions.exhibitor_id` 换成目标账号并返回更新后的 `exhibition`。目标必须是还能管理展会的账号（展商或管理员，已到期的展商按普通用户算），封禁账号也不收；邮箱没有对应账号、对方不是展商、对方已封禁、本来就是这个账号分别是 200 + `ok:false` 的 `exhibition.ownerEmailNotFound` / `exhibition.ownerNotExhibitor` / `exhibition.ownerBanned` / `exhibition.ownerUnchanged`，邮箱格式不对是 `validation.emailInvalid`。展商不能转手自己的展会（403）。归属判定每次写操作都重算，换人后原账号立即失去编辑权，不用额外清理。
 - `PUT /exhibitions/:id/status` 同时接受中文标签和英文代码。
 - 公开页的报名不含 `checkInCode`；本人和管理员走 `/registrations`、`/review` 时下发。公开页始终带上 `attendedCount`（已参加场数），不受「展示我的报名」开关影响；开关只决定报名记录列表。
 

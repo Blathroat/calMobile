@@ -18,7 +18,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 ## 样式分层与令牌
 
 - 页面不自建 `.page` / `.topbar` / `.app-body` / `.tabbar`，也不写颜色、字号、间距与圆角；用 `web/src/styles/tokens.css` 的令牌与 `web/src/styles/base.css` 的原语。
-- 输入框默认是方框（`--stroke` 描边 + `--f3` 浅底），只有明确需要下划线的地方加 `.input-line`：管理设置页的全部一般输入、编辑展会页的名称 / 地点 / 日期与时间触发按钮 / 分类，以及收集项的「字段标题」。`.input-line` 由 `web/src/styles/components.css` 统一给出：默认一条 `--stroke` 底边，聚焦时主题色下划线从左侧长满（320ms，失焦缩回），校验失败直接变砖红；所有下划线输入框共用这一套动画，页面不要自绘。日期与时间触发按钮借用 `.input.input-line` 的外观，窄屏同样给 `min-width: 0`，否则固有最小宽会撑破两列布局。
+- 输入框默认是方框（`--stroke` 描边 + `--f3` 浅底），只有明确需要下划线的地方加 `.input-line`：管理设置页的全部一般输入、编辑展会页的名称 / 地点 / 日期与时间触发按钮 / 分类 / 归属卡里的邮箱，以及收集项的「字段标题」。`.input-line` 由 `web/src/styles/components.css` 统一给出：默认一条 `--stroke` 底边，聚焦时主题色下划线从左侧长满（320ms，失焦缩回），校验失败直接变砖红；所有下划线输入框共用这一套动画，页面不要自绘。日期与时间触发按钮借用 `.input.input-line` 的外观，窄屏同样给 `min-width: 0`，否则固有最小宽会撑破两列布局。
 - 校验失败用专用 token：底色 `--danger-wash`、描边与下划线 `--danger-edge`（比 `--danger-tint` / `--danger-ink` 浅一档，明暗主题都定义），文字仍用 `--danger-ink`；`--danger-tint` 的其它用途（状态标签、提示条、危险按钮）不动。`data-invalid` 从无到有时字段播一次轻微横向抖动，`.field-error` 淡入上移；`prefers-reduced-motion: reduce` 下这两段动画关闭。
 - 强调色使用 `--accent*`。二维码展示时保持白底黑点（展商分享图的导出是唯一例外：透明底、黑色点，白底只来自展示容器）。Markdown / HTML 先经 `web/src/services/markdown.ts` 清洗再渲染；Markdown 表格渲染成 1px 框线、列宽随内容、单元格可换行、放不下时表格自己横向滚动的样式，定义在 `.rich-content`。
 - 管理-设置的保存按钮是右下角悬浮圆形按钮（`.round-action`，投递到 `body`，否则页面切换动画的 transform 祖先会改掉 `position: fixed` 的包含块）。
@@ -86,7 +86,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 
 - 接口路径以各路由模块导出的注册表和 `web/api-endpoints.mjs` 为准。页面数据只走 `web/src/api/client.ts`，页面不直接 `fetch`，也不通过原生桥取业务数据。
 - 写接口返回 `{ ok, error, ... }`：规则失败用 200 + `ok:false`，认证授权用 4xx，数据库不可用用 503；响应里只放给用户看的文案。完整响应约定与错误分类见 [`../server.md`](../server.md)。
-- 新接口同时改 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由和 `server/src/test/` 下的契约测试；前端动作总数 90 个钉在 `server/src/test/routes-contract.test.ts`，加接口要一起改。
+- 新接口同时改 `web/src/api/client.ts`、`web/api-endpoints.mjs`、后端路由和 `server/src/test/` 下的契约测试；前端动作总数 91 个钉在 `server/src/test/routes-contract.test.ts`，加接口要一起改。
 - 协议值（状态、报名方式、收集项类型、角色）一律用英文 code：服务端 `server/src/domain/labels.ts` 与前端 `web/src/services/status.ts` 是同一套 code 的定义处，改一边必须同步另一边。接口只下发 code（`statusCode` / `role`，如 `pending` / `review` / `text` / `exhibitor`），界面按 code 查 `status.*` / `role.*` / `fieldType.*` 取文案。
 - 中文标签字段（`status` / `statusLabel` / `modeLabel` / `roleLabel`）是兼容层，新代码不要读，更不要拿它当比较或回传的值——装了语言包会比不中、还会把译文写进库里。`web/src/api/compat-fields.test.ts` 盯着 `statusLabel` / `modeLabel` / `roleLabel` 三个读取；`status` 太容易和 HTTP 状态、表单模型撞名，靠扫描与评审。客户端快照全部升级后，服务端删掉这几个字段与这条守卫测试。
 - 服务端侧：客户端地址由 `server/src/http/client-ip.ts` 统一解析——`TRUST_PROXY` 决定怎么读 `X-Forwarded-For`（跳数或可信来源），`TRUST_CLOUDFLARE` 打开时只要地址链里经过可信反代就改用 Cloudflare 写入的 `CF-Connecting-IP`。登录 / 注册、验证码限流、请求日志与操作日志都走这一个函数。登录成功时 `recordLogin()` 每次刷新 `last_login_time` / `last_login_ip` / `last_login_region`，地区由 `server/src/services/ip-region.ts` 用离线 xdb 解析，IP 原文只落库、不下发。
@@ -160,7 +160,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 ### 图标
 
 - 站点 favicon、PWA 图标和 Android 启动图标共用一份源图：`web/pwa-build.mjs` 与 Gradle 的 `buildIcons` 任务都调 `scripts/build-icons.mjs`（只是统一入口：PNG 编解码、配置、站点图标、Android 图标分别在 `scripts/icons/` 的 `png.mjs` / `config.mjs` / `web.mjs` / `android.mjs`），把 `APP_ICON`（默认 `web/public/icons/icon-1024.png`）生成到 `web/dist/favicon.ico`、`web/dist/icons/`；Gradle 用同一套模块生成 `app/build/generated/icons/res/`，再作为额外资源目录参与打包，所以各密度启动图标不入库。
-- `APP_ICON_BACKGROUND`（默认 `#41707e`）是 maskable、Apple 主屏幕和 Android 自适应图标的留白底色；`APP_ICON_TRANSPARENT=1` 时站点 / PWA 与 Android legacy / round 图标不铺底，Android 也不生成 adaptive 图标。源图只接受 8 位 RGB/RGBA、非隔行 PNG，非方形会居中裁切。`favicon.ico` 含 16/32/48 三个 PNG 条目；Android 生成 legacy / round / adaptive foreground 三套资源。开发服务器用 `web/public/favicon.ico` 的默认图，生产构建会把生成图写进 `dist`；服务端根路径 `/favicon.ico` 转发同一份产物。服务器运行时可改用 `PWA_ICON_DIR` 指向预生成的一套图标。
+- `APP_ICON_BACKGROUND`（默认 `#41707e`）是 maskable、Apple 主屏幕和 Android 自适应图标的留白底色；`APP_ICON_TRANSPARENT=1` 时站点 / PWA 与 Android legacy / round 图标不铺底，Android 也不生成 adaptive 图标。**`apple-touch-icon-180.png` 是唯一例外**：iOS 会把主屏幕图标的透明像素画成黑底，所以 `scripts/icons/web.mjs` 的 `appleTouchIcon()` 在渲染结果仍有透明像素时补一层不透明底，底色按图标可见像素的平均亮度选——偏深铺黑、偏浅铺白（阈值 0.5，见 `png.mjs` 的 `visibleLuminance()`），不透明模式仍用 `APP_ICON_BACKGROUND`；透明模式只对其它图标生效（`PWA_ICON_DIR` 由使用者自行保证那枚图不透明）。源图只接受 8 位 RGB/RGBA、非隔行 PNG，非方形会居中裁切。`favicon.ico` 含 16/32/48 三个 PNG 条目；Android 生成 legacy / round / adaptive foreground 三套资源。开发服务器用 `web/public/favicon.ico` 的默认图，生产构建会把生成图写进 `dist`；服务端根路径 `/favicon.ico` 转发同一份产物。服务器运行时可改用 `PWA_ICON_DIR` 指向预生成的一套图标。
 
 ### Service Worker 缓存边界
 
@@ -182,7 +182,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 ### 状态与身份、输入与选择器
 
 - 每个字段有可见标签。标签和内容左对齐。
-- **状态标签是「信号灯」**：`StatusTag` 只有色点 + 文字，没有边框与底色（ok 绿 / pending 琥珀 / danger 砖红 / info 灰蓝 / muted 灰），用在报名状态、展会报名方式与账号状态上。**身份标签不是状态**：展商 / 管理员走 `RoleTag`，保留方框小签（浅底 + `--accent-edge` 描边 + 强调色文字），不要换成信号灯。
+- **状态标签是「信号灯」**：`StatusTag` 只有色点 + 文字，没有边框与底色（ok 绿 / pending 琥珀 / danger 砖红 / info 灰蓝 / muted 灰），用在报名状态、展会报名方式与账号状态上。`services/status.ts` 的 `statusTone()` 是唯一映射处：**截止报名（`closed`）是终态，用 danger 砖红**；琥珀只留给「还要等」的待审核（`pending`）与受限账号（`restricted`）。**身份标签不是状态**：展商 / 管理员走 `RoleTag`，保留方框小签（浅底 + `--accent-edge` 描边 + 强调色文字），不要换成信号灯。
 - 需要从固定清单里选值的字段用**应用内抽屉**：`openSheet({ layout: 'list', actions: [{ label, checked }] })`，当前值带对勾；不要用系统 `<select>`。
 - **日期与时间用应用内抽屉**：范围日期（开展 / 闭展、报名开始 / 截止）走 `web/src/components/DatePickerSheet.vue` 的 `range` 模式，单日期（会议日期）走 `single` 模式；时间走 `web/src/components/TimeWheelSheet.vue` 的时 / 分滚轮。入口统一是 `web/src/services/pickers.ts` 的 `openDateRange` / `openSingleDate` / `openTime`，页面不要自己拼面板、也不要用系统原生控件。
 - 范围选择第一次点选就把起点回填给表单、第二次点选终点后自动收起（因此报名窗口可以只填开始）；第二次点的是同一天时终点也回填这一天，表单两端的框显示同一个日期；已有一段完整区间时点任意一天从该天重新开始；终点早于起点禁用；`min` / `max` 夹住可选范围两端（会议日期不能早于今天，报名参加时间限制在展会期间）；「清除」清空两端。时间滚轮在值为空时按开始 `09:00` / 结束 `17:00` 摆位，只有点「确认」才写回，「清除」把时间留空（时间选填）。月历按月份分节、周日起排、今天带圆点，渲染从已选月份往前 12 个月到往后 24 个月。
@@ -206,6 +206,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 - 报名收集项是「一张卡 + 横线分隔」结构，段内顺序是：字段标题输入 → 类型分段 → 提示 → 选项行 → 必填与删除。只把「字段标题」那一个输入框换成下划线：「标题」两个字作**占位符**显示在框内，不浮在输入框上方；每一项上方留 12px、分隔线下方 16px，不靠浮动标签撑间距。
 - 编辑展会时，闭展日期在提交前按管理员设置的最大持续天数做本地校验（`bootstrap.exhibitor.maxExhibitionDays`）；服务端保存时再校验一次，超限返回 `exhibition.durationTooLong`。分类必填（编辑页校验；服务端 `exhibitionInputSchema` 只在新建时强制，错误码 `validation.categoryRequired`，更新保持宽松，让空分类的已有展会只改简介时不被拒）；开展时间选填，两个时 / 分滚轮都填才组成区间，都空就是没设置。空时间的展示统一走 `web/src/services/format.ts` 的 `joinText(parts, 分隔符)`（过滤空片段再拼），列表、详情、分享文案与报名页卡片都不会留下「 · 场馆」或行尾空格；`web/src/services/calendar-ics.ts` 没有可解析的时间时按全天事件处理。
 - 报名截止日已过时，服务端在展会 payload 里下发 `registrationEnded`（数据库按 `CURRENT_DATE > registration_end` 判定，且只有需审核 / 无需审核才为真），`openForRegistration` 同时为 false；卡片状态灯与详情页状态统一读 `web/src/services/status.ts` 的 `exhibitionModeCode(item)`（截止后显示「截止报名」），详情页按钮按 `registrationEnded` 显示「报名已截止」、其它关闭原因仍是「报名已关闭」。管理端「暂停 / 恢复报名」按 `acceptsRegistration(statusCode)` 判断，不读 `openForRegistration`，避免已截止的展会显示「恢复报名」。
+- 编辑展会页的「展会归属」卡（`ExhibitionFormPage.vue`）只在 `!isCreate && session.user.can?.admin` 时渲染，放在「危险操作」之前（删除仍是内容最下方的一颗）。卡里的当前归属人取详情 `exhibition.exhibitor`，改归属成功后用 `api.exhibitions.setOwner()` 的响应就地更新，**不重载整张表单**（`load()` 会按服务器内容重拍「已保存」基线，未保存的修改会被当成已保存）。提交前用 `validate.ts` 的 `check` + `PATTERNS.email` 校验，`confirmSheet` 确认后写库；服务端的规则失败（`server.exhibition.owner*`）就地显示在输入框下。归属改动不属于表单提交字段，不影响未保存修改的判定。
 
 ### 首页月历与扫码
 
@@ -215,6 +216,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 
 ### 展商后台与管理页
 
+- 管理-展会卡片（`AdminExhibitionCard.vue`）的版式与展商后台的展会卡一一对应：缩略图 78 高、标题最多两行、状态灯与报名数合成一条放在内容里，二维码按钮绝对定位在右侧垂直居中（主体按钮的右内距留出 44px 触控位），操作行用 `.action-row` 的 ghost 小按钮；组件不能用页面的 `.exh-*` 选择器，所以这里的类名与样式是 `.admin-exh-*` 的 scoped 副本。按钮不能嵌在主体 `<button>` 里。二维码按钮复用 `ShareQrSheet` 与 `services/registration-link.ts` 的 `registrationLink()`，没配报名站地址时只 toast；「暂停 / 恢复报名」按 `canManageExhibition()`（管理员或展会主办人）决定是否出现。
 - 展商后台：顶部一颗「核销报名码」，列表每张卡上半是整块可点的主体（右侧垂直居中一枚 44px 命中区的二维码分享按钮），下半放 ghost 小按钮（查看报名 / 编辑展会 / 复制链接），上下两段只用间距分开、不加分隔线（其它列表卡不受这条影响）；「复制链接」点击即复制（`web/src/services/clipboard.ts` 的 `copyText`，Clipboard API 失败时退回隐藏 textarea + `execCommand`），成功或失败都只 toast，不弹手动复制面板；二维码按钮打开 `web/src/components/ShareQrSheet.vue`，二维码内容是报名站分享链接，导出透明底黑点 PNG（`web/src/services/qr-encoder.ts` 的 `background: 'transparent'` + `foreground: '#000000'`，保存走 `media.saveImage`，浏览器里退回下载）。「新建展会」是右下角悬浮圆形按钮（`Teleport` 到 `body`），空态时由 `.state` 的入口承担、不显示悬浮按钮。
 - 管理-用户分区按身份与账号状态筛选：筛选值写进地址栏（`?tab=users&role=&status=`，非法值按「全部」），`GET /users` 接受 `role` / `status`，与 `query` 关键字同时生效（三者 AND）。两个筛选是排成一行的下划线选择栏（`.user-filter-row` 自适应网格，与编辑展会页的活动分类同一套；点开走 `openSheet` 的 `layout: list`，当前值带对勾），`AdminUsersSection` 只回抛事件，URL 同步与取数留在 `AdminPage`。
 - 管理-设置的「日志」卡片里有「查看最近日志」按钮（整行浅色描边按钮，`cta ghost`，位于上限设置下方）：`AdminSettingsSection` 发 `open-logs` 事件，`AdminPage` 负责跳转到 `/logs`。日志页支持全部 / 信息 / 警告 / 错误筛选与下拉刷新；日志的写入、容量上限与接口参数见 [`../server.md`](../server.md)。
@@ -239,7 +241,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 | `web/src/app/shell.test.ts` | 每个页面渲染在外壳内容区、导航与角色过滤 |
 | `web/src/api/compat-fields.test.ts` | 页面不读 `statusLabel` / `modeLabel` / `roleLabel` |
 | `web/src/components/pwa-install-sheet.test.ts`、`web/src/pages/home-pwa-install-hint.test.ts` | 安装引导条件与每次访问只提示一次 |
-| `server/src/test/routes-contract.test.ts` | 前端动作与后端路由一一对应、动作总数 90 |
+| `server/src/test/routes-contract.test.ts` | 前端动作与后端路由一一对应、动作总数 91 |
 | `app/src/test/`（含 `ShellCapabilitiesTest`） | 原生能力清单与动作表一致 |
 
 校验命令：

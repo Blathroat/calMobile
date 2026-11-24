@@ -8,6 +8,7 @@
  * 开展 / 闭展、报名开始 / 截止各是一组日期范围，开展时间是两个时 / 分滚轮。
  * 「删除展会」放在页面内容最下方。新建与编辑共用同一页：
  * 路由带 `:id` 就是编辑（先取详情），不带就是新建（空表单），保存成功后换成编辑地址。
+ * 管理员在编辑页最下方还多一张「展会归属」卡：按用户邮箱把这场展会交给另一个账号。
  *
  * 内存稿与未保存提示：去「使用Markdown编辑简介」的二级页时把整张表单 stash 成内存稿，
  * 回来时按 id 恢复（编辑已有展会也一样，二级页保存简介后其他未保存字段不会丢）；
@@ -592,6 +593,9 @@ async function load(): Promise<void> {
     return;
   }
   const content = contentFromServer(data.exhibition ?? {}, data);
+  // 归属人昵称直接取详情里的展商名；改归属成功后就地更新，不为了这一行重载整张表单
+  // （重载会把「已保存」基线按服务器内容重拍，未保存的修改就丢了）。
+  ownerName.value = String(data.exhibition?.exhibitor ?? '');
   // 有内存稿时表单已经被它填好（未保存的修改比服务器新），这里只补基线，不能再盖回去。
   markSaved(content);
   if (built.value) return;
@@ -811,6 +815,69 @@ function askDelete(): void {
         }
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
+      }
+    },
+  });
+}
+
+// ── 展会归属（仅管理员） ────────────────────────────────────────
+
+/**
+ * 归属卡只在「编辑已有展会 + 管理员」时出现：
+ * 新建还没有展会、展商也不能把别人的展会转走。改的是 `exhibitions.exhibitor_id`。
+ */
+const showOwnerCard = computed(() => !isCreate.value && session.user.can?.admin === true);
+/** 当前归属人昵称：取详情里的展商名，改归属成功后换成响应里的新展商名。 */
+const ownerName = ref('');
+const ownerEmail = ref('');
+const ownerError = ref('');
+const ownerBusy = ref(false);
+/** 空串表示历史数据没有主办人。 */
+const ownerLabel = computed(() => ownerName.value || t('exhibition.form.ownerNone'));
+
+/** 邮箱必填且要是邮箱形状；上限与服务端 `emailInputSchema` 一致。 */
+function ownerEmailError(): string {
+  return check(ownerEmail.value, {
+    label: t('exhibition.form.ownerEmailLabel'),
+    required: true,
+    max: 120,
+    pattern: PATTERNS.email,
+    patternMessage: t('exhibition.form.ownerEmailInvalid'),
+  });
+}
+
+/**
+ * 更改归属：先确认再提交。成功后就地刷新当前归属人，**不重载整张表单**
+ * （重载会按服务器内容重拍「已保存」基线，把未保存的修改当成已保存）。
+ * 服务端的规则失败（邮箱没有账号、目标不是展商、已是这个账号）带本地化文案，原位显示在输入框下。
+ */
+function askTransferOwner(): void {
+  if (ownerBusy.value) return;
+  const message = ownerEmailError();
+  if (message) {
+    ownerError.value = message;
+    toast(message, 'error');
+    return;
+  }
+  ownerError.value = '';
+  const email = ownerEmail.value.trim();
+  confirmSheet({
+    title: t('exhibition.form.ownerConfirmTitle'),
+    message: t('exhibition.form.ownerConfirmMessage', { email }),
+    confirmLabel: t('exhibition.form.ownerSubmit'),
+    onConfirm: async () => {
+      ownerBusy.value = true;
+      try {
+        const result = await api.exhibitions.setOwner(currentDraftId(), email);
+        const exhibition = (result?.exhibition ?? {}) as JsonObject;
+        ownerName.value = String(exhibition.exhibitor ?? '');
+        ownerEmail.value = '';
+        toast(t('exhibition.form.ownerUpdated'), 'success');
+      } catch (reason) {
+        ownerError.value = reason instanceof Error ? reason.message : String(reason);
+        toast(ownerError.value, 'error');
+      } finally {
+        ownerBusy.value = false;
       }
     },
   });
@@ -1166,6 +1233,10 @@ function normalizeOptions(options: unknown): string[] {
           :label="t('exhibition.form.registrationMode')"
           @update:model-value="changeMode"
         />
+        <!-- 只有「需审核」需要展商回到报名管理逐条处理，说明只在这一档出现。 -->
+        <p v-if="form.status === EXHIBITION_STATUS.REVIEW_REQUIRED" id="form-review-mode-hint" class="field-hint">
+          {{ t('exhibition.form.reviewModeHint') }}
+        </p>
       </div>
       <div class="stack" data-gap="sm">
         <div class="switch-row">
@@ -1200,6 +1271,42 @@ function normalizeOptions(options: unknown): string[] {
       :radio-max="limit('radioOption', 60)"
       :check-max="limit('checkOption', 60)"
     />
+
+    <!-- 展会归属：只有管理员、且是已有展会时出现。按邮箱把展会交给另一个账号，
+         放在「危险操作」之前，删除仍是页面内容最下方的一颗。 -->
+    <div v-if="showOwnerCard" class="card owner-card">
+      <span class="section-label">{{ t('exhibition.form.ownerSection') }}</span>
+      <p class="row-meta">{{ t('exhibition.form.ownerCurrent', { name: ownerLabel }) }}</p>
+      <div class="field" :data-invalid="ownerError ? 'true' : 'false'">
+        <label for="form-owner-email">{{ t('exhibition.form.ownerEmailLabel') }}</label>
+        <input
+          id="form-owner-email"
+          v-model="ownerEmail"
+          class="input input-line"
+          type="email"
+          inputmode="email"
+          autocomplete="off"
+          :maxlength="120"
+          :placeholder="t('exhibition.form.ownerEmailPlaceholder')"
+          :disabled="ownerBusy"
+          @keyup.enter="askTransferOwner"
+        />
+        <p v-if="ownerError" class="field-error" role="alert">{{ ownerError }}</p>
+      </div>
+      <div class="row">
+        <button
+          class="cta ghost"
+          data-size="small"
+          type="button"
+          :disabled="ownerBusy"
+          :data-loading="ownerBusy ? 'true' : 'false'"
+          @click="askTransferOwner"
+        >
+          {{ t('exhibition.form.ownerSubmit') }}
+        </button>
+      </div>
+      <p class="field-hint">{{ t('exhibition.form.ownerHint') }}</p>
+    </div>
 
     <!-- 删除放在内容最下，保存仍固定在页脚。新建还没有展会，按钮不可点。 -->
     <div class="card danger-zone">
@@ -1287,9 +1394,11 @@ function normalizeOptions(options: unknown): string[] {
   color: var(--ink-3);
 }
 
-/* 封面卡把简介并进来后，封面与简介之间多留一档；报名设置里各组之间只靠留白分区。 */
+/* 封面卡把简介并进来后，封面与简介之间多留一档；报名设置里各组之间只靠留白分区；
+   归属卡是一段操作，说明与输入之间同样松一档。 */
 .cover-card,
-.registration-settings-groups {
+.registration-settings-groups,
+.owner-card {
   gap: var(--s3);
 }
 

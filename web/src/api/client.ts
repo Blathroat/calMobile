@@ -228,6 +228,8 @@ export interface ApiClient {
     remove(id: Id): Promise<ApiResult>;
     /** 改上下架/审核状态；同样连带失效报名与审核列表。 */
     setStatus(id: Id, status: string): Promise<ApiResult>;
+    /** 管理员按用户邮箱更改展会归属；新主办人必须是还能管理展会的账号。 */
+    setOwner(id: Id, email: string): Promise<ApiResult>;
     /** 展会分类选项（管理端与筛选共用），键前缀是 `categories`。 */
     categories(): Promise<unknown[]>;
     /** 某个展会的自定义报名字段定义。 */
@@ -600,6 +602,13 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
           'exhibitions',
           'registrations',
           'review',
+          'search',
+        ]),
+      // 换主办人后「我的展会」与用户公开页（按主办人筛）都会变，三组读缓存一起失效。
+      setOwner: (id, email) =>
+        write<ApiResult>(`/exhibitions/${encodeURIComponent(id)}/owner`, { method: 'PUT', body: { email } }, [
+          'exhibitions',
+          'users.public',
           'search',
         ]),
       categories: () => read<unknown[]>('categories', '/exhibitions/categories'),

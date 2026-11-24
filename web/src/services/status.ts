@@ -218,8 +218,9 @@ export function statusTone(status: unknown): StatusTone {
     case REGISTRATION_STATUS.REJECTED:
     case REGISTRATION_STATUS.CANCELLED:
       return 'danger';
+    // 截止报名是「不能再报了」的终态提示，用砖红；琥珀只留给「还要等」的待审核与受限。
     case EXHIBITION_STATUS.CLOSED:
-      return 'warn';
+      return 'danger';
     case EXHIBITION_STATUS.DISPLAY_ONLY:
       return 'info';
     default:

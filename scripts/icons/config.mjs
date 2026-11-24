@@ -2,8 +2,9 @@
  * 图标生成用的源图与底色配置。
  *
  * `APP_ICON` 指向仓库内或绝对路径的 PNG；不配时用 `web/public/icons/icon-1024.png`。
- * `APP_ICON_BACKGROUND` 是可选的十六进制底色，用于 PWA maskable、Apple 主屏幕、
- * Android 自适应图标和圆角图标留白；不配时用默认强调色 `#41707e`。
+ * `APP_ICON_BACKGROUND` 是可选的十六进制底色，用于 PWA maskable、Apple 主屏幕
+ * （仅非透明模式）、Android 自适应图标和圆角图标留白；不配时用默认强调色 `#41707e`。
+ * 透明模式下 Apple 主屏幕图标有透明像素时改用黑 / 白底（见 web.mjs 的 appleTouchIcon）。
  * 构建期从 `server/.env` 与进程环境读取（见 scripts/env-file.mjs），运行时由服务端注入同名变量。
  */
 
