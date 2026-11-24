@@ -109,9 +109,31 @@ const UNAVAILABLE_CODES = new Set([
   '28P01', // 密码不对
 ]);
 
+/**
+ * 客户端在请求体没读完时把连接断了。
+ *
+ * Node 的 HTTP 服务器在 socket 关闭时用 `ConnResetException('aborted')` 中断还没读完的请求：
+ * 上传到一半超时的手机、切到后台的应用都会留下这个错误。它不是服务器的错，更不是数据库不可用，
+ * 因此回 400「请求被中断」，日志也不按请求失败打。
+ *
+ * **判据只看 message**：pg 的连接重置同样是 `code: 'ECONNRESET'`，但 message 是
+ * `read ECONNRESET` / `Connection terminated unexpectedly` 之类，不能被一起当成请求中断。
+ */
+export function isRequestAborted(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const record = error as { code?: unknown; message?: unknown };
+  return String(record.code || '') === 'ECONNRESET' && String(record.message || '') === 'aborted';
+}
+
 /** 判断一个错误是不是「数据库暂时不可用」。 */
 export function isDatabaseUnavailable(error: unknown): boolean {
   if (!error) {
+    return false;
+  }
+  // 客户端中途断开也带 ECONNRESET，不能让它变成「数据库暂时不可用」。
+  if (isRequestAborted(error)) {
     return false;
   }
   const record = error as { code?: unknown; message?: unknown };

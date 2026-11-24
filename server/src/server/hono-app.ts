@@ -11,6 +11,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { corsHeaders, headContentLength, requestLogger, requireHttps, securityHeaders } from './node-middleware.js';
 import { errorResponse } from '../http/error-response.js';
+import { isRequestAborted } from '../domain/errors.js';
 import { jsonResponse } from '../http/respond.js';
 import { jsonBodySizeGuard } from '../http/body-limit.js';
 import { apiRequestLog } from '../services/logs.js';
@@ -226,7 +227,13 @@ export function createApp(options: AppOptions): Hono {
    */
   app.onError((err, c) => {
     const { status, body } = errorResponse(err);
-    console.error(`请求失败（${status}）：`, err);
+    if (isRequestAborted(err)) {
+      // 客户端自己断开（上传超时、切到后台、网络切换）：不是服务器失败，不打印堆栈，
+      // 也不要让它看起来像「数据库暂时不可用」那种需要处理的故障。
+      console.warn(`请求被客户端中断：${c.req.method} ${new URL(c.req.url).pathname}`);
+    } else {
+      console.error(`请求失败（${status}）：`, err);
+    }
     return jsonResponse(c, body, status);
   });
 

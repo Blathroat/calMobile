@@ -66,6 +66,22 @@ function stableKey(value: unknown): string {
 }
 
 /**
+ * 上传类请求的超时（毫秒）。
+ *
+ * JSON 请求用 10 秒覆盖移动网络上的往返；上传要发的是用户选的文件，走的是真实上行带宽，
+ * 封面、简介插图在手机上常见几百 KB 到几 MB，弱网下十几秒很平常。以前封面给 20 秒，
+ * 会在「字节快发完、还在等服务器响应」时把请求掐断，服务端只看到客户端中断（aborted），
+ * 用户看到的是「后端响应超时」。这里给足时间，失败留给真正的网络错误与服务端错误。
+ *
+ * 头像与图片、视频分开：头像裁剪后是方图、体积小，视频最大且有 50MB 量级。
+ */
+const UPLOAD_TIMEOUT_MS = {
+  avatar: 60_000,
+  image: 120_000,
+  video: 600_000,
+};
+
+/**
  * 业务接口集合。
  *
  * 读方法的结果进查询缓存，写方法成功之后按前缀失效缓存；`session` 与 `clearCache` 是本地状态，
@@ -507,7 +523,7 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
             bytes,
             contentType,
             onUploadProgress,
-            timeoutMs: 20_000,
+            timeoutMs: UPLOAD_TIMEOUT_MS.avatar,
           },
           ['profile', 'users', 'search'],
         ),
@@ -535,7 +551,7 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
           contentType,
           onUploadProgress,
           query: { kind },
-          timeoutMs: kind === 'video' ? 60_000 : 20_000,
+          timeoutMs: kind === 'video' ? UPLOAD_TIMEOUT_MS.video : UPLOAD_TIMEOUT_MS.image,
         }),
     },
     security: {
@@ -688,7 +704,7 @@ export function createApi(baseUrl = DEFAULT_API_BASE, onSessionExpired?: () => v
             bytes,
             contentType,
             onUploadProgress,
-            timeoutMs: 20_000,
+            timeoutMs: UPLOAD_TIMEOUT_MS.avatar,
           },
           ['profile', 'users', 'users.public', 'search'],
         ),
