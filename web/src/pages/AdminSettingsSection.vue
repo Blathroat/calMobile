@@ -85,6 +85,11 @@ const props = defineProps<{
   coverBusy: boolean;
   /** 缺省封面上传进度（0–100）；null 表示没有上传在跑。 */
   coverProgress: number | null;
+  /**
+   * 上传期间先占住预览槽位的本机副本；空串 / 缺省表示照旧显示 `form.defaultCover`。
+   * 遮罩是「由下至上变亮」，已上传的那一段要透出刚选的图，不能是旧封面或占位图。
+   */
+  coverPreview?: string;
   canEditSettings: boolean;
   storageFull: boolean;
   storagePercent: number;
@@ -432,9 +437,14 @@ function clearAgreementContent(): void {
     <div class="card">
       <span class="section-label">{{ copy.coverTitle }}</span>
       <div class="cover-row">
-        <!-- 预览槽位始终在：上传期间盖进度遮罩，失败 / 取消随进度清空一起撤掉。 -->
+        <!-- 预览槽位始终在：上传期间盖进度遮罩，失败 / 取消随进度清空一起撤掉。
+             遮罩下半截透出的是刚选的本机副本，服务器地址返回后再换掉。 -->
         <div class="cover-frame ph-img">
-          <img v-if="form.defaultCover" :src="form.defaultCover" :alt="copy.coverTitle" />
+          <img
+            v-if="coverPreview || form.defaultCover"
+            :src="coverPreview || form.defaultCover"
+            :alt="copy.coverTitle"
+          />
           <UploadProgressMask
             v-if="coverProgress !== null"
             :progress="coverProgress"

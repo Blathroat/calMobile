@@ -321,6 +321,11 @@ const storagePolicies = [
 const coverBusy = ref(false);
 /** 缺省封面上传进度（0–100）；null 表示没有上传在跑。 */
 const coverProgress = ref<number | null>(null);
+/**
+ * 上传期间先占住预览槽位的本机副本（遮罩下面透出的是刚选的图，不是旧封面）。
+ * 服务器地址返回、或失败 / 取消后清空，槽位回到 `form.defaultCover`。
+ */
+const coverPreview = ref('');
 const inviteBusy = ref(false);
 const invites = ref<
   Array<{
@@ -838,6 +843,7 @@ async function pickDefaultCover(): Promise<void> {
       toast(t('admin.media.unreadableImage'), 'error');
       return;
     }
+    coverPreview.value = stored.url;
     coverProgress.value = 0;
     form.defaultCover = await publishImportedMedia('image', stored, (percent) => {
       coverProgress.value = Math.min(99, Math.max(0, percent));
@@ -849,6 +855,8 @@ async function pickDefaultCover(): Promise<void> {
     if (reason && typeof reason === 'object' && (reason as { code?: unknown }).code === 'cancelled') return;
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
   } finally {
+    // 本机副本由 publishImportedMedia 在上传结束时删掉 / 收回，这里只把槽位交还给表单地址。
+    coverPreview.value = '';
     coverBusy.value = false;
   }
 }
@@ -1147,6 +1155,7 @@ async function copyInvite(code: string): Promise<void> {
     :settings-saving="settingsSaving"
     :cover-busy="coverBusy"
     :cover-progress="coverProgress"
+    :cover-preview="coverPreview"
     :can-edit-settings="canEditSettings"
     :storage-full="storageFull"
     :storage-percent="storagePercent"
