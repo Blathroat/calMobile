@@ -710,6 +710,14 @@ onBeforeRouteLeave((to) => {
 const coverBusy = ref(false);
 /** 封面位置上的进度遮罩；null 表示没有上传在跑（遮罩随之卸载）。 */
 const coverProgress = ref<number | null>(null);
+/**
+ * 上传期间先占住封面槽位的本机副本。
+ *
+ * 遮罩是「由下至上变亮」：已经上传的那一段透出的必须是用户刚选的那张图，
+ * 而不是上一次的封面或占位图。服务器返回地址后（或失败 / 取消时）立刻清空，
+ * 槽位回到 `form.imageUri`。
+ */
+const coverPreview = ref('');
 
 /**
  * 封面先在设备上选择，再上传到服务器，表单里只留服务器地址。
@@ -725,6 +733,7 @@ async function pickCover(): Promise<void> {
       toast(t('admin.media.unreadableImage'), 'error');
       return;
     }
+    coverPreview.value = stored.url;
     coverProgress.value = 0;
     form.imageUri = await publishImportedMedia('image', stored, (percent) => {
       coverProgress.value = Math.min(99, Math.max(0, percent));
@@ -737,6 +746,8 @@ async function pickCover(): Promise<void> {
     if (isCancelled(reason)) return;
     toast(reason instanceof Error ? reason.message : String(reason), 'error');
   } finally {
+    // 本机副本由 publishImportedMedia 在上传结束时删掉 / 收回，这里只把槽位交还给表单地址。
+    coverPreview.value = '';
     coverBusy.value = false;
   }
 }
@@ -1163,7 +1174,12 @@ function normalizeOptions(options: unknown): string[] {
       <div class="cover-row">
         <!-- 封面槽位始终在：上传期间遮罩盖在它上面，失败 / 取消随进度清空一起撤掉。 -->
         <div class="cover-frame ph-img">
-          <img v-if="form.imageUri" :src="form.imageUri" :alt="t('exhibition.form.cover')" />
+          <!-- 上传期间显示本机副本：遮罩下半截透出的是用户刚选的图，不是占位图。 -->
+          <img
+            v-if="coverPreview || form.imageUri"
+            :src="coverPreview || form.imageUri"
+            :alt="t('exhibition.form.cover')"
+          />
           <UploadProgressMask v-if="coverProgress !== null" :progress="coverProgress" @settled="coverProgress = null" />
         </div>
         <div class="cover-side">

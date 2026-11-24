@@ -19,8 +19,14 @@ test('清单覆盖构建产物，且不把自己算进 id', () => {
       ['assets/index-abc.js', 'index.html'],
     );
     assert.match(first.id, /^[0-9a-f]{64}$/);
+    // HTML 会被反向代理（Cloudflare JSD）插脚本，条目带 skipVerify；资源文件仍逐个核对。
+    const html = first.files.find((file) => file.path === 'index.html');
+    assert.equal(html.skipVerify, true);
+    const asset = first.files.find((file) => file.path === 'assets/index-abc.js');
+    assert.equal(asset.skipVerify, undefined);
     const written = JSON.parse(readFileSync(path.join(root, 'release.json'), 'utf8'));
     assert.equal(written.id, first.id);
+    assert.equal(written.files.find((file) => file.path === 'index.html').skipVerify, true);
 
     const second = buildReleaseManifest(root);
     assert.equal(second.id, first.id);

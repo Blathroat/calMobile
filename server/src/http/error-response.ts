@@ -12,7 +12,7 @@
  * - **库故障不是 500 而是 503**：判定在 `domain/errors.ts` 的 `isDatabaseUnavailable()`。
  */
 
-import { ApiError, isDatabaseUnavailable } from '../domain/errors.js';
+import { ApiError, isDatabaseUnavailable, isRequestAborted } from '../domain/errors.js';
 
 /** body-parser 之类中间件的错误类型 → 对外文案（私有 `err.type` 的映射表）。 */
 export const MIDDLEWARE_MESSAGES: Record<string, string> = {
@@ -30,10 +30,15 @@ export interface RaisedError {
   message?: string;
 }
 
-/** 错误 → HTTP 状态码：ApiError 自带 > 中间件自带的 4xx > 数据库不可用 503 > 500。 */
+/** 错误 → HTTP 状态码：ApiError 自带 > 客户端中途断开 400 > 中间件自带的 4xx > 数据库不可用 503 > 500。 */
 export function statusFor(err: unknown): number {
   if (err instanceof ApiError) {
     return err.status;
+  }
+  // 客户端在请求体没读完时断开（上传超时、切后台）：这是客户端自己的动作，不是服务器故障。
+  // 以前它带 ECONNRESET，会被当成数据库不可用回 503，把两条完全不同的排查线索混在一起。
+  if (isRequestAborted(err)) {
+    return 400;
   }
   const record = err as RaisedError;
   const declared = Number(record.status || record.statusCode);
@@ -53,6 +58,9 @@ export function statusFor(err: unknown): number {
 export function clientMessage(err: unknown, status: number): string {
   if (err instanceof ApiError) {
     return err.message || '请求失败';
+  }
+  if (isRequestAborted(err)) {
+    return MIDDLEWARE_MESSAGES['request.aborted'] || '请求被中断';
   }
   const record = err as RaisedError;
   const message = record.type ? MIDDLEWARE_MESSAGES[record.type] : undefined;

@@ -35,6 +35,15 @@ test('statusFor：数据库不可用是 503，SQL 语法错与唯一冲突照旧
   assert.equal(statusFor(new TypeError('boom')), 500);
 });
 
+test('statusFor：客户端在请求体没读完时断开是 400，不是 503', () => {
+  const aborted = Object.assign(new Error('aborted'), { code: 'ECONNRESET' });
+  assert.equal(statusFor(aborted), 400, '上传超时断线不该被说成数据库不可用');
+  assert.equal(clientMessage(aborted, 400), '请求被中断');
+  assert.deepEqual(errorResponse(aborted), { status: 400, body: { error: '请求被中断' } });
+  // pg 自己重置连接仍是 503。
+  assert.equal(statusFor(Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })), 503);
+});
+
 test('clientMessage：只有 ApiError 的文案是给用户看的', () => {
   assert.equal(clientMessage(new ApiError(403, '账号已被限制，不能报名'), 403), '账号已被限制，不能报名');
   assert.equal(clientMessage(new ApiError(400, ''), 400), '请求失败', '空文案要有兜底');

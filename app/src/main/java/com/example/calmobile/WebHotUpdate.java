@@ -4,17 +4,22 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Locale;
 
 /**
  * 后台拉取 {@code /app/release.json}，核对后把新页面放到下次冷启动才启用的目录。
  * <p>
  * 不在这次进程里换页面，避免使用中重载。失败只留下原来的快照。
+ * <p>
+ * 清单里带 {@code skipVerify} 的文件（只有 HTML）跳过哈希核对：反向代理会在页面里插脚本
+ * （Cloudflare 的 JavaScript 检测），构建时的哈希和线上字节对不上，但页面仍然可用。
  */
 final class WebHotUpdate {
 
@@ -62,7 +67,7 @@ final class WebHotUpdate {
                 if (!WebSnapshot.isInside(incoming, target)) {
                     throw new IOException("路径越界");
                 }
-                total += download(base + "/app/" + entry.path, target, entry.sha256);
+                total += download(base + "/app/" + entry.path, target, entry);
                 if (total > MAX_TOTAL) {
                     throw new IOException("页面包过大");
                 }
@@ -99,7 +104,13 @@ final class WebHotUpdate {
         }
     }
 
-    private static long download(String url, File target, String expectedSha256) throws IOException {
+    /**
+     * 下载一个文件。
+     * <p>
+     * 普通文件逐个核对 sha256；带 {@code skipVerify} 的只做完整性检查（见
+     * {@link #checkUnverified(File, String, long)}），因为反向代理会改写 HTML 的内容。
+     */
+    private static long download(String url, File target, WebSnapshot.Entry entry) throws IOException {
         HttpURLConnection conn = open(url);
         try {
             if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
@@ -125,13 +136,39 @@ final class WebHotUpdate {
                 }
             }
             String actual = WebSnapshot.hex(digest.digest());
-            if (!actual.equals(expectedSha256)) {
+            if (entry.skipVerify) {
+                return checkUnverified(target, entry.path, total);
+            }
+            if (!actual.equals(entry.sha256)) {
                 throw new IOException("校验失败");
             }
             return total;
         } finally {
             conn.disconnect();
         }
+    }
+
+    /** 不核对哈希时的完整性检查：非空；HTML 还要有正常结尾，挡住被截断的页面。 */
+    private static long checkUnverified(File target, String path, long total) throws IOException {
+        if (total <= 0) {
+            throw new IOException("文件为空");
+        }
+        if (path.toLowerCase(Locale.ROOT).endsWith(".html") && !hasHtmlEnd(target)) {
+            throw new IOException("页面不完整");
+        }
+        return total;
+    }
+
+    /** 读文件末尾一小段，看 HTML 是不是正常收尾（{@code </html>}）。 */
+    private static boolean hasHtmlEnd(File file) throws IOException {
+        long length = file.length();
+        int keep = (int) Math.min(length, 4096);
+        byte[] tail = new byte[keep];
+        try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+            input.seek(length - keep);
+            input.readFully(tail);
+        }
+        return new String(tail, StandardCharsets.UTF_8).toLowerCase(Locale.ROOT).contains("</html>");
     }
 
     private static HttpURLConnection open(String url) throws IOException {

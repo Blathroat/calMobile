@@ -31,6 +31,35 @@ public class WebSnapshotTest {
         assertEquals("index.html", manifest.files.get(0).path);
     }
 
+    /** 只有 HTML 允许标记「不核对哈希」；标到别的文件上视为清单损坏。 */
+    @Test
+    public void acceptsSkipVerifyOnlyForHtml() {
+        String id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        String hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        WebSnapshot.Manifest html = WebSnapshot.parse(
+                "{\"id\":\"" + id + "\",\"files\":[{\"path\":\"index.html\",\"sha256\":\"" + hash
+                        + "\",\"skipVerify\":true}]}");
+        assertNotNull(html);
+        assertTrue(html.files.get(0).skipVerify);
+
+        WebSnapshot.Manifest plain = WebSnapshot.parse(
+                "{\"id\":\"" + id + "\",\"files\":[{\"path\":\"index.html\",\"sha256\":\"" + hash + "\"}]}");
+        assertNotNull(plain);
+        assertFalse(plain.files.get(0).skipVerify);
+
+        // 非 HTML 带这个标志：拒绝整份清单，避免清单被扩大成「什么都不校验」。
+        assertNull(WebSnapshot.parse(
+                "{\"id\":\"" + id + "\",\"files\":[{\"path\":\"assets/app.js\",\"sha256\":\"" + hash
+                        + "\",\"skipVerify\":true}]}"));
+
+        // 类型不对按「要核对」处理，不当成 skipVerify。
+        WebSnapshot.Manifest wrongType = WebSnapshot.parse(
+                "{\"id\":\"" + id + "\",\"files\":[{\"path\":\"index.html\",\"sha256\":\"" + hash
+                        + "\",\"skipVerify\":\"yes\"}]}");
+        assertNotNull(wrongType);
+        assertFalse(wrongType.files.get(0).skipVerify);
+    }
+
     /** 待用快照要等下次启动才换上，外壳 versionCode 不一致就不用。 */
     @Test
     public void promotesPendingSnapshotOnlyForMatchingVersion() throws Exception {

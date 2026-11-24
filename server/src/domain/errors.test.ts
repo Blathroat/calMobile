@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { ApiError, serviceUnavailable, isDatabaseUnavailable } from './errors.js';
+import { ApiError, serviceUnavailable, isDatabaseUnavailable, isRequestAborted } from './errors.js';
 
 /**
  * 数据库不可用的判定。
@@ -29,6 +29,19 @@ test('服务端侧的错误码也算不可用', () => {
   for (const code of ['08006', '57P01', '53300', '3D000', '28P01']) {
     assert.equal(isDatabaseUnavailable({ code }), true, `${code} 应当算数据库不可用`);
   }
+});
+
+test('客户端中途断开不算数据库不可用', () => {
+  // Node 在 socket 关闭时中断没读完的请求体：ConnResetException('aborted')。
+  const aborted = Object.assign(new Error('aborted'), { code: 'ECONNRESET' });
+  assert.equal(isRequestAborted(aborted), true);
+  assert.equal(isDatabaseUnavailable(aborted), false, '请求中断不能被当成库故障');
+  // pg 的连接重置同样是 ECONNRESET，但 message 不同，仍然算库不可用。
+  const reset = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' });
+  assert.equal(isRequestAborted(reset), false);
+  assert.equal(isDatabaseUnavailable(reset), true);
+  assert.equal(isRequestAborted(null), false);
+  assert.equal(isRequestAborted({ message: 'aborted' }), false, '没有 ECONNRESET 的不算请求中断');
 });
 
 test('SQL 语法错、约束冲突不算不可用', () => {

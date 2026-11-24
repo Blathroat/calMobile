@@ -2,6 +2,7 @@ package com.example.calmobile;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
@@ -46,6 +47,51 @@ public class WebHotUpdateTest {
             } finally {
                 bad.close();
             }
+        } finally {
+            server.close();
+            WebSnapshot.deleteRecursively(root);
+        }
+    }
+
+    /**
+     * 反向代理改写过的 HTML：清单的 sha256 对不上，但带 skipVerify 时仍然接受。
+     * Cloudflare 的 JavaScript 检测会往页面里插脚本，正是这个场景。
+     */
+    @Test
+    public void acceptsProxyTransformedHtmlWhenVerificationIsSkipped() throws Exception {
+        byte[] built = "<!doctype html><p>build</p></html>".getBytes(StandardCharsets.UTF_8);
+        byte[] served = "<!doctype html><script>cf</script><p>build</p></html>".getBytes(StandardCharsets.UTF_8);
+        String hash = WebSnapshot.sha256(built);
+        String id = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        String manifest = "{\"id\":\"" + id + "\",\"files\":[{\"path\":\"index.html\",\"sha256\":\"" + hash
+                + "\",\"skipVerify\":true}]}";
+        LocalHttp server = new LocalHttp(manifest.getBytes(StandardCharsets.UTF_8), served);
+        File root = tempDir("calmobile-hot-skip");
+        try {
+            assertEquals(WebHotUpdate.Result.UPDATED, WebHotUpdate.fetch(server.origin(), "", root, 3));
+            File pending = new File(root, "pending");
+            assertEquals(id, WebSnapshot.releaseId(pending));
+            assertEquals(served.length, new File(pending, "index.html").length());
+        } finally {
+            server.close();
+            WebSnapshot.deleteRecursively(root);
+        }
+    }
+
+    /** 跳过哈希核对也挡得住明显损坏的下载：没有正常结尾的 HTML 仍然判失败。 */
+    @Test
+    public void rejectsTruncatedHtmlWhenVerificationIsSkipped() throws Exception {
+        byte[] built = "<!doctype html><p>build</p></html>".getBytes(StandardCharsets.UTF_8);
+        byte[] truncated = "<!doctype html><p>trunc".getBytes(StandardCharsets.UTF_8);
+        String hash = WebSnapshot.sha256(built);
+        String id = "9999999999999999999999999999999999999999999999999999999999999999";
+        String manifest = "{\"id\":\"" + id + "\",\"files\":[{\"path\":\"index.html\",\"sha256\":\"" + hash
+                + "\",\"skipVerify\":true}]}";
+        LocalHttp server = new LocalHttp(manifest.getBytes(StandardCharsets.UTF_8), truncated);
+        File root = tempDir("calmobile-hot-skip-broken");
+        try {
+            assertEquals(WebHotUpdate.Result.FAILED, WebHotUpdate.fetch(server.origin(), "", root, 3));
+            assertNull(WebSnapshot.releaseId(new File(root, "pending")));
         } finally {
             server.close();
             WebSnapshot.deleteRecursively(root);

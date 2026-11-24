@@ -65,10 +65,13 @@ function makeIconDirectory(root: string): void {
   write(root, 'icons/apple-touch-icon-180.png', 'png-apple');
 }
 
-function readRelease(root: string): { id: string; files: { path: string; sha256: string }[] } {
+function readRelease(root: string): {
+  id: string;
+  files: { path: string; sha256: string; skipVerify?: boolean }[];
+} {
   return JSON.parse(readFileSync(path.join(root, 'release.json'), 'utf8')) as {
     id: string;
-    files: { path: string; sha256: string }[];
+    files: { path: string; sha256: string; skipVerify?: boolean }[];
   };
 }
 
@@ -138,6 +141,9 @@ test('标题、meta、manifest、图标与 release.json 在运行时一起生成
       assert.equal(actual, file.sha256, `${file.path} 的 sha256 应和 release.json 一致`);
     }
     assert.ok(paths.includes('index.html'));
+    // 运行时重算清单也要保留 HTML 的 skipVerify：Cloudflare JSD 会改写页面，客户端不核对它的哈希。
+    assert.equal(release.files.find((file) => file.path === 'index.html')?.skipVerify, true);
+    assert.equal(release.files.find((file) => file.path === 'assets/app.js')?.skipVerify, undefined);
     assert.ok(paths.includes('manifest.webmanifest'));
     assert.ok(paths.includes('icons/icon-192.png'));
     assert.ok(!paths.includes('release.json'));
