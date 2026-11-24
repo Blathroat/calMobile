@@ -28,10 +28,19 @@ final class WebSnapshot {
     static final class Entry {
         final String path;
         final String sha256;
+        /**
+         * 下载后不核对哈希。
+         * <p>
+         * 反向代理会改写 HTML：Cloudflare 的 JavaScript 检测（JSD）会往页面里插一段脚本，
+         * 构建时的 sha256 和客户端拿到的字节永远对不上，整包热更新会被判失败。
+         * 只有 HTML 允许带这个标志（见 {@link #parse(String)}），其余文件仍然逐个核对。
+         */
+        final boolean skipVerify;
 
-        Entry(String path, String sha256) {
+        Entry(String path, String sha256, boolean skipVerify) {
             this.path = path;
             this.sha256 = sha256;
+            this.skipVerify = skipVerify;
         }
     }
 
@@ -82,7 +91,12 @@ final class WebSnapshot {
                 if (!isRelativeFile(path) || !isSha256(sha256)) {
                     return null;
                 }
-                entries.add(new Entry(path, sha256.toLowerCase(Locale.ROOT)));
+                boolean skipVerify = readSkipVerify(file);
+                // 只允许 HTML 跳过核对：清单被改坏或将来误标时，不能变成「什么都不校验」。
+                if (skipVerify && !path.toLowerCase(Locale.ROOT).endsWith(".html")) {
+                    return null;
+                }
+                entries.add(new Entry(path, sha256.toLowerCase(Locale.ROOT), skipVerify));
             }
             if (entries.isEmpty()) {
                 return null;
@@ -91,6 +105,12 @@ final class WebSnapshot {
         } catch (RuntimeException ignored) {
             return null;
         }
+    }
+
+    /** 清单里的 `skipVerify` 只认真正的布尔值；缺字段或类型不对都按「要核对」处理。 */
+    private static boolean readSkipVerify(JsonObject file) {
+        JsonElement flag = file.get("skipVerify");
+        return flag != null && flag.isJsonPrimitive() && flag.getAsJsonPrimitive().isBoolean() && flag.getAsBoolean();
     }
 
     static String sha256(byte[] bytes) {

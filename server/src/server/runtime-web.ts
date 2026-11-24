@@ -451,6 +451,8 @@ function writeReleaseManifest(root: string): void {
 interface ReleaseFile {
   path: string;
   sha256: string;
+  /** HTML 会被反向代理（Cloudflare JSD）插脚本，客户端不核对哈希，见 web/release-manifest.mjs。 */
+  skipVerify?: boolean;
 }
 
 function snapshotFiles(root: string, exclude: string[]): ReleaseFile[] {
@@ -472,7 +474,10 @@ function walk(root: string, dir: string, files: ReleaseFile[], excluded: Set<str
     }
     if (!entry.isFile()) continue;
     const sha256 = createHash('sha256').update(readFileSync(full)).digest('hex');
-    files.push({ path: relative, sha256 });
+    const file: ReleaseFile = { path: relative, sha256 };
+    // 与 web/release-manifest.mjs 保持一致：HTML 可能被反向代理改写，客户端跳过哈希核对。
+    if (relative.toLowerCase().endsWith('.html')) file.skipVerify = true;
+    files.push(file);
   }
 }
 
