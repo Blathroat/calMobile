@@ -59,7 +59,7 @@ server {
 
 应用包里的接口地址来自 `APP_API_BASE`（`server/.env`，进程里已有的同名变量优先）。没配时是 `http://127.0.0.1:<PORT>/api/v1`。它只决定 APK 外壳加载哪个源的 `/app/index.html`、开发代理目标、明文/混合内容和 APK 页面源；页面包本身一律用相对 `/api/v1`，同一份 `web/dist` 可部署到任意 `PUBLIC_BASE_URL`。报名站不读它，接口仍是相对的 `/api/v1`。改 APK 指向的实例仍要重新构建 APK。
 
-**经 Cloudflare 转发时**（橙色云或 Cloudflare Tunnel）：边缘把真实客户端地址写进 `CF-Connecting-IP`，同时让 `X-Forwarded-For` 再追加一跳；只按跳数解析会把 Cloudflare 边缘地址当成客户端，登录地区与按 IP 的验证码限流都会出错。服务器 `/etc/calmobile.env` 保持 `TRUST_PROXY=1` 并打开 `TRUST_CLOUDFLARE=1`（`deploy/production.env` 已带这一项，更新时会补进还没有它的服务器）。地址链里至少有一跳可信反代时，服务端改用 `CF-Connecting-IP`（见 `server/src/http/client-ip.ts`）。这个头只有经过 Cloudflare 时才是真的，**源站要只接受 Cloudflare 与反代的流量**；不走 Cloudflare 的部署把它设为 0。反代不需要额外配置，nginx 默认会把请求头一起转给上游。
+**经 Cloudflare 转发时**（橙色云或 Cloudflare Tunnel）：边缘把真实客户端地址写进 `CF-Connecting-IP`，同时让 `X-Forwarded-For` 再追加一跳；只按跳数解析会把 Cloudflare 边缘地址当成客户端，登录地区与按 IP 的验证码限流都会出错。另外，Cloudflare 的 **JavaScript 检测（JSD）会往 HTML 响应里插一段脚本**，这会改掉 `/app/index.html` 的字节；Android 热更新因此对 HTML 条目不核对哈希（见「APK 页面与热更新」），不需要为此关掉 JSD。服务器 `/etc/calmobile.env` 保持 `TRUST_PROXY=1` 并打开 `TRUST_CLOUDFLARE=1`（`deploy/production.env` 已带这一项，更新时会补进还没有它的服务器）。地址链里至少有一跳可信反代时，服务端改用 `CF-Connecting-IP`（见 `server/src/http/client-ip.ts`）。这个头只有经过 Cloudflare 时才是真的，**源站要只接受 Cloudflare 与反代的流量**；不走 Cloudflare 的部署把它设为 0。反代不需要额外配置，nginx 默认会把请求头一起转给上游。
 
 包名默认 `com.blathroat.calmobile`（Java 源码在 `com.example.calmobile`）。调试包和正式包都用这个包名；手机上装过 `com.example.calmobile` 的是另一个应用，要先卸掉。
 
@@ -327,6 +327,8 @@ node /usr/local/lib/calmobile/calmobile-update.mjs --unpin
 ### APK 页面与热更新
 
 应用页面打进 APK 一份。正式包打开接口所在源的 `/app/index.html`，WebView 把这个路径拦截到本机快照，页面切换不访问网络。快照没有，或不是当前 `versionCode`，就用包内那份。首屏出来之后才后台拉取 `/app/release.json`；有新版本才下到待用目录，下次冷启动再换上，使用中不重载。调试包（接口是 http）不热更新。页面包本身用相对 `/api/v1`，不含 `APP_API_BASE` 域名；`APP_API_BASE` 只决定 APK 外壳加载哪个源，因此 APK 仍按实例构建，但同一份运行时包里的 `web/dist` 不必按域名重建。
+
+清单里的普通文件逐个核对 `sha256`；`.html` 条目带 `skipVerify`，客户端只检查文件完整、不核对哈希。原因是反向代理会改写页面：**Cloudflare 的 JavaScript 检测（JSD）会往 HTML 里插一段脚本**，构建时的哈希和线上字节永远对不上，整包热更新会被判失败。`id` 仍然包含 HTML 的哈希，页面内容一改照样触发更新；用 `PWA_ICON_DIR` 之类自带页面时也要按同一格式写清单。
 
 ### 环境文件
 

@@ -62,6 +62,7 @@ pnpm dev         # http://127.0.0.1:3000，并托管报名站
 
 - **报名站**：入口是 `web/dist-join/join.html`，缺失时用运行时包副本 `server/dist/app-shell-join`。`ENABLE_WEB=true` 且产物缺失时拒绝启动；未开启时不托管。`/api`、`/media` 和探针仍是 JSON。配了 `PUBLIC_BASE_URL` 时页面 Host 必须和它对齐，否则 308。
 - **应用页面**：已安装客户端与 iPhone 主屏幕应用都在 `/app/`，文件来自 `web/dist`（`index.html` 入口、`release.json` 热更新清单，`manifest.webmanifest`、`sw.js`、`favicon.ico`、`icons/` 是 PWA 静态文件）；`web/dist` 缺失时读运行时包副本 `server/dist/app-shell`。有产物就托管，不看 `ENABLE_WEB`；配了 `PUBLIC_BASE_URL` 时 Host 不一致同样 308。
+- **热更新清单**：`release.json` 是 `{ id, files: [{ path, sha256, skipVerify? }] }`。普通文件逐个核对 `sha256`；`.html` 条目带 `skipVerify: true`——反向代理会改写页面（Cloudflare 的 JavaScript 检测会插脚本），构建时的哈希对不上，客户端因此只检查文件完整（非空、HTML 有正常结尾），不核对哈希。`id` 仍然包含 HTML 的哈希，页面一改照样会触发更新。运行时品牌层重算清单时保留同一套标志。
 - **缓存与类型**：固定文件名（`index.html`、`release.json`、`manifest.webmanifest`、`sw.js`、`favicon.ico`、`icons/`）一律 `no-cache`，`/app/assets/` 下带哈希的文件长期缓存。缺的 `/app/assets/` 资源不回退成页面。`.webmanifest` 按 `application/manifest+json` 下发，`sw.js` 是 `text/javascript`，`.ico` 是 `image/x-icon`，图标按图片类型下发。根路径 `/favicon.ico` 转发同一份图标。
 - **同源**：页面和 API 必须同源。页面包固定用相对 `/api/v1` 与 `/media`，同一份产物可挂到不同域名；反代把这几组路径放在同一个源下即可。部署只放构建产物，不放 `web/src`，界面文案已打进脚本。
 - **运行时品牌**：配置了 `PWA_*` / `APP_TITLE` / `JOIN_TITLE` / `APP_ICON` 等时，服务启动会在临时目录生成实例页面层：复制页面、改应用页面标题 / manifest / 图标与报名站标题、重写 `sw.js` 缓存名并重算 `release.json`，然后托管临时目录；没有品牌配置时直接读静态目录，`web/dist` 不被修改。解析在 `server/src/config/branding.ts`，生成在 `server/src/server/runtime-web.ts`；单个品牌项失败只回退该项并打 warning，`release.json` 生成失败才整体回退静态页面。
@@ -148,6 +149,7 @@ pnpm dev         # http://127.0.0.1:3000，并托管报名站
 | 未登录或令牌失效 | 401 | `{ error }` |
 | 无权或找不到目标 | 403 / 404 | `{ error }` |
 | 请求体不是合法 JSON，或超过 2MB | 400 / 413 | `{ error }` |
+| 客户端在请求体读完前断开（上传超时、切后台） | 400 | `{ error:'请求被中断' }` |
 | 数据库暂时不可用 | 503 | `{ error:'数据库暂时不可用，请稍后重试' }` |
 | 其它服务器内部错误 | 500 | `{ error:'服务器内部错误' }` |
 
