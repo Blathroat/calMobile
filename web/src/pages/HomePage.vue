@@ -34,6 +34,7 @@ import { api, bootApp } from '@/app/runtime';
 import { paths } from '@/app/surface';
 import { preloadAdjacentMonths } from '@/app/preload';
 import { useBootstrapStore } from '@/stores/bootstrap';
+import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import AppIcon from '@/components/AppIcon.vue';
 import StateBlock from '@/components/StateBlock.vue';
@@ -53,7 +54,7 @@ import type { CachedRead } from '@/services/query-cache';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
 import RoleTag from '@/components/RoleTag.vue';
-import { addMonths, formatChineseTime, joinText, monthLabel } from '@/services/format';
+import { addMonths, formatChineseTime, formatDateWithWeekday, joinText, monthLabel } from '@/services/format';
 import { agreementConsentPending } from '@/services/agreement-prompt';
 import type { JsonObject } from '@/api/types';
 import { exhibitionModeCode, modeLabel, registrationStatusLabel, statusTone } from '@/services/status';
@@ -71,6 +72,7 @@ const WEEK_LABELS = [
 
 const router = useRouter();
 const bootstrap = useBootstrapStore();
+const session = useSessionStore();
 /** 日历滑动提示：与账号绑定的一次性提示，真滑过一次就不再显示。 */
 const { visible: hintVisible, dismiss: dismissHint } = useHint('home-calendar-swipe');
 
@@ -126,6 +128,84 @@ const meetingInitial = t('home.meetingInitial');
 const selectedMeta = computed(() => {
   const count = items.value.length + meetings.value.length;
   return count > 0 ? t('home.selectedCount', { count }) : t('home.noSchedule');
+});
+
+/** 当天列表的标题：选中某一天时报出日期，还没落定时只说「当日活动」。 */
+const dayTitle = computed(() =>
+  view.value.day > 0 ? t('home.dayEventsOn', { month: view.value.month, day: view.value.day }) : t('home.dayEvents'),
+);
+
+/** 选中日既没有展会也没有私人会议：换成空状态，并在原位给出可以点的邻近日期。 */
+const dayEmpty = computed(
+  () => !loading.value && !error.value && items.value.length === 0 && meetings.value.length === 0,
+);
+
+/** 当月日历上「有展会」的日期（数字加粗的那批）。 */
+function numericDays(key: 'eventDays' | 'markedDays'): number[] {
+  const raw = monthData.value?.[key];
+  if (!Array.isArray(raw)) return [];
+  return raw.map((value) => Number(value)).filter((day) => Number.isInteger(day) && day > 0);
+}
+
+const exhibitionDays = computed(() => new Set(numericDays('eventDays')));
+const activityDays = computed(() => new Set(numericDays('markedDays')));
+
+interface DayJump {
+  day: number;
+  label: string;
+  aria: string;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/** 本月第几天 → ISO 日期：日期格式化统一按后端下发的 YYYY-MM-DD 口径来。 */
+function isoOf(day: number): string {
+  return view.value.year + '-' + pad2(view.value.month) + '-' + pad2(day);
+}
+
+/** 建议日期后面那句标记：有展会优先，只有本人活动时才写「有我的活动」。 */
+function jumpMark(day: number): string {
+  const hasExhibition = exhibitionDays.value.has(day);
+  const hasActivity = activityDays.value.has(day);
+  if (hasExhibition && hasActivity) return joinText([t('home.hasExhibition'), t('home.hasMyActivity')], ' · ');
+  if (hasExhibition) return t('home.hasExhibition');
+  return hasActivity ? t('home.hasMyActivity') : '';
+}
+
+/**
+ * 空白日期的下一步：本月里离选中日最近的、有展会或本人活动的日期。
+ *
+ * 月视图一次取整月、点日期不发请求，所以这里只用已有的 eventDays / markedDays
+ * 摆出几颗「几月几日 · 有展会」的按钮，点一下就地切换，不用用户自己猜哪几天有活动。
+ */
+const dayJumps = computed<DayJump[]>(() => {
+  const ordered = [...new Set<number>([...exhibitionDays.value, ...activityDays.value])].sort((a, b) => a - b);
+  const current = view.value.day;
+  const candidates = ordered.filter((day) => day !== current);
+  if (candidates.length === 0) return [];
+  const before = candidates.filter((day) => day < current);
+  const after = candidates.filter((day) => day > current);
+  const picked: number[] = [];
+  if (before.length > 0) picked.push(before[before.length - 1]!);
+  if (after.length > 0) picked.push(after[0]!);
+  // 只有一侧有日期时再补一颗，避免空白日的下一步只有唯一去处。
+  if (picked.length < 2) {
+    const extra =
+      candidates.find((day) => !picked.includes(day) && day > current) ??
+      candidates.find((day) => !picked.includes(day));
+    if (extra !== undefined) picked.push(extra);
+  }
+  return picked
+    .sort((a, b) => a - b)
+    .map((day) => ({
+      day,
+      // 按钮文字只留「几月几日（周几）」：两颗并排才放得下，
+      // 「有展会 / 有我的活动」放进读屏名称（按钮本来就出现在空白日期的下一步里）。
+      label: formatDateWithWeekday(isoOf(day)),
+      aria: t('home.dayAria', { month: view.value.month, day, marks: jumpMark(day), selected: '' }),
+    }));
 });
 
 /** 启动公告：只在开关打开且本机未读过时显示一次。 */
@@ -489,11 +569,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <!-- 品牌行收成一行：首屏优先留给日历与当天活动，名字与拉丁标记各占一侧。 -->
   <header class="row" data-between="true">
-    <div class="stack" data-gap="sm">
-      <span class="eyebrow">{{ bootstrap.brand.en }}</span>
-      <h2>{{ bootstrap.brand.zh }}</h2>
-    </div>
+    <h2 class="home-brand truncate">{{ bootstrap.brand.zh }}</h2>
+    <span class="eyebrow">{{ bootstrap.brand.en }}</span>
   </header>
 
   <div v-if="announcement" class="notice" data-tone="accent" role="status">
@@ -563,10 +642,8 @@ onBeforeUnmount(() => {
   <HintNote v-if="hintVisible" :text="t('home.swipeMonthHint')" @dismiss="dismissHint" />
 
   <div class="row" data-between="true">
-    <strong>{{
-      view.day > 0 ? t('home.dayEventsOn', { month: view.month, day: view.day }) : t('home.dayEvents')
-    }}</strong>
-    <span class="dim">{{ selectedMeta }}</span>
+    <h2 class="home-day-title">{{ dayTitle }}</h2>
+    <span class="pill">{{ selectedMeta }}</span>
   </div>
 
   <div v-if="error && hasContent" class="notice" data-tone="accent">
@@ -574,13 +651,29 @@ onBeforeUnmount(() => {
   </div>
 
   <SkeletonBlock v-if="loading && !hasContent" :rows="2" />
-  <StateBlock
-    v-else-if="!loading && !error && items.length === 0 && meetings.length === 0"
-    :title="t('home.emptyDay')"
-    :description="t('home.emptyDayHint')"
-    :action-label="t('admin.exhibitions.search')"
-    @action="router.push('/search')"
-  />
+  <!-- 空白日期：先给出本月最近、确实有活动的日期按钮，点一下就地切换；
+       搜索要登录，访客只看到日期按钮，不会被带去登录页。
+       外面包一层是为了在短屏上收起状态块的大图标（见下方样式）。 -->
+  <div v-else-if="dayEmpty" class="home-empty-day">
+    <StateBlock :title="t('home.emptyDay')" :description="t('home.emptyDayHint')">
+      <div v-if="dayJumps.length > 0" class="home-day-jumps grid-cols-2">
+        <button
+          v-for="jump in dayJumps"
+          :key="jump.day"
+          class="cta ghost"
+          type="button"
+          data-size="small"
+          :aria-label="jump.aria"
+          @click="selectDay(jump.day)"
+        >
+          {{ jump.label }}
+        </button>
+      </div>
+      <button v-if="session.loggedIn" class="cta ghost" type="button" data-size="small" @click="router.push('/search')">
+        {{ t('admin.exhibitions.search') }}
+      </button>
+    </StateBlock>
+  </div>
   <TransitionGroup
     v-else
     name="reveal"
@@ -639,6 +732,30 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
+/* 品牌行收成一行后让中文名先占满、拉丁标记贴右侧；名字过长时省略，不把标记挤出行外。 */
+.home-brand {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 当天列表标题：与右侧「几场」的小签同一行，窄屏时标题自己换行。 */
+.home-day-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 空白日期：360×800 的短屏上也要同时看到说明与两颗日期按钮，
+   所以只在这一块收起空状态的大图标（状态块本身仍复用 StateBlock）。 */
+.home-empty-day .state-icon {
+  display: none;
+}
+
+/* 空白日期的下一步：本月最近的两个有活动的日期并排一行，点一下就切换。
+   并排是为了让两个入口都落在首屏内，窄屏时按钮文字仍是一行日期。 */
+.home-day-jumps {
+  width: 100%;
+}
+
 /* 月份切换只剩两颗箭头：去掉圆框后把间距收一档，箭头看起来仍是一组。 */
 .month-shift {
   gap: var(--s1);
@@ -649,7 +766,7 @@ onBeforeUnmount(() => {
   z-index: 1;
   padding: var(--s2);
   border: var(--hairline) solid var(--stroke);
-  border-radius: var(--r-panel);
+  border-radius: var(--r-card);
   /* 纸面底色：日期数字压在浅灰填充上对比度只有 4.4:1，换白卡后灰显日期也够读。 */
   background: var(--screen);
   will-change: transform;

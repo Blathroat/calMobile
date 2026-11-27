@@ -161,8 +161,10 @@ describe('报名站展会详情', () => {
   it('信息卡把闭展日期显示成日期区间', async () => {
     await mountDetail();
     await flush();
-    const text = document.querySelector('#join-detail-test .card')?.textContent ?? '';
-    expect(text).toContain('11月17日（周二） - 11月22日（周日）');
-    expect(text).toContain('09:00-17:00');
+    const facts = document.querySelector<HTMLElement>('#join-detail-test .detail-facts');
+    expect(facts?.querySelector('.detail-date')?.textContent).toBe('11月17日');
+    expect(facts?.querySelector('.detail-date-context')?.textContent).toBe('2026年 · 周二');
+    expect(facts?.querySelector('.detail-date-period > strong')?.textContent).toBe('11月22日（周日）');
+    expect(facts?.textContent).toContain('09:00-17:00');
   });
 });

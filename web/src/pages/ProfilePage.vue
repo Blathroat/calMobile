@@ -361,38 +361,51 @@ function logout(): void {
           </dl>
         </div>
 
-        <!-- 入口：公开主页、用户设置、安全设置各自一行，行间距 --s2 -->
-        <div class="list" data-gap="sm">
-          <button
-            v-if="publicPath"
-            class="row-card"
-            type="button"
-            data-pressable="true"
-            @click="router.push(publicPath)"
-          >
-            <span class="row-icon" aria-hidden="true"><AppIcon name="user" /></span>
-            <span class="row-copy">
-              <strong class="row-title">{{ t('profile.previewPublic') }}</strong>
-              <span class="row-meta">{{ publicMeta }}</span>
-            </span>
-            <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
-          </button>
-          <button class="row-card" type="button" data-pressable="true" @click="router.push('/settings')">
-            <span class="row-icon" aria-hidden="true"><AppIcon name="settings" /></span>
-            <span class="row-copy">
-              <strong class="row-title">{{ t('settings.title') }}</strong>
-              <span class="row-meta">{{ COPY.settingsMeta }}</span>
-            </span>
-            <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
-          </button>
-          <button class="row-card" type="button" data-pressable="true" @click="router.push('/security')">
-            <span class="row-icon" aria-hidden="true"><AppIcon name="shield" /></span>
-            <span class="row-copy">
-              <strong class="row-title">{{ t('security.title') }}</strong>
-              <span class="row-meta">{{ t('settings.securityMeta') }}</span>
-            </span>
-            <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
-          </button>
+        <!-- 账号入口：我的活动、公开主页、用户设置与安全设置各占一行，行间距 --s2。
+             组标题与设置页的「账号」组同名；先列「我的活动」：活动概览取不到时它仍在，
+             报名与私人会议总有入口。 -->
+        <div class="profile-entries">
+          <span class="section-label">{{ t('settings.section.account') }}</span>
+          <div class="list" data-gap="sm">
+            <button class="row-card" type="button" data-pressable="true" @click="router.push(paths.registrations)">
+              <span class="row-icon" aria-hidden="true"><AppIcon name="list" /></span>
+              <span class="row-copy">
+                <strong class="row-title">{{ t('registration.list.title') }}</strong>
+                <span class="row-meta">{{ t('profile.activityEntryMeta', undefined, '展会报名与私人会议') }}</span>
+              </span>
+              <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
+            </button>
+            <button
+              v-if="publicPath"
+              class="row-card"
+              type="button"
+              data-pressable="true"
+              @click="router.push(publicPath)"
+            >
+              <span class="row-icon" aria-hidden="true"><AppIcon name="user" /></span>
+              <span class="row-copy">
+                <strong class="row-title">{{ t('profile.previewPublic') }}</strong>
+                <span class="row-meta">{{ publicMeta }}</span>
+              </span>
+              <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
+            </button>
+            <button class="row-card" type="button" data-pressable="true" @click="router.push('/settings')">
+              <span class="row-icon" aria-hidden="true"><AppIcon name="settings" /></span>
+              <span class="row-copy">
+                <strong class="row-title">{{ t('settings.title') }}</strong>
+                <span class="row-meta">{{ COPY.settingsMeta }}</span>
+              </span>
+              <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
+            </button>
+            <button class="row-card" type="button" data-pressable="true" @click="router.push('/security')">
+              <span class="row-icon" aria-hidden="true"><AppIcon name="shield" /></span>
+              <span class="row-copy">
+                <strong class="row-title">{{ t('security.title') }}</strong>
+                <span class="row-meta">{{ t('settings.securityMeta') }}</span>
+              </span>
+              <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
+            </button>
+          </div>
         </div>
 
         <!-- 退出登录：整页唯一的破坏性动作，居中文字按钮，上方留 --s7 -->
@@ -571,6 +584,16 @@ function logout(): void {
 
 .profile-facts dd.dim {
   color: var(--ink-3);
+}
+
+/* 账号入口：组标题在入口行之上，行与行之间 --s2；与简介 / 公开资料两组同一套组标题。 */
+.profile-entries {
+  display: grid;
+  gap: var(--s2);
+}
+
+.profile-entries > .section-label {
+  justify-self: start;
 }
 
 /* 入口行左侧的静默图标与右侧箭头。 */

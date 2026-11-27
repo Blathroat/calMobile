@@ -15,6 +15,13 @@ import { navigation } from '@/app/navigation';
 import { useSessionStore } from '@/stores/session';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import type { ExhibitionDetail } from '@/api/types';
+import type { CachedRead } from '@/services/query-cache';
+
+const markdownHarness = vi.hoisted(() => ({
+  parserReady: false,
+  parserGate: null as Promise<void> | null,
+  parserFails: false,
+}));
 
 vi.mock('@/app/runtime', () => ({
   api: {
@@ -25,6 +32,27 @@ vi.mock('@/app/runtime', () => ({
 // 日历状态走原生桥；这里只关心报名按钮，给出一个稳定的「未加入」结果。
 vi.mock('@/services/device-services', () => ({
   device: { calendarStatus: vi.fn(async () => ({ inCalendar: false, granted: false })) },
+}));
+vi.mock('@/services/markdown', () => ({
+  loadMarkdownParser: vi.fn(async () => {
+    if (markdownHarness.parserGate) await markdownHarness.parserGate;
+    if (markdownHarness.parserFails) throw new Error('Markdown parser failed to load');
+    markdownHarness.parserReady = true;
+  }),
+  markdownToHtml: vi.fn((source: string) => {
+    if (!markdownHarness.parserReady) throw new Error('Markdown parser is not ready');
+    return `<p>${source}</p>`;
+  }),
+  sanitizeHtml: vi.fn((source: unknown) => {
+    if (!markdownHarness.parserReady) throw new Error('HTML purifier is not ready');
+    return String(source ?? '');
+  }),
+  plainText: vi.fn((source: unknown, max = 120) => {
+    const template = document.createElement('template');
+    template.innerHTML = String(source ?? '');
+    const text = (template.content.textContent ?? '').replace(/\s+/g, ' ').trim();
+    return text.length > max ? `${text.slice(0, max)}…` : text;
+  }),
 }));
 
 const DETAIL: ExhibitionDetail = {
@@ -63,6 +91,9 @@ let app: App | undefined;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  markdownHarness.parserReady = false;
+  markdownHarness.parserGate = null;
+  markdownHarness.parserFails = false;
   document.body.innerHTML = '<div id="app-foot"></div><div id="app-top-actions"></div><div id="detail-test"></div>';
   vi.mocked(api.exhibitions.get).mockResolvedValue(DETAIL);
   vi.mocked(api.registrations.list).mockResolvedValue([]);
@@ -93,7 +124,13 @@ function footerHint(): string {
 }
 
 async function mountDetail(
-  options: { loggedIn?: boolean; canRegister?: boolean; detail?: ExhibitionDetail; defaultCover?: string } = {},
+  options: {
+    loggedIn?: boolean;
+    canRegister?: boolean;
+    detail?: ExhibitionDetail;
+    cached?: boolean;
+    defaultCover?: string;
+  } = {},
 ): Promise<Router> {
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -109,7 +146,14 @@ async function mountDetail(
       can: { register: options.canRegister !== false },
     });
   }
-  if (options.detail) vi.mocked(api.exhibitions.get).mockResolvedValue(options.detail);
+  if (options.detail && options.cached) {
+    const response = Promise.resolve(options.detail) as CachedRead<ExhibitionDetail>;
+    response.cached = options.detail;
+    response.revalidating = true;
+    vi.mocked(api.exhibitions.get).mockImplementation(() => response as never);
+  } else if (options.detail) {
+    vi.mocked(api.exhibitions.get).mockResolvedValue(options.detail);
+  }
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -127,6 +171,82 @@ async function mountDetail(
   await vi.waitFor(() => expect(registerButton()).not.toBeUndefined());
   return router;
 }
+
+describe('展会详情冷启动', () => {
+  it('缓存详情先显示，富文本解析器就绪后再渲染简介', async () => {
+    let releaseParser!: () => void;
+    markdownHarness.parserGate = new Promise<void>((resolve) => {
+      releaseParser = resolve;
+    });
+    const detail: ExhibitionDetail = {
+      ...DETAIL,
+      exhibition: { ...DETAIL.exhibition!, description: '# 展会亮点' },
+    };
+
+    await mountDetail({ detail, cached: true });
+
+    expect(document.querySelector('#detail-test h2')?.textContent).toBe('秋季展会');
+    expect(document.querySelector('#detail-test .detail-facts')).not.toBeNull();
+    expect(document.querySelector('#detail-test .detail-date')).not.toBeNull();
+    expect(document.querySelector('#detail-test .rich-content')).toBeNull();
+    expect(document.querySelector('#detail-test .detail-introduction-pending')).not.toBeNull();
+    expect(document.querySelector('#detail-test .muted')?.textContent).not.toContain('还没有补充展会介绍');
+
+    releaseParser();
+    await vi.waitFor(() =>
+      expect(document.querySelector('#detail-test .rich-content')?.textContent).toBe('# 展会亮点'),
+    );
+  });
+  it('媒体型 HTML 简介等待解析器时不显示空简介', async () => {
+    let releaseParser!: () => void;
+    markdownHarness.parserGate = new Promise<void>((resolve) => {
+      releaseParser = resolve;
+    });
+    const detail: ExhibitionDetail = {
+      ...DETAIL,
+      exhibition: {
+        ...DETAIL.exhibition!,
+        descriptionFormat: 'html',
+        description: '<p><img src="/media/poster.jpg"></p>',
+      },
+    };
+
+    await mountDetail({ detail, cached: true });
+
+    expect(document.querySelector('#detail-test .detail-introduction-pending')).not.toBeNull();
+    expect(document.querySelector('#detail-test .detail-introduction-pending')?.textContent).toBe('展会介绍加载中…');
+    expect(document.querySelector('#detail-test .muted')?.textContent).not.toContain('还没有补充展会介绍');
+
+    releaseParser();
+    await vi.waitFor(() => expect(document.querySelector('#detail-test .rich-content')).not.toBeNull());
+  });
+  it('解析器加载失败时继续显示详情并说明简介暂不可用', async () => {
+    markdownHarness.parserFails = true;
+    const detail: ExhibitionDetail = {
+      ...DETAIL,
+      exhibition: { ...DETAIL.exhibition!, description: '# 展会亮点' },
+    };
+
+    await mountDetail({ detail });
+
+    await vi.waitFor(() => expect(document.querySelector('#detail-test .detail-introduction-fallback')).not.toBeNull());
+    expect(document.querySelector('#detail-test h2')?.textContent).toBe('秋季展会');
+    expect(document.querySelector('#detail-test .detail-introduction-fallback')?.textContent).toContain('暂时无法加载');
+  });
+  it('跨年展期在闭展日期中显示年份', async () => {
+    const detail: ExhibitionDetail = {
+      ...DETAIL,
+      exhibition: { ...DETAIL.exhibition!, date: '2026-12-30', endDate: '2027-01-02' },
+    };
+
+    await mountDetail({ detail });
+
+    expect(document.querySelector('#detail-test .detail-date-context')?.textContent).toBe('2026年 · 周三');
+    expect(document.querySelector('#detail-test .detail-date-period > strong')?.textContent).toBe(
+      '2027年1月2日（周六）',
+    );
+  });
+});
 
 describe('展会详情海报', () => {
   it('有自己上传的海报时显示海报与灯箱入口', async () => {
@@ -230,6 +350,32 @@ describe('展会详情底部报名按钮', () => {
     await flush();
     expect(api.registrations.list).not.toHaveBeenCalled();
     expect(registerButton()?.textContent?.trim()).toBe('登录后报名');
+  });
+
+  it('事实区显示我的报名状态与报名截止日，第一枚状态灯仍是报名方式', async () => {
+    vi.mocked(api.registrations.list).mockResolvedValue([
+      { id: 'reg-9', exhibitionId: 'exh-1', statusCode: 'approved' },
+    ]);
+    const detail: ExhibitionDetail = {
+      found: true,
+      exhibition: { ...DETAIL.exhibition!, statusCode: 'review', registrationEnd: '2026-09-19' },
+    };
+    await mountDetail({ loggedIn: true, detail });
+    await vi.waitFor(() => expect(registerButton()?.textContent?.trim()).toBe('查看我的报名'));
+
+    const tags = [...document.querySelectorAll<HTMLElement>('#detail-test .status-tag')];
+    // 第一枚仍是报名方式（已报名的状态不抢它的位置），第二枚是本场报名状态。
+    expect(tags[0]?.textContent?.trim()).toBe('报名中 · 需审核');
+    expect(tags[1]?.textContent?.trim()).toBe('已通过');
+    const facts = document.querySelector<HTMLElement>('#detail-test .detail-facts');
+    expect(facts?.textContent).toContain('报名截止 2026年9月19日');
+    expect(
+      facts
+        ?.querySelector('.detail-fact-deadline')
+        ?.previousElementSibling?.classList.contains('detail-registration-state'),
+    ).toBe(true);
+    expect(facts?.querySelector('.detail-mode-hint')).toBeNull();
+    expect(document.querySelector('#detail-test .hint-note')).toBeNull();
   });
 
   it('报名截止日已过：主按钮置灰并显示「报名已截止」，状态灯显示「截止报名」', async () => {
