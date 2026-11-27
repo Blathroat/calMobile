@@ -32,12 +32,13 @@ const CODE = 'CALMOBILE-CHECKIN|秋季展会|报名-1';
 let app: App | undefined;
 let decoder: QrDecoder;
 
-beforeEach(async () => {
-  // 面板状态是模块级的：上一个用例留下的面板要先收干净，否则会盖住新挂载的外壳。
-  if (sheet.current) {
-    closeSheet();
-    await new Promise((resolve) => setTimeout(resolve, 240));
-  }
+beforeEach(() => {
+  // 减少动效：抽屉退场 0ms，用例不必真等 220ms，也不会把上一份面板留到下一个用例。
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: true })),
+  );
+  if (sheet.current) closeSheet();
   vi.clearAllMocks();
   decoder = { ready: Promise.resolve(), decode: vi.fn().mockResolvedValue(null), dispose: vi.fn() };
   vi.mocked(createQrDecoder).mockReturnValue(decoder);
@@ -49,6 +50,7 @@ afterEach(() => {
   app?.unmount();
   app = undefined;
   document.body.innerHTML = '';
+  vi.unstubAllGlobals();
 });
 
 /** 挂核销页 + 真外壳（AppSheet 渲染面板内容与动作按钮）。 */

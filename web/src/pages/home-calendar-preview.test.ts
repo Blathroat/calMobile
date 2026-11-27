@@ -5,13 +5,9 @@
  * 因此位移量按 320 计算。落月动画依赖 transitionend，不在 jsdom 里模拟。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h, nextTick, type App } from 'vue';
-import { createPinia, setActivePinia } from 'pinia';
-import { createMemoryHistory, createRouter } from 'vue-router';
+import { nextTick } from 'vue';
 import { api, bootApp } from '@/app/runtime';
-import { navigation } from '@/app/navigation';
-import { useBootstrapStore } from '@/stores/bootstrap';
-import HomePage from './HomePage.vue';
+import { flush, mountHomePage, unmountHomePages } from './home-test-utils';
 
 vi.mock('@/app/runtime', () => ({
   api: {
@@ -23,8 +19,6 @@ vi.mock('@/app/runtime', () => ({
   applyRuntimeBootstrap: vi.fn(),
 }));
 vi.mock('@/app/preload', () => ({ preloadAdjacentMonths: vi.fn() }));
-
-let app: App | undefined;
 
 beforeEach(() => {
   // 首页默认落在当前自然月：把「今天」固定在 2026-06-05，用例里的 6 月数据才是当前月。
@@ -50,37 +44,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  app?.unmount();
-  app = undefined;
+  unmountHomePages();
   document.body.innerHTML = '';
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
-
-async function flush(): Promise<void> {
-  for (let index = 0; index < 8; index += 1) await Promise.resolve();
-  await nextTick();
-}
-
-async function mountHome(): Promise<HTMLElement> {
-  const pinia = createPinia();
-  setActivePinia(pinia);
-  useBootstrapStore().apply({ calendar: { landing: { year: 2026, month: 6 } } });
-  const router = createRouter({
-    history: createMemoryHistory(),
-    routes: [{ path: '/:pathMatch(.*)*', component: HomePage }],
-  });
-  router.beforeEach(() => {
-    navigation.begin();
-  });
-  await router.push('/home');
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  app = createApp({ render: () => h(HomePage) });
-  app.use(pinia).use(router).mount(container);
-  await flush();
-  return container;
-}
 
 /** 派发一个最小 PointerEvent：jsdom 的构造器不一定可用，直接给 Event 补字段。 */
 function firePointer(target: Element, type: string, x: number, y: number, pointerId = 1): void {
@@ -102,7 +70,7 @@ function ownDays(scope: ParentNode): HTMLButtonElement[] {
 
 describe('首页日历相邻月预览', () => {
   it('左右预览面板排的是上/下个月，而不是空白', async () => {
-    const container = await mountHome();
+    const container = await mountHomePage();
     const previews = [...container.querySelectorAll<HTMLElement>('.calendar-preview')];
     expect(previews.length).toBe(2);
     for (const preview of previews) {
@@ -122,7 +90,7 @@ describe('首页日历相邻月预览', () => {
   });
 
   it('选中跨天展会的中间一天，下面仍然展示这场展会', async () => {
-    const container = await mountHome();
+    const container = await mountHomePage();
     await flush();
     const current = container.querySelector<HTMLElement>('.calendar:not(.calendar-preview)')!;
     const day13 = [...current.querySelectorAll<HTMLButtonElement>('.cal-day')].find(
@@ -136,7 +104,7 @@ describe('首页日历相邻月预览', () => {
   });
 
   it('拖动时当前月与预览一起平移，露出的位置有下一月内容', async () => {
-    const container = await mountHome();
+    const container = await mountHomePage();
     const host = container.querySelector<HTMLElement>('.calendar-swipe')!;
     const card = container.querySelector<HTMLElement>('.calendar:not(.calendar-preview)')!;
     const next = container.querySelector<HTMLElement>('.calendar-preview[data-side="next"]')!;
@@ -186,7 +154,7 @@ describe('首页展会卡片', () => {
       ],
       meetings: [],
     });
-    const container = await mountHome();
+    const container = await mountHomePage();
     const cards = [...container.querySelectorAll<HTMLElement>('.row-card')];
     const first = cards.find((card) => card.textContent?.includes('展商与分类展'));
     expect(first?.textContent).toContain('示例展商 · 智能家居');
@@ -224,7 +192,7 @@ describe('首页展会卡片', () => {
       ],
       meetings: [],
     });
-    const container = await mountHome();
+    const container = await mountHomePage();
     const cards = [...container.querySelectorAll<HTMLElement>('.row-card')];
     const ended = cards.find((card) => card.textContent?.includes('已截止报名展会'));
     expect(ended?.querySelector('.status-tag')?.textContent?.trim()).toBe('截止报名');
@@ -235,7 +203,7 @@ describe('首页展会卡片', () => {
 
 describe('首页月份切换按钮', () => {
   it('只剩两颗箭头，命中区、aria-label 与 title 都保留', async () => {
-    const container = await mountHome();
+    const container = await mountHomePage();
     const buttons = [...container.querySelectorAll<HTMLButtonElement>('.month-shift .icon-button')];
     expect(buttons.length).toBe(2);
     for (const button of buttons) {

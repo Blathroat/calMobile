@@ -260,6 +260,8 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 | `server/src/test/routes-contract.test.ts` | 前端动作与后端路由一一对应、动作总数 91 |
 | `app/src/test/`（含 `ShellCapabilitiesTest`） | 原生能力清单与动作表一致 |
 
+同一页面有多个页面测试时，把挂载、`flush` 与卸载收进同目录的共享 helper（如 `web/src/pages/home-test-utils.ts`）；`vi.mock` 仍写在各测试文件里（hoist 只对当前文件生效）。
+
 校验命令：
 
 - 前端：`pnpm --dir web typecheck`、`lint`、`fmt:check`、`test`、`build`；改了报名站再跑 `pnpm --dir web build:join`。

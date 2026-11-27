@@ -4,14 +4,8 @@
  * 因为 /search 要求登录，访客点进去只会被弹回登录页。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h, nextTick, type App } from 'vue';
-import { createPinia, setActivePinia } from 'pinia';
-import { createMemoryHistory, createRouter } from 'vue-router';
 import { api, bootApp } from '@/app/runtime';
-import { navigation } from '@/app/navigation';
-import { useBootstrapStore } from '@/stores/bootstrap';
-import { useSessionStore } from '@/stores/session';
-import HomePage from './HomePage.vue';
+import { flush, mountHomePage, unmountHomePages } from './home-test-utils';
 
 vi.mock('@/app/runtime', () => ({
   api: {
@@ -23,8 +17,6 @@ vi.mock('@/app/runtime', () => ({
   applyRuntimeBootstrap: vi.fn(),
 }));
 vi.mock('@/app/preload', () => ({ preloadAdjacentMonths: vi.fn() }));
-
-let app: App | undefined;
 
 beforeEach(() => {
   // 首页默认落在当前自然月：把「今天」固定在 2026-06-05，用例里的 6 月数据才是当前月。
@@ -53,38 +45,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  app?.unmount();
-  app = undefined;
+  unmountHomePages();
   document.body.innerHTML = '';
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
-
-async function flush(): Promise<void> {
-  for (let index = 0; index < 8; index += 1) await Promise.resolve();
-  await nextTick();
-}
-
-async function mountHome(loggedIn = false): Promise<HTMLElement> {
-  const pinia = createPinia();
-  setActivePinia(pinia);
-  useBootstrapStore().apply({ calendar: { landing: { year: 2026, month: 6 } } });
-  if (loggedIn) useSessionStore().applyUser({ id: 'u1', username: 'user', loggedIn: true, can: {} });
-  const router = createRouter({
-    history: createMemoryHistory(),
-    routes: [{ path: '/:pathMatch(.*)*', component: HomePage }],
-  });
-  router.beforeEach(() => {
-    navigation.begin();
-  });
-  await router.push('/home');
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  app = createApp({ render: () => h(HomePage) });
-  app.use(pinia).use(router).mount(container);
-  await flush();
-  return container;
-}
 
 /** 点日历上的某一天（只认当月的格子，补位格子是灰的）。 */
 async function pickDay(container: HTMLElement, day: number): Promise<void> {
@@ -100,7 +65,7 @@ async function pickDay(container: HTMLElement, day: number): Promise<void> {
 
 describe('首页空白日期', () => {
   it('给出最近的有展会日期，点一下就切换到那天的活动', async () => {
-    const container = await mountHome();
+    const container = await mountHomePage();
     expect(container.textContent).toContain('十号展会');
 
     await pickDay(container, 11);
@@ -118,7 +83,7 @@ describe('首页空白日期', () => {
   });
 
   it('只有本人活动的日期标成「有我的活动」', async () => {
-    const container = await mountHome();
+    const container = await mountHomePage();
     await pickDay(container, 13);
 
     const jumps = [...container.querySelectorAll<HTMLButtonElement>('.home-day-jumps button')];
@@ -129,7 +94,7 @@ describe('首页空白日期', () => {
   });
 
   it('访客看不到要登录的搜索入口，已登录账号才有', async () => {
-    const guest = await mountHome();
+    const guest = await mountHomePage();
     await pickDay(guest, 11);
     expect(guest.querySelector<HTMLButtonElement>('.home-day-jumps')).not.toBeNull();
     const guestButtons = [...guest.querySelectorAll<HTMLButtonElement>('button')].map((button) =>
@@ -137,11 +102,10 @@ describe('首页空白日期', () => {
     );
     expect(guestButtons).not.toContain('搜索展会');
 
-    app?.unmount();
-    app = undefined;
+    unmountHomePages();
     document.body.innerHTML = '';
 
-    const member = await mountHome(true);
+    const member = await mountHomePage({ loggedIn: true });
     await pickDay(member, 11);
     const memberButtons = [...member.querySelectorAll<HTMLButtonElement>('button')].map((button) =>
       button.textContent?.trim(),

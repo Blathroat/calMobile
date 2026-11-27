@@ -18,7 +18,12 @@ import AppSheet from '@/components/AppSheet.vue';
 import { navigation } from '@/app/navigation';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
-import { clearExhibitionDraft, readExhibitionDraft, stashExhibitionDraft } from '@/services/exhibition-draft';
+import {
+  clearExhibitionDraft,
+  readExhibitionDraft,
+  stashExhibitionDraft,
+  type ExhibitionDraft,
+} from '@/services/exhibition-draft';
 import { sheet } from '@/services/sheet';
 import { api } from '@/app/runtime';
 
@@ -52,6 +57,28 @@ afterEach(() => {
   document.body.innerHTML = '';
   clearExhibitionDraft();
 });
+
+/** 放一份内存稿：默认是第 1 步的完整内容，用例只覆盖自己关心的字段。 */
+function stashDraft(overrides: Partial<ExhibitionDraft> = {}): void {
+  stashExhibitionDraft({
+    id: '',
+    title: '草稿展会',
+    venue: '草稿展馆',
+    date: iso(3),
+    endDate: '',
+    time: '',
+    status: 'review',
+    category: '智能家居',
+    description: '',
+    imageUri: '',
+    registrationStart: '',
+    registrationEnd: '',
+    qrEnabled: false,
+    allowCancel: true,
+    fields: [],
+    ...overrides,
+  });
+}
 
 /** 等微任务、重渲染与抽屉退场的 0ms 定时器都跑完。 */
 async function flush(): Promise<void> {
@@ -163,11 +190,7 @@ function inputValue(id: string): string {
 }
 
 function clickSheetAction(label: string): void {
-  const button = [...document.querySelectorAll<HTMLButtonElement>('.sheet-actions button')].find(
-    (item) => item.textContent?.trim() === label,
-  );
-  if (!button) throw new Error(`抽屉里没有「${label}」按钮`);
-  button.click();
+  sheetAction(label).click();
 }
 
 function footerButtons(): string[] {
@@ -394,22 +417,9 @@ describe('新建展会：三步创建流程', () => {
   });
 
   it('发布检查展示封面缩略图，简介剥掉 Markdown 记号', async () => {
-    stashExhibitionDraft({
-      id: '',
-      title: '草稿展会',
-      venue: '草稿展馆',
-      date: iso(3),
-      endDate: '',
-      time: '',
-      status: 'review',
-      category: '智能家居',
+    stashDraft({
       description: '# 展会亮点\n\n- 数控机床与机器人\n- 智能制造软件',
       imageUri: '/media/cover.jpg',
-      registrationStart: '',
-      registrationEnd: '',
-      qrEnabled: false,
-      allowCancel: true,
-      fields: [],
     });
     await mountPage();
     await clickFooter('继续');
@@ -424,24 +434,7 @@ describe('新建展会：三步创建流程', () => {
   });
 
   it('内存稿记着向导步骤，从简介编辑器回来停在那一步', async () => {
-    stashExhibitionDraft({
-      id: '',
-      title: '草稿展会',
-      venue: '草稿展馆',
-      date: iso(3),
-      endDate: '',
-      time: '',
-      status: 'review',
-      category: '智能家居',
-      description: '',
-      imageUri: '',
-      registrationStart: '',
-      registrationEnd: '',
-      qrEnabled: false,
-      allowCancel: true,
-      fields: [],
-      step: 2,
-    });
+    stashDraft({ step: 2 });
     await mountPage();
 
     expect(currentStep()).toBe('报名配置');
@@ -450,23 +443,7 @@ describe('新建展会：三步创建流程', () => {
   });
 
   it('换步骤会把步骤同步进内存稿', async () => {
-    stashExhibitionDraft({
-      id: '',
-      title: '草稿展会',
-      venue: '草稿展馆',
-      date: iso(3),
-      endDate: '',
-      time: '',
-      status: 'review',
-      category: '智能家居',
-      description: '',
-      imageUri: '',
-      registrationStart: '',
-      registrationEnd: '',
-      qrEnabled: false,
-      allowCancel: true,
-      fields: [],
-    });
+    stashDraft();
     // 草稿里第一步的必填项已经齐了：直接点「继续」就能进第二步。
     await mountPage();
     await clickFooter('继续');
@@ -477,23 +454,7 @@ describe('新建展会：三步创建流程', () => {
 
   it('离开时选「保存」校验失败，会切到出错字段所在的那一步', async () => {
     // 内存稿里的报名截止早于开始：整表校验会停在第二步的字段上。
-    stashExhibitionDraft({
-      id: '',
-      title: '草稿展会',
-      venue: '草稿展馆',
-      date: iso(3),
-      endDate: '',
-      time: '',
-      status: 'review',
-      category: '智能家居',
-      description: '',
-      imageUri: '',
-      registrationStart: iso(3),
-      registrationEnd: iso(1),
-      qrEnabled: false,
-      allowCancel: true,
-      fields: [],
-    });
+    stashDraft({ registrationStart: iso(3), registrationEnd: iso(1) });
     const router = await mountPage();
     expect(inputValue('form-title')).toBe('草稿展会');
     expect(currentStep()).toBe('基本信息');
