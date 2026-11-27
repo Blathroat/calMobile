@@ -27,6 +27,7 @@ vi.mock('@/app/runtime', () => ({
   api: {
     exhibitions: { get: vi.fn() },
     registrations: { list: vi.fn() },
+    profile: { markHint: vi.fn(async () => ({})) },
   },
 }));
 // 日历状态走原生桥；这里只关心报名按钮，给出一个稳定的「未加入」结果。
@@ -376,6 +377,38 @@ describe('展会详情底部报名按钮', () => {
     ).toBe(true);
     expect(facts?.querySelector('.detail-mode-hint')).toBeNull();
     expect(document.querySelector('#detail-test .hint-note')).toBeNull();
+  });
+
+  it('「我的报名」回来之前不显示首次引导，未报名用户随后才看到', async () => {
+    let release!: (value: unknown) => void;
+    vi.mocked(api.registrations.list).mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }) as never,
+    );
+    await mountDetail({ loggedIn: true });
+    await flush();
+
+    // 报名列表未落定：已报名与未报名都还不知道，先别给新用户引导。
+    expect(document.querySelector('#detail-test .hint-note')).toBeNull();
+
+    release([]);
+    await vi.waitFor(() =>
+      expect(document.querySelector('#detail-test .hint-note')?.textContent).toContain('先查看展期'),
+    );
+  });
+
+  it('已报名用户点「查看我的报名」不会把看不见的引导记成已读', async () => {
+    vi.mocked(api.registrations.list).mockResolvedValue([
+      { id: 'reg-9', exhibitionId: 'exh-1', statusCode: 'approved' },
+    ]);
+    const router = await mountDetail({ loggedIn: true });
+    await vi.waitFor(() => expect(registerButton()?.textContent?.trim()).toBe('查看我的报名'));
+    expect(document.querySelector('#detail-test .hint-note')).toBeNull();
+
+    registerButton()?.click();
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/registration-detail/reg-9'));
+    expect(api.profile.markHint).not.toHaveBeenCalled();
   });
 
   it('报名截止日已过：主按钮置灰并显示「报名已截止」，状态灯显示「截止报名」', async () => {

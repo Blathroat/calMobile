@@ -12,6 +12,7 @@
  */
 import { computed, ref, type ComputedRef } from 'vue';
 import { api } from '@/app/runtime';
+import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 
 /** 提示 key：短码，前后端一致（后端按 `^[a-z0-9][a-z0-9-]{2,39}$` 校验）。 */
@@ -54,11 +55,17 @@ export interface HintState {
 
 export function useHint(key: HintKey): HintState {
   const session = useSessionStore();
+  const bootstrap = useBootstrapStore();
   const busy = ref(false);
   const localSeen = ref(readLocalHints().includes(key));
 
   const seen = computed(() => session.user.seenHints?.includes(key) === true);
-  const visible = computed(() => (session.loggedIn ? !seen.value : !localSeen.value));
+  /**
+   * 访客分支要等启动数据落定（`bootstrap.booted`）再显示：`main.ts` 先挂载外壳、后恢复会话，
+   * 这段窗口里登录用户还是访客态，本机键又几乎永远是空的，会让账号上已读的提示闪一下；
+   * 用户在窗口里点「知道了」还会把本机键当成访客已读写进去。
+   */
+  const visible = computed(() => (session.loggedIn ? !seen.value : bootstrap.booted && !localSeen.value));
 
   async function dismiss(): Promise<void> {
     if (busy.value || (session.loggedIn ? seen.value : localSeen.value)) return;
@@ -70,7 +77,7 @@ export function useHint(key: HintKey): HintState {
       if (loggedIn) await api.profile.markHint(key);
       else writeLocalHint(key);
     } catch {
-      // 落库失败不回滚：下一次进页面会再记一次（见文件头）。
+      // 落库失败不回滚：本次已经收起，不为这种非阻塞提示弹错误（见文件头）。
     } finally {
       busy.value = false;
     }

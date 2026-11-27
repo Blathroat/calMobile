@@ -75,6 +75,12 @@ const canEditExhibition = computed(
 
 /** 我的报名列表（缓存键 `registrations`）。只有已登录时才请求；取不到就是空表。 */
 const registrations = ref<Registration[]>([]);
+/**
+ * 「我的报名」是否已有结论（取到、取失败或本来就不需要请求）。
+ * 首次引导的门控：报名列表回来之前 `myRegistration` 一定是 null，已报名用户会先看到
+ * 一条本该给新用户的引导再消失。
+ */
+const registrationsLoaded = ref(false);
 const calendarState = ref<{ inCalendar: boolean; granted: boolean }>({ inCalendar: false, granted: false });
 const calendarBusy = ref(false);
 /** 有没有原生桥：没有时（浏览器 / iOS PWA）日历改走生成 .ics 文件的浏览器通道。 */
@@ -257,12 +263,19 @@ function footerHint(): string {
  * 未登录不发请求：报名列表是登录态数据，访客不需要也不该看到这个判断。
  */
 async function loadMyRegistration(): Promise<void> {
-  if (session.loggedIn !== true) return;
+  if (session.loggedIn !== true) {
+    // 访客没有可查的报名列表，直接算「已有结论」。
+    registrationsLoaded.value = true;
+    return;
+  }
   try {
     const records = await api.registrations.list();
     if (Array.isArray(records)) registrations.value = records;
   } catch {
+    // 取不到就当没报过名：按钮退回「立即报名」，服务端仍会拦住重复报名。
     registrations.value = [];
+  } finally {
+    registrationsLoaded.value = true;
   }
 }
 
@@ -355,8 +368,8 @@ function startRegistration(): void {
   const item = exhibition.value;
   if (!item) return;
   // 已报名：主按钮变成「查看我的报名」，跳自己的报名详情，不受报名关闭 / 受限影响。
+  // 这条路径不碰引导：已报名用户本来就看不到这条提示，点按钮不该把它记成已读。
   if (myRegistration.value) {
-    void dismissHint();
     void router.push(paths.registrationDetail(String(myRegistration.value.id)));
     return;
   }
@@ -561,9 +574,10 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 一次性引导：看过海报、展期与地点之后，再提示报名入口在页面底部。 -->
+    <!-- 一次性引导：看过海报、展期与地点之后，再提示报名入口在页面底部。
+         等「我的报名」有结论再出现，否则已报名用户会先看到新用户引导再消失。 -->
     <HintNote
-      v-if="hintVisible && !myRegistration && !registerDisabled"
+      v-if="hintVisible && registrationsLoaded && !myRegistration && !registerDisabled"
       :text="t('exhibition.detail.firstVisitHint')"
       @dismiss="dismissHint"
     />
