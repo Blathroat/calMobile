@@ -113,6 +113,17 @@ describe('报名详情 · 注意事项与状态按钮', () => {
     expect(card?.textContent).toContain('请携带身份证');
   });
 
+  it('当前状态排在报名信息之前：先看到状态与下一步，再看自己填过的内容', async () => {
+    await mountPage();
+    const word = document.querySelector<HTMLElement>('.reg-status-word');
+    expect(word).not.toBeNull();
+    const info = [...document.querySelectorAll<HTMLElement>('.card')].find((card) =>
+      card.textContent?.includes('报名信息'),
+    );
+    expect(info).not.toBeUndefined();
+    expect(word!.compareDocumentPosition(info!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('未通过审核时即使接口带了注意事项也不展示卡片', async () => {
     vi.mocked(api.registrations.get).mockResolvedValue({
       found: true,

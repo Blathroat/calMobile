@@ -198,6 +198,21 @@ const publicPath = computed(() => {
 });
 
 /** 公开主页入口右侧说明的是「别人能看到什么」，不是本页的开关状态。 */
+/** 账号入口行：图标、标题、说明与目标路由；公开主页按有无可预览资料决定是否出现。 */
+const accountEntries = computed(() => [
+  {
+    icon: 'list',
+    title: t('registration.list.title'),
+    meta: t('profile.activityEntryMeta'),
+    to: paths.registrations,
+  },
+  ...(publicPath.value
+    ? [{ icon: 'user', title: t('profile.previewPublic'), meta: publicMeta.value, to: publicPath.value }]
+    : []),
+  { icon: 'settings', title: t('settings.title'), meta: COPY.settingsMeta, to: '/settings' },
+  { icon: 'shield', title: t('security.title'), meta: t('settings.securityMeta'), to: '/security' },
+]);
+
 const publicMeta = computed(() =>
   profile.showRegistrations === true ? t('profile.publicRegistrationsShown') : t('profile.publicRegistrationsHidden'),
 );
@@ -361,38 +376,28 @@ function logout(): void {
           </dl>
         </div>
 
-        <!-- 入口：公开主页、用户设置、安全设置各自一行，行间距 --s2 -->
-        <div class="list" data-gap="sm">
-          <button
-            v-if="publicPath"
-            class="row-card"
-            type="button"
-            data-pressable="true"
-            @click="router.push(publicPath)"
-          >
-            <span class="row-icon" aria-hidden="true"><AppIcon name="user" /></span>
-            <span class="row-copy">
-              <strong class="row-title">{{ t('profile.previewPublic') }}</strong>
-              <span class="row-meta">{{ publicMeta }}</span>
-            </span>
-            <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
-          </button>
-          <button class="row-card" type="button" data-pressable="true" @click="router.push('/settings')">
-            <span class="row-icon" aria-hidden="true"><AppIcon name="settings" /></span>
-            <span class="row-copy">
-              <strong class="row-title">{{ t('settings.title') }}</strong>
-              <span class="row-meta">{{ COPY.settingsMeta }}</span>
-            </span>
-            <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
-          </button>
-          <button class="row-card" type="button" data-pressable="true" @click="router.push('/security')">
-            <span class="row-icon" aria-hidden="true"><AppIcon name="shield" /></span>
-            <span class="row-copy">
-              <strong class="row-title">{{ t('security.title') }}</strong>
-              <span class="row-meta">{{ t('settings.securityMeta') }}</span>
-            </span>
-            <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
-          </button>
+        <!-- 账号入口：我的活动、公开主页、用户设置与安全设置各占一行，行间距 --s2。
+             组标题与设置页的「账号」组同名；先列「我的活动」：活动概览取不到时它仍在，
+             报名与私人会议总有入口。公开主页没有可预览资料时这一行不出现。 -->
+        <div class="profile-entries">
+          <span class="section-label">{{ t('settings.section.account') }}</span>
+          <div class="list" data-gap="sm">
+            <button
+              v-for="entry in accountEntries"
+              :key="entry.title"
+              class="row-card"
+              type="button"
+              data-pressable="true"
+              @click="router.push(entry.to)"
+            >
+              <span class="row-icon" aria-hidden="true"><AppIcon :name="entry.icon" /></span>
+              <span class="row-copy">
+                <strong class="row-title">{{ entry.title }}</strong>
+                <span class="row-meta">{{ entry.meta }}</span>
+              </span>
+              <span class="row-chev" aria-hidden="true"><AppIcon name="chevronRight" /></span>
+            </button>
+          </div>
         </div>
 
         <!-- 退出登录：整页唯一的破坏性动作，居中文字按钮，上方留 --s7 -->
@@ -571,6 +576,16 @@ function logout(): void {
 
 .profile-facts dd.dim {
   color: var(--ink-3);
+}
+
+/* 账号入口：组标题在入口行之上，行与行之间 --s2；与简介 / 公开资料两组同一套组标题。 */
+.profile-entries {
+  display: grid;
+  gap: var(--s2);
+}
+
+.profile-entries > .section-label {
+  justify-self: start;
 }
 
 /* 入口行左侧的静默图标与右侧箭头。 */

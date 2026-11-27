@@ -28,17 +28,30 @@ import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import AvatarBox from '@/components/AvatarBox.vue';
 import ImageViewer from '@/components/ImageViewer.vue';
-import { formatDateRange, joinText } from '@/services/format';
-import { REGISTRATION_STATUS, exhibitionModeCode, modeLabel, roleLabel, statusTone } from '@/services/status';
+import HintNote from '@/components/HintNote.vue';
+import { useHint } from '@/composables/useHint';
+import { dateParts, formatChineseDate, formatDateRange, formatEndDate, joinText } from '@/services/format';
+import {
+  EXHIBITION_STATUS,
+  REGISTRATION_STATUS,
+  exhibitionModeCode,
+  modeHint,
+  modeLabel,
+  registrationStatusLabel,
+  roleLabel,
+  statusTone,
+} from '@/services/status';
 import type { ExhibitionDetail, JsonObject, Registration } from '@/api/types';
 import { t } from '@/i18n';
 
 const route = useRoute();
 const router = useRouter();
 const session = useSessionStore();
+const { visible: hintVisible, dismiss: dismissHint } = useHint('exhibition-detail');
 const bootstrap = useBootstrapStore();
 const joinLinkMissing = t('exhibition.detail.registrationSiteMissing');
 const query = useAsync<ExhibitionDetail>();
+const markdownStatus = ref<'loading' | 'ready' | 'failed'>('loading');
 
 const COPY = {
   /** 封面的 aria-label：点开后看大图。 */
@@ -62,6 +75,12 @@ const canEditExhibition = computed(
 
 /** 我的报名列表（缓存键 `registrations`）。只有已登录时才请求；取不到就是空表。 */
 const registrations = ref<Registration[]>([]);
+/**
+ * 「我的报名」是否已有结论（取到、取失败或本来就不需要请求）。
+ * 首次引导的门控：报名列表回来之前 `myRegistration` 一定是 null，已报名用户会先看到
+ * 一条本该给新用户的引导再消失。
+ */
+const registrationsLoaded = ref(false);
 const calendarState = ref<{ inCalendar: boolean; granted: boolean }>({ inCalendar: false, granted: false });
 const calendarBusy = ref(false);
 /** 有没有原生桥：没有时（浏览器 / iOS PWA）日历改走生成 .ics 文件的浏览器通道。 */
@@ -88,16 +107,33 @@ const calendarLabel = computed(() =>
     : t('exhibition.detail.addToCalendar'),
 );
 
+interface DescriptionState {
+  html: string;
+  text: string;
+  loading: boolean;
+  failed: boolean;
+}
+
+const EMPTY_DESCRIPTION: DescriptionState = { html: '', text: '', loading: false, failed: false };
+
 /** 简介：HTML 走清洗，Markdown 走渲染入口，空简介给出说明而不是空白。 */
-const description = computed(() => {
+const description = computed<DescriptionState>(() => {
   const item = exhibition.value;
-  if (!item) return { html: '', text: '' };
+  if (!item) return EMPTY_DESCRIPTION;
   const raw = String(item.description ?? '');
-  if (item.descriptionFormat === 'html') {
-    if (/<[a-z][\s\S]*>/i.test(raw)) return { html: sanitizeHtml(raw), text: '' };
-    return { html: '', text: plainText(raw, 4000) };
+  if (!raw.trim()) return EMPTY_DESCRIPTION;
+  if (markdownStatus.value === 'loading') return { ...EMPTY_DESCRIPTION, loading: true };
+  if (markdownStatus.value === 'failed') {
+    return {
+      ...EMPTY_DESCRIPTION,
+      text: item.descriptionFormat === 'html' ? plainText(raw, 4000) : '',
+      failed: true,
+    };
   }
-  return { html: markdownToHtml(raw), text: '' };
+  if (item.descriptionFormat !== 'html') return { ...EMPTY_DESCRIPTION, html: markdownToHtml(raw) };
+  return /<[a-z][\s\S]*>/i.test(raw)
+    ? { ...EMPTY_DESCRIPTION, html: sanitizeHtml(raw) }
+    : { ...EMPTY_DESCRIPTION, text: plainText(raw, 4000) };
 });
 
 /** 已登录且后端明确下发可报名。 */
@@ -130,6 +166,44 @@ const myRegistration = computed<Registration | null>(() => {
     ) ?? null
   );
 });
+
+/**
+ * 展期：开展日单独用最大一档，闭展日作为「区间尾巴」小一号接在后面。
+ * 拆成两段是为了窄屏：一团 32px 的区间会在日期中间断开，把「（周二）」甩到下一行。
+ * 单日展会没有尾巴（闭展为空或与开展同一天），口径与 `formatDateRange` 一致。
+ */
+const dateStart = computed(() => dateParts(exhibition.value?.date));
+const dateEnd = computed(() => formatEndDate(exhibition.value?.date, exhibition.value?.endDate));
+
+/** 展商行：名字后面接展商自己的说明；两者都空时用「展」兜底，不留空行。 */
+const exhibitorLine = computed(() =>
+  joinText([exhibition.value?.exhibitor || t('exhibition.detail.brandMark'), exhibition.value?.exhibitorNote]),
+);
+
+/**
+ * 报名状态说明：和状态灯贴在一起，回答「现在能不能报、提交后会发生什么」。
+ *
+ * 报名中按报名方式说明后续流程；截止与关闭则说明为什么按钮是灰的。文案全部来自
+ * 现有词条，不在这里拼中文。
+ */
+const registrationStatusLine = computed(() => {
+  const item = exhibition.value;
+  if (!item || myRegistration.value || item.openForRegistration === false) return '';
+  const code = exhibitionModeCode(item);
+  if (code === EXHIBITION_STATUS.REVIEW_REQUIRED || code === EXHIBITION_STATUS.REVIEW_OPTIONAL) {
+    return modeHint(code);
+  }
+  return t('exhibition.detail.registrationUnavailable');
+});
+
+/** 报名截止日：填了才显示，是底部按钮之外的第二条时间线索。 */
+const registrationDeadline = computed(() => {
+  const end = formatChineseDate(exhibition.value?.registrationEnd);
+  return end ? `${t('exhibition.form.registrationCloses')} ${end}` : '';
+});
+
+/** 本场已报名时，把自己的报名状态也摆在事实区，不点进详情就能确认进度。 */
+const myRegistrationStatus = computed(() => String(myRegistration.value?.statusCode ?? ''));
 
 const registerLabel = computed(() => {
   // 已报名时主按钮是「去哪看报名」，与报名是否关闭、账号是否受限无关。
@@ -179,12 +253,19 @@ function footerHint(): string {
  * 未登录不发请求：报名列表是登录态数据，访客不需要也不该看到这个判断。
  */
 async function loadMyRegistration(): Promise<void> {
-  if (session.loggedIn !== true) return;
+  if (session.loggedIn !== true) {
+    // 访客没有可查的报名列表，直接算「已有结论」。
+    registrationsLoaded.value = true;
+    return;
+  }
   try {
     const records = await api.registrations.list();
     if (Array.isArray(records)) registrations.value = records;
   } catch {
+    // 取不到就当没报过名：按钮退回「立即报名」，服务端仍会拦住重复报名。
     registrations.value = [];
+  } finally {
+    registrationsLoaded.value = true;
   }
 }
 
@@ -192,14 +273,18 @@ async function load(): Promise<void> {
   calendarRequested = false;
   const data = await query.run(() => {
     const pending = api.exhibitions.get(exhibitionId.value) as CachedRead<ExhibitionDetail>;
-    return tagRead(
-      pending.then(async (detail) => {
-        if (detail.exhibition?.description) await loadMarkdownParser();
-        return detail;
-      }),
-      pending.cached,
-      pending.revalidating,
-    );
+    const prepared = pending.then(async (detail) => {
+      if (!detail.exhibition?.description) return detail;
+      markdownStatus.value = 'loading';
+      try {
+        await loadMarkdownParser();
+        markdownStatus.value = 'ready';
+      } catch {
+        markdownStatus.value = 'failed';
+      }
+      return detail;
+    });
+    return tagRead(prepared, pending.cached, pending.revalidating);
   });
   if (data?.found === false) {
     calendarState.value = { inCalendar: false, granted: false };
@@ -273,12 +358,14 @@ function startRegistration(): void {
   const item = exhibition.value;
   if (!item) return;
   // 已报名：主按钮变成「查看我的报名」，跳自己的报名详情，不受报名关闭 / 受限影响。
+  // 这条路径不碰引导：已报名用户本来就看不到这条提示，点按钮不该把它记成已读。
   if (myRegistration.value) {
     void router.push(paths.registrationDetail(String(myRegistration.value.id)));
     return;
   }
   // 报名站：未登录访客直接进免登录报名的表单，不弹「请先登录」。
   if (isJoinSurface && session.loggedIn !== true) {
+    void dismissHint();
     void router.push(paths.registrationForm(item.id));
     return;
   }
@@ -290,6 +377,7 @@ function startRegistration(): void {
     toast(t('exhibition.detail.loginBeforeRegister'));
     return;
   }
+  void dismissHint();
   void router.push(paths.registrationForm(item.id));
 }
 
@@ -418,7 +506,8 @@ onMounted(() => {
 
   <template v-else>
     <!-- 展会封面：设计比例 1080×1920 的竖版海报；点开后可以看大图并双指缩放。
-         只有展会自己上传了海报才渲染；没有时整块不显示（不回退缺省封面、不画占位图）。 -->
+         只有展会自己上传了海报才渲染；没有时整块不显示（不回退缺省封面、不画占位图）。
+         海报放在最前：第一屏先看到「这场展会长什么样」。 -->
     <button
       v-if="cover"
       class="hero ph-img hero-button"
@@ -431,34 +520,57 @@ onMounted(() => {
 
     <div class="stack" data-gap="sm">
       <h2 class="detail-title">{{ exhibition.title }}</h2>
-      <p class="muted">
-        {{ exhibition.exhibitor || t('exhibition.detail.brandMark') }} · {{ exhibition.exhibitorNote }}
-      </p>
+      <p class="muted">{{ exhibitorLine }}</p>
     </div>
 
-    <div class="card" data-tone="fill">
-      <div class="row" data-gap="md">
-        <span class="dim" aria-hidden="true"><AppIcon name="calendar" size="icon icon-sm" /></span>
-        <span class="row-meta">{{
-          joinText([formatDateRange(exhibition.date, exhibition.endDate), exhibition.time], ' ')
-        }}</span>
+    <!-- 事实区：展期（最大一档）→ 地点（正文大小）→ 报名状态与「提交后会发生什么」。
+         状态灯和说明贴在一起，用户不用去底部按钮猜为什么不能报名。 -->
+    <div class="card detail-facts">
+      <div class="detail-facts-date">
+        <AppIcon name="calendar" size="icon" />
+        <div class="detail-date-copy">
+          <div class="detail-date-primary">
+            <strong class="detail-date">{{ dateStart.monthDay }}</strong>
+            <span class="detail-date-context">{{ joinText([dateStart.year, dateStart.weekday], ' · ') }}</span>
+          </div>
+          <div v-if="dateEnd" class="detail-date-period">
+            <span>{{ t('exhibition.form.endDate') }}</span>
+            <strong>{{ dateEnd }}</strong>
+          </div>
+        </div>
       </div>
-      <div class="row" data-gap="md">
-        <span class="dim" aria-hidden="true"><AppIcon name="home" size="icon icon-sm" /></span>
-        <span class="row-meta">{{ exhibition.venue }}</span>
+      <div class="detail-facts-meta">
+        <div v-if="exhibition.time" class="detail-fact">
+          <span class="detail-fact-label">{{ t('exhibition.form.openTime') }}</span>
+          <strong>{{ exhibition.time }}</strong>
+        </div>
+        <div class="detail-fact">
+          <span class="detail-fact-label">{{ t('admin.exhibitions.venue') }}</span>
+          <strong>{{ exhibition.venue }}</strong>
+        </div>
       </div>
-      <div class="row" data-gap="md">
+      <div class="detail-registration-state">
         <StatusTag
           :text="modeLabel(exhibitionModeCode(exhibition))"
           :tone="statusTone(exhibitionModeCode(exhibition))"
         />
-        <span class="row-meta">{{
-          exhibition.openForRegistration
-            ? t('exhibition.detail.registrationNeeded')
-            : t('exhibition.detail.registrationUnavailable')
-        }}</span>
+        <span v-if="registrationStatusLine" class="row-meta fill">{{ registrationStatusLine }}</span>
+      </div>
+      <p v-if="registrationDeadline" class="detail-fact-deadline">{{ registrationDeadline }}</p>
+      <!-- 已经报过名：报名状态也摆在事实区，不点进详情就能确认进度 -->
+      <div v-if="myRegistration" class="detail-registration-state">
+        <span class="detail-fact-label">{{ t('registration.detail.status') }}</span>
+        <StatusTag :text="registrationStatusLabel(myRegistrationStatus)" :tone="statusTone(myRegistrationStatus)" />
       </div>
     </div>
+
+    <!-- 一次性引导：看过海报、展期与地点之后，再提示报名入口在页面底部。
+         等「我的报名」有结论再出现，否则已报名用户会先看到新用户引导再消失。 -->
+    <HintNote
+      v-if="hintVisible && registrationsLoaded && !myRegistration && !registerDisabled"
+      :text="t('exhibition.detail.firstVisitHint')"
+      @dismiss="dismissHint"
+    />
 
     <button
       class="row-card"
@@ -484,7 +596,15 @@ onMounted(() => {
     <div class="stack" data-gap="sm">
       <span class="section-label">{{ t('exhibition.detail.introduction') }}</span>
       <div v-if="description.html" class="rich-content" v-html="description.html" />
-      <p v-else-if="description.text" class="row-meta">{{ description.text }}</p>
+      <p v-else-if="description.loading" class="muted detail-introduction-pending">
+        {{ t('exhibition.detail.introductionLoading') }}
+      </p>
+      <p v-else-if="description.text" class="row-meta" :class="{ 'detail-introduction-fallback': description.failed }">
+        {{ description.text }}
+      </p>
+      <p v-else-if="description.failed" class="muted detail-introduction-fallback">
+        {{ t('exhibition.detail.introductionLoadFailed') }}
+      </p>
       <p v-else class="muted">{{ t('exhibition.detail.introductionEmpty') }}</p>
     </div>
 
@@ -545,6 +665,110 @@ onMounted(() => {
 </template>
 
 <style>
+/* 日期作为信息卡的主视觉，年与星期单独降一档，避免长区间挤成多行大字。 */
+.detail-facts {
+  gap: var(--s4);
+  padding: var(--s5);
+}
+
+.detail-facts-date {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.detail-facts-date > svg {
+  flex: none;
+  margin-top: 5px;
+  color: var(--accent-ink);
+}
+
+.detail-date-copy {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.detail-date-primary,
+.detail-date-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2);
+}
+
+.detail-date-primary {
+  min-width: 0;
+}
+
+.detail-date {
+  color: var(--ink);
+  font-size: var(--fs-date);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.detail-date-context,
+.detail-date-period > span,
+.detail-fact-label {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+
+.detail-date-period > strong {
+  color: var(--ink);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.detail-facts-meta {
+  display: grid;
+  grid-template-columns: minmax(4em, 0.35fr) minmax(0, 1.65fr);
+  gap: var(--s2) var(--s3);
+  min-width: 0;
+}
+
+.detail-fact {
+  display: contents;
+}
+
+.detail-fact > strong {
+  color: var(--ink);
+  font-size: var(--fs-body);
+  overflow-wrap: anywhere;
+}
+
+.detail-registration-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.detail-fact-deadline {
+  margin: calc(var(--s2) * -1) 0 0;
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+}
+
+@media (max-width: 360px) {
+  .detail-facts-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-fact {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: var(--s1);
+  }
+}
+
 /* 可点开的封面：清掉按钮自带的内边距 / 字体 / 居中，只保留 .hero 的尺寸与描边 */
 .hero-button {
   display: block;

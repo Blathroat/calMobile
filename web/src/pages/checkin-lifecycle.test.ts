@@ -13,7 +13,8 @@ vi.mock('@/services/qr-decoder', () => ({ createQrDecoder: vi.fn() }));
 vi.mock('@/services/device-services', () => ({
   device: { ensureCameraPermission: vi.fn().mockResolvedValue(true), pickImage: vi.fn() },
 }));
-vi.mock('@/composables/useHint', () => ({ useHint: () => ({ dismiss: vi.fn() }) }));
+const hint = vi.hoisted(() => ({ dismiss: vi.fn() }));
+vi.mock('@/composables/useHint', () => ({ useHint: () => ({ dismiss: hint.dismiss }) }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 vi.mock('@/services/sheet', () => ({ openSheet: vi.fn() }));
 
@@ -77,10 +78,16 @@ function actionButton(action: 'start-scan' | 'pick-image' | 'manual'): HTMLButto
 }
 
 describe('核销页面的异步识别与相机生命周期', () => {
-  it('受限账号不创建解码 Worker 或申请相机', async () => {
+  it('受限账号不创建解码 Worker 或申请相机，也不把核销教程记为已读', async () => {
     await mountPage(true);
     expect(createQrDecoder).not.toHaveBeenCalled();
     expect(getUserMedia).not.toHaveBeenCalled();
+    expect(hint.dismiss).not.toHaveBeenCalled();
+  });
+
+  it('正常账号进入核销页就把核销教程记为已读', async () => {
+    await mountPage();
+    expect(hint.dismiss).toHaveBeenCalledTimes(1);
   });
 
   it.each(['stop', 'unmount', 'manual'] as const)('%s 之后的旧帧不会发起核销，解码期间不重复取帧', async (action) => {
@@ -147,6 +154,48 @@ describe('核销页面的异步识别与相机生命周期', () => {
     await vi.waitFor(() => expect(document.querySelector('.notice[data-tone="error"]')).not.toBeNull());
     expect(stopTrack).toHaveBeenCalledOnce();
     expect(api.checkIn).not.toHaveBeenCalled();
+  });
+
+  it('相机那一帧还在解码时选图：先等它落定，不误判成「没有识别到」', async () => {
+    // 真解码器在「忙」时对新帧直接返回 null；这里按同一契约做桩：
+    // 相机帧挂起期间收到的第二帧返回 null，落定后才能真正解码。
+    let pending: ((value: string | null) => void) | null = null;
+    vi.mocked(decoder.decode).mockImplementation((() => {
+      if (pending) return Promise.resolve(null);
+      return new Promise<string | null>((resolve) => {
+        pending = (value) => {
+          pending = null;
+          resolve(value);
+        };
+      });
+    }) as never);
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async () => ({ width: 240, height: 120, close: vi.fn() })),
+    );
+    await mountPage();
+
+    actionButton('start-scan').click();
+    await vi.waitFor(() => expect(nextFrame).toBeDefined());
+    nextFrame!(120);
+    await vi.waitFor(() => expect(decoder.decode).toHaveBeenCalledTimes(1));
+
+    // 相机帧没解完就选图：页面要等它落定再解这张图。
+    const input = document.querySelector<HTMLInputElement>('[data-action="pick-image-input"]')!;
+    Object.defineProperty(input, 'files', {
+      value: [new File(['x'], 'qr.png', { type: 'image/png' })],
+      configurable: true,
+    });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await nextTick();
+    expect(decoder.decode).toHaveBeenCalledTimes(1);
+
+    pending!(null);
+    await vi.waitFor(() => expect(decoder.decode).toHaveBeenCalledTimes(2));
+    pending!('CALMOBILE-CHECKIN|秋季展会|报名-1');
+
+    await vi.waitFor(() => expect(api.checkIn).toHaveBeenCalledWith('CALMOBILE-CHECKIN|秋季展会|报名-1'));
+    expect(document.body.textContent).toContain('已识别报名码');
   });
 
   // ── 选择图像扫码：应用里走原生 device.pickImage（WebView 关着文件访问，<input type=file> 读不到 content://） ──

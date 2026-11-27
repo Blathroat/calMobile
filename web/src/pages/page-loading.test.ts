@@ -57,6 +57,8 @@ async function mount(page: Component, path: string) {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  // 首页默认落在当前自然月：把「今天」固定在 2026-06-05。
+  vi.setSystemTime(new Date('2026-06-05T10:00:00'));
   vi.clearAllMocks();
   vi.mocked(bootApp).mockResolvedValue(undefined);
   vi.mocked(api.users.list).mockResolvedValue([]);

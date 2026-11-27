@@ -95,7 +95,7 @@
   position: relative;
   flex: none;
   overflow: hidden;
-  border-radius: var(--r-panel);
+  border-radius: var(--r-card);
   touch-action: pan-y;
 }
 

@@ -72,6 +72,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 - 竖拉先越过 16px 死区，且纵向明显占优（> 横向 1.5 倍）才跟手：点击页面里的链接 / 按钮时手指会漂几像素，不过死区就完全当没下拉。手势中途横向追平即放弃；页面自己的横滑处理器（首页日历）判定要横滑时调 `suppressPull()`，外壳本次手势直接作废。只有真正的 `pointerup` 会发请求，`pointercancel` 只复位、绝不刷新；换页时外壳调 `resetPullVisual()`。
 - 查询缓存集中在 `web/src/services/query-cache.ts`：缓存键包含稳定序列化后的参数，并对相同请求去重；底部导航按下时预取该页。月视图一次取整月，点日期在本地完成。
 - `GET /exhibitions/month` 对跨天展会返回 `days`（本月内开展～闭展覆盖的所有天）并把它们并进 `eventDays`，首页按 `days` 判断选中日要展示哪些展会；没有 `days` 的数据按 `day` 处理。每条展会还带 `exhibitor`（展商昵称），首页卡片把展商名与分类拼成一行。个人圆点 `markedDays` 里，已通过 / 已参加的报名若选了参加时间就按那段区间打点，没选的按整场展会打点。
+- 首页按**当前自然月**取月：`HomePage.load()` 与 `app/preload.ts` 都用本机日期算年月，不再采用 `bootstrap.calendar.landing`（该字段仍随启动数据下发，供不带参数的 `GET /exhibitions/month` 兜底）。默认选中的日期由 `web/src/services/calendar-default.ts` 的 `homeDefaultDay()` 决定：当前月取「今天之后」第一个 `eventDays` ∪ `markedDays` 的日期，没有就取今天；其它月份取该月第一个有活动的日期，整月无活动则不选中。后端下发的 `day` 仍作为候选兜底（老接口、没有 `eventDays` 的数据）。
 - 写接口的失效前缀与读接口的缓存键前缀同族（`registrations` ↔ `registrations.record`、`users` ↔ `users.record`）。
 - 用户协议正文走 `api.agreement.get()` 直连，不进查询缓存（正文会随管理员保存变化）；`bootstrap` 只带 `{ enabled, version, updatedAt }` 摘要，登录 / 注册页据此决定是否展示勾选框。
 - 最近日志页（`web/src/pages/LogsPage.vue`）用 `api.logs.list()` 直连，也不进查询缓存：日志随时在增长，打开页面、切级别、下拉刷新都取最新的一批；统计（条数、已用 / 上限）与列表来自同一次响应。
@@ -205,23 +206,36 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 - 编辑展会页的「活动信息」卡自上而下是封面行（右侧写「支持 3:4~9:16 纵图」与允许的格式）→ 简介 textarea（`#form-description`，直接编辑 Markdown 源码）→「使用 Markdown 编辑简介」按钮 →「参与方式（仅通过审核用户可见）」textarea（`#form-registration-notice`，2000 字）。点 Markdown 按钮时先把当前表单 stash 成内存稿（`web/src/services/exhibition-draft.ts`，草稿带展会 id），二级编辑器用它起稿，新建与编辑两条路径都保证文本框和二级页是同一份正文。
 - 编辑已有展会时，二级编辑器保存简介**仍然立即写库**，成功后把最新正文 `patchExhibitionDraft()` 写回草稿、**不清掉**，返回表单时按 id 恢复整张草稿，其他未保存字段不丢；只有离开到 `/exhibition-form*` 以外的目标时才清草稿。二级编辑器页面本身不渲染展会标题卡，页面顶部只由外壳顶栏负责。
 - 编辑 / 新建展会页的「已保存基线」是提交字段的 JSON 快照（初次取数、成功保存、报名方式即时保存、新建空表单时更新）；离开时 `onBeforeRouteLeave` 对「已构建且未受限 / 未加载失败 / 未丢失且有未保存修改」取消导航并打开抽屉（`layout: 'row'`，保存 / 不保存 / 取消横排一行）。去 `/rich-editor` 直接放行且不清草稿；保存、不保存、删除成功与权限退回用自己的放行标记再 `router.replace(目标)`，保存失败留在本页原位报错。
+- 新建展会走三步状态机：`createStep`（1 基本信息 / 2 报名配置 / 3 发布检查）与 `createSteps`；`CREATE_STEP_FIELDS` 把字段名分到步骤（1：`title` / `venue` / `date` / `endDate` / `time` / `category` / `registrationNotice`，2：`registrationEnd` / `registrationStart`），`validateCreateStep(step)` 从 `fieldChecks()` 里筛出这些字段的规则跑一遍，第 2 步再校验收集项（`firstCollectFieldError`）；`advanceCreateStep` 通过才进下一步，`retreatCreateStep` 只回退并清掉上一步的错误，`validateCreateSteps()` 在点「发布展会」前按 1 → 2 再校一遍并切回失败的那一步，`createStepForField(name)` 把 `fields` / `registrationEnd` / `registrationStart` 归到第 2 步、其余归第 1 步（未保存提示里选「保存」失败时切到出错字段所在的那一步）。编辑已有展会仍走整表校验与分组表单，不分步。
+- 发布检查卡只读；收集项数量取 `submittedFieldCount`（标题非空的行，与 `submittedExhibitionData` 的 payload 同口径），展期 `dateRangeText` 在闭展为空或与开展同一天时只显示开展一天。
 - 报名收集项是「一张卡 + 横线分隔」结构，段内顺序是：字段标题输入 → 类型分段 → 提示 → 选项行 → 必填与删除。只把「字段标题」那一个输入框换成下划线：「标题」两个字作**占位符**显示在框内，不浮在输入框上方；每一项上方留 12px、分隔线下方 16px，不靠浮动标签撑间距。
 - 编辑展会时，闭展日期在提交前按管理员设置的最大持续天数做本地校验（`bootstrap.exhibitor.maxExhibitionDays`）；服务端保存时再校验一次，超限返回 `exhibition.durationTooLong`。分类必填（编辑页校验；服务端 `exhibitionInputSchema` 只在新建时强制，错误码 `validation.categoryRequired`，更新保持宽松，让空分类的已有展会只改简介时不被拒）；开展时间选填，两个时 / 分滚轮都填才组成区间，都空就是没设置。空时间的展示统一走 `web/src/services/format.ts` 的 `joinText(parts, 分隔符)`（过滤空片段再拼），列表、详情、分享文案与报名页卡片都不会留下「 · 场馆」或行尾空格；`web/src/services/calendar-ics.ts` 没有可解析的时间时按全天事件处理。
 - 报名截止日已过时，服务端在展会 payload 里下发 `registrationEnded`（数据库按 `CURRENT_DATE > registration_end` 判定，且只有需审核 / 无需审核才为真），`openForRegistration` 同时为 false；卡片状态灯与详情页状态统一读 `web/src/services/status.ts` 的 `exhibitionModeCode(item)`（截止后显示「截止报名」），详情页按钮按 `registrationEnded` 显示「报名已截止」、其它关闭原因仍是「报名已关闭」。管理端「暂停 / 恢复报名」按 `acceptsRegistration(statusCode)` 判断，不读 `openForRegistration`，避免已截止的展会显示「恢复报名」。
 - 编辑展会页的「展会归属」卡（`ExhibitionFormPage.vue`）只在 `!isCreate && session.user.can?.admin` 时渲染，放在「危险操作」之前（删除仍是内容最下方的一颗）。卡里的当前归属人取详情 `exhibition.exhibitor`，改归属成功后用 `api.exhibitions.setOwner()` 的响应就地更新，**不重载整张表单**（`load()` 会按服务器内容重拍「已保存」基线，未保存的修改会被当成已保存）。提交前用 `validate.ts` 的 `check` + `PATTERNS.email` 校验，`confirmSheet` 确认后写库；服务端的规则失败（`server.exhibition.owner*`）就地显示在输入框下。归属改动不属于表单提交字段，不影响未保存修改的判定。
+- 表单模型、服务器详情映射、内存稿回填与提交快照在 `web/src/services/exhibition-form-model.ts`（`emptyExhibitionFormModel` / `exhibitionContentFromServer` / `exhibitionContentFromDraft` / `submittedExhibitionData`；保存 payload 与「已保存基线」共用后者的归一化结果）。管理员转移归属的输入、校验、确认与结果状态在 `web/src/composables/useExhibitionOwnerTransfer.ts`，行为不变：改归属成功只就地更新归属人，不重载整张表单。
+- 详情页首次引导只在「已报名列表已取回（`registrationsLoaded`）、尚未报名、当前可报名」时出现；点报名入口（或提示里的「知道了」）才 `dismiss()` 记为已看，已报名用户点「查看我的报名」不记。
 
 ### 首页月历与扫码
 
 - 首页切月有两种入口：两颗不带圆框的 `chevronLeft` / `chevronRight` 按钮（`.icon-button`，去掉 `data-variant="outlined"`），以及下面的滑动。滑动用三块 `web/src/components/CalendarMonthPanel.vue`：当前月可交互，左右两份是相邻月预览（只按本地日期排，不带展会高亮，`aria-hidden` + `inert`，按钮全部禁用）。拖动时三块一起平移，露出的位置始终是相邻月份的日历而不是空白；松手过阈值后卡片与预览一起滑到位再换月，动画结束用新月份接口数据重画。相邻预览不额外发请求；切月动画只动 transform，减少动效时直接换月。
 - 二维码在 Worker 里串行解码。暂停与换页后丢弃过期帧，离开时释放 Worker 和摄像头。WASM 通过构建资源定位到本地文件。
 - 私约设置页顶链接行是 `.copy-line`：左侧链接文本，右侧复制与二维码两颗 44px 图标按钮。二维码复用 `web/src/components/ShareQrSheet.vue`（传 `qrLabel` / `hint` / `savedText` 覆盖成会议文案，不传则沿用展会文案），内容是 `meetingLink()`，文件名 `meeting-qr-<用户 id>.png`；没配 `PUBLIC_BASE_URL` 时只提示未配置，不打开空二维码。
+- 扫码页的相机与解码生命周期在 `web/src/composables/useCheckinScanner.ts`：初始化建解码器、逐帧取景识别、释放摄像头与丢弃过期帧都在这里；`start()` 在解码器失败标记置位时先重建解码器再试（识别库瞬时失败不再让整页只能手动输码），`decodeImage()` 成功一次就清掉失败标记，选图结果不会因旧的失败状态被丢弃。图片像素读取在 `web/src/services/checkin-image.ts`（优先 `createImageBitmap`，回退 `Image` + object URL，最长边缩到 1600 再取 `ImageData`）；核销历史读写与持久化在 `web/src/services/checkin-outcomes.ts`（键 `calmobile.checkin.outcomes.<用户 id>`、最多 20 条、坏记录逐条跳过）。核销请求用 `submitting` 串行化，扫码、选图、手动输入三条入口与「开始扫码」按钮在请求期间都禁用。
+
+### 一次性提示
+
+- 一次性提示统一用 `web/src/composables/useHint.ts` + `web/src/components/HintNote.vue`：`useHint(key)` 返回 `{ visible, dismiss }`，页面用 `v-if="visible"` 渲染 `HintNote`，做完对应动作或点「知道了」再调 `dismiss()`。
+- key 清单：`home-calendar-swipe` / `exhibitor-checkin` / `exhibition-detail` / `registration-form` / `registration-status` / `admin-settings-route`；后端按 `^[a-z0-9][a-z0-9-]{2,39}$` 校验，每个账号最多存 50 条。
+- 登录用户的已读状态在 `users.seen_hints`（`PUT /profile/hints`，重复提交幂等）；访客没有账号，已读记在本机 `localStorage` 的 `calmobile.seen-hints`。`bootstrap.booted` 为 false 时不渲染访客提示，避免登录用户冷启动时先看到账号上已读的提示。
+- `dismiss()` 先让界面收起（登录用户同步 `session.markHint()`，访客置本机已读），再落库（登录用户 `api.profile.markHint()`，访客写 `localStorage`）；写入失败不回滚、也不弹错误。
 
 ### 展商后台与管理页
 
 - 管理-展会卡片（`AdminExhibitionCard.vue`）的版式与展商后台的展会卡一一对应：缩略图 78 高、标题最多两行、状态灯与报名数合成一条放在内容里，二维码按钮绝对定位在右侧垂直居中（主体按钮的右内距留出 44px 触控位），操作行用 `.action-row` 的 ghost 小按钮；组件不能用页面的 `.exh-*` 选择器，所以这里的类名与样式是 `.admin-exh-*` 的 scoped 副本。按钮不能嵌在主体 `<button>` 里。二维码按钮复用 `ShareQrSheet` 与 `services/registration-link.ts` 的 `registrationLink()`，没配报名站地址时只 toast；「暂停 / 恢复报名」按 `canManageExhibition()`（管理员或展会主办人）决定是否出现。
-- 展商后台：顶部一颗「核销报名码」，列表每张卡上半是整块可点的主体（右侧垂直居中一枚 44px 命中区的二维码分享按钮），下半放 ghost 小按钮（查看报名 / 编辑展会 / 复制链接），上下两段只用间距分开、不加分隔线（其它列表卡不受这条影响）；「复制链接」点击即复制（`web/src/services/clipboard.ts` 的 `copyText`，Clipboard API 失败时退回隐藏 textarea + `execCommand`），成功或失败都只 toast，不弹手动复制面板；二维码按钮打开 `web/src/components/ShareQrSheet.vue`，二维码内容是报名站分享链接，导出透明底黑点 PNG（`web/src/services/qr-encoder.ts` 的 `background: 'transparent'` + `foreground: '#000000'`，保存走 `media.saveImage`，浏览器里退回下载）。「新建展会」是右下角悬浮圆形按钮（`Teleport` 到 `body`），空态时由 `.state` 的入口承担、不显示悬浮按钮。
+- 展商后台：首屏先给出「发布展会 / 报名管理 / 核销报名码」三个任务入口（受限账号的发布与核销置灰并说明原因，报名管理仍可用），自己的展会列表排在后面；列表每张卡上半是整块可点的主体（右侧垂直居中一枚 44px 命中区的二维码分享按钮），下半放 ghost 小按钮（查看报名 / 编辑展会 / 复制链接），上下两段只用间距分开、不加分隔线（其它列表卡不受这条影响）；「复制链接」点击即复制（`web/src/services/clipboard.ts` 的 `copyText`，Clipboard API 失败时退回隐藏 textarea + `execCommand`），成功或失败都只 toast，不弹手动复制面板；二维码按钮打开 `web/src/components/ShareQrSheet.vue`，二维码内容是报名站分享链接，导出透明底黑点 PNG（`web/src/services/qr-encoder.ts` 的 `background: 'transparent'` + `foreground: '#000000'`，保存走 `media.saveImage`，浏览器里退回下载）。「新建展会」是右下角悬浮圆形按钮（`Teleport` 到 `body`），只在展会分区且有列表时显示；空态由 `.state` 的入口承担。
 - 管理-用户分区按身份与账号状态筛选：筛选值写进地址栏（`?tab=users&role=&status=`，非法值按「全部」），`GET /users` 接受 `role` / `status`，与 `query` 关键字同时生效（三者 AND）。两个筛选是排成一行的下划线选择栏（`.user-filter-row` 自适应网格，与编辑展会页的活动分类同一套；点开走 `openSheet` 的 `layout: list`，当前值带对勾），`AdminUsersSection` 只回抛事件，URL 同步与取数留在 `AdminPage`。
 - 管理-设置的「日志」卡片里有「查看最近日志」按钮（整行浅色描边按钮，`cta ghost`，位于上限设置下方）：`AdminSettingsSection` 发 `open-logs` 事件，`AdminPage` 负责跳转到 `/logs`。日志页支持全部 / 信息 / 警告 / 错误筛选与下拉刷新；日志的写入、容量上限与接口参数见 [`../server.md`](../server.md)。
+- 管理-设置（`AdminSettingsSection.vue`）的卡片按任务分成六组：`GROUPS` 的顺序是服务器与日志 / 品牌与外观 / 展会与报名规则 / 账号与邀请码 / 媒体与字段限制 / 应用下载（也是首次配置路线），顶部 `.settings-group-nav` 两列排、每组带顺序号；每张卡用 `v-show="groupVisible(id)"` 而不是 `v-if`，换组不重建 DOM，未保存的输入、错误与文件说明都留在原处。组底 `.settings-group-switch` 放「返回」与「继续」两颗按钮（按钮后缀是上一组 / 下一组的组名；第一组没有返回、最后一组没有继续），`setGroup()` 换组后把分组导航 `scrollIntoView` 回视口顶部；保存仍是右下角同一颗 `.round-action.settings-save-fab`（`Teleport` 到 `body`），分组不另起表单、也不改提交字段。
 
 ## 改动检查清单、测试位置与校验命令
 
@@ -245,6 +259,8 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 | `web/src/components/pwa-install-sheet.test.ts`、`web/src/pages/home-pwa-install-hint.test.ts` | 安装引导条件与每次访问只提示一次 |
 | `server/src/test/routes-contract.test.ts` | 前端动作与后端路由一一对应、动作总数 91 |
 | `app/src/test/`（含 `ShellCapabilitiesTest`） | 原生能力清单与动作表一致 |
+
+同一页面有多个页面测试时，把挂载、`flush` 与卸载收进同目录的共享 helper（如 `web/src/pages/home-test-utils.ts`）；`vi.mock` 仍写在各测试文件里（hoist 只对当前文件生效）。
 
 校验命令：
 

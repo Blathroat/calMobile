@@ -347,19 +347,28 @@ describe('个人页资料展示与编辑', () => {
     await vi.waitFor(() => expect(document.body.textContent).toContain('公开页仅展示资料'));
   });
 
-  it('设置卡片分别进入设置与安全设置', async () => {
+  it('账号入口收在「账号与入口」组里：我的活动、公开主页、设置与安全设置各一行', async () => {
     const router = await mountProfile();
-    await vi.waitFor(() => expect(document.querySelectorAll('button.row-card').length).toBe(3));
-    const rows = [...document.querySelectorAll<HTMLButtonElement>('button.row-card')];
+    await vi.waitFor(() => expect(document.querySelectorAll('button.row-card').length).toBe(4));
+    // 组标题与设置页的「账号」组同名，入口不再零散地跟在资料后面。
+    const entries = document.querySelector('.profile-entries');
+    expect(entries?.querySelector('.section-label')?.textContent?.trim()).toBe('账号');
+    const rows = [...document.querySelectorAll<HTMLButtonElement>('.profile-entries button.row-card')];
     const labels = rows.map((item) => item.textContent ?? '');
-    expect(labels[0]).toContain('查看公开主页');
-    expect(labels[1]).toContain('设置');
-    expect(labels[2]).toContain('安全设置');
+    // 我的活动排第一：报名与私人会议总有入口，不依赖活动概览取数成功。
+    expect(labels[0]).toContain('我的活动');
+    expect(labels[0]).toContain('展会报名与私人会议');
+    expect(labels[1]).toContain('查看公开主页');
+    expect(labels[2]).toContain('设置');
+    expect(labels[3]).toContain('安全设置');
 
-    rows[1]?.click();
-    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/settings'));
+    rows[0]?.click();
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/my-registrations'));
     await router.push('/profile');
     rows[2]?.click();
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/settings'));
+    await router.push('/profile');
+    rows[3]?.click();
     await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/security'));
   });
 

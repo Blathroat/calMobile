@@ -153,15 +153,19 @@ describe('浏览器里的加入日历', () => {
     expect(calendarButton()?.textContent?.trim()).toBe('加入日历');
   });
 
-  it('展会时间留空时信息行只显示日期，不带行尾空格', async () => {
+  it('展会时间留空时只显示展期，不渲染时间行，也不留行尾空格', async () => {
     vi.mocked(api.exhibitions.get).mockResolvedValue({
       ...DETAIL,
       exhibition: { ...DETAIL.exhibition!, time: '' },
     });
     await mountDetail();
 
-    const rows = [...document.querySelectorAll<HTMLElement>('#detail-browser-test .card .row-meta')];
-    expect(rows[0]?.textContent).toBe('11月17日（周二） - 11月22日（周日）');
-    expect(rows[0]?.textContent?.endsWith(' ')).toBe(false);
+    // 开展日期使用主字号，年份和星期降一级，闭展日期独立呈现。
+    const facts = document.querySelector<HTMLElement>('#detail-browser-test .detail-facts');
+    expect(facts?.querySelector('.detail-date')?.textContent).toBe('11月17日');
+    expect(facts?.querySelector('.detail-date-context')?.textContent).toBe('2026年 · 周二');
+    expect(facts?.querySelector('.detail-date-period > strong')?.textContent).toBe('11月22日（周日）');
+    // 没有时间时省略该事实，不留空白内容。
+    expect(facts?.textContent).not.toContain('09:00-17:00');
   });
 });

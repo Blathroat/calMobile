@@ -32,12 +32,13 @@ const CODE = 'CALMOBILE-CHECKIN|秋季展会|报名-1';
 let app: App | undefined;
 let decoder: QrDecoder;
 
-beforeEach(async () => {
-  // 面板状态是模块级的：上一个用例留下的面板要先收干净，否则会盖住新挂载的外壳。
-  if (sheet.current) {
-    closeSheet();
-    await new Promise((resolve) => setTimeout(resolve, 240));
-  }
+beforeEach(() => {
+  // 减少动效：抽屉退场 0ms，用例不必真等 220ms，也不会把上一份面板留到下一个用例。
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: true })),
+  );
+  if (sheet.current) closeSheet();
   vi.clearAllMocks();
   decoder = { ready: Promise.resolve(), decode: vi.fn().mockResolvedValue(null), dispose: vi.fn() };
   vi.mocked(createQrDecoder).mockReturnValue(decoder);
@@ -49,6 +50,7 @@ afterEach(() => {
   app?.unmount();
   app = undefined;
   document.body.innerHTML = '';
+  vi.unstubAllGlobals();
 });
 
 /** 挂核销页 + 真外壳（AppSheet 渲染面板内容与动作按钮）。 */
@@ -109,6 +111,36 @@ describe('手动输入报名码走面板', () => {
     expect(api.checkIn).not.toHaveBeenCalled();
     expect(document.querySelector('.sheet-panel .field-error')?.textContent).toContain('请输入报名码');
     expect(document.querySelector('.sheet-panel #checkin-code')).not.toBeNull();
+  });
+
+  it('核销请求未回来时手动入口被挡住，不会并发提交第二笔', async () => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(api.checkIn).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }) as never,
+    );
+    await mountCheckin();
+    document.querySelector<HTMLButtonElement>('[data-action="manual"]')!.click();
+    await nextTick();
+    await nextTick();
+    await typeInto('#checkin-code', CODE);
+    sheetButton('核销').click();
+    await vi.waitFor(() => expect(api.checkIn).toHaveBeenCalledTimes(1));
+    // 第一笔提交后面板会收起（退场动画结束后 sheet.current 才清空）。
+    await vi.waitFor(() => expect(sheet.current).toBeNull());
+
+    // 请求在途：手动入口置灰，再点既不打开面板也不再发请求。
+    const manualButton = document.querySelector<HTMLButtonElement>('[data-action="manual"]')!;
+    expect(manualButton.disabled).toBe(true);
+    manualButton.click();
+    await nextTick();
+    await nextTick();
+    expect(sheet.current).toBeNull();
+    expect(api.checkIn).toHaveBeenCalledTimes(1);
+
+    finish({ ok: true, record: { recordId: 'reg-1' } });
+    await vi.waitFor(() => expect(manualButton.disabled).toBe(false));
   });
 
   it('粘贴面板同样能把输入写回调用方的响应式对象', async () => {

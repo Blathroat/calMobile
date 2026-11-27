@@ -30,7 +30,7 @@ import { toast } from '@/services/toast';
 import { openDateRange } from '@/services/pickers';
 import { answerDocument } from '@domain/answer-document';
 import { check, limit } from '@/services/validate';
-import { EXHIBITION_STATUS, FIELD_TYPE, modeLabel, statusTone } from '@/services/status';
+import { EXHIBITION_STATUS, FIELD_TYPE, exhibitionModeCode, modeHint, modeLabel, statusTone } from '@/services/status';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StatusTag from '@/components/StatusTag.vue';
@@ -40,6 +40,8 @@ import { coverOf } from '@/services/cover';
 import { loadMarkdownParser, markdownToHtml, sanitizeHtml } from '@/services/markdown';
 import MediaBox from '@/components/MediaBox.vue';
 import RadioChoices from '@/components/RadioChoices.vue';
+import HintNote from '@/components/HintNote.vue';
+import { useHint } from '@/composables/useHint';
 import type { ExhibitionDetail, Registration } from '@/api/types';
 import { t } from '@/i18n';
 
@@ -55,9 +57,33 @@ const route = useRoute();
 const router = useRouter();
 const bootstrap = useBootstrapStore();
 const session = useSessionStore();
+const { visible: hintVisible, dismiss: dismissHint } = useHint('registration-form');
 
 const query = useAsync<ExhibitionDetail>();
 const exhibition = computed(() => query.data.value?.exhibition);
+
+/** 展会当前是否仍接受报名：关闭 / 截止时提交按钮置灰，并在按钮下方说明原因。 */
+const accepting = computed(() => exhibition.value?.openForRegistration !== false);
+
+/**
+ * 提交之后的流程说明：只有需审核 / 无需审核两种报名方式有明确后续。
+ * 文案复用报名页既有的 `review.modeHint.*`，表单页和展会编辑页说的是同一件事。
+ */
+const processHint = computed(() => {
+  const item = exhibition.value;
+  if (!item) return '';
+  const code = exhibitionModeCode(item);
+  if (code !== EXHIBITION_STATUS.REVIEW_REQUIRED && code !== EXHIBITION_STATUS.REVIEW_OPTIONAL) return '';
+  return modeHint(code);
+});
+
+/** 收集项小节的标题：报名信息（N 项）；没有收集项时只写「报名信息」。 */
+const registrationSectionLabel = computed(() => {
+  const base = t('exhibition.detail.registrationInfo');
+  return fields.value.length > 0
+    ? joinText([base, t('registration.fields.countItems', { count: fields.value.length })], ' · ')
+    : base;
+});
 /** 报名站才展示封面和简介。App 的报名表单保持原来的摘要卡片。 */
 const joinDescription = computed(() => {
   if (!isJoinSurface) return '';
@@ -442,6 +468,7 @@ async function submit(): Promise<void> {
       error.value = String(result?.error || t('registration.form.submitFailed'));
       return;
     }
+    void dismissHint();
     approved.value = result.autoApproved === true || item.statusCode === EXHIBITION_STATUS.REVIEW_OPTIONAL;
     success.value = true;
     toast(approved.value ? t('registration.form.submittedAndApproved') : t('registration.form.submitted'), 'success');
@@ -480,6 +507,7 @@ async function submit(): Promise<void> {
   />
 
   <template v-else>
+    <HintNote v-if="hintVisible" :text="t('registration.form.firstVisitHint')" @dismiss="dismissHint" />
     <SkeletonBlock v-if="query.loading.value && !query.data.value" :rows="3" />
 
     <StateBlock
@@ -502,148 +530,156 @@ async function submit(): Promise<void> {
     />
 
     <template v-else-if="exhibition">
-      <!-- 展会小名片：44×78 缩略图 + 标题 + 日期时间地点 + 信号灯 -->
-      <div class="row-card reg-exhibition">
-        <MediaBox
-          :src="coverOf(exhibition.imageUri)"
-          class-name="thumb thumb-cover reg-thumb"
-          :alt="String(exhibition.title || '')"
-        />
-        <span class="row-copy">
-          <strong class="row-title truncate">{{ exhibition.title }}</strong>
-          <span class="row-meta">{{ joinText([formatDateWithWeekday(exhibition.date), exhibition.time], ' ') }}</span>
-          <span class="row-meta truncate">{{ exhibition.venue }}</span>
-        </span>
-        <StatusTag
-          :text="modeLabel(String(exhibition.statusCode || ''))"
-          :tone="statusTone(String(exhibition.statusCode || ''))"
-        />
+      <!-- ① 活动信息：先确认「报的是哪一场」。缩略图用展会自己的海报，
+           状态灯按报名截止口径显示（截止后是「截止报名」，不是「报名中」）。 -->
+      <div class="stack" data-gap="sm">
+        <span class="section-label">{{ t('exhibition.form.coverAndDescription') }}</span>
+        <div class="row-card reg-exhibition">
+          <MediaBox
+            :src="coverOf(exhibition.imageUri)"
+            class-name="thumb thumb-cover reg-thumb"
+            :alt="String(exhibition.title || '')"
+          />
+          <span class="row-copy">
+            <strong class="row-title truncate">{{ exhibition.title }}</strong>
+            <span class="row-meta">{{ joinText([formatDateWithWeekday(exhibition.date), exhibition.time], ' ') }}</span>
+            <span class="row-meta truncate">{{ exhibition.venue }}</span>
+          </span>
+          <StatusTag
+            :text="modeLabel(exhibitionModeCode(exhibition))"
+            :tone="statusTone(exhibitionModeCode(exhibition))"
+          />
+        </div>
+        <p v-if="processHint" class="row-meta">{{ processHint }}</p>
+        <div v-if="joinDescription" class="rich-content" v-html="joinDescription" />
       </div>
 
-      <div v-if="joinDescription" class="rich-content" v-html="joinDescription" />
-
-      <form id="registration-form" class="form" novalidate @submit.prevent="submit">
-        <!-- 匿名报名没有账号可读姓名。收集项里没有命中同义词的文本项时，收集项上方补一项必填「昵称」；
+      <!-- ② 报名信息：参加时间与展商配置的收集项都在这一区；提交区固定在页脚。 -->
+      <div class="stack" data-gap="sm">
+        <span class="section-label">{{ registrationSectionLabel }}</span>
+        <form id="registration-form" class="form" novalidate @submit.prevent="submit">
+          <!-- 匿名报名没有账号可读姓名。收集项里没有命中同义词的文本项时，收集项上方补一项必填「昵称」；
              命中时姓名来自那个收集项本身，这里不再多画一个输入框。 -->
-        <div v-if="anonymous && !nameField" class="field" :data-invalid="nameError ? 'true' : undefined">
-          <label class="reg-question" for="registration-guest-name">
-            {{ t('registration.form.nickname') }}<span class="required" aria-hidden="true"> *</span>
-          </label>
-          <input
-            id="registration-guest-name"
-            class="input"
-            type="text"
-            autocomplete="name"
-            :maxlength="guestNameMax"
-            :value="guestName"
-            @input="onGuestNameInput"
-          />
-          <p v-if="nameError" class="field-error" role="alert">{{ nameError }}</p>
-        </div>
-
-        <!-- 参加时间：多天展会才有。点任意一端打开同一个日期范围抽屉（范围限制在展会期间），
-             默认整段展期，用户可改窄；「清除」后提交空串表示不指定，由服务端按整段处理。 -->
-        <div v-if="multiDay" class="field reg-attendance" :data-invalid="attendanceError ? 'true' : undefined">
-          <span id="registration-attendance-label" class="reg-question">{{ t('registration.form.attendance') }}</span>
-          <div class="attendance-range">
-            <button
-              id="registration-attendance-start"
-              class="input input-line picker-trigger"
-              type="button"
-              aria-haspopup="dialog"
-              aria-labelledby="registration-attendance-label"
-              @click="openAttendanceRange"
-            >
-              <span class="picker-trigger-value" :data-empty="attendanceStart ? 'false' : 'true'">{{
-                attendanceStartText || t('registration.form.attendanceStart')
-              }}</span>
-              <AppIcon name="calendar" size="icon icon-sm" />
-            </button>
-            <span class="attendance-sep" aria-hidden="true">–</span>
-            <button
-              id="registration-attendance-end"
-              class="input input-line picker-trigger"
-              type="button"
-              aria-haspopup="dialog"
-              aria-labelledby="registration-attendance-label"
-              @click="openAttendanceRange"
-            >
-              <span class="picker-trigger-value" :data-empty="attendanceEnd ? 'false' : 'true'">{{
-                attendanceEndText || t('registration.form.attendanceEnd')
-              }}</span>
-              <AppIcon name="calendar" size="icon icon-sm" />
-            </button>
-          </div>
-          <p v-if="attendanceError" class="field-error" role="alert">{{ attendanceError }}</p>
-        </div>
-
-        <template v-for="field in fields" :key="field.title">
-          <!-- 单选：一组互斥选项 -->
-          <fieldset
-            v-if="field.type === FIELD_TYPE.RADIO"
-            class="choice-group"
-            :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
-          >
-            <legend class="reg-question">
-              {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
-            </legend>
-            <RadioChoices
-              :name="fieldId(field)"
-              :options="splitOptions(field.options)"
-              :selected="textValue(field)"
-              @select="onRadioChange(field, $event)"
-            />
-            <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
-          </fieldset>
-
-          <!-- 多选：可同时勾选多项 -->
-          <fieldset
-            v-else-if="field.type === FIELD_TYPE.CHECKBOX"
-            class="choice-group"
-            :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
-          >
-            <legend class="reg-question">
-              {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
-            </legend>
-            <div class="check-row">
-              <label
-                v-for="(option, index) in splitOptions(field.options)"
-                :key="option"
-                class="check-label"
-                :for="`${fieldId(field)}-${index}`"
-              >
-                <input
-                  :id="`${fieldId(field)}-${index}`"
-                  type="checkbox"
-                  :value="option"
-                  :checked="multiValue(field).includes(option)"
-                  @change="onMultiChange(field, option, $event)"
-                />
-                <span class="check-copy">{{ option }}</span>
-              </label>
-            </div>
-            <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
-          </fieldset>
-
-          <!-- 文本：默认类型 -->
-          <div v-else class="field" :data-invalid="fieldErrors[field.title] ? 'true' : undefined">
-            <label class="reg-question" :for="fieldId(field)">
-              {{ field.title
-              }}<span v-if="field.required || isNameSourceField(field)" class="required" aria-hidden="true"> *</span>
+          <div v-if="anonymous && !nameField" class="field" :data-invalid="nameError ? 'true' : undefined">
+            <label class="reg-question" for="registration-guest-name">
+              {{ t('registration.form.nickname') }}<span class="required" aria-hidden="true"> *</span>
             </label>
             <input
-              :id="fieldId(field)"
+              id="registration-guest-name"
               class="input"
               type="text"
-              :placeholder="t('registration.form.fieldPlaceholder', { title: field.title })"
-              :maxlength="textFillMax"
-              :value="textValue(field)"
-              @input="onTextInput(field, $event)"
+              autocomplete="name"
+              :maxlength="guestNameMax"
+              :value="guestName"
+              @input="onGuestNameInput"
             />
-            <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
+            <p v-if="nameError" class="field-error" role="alert">{{ nameError }}</p>
           </div>
-        </template>
-      </form>
+
+          <!-- 参加时间：多天展会才有。点任意一端打开同一个日期范围抽屉（范围限制在展会期间），
+             默认整段展期，用户可改窄；「清除」后提交空串表示不指定，由服务端按整段处理。 -->
+          <div v-if="multiDay" class="field reg-attendance" :data-invalid="attendanceError ? 'true' : undefined">
+            <span id="registration-attendance-label" class="reg-question">{{ t('registration.form.attendance') }}</span>
+            <div class="attendance-range">
+              <button
+                id="registration-attendance-start"
+                class="input input-line picker-trigger"
+                type="button"
+                aria-haspopup="dialog"
+                :aria-label="t('registration.form.attendanceStart')"
+                @click="openAttendanceRange"
+              >
+                <span class="picker-trigger-value" :data-empty="attendanceStart ? 'false' : 'true'">{{
+                  attendanceStartText || t('registration.form.attendanceStart')
+                }}</span>
+                <AppIcon name="calendar" size="icon icon-sm" />
+              </button>
+              <span class="attendance-sep" aria-hidden="true">–</span>
+              <button
+                id="registration-attendance-end"
+                class="input input-line picker-trigger"
+                type="button"
+                aria-haspopup="dialog"
+                :aria-label="t('registration.form.attendanceEnd')"
+                @click="openAttendanceRange"
+              >
+                <span class="picker-trigger-value" :data-empty="attendanceEnd ? 'false' : 'true'">{{
+                  attendanceEndText || t('registration.form.attendanceEnd')
+                }}</span>
+                <AppIcon name="calendar" size="icon icon-sm" />
+              </button>
+            </div>
+            <p v-if="attendanceError" class="field-error" role="alert">{{ attendanceError }}</p>
+          </div>
+
+          <template v-for="field in fields" :key="field.title">
+            <!-- 单选：一组互斥选项 -->
+            <fieldset
+              v-if="field.type === FIELD_TYPE.RADIO"
+              class="choice-group"
+              :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
+            >
+              <legend class="reg-question">
+                {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
+              </legend>
+              <RadioChoices
+                :name="fieldId(field)"
+                :options="splitOptions(field.options)"
+                :selected="textValue(field)"
+                @select="onRadioChange(field, $event)"
+              />
+              <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
+            </fieldset>
+
+            <!-- 多选：可同时勾选多项 -->
+            <fieldset
+              v-else-if="field.type === FIELD_TYPE.CHECKBOX"
+              class="choice-group"
+              :data-invalid="fieldErrors[field.title] ? 'true' : undefined"
+            >
+              <legend class="reg-question">
+                {{ field.title }}<span v-if="field.required" class="required" aria-hidden="true"> *</span>
+              </legend>
+              <div class="check-row">
+                <label
+                  v-for="(option, index) in splitOptions(field.options)"
+                  :key="option"
+                  class="check-label"
+                  :for="`${fieldId(field)}-${index}`"
+                >
+                  <input
+                    :id="`${fieldId(field)}-${index}`"
+                    type="checkbox"
+                    :value="option"
+                    :checked="multiValue(field).includes(option)"
+                    @change="onMultiChange(field, option, $event)"
+                  />
+                  <span class="check-copy">{{ option }}</span>
+                </label>
+              </div>
+              <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
+            </fieldset>
+
+            <!-- 文本：默认类型 -->
+            <div v-else class="field" :data-invalid="fieldErrors[field.title] ? 'true' : undefined">
+              <label class="reg-question" :for="fieldId(field)">
+                {{ field.title
+                }}<span v-if="field.required || isNameSourceField(field)" class="required" aria-hidden="true"> *</span>
+              </label>
+              <input
+                :id="fieldId(field)"
+                class="input"
+                type="text"
+                :placeholder="t('registration.form.fieldPlaceholder', { title: field.title })"
+                :maxlength="textFillMax"
+                :value="textValue(field)"
+                @input="onTextInput(field, $event)"
+              />
+              <p v-if="fieldErrors[field.title]" class="field-error" role="alert">{{ fieldErrors[field.title] }}</p>
+            </div>
+          </template>
+        </form>
+      </div>
     </template>
   </template>
 
@@ -662,12 +698,14 @@ async function submit(): Promise<void> {
           class="cta"
           type="submit"
           form="registration-form"
-          :disabled="busy || success"
+          :disabled="busy || success || !accepting"
           :data-loading="busy ? 'true' : 'false'"
         >
           {{ submitLabel }}
         </button>
-        <p class="field-hint text-center">{{ t('registration.form.confirmHint') }}</p>
+        <p class="field-hint text-center">
+          {{ accepting ? t('registration.form.confirmHint') : t('registration.form.notAccepting') }}
+        </p>
       </div>
     </div>
   </Teleport>

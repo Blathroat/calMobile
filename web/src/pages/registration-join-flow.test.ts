@@ -104,6 +104,7 @@ let app: App | undefined;
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  localStorage.clear();
   // 上一个用例打开的抽屉不影响本次断言；退场动画按「减少动效」立即结束。
   if (sheet.current) {
     closeSheet();
@@ -254,6 +255,21 @@ describe('匿名报名（报名站未登录）', () => {
     expect(payload.answers).toBe('');
     expect(router.currentRoute.value.query.token).toBe('tok-anon');
     expect(toast).toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem('calmobile.seen-hints') || '[]')).toContain('registration-form');
+  });
+
+  it('报名已关闭时提交按钮置灰，并在按钮下方说明原因', async () => {
+    vi.mocked(api.exhibitions.get).mockResolvedValue({
+      ...EXHIBITION,
+      exhibition: { ...EXHIBITION.exhibition, openForRegistration: false },
+    } as never);
+    await mountAt(RegistrationFormPage, '/e/exh-1/register', ROUTES);
+
+    const submit = [...document.querySelectorAll<HTMLButtonElement>('#app-foot button')].find((button) =>
+      button.classList.contains('cta'),
+    );
+    expect(submit?.disabled).toBe(true);
+    expect(document.querySelector('#app-foot .field-hint')?.textContent).toContain('该展会当前不接受报名');
   });
 
   it('已登录的报名站用户不显示姓名，成功后回我的活动', async () => {
@@ -513,6 +529,7 @@ describe('查询链接模式（报名站状态页）', () => {
     document.querySelector<HTMLButtonElement>('[data-action="copy-query-link"]')!.click();
     await vi.waitFor(() => expect(toast).toHaveBeenCalledWith('查询链接已复制', 'success'));
     expect(copyText).toHaveBeenCalledWith('https://app.example.com/e/exh-1/status?token=tok-anon');
+    expect(JSON.parse(localStorage.getItem('calmobile.seen-hints') || '[]')).toContain('registration-status');
   });
 
   it('已登录：先认领再换成登录后的详情页', async () => {

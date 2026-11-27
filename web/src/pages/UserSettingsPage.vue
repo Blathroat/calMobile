@@ -485,6 +485,7 @@ async function checkUpdate(auto = false): Promise<void> {
               {{ t('settings.profile.editProfile') }}
             </button>
           </div>
+          <p class="field-hint">{{ t('settings.profile.editHint') }}</p>
         </div>
 
         <div v-if="limited" class="notice" data-tone="accent">
@@ -558,6 +559,8 @@ async function checkUpdate(auto = false): Promise<void> {
               <span />
             </label>
           </div>
+          <!-- 这组开关都是点一下即保存，没有单独的保存按钮：先说清楚，避免用户找「保存」。 -->
+          <p class="field-hint">{{ t('settings.notify.instantHint') }}</p>
           <p v-if="limited" class="field-hint">{{ limitHint }}</p>
         </div>
       </section>

@@ -35,12 +35,15 @@ import { formatDateRange, formatRecordDate, joinText } from '@/services/format';
 import type { Registration, RegistrationDetail } from '@/api/types';
 import { isJoinSurface, paths } from '@/app/surface';
 import { registrationLink } from '@/services/registration-link';
+import HintNote from '@/components/HintNote.vue';
+import { useHint } from '@/composables/useHint';
 import { t } from '@/i18n';
 
 const route = useRoute();
 const router = useRouter();
 const bootstrap = useBootstrapStore();
 const session = useSessionStore();
+const { visible: hintVisible, dismiss: dismissHint } = useHint('registration-status');
 
 const query = useAsync<RegistrationDetail>();
 const record = computed<Registration | undefined>(() => query.data.value?.registration);
@@ -148,6 +151,7 @@ async function claim(): Promise<void> {
     const result = await api.registrations.claim(token.value);
     const id = String(result?.registration?.id || record.value?.id || '');
     if (id) {
+      void dismissHint();
       // 认领成功：报名已属于当前账号，换成登录后的详情页（页脚出现修改 / 撤销）。
       await router.replace(paths.registrationDetail(id));
       return;
@@ -170,6 +174,7 @@ function goRegister(): void {
 /** 复制查询链接：复制失败也要说清楚，不能静默。 */
 async function copyQueryLink(): Promise<void> {
   const ok = queryLink.value ? await copyText(queryLink.value) : false;
+  if (ok) void dismissHint();
   toast(
     ok ? t('registration.detail.queryLinkCopied') : t('registration.detail.queryLinkCopyFailed'),
     ok ? 'success' : 'error',
@@ -191,6 +196,7 @@ function statusHint(status: unknown): string {
 function modifyRegistration(): void {
   const item = record.value;
   if (!item) return;
+  void dismissHint();
   void router.push({
     path: paths.registrationForm(String(item.exhibitionId)),
     query: { registrationId: item.id },
@@ -216,6 +222,7 @@ function askCancel(): void {
         // 撤销是服务端已经完成的终态，就地更新本页状态与页脚；
         // 不重新取数：`registrations.get` 的缓存键（`registration:…`）不在 cancel 的失效前缀里。
         item.statusCode = REGISTRATION_STATUS.CANCELLED;
+        void dismissHint();
         toast(t('registration.detail.registrationCancelled'), 'success');
       } catch (reason) {
         toast(reason instanceof Error ? reason.message : String(reason), 'error');
@@ -337,54 +344,24 @@ onBeforeUnmount(cancelQrHold);
     <!-- 认领失败（例如这条报名已经属于别的账号）：说明原因，内容照常展示 -->
     <p v-if="claimError" class="field-error reg-claim-error" role="alert">{{ claimError }}</p>
 
+    <!-- 展会名片：先确认这是哪一场的报名 -->
     <div class="card" data-tone="fill">
       <strong>{{ record.exhibitionTitle }}</strong>
       <span class="row-meta">{{ joinText([formatRecordDate(record), record.exhibitionTime], ' ') }}</span>
       <span class="row-meta">{{ record.exhibitionVenue }}</span>
     </div>
 
-    <!-- 注意事项：展商在编辑展会时填的「注意事项」，只给审核通过 / 已参加的报名者看。 -->
-    <div v-if="canSeeNotice && record.exhibitionNotice" class="card" data-action="registration-notice">
-      <span class="section-label">{{ t('registration.detail.noticeTitle') }}</span>
-      <p class="reg-notice-copy">{{ record.exhibitionNotice }}</p>
-    </div>
-
-    <div class="card">
-      <span class="section-label">{{ t('exhibition.detail.registrationInfo') }}</span>
-      <div class="stack info-rows" data-gap="sm">
-        <div class="row" data-between="true">
-          <span class="row-meta">{{ t('registration.detail.registrant') }}</span>
-          <span class="strong truncate">{{ record.visitorName || '—' }}</span>
-        </div>
-        <div class="row" data-between="true">
-          <span class="row-meta">{{ t('registration.detail.identity') }}</span>
-          <span class="strong truncate">{{ roleLabel(String(record.visitorType || '')) || '—' }}</span>
-        </div>
-        <div v-if="attendanceSpan" class="row" data-between="true">
-          <span class="row-meta">{{ t('registration.detail.attendance') }}</span>
-          <span class="strong truncate">{{ attendanceSpan }}</span>
-        </div>
-        <template v-if="answers.length > 0">
-          <div v-for="(line, index) in answers" :key="`${line.label}-${index}`" class="row" data-between="true">
-            <span class="row-meta">{{ line.label || t('exhibition.detail.additionalInfo') }}</span>
-            <span class="strong">{{ line.value || '—' }}</span>
-          </div>
-        </template>
-        <div v-else class="row" data-between="true">
-          <span class="row-meta">{{ t('exhibition.detail.additionalInfo') }}</span>
-          <span class="strong">{{ t('registration.detail.noCollectedInfo') }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 状态区：小标 → 大号状态词（按语义上色）→ 一行说明；不再重复一枚信号灯状态。 -->
-    <div class="card">
+    <!-- 当前状态：本页最该一眼看到的信息，放在其它内容之前；说明里带着下一步。 -->
+    <div class="card reg-status-card">
       <span class="section-label">{{ t('exhibition.detail.currentStatus') }}</span>
       <strong class="reg-status-word" :data-tone="statusTone(String(record.statusCode || ''))">
         {{ registrationStatusLabel(String(record.statusCode || '')) }}
       </strong>
       <p class="reg-status-hint">{{ statusHint(record.statusCode) }}</p>
     </div>
+
+    <!-- 一次性引导：说明这一页还包含哪些内容（报名信息、注意事项、报名码）。 -->
+    <HintNote v-if="hintVisible" :text="t('registration.detail.firstVisitHint')" @dismiss="dismissHint" />
 
     <!-- 查询链接：凭据只在这一条链接里，未登录时这是唯一能回来看状态的方式，必须提示保存 -->
     <div v-if="tokenMode" class="card" data-action="query-link-card">
@@ -396,7 +373,14 @@ onBeforeUnmount(cancelQrHold);
       <p class="field-hint">{{ t('registration.detail.queryLinkHint') }}</p>
     </div>
 
-    <!-- 报名码：只有后端下发了 checkInCode（已通过 / 已参加且展商启用二维码）才渲染 -->
+    <!-- 注意事项：展商在编辑展会时填的「注意事项」，只给审核通过 / 已参加的报名者看。 -->
+    <div v-if="canSeeNotice && record.exhibitionNotice" class="card" data-action="registration-notice">
+      <span class="section-label">{{ t('registration.detail.noticeTitle') }}</span>
+      <p class="reg-notice-copy">{{ record.exhibitionNotice }}</p>
+    </div>
+
+    <!-- 报名码：只有后端下发了 checkInCode（已通过 / 已参加且展商启用二维码）才渲染。
+         它紧跟在状态与注意事项之后：审核通过后「下一步」就是现场出示这张码。 -->
     <div v-if="record.checkInCode" class="card">
       <div class="row" data-between="true">
         <span class="section-label">{{ t('registration.detail.checkInCode') }}</span>
@@ -432,8 +416,37 @@ onBeforeUnmount(cancelQrHold);
         {{ t('registration.detail.qrErrorHint', { error: qrError }) }}
       </p>
     </div>
-  </template>
 
+    <!-- 报名信息：本人填过的内容，放在状态与报名码之后（它们才是打开这一页的目的）。 -->
+    <div class="card">
+      <span class="section-label">{{ t('exhibition.detail.registrationInfo') }}</span>
+      <div class="stack info-rows" data-gap="sm">
+        <div class="row" data-between="true">
+          <span class="row-meta">{{ t('registration.detail.registrant') }}</span>
+          <span class="strong truncate">{{ record.visitorName || '—' }}</span>
+        </div>
+        <div class="row" data-between="true">
+          <span class="row-meta">{{ t('registration.detail.identity') }}</span>
+          <span class="strong truncate">{{ roleLabel(String(record.visitorType || '')) || '—' }}</span>
+        </div>
+        <div v-if="attendanceSpan" class="row" data-between="true">
+          <span class="row-meta">{{ t('registration.detail.attendance') }}</span>
+          <!-- 参加时间是日期区间，放不下时换行，不用省略号把结束日吃掉 -->
+          <span class="strong reg-info-span">{{ attendanceSpan }}</span>
+        </div>
+        <template v-if="answers.length > 0">
+          <div v-for="(line, index) in answers" :key="`${line.label}-${index}`" class="row" data-between="true">
+            <span class="row-meta">{{ line.label || t('exhibition.detail.additionalInfo') }}</span>
+            <span class="strong">{{ line.value || '—' }}</span>
+          </div>
+        </template>
+        <div v-else class="row" data-between="true">
+          <span class="row-meta">{{ t('exhibition.detail.additionalInfo') }}</span>
+          <span class="strong">{{ t('registration.detail.noCollectedInfo') }}</span>
+        </div>
+      </div>
+    </div>
+  </template>
   <!-- 底部固定操作区：本人详情是「修改报名 + 撤销报名」；
        未登录从查询链接进来时换成「登录 + 注册」（都带回本页地址，登录后自动认领）。 -->
   <Teleport v-if="record && footerShown" defer to="#app-foot">
@@ -565,6 +578,11 @@ onBeforeUnmount(cancelQrHold);
   max-width: 66%;
   text-align: end;
   overflow-wrap: anywhere;
+}
+
+/* 参加时间这类不能截断的值：靠右、放不下时换行。 */
+.info-rows .row > .reg-info-span {
+  white-space: normal;
 }
 
 /* 注意事项正文：展商可能按条换行，保留换行比压成一段更易读。 */

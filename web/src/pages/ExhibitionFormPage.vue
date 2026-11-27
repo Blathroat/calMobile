@@ -25,20 +25,31 @@ import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { confirmSheet, openSheet } from '@/services/sheet';
 import { openDateRange, openTime } from '@/services/pickers';
-import { formatDateWithWeekday } from '@/services/format';
+import { formatDateRange, formatDateWithWeekday } from '@/services/format';
 import { PATTERNS, allowedFormats, check, limit, validateAll } from '@/services/validate';
-import { EXHIBITION_STATUS, FIELD_TYPE, REGISTRATION_MODES, exhibitionStatusLabel } from '@/services/status';
+import { EXHIBITION_STATUS, REGISTRATION_MODES, exhibitionStatusLabel } from '@/services/status';
 import { canManageExhibition } from '@/services/exhibition-scope';
 import { device } from '@/services/device-services';
 import { publishImportedMedia } from '@/services/publish-media';
+import { useExhibitionOwnerTransfer } from '@/composables/useExhibitionOwnerTransfer';
 import CollectFieldsCard, { type CollectField } from '@/components/CollectFieldsCard.vue';
 import { firstCollectFieldError } from '@/services/collect-fields';
 import {
+  emptyExhibitionFormModel,
+  exhibitionContentFromDraft,
+  exhibitionContentFromServer,
+  submittedExhibitionData,
+  type ExhibitionFormContent,
+  type ExhibitionFormModel,
+} from '@/services/exhibition-form-model';
+import {
   clearExhibitionDraft,
+  patchExhibitionDraftStep,
   readExhibitionDraft,
   stashExhibitionDraft,
   type ExhibitionDraft,
 } from '@/services/exhibition-draft';
+import { coverOf } from '@/services/cover';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import SegControl from '@/components/SegControl.vue';
@@ -82,58 +93,7 @@ const notFound = computed(
 );
 const loadFailed = computed(() => detail.error.value !== undefined && detail.data.value === undefined);
 
-/**
- * 表单模型：与保存时提交的字段一一对应，收集项单独放在 `fields` 里。
- * 新建空表单、服务器详情、内存稿三条来源都先映射成这个形状，
- * 「已保存基线」与当前值才能用同一种写法比较。
- */
-interface FormModel {
-  title: string;
-  venue: string;
-  date: string;
-  /** 闭展日期；空串表示还没选（单日展会库里存 NULL），与开展同一天时照原样存这一天。 */
-  endDate: string;
-  // 时间选填，默认留空：只填日期时详情、月视图与日历文件都按「没有时间」展示。
-  time: string;
-  status: string;
-  category: string;
-  description: string;
-  imageUri: string;
-  registrationStart: string;
-  registrationEnd: string;
-  qrEnabled: boolean;
-  allowCancel: boolean;
-  /** 注意事项（选填，最多 2000 字）：审核通过 / 已参加的报名者在报名详情里看到。 */
-  registrationNotice: string;
-}
-
-/** 一份完整的表单内容：模型 + 收集项。首屏取数、内存稿回填与基线快照都用它。 */
-interface FormContent {
-  model: FormModel;
-  fields: CollectField[];
-}
-
-/** 新建 / 空表单的默认值。 */
-function emptyModel(): FormModel {
-  return {
-    title: '',
-    venue: '',
-    date: '',
-    endDate: '',
-    time: '',
-    status: EXHIBITION_STATUS.REVIEW_REQUIRED,
-    category: '',
-    description: '',
-    imageUri: '',
-    registrationStart: '',
-    registrationEnd: '',
-    qrEnabled: false,
-    allowCancel: true,
-    registrationNotice: '',
-  };
-}
-
-const form = reactive<FormModel>(emptyModel());
+const form = reactive<ExhibitionFormModel>(emptyExhibitionFormModel());
 const fields = ref<CollectField[]>([]);
 
 // ── 未保存修改：已保存基线 ───────────────────────────────────────
@@ -145,45 +105,15 @@ const fields = ref<CollectField[]>([]);
  */
 const baseline = ref('');
 
-/** 提交字段的规范化形状：组装保存 payload 与比较基线共用这一份。 */
-function submittedData(model: FormModel, fieldValues: CollectField[]): JsonObject {
-  return {
-    title: model.title.trim(),
-    venue: model.venue.trim(),
-    date: model.date,
-    endDate: model.endDate,
-    time: model.time.trim(),
-    status: model.status,
-    category: model.category.trim(),
-    description: model.description,
-    descriptionFormat: 'md',
-    imageUri: model.imageUri,
-    registrationStart: model.registrationStart,
-    registrationEnd: model.registrationEnd,
-    qrEnabled: model.qrEnabled,
-    allowCancel: model.allowCancel,
-    registrationNotice: model.registrationNotice.trim(),
-    // 空标题的收集项本就不会提交，不参与比较。
-    fields: fieldValues
-      .filter((item) => item.title.trim() !== '')
-      .map((item) => ({
-        title: item.title.trim(),
-        type: item.type,
-        required: item.required,
-        options: item.type === FIELD_TYPE.TEXT ? [] : item.options.map((option) => option.trim()).filter(Boolean),
-      })),
-  };
-}
-
 /** 当前表单内容的快照。 */
 function currentSnapshot(): string {
-  return JSON.stringify(submittedData(form, fields.value));
+  return JSON.stringify(submittedExhibitionData(form, fields.value));
 }
 
 /** 记下新的「已保存」基线：首屏取数、保存、报名方式即时保存之后调用。 */
-function markSaved(content?: FormContent): void {
+function markSaved(content?: ExhibitionFormContent): void {
   const target = content ?? { model: form, fields: fields.value };
-  baseline.value = JSON.stringify(submittedData(target.model, target.fields));
+  baseline.value = JSON.stringify(submittedExhibitionData(target.model, target.fields));
 }
 
 /** 有没有未保存的修改。 */
@@ -303,6 +233,49 @@ const dateText = computed(() => formatDateWithWeekday(form.date));
 const endDateText = computed(() => formatDateWithWeekday(form.endDate));
 const registrationStartText = computed(() => formatDateWithWeekday(form.registrationStart));
 const registrationEndText = computed(() => formatDateWithWeekday(form.registrationEnd));
+/** 发布检查里的展期：单日（闭展为空或与开展同一天）只显示开展一天。 */
+const dateRangeText = computed(() => formatDateRange(form.date, form.endDate, ' – '));
+/** 报名窗口：只填了一端时只显示那一端，两端都空时整行不渲染。 */
+const registrationWindowText = computed(() => {
+  if (!registrationStartText.value && !registrationEndText.value) return '';
+  return `${registrationStartText.value || '—'}${registrationEndText.value ? ` – ${registrationEndText.value}` : ''}`;
+});
+/** 发布检查里的收集项数量：标题为空的行不会进 payload，计数要与提交同口径。 */
+const submittedFieldCount = computed(() => fields.value.filter((field) => field.title.trim() !== '').length);
+/** 发布检查卡里「封面 / 简介」之前那几行；空的时间与分类不占位。 */
+const reviewRows = computed(() => [
+  { label: t('admin.limits.exhibitionName'), value: form.title },
+  { label: t('admin.exhibitions.venue'), value: form.venue },
+  { label: t('exhibition.form.openDate'), value: dateRangeText.value },
+  ...(form.time ? [{ label: t('exhibition.form.openTime'), value: form.time }] : []),
+  ...(form.category ? [{ label: t('admin.limits.category'), value: form.category }] : []),
+]);
+/** 封面 / 简介之后的行：报名方式、报名窗口（有才显示）与收集项数量。 */
+const reviewTailRows = computed(() => [
+  { label: t('exhibition.form.registrationMode'), value: exhibitionStatusLabel(form.status) },
+  ...(registrationWindowText.value
+    ? [{ label: t('exhibition.form.registrationOpens'), value: registrationWindowText.value }]
+    : []),
+  {
+    label: t('exhibition.form.collectFields'),
+    value: t('registration.fields.countItems', { count: submittedFieldCount.value }),
+  },
+]);
+/** 发布检查里的封面：与详情页同一套取值（自己的封面优先，其次管理员缺省封面）。 */
+const reviewCover = computed(() => coverOf(form.imageUri));
+/** 发布检查里的简介：剥掉 Markdown 记号取开头一段；没填就说明详情页显示占位文案。 */
+const reviewIntroduction = computed(() => {
+  const raw = form.description.trim();
+  if (!raw) return t('exhibition.form.reviewIntroductionNone');
+  const text = raw
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[#>*_`~|-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return t('exhibition.form.reviewIntroductionNone');
+  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+});
 
 // ── 分类抽屉 ─────────────────────────────────────────────────────
 
@@ -338,6 +311,7 @@ function openCategorySheet(): void {
 const built = ref(false);
 const formError = ref('');
 const invalidField = ref('');
+const createStep = ref(1);
 
 // ── 封面 / 报名方式的可变展示 ────────────────────────────────────
 
@@ -462,6 +436,15 @@ function fieldChecks(): Array<[string, () => string]> {
   ];
 }
 
+/** 收集项校验：保存、逐步校验与发布前整表校验共用同一份上限配置。 */
+function collectFieldsError(): string {
+  return firstCollectFieldError(fields.value, {
+    title: limit('fieldTitle', 30),
+    radio: limit('radioOption', 60),
+    check: limit('checkOption', 60),
+  });
+}
+
 /** 保存前校验：第一条错误显示在原位（字段红框 + 统一说明），并给一次轻提示。 */
 function failFirst(): boolean {
   invalidField.value = '';
@@ -473,11 +456,7 @@ function failFirst(): boolean {
     toast(result.message, 'error');
     return true;
   }
-  const fieldMessage = firstCollectFieldError(fields.value, {
-    title: limit('fieldTitle', 30),
-    radio: limit('radioOption', 60),
-    check: limit('checkOption', 60),
-  });
+  const fieldMessage = collectFieldsError();
   if (fieldMessage) {
     formError.value = fieldMessage;
     invalidField.value = 'fields';
@@ -488,73 +467,107 @@ function failFirst(): boolean {
   return false;
 }
 
+/**
+ * 新建展会的三步：基本信息 → 报名配置 → 发布检查。
+ * 每一步只校验这一步能看到的字段（「参与方式」在第一步的活动信息卡里，跟着第一步校验），
+ * 通过才前进；失败的字段在原位标红并给一次轻提示。编辑已有展会不走这里。
+ */
+const createSteps = [1, 2, 3];
+const CREATE_STEP_FIELDS: Record<number, string[]> = {
+  1: ['title', 'venue', 'date', 'endDate', 'time', 'category', 'registrationNotice'],
+  2: ['registrationEnd', 'registrationStart'],
+};
+
+function validateCreateStep(step: number): boolean {
+  const names = CREATE_STEP_FIELDS[step] ?? [];
+  const checks = fieldChecks().filter(([name]) => names.includes(name));
+  const result = validateAll(checks.map(([, run]) => run));
+  invalidField.value = '';
+  if (!result.ok) {
+    invalidField.value = checks[result.index]?.[0] ?? '';
+    formError.value = result.message;
+    toast(result.message, 'error');
+    return false;
+  }
+  if (step === 2) {
+    const fieldMessage = collectFieldsError();
+    if (fieldMessage) {
+      formError.value = fieldMessage;
+      invalidField.value = 'fields';
+      toast(fieldMessage, 'error');
+      return false;
+    }
+  }
+  formError.value = '';
+  return true;
+}
+
+/** 继续：只校验当前这一步，通过后进下一步。 */
+function advanceCreateStep(): void {
+  if (!validateCreateStep(createStep.value)) return;
+  createStep.value = Math.min(createSteps.length, createStep.value + 1);
+}
+
+/** 返回上一步：切步骤时清掉上一步留下的错误，值与其他编辑状态都还在。 */
+function retreatCreateStep(): void {
+  if (createStep.value <= 1) return;
+  createStep.value -= 1;
+  invalidField.value = '';
+  formError.value = '';
+}
+
+/**
+ * 发布前把三步再校一遍（中途可能返回改过前面的字段）：失败就退回那一步，
+ * 红框与说明才看得见。编辑页仍用整表校验，不受这条影响。
+ */
+function validateCreateSteps(): boolean {
+  for (const step of [1, 2]) {
+    if (validateCreateStep(step)) continue;
+    createStep.value = step;
+    return false;
+  }
+  return true;
+}
+
+/** 校验失败的字段属于哪一步：报名窗口与收集项在第二步，其余都在第一步。 */
+function createStepForField(name: string): number {
+  return name === 'fields' || name === 'registrationEnd' || name === 'registrationStart' ? 2 : 1;
+}
+
 /** 该字段是否处于「校验未通过」：红框 + 说明，不再依赖全局错误条。 */
 function isInvalid(name: string): boolean {
   return invalidField.value === name;
 }
 
+/** 新建流程第一、二步的页脚：只有「继续」；第三步多一颗「返回」。 */
+const showStepBack = computed(() => isCreate.value && createStep.value > 1);
+
+/** 页脚主按钮：继续 / 发布展会 / 保存展会，三处文案与忙碌态只在这里分一次。 */
+const footPrimary = computed(() => {
+  if (!isCreate.value) {
+    return { label: t('exhibition.form.saveExhibition'), busy: saving.value, action: submit };
+  }
+  if (createStep.value < createSteps.length) {
+    return { label: t('common.continue'), busy: false, action: advanceCreateStep };
+  }
+  return { label: t('exhibition.form.publishExhibition'), busy: saving.value, action: submit };
+});
+
+/** 内存稿里记的步骤：只认 1~3，旧草稿缺省回到第一步。 */
+function restoredStep(step: number | undefined): number {
+  const value = Number(step ?? 1);
+  return Number.isInteger(value) && value >= 1 && value <= createSteps.length ? value : 1;
+}
+
+// 新建换步骤时同步回内存稿：从简介编辑器回来仍停在离开时那一步。
+watch(createStep, (step) => {
+  if (isCreate.value) patchExhibitionDraftStep(step);
+});
+
 // ── 取数 ─────────────────────────────────────────────────────────
 
-/** 服务器详情 → 表单内容。老数据的分类不在清单里也原样保留，不悄悄改成空值。 */
-function contentFromServer(item: JsonObject, data: ExhibitionDetail): FormContent {
-  const status = String(item.statusCode ?? '');
-  return {
-    model: {
-      title: String(item.title ?? ''),
-      venue: String(item.venue ?? ''),
-      date: String(item.date ?? ''),
-      endDate: String(item.endDate ?? ''),
-      time: String(item.time ?? ''),
-      status: MODES.some((mode) => mode.value === status) ? status : EXHIBITION_STATUS.REVIEW_REQUIRED,
-      category: String(item.category ?? ''),
-      description: String(item.description ?? ''),
-      imageUri: String(item.imageUri ?? ''),
-      registrationStart: String(item.registrationStart ?? ''),
-      registrationEnd: String(item.registrationEnd ?? ''),
-      qrEnabled: item.qrEnabled === true,
-      allowCancel: item.allowCancel !== false,
-      registrationNotice: String(item.registrationNotice ?? ''),
-    },
-    fields: (data.fields ?? []).map((field) => ({
-      title: String(field.title ?? ''),
-      type: String(field.type ?? FIELD_TYPE.TEXT),
-      required: field.required === true,
-      // 选项在模型里统一为数组，界面上按条目增删。
-      options: normalizeOptions(field.options),
-    })),
-  };
-}
-
-/** 内存稿 → 表单内容：草稿里是用户还没保存的输入，原样填回。 */
-function contentFromDraft(draft: ExhibitionDraft): FormContent {
-  return {
-    model: {
-      title: draft.title,
-      venue: draft.venue,
-      date: draft.date,
-      endDate: draft.endDate ?? '',
-      time: draft.time,
-      status: MODES.some((mode) => mode.value === draft.status) ? draft.status : EXHIBITION_STATUS.REVIEW_REQUIRED,
-      category: draft.category,
-      description: draft.description,
-      imageUri: draft.imageUri,
-      registrationStart: draft.registrationStart,
-      registrationEnd: draft.registrationEnd,
-      qrEnabled: draft.qrEnabled,
-      allowCancel: draft.allowCancel,
-      registrationNotice: draft.registrationNotice ?? '',
-    },
-    fields: draft.fields.map((field) => ({
-      title: field.title,
-      type: field.type,
-      required: field.required,
-      options: [...field.options],
-    })),
-  };
-}
-
 /** 把一份内容落到响应式表单上（首屏取数与内存稿回填共用）。 */
-function fillContent(content: FormContent): void {
+function fillContent(content: ExhibitionFormContent): void {
   Object.assign(form, content.model);
   fields.value = content.fields;
 }
@@ -577,6 +590,8 @@ function currentDraft(): ExhibitionDraft {
     allowCancel: form.allowCancel,
     registrationNotice: form.registrationNotice,
     fields: fields.value,
+    // 新建向导的步骤也进内存稿：从简介编辑器回来停在离开时那一步。
+    step: isCreate.value ? createStep.value : undefined,
   };
 }
 
@@ -592,7 +607,7 @@ async function load(): Promise<void> {
     await router.replace('/exhibitor');
     return;
   }
-  const content = contentFromServer(data.exhibition ?? {}, data);
+  const content = exhibitionContentFromServer(data.exhibition ?? {}, data);
   // 归属人昵称直接取详情里的展商名；改归属成功后就地更新，不为了这一行重载整张表单
   // （重载会把「已保存」基线按服务器内容重拍，未保存的修改就丢了）。
   ownerName.value = String(data.exhibition?.exhibitor ?? '');
@@ -620,10 +635,13 @@ const restoredDraft = matchingDraft();
 if (isCreate.value) {
   built.value = true;
   markSaved();
-  if (restoredDraft) fillContent(contentFromDraft(restoredDraft));
+  if (restoredDraft) {
+    fillContent(exhibitionContentFromDraft(restoredDraft));
+    createStep.value = restoredStep(restoredDraft.step);
+  }
 } else if (restoredDraft) {
   built.value = true;
-  fillContent(contentFromDraft(restoredDraft));
+  fillContent(exhibitionContentFromDraft(restoredDraft));
 }
 
 onMounted(() => {
@@ -661,7 +679,13 @@ function askUnsaved(target: string): void {
         onClick: async (close) => {
           close();
           // 校验与错误提示沿用保存按钮那一套：失败就留在本页，抽屉不弹第二次。
-          if (await persist()) leaveTo(target);
+          if (await persist()) {
+            leaveTo(target);
+            return;
+          }
+          // 新建流程里把出错字段所在的那一步亮出来，否则红框会被收在看不见的那一步。
+          // 接口失败没有具体字段（invalidField 为空），停在第 3 步原位显示错误即可。
+          if (isCreate.value && invalidField.value) createStep.value = createStepForField(invalidField.value);
         },
       },
       {
@@ -838,61 +862,8 @@ function askDelete(): void {
  * 新建还没有展会、展商也不能把别人的展会转走。改的是 `exhibitions.exhibitor_id`。
  */
 const showOwnerCard = computed(() => !isCreate.value && session.user.can?.admin === true);
-/** 当前归属人昵称：取详情里的展商名，改归属成功后换成响应里的新展商名。 */
-const ownerName = ref('');
-const ownerEmail = ref('');
-const ownerError = ref('');
-const ownerBusy = ref(false);
-/** 空串表示历史数据没有主办人。 */
-const ownerLabel = computed(() => ownerName.value || t('exhibition.form.ownerNone'));
-
-/** 邮箱必填且要是邮箱形状；上限与服务端 `emailInputSchema` 一致。 */
-function ownerEmailError(): string {
-  return check(ownerEmail.value, {
-    label: t('exhibition.form.ownerEmailLabel'),
-    required: true,
-    max: 120,
-    pattern: PATTERNS.email,
-    patternMessage: t('exhibition.form.ownerEmailInvalid'),
-  });
-}
-
-/**
- * 更改归属：先确认再提交。成功后就地刷新当前归属人，**不重载整张表单**
- * （重载会按服务器内容重拍「已保存」基线，把未保存的修改当成已保存）。
- * 服务端的规则失败（邮箱没有账号、目标不是展商、已是这个账号）带本地化文案，原位显示在输入框下。
- */
-function askTransferOwner(): void {
-  if (ownerBusy.value) return;
-  const message = ownerEmailError();
-  if (message) {
-    ownerError.value = message;
-    toast(message, 'error');
-    return;
-  }
-  ownerError.value = '';
-  const email = ownerEmail.value.trim();
-  confirmSheet({
-    title: t('exhibition.form.ownerConfirmTitle'),
-    message: t('exhibition.form.ownerConfirmMessage', { email }),
-    confirmLabel: t('exhibition.form.ownerSubmit'),
-    onConfirm: async () => {
-      ownerBusy.value = true;
-      try {
-        const result = await api.exhibitions.setOwner(currentDraftId(), email);
-        const exhibition = (result?.exhibition ?? {}) as JsonObject;
-        ownerName.value = String(exhibition.exhibitor ?? '');
-        ownerEmail.value = '';
-        toast(t('exhibition.form.ownerUpdated'), 'success');
-      } catch (reason) {
-        ownerError.value = reason instanceof Error ? reason.message : String(reason);
-        toast(ownerError.value, 'error');
-      } finally {
-        ownerBusy.value = false;
-      }
-    },
-  });
-}
+const { ownerName, ownerEmail, ownerError, ownerBusy, ownerLabel, askTransferOwner } =
+  useExhibitionOwnerTransfer(currentDraftId);
 
 // ── 保存 ─────────────────────────────────────────────────────────
 
@@ -900,7 +871,7 @@ function askTransferOwner(): void {
 function buildPayload(): JsonObject {
   return {
     id: createdId.value || exhibitionId.value,
-    ...submittedData(form, fields.value),
+    ...submittedExhibitionData(form, fields.value),
     day: Number(form.date.slice(8, 10)) || 0,
   };
 }
@@ -940,8 +911,12 @@ async function persist(): Promise<boolean> {
   }
 }
 
-/** 页脚「保存」：保存成功后回展商后台（新建则先换成编辑地址）。 */
+/**
+ * 页脚主按钮：新建时第三步是「发布展会」，先在页面里逐步再校一遍（出错就退回那一步），
+ * 再走与编辑页共用的保存；成功后仍换成编辑地址，删除按钮随之后出现。
+ */
 async function submit(): Promise<void> {
+  if (isCreate.value && !validateCreateSteps()) return;
   if (!(await persist())) return;
   // 新建成功后换成编辑地址：再点保存就是更新，删除按钮也出现。
   if (isCreate.value) await router.replace(`/exhibition-form/${encodeURIComponent(createdId.value)}`);
@@ -950,15 +925,6 @@ async function submit(): Promise<void> {
 
 function isCancelled(reason: unknown): boolean {
   return Boolean(reason && typeof reason === 'object' && (reason as { code?: unknown }).code === 'cancelled');
-}
-
-/** 选项来源兼容字符串（逗号分隔）与数组，模型内统一为数组。 */
-function normalizeOptions(options: unknown): string[] {
-  if (Array.isArray(options)) return options.map((item) => String(item));
-  return String(options || '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 </script>
 
@@ -996,8 +962,32 @@ function normalizeOptions(options: unknown): string[] {
   />
 
   <template v-else-if="built">
-    <div class="form">
-      <div class="field" :data-invalid="isInvalid('title') ? 'true' : 'false'">
+    <!-- 新建展会走三步：进度条说明走到哪了，标题与说明告诉这一步要填什么。
+         编辑已有展会不显示这两块，仍是一张张分组卡片。 -->
+    <div
+      v-if="isCreate"
+      class="create-progress"
+      role="group"
+      :aria-label="t('exhibition.form.stepProgress', { current: createStep })"
+    >
+      <span
+        v-for="step in createSteps"
+        :key="step"
+        :data-current="step === createStep ? 'true' : 'false'"
+        :data-complete="step < createStep ? 'true' : 'false'"
+        :aria-current="step === createStep ? 'step' : undefined"
+      >
+        {{ t(`exhibition.form.step${step}`) }}
+      </span>
+    </div>
+
+    <div v-if="isCreate" class="stack create-heading" data-gap="sm">
+      <h2>{{ t(`exhibition.form.step${createStep}`) }}</h2>
+      <p class="field-hint">{{ t(`exhibition.form.stepHint${createStep}`) }}</p>
+    </div>
+
+    <div v-if="!isCreate || createStep < 3" class="form">
+      <div v-show="!isCreate || createStep === 1" class="field" :data-invalid="isInvalid('title') ? 'true' : 'false'">
         <label for="form-title"
           >{{ t('admin.limits.exhibitionName') }}<span class="required" aria-hidden="true"> *</span></label
         >
@@ -1010,7 +1000,7 @@ function normalizeOptions(options: unknown): string[] {
           :maxlength="limit('exhibitionTitle', 60)"
         />
       </div>
-      <div class="field" :data-invalid="isInvalid('venue') ? 'true' : 'false'">
+      <div v-show="!isCreate || createStep === 1" class="field" :data-invalid="isInvalid('venue') ? 'true' : 'false'">
         <label for="form-venue"
           >{{ t('admin.exhibitions.venue') }}<span class="required" aria-hidden="true"> *</span></label
         >
@@ -1026,7 +1016,7 @@ function normalizeOptions(options: unknown): string[] {
 
       <!-- 开展 / 闭展是一组日期范围：点任意一侧都打开同一个范围抽屉，选完一起回填。
            闭展可以留空（单日展会），两次点同一天时闭展也回填这一天；「清除」把两个日期一起清掉。 -->
-      <div class="form-pair">
+      <div v-show="!isCreate || createStep === 1" class="form-pair">
         <div class="field" :data-invalid="isInvalid('date') ? 'true' : 'false'">
           <span id="form-date-label" class="field-label"
             >{{ t('exhibition.form.openDate') }}<span class="required" aria-hidden="true"> *</span></span
@@ -1069,7 +1059,7 @@ function normalizeOptions(options: unknown): string[] {
       </div>
 
       <!-- 开展时间：两个时间滚轮，中间一横把起止分开，值仍写回 form.time。 -->
-      <div class="field" :data-invalid="isInvalid('time') ? 'true' : 'false'">
+      <div v-show="!isCreate || createStep === 1" class="field" :data-invalid="isInvalid('time') ? 'true' : 'false'">
         <span id="form-time-label" class="field-label">{{ t('exhibition.form.openTime') }}</span>
         <div class="time-range">
           <button
@@ -1103,7 +1093,7 @@ function normalizeOptions(options: unknown): string[] {
       </div>
 
       <!-- 报名开始 / 截止也是一组日期范围；两项都可留空，清空即不设报名窗口。 -->
-      <div class="form-pair">
+      <div v-show="!isCreate || createStep === 2" class="form-pair">
         <div class="field" :data-invalid="isInvalid('registrationStart') ? 'true' : 'false'">
           <span id="form-reg-start-label" class="field-label">{{ t('exhibition.form.registrationOpens') }}</span>
           <button
@@ -1141,7 +1131,11 @@ function normalizeOptions(options: unknown): string[] {
       </div>
 
       <!-- 分类是管理员在「管理后台-设置」里维护的清单：一行可点的字段，点开抽屉选值 -->
-      <div class="field" :data-invalid="isInvalid('category') ? 'true' : 'false'">
+      <div
+        v-show="!isCreate || createStep === 1"
+        class="field"
+        :data-invalid="isInvalid('category') ? 'true' : 'false'"
+      >
         <span id="form-category-label" class="field-label"
           >{{ t('admin.limits.category') }}<span class="required" aria-hidden="true"> *</span></span
         >
@@ -1169,7 +1163,7 @@ function normalizeOptions(options: unknown): string[] {
          简介与 RichEditorPage 共用 form.description：点 Markdown 入口时先把当前表单存成内存稿
          （新建与编辑都一样），二级页以它为起稿、保存后把最新正文写回同一份稿，返回时整张表单
          按它恢复，所以两边始终是同一份正文，其他未保存字段也不会在往返中丢。 -->
-    <div class="card cover-card">
+    <div v-show="!isCreate || createStep === 1" class="card cover-card">
       <span class="section-label">{{ t('exhibition.form.coverAndDescription') }}</span>
       <div class="cover-row">
         <!-- 封面槽位始终在：上传期间遮罩盖在它上面，失败 / 取消随进度清空一起撤掉。 -->
@@ -1239,7 +1233,7 @@ function normalizeOptions(options: unknown): string[] {
     </div>
 
     <!-- 报名设置：报名方式、报名二维码与通过后撤销，三块之间只留白，不再画分隔线。 -->
-    <div class="card registration-settings-groups">
+    <div v-show="!isCreate || createStep === 2" class="card registration-settings-groups">
       <span class="section-label">{{ t('exhibition.form.registrationSettings') }}</span>
       <div class="field">
         <span class="field-label">{{ t('exhibition.form.registrationMode') }}</span>
@@ -1281,6 +1275,7 @@ function normalizeOptions(options: unknown): string[] {
 
     <!-- 报名收集项：与私人会议设置共用同一张卡，样式保持一致 -->
     <CollectFieldsCard
+      v-show="!isCreate || createStep === 2"
       :fields="fields"
       :label="t('exhibition.form.collectFields')"
       :title-max="limit('fieldTitle', 30)"
@@ -1324,12 +1319,45 @@ function normalizeOptions(options: unknown): string[] {
       <p class="field-hint">{{ t('exhibition.form.ownerHint') }}</p>
     </div>
 
-    <!-- 删除放在内容最下，保存仍固定在页脚。新建还没有展会，按钮不可点。 -->
-    <div class="card danger-zone">
+    <!-- 删除放在内容最下，保存仍固定在页脚。新建还没有展会，整块不渲染。 -->
+    <div v-if="!isCreate" class="card danger-zone">
       <span class="section-label">{{ t('exhibition.form.dangerZone') }}</span>
-      <button class="cta danger" type="button" :disabled="isCreate" @click="askDelete">
-        {{ isCreate ? t('exhibition.form.deleteAfterSave') : t('exhibition.form.deleteExhibition') }}
+      <button class="cta danger" type="button" @click="askDelete">
+        {{ t('exhibition.form.deleteExhibition') }}
       </button>
+    </div>
+
+    <!-- 发布检查：把要发布的展会与报名配置摊在同一张卡里，核对完再点页脚的「发布展会」。
+         这里只读；要改就点「返回」上一步。 -->
+    <div v-if="isCreate && createStep === 3" class="card create-review">
+      <span class="section-label">{{ t('exhibition.form.publishCheck') }}</span>
+      <div v-for="row in reviewRows" :key="row.label" class="create-review-row">
+        <span>{{ row.label }}</span>
+        <strong>{{ row.value }}</strong>
+      </div>
+      <!-- 封面与简介也在这里核对：它们决定详情页第一屏，别让用户发布后才发现没传 / 没写。 -->
+      <div class="create-review-row">
+        <span>{{ t('exhibition.form.cover') }}</span>
+        <span v-if="reviewCover" class="create-review-cover">
+          <img :src="reviewCover" :alt="t('exhibition.form.cover')" />
+        </span>
+        <strong v-else class="create-review-empty">{{ t('exhibition.form.reviewCoverNone') }}</strong>
+      </div>
+      <div class="create-review-row">
+        <span>{{ t('exhibition.form.descriptionLabel') }}</span>
+        <strong class="create-review-copy">{{ reviewIntroduction }}</strong>
+      </div>
+      <div class="create-review-row">
+        <span>{{ t('exhibition.form.registrationMode') }}</span>
+        <strong>{{ exhibitionStatusLabel(form.status) }}</strong>
+      </div>
+      <div v-for="row in reviewTailRows" :key="row.label" class="create-review-row">
+        <span>{{ row.label }}</span>
+        <strong>{{ row.value }}</strong>
+      </div>
+      <p class="field-hint">{{ t('exhibition.form.publishCheckHint') }}</p>
+      <!-- 接口失败（没有具体字段）时也要在第三步看见原因；字段错误会退回那一步显示。 -->
+      <p v-if="formError && !invalidField" class="field-error" role="alert">{{ formError }}</p>
     </div>
   </template>
 
@@ -1337,10 +1365,21 @@ function normalizeOptions(options: unknown): string[] {
   <Teleport v-if="built && !limited && !loadFailed && !notFound" defer to="#app-foot">
     <div class="page-foot">
       <div class="stack" data-gap="sm">
-        <button class="cta" type="button" :disabled="saving" :data-loading="saving ? 'true' : 'false'" @click="submit">
-          {{ isCreate ? t('exhibition.form.createExhibition') : t('exhibition.form.saveExhibition') }}
-        </button>
-        <p class="field-hint text-center">{{ t('exhibition.form.confirmOnDetail') }}</p>
+        <div :class="showStepBack ? 'grid-cols-2' : undefined">
+          <button v-if="showStepBack" class="cta ghost" type="button" @click="retreatCreateStep">
+            {{ t('common.back') }}
+          </button>
+          <button
+            class="cta"
+            type="button"
+            :disabled="footPrimary.busy"
+            :data-loading="footPrimary.busy ? 'true' : 'false'"
+            @click="footPrimary.action"
+          >
+            {{ footPrimary.label }}
+          </button>
+        </div>
+        <p v-if="!isCreate" class="field-hint text-center">{{ t('exhibition.form.confirmOnDetail') }}</p>
       </div>
     </div>
   </Teleport>
@@ -1351,6 +1390,75 @@ function normalizeOptions(options: unknown): string[] {
    表单列宽跟容器走：隐式 auto 轨道会被子项的 max-content 撑宽，320 宽时会横向溢出。 */
 .form {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.create-progress {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s2);
+}
+
+.create-progress > span {
+  min-width: 0;
+  padding-block: var(--s2);
+  border-bottom: 2px solid var(--stroke);
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  text-align: center;
+}
+
+.create-progress > span[data-current='true'],
+.create-progress > span[data-complete='true'] {
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.create-heading h2 {
+  margin: 0;
+  font-size: var(--fs-h1);
+}
+
+.create-review {
+  gap: var(--s3);
+}
+
+.create-review-row {
+  display: grid;
+  grid-template-columns: minmax(5.5em, 0.65fr) minmax(0, 1.35fr);
+  gap: var(--s3);
+  align-items: start;
+  font-size: var(--fs-body);
+}
+
+.create-review-row > span {
+  color: var(--ink-2);
+}
+
+.create-review-row > strong {
+  overflow-wrap: anywhere;
+  text-align: end;
+}
+
+/* 简介是多行文本：左对齐比右对齐好读；占位说明用次要色。 */
+.create-review-row > .create-review-copy {
+  text-align: start;
+}
+
+.create-review-row > .create-review-empty {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+/* 封面缩略图：与列表里的竖版海报同一个比例，靠右对齐到值列。 */
+.create-review-cover img {
+  display: block;
+  width: 72px;
+  aspect-ratio: 3 / 4;
+  margin-inline-start: auto;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-card);
+  object-fit: cover;
 }
 
 /* 日期 / 时间字段成组排：宽屏两列、窄屏自动落成一行，触发按钮不会截字。 */

@@ -2,6 +2,7 @@
 /**
  * 屏幕 10 · 展商后台
  *
+ * 首屏先摆出三件事：发布展会、审核报名、现场核销；自己的展会列表跟在后面。
  * 卡片上「查看报名」「编辑展会」「复制链接」排在同一行。点卡片主体进入展会详情。
  * 都属于展会的配置，统一收进「编辑展会」的二级界面，卡片保持清爽。
  * 卡片主体右侧的二维码按钮打开「分享展会」抽屉：二维码内容就是报名站分享链接，
@@ -111,19 +112,36 @@ function openExhibitionForm(id: unknown): void {
   void router.push(`/exhibition-form/${String(id)}`);
 }
 
+/**
+ * 审核报名：只有一个展会时直接进这场展会的报名管理，省掉一次选择；
+ * 有多个展会时进选择页，由展商挑一个再审核。受限账号仍可审核已有报名。
+ */
+function openReview(): void {
+  const only = items.value.length === 1 ? items.value[0] : undefined;
+  if (only) {
+    void router.push(`/review?exhibitionId=${encodeURIComponent(String(only.id))}`);
+    return;
+  }
+  void router.push('/review');
+}
+
 /** 核销报名码：受限账号进得去页面也提交不了，入口就在这里挡住。 */
 const joinLinkMissing = t('exhibition.detail.registrationSiteMissing');
 const joinLinkCopied = t('exhibitor.registrationLinkCopied');
 const joinLinkCopyFailed = t('exhibitor.copyLinkFailed');
 const joinLinkCopy = t('exhibitor.copyLink');
 
+/** 报名站链接：没配对外地址时提示一次并返回空串，调用方直接放弃。 */
+function joinLinkOf(id: unknown): string {
+  const link = registrationLink(bootstrap.publicBaseUrl, id);
+  if (!link) toast(joinLinkMissing, 'error');
+  return link;
+}
+
 /** 复制报名链接：点击即复制，失败才提示，不再弹手动复制面板。 */
 async function copyJoinLink(id: unknown): Promise<void> {
-  const link = registrationLink(bootstrap.publicBaseUrl, id);
-  if (!link) {
-    toast(joinLinkMissing, 'error');
-    return;
-  }
+  const link = joinLinkOf(id);
+  if (!link) return;
   if (await copyText(link)) {
     toast(joinLinkCopied);
     return;
@@ -133,11 +151,8 @@ async function copyJoinLink(id: unknown): Promise<void> {
 
 /** 分享展会：抽屉里展示报名二维码，可保存成透明背景 PNG。没配报名站地址时不打开空二维码。 */
 function openShareQr(item: Exhibition): void {
-  const link = registrationLink(bootstrap.publicBaseUrl, item.id);
-  if (!link) {
-    toast(joinLinkMissing, 'error');
-    return;
-  }
+  const link = joinLinkOf(item.id);
+  if (!link) return;
   openSheet({
     title: t('share.qrTitle'),
     component: ShareQrSheet,
@@ -182,6 +197,48 @@ usePullRefresh(
   <!-- 顶栏已经写着「展商后台」，正文不再重复标题。分段始终在内容之前，空列表不能把切换按钮盖掉。 -->
   <SegControl :model-value="tab" :items="TABS" :label="partitionLabel" @update:model-value="changeTab" />
 
+  <!-- 首屏三件事：发布展会、审核报名、现场核销。受限账号不能发布与核销，入口提前置灰；
+       审核已有报名不受限制，所以「报名管理」始终可用。 -->
+  <template v-if="tab !== 'meetings'">
+    <div class="exh-tasks" role="group" :aria-label="t('exhibitor.title')">
+      <button
+        class="exh-task"
+        data-variant="primary"
+        data-task="create"
+        type="button"
+        :disabled="limited"
+        :title="limited ? t('exhibition.form.publishBlocked') : undefined"
+        @click="createExhibition"
+      >
+        <AppIcon name="plus" />
+        <span>{{ t('exhibition.form.publishExhibition') }}</span>
+      </button>
+      <button class="exh-task" data-task="review" type="button" @click="openReview">
+        <AppIcon name="list" />
+        <span>{{ t('registration.review.title') }}</span>
+      </button>
+      <button
+        class="exh-task"
+        data-task="checkin"
+        type="button"
+        :disabled="limited"
+        :title="limited ? t('exhibitor.cannotCheckin') : undefined"
+        @click="openCheckin"
+      >
+        <AppIcon name="qr" />
+        <span>{{ t('exhibitor.checkin') }}</span>
+      </button>
+    </div>
+
+    <!-- 一次性提示：进过一次核销页（这条提示指的就是那个入口）就不再显示 -->
+    <HintNote v-if="hintVisible" :text="t('exhibitor.checkinHint')" @dismiss="dismissHint" />
+
+    <div v-if="limited" class="notice" data-tone="accent">
+      <strong>{{ t('exhibition.form.publishBlocked') }}</strong>
+      <span>{{ t('exhibition.form.restrictedAccount') }}</span>
+    </div>
+  </template>
+
   <MeetingInbox v-if="tab === 'meetings'" mode="exhibitor" />
 
   <SkeletonBlock v-else-if="query.loading.value && !hasContent" :rows="3" />
@@ -206,21 +263,6 @@ usePullRefresh(
   />
 
   <template v-else>
-    <button
-      class="cta ghost"
-      type="button"
-      :disabled="limited"
-      :title="limited ? t('exhibitor.cannotCheckin') : undefined"
-      @click="openCheckin"
-    >
-      {{ t('exhibitor.checkin') }}
-    </button>
-
-    <div v-if="limited" class="notice" data-tone="accent">
-      <strong>{{ t('exhibition.form.publishBlocked') }}</strong>
-      <span>{{ t('exhibition.form.restrictedAccount') }}</span>
-    </div>
-
     <div v-if="query.error.value" class="notice" data-tone="accent">
       <span>{{ query.error.value.message }}</span>
     </div>
@@ -231,9 +273,6 @@ usePullRefresh(
         t('exhibition.list.countLabel', { count: items.length, registrations: registrationTotal })
       }}</span>
     </div>
-
-    <!-- 一次性提示：进过一次核销页（这条提示指的就是那个入口）就不再显示 -->
-    <HintNote v-if="hintVisible" :text="t('exhibitor.checkinHint')" @dismiss="dismissHint" />
 
     <!-- 每张卡只有一层纸：上半整块可点进详情，一条分隔线下面放展会配置动作 -->
     <div class="list" data-gap="sm">
@@ -330,6 +369,62 @@ usePullRefresh(
 </template>
 
 <style scoped>
+/* 首屏三件事并排：图标在上、标题在下，整块都是命中区（不小于 44px）。
+   受限时发布与核销置灰，审核仍是可用入口。 */
+.exh-tasks {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s2);
+}
+
+.exh-task {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: calc(var(--touch) + var(--s5));
+  display: grid;
+  align-content: center;
+  place-items: center;
+  gap: var(--s1);
+  padding: var(--s3) var(--s2);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-card);
+  background: var(--screen);
+  color: var(--ink);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.exh-task svg {
+  width: 20px;
+  height: 20px;
+  color: var(--ink-2);
+}
+
+/* 发布展会是首屏的主任务：只有它用强调色的描边与文字。 */
+.exh-task[data-variant='primary'] {
+  border-color: var(--accent-edge);
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+}
+
+.exh-task[data-variant='primary'] svg {
+  color: var(--accent-ink);
+}
+
+.exh-task[disabled] {
+  border-color: var(--stroke);
+  background: var(--f3);
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.exh-task[disabled] svg {
+  color: var(--ink-3);
+}
+
 /* 缩略图按设计稿的 44×78 竖版；全局 .thumb 是 36×64，只在本页放大一档。 */
 .exh-thumb {
   /* 高度固定，宽度由海报比例（9:16～3:4 纵向）算出来；卡片高度不变。 */

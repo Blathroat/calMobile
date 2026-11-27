@@ -44,11 +44,13 @@ const PROFILE = {
 };
 let app: App | undefined;
 
-beforeEach(async () => {
-  if (sheet.current) {
-    closeSheet();
-    await new Promise((resolve) => setTimeout(resolve, 240));
-  }
+beforeEach(() => {
+  // 减少动效时抽屉退场动画是 0ms，用例不必真等 220ms（与其它页面测试同一套桩）。
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: true })),
+  );
+  if (sheet.current) closeSheet();
   vi.resetAllMocks();
   document.body.innerHTML = '<div id="app-foot"></div><div id="settings-test"></div>';
   vi.mocked(api.profile.get).mockResolvedValue(PROFILE);
@@ -64,6 +66,7 @@ afterEach(() => {
   app?.unmount();
   app = undefined;
   document.body.innerHTML = '';
+  vi.unstubAllGlobals();
   // hasNative 是真实单例上的 spy，测试之间必须还原，避免后面的用例误进原生模式。
   vi.restoreAllMocks();
 });
@@ -300,10 +303,11 @@ describe('设置页独立取数状态', () => {
     expect(button('移除头像')).toBeUndefined();
     document.querySelector<HTMLButtonElement>('.sheet-panel [data-avatar-edit]')!.click();
     // 先 PUT /profile：保存成功才关资料抽屉，然后直接拉起系统选图。
-    await vi.waitFor(() => expect(api.profile.save).toHaveBeenCalledTimes(1), { timeout: 1000 });
-    await vi.waitFor(() => expect(device.pickImage).toHaveBeenCalledTimes(1), { timeout: 1000 });
+    // 这条链路要经过保存、关抽屉与裁剪抽屉几段动画，全量并行时 1s 预算太紧，给到 3s。
+    await vi.waitFor(() => expect(api.profile.save).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    await vi.waitFor(() => expect(device.pickImage).toHaveBeenCalledTimes(1), { timeout: 3000 });
     // 没有中转页：不会再冒出「编辑头像」面板，选到图后出现裁剪抽屉。
-    await vi.waitFor(() => expect(document.body.textContent).toContain('裁剪头像'), { timeout: 1000 });
+    await vi.waitFor(() => expect(document.body.textContent).toContain('裁剪头像'), { timeout: 3000 });
     expect(sheet.current).toBeNull();
     expect(button('移除头像')).toBeUndefined();
   });

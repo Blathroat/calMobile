@@ -134,9 +134,29 @@ async function pickCategory(name = '智能家居'): Promise<void> {
   await flush();
 }
 
-/** 保存按钮固定在页脚，点一次触发提交。 */
-function clickSave(): void {
-  document.querySelector<HTMLButtonElement>('#app-foot button')?.click();
+/** 页脚按钮按文案找：新建是三步流程，第三步才是提交。 */
+async function clickFooter(label: string): Promise<void> {
+  const button = [...document.querySelectorAll<HTMLButtonElement>('#app-foot button')].find(
+    (item) => item.textContent?.trim() === label,
+  );
+  if (!button) throw new Error(`#app-foot 里缺少「${label}」按钮`);
+  button.click();
+  await flush();
+}
+
+/**
+ * 新建展会走三步：先点两次「继续」，到第三步再点「发布展会」。
+ * 校验没过时会停在原来的那一步（没有「发布展会」），这里就停下来让用例断言原状态。
+ */
+async function clickSave(): Promise<void> {
+  await clickFooter('继续');
+  await clickFooter('继续');
+  const publish = [...document.querySelectorAll<HTMLButtonElement>('#app-foot button')].find(
+    (item) => item.textContent?.trim() === '发布展会',
+  );
+  if (!publish) return;
+  publish.click();
+  await flush();
 }
 
 describe('编辑展会：日期与时间选择', () => {
@@ -186,7 +206,7 @@ describe('编辑展会：日期与时间选择', () => {
     expect(trigger('form-date').textContent).toContain(formatDateWithWeekday(day));
     expect(trigger('form-end-date').textContent).toContain(formatDateWithWeekday(day));
 
-    clickSave();
+    await clickSave();
     await vi.waitFor(() => expect(vi.mocked(api.exhibitions.save)).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(api.exhibitions.save).mock.calls[0]![0] as Record<string, unknown>;
     expect(payload.date).toBe(day);
@@ -247,7 +267,7 @@ describe('编辑展会：日期与时间选择', () => {
     sheetAction('取消').click();
     await flush();
 
-    clickSave();
+    await clickSave();
     await flush();
 
     expect(vi.mocked(api.exhibitions.save)).not.toHaveBeenCalled();
@@ -277,7 +297,7 @@ describe('编辑展会：日期与时间选择', () => {
     await flush();
     await pickCategory();
 
-    clickSave();
+    await clickSave();
     await vi.waitFor(() => expect(vi.mocked(api.exhibitions.save)).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(api.exhibitions.save).mock.calls[0]![0] as Record<string, unknown>;
     expect(payload.time).toBe('');
@@ -338,7 +358,7 @@ describe('编辑展会：活动信息卡与文案', () => {
     fill('form-description', '纯文本简介：\n第一行\n第二行');
     fill('form-registration-notice', '请携带身份证\n签到地点：A 口服务台');
 
-    clickSave();
+    await clickSave();
     await vi.waitFor(() => expect(vi.mocked(api.exhibitions.save)).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(api.exhibitions.save).mock.calls[0]![0] as Record<string, unknown>;
     // 纯文本简介与 RichEditorPage 共用 form.description，保存时原样带上。
@@ -362,7 +382,7 @@ describe('编辑展会：活动信息卡与文案', () => {
     await flush();
     await pickCategory();
 
-    clickSave();
+    await clickSave();
     await vi.waitFor(() => expect(vi.mocked(api.exhibitions.save)).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(api.exhibitions.save).mock.calls[0]![0] as Record<string, unknown>;
     expect(payload.date).toBe(start);

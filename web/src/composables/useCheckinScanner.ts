@@ -1,0 +1,332 @@
+import { nextTick, ref, type Ref } from 'vue';
+import { device } from '@/services/device-services';
+import { nativeBridge } from '@/services/native-bridge';
+import { createQrDecoder, type QrDecoder } from '@/services/qr-decoder';
+import { t } from '@/i18n';
+
+const DECODE_WIDTH = 640;
+const DECODE_INTERVAL = 120;
+
+/** 取景区状态：页面与 composable 共用这一份，避免两边各写一遍字面量联合。 */
+export type StageMode = 'idle' | 'live' | 'error' | 'stopped' | 'detected';
+
+interface CheckinScannerOptions {
+  videoEl: Ref<HTMLVideoElement | undefined>;
+  canvasEl: Ref<HTMLCanvasElement | undefined>;
+  onCode: (raw: string) => void | Promise<void>;
+  setStage: (mode: StageMode, title: string, description: string) => void;
+  showNotice: (message: string, tone?: 'neutral' | 'error') => void;
+  clearStatus: () => void;
+}
+
+/** 管理扫码页的解码器、摄像头流和逐帧识别生命周期。 */
+export function useCheckinScanner(options: CheckinScannerOptions) {
+  const starting = ref(false);
+  const scanning = ref(false);
+  const decoderReady = ref(false);
+  const decoderFailed = ref(false);
+
+  let stream: MediaStream | null = null;
+  let frameHandle = 0;
+  let lastDecodeAt = 0;
+  let decoder: QrDecoder | null = null;
+  let decodeBusy = false;
+  /** 相机那一帧的解码 promise：选图前要等它落定，见 `decodeImage`。 */
+  let decodeIdle: Promise<void> | null = null;
+  let settleDecode: (() => void) | null = null;
+  let scanEpoch = 0;
+  let alive = true;
+
+  function cameraErrorNotice(reason: unknown): string {
+    const name = String((reason as { name?: unknown } | null)?.name ?? '');
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+      return t('checkin.scan.cameraDenied');
+    }
+    if (
+      name === 'NotFoundError' ||
+      name === 'DevicesNotFoundError' ||
+      name === 'OverconstrainedError' ||
+      name === 'ConstraintNotSatisfiedError'
+    ) {
+      return t('checkin.scan.cameraNotFound');
+    }
+    if (name === 'NotReadableError' || name === 'TrackStartError') return t('checkin.scan.cameraBusy');
+    return t('checkin.scan.cameraUnsupported');
+  }
+
+  function releaseCamera(): void {
+    scanEpoch += 1;
+    scanning.value = false;
+    if (frameHandle) {
+      cancelAnimationFrame(frameHandle);
+      frameHandle = 0;
+    }
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      stream = null;
+    }
+    if (options.videoEl.value) options.videoEl.value.srcObject = null;
+  }
+
+  function decoderUnavailable(): void {
+    if (!alive) return;
+    releaseCamera();
+    decoderReady.value = false;
+    decoderFailed.value = true;
+    options.showNotice(t('checkin.scan.decoderUnavailable'), 'error');
+  }
+
+  /** 相机打不开：取景区与行内提示一起落到错误态。 */
+  function failCamera(reason: unknown): void {
+    options.setStage('error', t('checkin.scan.openFailed'), cameraErrorNotice(reason));
+    options.clearStatus();
+  }
+
+  /**
+   * 建解码器并等它就绪。失败（分包加载失败、初始化超时）只置位失败标记，不抛错。
+   * 单独成函数是为了「开始扫码」时能重建一次：识别库通常是瞬时故障，页面不该因此锁死。
+   */
+  async function initialize(): Promise<void> {
+    decoder?.dispose();
+    decoder = null;
+    decoderReady.value = false;
+    try {
+      decoder = createQrDecoder();
+    } catch {
+      decoderUnavailable();
+      return;
+    }
+    try {
+      await decoder.ready;
+      if (!alive) return;
+      decoderFailed.value = false;
+      decoderReady.value = true;
+    } catch {
+      decoderUnavailable();
+    }
+  }
+
+  function scheduleFrame(): void {
+    if (!scanning.value) return;
+    frameHandle = requestAnimationFrame((timestamp) => {
+      if (!scanning.value) return;
+      if (timestamp - lastDecodeAt >= DECODE_INTERVAL) {
+        lastDecodeAt = timestamp;
+        void decodeFrame();
+      }
+      scheduleFrame();
+    });
+  }
+
+  async function decodeFrame(): Promise<void> {
+    if (!decoderReady.value || decodeBusy || !alive || !scanning.value) return;
+    const node = options.videoEl.value;
+    const target = options.canvasEl.value;
+    if (!decoder || !node || !target) return;
+    const width = node.videoWidth;
+    const height = node.videoHeight;
+    if (!width || !height) return;
+
+    const cropWidth = Math.min(width, Math.round((height * 4) / 3));
+    const cropHeight = Math.min(height, Math.round((cropWidth * 3) / 4));
+    const context = target.getContext('2d', { willReadFrequently: true });
+    if (!context) return;
+    target.width = DECODE_WIDTH;
+    target.height = Math.round((DECODE_WIDTH * cropHeight) / cropWidth);
+    context.drawImage(
+      node,
+      (width - cropWidth) / 2,
+      (height - cropHeight) / 2,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      target.width,
+      target.height,
+    );
+
+    let image: ImageData;
+    try {
+      image = context.getImageData(0, 0, target.width, target.height);
+    } catch {
+      return;
+    }
+
+    const epoch = scanEpoch;
+    decodeBusy = true;
+    decodeIdle = new Promise<void>((resolve) => {
+      settleDecode = resolve;
+    });
+    try {
+      let found: string | null = null;
+      try {
+        found = await decoder.decode(image);
+      } catch {
+        // 只有解码本身抛错才算识别库故障。
+        if (epoch === scanEpoch) decoderUnavailable();
+        return;
+      }
+      if (alive && scanning.value && epoch === scanEpoch && found) {
+        try {
+          await options.onCode(found);
+        } catch {
+          // 识别结果的处理失败由调用方自己提示（页面里是核销请求），不能当成解码器故障。
+        }
+      }
+    } finally {
+      decodeBusy = false;
+      settleDecode?.();
+      settleDecode = null;
+      decodeIdle = null;
+    }
+  }
+
+  async function startCamera(): Promise<void> {
+    const epoch = ++scanEpoch;
+    if (nativeBridge.hasNative()) {
+      try {
+        const granted = await device.ensureCameraPermission();
+        if (!alive || epoch !== scanEpoch || decoderFailed.value) return;
+        if (granted !== true) {
+          options.showNotice(t('checkin.scan.permissionDenied'), 'error');
+          return;
+        }
+      } catch (reason) {
+        if (alive && epoch === scanEpoch) {
+          options.showNotice(reason instanceof Error ? reason.message : String(reason), 'error');
+        }
+        return;
+      }
+      if (!alive) return;
+    }
+
+    options.setStage('live', '', '');
+    options.showNotice(t('checkin.scan.opening'));
+
+    let request: Promise<{ stream: MediaStream } | { error: unknown }>;
+    try {
+      request = navigator.mediaDevices
+        .getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+          audio: false,
+        })
+        .then(
+          (media) => ({ stream: media }) as const,
+          (error: unknown) => ({ error }) as const,
+        );
+    } catch (reason) {
+      failCamera(reason);
+      return;
+    }
+    await nextTick();
+
+    const settled = await request;
+    if (!alive || epoch !== scanEpoch) {
+      if ('stream' in settled) settled.stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    if ('error' in settled) {
+      failCamera(settled.error);
+      return;
+    }
+
+    const media = settled.stream;
+    if (!alive || epoch !== scanEpoch || decoderFailed.value) {
+      media.getTracks().forEach((track) => track.stop());
+      return;
+    }
+
+    const node = options.videoEl.value;
+    if (!node) {
+      media.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    stream = media;
+    node.srcObject = media;
+    try {
+      await node.play();
+    } catch {
+      // 部分内核要求用户手势才自动播放，识别循环仍会尝试取帧。
+    }
+    if (!alive || epoch !== scanEpoch || stream !== media) return;
+    scanning.value = true;
+    options.showNotice(t('checkin.scan.placeCode'));
+    scheduleFrame();
+  }
+
+  async function start(): Promise<void> {
+    if (starting.value || scanning.value) return;
+
+    starting.value = true;
+    try {
+      // 识别库可能是瞬时失败（分包加载失败、初始化超时）：按「开始扫码」重建一次再试，
+      // 否则这一页的扫码与选图会一直不可用，只能手动输码。
+      if (decoderFailed.value) {
+        await initialize();
+        if (!alive || decoderFailed.value) return;
+      }
+      const supported =
+        typeof navigator !== 'undefined' &&
+        Boolean(navigator.mediaDevices) &&
+        typeof navigator.mediaDevices.getUserMedia === 'function';
+      if (!supported) {
+        options.showNotice(t('checkin.scan.unsupported'), 'error');
+        return;
+      }
+      await startCamera();
+    } finally {
+      if (alive) starting.value = false;
+    }
+  }
+
+  /** 识别库不可用：统一提示一次，并让调用方拿到「没有结果」。 */
+  function decoderMiss(): null {
+    decoderUnavailable();
+    return null;
+  }
+
+  async function decodeImage(image: ImageData): Promise<string | null> {
+    if (!decoder) return decoderMiss();
+    if (!decoderReady.value) {
+      try {
+        await decoder.ready;
+      } catch {
+        return decoderMiss();
+      }
+      if (!alive) return null;
+      decoderReady.value = true;
+      decoderFailed.value = false;
+    }
+    if (!alive) return null;
+    // 相机那一帧还在解：等它落定再解这张图。否则解码器会以「忙」返回 null，
+    // 页面会误判成「这张图片里没有报名码」，用户要再选一次。
+    if (decodeIdle) await decodeIdle;
+    if (!alive) return null;
+    try {
+      const found = await decoder.decode(image);
+      // 一次成功解码说明识别库可用：清掉之前的失败标记，页面不会再丢弃这次结果。
+      decoderFailed.value = false;
+      return found;
+    } catch {
+      return decoderMiss();
+    }
+  }
+
+  function dispose(): void {
+    alive = false;
+    releaseCamera();
+    decoder?.dispose();
+  }
+
+  return {
+    starting,
+    scanning,
+    decoderReady,
+    decoderFailed,
+    initialize,
+    start,
+    releaseCamera,
+    decodeImage,
+    dispose,
+  };
+}

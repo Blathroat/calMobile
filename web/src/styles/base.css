@@ -531,7 +531,7 @@ label {
   align-items: center;
   gap: var(--s2);
   color: var(--ink-2);
-  font-size: var(--fs-label);
+  font-size: var(--fs-h3);
   font-weight: 700;
 }
 
@@ -860,7 +860,7 @@ button.avatar {
   width: min(100%, 228px);
   margin-inline: auto;
   border: var(--hairline) solid var(--stroke);
-  border-radius: var(--r-panel);
+  border-radius: var(--r-card);
   background: var(--f3);
   overflow: hidden;
 }
