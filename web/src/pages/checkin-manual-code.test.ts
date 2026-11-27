@@ -111,6 +111,36 @@ describe('手动输入报名码走面板', () => {
     expect(document.querySelector('.sheet-panel #checkin-code')).not.toBeNull();
   });
 
+  it('核销请求未回来时手动入口被挡住，不会并发提交第二笔', async () => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(api.checkIn).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }) as never,
+    );
+    await mountCheckin();
+    document.querySelector<HTMLButtonElement>('[data-action="manual"]')!.click();
+    await nextTick();
+    await nextTick();
+    await typeInto('#checkin-code', CODE);
+    sheetButton('核销').click();
+    await vi.waitFor(() => expect(api.checkIn).toHaveBeenCalledTimes(1));
+    // 第一笔提交后面板会收起（退场动画结束后 sheet.current 才清空）。
+    await vi.waitFor(() => expect(sheet.current).toBeNull());
+
+    // 请求在途：手动入口置灰，再点既不打开面板也不再发请求。
+    const manualButton = document.querySelector<HTMLButtonElement>('[data-action="manual"]')!;
+    expect(manualButton.disabled).toBe(true);
+    manualButton.click();
+    await nextTick();
+    await nextTick();
+    expect(sheet.current).toBeNull();
+    expect(api.checkIn).toHaveBeenCalledTimes(1);
+
+    finish({ ok: true, record: { recordId: 'reg-1' } });
+    await vi.waitFor(() => expect(manualButton.disabled).toBe(false));
+  });
+
   it('粘贴面板同样能把输入写回调用方的响应式对象', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);

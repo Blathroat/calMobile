@@ -133,10 +133,6 @@ onBeforeUnmount(() => {
   scanner.dispose();
 });
 
-function prefersReducedMotion(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 function clearStatus(): void {
   statusText.value = '';
   statusTone.value = 'neutral';
@@ -200,7 +196,7 @@ function previewOf(raw: string): string {
 // ── 取景与识别 ─────────────────────────────────────────────────
 
 async function toggleScan(): Promise<void> {
-  if (scanner.starting.value) return;
+  if (scanner.starting.value || submitting.value) return;
   if (scanner.scanning.value) {
     stopScan();
     return;
@@ -233,7 +229,7 @@ async function handleCode(raw: string): Promise<void> {
  * 两条路都汇到 useImageSource，缩放与解码只写一遍。
  */
 function pickImage(): void {
-  if (picking.value || scanner.starting.value) return;
+  if (picking.value || scanner.starting.value || submitting.value) return;
   // 选图期间不再取景：相机一直占着会挡住系统选择器，也没必要同时解码两路。
   if (scanner.scanning.value) stopScan();
   else scanner.releaseCamera();
@@ -276,7 +272,7 @@ async function onImageChosen(event: Event): Promise<void> {
   const file = input?.files?.[0];
   // 清空才能连续选同一张图；用户取消选择时这里没有文件，静默返回。
   if (input) input.value = '';
-  if (!file || !alive || picking.value) return;
+  if (!file || !alive || picking.value || submitting.value) return;
   picking.value = true;
   try {
     await useImageSource(file);
@@ -287,6 +283,7 @@ async function onImageChosen(event: Event): Promise<void> {
 
 /** 两条选图路径共用：读取像素、等待解码器就绪，再核销或提示。 */
 async function useImageSource(source: File | string): Promise<void> {
+  if (submitting.value) return;
   // 解码可能要点时间，先用骨架行占位，避免看起来没反应。
   showLoadingStatus();
   let image: ImageData;
@@ -311,6 +308,8 @@ async function useImageSource(source: File | string): Promise<void> {
 // ── 核销 ───────────────────────────────────────────────────────
 
 async function verify(raw: string): Promise<void> {
+  // 一次只跑一笔核销：扫码、选图、手动输入三条入口最后都汇到这里。
+  if (submitting.value) return;
   submitting.value = true;
   showLoadingStatus();
   try {
@@ -373,6 +372,7 @@ function clearOutcomes(): void {
  * 校验失败就把错误写回 `manual.error` 并留在面板里，成功才关闭。
  */
 function openManual(): void {
+  if (submitting.value) return;
   stopScan();
   manual.code = '';
   manual.error = '';
@@ -398,6 +398,7 @@ function openManual(): void {
 }
 
 async function submitManual(close: () => void): Promise<void> {
+  if (submitting.value) return;
   const code = manual.code.trim();
   if (!code) {
     // 留在面板里，让用户就地补上
@@ -479,7 +480,7 @@ async function submitManual(close: () => void): Promise<void> {
         class="cta"
         type="button"
         data-action="start-scan"
-        :disabled="scanner.starting.value"
+        :disabled="scanner.starting.value || submitting"
         :data-loading="scanner.starting.value ? 'true' : 'false'"
         @click="toggleScan"
       >
@@ -489,12 +490,12 @@ async function submitManual(close: () => void): Promise<void> {
         class="cta ghost"
         type="button"
         data-action="pick-image"
-        :disabled="scanner.starting.value || picking"
+        :disabled="scanner.starting.value || picking || submitting"
         @click="pickImage"
       >
         {{ t('checkin.scan.pickImage') }}
       </button>
-      <button class="cta ghost" type="button" data-action="manual" @click="openManual">
+      <button class="cta ghost" type="button" data-action="manual" :disabled="submitting" @click="openManual">
         {{ t('checkin.manual.enterCode') }}
       </button>
       <!-- 隐藏的文件输入：只在没有原生桥（浏览器预览 / 报名站）时使用，应用里走 device.pickImage -->
