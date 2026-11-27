@@ -17,12 +17,19 @@ import { useRouter } from 'vue-router';
 import { api } from '@/app/runtime';
 import { useSessionStore } from '@/stores/session';
 import { device } from '@/services/device-services';
-import { createQrDecoder, type QrDecoder } from '@/services/qr-decoder';
 import { nativeBridge } from '@/services/native-bridge';
 import { openSheet } from '@/services/sheet';
 import { toast } from '@/services/toast';
 import { REGISTRATION_STATUS, registrationStatusLabel } from '@/services/status';
+import { readCheckinImageData } from '@/services/checkin-image';
+import {
+  MAX_CHECKIN_OUTCOMES,
+  persistCheckinOutcomes,
+  readCheckinOutcomes,
+  type CheckInOutcome,
+} from '@/services/checkin-outcomes';
 import { useHint } from '@/composables/useHint';
+import { useCheckinScanner } from '@/composables/useCheckinScanner';
 import { answerDocument } from '@domain/answer-document';
 import AppIcon from '@/components/AppIcon.vue';
 import ManualCodePanel from '@/components/ManualCodePanel.vue';
@@ -32,28 +39,8 @@ import StatusTag from '@/components/StatusTag.vue';
 import type { ApiResult, JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
-/** 取景画面的解码宽度：越小越快，640 足够分辨报名码。 */
-const DECODE_WIDTH = 640;
-/** 识别节流：约每 120ms 解一帧，既跟得上手势又不占满 CPU。 */
-const DECODE_INTERVAL = 120;
-/** 选择图像扫码：交给解码器前把图像等比缩到最长边不超过这个像素数。 */
-const MAX_IMAGE_EDGE = 1600;
-/** 核销结果按账号分键存在本机：换号不会串台，重开页面还能看到之前核销过谁。 */
-const OUTCOMES_PREFIX = 'calmobile.checkin.outcomes.';
-/** 本页只当现场记录用，最多留这么多条，最新的排最前。 */
-const MAX_OUTCOMES = 20;
-
 /** 取景区只表达一件事：当前是取景、识别中，还是某一步失败 / 已停止。 */
 type StageMode = 'idle' | 'live' | 'error' | 'stopped' | 'detected';
-
-interface CheckInOutcome {
-  /** 列表内的本地唯一键：同一条报名可能先失败几次、最后一次才成功。 */
-  id: string;
-  ok: boolean;
-  statusText: string;
-  message: string;
-  record: JsonObject;
-}
 
 /** 列表里一行「标签 + 值」：收集项按行解析后逐行渲染。 */
 interface OutcomeRow {
@@ -104,84 +91,22 @@ function answerLines(record: JsonObject): Array<{ label: string; value: string }
   return answerDocument({ source: { text } }).lines;
 }
 
-/** 按当前登录用户分键；没有 id 时退回一个共享键，不写进别人的记录里。 */
-function outcomesKey(): string {
-  return `${OUTCOMES_PREFIX}${String(session.user?.id ?? '') || 'anonymous'}`;
-}
-
-/** 读本机记录：整份不是数组就当作没有，单条坏数据跳过而不是丢整份。 */
-function readOutcomes(): CheckInOutcome[] {
-  let raw: string | null = null;
-  try {
-    raw = window.localStorage?.getItem(outcomesKey()) ?? null;
-  } catch {
-    return [];
-  }
-  if (!raw) return [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
-  const list: CheckInOutcome[] = [];
-  for (const item of parsed) {
-    const entry = normalizeOutcome(item, list.length);
-    if (entry) list.push(entry);
-    if (list.length >= MAX_OUTCOMES) break;
-  }
-  return list;
-}
-
-/** 单条记录的形状校验：缺 record 的条目跳过，不影响同一份里的其它条目。 */
-function normalizeOutcome(value: unknown, index: number): CheckInOutcome | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const raw = value as Record<string, unknown>;
-  const record = raw.record;
-  if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
-  return {
-    id: typeof raw.id === 'string' && raw.id ? raw.id : `restored-${index}`,
-    ok: raw.ok === true,
-    statusText: String(raw.statusText ?? ''),
-    message: String(raw.message ?? ''),
-    record: record as JsonObject,
-  };
-}
-
 function persistOutcomes(): void {
-  try {
-    const storage = window.localStorage;
-    if (!storage) return;
-    if (outcomes.value.length === 0) storage.removeItem(outcomesKey());
-    else storage.setItem(outcomesKey(), JSON.stringify(outcomes.value.slice(0, MAX_OUTCOMES)));
-  } catch {
-    // 本机存储不可用（隐私模式 / 配额满）时列表仍留在内存里，不打断核销。
-  }
+  persistCheckinOutcomes(session.user?.id, outcomes.value);
 }
 
 /** 换号时按新键重读，避免把上一个账号的记录留在屏幕上。 */
 function loadOutcomes(): void {
-  outcomes.value = readOutcomes();
+  outcomes.value = readCheckinOutcomes(session.user?.id);
 }
 
-const starting = ref(false);
-const scanning = ref(false);
 const submitting = ref(false);
 /** 正在读图 / 解码：期间禁用「选择图像扫码」，避免并发解码互相顶掉结果。 */
 const picking = ref(false);
-const decoderReady = ref(false);
-const decoderFailed = ref(false);
 
 /** 手动输入面板的数据：输入值与原位错误都放在这个响应式对象里（面板组件按引用读写）。 */
 const manual = reactive({ code: '', error: '' });
 
-let stream: MediaStream | null = null;
-let frameHandle = 0;
-let lastDecodeAt = 0;
-let decoder: QrDecoder | null = null;
-let decodeBusy = false;
-let scanEpoch = 0;
 /** 页面被替换后置为 false：异步步骤（权限、getUserMedia）回来时据此放弃取景。 */
 let alive = true;
 
@@ -194,16 +119,7 @@ onMounted(() => {
   // （后台按钮、深链、返回键回来）都把它记为已读，下次不再显示。
   void dismissCheckinHint();
   if (limited.value) return;
-  try {
-    decoder = createQrDecoder();
-    void decoder.ready
-      .then(() => {
-        if (alive) decoderReady.value = true;
-      })
-      .catch(decoderUnavailable);
-  } catch {
-    decoderUnavailable();
-  }
+  scanner.initialize();
 });
 
 // 换号（含登录后会话落地）时按新用户的键重读历史，不把上一个账号的记录留在屏幕上。
@@ -214,17 +130,8 @@ watch(
 
 onBeforeUnmount(() => {
   alive = false;
-  releaseCamera();
-  decoder?.dispose();
+  scanner.dispose();
 });
-
-function decoderUnavailable(): void {
-  if (!alive) return;
-  releaseCamera();
-  decoderReady.value = false;
-  decoderFailed.value = true;
-  showNotice(t('checkin.scan.decoderUnavailable'), 'error');
-}
 
 function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -259,6 +166,15 @@ function setStage(mode: StageMode, title: string, description: string): void {
   stageDescription.value = description;
 }
 
+const scanner = useCheckinScanner({
+  videoEl,
+  canvasEl,
+  onCode: handleCode,
+  setStage,
+  showNotice,
+  clearStatus,
+});
+
 function stageIcon(): string {
   return stageMode.value === 'detected' ? 'check' : 'image';
 }
@@ -284,222 +200,24 @@ function previewOf(raw: string): string {
 // ── 取景与识别 ─────────────────────────────────────────────────
 
 async function toggleScan(): Promise<void> {
-  if (starting.value) return;
-  if (scanning.value) {
+  if (scanner.starting.value) return;
+  if (scanner.scanning.value) {
     stopScan();
     return;
   }
-  if (decoderFailed.value) {
-    decoderUnavailable();
-    return;
-  }
-  const supported =
-    typeof navigator !== 'undefined' &&
-    Boolean(navigator.mediaDevices) &&
-    typeof navigator.mediaDevices.getUserMedia === 'function';
-  if (!supported) {
-    showNotice(t('checkin.scan.unsupported'), 'error');
-    return;
-  }
-
-  starting.value = true;
-  try {
-    await startScan();
-  } finally {
-    if (alive) starting.value = false;
-  }
-}
-
-/**
- * 浏览器给出的 `getUserMedia` 错误名映射成给人看的文案。
- *
- * 不同内核的错误名不统一（旧 WebView 还有 `PermissionDeniedError` 这类前缀），
- * 这里统一归到四类；认不出的按「环境不支持取景」处理，绝不把英文原文塞进提示。
- */
-function cameraErrorNotice(reason: unknown): string {
-  const name = String((reason as { name?: unknown } | null)?.name ?? '');
-  if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
-    return t('checkin.scan.cameraDenied');
-  }
-  if (
-    name === 'NotFoundError' ||
-    name === 'DevicesNotFoundError' ||
-    name === 'OverconstrainedError' ||
-    name === 'ConstraintNotSatisfiedError'
-  ) {
-    return t('checkin.scan.cameraNotFound');
-  }
-  if (name === 'NotReadableError' || name === 'TrackStartError') return t('checkin.scan.cameraBusy');
-  return t('checkin.scan.cameraUnsupported');
-}
-
-async function startScan(): Promise<void> {
-  const epoch = ++scanEpoch;
-  // 应用里先让原生申请一次系统权限，用户同意后 WebView 的 getUserMedia 才会放行。
-  // 浏览器里没有原生权限通道，而且 getUserMedia 必须紧贴用户点击同步发起：
-  // 中间只要有一次 await 就可能丢失用户手势，iOS Safari 会直接拒绝。
-  if (nativeBridge.hasNative()) {
-    try {
-      const granted = await device.ensureCameraPermission();
-      if (!alive || epoch !== scanEpoch || decoderFailed.value) return;
-      if (granted !== true) {
-        showNotice(t('checkin.scan.permissionDenied'), 'error');
-        return;
-      }
-    } catch (reason) {
-      if (alive && epoch === scanEpoch) showNotice(reason instanceof Error ? reason.message : String(reason), 'error');
-      return;
-    }
-    if (!alive) return;
-  }
-
-  setStage('live', '', '');
-  showNotice(t('checkin.scan.opening'));
-
-  // 先同步发起请求，再等 DOM 把 <video> 画出来：请求留在点击的同步栈里，await 只等结果。
-  // 成功 / 失败都落到同一个结果对象，避免详细错误在 await 之前变成未处理的 rejection。
-  let request: Promise<{ stream: MediaStream } | { error: unknown }>;
-  try {
-    request = navigator.mediaDevices
-      .getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
-        audio: false,
-      })
-      .then(
-        (stream) => ({ stream }) as const,
-        (error: unknown) => ({ error }) as const,
-      );
-  } catch (reason) {
-    // 极少数内核在这里同步抛错（mediaDevices 被策略禁用等），按不支持取景提示。
-    setStage('error', t('checkin.scan.openFailed'), cameraErrorNotice(reason));
-    clearStatus();
-    return;
-  }
-  await nextTick();
-
-  const settled = await request;
-  if (!alive || epoch !== scanEpoch) {
-    // 页面已离开或重新开始：媒体回来也立刻释放，不留下后台摄像头。
-    if ('stream' in settled) settled.stream.getTracks().forEach((track) => track.stop());
-    return;
-  }
-  if ('error' in settled) {
-    setStage('error', t('checkin.scan.openFailed'), cameraErrorNotice(settled.error));
-    clearStatus();
-    return;
-  }
-
-  const media = settled.stream;
-  if (!alive || epoch !== scanEpoch || decoderFailed.value) {
-    media.getTracks().forEach((track) => track.stop());
-    return;
-  }
-
-  const node = videoEl.value;
-  if (!node) {
-    media.getTracks().forEach((track) => track.stop());
-    return;
-  }
-  stream = media;
-  node.srcObject = media;
-  try {
-    await node.play();
-  } catch {
-    // 部分内核要求用户手势才自动播放；播放失败时下面的循环仍会尝试取帧。
-  }
-  if (!alive || epoch !== scanEpoch || stream !== media) return;
-  scanning.value = true;
-  showNotice(t('checkin.scan.placeCode'));
-  scheduleFrame();
+  await scanner.start();
 }
 
 function stopScan(): void {
-  scanning.value = false;
-  if (frameHandle) {
-    cancelAnimationFrame(frameHandle);
-    frameHandle = 0;
-  }
-  releaseCamera();
+  scanner.releaseCamera();
   setStage('stopped', t('checkin.scan.stopped'), t('checkin.scan.resumeOrType'));
   clearStatus();
-}
-
-function releaseCamera(): void {
-  scanEpoch += 1;
-  scanning.value = false;
-  if (frameHandle) {
-    cancelAnimationFrame(frameHandle);
-    frameHandle = 0;
-  }
-  if (stream) {
-    stream.getTracks().forEach((track) => track.stop());
-    stream = null;
-  }
-  if (videoEl.value) videoEl.value.srcObject = null;
-}
-
-function scheduleFrame(): void {
-  if (!scanning.value) return;
-  frameHandle = requestAnimationFrame((timestamp) => {
-    if (!scanning.value) return;
-    if (timestamp - lastDecodeAt >= DECODE_INTERVAL) {
-      lastDecodeAt = timestamp;
-      void decodeFrame();
-    }
-    scheduleFrame();
-  });
-}
-
-/** 取当前画面中间 4:3 区域解码，兼顾识别率与性能。 */
-async function decodeFrame(): Promise<void> {
-  if (!decoderReady.value || decodeBusy || !alive || !scanning.value) return;
-  const node = videoEl.value;
-  const target = canvasEl.value;
-  if (!decoder || !node || !target) return;
-  const width = node.videoWidth;
-  const height = node.videoHeight;
-  if (!width || !height) return;
-
-  const cropWidth = Math.min(width, Math.round((height * 4) / 3));
-  const cropHeight = Math.min(height, Math.round((cropWidth * 3) / 4));
-  const context = target.getContext('2d', { willReadFrequently: true });
-  if (!context) return;
-  target.width = DECODE_WIDTH;
-  target.height = Math.round((DECODE_WIDTH * cropHeight) / cropWidth);
-  context.drawImage(
-    node,
-    (width - cropWidth) / 2,
-    (height - cropHeight) / 2,
-    cropWidth,
-    cropHeight,
-    0,
-    0,
-    target.width,
-    target.height,
-  );
-  let image: ImageData;
-  try {
-    image = context.getImageData(0, 0, target.width, target.height);
-  } catch {
-    return;
-  }
-  const epoch = scanEpoch;
-  decodeBusy = true;
-  try {
-    const found = await decoder.decode(image);
-    // 停止、重启或离开页面后，旧帧的结果不再触发核销。
-    if (alive && scanning.value && epoch === scanEpoch && found) await handleCode(found);
-  } catch {
-    if (epoch === scanEpoch) decoderUnavailable();
-  } finally {
-    if (alive) decodeBusy = false;
-  }
 }
 
 /** 识别到内容后先停止取景，避免同一张码被连续提交。 */
 async function handleCode(raw: string): Promise<void> {
   if (submitting.value) return;
-  releaseCamera();
+  scanner.releaseCamera();
   setStage('detected', t('checkin.scan.recognized'), previewOf(raw));
   await verify(raw);
 }
@@ -515,10 +233,10 @@ async function handleCode(raw: string): Promise<void> {
  * 两条路都汇到 useImageSource，缩放与解码只写一遍。
  */
 function pickImage(): void {
-  if (picking.value || starting.value) return;
+  if (picking.value || scanner.starting.value) return;
   // 选图期间不再取景：相机一直占着会挡住系统选择器，也没必要同时解码两路。
-  if (scanning.value) stopScan();
-  else releaseCamera();
+  if (scanner.scanning.value) stopScan();
+  else scanner.releaseCamera();
   if (nativeBridge.hasNative()) {
     void pickNativeImage();
     return;
@@ -567,39 +285,20 @@ async function onImageChosen(event: Event): Promise<void> {
   }
 }
 
-/** 两条选图路径共用：缩到 MAX_IMAGE_EDGE -> 等解码器就绪 -> 解码 -> 核销或提示。 */
+/** 两条选图路径共用：读取像素、等待解码器就绪，再核销或提示。 */
 async function useImageSource(source: File | string): Promise<void> {
   // 解码可能要点时间，先用骨架行占位，避免看起来没反应。
   showLoadingStatus();
   let image: ImageData;
   try {
-    image = await readImageData(source);
+    image = await readCheckinImageData(source);
   } catch {
     if (alive) showNotice(t('checkin.scan.pickFailed'), 'error');
     return;
   }
   if (!alive) return;
-  if (!decoder) {
-    decoderUnavailable();
-    return;
-  }
-  // 解码器就是挂载时创建的那一个：没就绪就在这里等它，不必先开摄像头。
-  if (!decoderReady.value) {
-    try {
-      await decoder.ready;
-    } catch {
-      decoderUnavailable();
-      return;
-    }
-  }
-  let found: string | null;
-  try {
-    found = await decoder.decode(image);
-  } catch {
-    decoderUnavailable();
-    return;
-  }
-  if (!alive) return;
+  const found = await scanner.decodeImage(image);
+  if (!alive || scanner.decoderFailed.value) return;
   if (!found) {
     // 没识别到是常见结果，用行内提示而不是错误块。
     showNotice(t('checkin.scan.pickEmpty'));
@@ -607,64 +306,6 @@ async function useImageSource(source: File | string): Promise<void> {
   }
   // 与摄像头识别同一条路：停取景、进入已识别、再核销。
   await handleCode(found);
-}
-
-/** 把选到的图片读成像素：等比缩到最长边 <= MAX_IMAGE_EDGE，再取 ImageData。 */
-async function readImageData(source: File | string): Promise<ImageData> {
-  const loaded = await loadImageSource(source);
-  try {
-    const { width, height } = loaded;
-    if (!width || !height) throw new Error('image has no size');
-    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(width, height));
-    const targetWidth = Math.max(1, Math.round(width * scale));
-    const targetHeight = Math.max(1, Math.round(height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) throw new Error('2d context unavailable');
-    context.drawImage(loaded.source, 0, 0, targetWidth, targetHeight);
-    return context.getImageData(0, 0, targetWidth, targetHeight);
-  } finally {
-    loaded.release();
-  }
-}
-
-/**
- * File 优先 createImageBitmap（不解码到 DOM，快且省内存），内核解不开这个格式时退回
- * Image + object URL；dataUrl 直接用 Image 解码。release 由调用方取完像素后调用。
- */
-async function loadImageSource(
-  source: File | string,
-): Promise<{ source: CanvasImageSource; width: number; height: number; release: () => void }> {
-  if (typeof source !== 'string' && typeof createImageBitmap === 'function') {
-    try {
-      const bitmap = await createImageBitmap(source);
-      return { source: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close() };
-    } catch {
-      // 落到下面的 <img> 再试一次
-    }
-  }
-  const objectUrl = typeof source === 'string' ? '' : URL.createObjectURL(source);
-  try {
-    const image = new Image();
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error('image load failed'));
-      image.src = objectUrl || (source as string);
-    });
-    return {
-      source: image,
-      width: image.naturalWidth,
-      height: image.naturalHeight,
-      release: () => {
-        if (objectUrl) URL.revokeObjectURL(objectUrl);
-      },
-    };
-  } catch (reason) {
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
-    throw reason;
-  }
 }
 
 // ── 核销 ───────────────────────────────────────────────────────
@@ -700,7 +341,7 @@ function renderResult(response: ApiResult): void {
       record,
     },
     ...outcomes.value,
-  ].slice(0, MAX_OUTCOMES);
+  ].slice(0, MAX_CHECKIN_OUTCOMES);
   persistOutcomes();
   if (ok) toast(String(response?.message || t('checkin.succeeded')), 'success');
   else toast(String(response?.error || t('checkin.unsuccessful')), 'error');
@@ -838,8 +479,8 @@ async function submitManual(close: () => void): Promise<void> {
         class="cta"
         type="button"
         data-action="start-scan"
-        :disabled="starting"
-        :data-loading="starting ? 'true' : 'false'"
+        :disabled="scanner.starting.value"
+        :data-loading="scanner.starting.value ? 'true' : 'false'"
         @click="toggleScan"
       >
         {{ t('checkin.scan.start') }}
@@ -848,7 +489,7 @@ async function submitManual(close: () => void): Promise<void> {
         class="cta ghost"
         type="button"
         data-action="pick-image"
-        :disabled="starting || picking"
+        :disabled="scanner.starting.value || picking"
         @click="pickImage"
       >
         {{ t('checkin.scan.pickImage') }}
