@@ -18,7 +18,7 @@ import AppSheet from '@/components/AppSheet.vue';
 import { navigation } from '@/app/navigation';
 import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
-import { clearExhibitionDraft, stashExhibitionDraft } from '@/services/exhibition-draft';
+import { clearExhibitionDraft, readExhibitionDraft, stashExhibitionDraft } from '@/services/exhibition-draft';
 import { sheet } from '@/services/sheet';
 import { api } from '@/app/runtime';
 
@@ -335,6 +335,11 @@ describe('新建展会：三步创建流程', () => {
     expect(review?.textContent).toContain('0 项');
     // 闭展留空是单日展会：只显示开展那一天，不补区间分隔符。
     expect(review?.textContent).not.toContain(' – ');
+    // 封面与简介也摊在这里：没传 / 没写就给占位说明。
+    expect(review?.textContent).toContain('展会封面');
+    expect(review?.textContent).toContain('未设置');
+    expect(review?.textContent).toContain('简介');
+    expect(review?.textContent).toContain('未填写');
     // 第三步只留发布检查：基础字段整块不渲染，活动信息 / 报名设置两卡收起。
     expect(document.querySelector('#form-title')).toBeNull();
     expect(document.querySelector('#form-reg-start')).toBeNull();
@@ -386,6 +391,88 @@ describe('新建展会：三步创建流程', () => {
     expect(router.currentRoute.value.path).toBe('/exhibition-form');
     expect(currentStep()).toBe('发布检查');
     expect(document.querySelector('.create-review .field-error')?.textContent).toContain('保存失败');
+  });
+
+  it('发布检查展示封面缩略图，简介剥掉 Markdown 记号', async () => {
+    stashExhibitionDraft({
+      id: '',
+      title: '草稿展会',
+      venue: '草稿展馆',
+      date: iso(3),
+      endDate: '',
+      time: '',
+      status: 'review',
+      category: '智能家居',
+      description: '# 展会亮点\n\n- 数控机床与机器人\n- 智能制造软件',
+      imageUri: '/media/cover.jpg',
+      registrationStart: '',
+      registrationEnd: '',
+      qrEnabled: false,
+      allowCancel: true,
+      fields: [],
+    });
+    await mountPage();
+    await clickFooter('继续');
+    await clickFooter('继续');
+
+    const review = document.querySelector('.create-review');
+    expect(review?.querySelector('.create-review-cover img')?.getAttribute('src')).toBe('/media/cover.jpg');
+    expect(review?.textContent).toContain('展会亮点');
+    expect(review?.textContent).toContain('数控机床与机器人');
+    expect(review?.textContent).not.toContain('#');
+    expect(review?.textContent).not.toContain('未设置');
+  });
+
+  it('内存稿记着向导步骤，从简介编辑器回来停在那一步', async () => {
+    stashExhibitionDraft({
+      id: '',
+      title: '草稿展会',
+      venue: '草稿展馆',
+      date: iso(3),
+      endDate: '',
+      time: '',
+      status: 'review',
+      category: '智能家居',
+      description: '',
+      imageUri: '',
+      registrationStart: '',
+      registrationEnd: '',
+      qrEnabled: false,
+      allowCancel: true,
+      fields: [],
+      step: 2,
+    });
+    await mountPage();
+
+    expect(currentStep()).toBe('报名配置');
+    expect(hiddenByStep('#form-title')).toBe(true);
+    expect(hiddenByStep('#form-reg-start')).toBe(false);
+  });
+
+  it('换步骤会把步骤同步进内存稿', async () => {
+    stashExhibitionDraft({
+      id: '',
+      title: '草稿展会',
+      venue: '草稿展馆',
+      date: iso(3),
+      endDate: '',
+      time: '',
+      status: 'review',
+      category: '智能家居',
+      description: '',
+      imageUri: '',
+      registrationStart: '',
+      registrationEnd: '',
+      qrEnabled: false,
+      allowCancel: true,
+      fields: [],
+    });
+    // 草稿里第一步的必填项已经齐了：直接点「继续」就能进第二步。
+    await mountPage();
+    await clickFooter('继续');
+
+    expect(currentStep()).toBe('报名配置');
+    expect(readExhibitionDraft()?.step).toBe(2);
   });
 
   it('离开时选「保存」校验失败，会切到出错字段所在的那一步', async () => {

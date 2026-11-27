@@ -44,10 +44,12 @@ import {
 } from '@/services/exhibition-form-model';
 import {
   clearExhibitionDraft,
+  patchExhibitionDraftStep,
   readExhibitionDraft,
   stashExhibitionDraft,
   type ExhibitionDraft,
 } from '@/services/exhibition-draft';
+import { coverOf } from '@/services/cover';
 import StateBlock from '@/components/StateBlock.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import SegControl from '@/components/SegControl.vue';
@@ -244,6 +246,21 @@ const registrationWindowText = computed(() => {
 });
 /** 发布检查里的收集项数量：标题为空的行不会进 payload，计数要与提交同口径。 */
 const submittedFieldCount = computed(() => fields.value.filter((field) => field.title.trim() !== '').length);
+/** 发布检查里的封面：与详情页同一套取值（自己的封面优先，其次管理员缺省封面）。 */
+const reviewCover = computed(() => coverOf(form.imageUri));
+/** 发布检查里的简介：剥掉 Markdown 记号取开头一段；没填就说明详情页显示占位文案。 */
+const reviewIntroduction = computed(() => {
+  const raw = form.description.trim();
+  if (!raw) return t('exhibition.form.reviewIntroductionNone');
+  const text = raw
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[#>*_`~|-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return t('exhibition.form.reviewIntroductionNone');
+  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+});
 
 // ── 分类抽屉 ─────────────────────────────────────────────────────
 
@@ -506,6 +523,17 @@ function isInvalid(name: string): boolean {
   return invalidField.value === name;
 }
 
+/** 内存稿里记的步骤：只认 1~3，旧草稿缺省回到第一步。 */
+function restoredStep(step: number | undefined): number {
+  const value = Number(step ?? 1);
+  return Number.isInteger(value) && value >= 1 && value <= createSteps.length ? value : 1;
+}
+
+// 新建换步骤时同步回内存稿：从简介编辑器回来仍停在离开时那一步。
+watch(createStep, (step) => {
+  if (isCreate.value) patchExhibitionDraftStep(step);
+});
+
 // ── 取数 ─────────────────────────────────────────────────────────
 
 /** 把一份内容落到响应式表单上（首屏取数与内存稿回填共用）。 */
@@ -532,6 +560,8 @@ function currentDraft(): ExhibitionDraft {
     allowCancel: form.allowCancel,
     registrationNotice: form.registrationNotice,
     fields: fields.value,
+    // 新建向导的步骤也进内存稿：从简介编辑器回来停在离开时那一步。
+    step: isCreate.value ? createStep.value : undefined,
   };
 }
 
@@ -575,7 +605,10 @@ const restoredDraft = matchingDraft();
 if (isCreate.value) {
   built.value = true;
   markSaved();
-  if (restoredDraft) fillContent(exhibitionContentFromDraft(restoredDraft));
+  if (restoredDraft) {
+    fillContent(exhibitionContentFromDraft(restoredDraft));
+    createStep.value = restoredStep(restoredDraft.step);
+  }
 } else if (restoredDraft) {
   built.value = true;
   fillContent(exhibitionContentFromDraft(restoredDraft));
@@ -1288,6 +1321,18 @@ function isCancelled(reason: unknown): boolean {
         <span>{{ t('admin.limits.category') }}</span>
         <strong>{{ form.category }}</strong>
       </div>
+      <!-- 封面与简介也在这里核对：它们决定详情页第一屏，别让用户发布后才发现没传 / 没写。 -->
+      <div class="create-review-row">
+        <span>{{ t('exhibition.form.cover') }}</span>
+        <span v-if="reviewCover" class="create-review-cover">
+          <img :src="reviewCover" :alt="t('exhibition.form.cover')" />
+        </span>
+        <strong v-else class="create-review-empty">{{ t('exhibition.form.reviewCoverNone') }}</strong>
+      </div>
+      <div class="create-review-row">
+        <span>{{ t('exhibition.form.descriptionLabel') }}</span>
+        <strong class="create-review-copy">{{ reviewIntroduction }}</strong>
+      </div>
       <div class="create-review-row">
         <span>{{ t('exhibition.form.registrationMode') }}</span>
         <strong>{{ exhibitionStatusLabel(form.status) }}</strong>
@@ -1398,6 +1443,27 @@ function isCancelled(reason: unknown): boolean {
 .create-review-row > strong {
   overflow-wrap: anywhere;
   text-align: end;
+}
+
+/* 简介是多行文本：左对齐比右对齐好读；占位说明用次要色。 */
+.create-review-row > .create-review-copy {
+  text-align: start;
+}
+
+.create-review-row > .create-review-empty {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+/* 封面缩略图：与列表里的竖版海报同一个比例，靠右对齐到值列。 */
+.create-review-cover img {
+  display: block;
+  width: 72px;
+  aspect-ratio: 3 / 4;
+  margin-inline-start: auto;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-card);
+  object-fit: cover;
 }
 
 /* 日期 / 时间字段成组排：宽屏两列、窄屏自动落成一行，触发按钮不会截字。 */

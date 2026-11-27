@@ -545,6 +545,8 @@
       "cover": "展会封面",
       "coverCompressed": "封面已压缩并上传",
       "coverRatioHint": "支持3:4~9:16纵图",
+      "reviewCoverNone": "未设置（详情页用缺省封面或占位图）",
+      "reviewIntroductionNone": "未填写（详情页显示占位文案）",
       "coverUploaded": "封面已上传",
       "created": "展会已创建",
       "dangerZone": "危险操作",

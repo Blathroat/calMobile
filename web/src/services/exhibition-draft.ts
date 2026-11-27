@@ -9,6 +9,8 @@ import type { CollectField } from '@/components/CollectFieldsCard.vue';
 export interface ExhibitionDraft {
   /** 编辑已有展会时带的展会 id（新建为空串，缺省）：二级页据此判断草稿属于哪场展会。 */
   id?: string;
+  /** 新建向导停在第几步（1 基本信息 / 2 报名配置 / 3 发布检查）；编辑稿不用，旧草稿缺省按第一步。 */
+  step?: number;
   title: string;
   venue: string;
   date: string;
@@ -50,6 +52,12 @@ export function readExhibitionDraft(): ExhibitionDraft | null {
 export function patchExhibitionDraft(description: string): void {
   if (!current) return;
   current.description = description;
+}
+
+/** 换步骤时同步回内存稿：从简介编辑器回来仍停在离开时那一步。 */
+export function patchExhibitionDraftStep(step: number): void {
+  if (!current) return;
+  current.step = step;
 }
 
 export function clearExhibitionDraft(): void {
