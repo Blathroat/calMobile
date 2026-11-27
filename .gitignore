@@ -51,6 +51,9 @@ skills-lock.json
 npm-debug.log*
 pnpm-debug.log*
 
+# ── 本机截图与抓取证据：留在工作区供比对，不入库 ──────────────────
+.artifacts/
+
 # ── 系统文件 ─────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
