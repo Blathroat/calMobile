@@ -116,6 +116,13 @@ function groupTab(label: string): HTMLButtonElement {
   return button;
 }
 
+/** 组间「返回 / 继续」两颗按钮的文案。 */
+function switchLabels(): string[] {
+  return [...document.querySelectorAll<HTMLElement>('.settings-group-switch button')].map(
+    (item) => item.textContent?.trim() ?? '',
+  );
+}
+
 function visibleCardLabels(): string[] {
   return [...document.querySelectorAll<HTMLElement>('.card')]
     .filter((card) => card.style.display !== 'none')
@@ -220,12 +227,13 @@ describe('管理设置 · 分组导航', () => {
     previous.click();
     await nextTick();
     expect(groupTab('展会与报名规则').getAttribute('aria-pressed')).toBe('true');
-    // 第一组没有「返回」，最后一组没有「继续」。
-    expect(
-      [...document.querySelectorAll<HTMLButtonElement>('.settings-group-switch button')].some((item) =>
-        item.textContent?.includes('返回'),
-      ),
-    ).toBe(true);
+    // 组间按钮的边界：第一组没有「返回」，最后一组没有「继续」。
+    groupTab('服务器与日志').click();
+    await nextTick();
+    expect(switchLabels()).toEqual(['继续 · 品牌与外观']);
+    groupTab('应用下载').click();
+    await nextTick();
+    expect(switchLabels()).toEqual(['返回 · 媒体与字段限制']);
   });
 
   it('首次进入显示配置路线提示，关掉后记到账号上', async () => {

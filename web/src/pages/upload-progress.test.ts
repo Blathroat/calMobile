@@ -34,9 +34,6 @@ vi.mock('@/services/publish-media', () => ({ publishImportedMedia: vi.fn() }));
 vi.mock('@/services/device-services', () => ({ device: { importMedia: vi.fn(), discardMedia: vi.fn() } }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 
-/** 管理页 / 展会表单页挂载较重，整套用例并行跑时 5s 默认超时不够。 */
-vi.setConfig({ testTimeout: 15_000 });
-
 const blank = defineComponent({ render: () => h('div') });
 
 /** 管理端设置接口的回包：字段与真实接口同形（沿用管理设置其它用例的夹具）。 */
