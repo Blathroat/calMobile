@@ -10,6 +10,8 @@
  */
 import { api } from '@/app/runtime';
 import { isJoinSurface } from '@/app/surface';
+import { currentYearMonth } from '@/services/calendar-default';
+import { addMonths } from '@/services/format';
 import { useSessionStore } from '@/stores/session';
 
 const done = new Set<string>();
@@ -51,12 +53,6 @@ function drain(): void {
     .then(() => idle(drain));
 }
 
-/** 首页的月份（当前自然月）：与 `HomePage` 用同一套参数，键一致才命中缓存。 */
-function homeMonth(): { year: number; month: number } {
-  const now = new Date();
-  return { year: now.getFullYear(), month: now.getMonth() + 1 };
-}
-
 /** 底部导航能直达的几个页面（切换最频繁）。 */
 export function preloadTabs(): void {
   const session = useSessionStore();
@@ -64,8 +60,8 @@ export function preloadTabs(): void {
     if (session.loggedIn) enqueue('my-registrations', () => api.registrations.list());
     return;
   }
-  const { year, month } = homeMonth();
-  // 首页的键带上落点年月：参数变了就重新预热，否则真实落点会被默认月份永久挡住。
+  const { year, month } = currentYearMonth();
+  // 首页的键带上落点年月：参数变了就重新预热，否则切换月份后仍是旧缓存。
   enqueue(`home-${year}-${month}`, () => api.exhibitions.month({ year, month }));
   enqueue('my-registrations', () => api.registrations.list());
   if (session.loggedIn) {
@@ -97,7 +93,7 @@ function tabTask(id: string): (() => Promise<unknown>) | null {
   const session = useSessionStore();
   if (id === 'home') {
     if (isJoinSurface) return null;
-    const { year, month } = homeMonth();
+    const { year, month } = currentYearMonth();
     return () => api.exhibitions.month({ year, month });
   }
   if (id === 'my-registrations') {
@@ -122,8 +118,7 @@ function tabTask(id: string): (() => Promise<unknown>) | null {
 /** 相邻月份：左右滑动切月时目标月份已经在缓存里。 */
 export function preloadAdjacentMonths(year: number, month: number): void {
   for (const delta of [1, -1]) {
-    const total = year * 12 + (month - 1) + delta;
-    const target = { year: Math.floor(total / 12), month: (total % 12) + 1 };
+    const target = addMonths(year, month, delta);
     enqueue(`month-${target.year}-${target.month}`, () => api.exhibitions.month(target));
   }
 }

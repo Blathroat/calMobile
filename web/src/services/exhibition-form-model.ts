@@ -73,61 +73,55 @@ export function submittedExhibitionData(model: ExhibitionFormModel, fields: Coll
   };
 }
 
-/** 将详情映射到表单，并保留旧记录中不再出现在分类清单里的值。 */
-export function exhibitionContentFromServer(item: JsonObject, data: ExhibitionDetail): ExhibitionFormContent {
-  const status = String(item.statusCode ?? '');
+/**
+ * 服务器详情与内存稿各自的字段类型不同，但缺省规则完全一样：字符串字段一律
+ * `String(... ?? '')` 兜空，状态不在清单里退回「需审核」。两边都先收成可索引对象再映射。
+ */
+function toFormModel(raw: object, statusCode: unknown): ExhibitionFormModel {
+  const source = raw as Record<string, unknown>;
+  const status = String(statusCode ?? '');
   return {
-    model: {
-      title: String(item.title ?? ''),
-      venue: String(item.venue ?? ''),
-      date: String(item.date ?? ''),
-      endDate: String(item.endDate ?? ''),
-      time: String(item.time ?? ''),
-      status: REGISTRATION_MODES.some((mode) => mode === status) ? status : EXHIBITION_STATUS.REVIEW_REQUIRED,
-      category: String(item.category ?? ''),
-      description: String(item.description ?? ''),
-      imageUri: String(item.imageUri ?? ''),
-      registrationStart: String(item.registrationStart ?? ''),
-      registrationEnd: String(item.registrationEnd ?? ''),
-      qrEnabled: item.qrEnabled === true,
-      allowCancel: item.allowCancel !== false,
-      registrationNotice: String(item.registrationNotice ?? ''),
-    },
-    fields: (data.fields ?? []).map((field) => ({
-      title: String(field.title ?? ''),
-      type: String(field.type ?? FIELD_TYPE.TEXT),
-      required: field.required === true,
-      options: normalizeOptions(field.options),
-    })),
+    title: String(source.title ?? ''),
+    venue: String(source.venue ?? ''),
+    date: String(source.date ?? ''),
+    endDate: String(source.endDate ?? ''),
+    time: String(source.time ?? ''),
+    status: REGISTRATION_MODES.some((mode) => mode === status) ? status : EXHIBITION_STATUS.REVIEW_REQUIRED,
+    category: String(source.category ?? ''),
+    description: String(source.description ?? ''),
+    imageUri: String(source.imageUri ?? ''),
+    registrationStart: String(source.registrationStart ?? ''),
+    registrationEnd: String(source.registrationEnd ?? ''),
+    qrEnabled: source.qrEnabled === true,
+    allowCancel: source.allowCancel !== false,
+    registrationNotice: String(source.registrationNotice ?? ''),
   };
 }
 
+/** 收集项归一化：缺类型按文本处理，选项统一成字符串数组。 */
+function toCollectField(field: object): CollectField {
+  const { title, type, required, options } = field as Record<string, unknown>;
+  return {
+    title: String(title ?? ''),
+    type: String(type ?? FIELD_TYPE.TEXT),
+    required: required === true,
+    options: normalizeOptions(options),
+  };
+}
+
+/** 将详情映射到表单，并保留旧记录中不再出现在分类清单里的值。 */
+export function exhibitionContentFromServer(item: JsonObject, data: ExhibitionDetail): ExhibitionFormContent {
+  return {
+    model: toFormModel(item, item.statusCode),
+    fields: (data.fields ?? []).map(toCollectField),
+  };
+}
+
+/** 内存稿回填：内容来自用户刚填的表单，映射规则与服务器详情一致。 */
 export function exhibitionContentFromDraft(draft: ExhibitionDraft): ExhibitionFormContent {
   return {
-    model: {
-      title: draft.title,
-      venue: draft.venue,
-      date: draft.date,
-      endDate: draft.endDate ?? '',
-      time: draft.time,
-      status: REGISTRATION_MODES.some((mode) => mode === draft.status)
-        ? draft.status
-        : EXHIBITION_STATUS.REVIEW_REQUIRED,
-      category: draft.category,
-      description: draft.description,
-      imageUri: draft.imageUri,
-      registrationStart: draft.registrationStart,
-      registrationEnd: draft.registrationEnd,
-      qrEnabled: draft.qrEnabled,
-      allowCancel: draft.allowCancel,
-      registrationNotice: draft.registrationNotice ?? '',
-    },
-    fields: draft.fields.map((field) => ({
-      title: field.title,
-      type: field.type,
-      required: field.required,
-      options: [...field.options],
-    })),
+    model: toFormModel(draft, draft.status),
+    fields: draft.fields.map(toCollectField),
   };
 }
 

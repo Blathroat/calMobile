@@ -54,11 +54,11 @@ import type { CachedRead } from '@/services/query-cache';
 import { coverOf } from '@/services/cover';
 import StatusTag from '@/components/StatusTag.vue';
 import RoleTag from '@/components/RoleTag.vue';
-import { addMonths, formatChineseTime, formatDateWithWeekday, joinText, monthLabel } from '@/services/format';
+import { addMonths, formatChineseTime, formatDateWithWeekday, isoDate, joinText, monthLabel } from '@/services/format';
 import { agreementConsentPending } from '@/services/agreement-prompt';
 import type { JsonObject } from '@/api/types';
 import { exhibitionModeCode, modeLabel, registrationStatusLabel, statusTone } from '@/services/status';
-import { homeDefaultDay } from '@/services/calendar-default';
+import { currentYearMonth, homeDefaultDay } from '@/services/calendar-default';
 import { t } from '@/i18n';
 
 const WEEK_LABELS = [
@@ -79,8 +79,7 @@ const { visible: hintVisible, dismiss: dismissHint } = useHint('home-calendar-sw
 
 /** 首屏落在当前自然月；之后切月份、点日期都以用户为准。 */
 const view = ref({
-  year: new Date().getFullYear(),
-  month: new Date().getMonth() + 1,
+  ...currentYearMonth(),
   // 0 表示「还没选」：取到当月数据后按默认规则补上，见 `homeDefaultDay`。
   day: 0,
 });
@@ -156,13 +155,9 @@ interface DayJump {
   aria: string;
 }
 
-function pad2(value: number): string {
-  return String(value).padStart(2, '0');
-}
-
-/** 本月第几天 → ISO 日期：日期格式化统一按后端下发的 YYYY-MM-DD 口径来。 */
+/** 本月第几天 → ISO 日期：日期格式化统一按后端下发的 `YYYY-MM-DD` 口径来。 */
 function isoOf(day: number): string {
-  return view.value.year + '-' + pad2(view.value.month) + '-' + pad2(day);
+  return isoDate(view.value.year, view.value.month, day);
 }
 
 /** 建议日期后面那句标记：有展会优先，只有本人活动时才写「有我的活动」。 */
@@ -313,10 +308,17 @@ function resetSlideStyles(): void {
   if (calendarHost.value) calendarHost.value.dataset.drag = 'false';
 }
 
+/** 清掉回弹的兜底计时器（新一次拖动 / 切月 / 卸载前都要清）。 */
+function clearSnapTimer(): void {
+  if (snapTimer === undefined) return;
+  window.clearTimeout(snapTimer);
+  snapTimer = undefined;
+}
+
 /** 松手但没到切月阈值：三块一起回原位。 */
 function snapBackSlide(): void {
   paintOffset(0, 'transform var(--motion-normal) var(--ease-out)');
-  if (snapTimer !== undefined) window.clearTimeout(snapTimer);
+  clearSnapTimer();
   snapTimer = window.setTimeout(
     () => {
       snapTimer = undefined;
@@ -351,10 +353,7 @@ function slideMonth(direction: number): void {
   }
   monthSliding = true;
   monthQuery.cancel();
-  if (snapTimer !== undefined) {
-    window.clearTimeout(snapTimer);
-    snapTimer = undefined;
-  }
+  clearSnapTimer();
   const offset = direction > 0 ? -cardWidth() : cardWidth();
   paintOffset(offset, 'transform var(--motion-normal) var(--ease-out)');
   const card = calendarHost.value;
@@ -416,10 +415,7 @@ function enableSwipe(): void {
     if (pointerId !== null || event.pointerType === 'mouse') return;
     if (monthSliding) return;
     // 回弹动画还没结束时再次按下：取消兜底复位，交给这次拖动继续跟手。
-    if (snapTimer !== undefined) {
-      window.clearTimeout(snapTimer);
-      snapTimer = undefined;
-    }
+    clearSnapTimer();
     pointerId = event.pointerId;
     startX = event.clientX;
     startY = event.clientY;
@@ -563,7 +559,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   if (slideTimer !== undefined) window.clearTimeout(slideTimer);
-  if (snapTimer !== undefined) window.clearTimeout(snapTimer);
+  clearSnapTimer();
   if (installHintTimer !== undefined) window.clearTimeout(installHintTimer);
 });
 </script>
@@ -571,7 +567,7 @@ onBeforeUnmount(() => {
 <template>
   <!-- 品牌行收成一行：首屏优先留给日历与当天活动，名字与拉丁标记各占一侧。 -->
   <header class="row" data-between="true">
-    <h2 class="home-brand truncate">{{ bootstrap.brand.zh }}</h2>
+    <h2 class="home-brand truncate fill">{{ bootstrap.brand.zh }}</h2>
     <span class="eyebrow">{{ bootstrap.brand.en }}</span>
   </header>
 
@@ -642,7 +638,7 @@ onBeforeUnmount(() => {
   <HintNote v-if="hintVisible" :text="t('home.swipeMonthHint')" @dismiss="dismissHint" />
 
   <div class="row" data-between="true">
-    <h2 class="home-day-title">{{ dayTitle }}</h2>
+    <h2 class="home-day-title fill">{{ dayTitle }}</h2>
     <span class="pill">{{ selectedMeta }}</span>
   </div>
 
@@ -732,17 +728,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-/* 品牌行收成一行后让中文名先占满、拉丁标记贴右侧；名字过长时省略，不把标记挤出行外。 */
-.home-brand {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-/* 当天列表标题：与右侧「几场」的小签同一行，窄屏时标题自己换行。 */
-.home-day-title {
-  flex: 1 1 auto;
-  min-width: 0;
-}
+/* 品牌行与当天标题都靠 .fill 占满剩余宽度（见 base.css）：前者过长时省略，后者窄屏换行。 */
 
 /* 空白日期：360×800 的短屏上也要同时看到说明与两颗日期按钮，
    所以只在这一块收起空状态的大图标（状态块本身仍复用 StateBlock）。 */

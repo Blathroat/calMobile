@@ -30,7 +30,7 @@ import AvatarBox from '@/components/AvatarBox.vue';
 import ImageViewer from '@/components/ImageViewer.vue';
 import HintNote from '@/components/HintNote.vue';
 import { useHint } from '@/composables/useHint';
-import { formatChineseDate, formatDateRange, formatDateWithWeekday, joinText, parseDate } from '@/services/format';
+import { dateParts, formatChineseDate, formatDateRange, formatEndDate, joinText } from '@/services/format';
 import {
   EXHIBITION_STATUS,
   REGISTRATION_STATUS,
@@ -107,26 +107,33 @@ const calendarLabel = computed(() =>
     : t('exhibition.detail.addToCalendar'),
 );
 
+interface DescriptionState {
+  html: string;
+  text: string;
+  loading: boolean;
+  failed: boolean;
+}
+
+const EMPTY_DESCRIPTION: DescriptionState = { html: '', text: '', loading: false, failed: false };
+
 /** 简介：HTML 走清洗，Markdown 走渲染入口，空简介给出说明而不是空白。 */
-const description = computed(() => {
+const description = computed<DescriptionState>(() => {
   const item = exhibition.value;
-  if (!item) return { html: '', text: '', loading: false, failed: false };
+  if (!item) return EMPTY_DESCRIPTION;
   const raw = String(item.description ?? '');
-  if (!raw.trim()) return { html: '', text: '', loading: false, failed: false };
-  if (markdownStatus.value === 'loading') return { html: '', text: '', loading: true, failed: false };
+  if (!raw.trim()) return EMPTY_DESCRIPTION;
+  if (markdownStatus.value === 'loading') return { ...EMPTY_DESCRIPTION, loading: true };
   if (markdownStatus.value === 'failed') {
     return {
-      html: '',
+      ...EMPTY_DESCRIPTION,
       text: item.descriptionFormat === 'html' ? plainText(raw, 4000) : '',
-      loading: false,
       failed: true,
     };
   }
-  if (item.descriptionFormat === 'html') {
-    if (/<[a-z][\s\S]*>/i.test(raw)) return { html: sanitizeHtml(raw), text: '', loading: false, failed: false };
-    return { html: '', text: plainText(raw, 4000), loading: false, failed: false };
-  }
-  return { html: markdownToHtml(raw), text: '', loading: false, failed: false };
+  if (item.descriptionFormat !== 'html') return { ...EMPTY_DESCRIPTION, html: markdownToHtml(raw) };
+  return /<[a-z][\s\S]*>/i.test(raw)
+    ? { ...EMPTY_DESCRIPTION, html: sanitizeHtml(raw) }
+    : { ...EMPTY_DESCRIPTION, text: plainText(raw, 4000) };
 });
 
 /** 已登录且后端明确下发可报名。 */
@@ -163,26 +170,10 @@ const myRegistration = computed<Registration | null>(() => {
 /**
  * 展期：开展日单独用最大一档，闭展日作为「区间尾巴」小一号接在后面。
  * 拆成两段是为了窄屏：一团 32px 的区间会在日期中间断开，把「（周二）」甩到下一行。
- * 单日展会没有尾巴（闭展为空或与开展同一天），与 `formatDateRange` 的口径一致。
+ * 单日展会没有尾巴（闭展为空或与开展同一天），口径与 `formatDateRange` 一致。
  */
-const dateStart = computed(() => {
-  const date = parseDate(exhibition.value?.date);
-  if (!date) return { monthDay: '', year: '', weekday: '' };
-  const label = formatDateWithWeekday(exhibition.value?.date);
-  return {
-    monthDay: `${date.month}月${date.day}日`,
-    year: `${date.year}年`,
-    weekday: label.match(/（([^）]+)）/)?.[1] ?? '',
-  };
-});
-const dateEnd = computed(() => {
-  const item = exhibition.value;
-  const start = parseDate(item?.date);
-  const end = parseDate(item?.endDate);
-  if (!start || !end || (start.year === end.year && start.month === end.month && start.day === end.day)) return '';
-  const label = formatDateWithWeekday(item?.endDate);
-  return start.year === end.year ? label : `${end.year}年${label}`;
-});
+const dateStart = computed(() => dateParts(exhibition.value?.date));
+const dateEnd = computed(() => formatEndDate(exhibition.value?.date, exhibition.value?.endDate));
 
 /** 展商行：名字后面接展商自己的说明；两者都空时用「展」兜底，不留空行。 */
 const exhibitorLine = computed(() =>
@@ -199,7 +190,6 @@ const registrationStatusLine = computed(() => {
   const item = exhibition.value;
   if (!item || myRegistration.value || item.openForRegistration === false) return '';
   const code = exhibitionModeCode(item);
-  if (item.registrationEnded === true) return '';
   if (code === EXHIBITION_STATUS.REVIEW_REQUIRED || code === EXHIBITION_STATUS.REVIEW_OPTIONAL) {
     return modeHint(code);
   }
@@ -564,7 +554,7 @@ onMounted(() => {
           :text="modeLabel(exhibitionModeCode(exhibition))"
           :tone="statusTone(exhibitionModeCode(exhibition))"
         />
-        <span v-if="registrationStatusLine" class="row-meta detail-mode-hint">{{ registrationStatusLine }}</span>
+        <span v-if="registrationStatusLine" class="row-meta fill">{{ registrationStatusLine }}</span>
       </div>
       <p v-if="registrationDeadline" class="detail-fact-deadline">{{ registrationDeadline }}</p>
       <!-- 已经报过名：报名状态也摆在事实区，不点进详情就能确认进度 -->
@@ -679,7 +669,6 @@ onMounted(() => {
 .detail-facts {
   gap: var(--s4);
   padding: var(--s5);
-  background: var(--screen);
 }
 
 .detail-facts-date {
@@ -701,11 +690,15 @@ onMounted(() => {
   min-width: 0;
 }
 
-.detail-date-primary {
+.detail-date-primary,
+.detail-date-period {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--s2);
+}
+
+.detail-date-primary {
   min-width: 0;
 }
 
@@ -724,13 +717,6 @@ onMounted(() => {
   color: var(--ink-2);
   font-size: var(--fs-meta);
   font-weight: 600;
-}
-
-.detail-date-period {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--s2);
 }
 
 .detail-date-period > strong {
@@ -765,11 +751,6 @@ onMounted(() => {
   min-width: 0;
 }
 
-.detail-mode-hint {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 .detail-fact-deadline {
   margin: calc(var(--s2) * -1) 0 0;
   color: var(--ink-2);
@@ -787,9 +768,7 @@ onMounted(() => {
     gap: var(--s1);
   }
 }
-</style>
 
-<style>
 /* 可点开的封面：清掉按钮自带的内边距 / 字体 / 居中，只保留 .hero 的尺寸与描边 */
 .hero-button {
   display: block;

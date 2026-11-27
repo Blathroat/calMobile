@@ -32,13 +32,36 @@ export function formatDateWithWeekday(iso: unknown): string {
  * 展会日期区间：有闭展日期且与开展不同才显示成区间，否则就是单日。
  *
  * 例：`11月17日（周二） - 11月22日（周日）`。闭展为空、非法或与开展同一天时只显示开展，
- * 与后端「闭展为空 = 单日展会」的口径一致。
+ * 与后端「闭展为空 = 单日展会」的口径一致。`separator` 供需要长破折号的页面覆盖。
  */
-export function formatDateRange(start: unknown, end?: unknown): string {
+export function formatDateRange(start: unknown, end?: unknown, separator = ' - '): string {
   const first = formatDateWithWeekday(start);
   if (!first) return '';
   const last = formatDateWithWeekday(end);
-  return last && last !== first ? `${first} - ${last}` : first;
+  return last && last !== first ? `${first}${separator}${last}` : first;
+}
+
+/** 详情页信息区的日期片段：11月1日 / 2026年 / 周六；非法日期全空。 */
+export function dateParts(iso: unknown): { monthDay: string; year: string; weekday: string } {
+  const date = parseDate(iso);
+  if (!date) return { monthDay: '', year: '', weekday: '' };
+  return {
+    monthDay: `${date.month}月${date.day}日`,
+    year: `${date.year}年`,
+    weekday: WEEKDAYS[new Date(date.year, date.month - 1, date.day).getDay()] ?? '',
+  };
+}
+
+/**
+ * 闭展日期的尾巴：单日（闭展为空 / 非法 / 与开展同一天）返回空串，跨年时带年份。
+ * 与 `formatDateRange` 的「单日只有一天」同一口径，详情页把它和开展日拆成两段渲染。
+ */
+export function formatEndDate(startIso: unknown, endIso: unknown): string {
+  const start = parseDate(startIso);
+  const end = parseDate(endIso);
+  if (!start || !end || (start.year === end.year && start.month === end.month && start.day === end.day)) return '';
+  const label = formatDateWithWeekday(endIso);
+  return start.year === end.year ? label : `${end.year}年${label}`;
 }
 
 /**
@@ -58,6 +81,11 @@ export function joinText(parts: readonly unknown[], separator = ' · '): string 
 /** 日历分节的月份标题：2026年11月（与 `monthLabel` 的「2026 年 11 月」不同，这里给选择器用）。 */
 export function formatMonthHeading(year: number, month: number): string {
   return `${year}年${month}月`;
+}
+
+/** 年月日拼成后端统一的 `YYYY-MM-DD`（月、日补零）。 */
+export function isoDate(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 /** 2026-10-22 → 2026年10月22日。非法日期返回空串。 */

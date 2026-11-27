@@ -20,6 +20,11 @@ export interface HomeDefaultDayOptions {
   today: Date;
 }
 
+/** 当前自然月的年月：首页取月与底部导航预热共用，参数一致才命中同一份缓存。 */
+export function currentYearMonth(now: Date = new Date()): { year: number; month: number } {
+  return { year: now.getFullYear(), month: now.getMonth() + 1 };
+}
+
 /**
  * @returns 应默认选中的日期（1~31）；整个月都没有活动且不是当前月时返回 0
  */
