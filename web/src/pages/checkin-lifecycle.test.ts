@@ -13,7 +13,8 @@ vi.mock('@/services/qr-decoder', () => ({ createQrDecoder: vi.fn() }));
 vi.mock('@/services/device-services', () => ({
   device: { ensureCameraPermission: vi.fn().mockResolvedValue(true), pickImage: vi.fn() },
 }));
-vi.mock('@/composables/useHint', () => ({ useHint: () => ({ dismiss: vi.fn() }) }));
+const hint = vi.hoisted(() => ({ dismiss: vi.fn() }));
+vi.mock('@/composables/useHint', () => ({ useHint: () => ({ dismiss: hint.dismiss }) }));
 vi.mock('@/services/toast', () => ({ toast: vi.fn() }));
 vi.mock('@/services/sheet', () => ({ openSheet: vi.fn() }));
 
@@ -77,10 +78,16 @@ function actionButton(action: 'start-scan' | 'pick-image' | 'manual'): HTMLButto
 }
 
 describe('核销页面的异步识别与相机生命周期', () => {
-  it('受限账号不创建解码 Worker 或申请相机', async () => {
+  it('受限账号不创建解码 Worker 或申请相机，也不把核销教程记为已读', async () => {
     await mountPage(true);
     expect(createQrDecoder).not.toHaveBeenCalled();
     expect(getUserMedia).not.toHaveBeenCalled();
+    expect(hint.dismiss).not.toHaveBeenCalled();
+  });
+
+  it('正常账号进入核销页就把核销教程记为已读', async () => {
+    await mountPage();
+    expect(hint.dismiss).toHaveBeenCalledTimes(1);
   });
 
   it.each(['stop', 'unmount', 'manual'] as const)('%s 之后的旧帧不会发起核销，解码期间不重复取帧', async (action) => {

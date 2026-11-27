@@ -115,10 +115,11 @@ onMounted(() => {
   topActionsReady.value = document.getElementById('app-top-actions') !== null;
   // 先把本机留下的核销记录读回来，再决定要不要加载识别库。
   loadOutcomes();
+  // 受限账号只看到「不能核销」：这一页没教到位，提示留到限制解除后再出现。
+  if (limited.value) return;
   // 进到核销页就说明展商后台那条「怎么核销」的提示已经教到位了：不管从哪个入口进来
   // （后台按钮、深链、返回键回来）都把它记为已读，下次不再显示。
   void dismissCheckinHint();
-  if (limited.value) return;
   scanner.initialize();
 });
 
