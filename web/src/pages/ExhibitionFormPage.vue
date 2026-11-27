@@ -231,13 +231,19 @@ const dateText = computed(() => formatDateWithWeekday(form.date));
 const endDateText = computed(() => formatDateWithWeekday(form.endDate));
 const registrationStartText = computed(() => formatDateWithWeekday(form.registrationStart));
 const registrationEndText = computed(() => formatDateWithWeekday(form.registrationEnd));
-/** 发布检查里的展期：没填闭展就是单日展会，不补多余的分隔符。 */
-const dateRangeText = computed(() => (endDateText.value ? `${dateText.value} – ${endDateText.value}` : dateText.value));
+/** 发布检查里的展期：闭展为空或与开展同一天都是单日展会，不补多余的分隔符。 */
+const dateRangeText = computed(() =>
+  endDateText.value && endDateText.value !== dateText.value
+    ? `${dateText.value} – ${endDateText.value}`
+    : dateText.value,
+);
 /** 报名窗口：只填了一端时只显示那一端，两端都空时整行不渲染。 */
 const registrationWindowText = computed(() => {
   if (!registrationStartText.value && !registrationEndText.value) return '';
   return `${registrationStartText.value || '—'}${registrationEndText.value ? ` – ${registrationEndText.value}` : ''}`;
 });
+/** 发布检查里的收集项数量：标题为空的行不会进 payload，计数要与提交同口径。 */
+const submittedFieldCount = computed(() => fields.value.filter((field) => field.title.trim() !== '').length);
 
 // ── 分类抽屉 ─────────────────────────────────────────────────────
 
@@ -615,7 +621,8 @@ function askUnsaved(target: string): void {
             return;
           }
           // 新建流程里把出错字段所在的那一步亮出来，否则红框会被收在看不见的那一步。
-          if (isCreate.value) createStep.value = createStepForField(invalidField.value);
+          // 接口失败没有具体字段（invalidField 为空），停在第 3 步原位显示错误即可。
+          if (isCreate.value && invalidField.value) createStep.value = createStepForField(invalidField.value);
         },
       },
       {
@@ -1249,11 +1256,11 @@ function isCancelled(reason: unknown): boolean {
       <p class="field-hint">{{ t('exhibition.form.ownerHint') }}</p>
     </div>
 
-    <!-- 删除放在内容最下，保存仍固定在页脚。新建还没有展会，按钮不可点。 -->
+    <!-- 删除放在内容最下，保存仍固定在页脚。新建还没有展会，整块不渲染。 -->
     <div v-if="!isCreate" class="card danger-zone">
       <span class="section-label">{{ t('exhibition.form.dangerZone') }}</span>
-      <button class="cta danger" type="button" :disabled="isCreate" @click="askDelete">
-        {{ isCreate ? t('exhibition.form.deleteAfterSave') : t('exhibition.form.deleteExhibition') }}
+      <button class="cta danger" type="button" @click="askDelete">
+        {{ t('exhibition.form.deleteExhibition') }}
       </button>
     </div>
 
@@ -1291,7 +1298,7 @@ function isCancelled(reason: unknown): boolean {
       </div>
       <div class="create-review-row">
         <span>{{ t('exhibition.form.collectFields') }}</span>
-        <strong>{{ t('registration.fields.countItems', { count: fields.length }) }}</strong>
+        <strong>{{ t('registration.fields.countItems', { count: submittedFieldCount }) }}</strong>
       </div>
       <p class="field-hint">{{ t('exhibition.form.publishCheckHint') }}</p>
       <!-- 接口失败（没有具体字段）时也要在第三步看见原因；字段错误会退回那一步显示。 -->

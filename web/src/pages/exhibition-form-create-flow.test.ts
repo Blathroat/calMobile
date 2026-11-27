@@ -292,7 +292,7 @@ describe('新建展会：三步创建流程', () => {
     expect(currentStep()).toBe('基本信息');
     expect(inputValue('form-title')).toBe('自动化测试展');
     expect(document.querySelectorAll('.field[data-invalid="true"]')).toHaveLength(0);
-  }, 15000);
+  });
 
   it('第二步校验收集项：标题超出上限时停在这一步并提示', async () => {
     await mountPage();
@@ -333,6 +333,8 @@ describe('新建展会：三步创建流程', () => {
     expect(review?.textContent).toContain('智能家居');
     expect(review?.textContent).toContain('需审核');
     expect(review?.textContent).toContain('0 项');
+    // 闭展留空是单日展会：只显示开展那一天，不补区间分隔符。
+    expect(review?.textContent).not.toContain(' – ');
     // 第三步只留发布检查：基础字段整块不渲染，活动信息 / 报名设置两卡收起。
     expect(document.querySelector('#form-title')).toBeNull();
     expect(document.querySelector('#form-reg-start')).toBeNull();
@@ -353,6 +355,37 @@ describe('新建展会：三步创建流程', () => {
     await flush();
     expect(document.querySelector('.create-progress')).toBeNull();
     expect(footerButtons()).toEqual(['保存展会']);
+  });
+
+  it('闭展与开展选同一天时，发布检查只显示一天', async () => {
+    await mountPage();
+    // 同一天点两次：闭展自动回填成开展日，展会就是单日。
+    await fillStepOne({ endOffset: 3 });
+    await clickFooter('继续');
+    await clickFooter('继续');
+
+    const review = document.querySelector('.create-review');
+    expect(review?.textContent).toContain('开展日期');
+    expect(review?.textContent).not.toContain('–');
+  });
+
+  it('离开时选「保存」遇到接口失败，停在第 3 步原位显示错误', async () => {
+    const router = await mountPage();
+    await fillStepOne();
+    await clickFooter('继续');
+    await clickFooter('继续');
+    vi.mocked(api.exhibitions.save).mockResolvedValue({ ok: false, error: '保存失败' });
+
+    await router.push('/exhibitor');
+    await flush();
+    clickSheetAction('保存');
+
+    await vi.waitFor(() => expect(sheet.current).toBeNull());
+    await flush();
+    // 接口失败没有具体字段：不切换步骤，错误停在发布检查里看得见。
+    expect(router.currentRoute.value.path).toBe('/exhibition-form');
+    expect(currentStep()).toBe('发布检查');
+    expect(document.querySelector('.create-review .field-error')?.textContent).toContain('保存失败');
   });
 
   it('离开时选「保存」校验失败，会切到出错字段所在的那一步', async () => {
