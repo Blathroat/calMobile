@@ -14,10 +14,6 @@ export function useExhibitionOwnerTransfer(getExhibitionId: () => string) {
   const ownerBusy = ref(false);
   const ownerLabel = computed(() => ownerName.value || t('exhibition.form.ownerNone'));
 
-  function setCurrentOwner(name: string): void {
-    ownerName.value = name;
-  }
-
   function ownerEmailError(): string {
     return check(ownerEmail.value, {
       label: t('exhibition.form.ownerEmailLabel'),
@@ -60,5 +56,5 @@ export function useExhibitionOwnerTransfer(getExhibitionId: () => string) {
     });
   }
 
-  return { ownerName, ownerEmail, ownerError, ownerBusy, ownerLabel, setCurrentOwner, askTransferOwner };
+  return { ownerName, ownerEmail, ownerError, ownerBusy, ownerLabel, askTransferOwner };
 }

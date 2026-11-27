@@ -25,7 +25,7 @@ import { useSessionStore } from '@/stores/session';
 import { toast } from '@/services/toast';
 import { confirmSheet, openSheet } from '@/services/sheet';
 import { openDateRange, openTime } from '@/services/pickers';
-import { formatDateWithWeekday } from '@/services/format';
+import { formatDateRange, formatDateWithWeekday } from '@/services/format';
 import { PATTERNS, allowedFormats, check, limit, validateAll } from '@/services/validate';
 import { EXHIBITION_STATUS, REGISTRATION_MODES, exhibitionStatusLabel } from '@/services/status';
 import { canManageExhibition } from '@/services/exhibition-scope';
@@ -233,12 +233,8 @@ const dateText = computed(() => formatDateWithWeekday(form.date));
 const endDateText = computed(() => formatDateWithWeekday(form.endDate));
 const registrationStartText = computed(() => formatDateWithWeekday(form.registrationStart));
 const registrationEndText = computed(() => formatDateWithWeekday(form.registrationEnd));
-/** 发布检查里的展期：闭展为空或与开展同一天都是单日展会，不补多余的分隔符。 */
-const dateRangeText = computed(() =>
-  endDateText.value && endDateText.value !== dateText.value
-    ? `${dateText.value} – ${endDateText.value}`
-    : dateText.value,
-);
+/** 发布检查里的展期：单日（闭展为空或与开展同一天）只显示开展一天。 */
+const dateRangeText = computed(() => formatDateRange(form.date, form.endDate, ' – '));
 /** 报名窗口：只填了一端时只显示那一端，两端都空时整行不渲染。 */
 const registrationWindowText = computed(() => {
   if (!registrationStartText.value && !registrationEndText.value) return '';
@@ -246,6 +242,25 @@ const registrationWindowText = computed(() => {
 });
 /** 发布检查里的收集项数量：标题为空的行不会进 payload，计数要与提交同口径。 */
 const submittedFieldCount = computed(() => fields.value.filter((field) => field.title.trim() !== '').length);
+/** 发布检查卡里「封面 / 简介」之前那几行；空的时间与分类不占位。 */
+const reviewRows = computed(() => [
+  { label: t('admin.limits.exhibitionName'), value: form.title },
+  { label: t('admin.exhibitions.venue'), value: form.venue },
+  { label: t('exhibition.form.openDate'), value: dateRangeText.value },
+  ...(form.time ? [{ label: t('exhibition.form.openTime'), value: form.time }] : []),
+  ...(form.category ? [{ label: t('admin.limits.category'), value: form.category }] : []),
+]);
+/** 封面 / 简介之后的行：报名方式、报名窗口（有才显示）与收集项数量。 */
+const reviewTailRows = computed(() => [
+  { label: t('exhibition.form.registrationMode'), value: exhibitionStatusLabel(form.status) },
+  ...(registrationWindowText.value
+    ? [{ label: t('exhibition.form.registrationOpens'), value: registrationWindowText.value }]
+    : []),
+  {
+    label: t('exhibition.form.collectFields'),
+    value: t('registration.fields.countItems', { count: submittedFieldCount.value }),
+  },
+]);
 /** 发布检查里的封面：与详情页同一套取值（自己的封面优先，其次管理员缺省封面）。 */
 const reviewCover = computed(() => coverOf(form.imageUri));
 /** 发布检查里的简介：剥掉 Markdown 记号取开头一段；没填就说明详情页显示占位文案。 */
@@ -421,6 +436,15 @@ function fieldChecks(): Array<[string, () => string]> {
   ];
 }
 
+/** 收集项校验：保存、逐步校验与发布前整表校验共用同一份上限配置。 */
+function collectFieldsError(): string {
+  return firstCollectFieldError(fields.value, {
+    title: limit('fieldTitle', 30),
+    radio: limit('radioOption', 60),
+    check: limit('checkOption', 60),
+  });
+}
+
 /** 保存前校验：第一条错误显示在原位（字段红框 + 统一说明），并给一次轻提示。 */
 function failFirst(): boolean {
   invalidField.value = '';
@@ -432,11 +456,7 @@ function failFirst(): boolean {
     toast(result.message, 'error');
     return true;
   }
-  const fieldMessage = firstCollectFieldError(fields.value, {
-    title: limit('fieldTitle', 30),
-    radio: limit('radioOption', 60),
-    check: limit('checkOption', 60),
-  });
+  const fieldMessage = collectFieldsError();
   if (fieldMessage) {
     formError.value = fieldMessage;
     invalidField.value = 'fields';
@@ -470,11 +490,7 @@ function validateCreateStep(step: number): boolean {
     return false;
   }
   if (step === 2) {
-    const fieldMessage = firstCollectFieldError(fields.value, {
-      title: limit('fieldTitle', 30),
-      radio: limit('radioOption', 60),
-      check: limit('checkOption', 60),
-    });
+    const fieldMessage = collectFieldsError();
     if (fieldMessage) {
       formError.value = fieldMessage;
       invalidField.value = 'fields';
@@ -522,6 +538,20 @@ function createStepForField(name: string): number {
 function isInvalid(name: string): boolean {
   return invalidField.value === name;
 }
+
+/** 新建流程第一、二步的页脚：只有「继续」；第三步多一颗「返回」。 */
+const showStepBack = computed(() => isCreate.value && createStep.value > 1);
+
+/** 页脚主按钮：继续 / 发布展会 / 保存展会，三处文案与忙碌态只在这里分一次。 */
+const footPrimary = computed(() => {
+  if (!isCreate.value) {
+    return { label: t('exhibition.form.saveExhibition'), busy: saving.value, action: submit };
+  }
+  if (createStep.value < createSteps.length) {
+    return { label: t('common.continue'), busy: false, action: advanceCreateStep };
+  }
+  return { label: t('exhibition.form.publishExhibition'), busy: saving.value, action: submit };
+});
 
 /** 内存稿里记的步骤：只认 1~3，旧草稿缺省回到第一步。 */
 function restoredStep(step: number | undefined): number {
@@ -580,7 +610,7 @@ async function load(): Promise<void> {
   const content = exhibitionContentFromServer(data.exhibition ?? {}, data);
   // 归属人昵称直接取详情里的展商名；改归属成功后就地更新，不为了这一行重载整张表单
   // （重载会把「已保存」基线按服务器内容重拍，未保存的修改就丢了）。
-  setCurrentOwner(String(data.exhibition?.exhibitor ?? ''));
+  ownerName.value = String(data.exhibition?.exhibitor ?? '');
   // 有内存稿时表单已经被它填好（未保存的修改比服务器新），这里只补基线，不能再盖回去。
   markSaved(content);
   if (built.value) return;
@@ -832,7 +862,7 @@ function askDelete(): void {
  * 新建还没有展会、展商也不能把别人的展会转走。改的是 `exhibitions.exhibitor_id`。
  */
 const showOwnerCard = computed(() => !isCreate.value && session.user.can?.admin === true);
-const { ownerName, ownerEmail, ownerError, ownerBusy, ownerLabel, setCurrentOwner, askTransferOwner } =
+const { ownerName, ownerEmail, ownerError, ownerBusy, ownerLabel, askTransferOwner } =
   useExhibitionOwnerTransfer(currentDraftId);
 
 // ── 保存 ─────────────────────────────────────────────────────────
@@ -1301,25 +1331,9 @@ function isCancelled(reason: unknown): boolean {
          这里只读；要改就点「返回」上一步。 -->
     <div v-if="isCreate && createStep === 3" class="card create-review">
       <span class="section-label">{{ t('exhibition.form.publishCheck') }}</span>
-      <div class="create-review-row">
-        <span>{{ t('admin.limits.exhibitionName') }}</span>
-        <strong>{{ form.title }}</strong>
-      </div>
-      <div class="create-review-row">
-        <span>{{ t('admin.exhibitions.venue') }}</span>
-        <strong>{{ form.venue }}</strong>
-      </div>
-      <div class="create-review-row">
-        <span>{{ t('exhibition.form.openDate') }}</span>
-        <strong>{{ dateRangeText }}</strong>
-      </div>
-      <div v-if="form.time" class="create-review-row">
-        <span>{{ t('exhibition.form.openTime') }}</span>
-        <strong>{{ form.time }}</strong>
-      </div>
-      <div v-if="form.category" class="create-review-row">
-        <span>{{ t('admin.limits.category') }}</span>
-        <strong>{{ form.category }}</strong>
+      <div v-for="row in reviewRows" :key="row.label" class="create-review-row">
+        <span>{{ row.label }}</span>
+        <strong>{{ row.value }}</strong>
       </div>
       <!-- 封面与简介也在这里核对：它们决定详情页第一屏，别让用户发布后才发现没传 / 没写。 -->
       <div class="create-review-row">
@@ -1337,13 +1351,9 @@ function isCancelled(reason: unknown): boolean {
         <span>{{ t('exhibition.form.registrationMode') }}</span>
         <strong>{{ exhibitionStatusLabel(form.status) }}</strong>
       </div>
-      <div v-if="registrationWindowText" class="create-review-row">
-        <span>{{ t('exhibition.form.registrationOpens') }}</span>
-        <strong>{{ registrationWindowText }}</strong>
-      </div>
-      <div class="create-review-row">
-        <span>{{ t('exhibition.form.collectFields') }}</span>
-        <strong>{{ t('registration.fields.countItems', { count: submittedFieldCount }) }}</strong>
+      <div v-for="row in reviewTailRows" :key="row.label" class="create-review-row">
+        <span>{{ row.label }}</span>
+        <strong>{{ row.value }}</strong>
       </div>
       <p class="field-hint">{{ t('exhibition.form.publishCheckHint') }}</p>
       <!-- 接口失败（没有具体字段）时也要在第三步看见原因；字段错误会退回那一步显示。 -->
@@ -1355,35 +1365,20 @@ function isCancelled(reason: unknown): boolean {
   <Teleport v-if="built && !limited && !loadFailed && !notFound" defer to="#app-foot">
     <div class="page-foot">
       <div class="stack" data-gap="sm">
-        <template v-if="isCreate">
-          <div v-if="createStep > 1" class="grid-cols-2">
-            <button class="cta ghost" type="button" @click="retreatCreateStep">{{ t('common.back') }}</button>
-            <button v-if="createStep === 2" class="cta" type="button" @click="advanceCreateStep">
-              {{ t('common.continue') }}
-            </button>
-            <button
-              v-else
-              class="cta"
-              type="button"
-              :disabled="saving"
-              :data-loading="saving ? 'true' : 'false'"
-              @click="submit"
-            >
-              {{ t('exhibition.form.publishExhibition') }}
-            </button>
-          </div>
-          <button v-else class="cta" type="button" @click="advanceCreateStep">{{ t('common.continue') }}</button>
-        </template>
-        <button
-          v-else
-          class="cta"
-          type="button"
-          :disabled="saving"
-          :data-loading="saving ? 'true' : 'false'"
-          @click="submit"
-        >
-          {{ t('exhibition.form.saveExhibition') }}
-        </button>
+        <div :class="showStepBack ? 'grid-cols-2' : undefined">
+          <button v-if="showStepBack" class="cta ghost" type="button" @click="retreatCreateStep">
+            {{ t('common.back') }}
+          </button>
+          <button
+            class="cta"
+            type="button"
+            :disabled="footPrimary.busy"
+            :data-loading="footPrimary.busy ? 'true' : 'false'"
+            @click="footPrimary.action"
+          >
+            {{ footPrimary.label }}
+          </button>
+        </div>
         <p v-if="!isCreate" class="field-hint text-center">{{ t('exhibition.form.confirmOnDetail') }}</p>
       </div>
     </div>

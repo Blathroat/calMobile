@@ -42,7 +42,7 @@ function writeLocalHint(key: HintKey): void {
   try {
     localStorage.setItem(LOCAL_HINTS_KEY, JSON.stringify([...seen, key]));
   } catch {
-    // Private browsing may deny storage. The current page still dismisses the hint.
+    // 隐私模式可能拒绝写入本机存储：当前页面照样收起这条提示，不因为存不下而卡住。
   }
 }
 

@@ -131,13 +131,17 @@ const joinLinkCopied = t('exhibitor.registrationLinkCopied');
 const joinLinkCopyFailed = t('exhibitor.copyLinkFailed');
 const joinLinkCopy = t('exhibitor.copyLink');
 
+/** 报名站链接：没配对外地址时提示一次并返回空串，调用方直接放弃。 */
+function joinLinkOf(id: unknown): string {
+  const link = registrationLink(bootstrap.publicBaseUrl, id);
+  if (!link) toast(joinLinkMissing, 'error');
+  return link;
+}
+
 /** 复制报名链接：点击即复制，失败才提示，不再弹手动复制面板。 */
 async function copyJoinLink(id: unknown): Promise<void> {
-  const link = registrationLink(bootstrap.publicBaseUrl, id);
-  if (!link) {
-    toast(joinLinkMissing, 'error');
-    return;
-  }
+  const link = joinLinkOf(id);
+  if (!link) return;
   if (await copyText(link)) {
     toast(joinLinkCopied);
     return;
@@ -147,11 +151,8 @@ async function copyJoinLink(id: unknown): Promise<void> {
 
 /** 分享展会：抽屉里展示报名二维码，可保存成透明背景 PNG。没配报名站地址时不打开空二维码。 */
 function openShareQr(item: Exhibition): void {
-  const link = registrationLink(bootstrap.publicBaseUrl, item.id);
-  if (!link) {
-    toast(joinLinkMissing, 'error');
-    return;
-  }
+  const link = joinLinkOf(item.id);
+  if (!link) return;
   openSheet({
     title: t('share.qrTitle'),
     component: ShareQrSheet,

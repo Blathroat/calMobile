@@ -145,29 +145,19 @@ const emit = defineEmits<{
  * - 每张卡仍绑定同一个 `props.form`，保存入口仍是右下角那一颗悬浮按钮；
  * - 用 `v-show` 而不是 `v-if`：切走再切回时，已填但还没保存的输入、协议选中的
  *   文件说明与错误提示都留在原处，不会因为重建 DOM 丢掉；
- * - 组名取 `admin.settings.group*`，顺序就是卡片在页面里的顺序（也是首次配置路线）。
+ * - 组名取 `admin.settings.group*`，顺序既是卡片在页面里的顺序，也是首次配置路线：
+ *   服务器与容量 → 品牌与进入公告 → 展会与报名规则 → 账号准入（用户协议 / 邀请码）→
+ *   媒体与字段限制 → 应用下载。
  */
-const GROUP_IDS = ['server', 'brand', 'exhibitions', 'accounts', 'media', 'delivery'] as const;
-type SettingsGroup = (typeof GROUP_IDS)[number];
-
-interface SettingsGroupCopy {
-  id: SettingsGroup;
-  /** 组名文案路径：中文表里已经按任务分好组，这里只引用。 */
-  labelPath: string;
-}
-
-/**
- * 顺序就是首次配置路线：服务器与容量 → 品牌与进入公告 → 展会与报名规则 →
- * 账号准入（用户协议 / 邀请码）→ 媒体与字段限制 → 应用下载。
- */
-const GROUPS: SettingsGroupCopy[] = [
+const GROUPS = [
   { id: 'server', labelPath: 'admin.settings.groupServer' },
   { id: 'brand', labelPath: 'admin.settings.groupBrand' },
   { id: 'exhibitions', labelPath: 'admin.settings.groupExhibitions' },
   { id: 'accounts', labelPath: 'admin.settings.groupAccounts' },
   { id: 'media', labelPath: 'admin.settings.groupMedia' },
   { id: 'delivery', labelPath: 'admin.settings.groupDelivery' },
-];
+] as const;
+type SettingsGroup = (typeof GROUPS)[number]['id'];
 
 const activeGroup = ref<SettingsGroup>('server');
 const groupNav = ref<HTMLElement>();

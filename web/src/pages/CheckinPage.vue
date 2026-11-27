@@ -29,7 +29,7 @@ import {
   type CheckInOutcome,
 } from '@/services/checkin-outcomes';
 import { useHint } from '@/composables/useHint';
-import { useCheckinScanner } from '@/composables/useCheckinScanner';
+import { useCheckinScanner, type StageMode } from '@/composables/useCheckinScanner';
 import { answerDocument } from '@domain/answer-document';
 import AppIcon from '@/components/AppIcon.vue';
 import ManualCodePanel from '@/components/ManualCodePanel.vue';
@@ -40,8 +40,6 @@ import type { ApiResult, JsonObject } from '@/api/types';
 import { t } from '@/i18n';
 
 /** 取景区只表达一件事：当前是取景、识别中，还是某一步失败 / 已停止。 */
-type StageMode = 'idle' | 'live' | 'error' | 'stopped' | 'detected';
-
 /** 列表里一行「标签 + 值」：收集项按行解析后逐行渲染。 */
 interface OutcomeRow {
   item: CheckInOutcome;
@@ -120,7 +118,7 @@ onMounted(() => {
   // 进到核销页就说明展商后台那条「怎么核销」的提示已经教到位了：不管从哪个入口进来
   // （后台按钮、深链、返回键回来）都把它记为已读，下次不再显示。
   void dismissCheckinHint();
-  scanner.initialize();
+  void scanner.initialize();
 });
 
 // 换号（含登录后会话落地）时按新用户的键重读历史，不把上一个账号的记录留在屏幕上。
@@ -227,7 +225,7 @@ async function handleCode(raw: string): Promise<void> {
  *   最长边 <= 1080 的 JPEG，交回 dataUrl。WebView 关着 setAllowFileAccess / setAllowContentAccess，
  *   <input type=file> 拿到的 content:// URI 不保证读得到，所以真机上只走这条。
  * - 没有原生桥（浏览器预览 / 报名站）：用隐藏的 file input 选本地文件。
- * 两条路都汇到 useImageSource，缩放与解码只写一遍。
+ * 两条路都汇到 handleImageSource，缩放与解码只写一遍。
  */
 function pickImage(): void {
   if (picking.value || scanner.starting.value || submitting.value) return;
@@ -241,11 +239,26 @@ function pickImage(): void {
   fileInput.value?.click();
 }
 
+/** 选图失败的行内提示：拿不到图 / 读不出图都这一句。 */
+function pickFailedNotice(): void {
+  showNotice(t('checkin.scan.pickFailed'), 'error');
+}
+
+/** 两条选图入口共用的「占用中」包装：同一时间只跑一条选图链路。 */
+async function withPicking(task: () => Promise<void>): Promise<void> {
+  if (!alive) return;
+  picking.value = true;
+  try {
+    await task();
+  } finally {
+    if (alive) picking.value = false;
+  }
+}
+
 /** 原生通道：dataUrl 已经在设备上读过并缩过，这里只取像素。 */
 async function pickNativeImage(): Promise<void> {
   if (picking.value) return;
-  picking.value = true;
-  try {
+  await withPicking(async () => {
     let dataUrl = '';
     try {
       const result = await device.pickImage();
@@ -255,17 +268,15 @@ async function pickNativeImage(): Promise<void> {
       if (!alive) return;
       // 用户在系统相册里取消按稳定错误码判断，不匹配文案；取消保持静默。
       if ((reason as { code?: string } | null)?.code === 'cancelled') return;
-      showNotice(t('checkin.scan.pickFailed'), 'error');
+      pickFailedNotice();
       return;
     }
     if (!dataUrl) {
-      showNotice(t('checkin.scan.pickFailed'), 'error');
+      pickFailedNotice();
       return;
     }
-    await useImageSource(dataUrl);
-  } finally {
-    if (alive) picking.value = false;
-  }
+    await handleImageSource(dataUrl);
+  });
 }
 
 async function onImageChosen(event: Event): Promise<void> {
@@ -274,16 +285,11 @@ async function onImageChosen(event: Event): Promise<void> {
   // 清空才能连续选同一张图；用户取消选择时这里没有文件，静默返回。
   if (input) input.value = '';
   if (!file || !alive || picking.value || submitting.value) return;
-  picking.value = true;
-  try {
-    await useImageSource(file);
-  } finally {
-    if (alive) picking.value = false;
-  }
+  await withPicking(() => handleImageSource(file));
 }
 
 /** 两条选图路径共用：读取像素、等待解码器就绪，再核销或提示。 */
-async function useImageSource(source: File | string): Promise<void> {
+async function handleImageSource(source: File | string): Promise<void> {
   if (submitting.value) return;
   // 解码可能要点时间，先用骨架行占位，避免看起来没反应。
   showLoadingStatus();
@@ -291,7 +297,7 @@ async function useImageSource(source: File | string): Promise<void> {
   try {
     image = await readCheckinImageData(source);
   } catch {
-    if (alive) showNotice(t('checkin.scan.pickFailed'), 'error');
+    if (alive) pickFailedNotice();
     return;
   }
   if (!alive) return;

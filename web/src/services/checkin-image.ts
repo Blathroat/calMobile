@@ -21,7 +21,7 @@ export async function readCheckinImageData(source: File | string): Promise<Image
   }
 }
 
-/** Prefer ImageBitmap for files and release temporary bitmaps or object URLs after reading. */
+/** 优先用 ImageBitmap 解码文件；读完后临时位图 / objectURL 都要释放。 */
 async function loadImageSource(
   source: File | string,
 ): Promise<{ source: CanvasImageSource; width: number; height: number; release: () => void }> {

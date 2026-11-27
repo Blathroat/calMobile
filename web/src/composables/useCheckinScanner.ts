@@ -7,7 +7,8 @@ import { t } from '@/i18n';
 const DECODE_WIDTH = 640;
 const DECODE_INTERVAL = 120;
 
-type StageMode = 'idle' | 'live' | 'error' | 'stopped' | 'detected';
+/** 取景区状态：页面与 composable 共用这一份，避免两边各写一遍字面量联合。 */
+export type StageMode = 'idle' | 'live' | 'error' | 'stopped' | 'detected';
 
 interface CheckinScannerOptions {
   videoEl: Ref<HTMLVideoElement | undefined>;
@@ -75,11 +76,17 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
     options.showNotice(t('checkin.scan.decoderUnavailable'), 'error');
   }
 
+  /** 相机打不开：取景区与行内提示一起落到错误态。 */
+  function failCamera(reason: unknown): void {
+    options.setStage('error', t('checkin.scan.openFailed'), cameraErrorNotice(reason));
+    options.clearStatus();
+  }
+
   /**
    * 建解码器并等它就绪。失败（分包加载失败、初始化超时）只置位失败标记，不抛错。
    * 单独成函数是为了「开始扫码」时能重建一次：识别库通常是瞬时故障，页面不该因此锁死。
    */
-  async function attachDecoder(): Promise<void> {
+  async function initialize(): Promise<void> {
     decoder?.dispose();
     decoder = null;
     decoderReady.value = false;
@@ -97,10 +104,6 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
     } catch {
       decoderUnavailable();
     }
-  }
-
-  function initialize(): void {
-    void attachDecoder();
   }
 
   function scheduleFrame(): void {
@@ -212,8 +215,7 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
           (error: unknown) => ({ error }) as const,
         );
     } catch (reason) {
-      options.setStage('error', t('checkin.scan.openFailed'), cameraErrorNotice(reason));
-      options.clearStatus();
+      failCamera(reason);
       return;
     }
     await nextTick();
@@ -224,8 +226,7 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
       return;
     }
     if ('error' in settled) {
-      options.setStage('error', t('checkin.scan.openFailed'), cameraErrorNotice(settled.error));
-      options.clearStatus();
+      failCamera(settled.error);
       return;
     }
 
@@ -261,7 +262,7 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
       // 识别库可能是瞬时失败（分包加载失败、初始化超时）：按「开始扫码」重建一次再试，
       // 否则这一页的扫码与选图会一直不可用，只能手动输码。
       if (decoderFailed.value) {
-        await attachDecoder();
+        await initialize();
         if (!alive || decoderFailed.value) return;
       }
       const supported =
@@ -278,19 +279,23 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
     }
   }
 
+  /** 识别库不可用：统一提示一次，并让调用方拿到「没有结果」。 */
+  function decoderMiss(): null {
+    decoderUnavailable();
+    return null;
+  }
+
   async function decodeImage(image: ImageData): Promise<string | null> {
-    if (!decoder) {
-      decoderUnavailable();
-      return null;
-    }
+    if (!decoder) return decoderMiss();
     if (!decoderReady.value) {
       try {
         await decoder.ready;
-        if (alive) decoderReady.value = true;
       } catch {
-        decoderUnavailable();
-        return null;
+        return decoderMiss();
       }
+      if (!alive) return null;
+      decoderReady.value = true;
+      decoderFailed.value = false;
     }
     if (!alive) return null;
     // 相机那一帧还在解：等它落定再解这张图。否则解码器会以「忙」返回 null，
@@ -303,8 +308,7 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
       decoderFailed.value = false;
       return found;
     } catch {
-      decoderUnavailable();
-      return null;
+      return decoderMiss();
     }
   }
 
@@ -323,7 +327,6 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
     start,
     releaseCamera,
     decodeImage,
-    decoderUnavailable,
     dispose,
   };
 }
