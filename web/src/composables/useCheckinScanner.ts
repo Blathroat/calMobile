@@ -30,6 +30,9 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
   let lastDecodeAt = 0;
   let decoder: QrDecoder | null = null;
   let decodeBusy = false;
+  /** 相机那一帧的解码 promise：选图前要等它落定，见 `decodeImage`。 */
+  let decodeIdle: Promise<void> | null = null;
+  let settleDecode: (() => void) | null = null;
   let scanEpoch = 0;
   let alive = true;
 
@@ -148,6 +151,9 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
 
     const epoch = scanEpoch;
     decodeBusy = true;
+    decodeIdle = new Promise<void>((resolve) => {
+      settleDecode = resolve;
+    });
     try {
       let found: string | null = null;
       try {
@@ -165,7 +171,10 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
         }
       }
     } finally {
-      if (alive) decodeBusy = false;
+      decodeBusy = false;
+      settleDecode?.();
+      settleDecode = null;
+      decodeIdle = null;
     }
   }
 
@@ -283,6 +292,10 @@ export function useCheckinScanner(options: CheckinScannerOptions) {
         return null;
       }
     }
+    if (!alive) return null;
+    // 相机那一帧还在解：等它落定再解这张图。否则解码器会以「忙」返回 null，
+    // 页面会误判成「这张图片里没有报名码」，用户要再选一次。
+    if (decodeIdle) await decodeIdle;
     if (!alive) return null;
     try {
       const found = await decoder.decode(image);

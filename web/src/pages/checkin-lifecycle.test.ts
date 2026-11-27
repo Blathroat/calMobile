@@ -156,6 +156,48 @@ describe('核销页面的异步识别与相机生命周期', () => {
     expect(api.checkIn).not.toHaveBeenCalled();
   });
 
+  it('相机那一帧还在解码时选图：先等它落定，不误判成「没有识别到」', async () => {
+    // 真解码器在「忙」时对新帧直接返回 null；这里按同一契约做桩：
+    // 相机帧挂起期间收到的第二帧返回 null，落定后才能真正解码。
+    let pending: ((value: string | null) => void) | null = null;
+    vi.mocked(decoder.decode).mockImplementation((() => {
+      if (pending) return Promise.resolve(null);
+      return new Promise<string | null>((resolve) => {
+        pending = (value) => {
+          pending = null;
+          resolve(value);
+        };
+      });
+    }) as never);
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async () => ({ width: 240, height: 120, close: vi.fn() })),
+    );
+    await mountPage();
+
+    actionButton('start-scan').click();
+    await vi.waitFor(() => expect(nextFrame).toBeDefined());
+    nextFrame!(120);
+    await vi.waitFor(() => expect(decoder.decode).toHaveBeenCalledTimes(1));
+
+    // 相机帧没解完就选图：页面要等它落定再解这张图。
+    const input = document.querySelector<HTMLInputElement>('[data-action="pick-image-input"]')!;
+    Object.defineProperty(input, 'files', {
+      value: [new File(['x'], 'qr.png', { type: 'image/png' })],
+      configurable: true,
+    });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await nextTick();
+    expect(decoder.decode).toHaveBeenCalledTimes(1);
+
+    pending!(null);
+    await vi.waitFor(() => expect(decoder.decode).toHaveBeenCalledTimes(2));
+    pending!('CALMOBILE-CHECKIN|秋季展会|报名-1');
+
+    await vi.waitFor(() => expect(api.checkIn).toHaveBeenCalledWith('CALMOBILE-CHECKIN|秋季展会|报名-1'));
+    expect(document.body.textContent).toContain('已识别报名码');
+  });
+
   // ── 选择图像扫码：应用里走原生 device.pickImage（WebView 关着文件访问，<input type=file> 读不到 content://） ──
 
   /** 原生桥存在时按钮走 device.pickImage；这里只放一个假的 Image，让 dataUrl 能解出尺寸。 */
