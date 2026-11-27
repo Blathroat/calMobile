@@ -7,12 +7,14 @@
  * 不整体替换，因此父组件不需要处理 update:modelValue（也避免 v-model 对 const 绑定的改写）。
  */
 import AppIcon from '@/components/AppIcon.vue';
+import HintNote from '@/components/HintNote.vue';
 import SegControl from '@/components/SegControl.vue';
 import UploadProgressMask from '@/components/upload-progress-mask.vue';
 import SkeletonBlock from '@/components/SkeletonBlock.vue';
 import StateBlock from '@/components/StateBlock.vue';
 import { computed, ref, type Ref } from 'vue';
 import type { JsonObject } from '@/api/types';
+import { useHint } from '@/composables/useHint';
 import { device } from '@/services/device-services';
 import { nativeBridge } from '@/services/native-bridge';
 import { formatLocalChineseDate } from '@/services/format';
@@ -135,6 +137,82 @@ const emit = defineEmits<{
   /** 「查看最近日志」：列表在二级页 /logs，设置页只在日志卡下面放入口按钮。 */
   'open-logs': [];
 }>();
+
+// ── 设置分组：按任务把同一批卡片收成六组 ────────────────────────
+
+/**
+ * 分组只决定「现在显示哪几张卡」，不新开表单：
+ * - 每张卡仍绑定同一个 `props.form`，保存入口仍是右下角那一颗悬浮按钮；
+ * - 用 `v-show` 而不是 `v-if`：切走再切回时，已填但还没保存的输入、协议选中的
+ *   文件说明与错误提示都留在原处，不会因为重建 DOM 丢掉；
+ * - 组名取 `admin.settings.group*`，顺序就是卡片在页面里的顺序（也是首次配置路线）。
+ */
+const GROUP_IDS = ['server', 'brand', 'exhibitions', 'accounts', 'media', 'delivery'] as const;
+type SettingsGroup = (typeof GROUP_IDS)[number];
+
+interface SettingsGroupCopy {
+  id: SettingsGroup;
+  /** 组名文案路径：中文表里已经按任务分好组，这里只引用。 */
+  labelPath: string;
+}
+
+/**
+ * 顺序就是首次配置路线：服务器与容量 → 品牌与进入公告 → 展会与报名规则 →
+ * 账号准入（用户协议 / 邀请码）→ 媒体与字段限制 → 应用下载。
+ */
+const GROUPS: SettingsGroupCopy[] = [
+  { id: 'server', labelPath: 'admin.settings.groupServer' },
+  { id: 'brand', labelPath: 'admin.settings.groupBrand' },
+  { id: 'exhibitions', labelPath: 'admin.settings.groupExhibitions' },
+  { id: 'accounts', labelPath: 'admin.settings.groupAccounts' },
+  { id: 'media', labelPath: 'admin.settings.groupMedia' },
+  { id: 'delivery', labelPath: 'admin.settings.groupDelivery' },
+];
+
+const activeGroup = ref<SettingsGroup>('server');
+const groupNav = ref<HTMLElement>();
+
+const groupItems = computed(() => GROUPS.map((group) => ({ id: group.id, label: t(group.labelPath) })));
+const activeGroupIndex = computed(() =>
+  Math.max(
+    0,
+    GROUPS.findIndex((group) => group.id === activeGroup.value),
+  ),
+);
+const previousGroup = computed(() =>
+  activeGroupIndex.value > 0 ? groupItems.value[activeGroupIndex.value - 1] : undefined,
+);
+const nextGroup = computed(() => groupItems.value[activeGroupIndex.value + 1]);
+
+/** 这张卡属于当前分组吗：模板里每张卡按它决定是否显示。 */
+function groupVisible(id: SettingsGroup): boolean {
+  return activeGroup.value === id;
+}
+
+/**
+ * 切组：只换显示，表单内容与本地状态都不动。
+ * 切完把分组导航滚回视口顶部，否则停在上组末尾时看到的是下一组的中间。
+ */
+function setGroup(value: string): void {
+  const target = GROUPS.find((group) => group.id === value);
+  if (!target || target.id === activeGroup.value) return;
+  activeGroup.value = target.id;
+  requestAnimationFrame(() => {
+    const node = groupNav.value;
+    if (!node || typeof node.scrollIntoView !== 'function') return;
+    const reduce =
+      typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    node.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+  });
+}
+
+function shiftGroup(delta: number): void {
+  const target = GROUPS[activeGroupIndex.value + delta];
+  if (target) setGroup(target.id);
+}
+
+/** 首次进入设置的一次性路线提示：按账号记已读，访客不会走到这里（设置要求管理员）。 */
+const { visible: hintVisible, dismiss: dismissHint } = useHint('admin-settings-route');
 
 /** 下载源选项：直链直接填 APK 地址，GitHub 仓库由服务器追踪最新 Release。 */
 const downloadSources = computed(() => [
@@ -309,7 +387,27 @@ function clearAgreementContent(): void {
       <span>{{ t('admin.settings.serverScope') }}</span>
     </div>
 
-    <div class="card">
+    <!-- 首次进入设置的一次性路线提示：关掉后记到账号上，之后不再出现。 -->
+    <HintNote v-if="hintVisible" :text="t('admin.settings.firstVisitHint')" @dismiss="dismissHint" />
+
+    <!-- 组间导航：六组按首次配置路线编号，两列排，窄屏也能完整读到组名。
+         换组只切换显示，不重建表单（见脚本里的 groupVisible）。 -->
+    <nav ref="groupNav" class="settings-group-nav" :aria-label="t('admin.sections')">
+      <button
+        v-for="(group, index) in groupItems"
+        :key="group.id"
+        class="settings-group-tab"
+        type="button"
+        :aria-pressed="group.id === activeGroup ? 'true' : 'false'"
+        :data-active="group.id === activeGroup ? 'true' : 'false'"
+        @click="setGroup(group.id)"
+      >
+        <span class="settings-group-index" aria-hidden="true">{{ index + 1 }}</span>
+        <span class="settings-group-label">{{ group.label }}</span>
+      </button>
+    </nav>
+
+    <div v-show="groupVisible('server')" class="card">
       <span class="section-label">{{ copy.storageTitle }}</span>
       <div class="storage-meter" :data-full="storageFull ? 'true' : 'false'">
         <span :style="{ width: storagePercent + '%' }" />
@@ -346,7 +444,7 @@ function clearAgreementContent(): void {
 
     <!-- 日志：只设置上限；当前用量由管理端设置接口下发，没有数据时只显示「—」。
          清理策略固定为「超过上限自动清理最早的日志」，不做成选项。 -->
-    <div class="card">
+    <div v-show="groupVisible('server')" class="card">
       <span class="section-label">{{ t('admin.settings.logs') }}</span>
       <div v-if="logsUsage.hasUsage" class="storage-meter" :data-full="logsMeter.full ? 'true' : 'false'">
         <span :style="{ width: logsMeter.percent + '%' }" />
@@ -376,7 +474,7 @@ function clearAgreementContent(): void {
       </button>
     </div>
 
-    <div class="card">
+    <div v-show="groupVisible('brand')" class="card">
       <span class="section-label">{{ t('admin.settings.brand') }}</span>
       <div class="settings-rows">
         <div class="setting-row">
@@ -409,7 +507,7 @@ function clearAgreementContent(): void {
     </div>
 
     <!-- 首色调：下发到色板下标 0，应用默认选中它；默认占位就是当前钢青 #41707E。 -->
-    <div class="card">
+    <div v-show="groupVisible('brand')" class="card">
       <span class="section-label">{{ t('admin.settings.appearance') }}</span>
       <div class="settings-rows">
         <div class="setting-row">
@@ -434,7 +532,7 @@ function clearAgreementContent(): void {
 
     <!-- 缺省展会封面：展会自己没有封面时用它替掉占位图；留空即回到占位图。
          版式与编辑展会页的封面卡一致：左侧 96×170 竖版预览，右侧竖排按钮与说明，窄屏上下堆叠。 -->
-    <div class="card">
+    <div v-show="groupVisible('brand')" class="card">
       <span class="section-label">{{ copy.coverTitle }}</span>
       <div class="cover-row">
         <!-- 预览槽位始终在：上传期间盖进度遮罩，失败 / 取消随进度清空一起撤掉。
@@ -479,7 +577,7 @@ function clearAgreementContent(): void {
     </div>
 
     <!-- 展商相关：同时筹备的展会 / 会议数，以及单个展会最长持续天数 -->
-    <div class="card">
+    <div v-show="groupVisible('exhibitions')" class="card">
       <span class="section-label">{{ copy.exhibitorSection }}</span>
       <div class="settings-rows">
         <div class="setting-block">
@@ -537,7 +635,7 @@ function clearAgreementContent(): void {
       </div>
     </div>
 
-    <div class="card">
+    <div v-show="groupVisible('brand')" class="card">
       <span class="section-label">{{ t('admin.announce.entry') }}</span>
       <textarea id="settings-announcement" v-model="form.announcement" class="textarea" rows="3" />
       <div class="switch-row" data-flush="true">
@@ -551,12 +649,12 @@ function clearAgreementContent(): void {
       </div>
     </div>
 
-    <div class="card">
+    <div v-show="groupVisible('exhibitions')" class="card">
       <span class="section-label">{{ t('admin.settings.categories') }}</span>
       <textarea id="settings-categories" v-model="form.categories" class="textarea" rows="4" />
     </div>
 
-    <div class="card">
+    <div v-show="groupVisible('exhibitions')" class="card">
       <span class="section-label">{{ t('admin.settings.reviewPolicy') }}</span>
       <div class="switch-row" data-flush="true">
         <span class="switch-copy">
@@ -581,7 +679,7 @@ function clearAgreementContent(): void {
 
     <!-- 报名相关：匿名报名（报名站未登录）时，收集项标题命中这些同义词就把额外姓名表单合并掉。
          空列表表示不合并，仍显示单独的姓名输入。 -->
-    <div class="card">
+    <div v-show="groupVisible('exhibitions')" class="card">
       <span class="section-label">{{ t('admin.settings.registrationSection') }}</span>
       <div class="field">
         <label for="settings-registration-name-titles">{{ t('admin.settings.registrationNameFieldTitles') }}</label>
@@ -598,7 +696,7 @@ function clearAgreementContent(): void {
 
     <!-- 用户协议：上传 Markdown 作为协议浏览页正文。关闭时登录、注册、设置与更新提示里的入口全部隐藏；
          卡片内分区只用留白，不加分隔线。 -->
-    <div class="card">
+    <div v-show="groupVisible('accounts')" class="card">
       <span class="section-label">{{ t('admin.settings.agreement') }}</span>
       <div class="switch-row" data-flush="true">
         <span class="switch-copy">
@@ -649,7 +747,7 @@ function clearAgreementContent(): void {
       <p v-if="agreementError" class="field-error" role="alert">{{ agreementError }}</p>
     </div>
 
-    <div class="card">
+    <div v-show="groupVisible('accounts')" class="card">
       <span class="section-label">{{ t('admin.invites.title') }}</span>
       <p class="field-hint">{{ t('admin.invites.hint') }}</p>
       <!-- 三个数字字段并排：次数、码有效期、兑换后的展商时长 -->
@@ -748,7 +846,7 @@ function clearAgreementContent(): void {
       </div>
     </div>
 
-    <div class="card">
+    <div v-show="groupVisible('media')" class="card">
       <span class="section-label">{{ t('admin.media.richMedia') }}</span>
       <div class="settings-rows">
         <div class="setting-row">
@@ -810,7 +908,7 @@ function clearAgreementContent(): void {
       </div>
     </div>
 
-    <div class="card">
+    <div v-show="groupVisible('media')" class="card">
       <span class="section-label">{{ t('admin.media.uploadFormats') }}</span>
       <div class="settings-rows">
         <div class="setting-row">
@@ -842,7 +940,7 @@ function clearAgreementContent(): void {
       </div>
     </div>
 
-    <div class="card">
+    <div v-show="groupVisible('media')" class="card">
       <span class="section-label">{{ copy.avatarSection }}</span>
       <div class="settings-rows">
         <div class="setting-row">
@@ -876,7 +974,7 @@ function clearAgreementContent(): void {
       </div>
     </div>
 
-    <div class="card">
+    <div v-show="groupVisible('media')" class="card">
       <span class="section-label">{{ t('admin.limits.formChars') }}</span>
       <p class="field-hint">{{ copy.limitIntro }}</p>
       <div v-for="group in limitGroups" :key="group.id" class="limit-group">
@@ -905,7 +1003,7 @@ function clearAgreementContent(): void {
 
     <!-- 软件包下载：检查更新和报名站下载条都读这一份配置。
          直链可填单个 APK，也可填包含版本化 APK 的目录；GitHub 仓库交给服务器追踪最新 Release。 -->
-    <div class="card">
+    <div v-show="groupVisible('delivery')" class="card">
       <span class="section-label">{{ t('admin.download.title') }}</span>
       <div class="field">
         <span class="field-label">{{ t('admin.download.source') }}</span>
@@ -946,6 +1044,17 @@ function clearAgreementContent(): void {
       </template>
     </div>
 
+    <!-- 组底部的「返回 / 继续」：按首次配置路线线性走一遍，不用再回到顶部的分组导航。
+         第一组没有「返回」，最后一组没有「继续」。 -->
+    <div class="settings-group-switch">
+      <button v-if="previousGroup" class="cta ghost" data-size="small" type="button" @click="shiftGroup(-1)">
+        {{ t('common.back') }} · {{ previousGroup.label }}
+      </button>
+      <button v-if="nextGroup" class="cta ghost" data-size="small" type="button" @click="shiftGroup(1)">
+        {{ t('common.continue') }} · {{ nextGroup.label }}
+      </button>
+    </div>
+
     <p v-if="settingsError" class="field-error" role="alert">{{ settingsError }}</p>
 
     <!-- 悬浮保存：只在本分区（管理-设置）渲染，贴页面右下角；保存中或没有权限时禁用。
@@ -969,6 +1078,94 @@ function clearAgreementContent(): void {
 </template>
 
 <style scoped>
+/* 组间导航：六组按首次配置路线编号，两列排；窄屏两列也能完整放下最长的组名。
+   切组时导航会被滚回视口顶部，留出顶部安全区的余量。 */
+.settings-group-nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s2);
+  scroll-margin-top: calc(var(--safe-top) + var(--topbar-h));
+}
+
+@media (min-width: 520px) {
+  .settings-group-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.settings-group-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+  min-height: var(--touch);
+  padding: var(--s2) var(--s3);
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-card);
+  background: var(--screen);
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  text-align: start;
+  transition:
+    border-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease),
+    background var(--motion-fast) var(--ease);
+}
+
+.settings-group-tab[data-active='true'] {
+  border-color: var(--accent-edge);
+  background: var(--f3);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* 组序号：说明这是一条按顺序走的配置路线，选中时跟组名一起提亮。 */
+.settings-group-index {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: var(--hairline) solid var(--stroke);
+  border-radius: var(--r-pill);
+  color: var(--ink-3);
+  font-size: var(--fs-tag);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-group-tab[data-active='true'] .settings-group-index {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.settings-group-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 组底部的返回 / 继续：窄屏上下排（组名最长 7 个字，横排会被挤成两行），
+   宽屏再并排。放在最后一组之外，不跟卡片内容混在一起。 */
+.settings-group-switch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+@media (min-width: 480px) {
+  .settings-group-switch {
+    flex-direction: row;
+  }
+}
+
+.settings-group-switch > .cta {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: var(--s2);
+}
+
 /* 卡片内的节奏：组标题到第一行留 12px，组与组之间 20px（在 .list 层）。
    设置项本身「一行标题 + 一行说明」为一组，组与组之间 16px。 */
 .card {
