@@ -41,6 +41,9 @@ function stubProperty(target: object, key: string, value: unknown): void {
 }
 
 beforeEach(() => {
+  // 首页默认落在当前自然月：把「今天」固定在 2026-06-05，用例里的 6 月数据才是当前月。
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-06-05T10:00:00'));
   vi.clearAllMocks();
   localStorage.clear();
   // 每个用例从一个新的「页面访问」开始：模块级标记清空，等同刷新页面。
@@ -63,6 +66,7 @@ afterEach(() => {
     else Reflect.deleteProperty(stub.target, stub.key);
   }
   stubs.length = 0;
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 

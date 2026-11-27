@@ -10,7 +10,6 @@
  */
 import { api } from '@/app/runtime';
 import { isJoinSurface } from '@/app/surface';
-import { useBootstrapStore } from '@/stores/bootstrap';
 import { useSessionStore } from '@/stores/session';
 
 const done = new Set<string>();
@@ -52,14 +51,10 @@ function drain(): void {
     .then(() => idle(drain));
 }
 
-/** 首页落点月份：与 `HomePage` 用同一套参数，键一致才命中缓存。 */
+/** 首页的月份（当前自然月）：与 `HomePage` 用同一套参数，键一致才命中缓存。 */
 function homeMonth(): { year: number; month: number } {
-  const landing = useBootstrapStore().calendar.landing;
-  const info = (landing && typeof landing === 'object' ? landing : {}) as Record<string, unknown>;
-  return {
-    year: Number(info.year) || new Date().getFullYear(),
-    month: Number(info.month) || new Date().getMonth() + 1,
-  };
+  const now = new Date();
+  return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
 /** 底部导航能直达的几个页面（切换最频繁）。 */

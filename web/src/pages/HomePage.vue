@@ -58,6 +58,7 @@ import { addMonths, formatChineseTime, formatDateWithWeekday, joinText, monthLab
 import { agreementConsentPending } from '@/services/agreement-prompt';
 import type { JsonObject } from '@/api/types';
 import { exhibitionModeCode, modeLabel, registrationStatusLabel, statusTone } from '@/services/status';
+import { homeDefaultDay } from '@/services/calendar-default';
 import { t } from '@/i18n';
 
 const WEEK_LABELS = [
@@ -76,14 +77,13 @@ const session = useSessionStore();
 /** 日历滑动提示：与账号绑定的一次性提示，真滑过一次就不再显示。 */
 const { visible: hintVisible, dismiss: dismissHint } = useHint('home-calendar-swipe');
 
+/** 首屏落在当前自然月；之后切月份、点日期都以用户为准。 */
 const view = ref({
   year: new Date().getFullYear(),
   month: new Date().getMonth() + 1,
-  // 0 表示「未指定」：落到当月第一个有展会的日期。
+  // 0 表示「还没选」：取到当月数据后按默认规则补上，见 `homeDefaultDay`。
   day: 0,
 });
-/** 落点月份只采用一次：之后切月份、点日期都以用户为准。 */
-const landingApplied = ref(false);
 
 const monthQuery = useAsync<{ data: JsonObject; year: number; month: number }>();
 const monthData = computed(() => monthQuery.data.value?.data);
@@ -140,15 +140,15 @@ const dayEmpty = computed(
   () => !loading.value && !error.value && items.value.length === 0 && meetings.value.length === 0,
 );
 
-/** 当月日历上「有展会」的日期（数字加粗的那批）。 */
-function numericDays(key: 'eventDays' | 'markedDays'): number[] {
-  const raw = monthData.value?.[key];
+/** 某个月数据里的一类日期（eventDays 加粗 / markedDays 圆点），过滤掉脏值。 */
+function numericDaysIn(data: JsonObject | undefined, key: 'eventDays' | 'markedDays'): number[] {
+  const raw = data?.[key];
   if (!Array.isArray(raw)) return [];
   return raw.map((value) => Number(value)).filter((day) => Number.isInteger(day) && day > 0);
 }
 
-const exhibitionDays = computed(() => new Set(numericDays('eventDays')));
-const activityDays = computed(() => new Set(numericDays('markedDays')));
+const exhibitionDays = computed(() => new Set(numericDaysIn(monthData.value, 'eventDays')));
+const activityDays = computed(() => new Set(numericDaysIn(monthData.value, 'markedDays')));
 
 interface DayJump {
   day: number;
@@ -214,20 +214,10 @@ const announcement = ref('');
 /** 加载当前 `view` 对应的月份；已有内容时保留旧内容，只标记忙碌。 */
 async function load(): Promise<boolean> {
   const requested = { ...view.value };
-  const applyLanding = !landingApplied.value;
   const result = await monthQuery.run(async (signal) => {
-    // 落点月份由后端下发（示例数据集中在 2026 年 6–8 月），首屏必须等它落定。
+    // 会话恢复后再取：本人活动的圆点要按登录身份算。
     await bootApp();
     signal.throwIfAborted();
-    if (applyLanding) {
-      const landing = (bootstrap.calendar.landing ?? {}) as JsonObject;
-      const year = Number(landing.year);
-      const month = Number(landing.month);
-      if (Number.isInteger(year) && Number.isInteger(month) && month >= 1 && month <= 12) {
-        requested.year = year;
-        requested.month = month;
-      }
-    }
     const monthPromise = api.exhibitions.month({
       year: requested.year,
       month: requested.month,
@@ -241,11 +231,23 @@ async function load(): Promise<boolean> {
     return { data, year: requested.year, month: requested.month };
   });
   if (!result) return false;
-  landingApplied.value = true;
   view.value.year = result.year;
   view.value.month = result.month;
-  // 只有还没选中日期时才采用后端给的落点，避免刷新覆盖用户的选择。
-  if (!view.value.day) view.value.day = Number(result.data.day) || 0;
+  // 还没选过日期时按默认规则补上：本月今天之后第一个有活动的日期，没有就今天。
+  // 已选过的日期不覆盖，刷新也不会把用户的选择冲掉。
+  if (!view.value.day) {
+    view.value.day = homeDefaultDay({
+      year: result.year,
+      month: result.month,
+      // 后端给的 day 本来就是「该月第一个有展会的日期」，老接口没有 eventDays 时靠它兜底。
+      activeDays: [
+        ...numericDaysIn(result.data, 'eventDays'),
+        ...numericDaysIn(result.data, 'markedDays'),
+        Number(result.data.day) || 0,
+      ],
+      today: new Date(),
+    });
+  }
   preloadAdjacentMonths(result.year, result.month);
   for (const item of items.value.slice(0, 2)) warm(item.id);
   return true;
@@ -328,7 +330,6 @@ function snapBackSlide(): void {
 function applyMonth(delta: number): void {
   const next = addMonths(view.value.year, view.value.month, delta);
   monthQuery.cancel();
-  landingApplied.value = true;
   view.value.year = next.year;
   view.value.month = next.month;
   view.value.day = 0;
@@ -350,7 +351,6 @@ function slideMonth(direction: number): void {
   }
   monthSliding = true;
   monthQuery.cancel();
-  landingApplied.value = true;
   if (snapTimer !== undefined) {
     window.clearTimeout(snapTimer);
     snapTimer = undefined;

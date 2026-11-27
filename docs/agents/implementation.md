@@ -72,6 +72,7 @@ agent 改代码前按任务读对应小节。这里只写文件级约束、组�
 - 竖拉先越过 16px 死区，且纵向明显占优（> 横向 1.5 倍）才跟手：点击页面里的链接 / 按钮时手指会漂几像素，不过死区就完全当没下拉。手势中途横向追平即放弃；页面自己的横滑处理器（首页日历）判定要横滑时调 `suppressPull()`，外壳本次手势直接作废。只有真正的 `pointerup` 会发请求，`pointercancel` 只复位、绝不刷新；换页时外壳调 `resetPullVisual()`。
 - 查询缓存集中在 `web/src/services/query-cache.ts`：缓存键包含稳定序列化后的参数，并对相同请求去重；底部导航按下时预取该页。月视图一次取整月，点日期在本地完成。
 - `GET /exhibitions/month` 对跨天展会返回 `days`（本月内开展～闭展覆盖的所有天）并把它们并进 `eventDays`，首页按 `days` 判断选中日要展示哪些展会；没有 `days` 的数据按 `day` 处理。每条展会还带 `exhibitor`（展商昵称），首页卡片把展商名与分类拼成一行。个人圆点 `markedDays` 里，已通过 / 已参加的报名若选了参加时间就按那段区间打点，没选的按整场展会打点。
+- 首页按**当前自然月**取月：`HomePage.load()` 与 `app/preload.ts` 都用本机日期算年月，不再采用 `bootstrap.calendar.landing`（该字段仍随启动数据下发，供不带参数的 `GET /exhibitions/month` 兜底）。默认选中的日期由 `web/src/services/calendar-default.ts` 的 `homeDefaultDay()` 决定：当前月取「今天之后」第一个 `eventDays` ∪ `markedDays` 的日期，没有就取今天；其它月份取该月第一个有活动的日期，整月无活动则不选中。后端下发的 `day` 仍作为候选兜底（老接口、没有 `eventDays` 的数据）。
 - 写接口的失效前缀与读接口的缓存键前缀同族（`registrations` ↔ `registrations.record`、`users` ↔ `users.record`）。
 - 用户协议正文走 `api.agreement.get()` 直连，不进查询缓存（正文会随管理员保存变化）；`bootstrap` 只带 `{ enabled, version, updatedAt }` 摘要，登录 / 注册页据此决定是否展示勾选框。
 - 最近日志页（`web/src/pages/LogsPage.vue`）用 `api.logs.list()` 直连，也不进查询缓存：日志随时在增长，打开页面、切级别、下拉刷新都取最新的一批；统计（条数、已用 / 上限）与列表来自同一次响应。

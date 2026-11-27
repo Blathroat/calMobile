@@ -27,6 +27,9 @@ vi.mock('@/app/preload', () => ({ preloadAdjacentMonths: vi.fn() }));
 let app: App | undefined;
 
 beforeEach(() => {
+  // 首页默认落在当前自然月：把「今天」固定在 2026-06-05，用例里的 6 月数据才是当前月。
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-06-05T10:00:00'));
   vi.clearAllMocks();
   vi.mocked(bootApp).mockResolvedValue(undefined);
   vi.mocked(api.users.list).mockResolvedValue([]);
@@ -53,6 +56,7 @@ afterEach(() => {
   app?.unmount();
   app = undefined;
   document.body.innerHTML = '';
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 

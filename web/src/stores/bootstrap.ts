@@ -8,8 +8,9 @@
  * 谁写：`app/runtime.ts` 的 `applyRuntimeBootstrap()` —— 必须在会话恢复**之后**调用，
  * 否则后端按匿名身份回答、下发的权限与用户都不对；管理员改完设置重新拉取时也走这里。
  * 谁读：`services/validate.ts`（`limits` / `server` / `media`）、`app/theme.ts`
- * （`theme.colors` / `theme.index`）、`app/preload.ts`（`calendar.landing`），
- * 以及各页面里的品牌名、公告与 `review.canRevise`。
+ * （`theme.colors` / `theme.index`），以及各页面里的品牌名、公告与 `review.canRevise`。
+ * `calendar.landing` 仍随启动数据下发（`GET /exhibitions/month` 不带参数时用它），
+ * 首页已改为按当前自然月取月，不再读它。
  *
  * 不变量与坑：
  * - `apply()` 是逐段**浅合并**：某段缺失或不是对象时保留上一份，页面不会因为后端少发一个键
